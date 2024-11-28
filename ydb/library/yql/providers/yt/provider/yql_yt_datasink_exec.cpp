@@ -93,7 +93,7 @@ public:
                 TYtMerge::CallableName(),
                 TYtMapReduce::CallableName(),
             },
-            RequireAllOf({TYtTransientOpBase::idx_World, TYtTransientOpBase::idx_Input}),
+            RequireForTransientOp(),
             Hndl(&TYtDataSinkExecTransformer::HandleOutputOp<true>)
         );
         AddHandler(
@@ -104,7 +104,7 @@ public:
             RequireFirst(),
             Hndl(&TYtDataSinkExecTransformer::HandleOutputOp<true>)
         );
-        AddHandler({TYtReduce::CallableName()}, RequireAllOf({TYtTransientOpBase::idx_World, TYtTransientOpBase::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandleReduce));
+        AddHandler({TYtReduce::CallableName()}, RequireForTransientOp(), Hndl(&TYtDataSinkExecTransformer::HandleReduce));
         AddHandler({TYtOutput::CallableName()}, RequireFirst(), Pass());
         AddHandler({TYtPublish::CallableName()}, RequireAllOf({TYtPublish::idx_World, TYtPublish::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandlePublish));
         AddHandler({TYtDropTable::CallableName()}, RequireFirst(), Hndl(&TYtDataSinkExecTransformer::HandleDrop));
@@ -121,6 +121,21 @@ public:
     void Rewind() override {
         Delegated_->clear();
         TExecTransformerBase::Rewind();
+    }
+
+    static TExecTransformerBase::TPrerequisite RequireForTransientOp() {
+        return [] (const TExprNode::TPtr& input) {
+            auto status = RequireChild(*input, TYtTransientOpBase::idx_World);
+            // We have to run input only if it has no settings to calculate.
+            // Otherwise, we first of all wait world completion.
+            // Then begins node execution, which run settings calculation.
+            // And after that, starts input execution
+            // See YQL-19303
+            if (!HasNodesToCalculate(input->ChildPtr(TYtTransientOpBase::idx_Input))) {
+                status = status.Combine(RequireChild(*input, TYtTransientOpBase::idx_Input));
+            }
+            return status;
+        };
     }
 
 private:
@@ -187,6 +202,10 @@ private:
         if (!needCalc.empty()) {
             YQL_CLOG(DEBUG, ProviderYt) << "Calculating nodes for " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
             return CalculateNodes(State_, input, cluster, needCalc, ctx);
+        }
+
+        if (auto opInput = op.Maybe<TYtTransientOpBase>().Input()) {
+            YQL_ENSURE(opInput.Ref().GetState() == TExprNode::EState::ExecutionComplete);
         }
 
         auto outSection = op.Output();

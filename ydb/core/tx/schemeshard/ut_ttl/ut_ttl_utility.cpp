@@ -38,16 +38,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLUtility) {
             return tier;
         };
 
-        TestValidateTiers({ tierNoAction }, TConclusionStatus::Fail("Unset tier action"));
-        TestValidateTiers({ tierNoDuration }, TConclusionStatus::Fail("Missing ApplyAfterSeconds in a tier"));
+        TestValidateTiers({ tierNoAction }, TConclusionStatus::Fail("Tier 0: missing Action"));
+        TestValidateTiers({ tierNoDuration }, TConclusionStatus::Fail("Tier 0: missing ApplyAfterSeconds"));
         TestValidateTiers({ makeDeleteTier(1) }, TConclusionStatus::Success());
         TestValidateTiers({ makeEvictTier(1) }, TConclusionStatus::Success());
         TestValidateTiers({ makeEvictTier(1), makeDeleteTier(2) }, TConclusionStatus::Success());
         TestValidateTiers({ makeEvictTier(1), makeEvictTier(2), makeDeleteTier(3) }, TConclusionStatus::Success());
         TestValidateTiers({ makeEvictTier(1), makeEvictTier(2) }, TConclusionStatus::Success());
-        TestValidateTiers({ makeEvictTier(2), makeEvictTier(1) }, TConclusionStatus::Fail("Tiers in the sequence must have increasing ApplyAfterSeconds"));
-        TestValidateTiers({ makeDeleteTier(1), makeEvictTier(2) }, TConclusionStatus::Fail("Only the last tier in TTL settings can have Delete action"));
-        TestValidateTiers({ makeDeleteTier(1), makeDeleteTier(2) }, TConclusionStatus::Fail("Only the last tier in TTL settings can have Delete action"));
+        TestValidateTiers({ makeEvictTier(2), makeEvictTier(1) }, TConclusionStatus::Fail("Tiers in the sequence must have increasing ApplyAfterSeconds: 2 (tier 0) >= 1 (tier 1)"));
+        TestValidateTiers({ makeDeleteTier(1), makeEvictTier(2) }, TConclusionStatus::Fail("Tier 0: only the last tier in TTL settings can have Delete action"));
+        TestValidateTiers({ makeDeleteTier(1), makeDeleteTier(2) }, TConclusionStatus::Fail("Tier 0: only the last tier in TTL settings can have Delete action"));
     }
 
     void ValidateGetExpireAfter(const NKikimrSchemeOp::TTTLSettings::TEnabled& ttlSettings, const bool allowNonDeleteTiers, const TConclusion<TDuration>& expectedResult) {

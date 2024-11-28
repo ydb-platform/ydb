@@ -62,25 +62,26 @@ bool TTTLValidator::ValidateTiers(const NKikimrSchemeOp::TTTLSettings::TEnabled 
     for (ui64 i = 0; i < ttlSettings.TiersSize(); ++i) {
         const auto& tier = ttlSettings.GetTiers(i);
         if (!tier.HasApplyAfterSeconds()) {
-            errStr = "Missing ApplyAfterSeconds in a tier";
+            errStr = TStringBuilder() << "Tier " << i << ": missing ApplyAfterSeconds";
             return false;
         }
         if (i != 0 && tier.GetApplyAfterSeconds() <= ttlSettings.GetTiers(i - 1).GetApplyAfterSeconds()) {
             errStr = TStringBuilder() << "Tiers in the sequence must have increasing ApplyAfterSeconds: "
-                                      << ttlSettings.GetTiers(i - 1).GetApplyAfterSeconds() << " >= " << tier.GetApplyAfterSeconds();
+                                      << ttlSettings.GetTiers(i - 1).GetApplyAfterSeconds() << " (tier " << i - 1
+                                      << ") >= " << tier.GetApplyAfterSeconds() << " (tier " << i << ")";
             return false;
         }
         switch (tier.GetActionCase()) {
             case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
                 if (i + 1 != ttlSettings.TiersSize()) {
-                    errStr = "Only the last tier in TTL settings can have Delete action";
+                    errStr = TStringBuilder() << "Tier " << i << ": only the last tier in TTL settings can have Delete action";
                     return false;
                 }
                 break;
             case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
                 break;
             case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
-                errStr = "Unset tier action";
+                errStr = TStringBuilder() << "Tier " << i << ": missing Action";
                 return false;
         }
     }

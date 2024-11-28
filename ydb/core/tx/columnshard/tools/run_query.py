@@ -89,11 +89,11 @@ def run_query(pool: ydb.QuerySessionPool, queries: List[TestQuery]) -> Dict[str,
                     if len(query._expected_rows) == 0:
                         count_rows += len(res.rows)
                     else:
-                        for row in res.rows:
-                            flag = flag and (query.expected_rows[count_rows] == row)
+                        for i in range(len(res.rows)):
+                            flag = flag and (query.expected_rows[i] == res.rows[i])
                             count_rows += 1
                         
-            print(f"Time query: {round(elapsed_time, 2)} sec, count rows: {count_rows}")
+            print(f"Query time: {round(elapsed_time, 2)} sec, count rows: {count_rows}")
             if query.expected_rows_count == count_rows:
                 if flag:
                     result[query.name] = ResultQuery(status=StatusQuery.PASSED)

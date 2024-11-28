@@ -1770,7 +1770,7 @@ void TKikimrRunner::KikimrStart() {
     ThreadSigmask(SIG_UNBLOCK);
 }
 
-void TKikimrRunner::KikimrStop(bool graceful, const TKikimrRunConfig& runConfig) {
+void TKikimrRunner::KikimrStop(bool graceful) {
 
     Y_UNUSED(graceful);
 
@@ -1779,19 +1779,18 @@ void TKikimrRunner::KikimrStop(bool graceful, const TKikimrRunConfig& runConfig)
     if (enableReleaseNodeNameOnGracefulShutdown) {
         using namespace NKikimr::NNodeBroker;
         using TEvent = TEvNodeBroker::TEvGracefulShutdownRequest;
-
-        const auto& nodeInfo = runConfig.AppConfig.GetDynamicNodeConfig().GetNodeInfo();
-        const auto& dynamicNameserviceConfig = runConfig.AppConfig.GetDynamicNameserviceConfig();
-        bool isDynamicNode = dynamicNameserviceConfig.GetMinDynamicNodeId() <= nodeInfo.GetNodeId();
+        
+        const ui32 nodeId = ActorSystem->NodeId;
+        bool isDynamicNode = AppData->DynamicNameserviceConfig.GetMinDynamicNodeId() <= nodeId;
         
         if (isDynamicNode) {
             NTabletPipe::TClientConfig pipeConfig;
             pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
             auto pipe = NTabletPipe::CreateClient({}, MakeNodeBrokerID(), pipeConfig);
             TActorId nodeBrokerPipe = ActorSystem->Register(pipe);
-
+    
             THolder<TEvent> event = MakeHolder<TEvent>();
-            event->Record.SetNodeId(nodeInfo.GetNodeId());
+            event->Record.SetNodeId(nodeId);
 
             NTabletPipe::SendData({}, nodeBrokerPipe, event.Release());
         }

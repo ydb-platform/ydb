@@ -849,6 +849,9 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
 void TNodeBroker::DbReleaseSlotIndex(const TNodeInfo &node,
                                        TTransactionContext &txc) 
 {
+
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Relese slot index (" << (node.SlotIndex.has_value() ? TStringBuilder() << *node.SlotIndex : "null" ) << ") node " << node.IdString() );
     NIceDb::TNiceDb db(txc.DB);
     using T = Schema::Nodes;
     db.Table<T>().Key(node.NodeId)

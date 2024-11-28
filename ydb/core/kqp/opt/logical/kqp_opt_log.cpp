@@ -164,8 +164,7 @@ protected:
         auto maxDPhypDPTableSize = Config->MaxDPHypDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPHypDPTableSize);
         auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel);
         auto providerCtx = TKqpProviderContext(KqpCtx, optLevel);
-        TExprContext dummyCtx;
-        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPhypDPTableSize, dummyCtx));
+        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPhypDPTableSize, ctx));
         TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, optLevel,
             *opt, [](auto& rels, auto label, auto node, auto stat) {
                 rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), *stat, node));

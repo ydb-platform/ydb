@@ -246,8 +246,7 @@ Y_UNIT_TEST(DqOptimizeEquiJoinWithCostsNative) {
     TExprContext ctx;
     TBaseProviderContext pctx;
     std::function<IOptimizerNew*()> optFactory = [&]() {
-        TExprContext dummyCtx;
-        return MakeNativeOptimizerNew(pctx, 100000, dummyCtx);
+        return MakeNativeOptimizerNew(pctx, 100000, ctx);
     };
     _DqOptimizeEquiJoinWithCosts(optFactory, ctx);
 }

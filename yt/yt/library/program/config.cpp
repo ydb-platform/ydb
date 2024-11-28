@@ -1,7 +1,5 @@
 #include "config.h"
 
-#include <yt/yt/library/profiling/solomon/config.h>
-
 #include <yt/yt/core/concurrency/fiber_scheduler_thread.h>
 
 namespace NYT {
@@ -133,8 +131,6 @@ void TSingletonsConfig::Register(TRegistrar registrar)
     registrar.Parameter("grpc_dispatcher", &TThis::GrpcDispatcher)
         .DefaultNew();
     registrar.Parameter("yp_service_discovery", &TThis::YPServiceDiscovery)
-        .DefaultNew();
-    registrar.Parameter("solomon_exporter", &TThis::SolomonExporter)
         .DefaultNew();
     registrar.Parameter("logging", &TThis::Logging)
         .DefaultCtor([] { return NLogging::TLogManagerConfig::CreateDefault(); })

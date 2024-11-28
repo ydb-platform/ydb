@@ -13,7 +13,7 @@ NPrivate::IDataAccumulator* CreateCompatAccumulator(
 NPrivate::IDataWriter* CreateCompatWriter(
     const TString& path,
     NTable::TTableClient& tableClient,
-    NPrivate::IDataAccumulator* accumulator,
+    const NPrivate::IDataAccumulator* accumulator,
     const TRestoreSettings& settings);
 
 } // NDump

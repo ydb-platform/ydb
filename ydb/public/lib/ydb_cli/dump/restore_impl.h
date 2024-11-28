@@ -61,9 +61,12 @@ public:
     }
 };
 
+class IDataAccumulator;
+
 class TBatch {
     TStringBuilder Data;
     TVector<TLocation> Locations;
+    IDataAccumulator* OriginAccumulator;
 
 public:
     void Add(const TLine& line);
@@ -83,6 +86,14 @@ public:
 
     inline auto size() const {
         return Data.size();
+    }
+
+    inline void SetOriginAccumulator(IDataAccumulator* originAccumulator) {
+        OriginAccumulator = originAccumulator;
+    }
+
+    inline IDataAccumulator* GetOriginAccumulator() const {
+        return OriginAccumulator;
     }
 };
 
@@ -119,6 +130,12 @@ class TRestoreClient {
     TRestoreResult RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc);
     TRestoreResult RestoreIndexes(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestorePermissions(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const THashSet<TString>& oldEntries);
+
+    THolder<NPrivate::IDataWriter> CreateDataWriter(const TString& dbPath, const TRestoreSettings& settings,
+        const NTable::TTableDescription& desc, const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators);
+    TRestoreResult CreateDataAccumulators(TVector<THolder<NPrivate::IDataAccumulator>>& outAccumulators,
+        const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc,
+        ui32 dataFilesCount);
 
 public:
     explicit TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log);

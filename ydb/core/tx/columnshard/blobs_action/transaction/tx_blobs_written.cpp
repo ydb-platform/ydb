@@ -119,6 +119,7 @@ TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKiki
     : TBase(self, "TTxBlobsWritingFinished")
     , Packs(std::move(packs))
     , WritingActions(writingActions) {
+    Y_UNUSED(writeStatus);
     for (auto&& i : noDataWrites) {
         auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)i.GetWriteMeta().GetWriteId());
@@ -127,6 +128,7 @@ TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKiki
 }
 
 bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorContext& ctx) {
+    Y_UNUSED(ctx);
     for (auto&& pack : Packs) {
         const auto& writeMeta = pack.GetWriteMeta();
         AFL_VERIFY(!writeMeta.HasLongTxId());

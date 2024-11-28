@@ -558,7 +558,6 @@ class TExecutor
     void Handle(TEvents::TEvFlushLog::TPtr &ev);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr&);
     void Handle(NSharedCache::TEvResult::TPtr &ev);
-    void Handle(NSharedCache::TEvRequest::TPtr &ev);
     void Handle(NSharedCache::TEvUpdated::TPtr &ev);
     void Handle(NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr&);
     void Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx);

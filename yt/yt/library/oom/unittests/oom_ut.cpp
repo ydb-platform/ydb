@@ -11,9 +11,9 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(EarlyOOM, Crash)
+TEST(TEarlyOomTest, Crash)
 {
-    auto checkOOM = [] {
+    auto checkOom = [] {
         EnableEarlyOomWatchdog(TOomWatchdogOptions{
             .MemoryLimit = 0,
         });
@@ -21,12 +21,12 @@ TEST(EarlyOOM, Crash)
         Sleep(TDuration::Seconds(5));
     };
 
-    ASSERT_DEATH(checkOOM(), "");
+    ASSERT_DEATH(checkOom(), "");
 
     ASSERT_TRUE(NFs::Exists("oom.pb.gz"));
 }
 
-TEST(EarlyOOM, NoCrash)
+TEST(TEarlyOomTest, NoCrash)
 {
     EnableEarlyOomWatchdog(TOomWatchdogOptions{
         .MemoryLimit = 1_GB,

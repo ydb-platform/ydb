@@ -1,10 +1,19 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
+
+#include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 
 #include <locale>
+
+namespace NKikimr::NSchemeShard {
+// defined in ydb/core/tx/schemeshard/schemeshard__table_stats_histogram.cpp
+TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, ui64 total, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes);
+}  // namespace NKikimr::NSchemeShard
 
 using namespace NKikimr;
 using namespace NSchemeShard;

@@ -336,11 +336,15 @@ void TYtState::LeaveEvaluation(ui64 id) {
     }
 }
 
-std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId, const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx) {
+std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId,
+    const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+    const IOptimizerFactory::TPtr& optFactory)
+{
     auto ytState = MakeIntrusive<TYtState>(typeCtx.Get());
     ytState->SessionId = sessionId;
     ytState->Gateway = gateway;
     ytState->DqIntegration_ = CreateYtDqIntegration(ytState.Get());
+    ytState->OptimizerFactory_ = optFactory;
 
     if (ytGatewayConfig) {
         std::unordered_set<std::string_view> groups;
@@ -374,8 +378,8 @@ std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::
     return {ytState, statWriter};
 }
 
-TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway, ui32 planLimits) {
-    return [originalGateway = gateway, planLimits] (
+TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway, IOptimizerFactory::TPtr optFactory, ui32 planLimits) {
+    return [originalGateway = gateway, optFactory, planLimits] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -404,7 +408,7 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         const TYtGatewayConfig* ytGatewayConfig = gatewaysConfig ? &gatewaysConfig->GetYt() : nullptr;
         TIntrusivePtr<TYtState> ytState;
         TStatWriter statWriter;
-        std::tie(ytState, statWriter) = CreateYtNativeState(gateway, userName, sessionId, ytGatewayConfig, typeCtx);
+        std::tie(ytState, statWriter) = CreateYtNativeState(gateway, userName, sessionId, ytGatewayConfig, typeCtx, optFactory);
         ytState->PlanLimits = planLimits;
 
         info.Names.insert({TString{YtProviderName}});

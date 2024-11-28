@@ -381,8 +381,9 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
-    if (!CompactedKeys.empty())
+    if (!CompactedKeys.empty()) {
         HeadKeys.clear();
+    }
 
     if (NewHeadKey.Size > 0) {
         while (!HeadKeys.empty() &&
@@ -437,6 +438,8 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     }
 
     EndOffset = Head.GetNextOffset();
+    EndWriteTimestamp = PendingWriteTimestamp;
+
     NewHead.Clear();
     NewHead.Offset = EndOffset;
 
@@ -1253,13 +1256,18 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             ++WriteNewMessagesInternal;
     }
 
+    // Empty partition may will be filling from offset great than zero from mirror actor if source partition old and was clean by retantion time
+    if (!Head.GetCount() && !NewHead.GetCount() && DataKeysBody.empty() && HeadKeys.empty() && p.Offset) {
+        StartOffset = *p.Offset;
+    }
+
     TMaybe<TPartData> partData;
     if (p.Msg.TotalParts > 1) { //this is multi-part message
         partData = TPartData(p.Msg.PartNo, p.Msg.TotalParts, p.Msg.TotalSize);
     }
     WriteTimestamp = ctx.Now();
     WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
-    TClientBlob blob(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.Data, std::move(partData), WriteTimestampEstimate,
+    TClientBlob blob(p.Msg.SourceId, p.Msg.SeqNo, std::move(p.Msg.Data), std::move(partData), WriteTimestampEstimate,
                         TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
                         p.Msg.UncompressedSize, p.Msg.PartitionKey, p.Msg.ExplicitHashKey); //remove curOffset when LB will report CTime
 
@@ -1335,7 +1343,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
     }
 
-    TString().swap(p.Msg.Data);
     return true;
 }
 
@@ -1397,12 +1404,15 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
         Y_ABORT_UNLESS(Head.GetBatch(pp).GetPartNo() == key.GetPartNo());
         for (; pp < Head.GetBatches().size(); ++pp) { //TODO - merge small batches here
             Y_ABORT_UNLESS(Head.GetBatch(pp).Packed);
-            Head.GetBatch(pp).SerializeTo(valueD);
+            auto& batch = Head.GetBatch(pp);
+            batch.SerializeTo(valueD);
+            PendingWriteTimestamp = std::max(PendingWriteTimestamp, batch.GetEndWriteTimestamp());
         }
     }
     for (auto& b : NewHead.GetBatches()) {
         Y_ABORT_UNLESS(b.Packed);
         b.SerializeTo(valueD);
+        PendingWriteTimestamp = std::max(PendingWriteTimestamp, b.GetEndWriteTimestamp());
     }
 
     Y_ABORT_UNLESS(res.second >= valueD.size());

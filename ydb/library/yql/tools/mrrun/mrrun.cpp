@@ -41,6 +41,7 @@
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/core/yql_library_compiler.h>
@@ -657,7 +658,7 @@ int RunMain(int argc, const char* argv[])
         auto ytNativeGateway = CreateYtNativeGateway(services);
         gateways.emplace_back(ytNativeGateway);
         FillClusterMapping(clusters, gatewaysConfig.GetYt(), TString{YtProviderName});
-        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory()));
     }
 
     if (gatewayTypes.contains(ClickHouseProviderName) && gatewaysConfig.HasClickHouse()) {

@@ -1,5 +1,5 @@
 LIBRARY()
 
-INCLUDE(../../../../../library/yql/public/purecalc/common/ya.make.inc)
+INCLUDE(${ARCADIA_ROOT}/yql/essentials/public/purecalc/common/ya.make.inc)
 
 END()

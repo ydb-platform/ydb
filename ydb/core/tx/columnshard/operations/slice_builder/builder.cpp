@@ -76,14 +76,14 @@ private:
     const ui64 DataSize;
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
         std::vector<NColumnShard::TInsertedPortion> portions;
-        std::vector<NColumnShard::TFailedWrite> fails;
+        std::vector<NColumnShard::TNoDataWrite> noDataWrites;
         for (auto&& i : Portions) {
             portions.emplace_back(i.ExtractPortion(), i.GetPKBatch());
         }
         NColumnShard::TInsertedPortions pack(std::move(WriteMeta), std::move(portions), DataSize);
         std::vector<NColumnShard::TInsertedPortions> packs = { pack };
         auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
-            putResult->GetPutStatus(), Action, std::move(packs), std::move(fails));
+            putResult->GetPutStatus(), Action, std::move(packs), std::move(noDataWrites));
         ctx.Send(DstActor, result.release());
     }
     virtual void DoOnStartSending() override {
@@ -119,9 +119,9 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     if (WriteData.GetWritePortions()) {
         if (OriginalBatch->num_rows() == 0) {
             std::vector<NColumnShard::TInsertedPortions> portions;
-            std::vector<NColumnShard::TFailedWrite> fails = { NColumnShard::TFailedWrite(WriteData.GetWriteMeta(), WriteData.GetSize()) };
+            std::vector<NColumnShard::TNoDataWrite> noDataWrites = { NColumnShard::TNoDataWrite(WriteData.GetWriteMeta(), WriteData.GetSize()) };
             auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
-                NKikimrProto::EReplyStatus::OK, nullptr, std::move(portions), std::move(fails));
+                NKikimrProto::EReplyStatus::OK, nullptr, std::move(portions), std::move(noDataWrites));
             NActors::TActivationContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
         } else {
             auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(OriginalBatch,

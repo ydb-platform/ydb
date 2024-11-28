@@ -225,7 +225,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // It may fill or clear particular fields based on some runtime SS state.
 
     for (auto tx : record.GetTransaction()) {
-        if (DispatchOp(tx, [&](auto traits) { return traits.NeedRewrite && !traits.Rewrite(tx); })) {
+        if (DispatchOp(tx, [&](auto traits) { return traits.NeedRewrite && !Rewrite(traits, tx); })) {
             response.Reset(new TProposeResponse(NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId)));
             response->SetError(NKikimrScheme::StatusPreconditionFailed, "Invalid schema rewrite rule.");
             return std::move(response);
@@ -895,7 +895,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         TString targetName;
 
         if (!DispatchOp(tx, [&](auto traits) {
-                auto name = traits.GetTargetName(tx);
+                auto name = GetTargetName(traits, tx);
                 if (name) {
                     targetName = *name;
                     return true;
@@ -964,7 +964,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             create.SetFailOnExist(tx.GetFailOnExist());
 
             if (!DispatchOp(tx, [&](auto traits) {
-                    return traits.SetName(create, name);
+                    return SetName(traits, create, name);
                 }))
             {
                 Y_ABORT("Invariant violation");
@@ -984,7 +984,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 
     // # Generates MkDirs based on transaction-specific requirements
     if (DispatchOp(tx, [&](auto traits) { return traits.CreateAdditionalDirs; })) {
-        if (auto requiredPaths = DispatchOp(tx, [&](auto traits) { return traits.GetRequiredPaths(tx, context); }); requiredPaths) {
+        if (auto requiredPaths = DispatchOp(tx, [&](auto traits) { return GetRequiredPaths(traits, tx, context); }); requiredPaths) {
             for (const auto& [parentPathStr, pathStrs] : *requiredPaths) {
                 const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
                 {

@@ -1,7 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_path_element.h"
+
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -35,6 +35,7 @@ NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableInde
     operation->SetName(dst.LeafName());
 
     operation->SetType(indexInfo->Type);
+    Y_ABORT_UNLESS(indexInfo->Type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
     for (const auto& keyName: indexInfo->IndexKeys) {
         *operation->MutableKeyColumnNames()->Add() = keyName;
     }
@@ -174,9 +175,14 @@ bool CreateConsistentCopyTables(
             }
 
             Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
+            TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
+            if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+                result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                                       "Consistent copy table doesn't support table with vector index")};
+                return false;
+            }
             Y_VERIFY_S(srcIndexPath.Base()->GetChildren().size() == 1, srcIndexPath.PathString() << " has children " << srcIndexPath.Base()->GetChildren().size() << " but 1 expected");
 
-            TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), CreateIndexTask(indexInfo, dstIndexPath)));
 
             TString srcImplTableName = srcIndexPath.Base()->GetChildren().begin()->first;

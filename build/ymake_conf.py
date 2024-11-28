@@ -2467,7 +2467,7 @@ class Cuda(object):
 
     def auto_cuda_version(self):
         if self.use_arcadia_cuda.value:
-            return '12.2'
+            return '12.6'
 
         if not self.have_cuda.value:
             return None

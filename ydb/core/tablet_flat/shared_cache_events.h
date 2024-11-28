@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "flat_bio_events.h"
 #include "shared_handle.h"
+#include "shared_page.h"
 #include <ydb/core/protos/shared_cache.pb.h>
 
 #include <util/generic/map.h>
@@ -12,6 +13,7 @@
 
 namespace NKikimr::NSharedCache {
     using EPriority = NTabletFlatExecutor::NBlockIO::EPriority;
+    using TPageId = NTable::NPage::TPageId;
 
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR),
@@ -20,6 +22,7 @@ namespace NKikimr::NSharedCache {
         EvUnregister,
         EvInvalidate,
         EvAttach,
+        EvSaveCompactedPages,
         EvRequest,
         EvResult,
         EvUpdated,
@@ -43,9 +46,9 @@ namespace NKikimr::NSharedCache {
     };
 
     struct TEvTouch : public TEventLocal<TEvTouch, EvTouch> {
-        THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> Touched;
+        THashMap<TLogoBlobID, THashSet<TPageId>> Touched;
 
-        TEvTouch(THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> &&touched)
+        TEvTouch(THashMap<TLogoBlobID, THashSet<TPageId>> &&touched)
             : Touched(std::move(touched))
         {}
     };
@@ -59,6 +62,19 @@ namespace NKikimr::NSharedCache {
             , Owner(owner)
         {
             Y_ABORT_UNLESS(Owner, "Cannot send request with empty owner");
+        }
+    };
+
+    // Note: compacted pages do not have an owner yet
+    // at first they should be accepted by an executor
+    // and it will send TEvAttach itself when it have happened
+    struct TEvSaveCompactedPages : public TEventLocal<TEvSaveCompactedPages, EvSaveCompactedPages> {
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TIntrusivePtr<TPage>> Pages;
+
+        TEvSaveCompactedPages(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
+            : PageCollection(std::move(pageCollection))
+        {
         }
     };
 
@@ -120,7 +136,6 @@ namespace NKikimr::NSharedCache {
 
     struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {
         struct TActions {
-            THashMap<ui32, TSharedPageRef> Accepted;
             THashSet<ui32> Dropped;
         };
 

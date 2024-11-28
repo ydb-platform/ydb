@@ -29,6 +29,8 @@ struct TEvRowDispatcher {
         EvCoordinatorResult,
         EvSessionStatistic,
         EvHeartbeat,
+        EvGetInternalStateRequest,
+        EvGetInternalStateResponse,
         EvEnd,
     };
 
@@ -137,6 +139,16 @@ struct TEvRowDispatcher {
         TEvHeartbeat(ui32 partitionId) {
             Record.SetPartitionId(partitionId);
         }
+    };
+
+    struct TEvGetInternalStateRequest : public NActors::TEventPB<TEvGetInternalStateRequest,
+        NFq::NRowDispatcherProto::TEvGetInternalStateRequest, EEv::EvGetInternalStateRequest> {
+        TEvGetInternalStateRequest() = default;
+    };
+
+    struct TEvGetInternalStateResponse : public NActors::TEventPB<TEvGetInternalStateResponse,
+        NFq::NRowDispatcherProto::TEvGetInternalStateResponse, EEv::EvGetInternalStateResponse> {
+        TEvGetInternalStateResponse() = default;
     };
 };
 

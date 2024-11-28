@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
             auto ytGateway = CreateYtFileGateway(yqlNativeServices);
 
             TVector<TDataProviderInitializer> dataProvidersInit;
-            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway, MakeSimpleCBOOptimizerFactory()));
+            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway, MakeSimpleCBOOptimizerFactory(), {}));
             TProgramFactory factory(true, funcReg, 0ULL, dataProvidersInit, "ut");
 
             TProgramPtr program = factory.Create("-stdin-", Src);

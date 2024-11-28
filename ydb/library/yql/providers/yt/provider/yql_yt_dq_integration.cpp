@@ -197,10 +197,9 @@ public:
         return groupIdColumnarStats;
     }
 
-    ui64 Partition(const TDqSettings& config, size_t maxTasks, const TExprNode& node,
-        TVector<TString>& serializedPartitions, TString* clusterName, TExprContext& ctx, bool canFallback) override
+    ui64 Partition(const TExprNode& node, TVector<TString>& serializedPartitions, TString* clusterName, TExprContext& ctx, const TPartitionSettings& settings) override
     {
-        auto dataSizePerJob = config.DataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::DataSizePerJob);
+        auto dataSizePerJob = settings.DataSizePerJob.GetOrElse(TDqSettings::TDefault::DataSizePerJob);
         if (!TMaybeNode<TYtReadTable>(&node).IsValid()) {
             return 0;
         }
@@ -228,7 +227,7 @@ public:
             groupIdPathInfos.push_back(pathInfos);
         }
 
-        if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); canFallback && chunksCount > maxChunks) {
+        if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); settings.CanFallback && chunksCount > maxChunks) {
             throw TFallbackError() << DqFallbackErrorMessageWrap( TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks);
         }
 
@@ -240,6 +239,7 @@ public:
             }
         }
 
+        auto maxTasks = settings.MaxPartitions;
         ui64 maxDataSizePerJob = 0;
         if (State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false)) {
             TVector<TYtPathInfo::TPtr> paths;
@@ -269,7 +269,7 @@ public:
                 .Cluster(cluster)
                 .MaxPartitions(maxTasks)
                 .DataSizePerJob(dataSizePerJob)
-                .AdjustDataWeightPerPartition(!canFallback)
+                .AdjustDataWeightPerPartition(!settings.CanFallback)
                 .Config(State_->Configuration->Snapshot())
                 .Paths(std::move(paths)));
             if (!res.Success()) {
@@ -280,7 +280,7 @@ public:
                     issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
                 }
 
-                if (canFallback) {
+                if (settings.CanFallback) {
                     throw TFallbackError(MakeIntrusive<TIssue>(std::move(issue))) << message;
                 } else {
                     ctx.IssueManager.RaiseIssue(issue);
@@ -303,7 +303,7 @@ public:
             ui64 sumAllTableSizes = 0;
             TVector<TVector<ui64>> groupIdColumnarStats = EstimateColumnStats(ctx, cluster, {groupIdPathInfos}, sumAllTableSizes);
             ui64 parts = (sumAllTableSizes + dataSizePerJob - 1) / dataSizePerJob;
-            if (canFallback && hasErasure && parts > maxTasks) {
+            if (settings.CanFallback && hasErasure && parts > maxTasks) {
                 auto message = DqFallbackErrorMessageWrap("too big table with erasure codec");
                 YQL_CLOG(INFO, ProviderDq) << message;
                 throw TFallbackError() << message;
@@ -642,7 +642,7 @@ public:
         ctx.AddError(YqlIssue(ctx.GetPosition(where), TIssuesIds::DQ_OPTIMIZE_ERROR, DqFallbackErrorMessageWrap(cause)));
     }
 
-    TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
         if (auto maybeYtReadTable = TMaybeNode<TYtReadTable>(read)) {
             TMaybeNode<TCoSecureParam> secParams;
             const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster();

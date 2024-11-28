@@ -545,7 +545,7 @@ namespace NYql::NDqs {
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
             TString clusterName;
             IDqIntegration::TPartitionSettings settings {
-                .DataSizePerJob = Settings->DataSizePerJob.Get(),
+                .DataSizePerJob = Settings->DataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::DataSizePerJob),
                 .MaxPartitions = maxPartitions,
                 .EnableComputeActor = Settings->EnableComputeActor.Get(),
                 .CanFallback = canFallback

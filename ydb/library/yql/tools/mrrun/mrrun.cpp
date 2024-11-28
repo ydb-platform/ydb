@@ -12,6 +12,7 @@
 #include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 #include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 
 #include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
 
@@ -236,7 +237,7 @@ bool FillUsedUrls(
 
 NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    
+
     TPqGatewayServices pqServices(
         driver,
         nullptr,
@@ -658,7 +659,7 @@ int RunMain(int argc, const char* argv[])
         auto ytNativeGateway = CreateYtNativeGateway(services);
         gateways.emplace_back(ytNativeGateway);
         FillClusterMapping(clusters, gatewaysConfig.GetYt(), TString{YtProviderName});
-        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory()));
+        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
     }
 
     if (gatewayTypes.contains(ClickHouseProviderName) && gatewaysConfig.HasClickHouse()) {

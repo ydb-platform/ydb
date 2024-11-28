@@ -7,9 +7,6 @@
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/config/yql_config_provider.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_datasink.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_datasource.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -49,10 +46,6 @@ Y_UNIT_TEST_SUITE(TYqlEpoch) {
         InitializeYtGateway(ytGateway, ytState);
         typeAnnotationContext->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
         typeAnnotationContext->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
-
-        TDqStatePtr dqState = new TDqState(nullptr, {}, functionRegistry.Get(), {}, {}, {}, typeAnnotationContext.Get(), {}, {}, {}, nullptr, {}, {}, {}, false, {});
-        typeAnnotationContext->AddDataSink(DqProviderName, CreateDqDataSink(dqState));
-        typeAnnotationContext->AddDataSource(DqProviderName, CreateDqDataSource(dqState, [](const TDqStatePtr&) { return new TNullTransformer; }));
 
         typeAnnotationContext->AddDataSource(ConfigProviderName, CreateConfigProvider(*typeAnnotationContext, nullptr, ""));
 
@@ -363,10 +356,10 @@ R"((
 R"(
 use plato;
 pragma yt.Pool="1";
-pragma dq.AnalyzeQuery="1";
+pragma config.flags("LLVM_OFF");
 pragma yt.Pool="2";
 select * from Input;
-pragma dq.AnalyzeQuery="1";
+pragma config.flags("LLVM_OFF");
 pragma yt.Pool="3";
 select * from Input;
 )",
@@ -374,9 +367,9 @@ R"((
 (let $1 (YtConfigure! world '"yt" '"Attr" '"pool" '"1"))
 (let $2 (YtConfigure! $1 '"yt" '"Attr" '"pool" '"2"))
 (let $3 (YtConfigure! $2 '"yt" '"Attr" '"pool" '"3"))
-(let $4 (Configure! world '"dq" '"Attr" '"analyzequery" '"1"))
+(let $4 (Configure! world '"config" '"LLVM_OFF"))
 (let $5 (Write! (Sync! $2 $4) 'result (Key) (Right! (Read! $2 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('type) '('autoref))))
-(let $6 (Configure! (Commit! $5 'result) '"dq" '"Attr" '"analyzequery" '"1"))
+(let $6 (Configure! (Commit! $5 'result) '"config" '"LLVM_OFF"))
 (let $7 (Write! (Sync! $3 $6) 'result (Key) (Right! (Read! $3 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('type) '('autoref))))
 (return (Commit! (Commit! $7 'result) '"yt" '('('"epoch" '"1"))))
 )

@@ -280,8 +280,12 @@ protected:
             }
         }
         if (!rightAny) {
-            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN ANY"));
-            return {};
+            if (false) { // Tempoarily change to waring to allow for smooth transition
+                ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN ANY"));
+                return {};
+            } else {
+                ctx.AddWarning(TIssue(ctx.GetPosition(join.Pos()), "(Deprecation) Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
+            }
         }
 
         if (!ttl) {

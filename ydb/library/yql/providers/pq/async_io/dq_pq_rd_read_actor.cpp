@@ -76,6 +76,7 @@ struct TRowDispatcherReadActorMetrics {
         , Counters(counters) {
         SubGroup = Counters->GetSubgroup("sink", "RdPqRead");
         auto sink = SubGroup->GetSubgroup("tx_id", TxId);
+        ReInit = sink->GetCounter("ReInit", true);
         auto task = sink->GetSubgroup("task_id", ToString(taskId));
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
@@ -90,6 +91,7 @@ struct TRowDispatcherReadActorMetrics {
     ::NMonitoring::TDynamicCounterPtr SubGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyGetNextBatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReInit;
 };
 
 struct TEvPrivate {
@@ -107,7 +109,7 @@ struct TEvPrivate {
 class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase {
 
     const ui64 PrintStatePeriodSec = 300;
-    const ui64 ProcessStatePeriodSec = 2;
+    const ui64 SleepPeriodSec = 2;
 
     struct TReadyBatch {
     public:
@@ -154,6 +156,7 @@ private:
     bool Inited = false;
     ui64 CoordinatorRequestCookie = 0;
     TRowDispatcherReadActorMetrics Metrics;
+    bool ProcessStateScheduled = false;
     bool InFlyAsyncInputData = false;
     TCounters Counters;
 
@@ -285,6 +288,7 @@ public:
     void NotifyCA();
     void SendStartSession(TSession& sessionInfo);
     void Init();
+    void Sleep();
 };
 
 TDqPqRdReadActor::TDqPqRdReadActor(
@@ -342,14 +346,11 @@ void TDqPqRdReadActor::Init() {
     SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local RD (" << LocalRowDispatcherActorId << ")");
     Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
 
-    Schedule(TDuration::Seconds(ProcessStatePeriodSec), new TEvPrivate::TEvProcessState());
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     Inited = true;
 }
 
 void TDqPqRdReadActor::ProcessState() {
-    Init();
-
     bool needSendCoordinatorRequest = false;
 
     for (auto& [partitionId, sessionInfo] : Sessions) {
@@ -435,10 +436,10 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
 
 i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& /*watermark*/, bool&, i64 freeSpace) {
     SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
+    Init();
     Metrics.InFlyAsyncInputData->Set(0);
     InFlyAsyncInputData = false;
 
-    ProcessState();
     if (ReadyBuffer.empty() || !freeSpace) {
         return 0;
     }
@@ -468,7 +469,6 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     for (auto& [partitionId, sessionInfo] : Sessions) {
         TrySendGetNextBatch(sessionInfo);
     }
-    ProcessState();
     return usedSpace;
 }
 
@@ -597,11 +597,20 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr
 
     CoordinatorActorId = ev->Get()->CoordinatorActorId;
     ReInit("Coordinator is changed");
-    ProcessState();
+    Sleep();
+}
+
+void TDqPqRdReadActor::Sleep() {
+    if (ProcessStateScheduled) {
+        return;
+    }
+    ProcessStateScheduled = true;
+    Schedule(TDuration::Seconds(SleepPeriodSec), new TEvPrivate::TEvProcessState());
 }
 
 void TDqPqRdReadActor::ReInit(const TString& reason) {
     SRC_LOG_I("ReInit state, reason " << reason);
+    Metrics.ReInit->Inc();
 
     for (auto& [partitionId, sessionInfo] : Sessions) {
         StopSession(sessionInfo);
@@ -610,7 +619,6 @@ void TDqPqRdReadActor::ReInit(const TString& reason) {
     if (!ReadyBuffer.empty()) {
         NotifyCA();
     }
-    PrintInternalState();
 }
 
 void TDqPqRdReadActor::Stop(const TString& message) {
@@ -690,6 +698,8 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
     if (CoordinatorActorId && *CoordinatorActorId == ev->Sender) {
         ReInit("TEvUndelivered to coordinator");
+        Sleep();
+        return;
     }
     ProcessState();
 }
@@ -780,7 +790,6 @@ void TDqPqRdReadActor::PrintInternalState() {
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvProcessState::TPtr&) {
     Counters.ProcessState++;
-    Schedule(TDuration::Seconds(ProcessStatePeriodSec), new TEvPrivate::TEvProcessState());
     ProcessState();
 }
 

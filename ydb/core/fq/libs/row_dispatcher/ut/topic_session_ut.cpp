@@ -61,6 +61,7 @@ public:
             nullptr);
 
         TopicSession = Runtime.Register(NewTopicSession(
+            "read_group",
             topicPath,
             GetDefaultPqEndpoint(),
             GetDefaultPqDatabase(),

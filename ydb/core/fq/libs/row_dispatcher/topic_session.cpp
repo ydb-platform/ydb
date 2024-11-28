@@ -178,6 +178,7 @@ private:
 
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
+    const TString ReadGroup;
     const TString TopicPath;
     const TString TopicPathPartition;
     const TString Endpoint;
@@ -212,6 +213,7 @@ private:
 
 public:
     explicit TTopicSession(
+        const TString& readGroup,
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
@@ -305,6 +307,7 @@ private:
 };
 
 TTopicSession::TTopicSession(
+    const TString& readGroup,
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
@@ -317,7 +320,8 @@ TTopicSession::TTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize)
-    : TopicPath(topicPath)
+    : ReadGroup(readGroup)
+    , TopicPath(topicPath)
     , TopicPathPartition(TStringBuilder() << topicPath << "/" << partitionId)
     , Endpoint(endpoint)
     , Database(database)
@@ -1009,7 +1013,7 @@ void TTopicSession::SendStatisticToRowDispatcher() {
     stat.Common.LastReadedOffset = LastMessageOffset;
     SessionStats.Clear();
 
-    stat.SessionKey = TopicSessionParams{Endpoint, Database, TopicPath, PartitionId};
+    stat.SessionKey = TopicSessionParams{ReadGroup, Endpoint, Database, TopicPath, PartitionId};
     stat.Clients.reserve(Clients.size());
     for (auto& [readActorId, info] : Clients) {
         TopicSessionClientStatistic client;
@@ -1082,6 +1086,7 @@ TString TTopicSession::GetAnyQueryIdByFieldName(const TString& fieldName) {
 ////////////////////////////////////////////////////////////////////////////////
     
 std::unique_ptr<NActors::IActor> NewTopicSession(
+    const TString& readGroup,
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
@@ -1094,7 +1099,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize) {
-    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, pureCalcProgramFactory, counters, pqGateway, maxBufferSize));
+    return std::unique_ptr<NActors::IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, pureCalcProgramFactory, counters, pqGateway, maxBufferSize));
 }
 
 } // namespace NFq

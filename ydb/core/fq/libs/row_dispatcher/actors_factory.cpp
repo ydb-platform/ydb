@@ -9,6 +9,7 @@ struct TActorFactory : public IActorFactory {
     TActorFactory() {}
 
     NActors::TActorId RegisterTopicSession(
+        const TString& readGroup,
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
@@ -23,6 +24,7 @@ struct TActorFactory : public IActorFactory {
         ui64 maxBufferSize) const override {
 
         auto actorPtr = NFq::NewTopicSession(
+            readGroup,
             topicPath,
             endpoint,
             database,

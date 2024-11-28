@@ -71,7 +71,27 @@ struct TEvPrivate {
     };
 };
 
-using TQueryStatKey = std::pair<TString, TString>;  // QueryId / Topic
+struct TQueryStatKey {
+    TString QueryId;
+    TString Topic;
+    TString ReadGroup;
+
+    size_t Hash() const noexcept {
+        ui64 hash = std::hash<TString>()(QueryId);
+        hash = CombineHashes<ui64>(hash, std::hash<TString>()(Topic));
+        hash = CombineHashes<ui64>(hash, std::hash<TString>()(ReadGroup));
+        return hash;
+    }
+    bool operator==(const TQueryStatKey& other) const {
+        return QueryId == other.QueryId && Topic == other.Topic && ReadGroup == other.ReadGroup;
+    }
+};
+
+struct TQueryStatKeyHash {
+    size_t operator()(const TQueryStatKey& k) const {
+        return k.Hash();
+    }
+};
 
 struct TAggQueryStat {
     NYql::TCounters::TEntry ReadBytes;
@@ -117,20 +137,22 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     };
 
     struct TopicSessionKey {
+        TString ReadGroup;
         TString Endpoint;
         TString Database;
         TString TopicPath;
         ui64 PartitionId;
 
         size_t Hash() const noexcept {
-            ui64 hash = std::hash<TString>()(Endpoint);
+            ui64 hash = std::hash<TString>()(ReadGroup);
+            hash = CombineHashes<ui64>(hash, std::hash<TString>()(Endpoint));
             hash = CombineHashes<ui64>(hash, std::hash<TString>()(Database));
             hash = CombineHashes<ui64>(hash, std::hash<TString>()(TopicPath));
             hash = CombineHashes<ui64>(hash, std::hash<ui64>()(PartitionId));
             return hash;
         }
         bool operator==(const TopicSessionKey& other) const {
-            return Endpoint == other.Endpoint && Database == other.Database
+            return ReadGroup == other.ReadGroup && Endpoint == other.Endpoint && Database == other.Database
                 && TopicPath == other.TopicPath && PartitionId == other.PartitionId;
         }
     };
@@ -242,7 +264,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     struct TAggregatedStats{
         NYql::TCounters::TEntry AllSessionsReadBytes;
-        TMap<TQueryStatKey, TMaybe<TAggQueryStat>> LastQueryStats;
+        THashMap<TQueryStatKey, TMaybe<TAggQueryStat>, TQueryStatKeyHash> LastQueryStats;
         TDuration LastUpdateMetricsPeriod;
     };
 
@@ -530,7 +552,7 @@ void TRowDispatcher::UpdateMetrics() {
             sessionInfo.Stat.Clear();
 
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
-                auto& stat = AggrStats.LastQueryStats[TQueryStatKey{consumer->QueryId, topic}];
+                auto& stat = AggrStats.LastQueryStats[TQueryStatKey{consumer->QueryId, topic, key.ReadGroup}];
                 if (!stat) {
                     stat = TAggQueryStat();
                 }
@@ -539,22 +561,23 @@ void TRowDispatcher::UpdateMetrics() {
             }
         }
     }
-    for (auto it = AggrStats.LastQueryStats.begin(); it != AggrStats.LastQueryStats.end();) {
-        const auto& stats = it->second;
+    THashSet<TQueryStatKey, TQueryStatKeyHash> toDelete;
+    for (const auto& [key, stats] : AggrStats.LastQueryStats) {
         if (!stats) {
-            SetQueryMetrics(it->first, 0, 0, 0);
-            it = AggrStats.LastQueryStats.erase(it);
-            continue;
+            toDelete.insert(key);
         }
-        SetQueryMetrics(it->first, stats->UnreadBytes.Max, stats->UnreadBytes.Avg, stats->ReadLagMessages.Max);
-        ++it;
+        SetQueryMetrics(key, stats->UnreadBytes.Max, stats->UnreadBytes.Avg, stats->ReadLagMessages.Max);
+    }
+    for (const auto& key : toDelete) {
+         SetQueryMetrics(key, 0, 0, 0);
+         AggrStats.LastQueryStats.erase(key);
     }
     PrintStateToLog();
 }
 
 void TRowDispatcher::SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax) {
-    auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryKey.first);
-    auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(queryKey.second));
+    auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryKey.QueryId);
+    auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(queryKey.Topic));
     topicGroup->GetCounter("MaxUnreadBytes")->Set(unreadBytesMax);
     topicGroup->GetCounter("AvgUnreadBytes")->Set(unreadBytesAvg);
     topicGroup->GetCounter("MaxReadLag")->Set(readLagMessagesMax);
@@ -590,16 +613,15 @@ TString TRowDispatcher::GetInternalState() {
     printDataRate(AggrStats.AllSessionsReadBytes);
     str << "\n";
 
-    TMap<TQueryStatKey, TAggQueryStat> queryState;
-    TMap<TQueryStatKey, ui64> sessionCountByQuery;
+    THashMap<TQueryStatKey, TAggQueryStat, TQueryStatKeyHash> queryState;
+    THashMap<TQueryStatKey, ui64, TQueryStatKeyHash> sessionCountByQuery;
     ui64 unreadBytesSum = 0;
 
-    for (auto& [key, sessionsInfo] : TopicSessions) {
+    for (auto& [sessionKey, sessionsInfo] : TopicSessions) {
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
-            const auto& topic = key.TopicPath;
             unreadBytesSum += sessionInfo.Stat.UnreadBytes;
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
-                auto key = TQueryStatKey{consumer->QueryId, topic};
+                auto key = TQueryStatKey{consumer->QueryId, sessionKey.TopicPath, sessionKey.ReadGroup};
                 ++sessionCountByQuery[key];
                 queryState[key].Add(consumer->Stat);
             }
@@ -612,11 +634,11 @@ TString TRowDispatcher::GetInternalState() {
 
     str << "Queries:\n";
     for (const auto& [queryStatKey, stat]: queryState) {
-        auto [queryId, topic] = queryStatKey;
+        auto [queryId, topic, readGroup] = queryStatKey;
         const auto& aggStat = AggrStats.LastQueryStats[queryStatKey];
         auto sessionsBufferSumSize = sessionCountByQuery[queryStatKey] * MaxSessionBufferSizeBytes;
         auto used = sessionsBufferSumSize ? (stat.UnreadBytes.Sum * 100.0 / sessionsBufferSumSize) : 0.0;
-        str << "  " << queryId << " / " << topic << ": buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.UnreadBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.UnreadBytes.Max) << " data rate";
+        str << "  " << queryId << " / " << topic << " / " << readGroup << ": buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.UnreadBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.UnreadBytes.Max) << " data rate";
         if (aggStat) {
             printDataRate(aggStat->ReadBytes);
         }
@@ -625,7 +647,7 @@ TString TRowDispatcher::GetInternalState() {
     }
     str << "TopicSessions:\n";
     for (auto& [key, sessionsInfo] : TopicSessions) {
-        str << "  " << key.TopicPath << " / " << key.PartitionId;
+        str << "  " << key.TopicPath  << " / " << key.ReadGroup << " / " << key.PartitionId;
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
             str << " / " << LeftPad(actorId, 32)
                 << " data rate " << toHumanDR(sessionInfo.AggrReadBytes.Sum) << " unread bytes " << toHuman(sessionInfo.Stat.UnreadBytes)
@@ -655,7 +677,7 @@ TString TRowDispatcher::GetInternalState() {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
+    LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", read group " << ev->Get()->Record.GetSource().GetReadGroup() << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " part id " << ev->Get()->Record.GetPartitionId() << " query id " << ev->Get()->Record.GetQueryId() << " cookie " << ev->Cookie);
     auto queryGroup = Metrics.Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
     auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(ev->Get()->Record.GetSource().GetTopicPath()));
@@ -681,7 +703,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     }
     const auto& source = ev->Get()->Record.GetSource();
     TActorId sessionActorId;
-    TopicSessionKey topicKey{source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath(), ev->Get()->Record.GetPartitionId()};
+    TopicSessionKey topicKey{source.GetReadGroup(), source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath(), ev->Get()->Record.GetPartitionId()};
     TopicSessionInfo& topicSessionInfo = TopicSessions[topicKey];
     Y_ENSURE(topicSessionInfo.Sessions.size() <= 1);
 
@@ -693,8 +715,10 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     }
 
     if (topicSessionInfo.Sessions.empty()) {
-        LOG_ROW_DISPATCHER_DEBUG("Create new session, offset " << readOffset);
+        LOG_ROW_DISPATCHER_DEBUG("Create new session: read group " << source.GetReadGroup() << " topic " << source.GetTopicPath() 
+            << " part id " << ev->Get()->Record.GetPartitionId() << " offset " << readOffset);
         sessionActorId = ActorFactory->RegisterTopicSession(
+            source.GetReadGroup(),
             source.GetTopicPath(),
             source.GetEndpoint(),
             source.GetDatabase(),
@@ -798,6 +822,7 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     Send(new IEventHandle(consumerIt->second->TopicSessionId, consumer->ReadActorId, event.release(), 0));
 
     TopicSessionKey topicKey{
+        consumer->SourceParams.GetReadGroup(),
         consumer->SourceParams.GetEndpoint(),
         consumer->SourceParams.GetDatabase(),
         consumer->SourceParams.GetTopicPath(),
@@ -928,7 +953,7 @@ void TRowDispatcher::Handle(const NMon::TEvHttpInfo::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvSessionStatistic from " << ev->Sender);
     const auto& key = ev->Get()->Stat.SessionKey;
-    TopicSessionKey sessionKey{key.Endpoint, key.Database, key.TopicPath, key.PartitionId};
+    TopicSessionKey sessionKey{key.ReadGroup, key.Endpoint, key.Database, key.TopicPath, key.PartitionId};
 
     auto sessionsIt = TopicSessions.find(sessionKey);
     if (sessionsIt == TopicSessions.end()) {

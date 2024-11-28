@@ -8,6 +8,7 @@ https://github.com/llvm/llvm-project/releases/download/llvmorg-{{self.version().
 
 {% block patch_source %}
 (
+rm CMakeLists.txt
 cd lib/builtins
 rm CMakeLists.txt
 rm aarch64/lse.S

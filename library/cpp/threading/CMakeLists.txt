@@ -12,9 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(queue)
 add_subdirectory(equeue)
 add_subdirectory(light_rw_lock)
+add_subdirectory(queue)
 add_subdirectory(future)
 add_subdirectory(poor_man_openmp)
 add_subdirectory(atomic)

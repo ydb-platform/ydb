@@ -1073,14 +1073,12 @@ Y_UNIT_TEST_SUITE(TOlap) {
         {   // Write data directly into shard
             TActorId sender = runtime.AllocateEdgeActor();
             data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
-            fprintf(stderr, "Test blob size: %lu\n", data.size());
-
-
             TSet<ui64> txIds;
             for (ui32 i = 0; i < 10; ++i) {
                 std::vector<ui64> writeIds;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
-                NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
+                ++txId;
+                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
 
@@ -1091,8 +1089,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
             // Check that writes will fail if quota is exceeded
             std::vector<ui64> writeIds;
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
-            NTxUT::ProposeCommitFail(runtime, sender, shardId, ++txId, writeIds);
+            ++txId;
+            AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId));
+            NTxUT::ProposeCommitFail(runtime, sender, shardId, txId, writeIds, txId);
         }
 
         csController->WaitIndexation(TDuration::Seconds(5));
@@ -1125,8 +1124,10 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         std::vector<ui64> writeIds;
         TSet<ui64> txIds;
-        NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Delete);
-        NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
+        ++txId;
+        bool delResult = NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Delete, txId);
+        Y_UNUSED(delResult);
+        NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
         txIds.insert(txId);
         NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, txIds);
 

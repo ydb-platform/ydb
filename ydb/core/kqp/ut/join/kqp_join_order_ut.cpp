@@ -87,8 +87,6 @@ static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStor
 
     CreateTables(session, "schema/lookupbug.sql", useColumnStore);
 
-    CreateTables(session, "schema/general_priorities_bug.sql", useColumnStore);
-
     CreateView(session, "view/tpch_random_join_view.sql");
 }
 
@@ -487,6 +485,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCHRandomJoinViewJustWorks, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch_random_join_view_just_works.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
+    }
+
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCHRandomJoinViewJustWorks, StreamLookupJoin, ColumnStore) {
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpch_random_join_view_just_works.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH3, StreamLookupJoin, ColumnStore) {

@@ -81,3 +81,10 @@ message TEvHeartbeat {
     uint32 PartitionId = 1;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
+
+message TEvGetInternalStateRequest {
+}
+
+message TEvGetInternalStateResponse {
+    string InternalState = 1;
+}

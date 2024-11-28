@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 
 $l = (
@@ -7,8 +8,8 @@ $l = (
         TableName() AS tn
     FROM CONCAT(Input1, Input2)
         AS t
-    WHERE key == '023' AND
-        subkey == "3"
+    WHERE key == '023'
+    AND subkey == "3"
 );
 
 $r = (
@@ -17,8 +18,8 @@ $r = (
         TableName() AS tn
     FROM CONCAT(Input1, Input2)
         AS t
-    WHERE key == '150' AND
-        subkey == "3"
+    WHERE key == '150'
+    AND subkey == "3"
 );
 
 SELECT

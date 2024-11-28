@@ -1,4 +1,5 @@
-/* postgres can not *//* multirun can not */
+/* postgres can not */
+/* multirun can not */
 USE plato;
 
 INSERT INTO Output
@@ -17,4 +18,4 @@ COMMIT;
 SELECT
     *
 FROM Output
-WHERE x = 50;
+WHERE x == 50;

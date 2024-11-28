@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $list = ["one", "two", "three", "four", "five"];
 
 SELECT

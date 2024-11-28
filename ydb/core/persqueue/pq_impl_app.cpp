@@ -123,7 +123,7 @@ private:
                                                     str << tx.TxId;
                                                 }
                                             }
-                                            TABLED() {str << tx.Step;}
+                                            TABLED() {str << GetTxStep(tx);}
                                             TABLED() {str << NKikimrPQ::TTransaction_EState_Name(tx.State);}
                                             TABLED() {str << tx.MinStep;}
                                             TABLED() {str << tx.MaxStep;}
@@ -145,6 +145,13 @@ private:
         PQ_LOG_D("Answer TEvRemoteHttpInfoRes: to " << Sender << " self " << ctx.SelfID);
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         Die(ctx);
+    }
+
+    static TString GetTxStep(const TTransactionSnapshot& tx) {
+        if (tx.Step == Max<ui64>()) {
+            return "-";
+        }
+        return ToString(tx.Step);
     }
 
     void Wakeup(const TActorContext& ctx) {

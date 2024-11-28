@@ -1,4 +1,6 @@
-/* postgres can not *//* syntax version 1 *//* yt can not */
+/* postgres can not */
+/* syntax version 1 */
+/* yt can not */
 $s = <|a: 1p|>;
 $js = Just($s);
 $es = Nothing(Struct<a: PgInt>?);

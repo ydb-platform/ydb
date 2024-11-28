@@ -6,5 +6,5 @@ FROM plato.Input
 GROUP BY
     key
 ORDER BY
-    key
-/* sort for stable results only */ LIMIT 2;
+    key /* sort for stable results only */
+LIMIT 2;

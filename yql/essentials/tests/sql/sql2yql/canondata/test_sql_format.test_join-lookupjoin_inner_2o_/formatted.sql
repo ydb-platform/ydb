@@ -10,4 +10,4 @@ FROM Input2
     AS a
 INNER JOIN Input1
     AS b
-ON a.k2 = b.k1 AND a.v2 = b.v1;
+ON a.k2 == b.k1 AND a.v2 == b.v1;

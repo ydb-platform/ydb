@@ -7,8 +7,7 @@ FROM BigDates
 ORDER BY
     row;
 
-INSERT INTO @Output
-    WITH truncate
+INSERT INTO @Output WITH truncate
 SELECT
     *
 FROM BigDates

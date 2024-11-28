@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $i1 =
     SELECT
         CAST(key AS Int32) ?? 0 AS key,

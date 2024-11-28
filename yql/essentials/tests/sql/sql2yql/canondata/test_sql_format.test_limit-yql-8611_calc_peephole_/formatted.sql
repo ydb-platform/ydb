@@ -10,7 +10,7 @@ $row_count = (
     SELECT
         Yson::LookupInt64(Attributes, "row_count")
     FROM AS_TABLE($tableList)
-    WHERE Type = "table"
+    WHERE Type == "table"
 );
 $bucket_size = unwrap(CAST($row_count / ListLength($buckets) AS Uint64));
 

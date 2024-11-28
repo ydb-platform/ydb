@@ -10,8 +10,8 @@ $revenue0 = (
         sum(l_extendedprice * (1 - l_discount)) AS total_revenue,
         CAST(sum(l_extendedprice * (1 - l_discount)) AS Uint64) AS total_revenue_approx
     FROM plato.lineitem
-    WHERE CAST(l_shipdate AS timestamp) >= $border AND
-        CAST(l_shipdate AS timestamp) < ($border + Interval("P92D"))
+    WHERE CAST(l_shipdate AS timestamp) >= $border
+    AND CAST(l_shipdate AS timestamp) < ($border + Interval("P92D"))
     GROUP BY
         l_suppkey
 );
@@ -34,7 +34,7 @@ $join1 = (
         AS s
     JOIN $revenue0
         AS r
-    ON s.s_suppkey = r.supplier_no
+    ON s.s_suppkey == r.supplier_no
 );
 
 SELECT
@@ -47,6 +47,6 @@ FROM $join1
     AS j
 JOIN $max_revenue
     AS m
-ON j.total_revenue_approx = m.max_revenue
+ON j.total_revenue_approx == m.max_revenue
 ORDER BY
     s_suppkey;

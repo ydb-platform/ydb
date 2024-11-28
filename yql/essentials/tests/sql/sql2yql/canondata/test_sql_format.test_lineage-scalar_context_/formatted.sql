@@ -4,7 +4,7 @@ $sub = (
     SELECT
         key
     FROM Input
-    WHERE value = 'abc'
+    WHERE value == 'abc'
 );
 
 INSERT INTO Output

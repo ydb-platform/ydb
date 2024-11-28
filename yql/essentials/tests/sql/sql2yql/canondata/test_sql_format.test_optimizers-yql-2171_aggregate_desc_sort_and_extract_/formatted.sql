@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 
 $data = (
@@ -29,6 +30,6 @@ FROM $top_users_by_age_dec
     AS top
 JOIN $data
     AS info
-ON top.age_dec = info.age / 10
+ON top.age_dec == info.age / 10
 ORDER BY
     name;

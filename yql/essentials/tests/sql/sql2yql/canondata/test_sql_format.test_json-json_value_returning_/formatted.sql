@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not */-- Basic cases
+/* syntax version 1 */
+/* postgres can not */
+-- Basic cases
 $bool_json = CAST(
     @@{
     "key": true
@@ -6,8 +8,7 @@ $bool_json = CAST(
 );
 
 SELECT
-    JSON_VALUE ($bool_json, "strict $.key"),
-    -- defaults to RETURNING Utf8 with cast to string value
+    JSON_VALUE ($bool_json, "strict $.key"), -- defaults to RETURNING Utf8 with cast to string value
     JSON_VALUE ($bool_json, "strict $.key" RETURNING Bool);
 $string_json = CAST(
     @@{
@@ -16,8 +17,7 @@ $string_json = CAST(
 );
 
 SELECT
-    JSON_VALUE ($string_json, "strict $.key"),
-    -- defaults to RETURNING Utf8 with cast to string value
+    JSON_VALUE ($string_json, "strict $.key"), -- defaults to RETURNING Utf8 with cast to string value
     JSON_VALUE ($string_json, "strict $.key" RETURNING Utf8);
 $int64_json = CAST(
     @@{
@@ -26,8 +26,7 @@ $int64_json = CAST(
 );
 
 SELECT
-    JSON_VALUE ($int64_json, "strict $.key"),
-    -- defaults to RETURNING Utf8 with cast to string value
+    JSON_VALUE ($int64_json, "strict $.key"), -- defaults to RETURNING Utf8 with cast to string value
     JSON_VALUE ($int64_json, "strict $.key" RETURNING Int64);
 $double_json = CAST(
     @@{
@@ -36,8 +35,7 @@ $double_json = CAST(
 );
 
 SELECT
-    JSON_VALUE ($double_json, "strict $.key"),
-    -- defaults to RETURNING Utf8 with cast to string value
+    JSON_VALUE ($double_json, "strict $.key"), -- defaults to RETURNING Utf8 with cast to string value
     JSON_VALUE ($double_json, "strict $.key" RETURNING Double);
 
 -- Casting of result value to different types

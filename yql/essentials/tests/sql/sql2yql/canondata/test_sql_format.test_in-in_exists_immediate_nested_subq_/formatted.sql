@@ -1,4 +1,5 @@
-/* postgres can not *//* ignore runonopt plan diff */
+/* postgres can not */
+/* ignore runonopt plan diff */
 USE plato;
 
 $q = (

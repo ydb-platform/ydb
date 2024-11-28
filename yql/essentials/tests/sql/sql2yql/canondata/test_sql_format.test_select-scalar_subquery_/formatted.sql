@@ -3,6 +3,7 @@ $query = (
     SELECT
         AsTuple(count(*), min(value))
     FROM plato.Input
+
 --WHERE 1=0
 );
 

@@ -5,7 +5,7 @@ $n =
     SELECT
         n_nationkey
     FROM plato.nation
-    WHERE n_name = 'EGYPT';
+    WHERE n_name == 'EGYPT';
 
 $s =
     SELECT
@@ -15,7 +15,7 @@ $s =
         AS supplier
     JOIN $n
         AS nation
-    ON supplier.s_nationkey = nation.n_nationkey;
+    ON supplier.s_nationkey == nation.n_nationkey;
 
 $l =
     SELECT
@@ -33,7 +33,7 @@ $j1 =
         AS l1
     JOIN $s
         AS supplier
-    ON l1.l_suppkey = supplier.s_suppkey;
+    ON l1.l_suppkey == supplier.s_suppkey;
 
 $j1_1 =
     SELECT
@@ -42,8 +42,8 @@ $j1_1 =
         AS l1
     JOIN $l
         AS l3
-    ON l1.l_orderkey = l3.l_orderkey
-    WHERE l3.l_suppkey <> l1.l_suppkey;
+    ON l1.l_orderkey == l3.l_orderkey
+    WHERE l3.l_suppkey != l1.l_suppkey;
 
 $j2 =
     SELECT
@@ -54,7 +54,7 @@ $j2 =
         AS l1
     LEFT ONLY JOIN $j1_1
         AS l3
-    ON l1.l_orderkey = l3.l_orderkey;
+    ON l1.l_orderkey == l3.l_orderkey;
 
 $j2_1 =
     SELECT
@@ -63,8 +63,8 @@ $j2_1 =
         AS l1
     JOIN plato.lineitem
         AS l2
-    ON l1.l_orderkey = l2.l_orderkey
-    WHERE l2.l_suppkey <> l1.l_suppkey;
+    ON l1.l_orderkey == l2.l_orderkey
+    WHERE l2.l_suppkey != l1.l_suppkey;
 
 $j3 =
     SELECT
@@ -75,7 +75,7 @@ $j3 =
         AS l1
     LEFT SEMI JOIN $j2_1
         AS l2
-    ON l1.l_orderkey = l2.l_orderkey;
+    ON l1.l_orderkey == l2.l_orderkey;
 
 $j4 =
     SELECT
@@ -84,8 +84,8 @@ $j4 =
         AS l1
     JOIN plato.orders
         AS orders
-    ON orders.o_orderkey = l1.l_orderkey
-    WHERE o_orderstatus = 'F';
+    ON orders.o_orderkey == l1.l_orderkey
+    WHERE o_orderstatus == 'F';
 
 SELECT
     s_name,

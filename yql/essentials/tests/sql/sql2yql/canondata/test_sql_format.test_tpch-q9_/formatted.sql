@@ -18,7 +18,7 @@ $j1 = (
         AS ps
     JOIN $p
         AS p
-    ON ps.ps_partkey = p.p_partkey
+    ON ps.ps_partkey == p.p_partkey
 );
 
 $j2 = (
@@ -34,7 +34,7 @@ $j2 = (
         AS l
     JOIN $j1
         AS j
-    ON l.l_suppkey = j.ps_suppkey AND l.l_partkey = j.ps_partkey
+    ON l.l_suppkey == j.ps_suppkey AND l.l_partkey == j.ps_partkey
 );
 
 $j3 = (
@@ -49,7 +49,7 @@ $j3 = (
         AS s
     JOIN $j2
         AS j
-    ON j.l_suppkey = s.s_suppkey
+    ON j.l_suppkey == s.s_suppkey
 );
 
 $j4 = (
@@ -64,7 +64,7 @@ $j4 = (
         AS o
     JOIN $j3
         AS j
-    ON o.o_orderkey = j.l_orderkey
+    ON o.o_orderkey == j.l_orderkey
 );
 
 $j5 = (
@@ -79,7 +79,7 @@ $j5 = (
         AS n
     JOIN $j4
         AS j
-    ON j.s_nationkey = n.n_nationkey
+    ON j.s_nationkey == n.n_nationkey
 );
 
 $profit = (

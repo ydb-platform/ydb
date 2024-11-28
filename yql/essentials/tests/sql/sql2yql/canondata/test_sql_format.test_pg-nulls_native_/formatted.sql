@@ -16,8 +16,8 @@ INSERT INTO @bar
 SELECT
     t.a + 1 AS a,
     t.*
-    WITHOUT
-        a
+WITHOUT
+    a
 FROM @foo
     AS t;
 COMMIT;

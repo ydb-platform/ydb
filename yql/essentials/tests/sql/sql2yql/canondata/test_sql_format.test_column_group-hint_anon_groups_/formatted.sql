@@ -21,8 +21,7 @@ SELECT
 FROM $i;
 
 -- Forces specific group for $i
-INSERT INTO @tmp
-    WITH column_groups = "{grp=[b;c;d]}"
+INSERT INTO @tmp WITH column_groups = "{grp=[b;c;d]}"
 SELECT
     *
 FROM $i;

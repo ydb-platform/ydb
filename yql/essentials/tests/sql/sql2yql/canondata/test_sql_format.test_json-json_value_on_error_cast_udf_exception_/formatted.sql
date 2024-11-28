@@ -1,4 +1,5 @@
-/* custom error:Cannot convert extracted JSON value to target type*/-- In this case call to Json2::SqlValueNumber will fail because "string"
+/* custom error:Cannot convert extracted JSON value to target type*/
+-- In this case call to Json2::SqlValueNumber will fail because "string"
 -- does not represent Number value
 $json = CAST(
     @@{

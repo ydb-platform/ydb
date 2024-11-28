@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $lambda = ($x) -> {
     RETURN CAST($x AS String)
 };

@@ -10,6 +10,6 @@ SELECT
     h.ip6 AS ip6
 FROM Event
     AS e
-LEFT JOIN/*+ streamlookup(TTL 1 MaxCachedRows 5 MaxDelayedRows 3) */ ANY Host
+LEFT JOIN /*+ streamlookup(TTL 1 MaxCachedRows 5 MaxDelayedRows 3) */ ANY Host
     AS h
 ON (e.host == h.hostname);

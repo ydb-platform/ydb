@@ -91,7 +91,7 @@ YT_DEFINE_ERROR_ENUM(
     ((ReadMetaTimeout)                       (763))
 );
 
-DEFINE_ENUM(EUpdateMode,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EUpdateMode, i8,
     ((None)                     (0))
     ((Append)                   (1))
     ((Overwrite)                (2))
@@ -193,7 +193,7 @@ DEFINE_ENUM(EChunkAvailabilityPolicy,
 );
 
 // Keep in sync with NChunkServer::ETableChunkFormat.
-DEFINE_ENUM(EChunkFormat,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkFormat, i8,
     // Sentinels.
     ((Unknown)                             (-1))
 

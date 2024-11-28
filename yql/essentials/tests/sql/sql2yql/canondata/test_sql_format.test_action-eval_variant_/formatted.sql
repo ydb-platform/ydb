@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $vt = ParseType("Variant<One:Int32,Two:String>");
 
 SELECT

@@ -11,7 +11,7 @@ LEFT JOIN (
     FROM Input2
 )
     AS b
-ON a.key = b.key
+ON a.key == b.key
 SELECT
     a.key AS akey,
     b.key AS bkey,

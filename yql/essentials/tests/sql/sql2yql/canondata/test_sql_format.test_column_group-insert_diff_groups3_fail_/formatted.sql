@@ -2,8 +2,7 @@
 USE plato;
 PRAGMA yt.ColumnGroupMode = "perusage";
 
-INSERT INTO Output
-    WITH column_groups = "{a=#}"
+INSERT INTO Output WITH column_groups = "{a=#}"
 SELECT
     *
 FROM Input

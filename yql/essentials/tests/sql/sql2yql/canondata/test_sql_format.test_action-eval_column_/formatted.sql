@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 $x = CAST(Unicode::ToLower("foo"u) AS String);
 
@@ -50,7 +51,7 @@ FROM Input
     AS a
 JOIN Input
     AS b
-ON (a.$x = b.$x)
+ON (a.$x == b.$x)
 ORDER BY
     x;
 

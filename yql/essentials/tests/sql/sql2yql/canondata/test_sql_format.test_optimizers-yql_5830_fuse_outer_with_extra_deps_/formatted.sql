@@ -21,6 +21,6 @@ LEFT JOIN (
     WHERE key > "050"
 )
     AS b
-ON a.key = b.key
+ON a.key == b.key
 ORDER BY
     a.key;

@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 PRAGMA warning("disable", "4520");
 PRAGMA AnsiRankForNullableKeys;
 
@@ -19,7 +20,7 @@ FROM (
         subkey,
         value
     FROM plato.Input
-    WHERE key = '1'
+    WHERE key == '1'
 )
 WINDOW
     w1 AS (

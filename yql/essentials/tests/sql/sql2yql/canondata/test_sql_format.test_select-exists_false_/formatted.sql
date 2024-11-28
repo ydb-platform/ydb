@@ -3,6 +3,6 @@ SELECT
         SELECT
             *
         FROM plato.Input
-        WHERE key = 'none'
+        WHERE key == 'none'
     )
 FROM plato.Input;

@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $json = CAST(
     @@{
     "key": 123
@@ -21,6 +22,7 @@ SELECT
         CAST(9 AS Double) AS var9,
         CAST(10 AS Float) AS var10
     ),
+
     -- Time types
     JSON_EXISTS (
         $json,
@@ -34,21 +36,25 @@ SELECT
         $json,
         "strict $var" PASSING CAST("2020-02-18" AS Date) AS var
     ),
+
     -- Utf8
     JSON_EXISTS (
         $json,
         "strict $var" PASSING CAST("привет" AS Utf8) AS var
     ),
+
     -- Bool
     JSON_EXISTS (
         $json,
         "strict $var" PASSING TRUE AS var
     ),
+
     -- Json
     JSON_EXISTS (
         $json,
         "strict $var" PASSING $json AS var
     ),
+
     -- Nulls
     JSON_EXISTS (
         $json,
@@ -64,6 +70,7 @@ SELECT
     JSON_EXISTS (
         $json, "strict $var1" PASSING 123 AS var1
     ),
+
     -- NOTE: VaR1 is not casted to upper-case VAR1 as standard expects
     JSON_EXISTS (
         $json, "strict $VaR1" PASSING 123 AS VaR1

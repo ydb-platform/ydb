@@ -2,13 +2,13 @@ PRAGMA warning("disable", "4510");
 
 SELECT
     3,
-    Yql::Date32(AsAtom("0")) = Yql::Date32(AsAtom("1")),
+    Yql::Date32(AsAtom("0")) == Yql::Date32(AsAtom("1")),
     4,
-    Yql::Datetime64(AsAtom("0")) = Yql::Datetime64(AsAtom("1")),
+    Yql::Datetime64(AsAtom("0")) == Yql::Datetime64(AsAtom("1")),
     5,
-    Yql::Timestamp64(AsAtom("0")) = Yql::Timestamp64(AsAtom("1")),
+    Yql::Timestamp64(AsAtom("0")) == Yql::Timestamp64(AsAtom("1")),
     6,
-    Yql::Interval64(AsAtom("0")) = Yql::Interval64(AsAtom("1")),
+    Yql::Interval64(AsAtom("0")) == Yql::Interval64(AsAtom("1")),
     7,
     Yql::Date32(AsAtom("0")) < Yql::Date32(AsAtom("1")),
     8,

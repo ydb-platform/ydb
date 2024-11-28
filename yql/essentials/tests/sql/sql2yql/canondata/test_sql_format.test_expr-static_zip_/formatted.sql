@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $s1 = AsStruct(1 AS k1, "2" AS k2, ["3", "4"] AS k3);
 $s2 = AsStruct("10" AS k1, [20, 30] AS k2, 40 AS k3);
 $s3 = AsStruct([100, 200] AS k1, 300 AS k2, "400" AS k3);

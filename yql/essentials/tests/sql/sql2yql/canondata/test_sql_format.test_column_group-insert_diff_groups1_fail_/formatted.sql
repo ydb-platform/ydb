@@ -20,8 +20,7 @@ SELECT
 FROM $s1;
 COMMIT;
 
-INSERT INTO @a
-    WITH column_groups = "{a=#}"
+INSERT INTO @a WITH column_groups = "{a=#}"
 SELECT
     *
 FROM $s2;

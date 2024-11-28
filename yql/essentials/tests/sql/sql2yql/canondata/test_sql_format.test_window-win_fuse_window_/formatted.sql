@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 $data = (
@@ -46,15 +47,13 @@ WINDOW
         ORDER BY
             value
         ROWS UNBOUNDED PRECEDING
-    ),
-    -- = w1
+    ), -- = w1
     w4 AS (
         ORDER BY
             key,
             subkey
         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    ),
-    -- = w2
+    ), -- = w2
     w5 AS (
         PARTITION BY
             subkey,
@@ -62,8 +61,7 @@ WINDOW
         ORDER BY
             value
         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    )
--- = w1
+    ) -- = w1
 ORDER BY
     key,
     subkey;

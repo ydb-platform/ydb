@@ -1,9 +1,10 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $input = (
     SELECT
         *
     FROM plato.Input
-    WHERE key = '1'
+    WHERE key == '1'
     UNION ALL
     SELECT
         NULL AS key,

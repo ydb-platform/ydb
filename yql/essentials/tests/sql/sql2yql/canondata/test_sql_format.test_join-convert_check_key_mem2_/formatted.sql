@@ -18,7 +18,7 @@ FROM as_table($a)
     AS a
 JOIN as_table($b)
     AS b
-ON a.K = b.K AND a.V = b.V
+ON a.K == b.K AND a.V == b.V
 ORDER BY
     a.K,
     b.V;

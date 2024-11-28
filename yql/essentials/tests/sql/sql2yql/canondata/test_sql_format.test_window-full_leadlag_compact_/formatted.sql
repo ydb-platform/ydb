@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $in =
     SELECT
         value,
@@ -10,11 +11,11 @@ $in =
         SELECT
             *
         FROM plato.Input
-        WHERE key = '1'
+        WHERE key == '1'
     )
     WINDOW
         w1 AS (
-            PARTITION/*+ COMPACT() */ BY
+            PARTITION /*+ COMPACT() */ BY
                 ()
             ORDER BY
                 value

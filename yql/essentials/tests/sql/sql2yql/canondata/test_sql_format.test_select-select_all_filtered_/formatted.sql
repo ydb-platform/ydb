@@ -1,4 +1,4 @@
 SELECT
     *
 FROM plato.Input
-WHERE value = "ddd";
+WHERE value == "ddd";

@@ -66,7 +66,7 @@ $year_total = (
         store_sales
     CROSS JOIN @customer
         customer
-    WHERE ss_sold_date_sk = d_date_sk AND c_customer_sk = ss_customer_sk
+    WHERE ss_sold_date_sk == d_date_sk AND c_customer_sk == ss_customer_sk
     GROUP BY
         customer.c_customer_id,
         customer.c_first_name,
@@ -87,11 +87,11 @@ FROM $year_total
     t_s_firstyear
 CROSS JOIN $year_total
     t_s_secyear
-WHERE t_s_secyear.customer_id = t_s_firstyear.customer_id AND
-    t_s_firstyear.sale_type = 's' AND
-    t_s_secyear.sale_type = 's' AND
-    t_s_firstyear.dyear = 1999 AND
-    t_s_secyear.dyear = 1999 + 1
+WHERE t_s_secyear.customer_id == t_s_firstyear.customer_id
+    AND t_s_firstyear.sale_type == 's'
+    AND t_s_secyear.sale_type == 's'
+    AND t_s_firstyear.dyear == 1999
+    AND t_s_secyear.dyear == 1999 + 1
 ORDER BY
     t_s_secyear.customer_id,
     t_s_secyear.customer_first_name,

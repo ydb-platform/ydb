@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not */-- Null handling
+/* syntax version 1 */
+/* postgres can not */
+-- Null handling
 SELECT
     JSON_QUERY (NULL, "strict $.key"),
     JSON_QUERY (Nothing(Json?), "strict $.key");

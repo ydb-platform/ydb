@@ -1003,6 +1003,7 @@ void CheckInputTablesExist(
     for (auto& path : paths) {
         auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
         Y_ENSURE_EX(
+            path.Cluster_.Defined() ||
             Exists(
                 preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
                 preparer.GetContext(),

@@ -13,7 +13,7 @@ $join1 = (
         AS ps
     JOIN plato.supplier
         AS s
-    ON ps.ps_suppkey = s.s_suppkey
+    ON ps.ps_suppkey == s.s_suppkey
 );
 
 $join2 = (
@@ -26,8 +26,8 @@ $join2 = (
         AS j
     JOIN plato.nation
         AS n
-    ON n.n_nationkey = j.s_nationkey
-    WHERE n.n_name = 'CANADA'
+    ON n.n_nationkey == j.s_nationkey
+    WHERE n.n_name == 'CANADA'
 );
 
 $threshold = (

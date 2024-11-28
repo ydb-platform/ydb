@@ -18,7 +18,7 @@ SELECT
 FROM Input
 JOIN $data
     AS d
-ON Input.key = d.key AND Input.value == d.value
+ON Input.key == d.key AND Input.value == d.value
 ORDER BY
     key,
     value;

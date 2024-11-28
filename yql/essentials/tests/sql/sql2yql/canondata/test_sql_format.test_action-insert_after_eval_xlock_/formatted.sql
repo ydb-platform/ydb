@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not *//* multirun can not */
+/* syntax version 1 */
+/* postgres can not */
+/* multirun can not */
 USE plato;
 
 $s1 = (
@@ -15,8 +17,7 @@ $s2 = (
         WITH xlock
 );
 
-INSERT INTO Output
-    WITH truncate
+INSERT INTO Output WITH truncate
 SELECT
     EvaluateExpr($s1) AS a,
     EvaluateExpr($s2) AS b;

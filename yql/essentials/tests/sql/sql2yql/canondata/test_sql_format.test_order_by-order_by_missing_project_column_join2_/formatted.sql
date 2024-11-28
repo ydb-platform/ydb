@@ -1,4 +1,8 @@
-/* syntax version 1 *//* postgres can not *//* dq can not *//* dqfile can not *//* yt can not */
+/* syntax version 1 */
+/* postgres can not */
+/* dq can not */
+/* dqfile can not */
+/* yt can not */
 $src = [
     <|a: 5, b: 50, zz: 500|>,
     <|a: 4, b: 40, zz: 400|>,
@@ -31,7 +35,7 @@ FROM $src
     AS x
 CROSS JOIN $src1
     AS y
-WHERE x.a = y.e
+WHERE x.a == y.e
 ORDER BY
     zz,
     col1;

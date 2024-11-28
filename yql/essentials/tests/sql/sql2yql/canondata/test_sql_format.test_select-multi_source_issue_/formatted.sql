@@ -17,7 +17,7 @@ $count_a = (
     SELECT
         count(*)
     FROM $i
-    WHERE substring(value, 0, 1) = 'a'
+    WHERE substring(value, 0, 1) == 'a'
 );
 
 --INSERT INTO Output

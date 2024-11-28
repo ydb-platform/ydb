@@ -9,7 +9,7 @@ FROM Input1
     AS a
 JOIN Input2
     AS b
-ON b.k2 = a.k1
+ON b.k2 == a.k1
 CROSS JOIN Input3
     AS c
 SELECT

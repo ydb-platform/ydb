@@ -11,7 +11,7 @@ FROM Input2
     AS b
 JOIN Input1
     AS a
-ON a.k1 = b.k2
+ON a.k1 == b.k2
 ORDER BY
     a.v1,
     b.v2;

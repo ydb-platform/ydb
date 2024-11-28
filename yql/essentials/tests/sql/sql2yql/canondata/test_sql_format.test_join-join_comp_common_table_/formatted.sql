@@ -21,7 +21,7 @@ FROM $i
     AS a
 INNER JOIN $j
     AS b
-ON a.x = b.y
+ON a.x == b.y
 ORDER BY
     zzz,
     fff;
@@ -33,7 +33,7 @@ FROM $i
     AS a
 RIGHT JOIN $j
     AS b
-ON a.x = b.y
+ON a.x == b.y
 ORDER BY
     zzz,
     fff;
@@ -45,7 +45,7 @@ FROM $i
     AS a
 LEFT JOIN $j
     AS b
-ON a.x = b.y
+ON a.x == b.y
 ORDER BY
     zzz,
     fff;
@@ -56,7 +56,7 @@ FROM $i
     AS a
 LEFT SEMI JOIN $j
     AS b
-ON a.x = b.y
+ON a.x == b.y
 ORDER BY
     zzz;
 
@@ -66,7 +66,7 @@ FROM $i
     AS a
 LEFT ONLY JOIN $j
     AS b
-ON a.x = b.y
+ON a.x == b.y
 ORDER BY
     zzz;
 
@@ -76,7 +76,7 @@ FROM $i
     AS a
 RIGHT SEMI JOIN $j
     AS b
-ON a.x = b.y
+ON a.x == b.y
 ORDER BY
     fff;
 
@@ -86,7 +86,7 @@ FROM $i
     AS a
 RIGHT ONLY JOIN $j
     AS b
-ON a.x = b.y
+ON a.x == b.y
 ORDER BY
     fff;
 
@@ -97,7 +97,7 @@ FROM $i
     AS a
 FULL JOIN $j
     AS b
-ON a.x = b.y
+ON a.x == b.y
 ORDER BY
     zzz,
     fff;
@@ -109,7 +109,7 @@ FROM $i
     AS a
 EXCLUSION JOIN $j
     AS b
-ON a.x = b.y
+ON a.x == b.y
 ORDER BY
     zzz,
     fff;

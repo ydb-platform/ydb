@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 PRAGMA DistinctOverWindow;
 $input = AsList(
@@ -17,6 +18,7 @@ SELECT
     key,
     subkey,
     col,
+
     -- assuming ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
     count(DISTINCT col) OVER (
         PARTITION BY
@@ -38,6 +40,7 @@ SELECT
     key,
     subkey,
     col,
+
     -- assuming ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
     count(DISTINCT col) OVER (
         PARTITION BY

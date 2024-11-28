@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $list0 = AsList("a", "b");
 $list1 = AsList(Just("a"), "b", Nothing(ParseType("String?")));
 $list2 = Just(AsList("a", "b"));

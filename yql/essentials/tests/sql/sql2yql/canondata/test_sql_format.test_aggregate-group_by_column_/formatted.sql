@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not */-- order to have same on yt and yamr
+/* syntax version 1 */
+/* postgres can not */
+-- order to have same on yt and yamr
 SELECT
     count(1),
     z

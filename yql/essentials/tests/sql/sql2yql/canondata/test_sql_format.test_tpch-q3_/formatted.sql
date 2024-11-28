@@ -11,7 +11,7 @@ $join1 = (
         AS c
     JOIN plato.orders
         AS o
-    ON c.c_custkey = o.o_custkey
+    ON c.c_custkey == o.o_custkey
 );
 
 $join2 = (
@@ -27,7 +27,7 @@ $join2 = (
         AS j1
     JOIN plato.lineitem
         AS l
-    ON l.l_orderkey = j1.o_orderkey
+    ON l.l_orderkey == j1.o_orderkey
 );
 
 SELECT
@@ -36,9 +36,9 @@ SELECT
     o_orderdate,
     o_shippriority
 FROM $join2
-WHERE c_mktsegment = 'MACHINERY' AND
-    CAST(o_orderdate AS Timestamp) < Date('1995-03-08') AND
-    CAST(l_shipdate AS Timestamp) > Date('1995-03-08')
+WHERE c_mktsegment == 'MACHINERY'
+    AND CAST(o_orderdate AS Timestamp) < Date('1995-03-08')
+    AND CAST(l_shipdate AS Timestamp) > Date('1995-03-08')
 GROUP BY
     l_orderkey,
     o_orderdate,

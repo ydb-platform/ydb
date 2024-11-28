@@ -1,4 +1,6 @@
-/* postgres can not *//* dq can not *//* dqfile can not */
+/* postgres can not */
+/* dq can not */
+/* dqfile can not */
 $s = <|foo: 1p|>;
 $t = (1p,);
 

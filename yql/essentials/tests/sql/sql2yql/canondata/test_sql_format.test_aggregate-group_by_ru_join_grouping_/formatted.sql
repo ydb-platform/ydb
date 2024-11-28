@@ -17,6 +17,6 @@ FROM Input
     AS a
 JOIN $t
     AS b
-ON a.key = b.key
+ON a.key == b.key
 GROUP BY
     ROLLUP (a.key, a.subkey);

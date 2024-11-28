@@ -1,9 +1,10 @@
-/* syntax version 1 *//* postgres can not */-- Accessing absent object member will cause empty result in lax mode
+/* syntax version 1 */
+/* postgres can not */
+-- Accessing absent object member will cause empty result in lax mode
 $json = CAST("{}" AS Json);
 
 SELECT
-    JSON_VALUE ($json, "lax $.key"),
-    -- defaults to NULL ON EMPTY
+    JSON_VALUE ($json, "lax $.key"), -- defaults to NULL ON EMPTY
     JSON_VALUE ($json, "lax $.key" NULL ON EMPTY),
     JSON_VALUE ($json, "lax $.key" DEFAULT "*** empty ***" ON EMPTY);
 

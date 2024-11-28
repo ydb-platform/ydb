@@ -18,4 +18,4 @@ FROM $input;
 SELECT
     *
 FROM Input
-WHERE key = $input;
+WHERE key == $input;

@@ -11,7 +11,7 @@ FROM plato.Input1
     AS t1
 LEFT JOIN plato.Input2
     AS t2
-ON t1.Fk1 = t2.Key
+ON t1.Fk1 == t2.Key
 WHERE t2.Value IS NULL
 ORDER BY
     t1.Key1,

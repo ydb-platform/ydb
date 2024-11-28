@@ -11,5 +11,5 @@ INNER JOIN (
     WHERE key == "075"
 )
     AS b
-ON a.subkey = b.subkey
+ON a.subkey == b.subkey
 WHERE b.value != "";

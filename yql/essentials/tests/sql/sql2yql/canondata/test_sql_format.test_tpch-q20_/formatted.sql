@@ -9,8 +9,8 @@ $threshold = (
         l_partkey AS l_partkey,
         l_suppkey AS l_suppkey
     FROM plato.lineitem
-    WHERE CAST(l_shipdate AS timestamp) >= $border AND
-        CAST(l_shipdate AS timestamp) < ($border + Interval("P365D"))
+    WHERE CAST(l_shipdate AS timestamp) >= $border
+    AND CAST(l_shipdate AS timestamp) < ($border + Interval("P365D"))
     GROUP BY
         l_partkey,
         l_suppkey
@@ -32,7 +32,7 @@ $join1 = (
         AS ps
     JOIN ANY $parts
         AS p
-    ON ps.ps_partkey = p.p_partkey
+    ON ps.ps_partkey == p.p_partkey
 );
 
 $join2 = (
@@ -42,7 +42,7 @@ $join2 = (
         AS j
     JOIN ANY $threshold
         AS t
-    ON j.ps_partkey = t.l_partkey AND j.ps_suppkey = t.l_suppkey
+    ON j.ps_partkey == t.l_partkey AND j.ps_suppkey == t.l_suppkey
     WHERE j.ps_availqty > t.threshold
 );
 
@@ -56,7 +56,7 @@ $join3 = (
         AS j
     JOIN ANY plato.supplier
         AS s
-    ON j.ps_suppkey = s.s_suppkey
+    ON j.ps_suppkey == s.s_suppkey
 );
 
 SELECT
@@ -66,7 +66,7 @@ FROM $join3
     AS j
 JOIN plato.nation
     AS n
-ON j.s_nationkey = n.n_nationkey
-WHERE n.n_name = 'VIETNAM'
+ON j.s_nationkey == n.n_nationkey
+WHERE n.n_name == 'VIETNAM'
 ORDER BY
     s_name;

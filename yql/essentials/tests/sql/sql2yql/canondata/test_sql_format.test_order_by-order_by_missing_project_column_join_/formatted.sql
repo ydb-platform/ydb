@@ -1,4 +1,8 @@
-/* syntax version 1 *//* postgres can not *//* dq can not *//* dqfile can not *//* yt can not */
+/* syntax version 1 */
+/* postgres can not */
+/* dq can not */
+/* dqfile can not */
+/* yt can not */
 $src = [
     <|a: 5, b: 50, zz: 500|>,
     <|a: 4, b: 40, zz: 400|>,
@@ -41,28 +45,28 @@ ORDER BY
 
 SELECT
     *
-    WITHOUT
-        b,
-        a
+WITHOUT
+    b,
+    a
 FROM $src
 ORDER BY
     zz + 1;
 
 SELECT
     *
-    WITHOUT
-        b,
-        a,
-        zz
+WITHOUT
+    b,
+    a,
+    zz
 FROM $src
 ORDER BY
     zz + 1;
 
 SELECT
     *
-    WITHOUT
-        x.b,
-        x.a
+WITHOUT
+    x.b,
+    x.a
 FROM $src
     AS x
 ORDER BY
@@ -70,10 +74,10 @@ ORDER BY
 
 SELECT
     *
-    WITHOUT
-        x.b,
-        x.a,
-        zz
+WITHOUT
+    x.b,
+    x.a,
+    zz
 FROM $src
     AS x
 ORDER BY
@@ -83,9 +87,9 @@ SELECT
     a,
     b,
     x.*
-    WITHOUT
-        b,
-        a
+WITHOUT
+    b,
+    a
 FROM $src
     AS x
 ORDER BY
@@ -95,10 +99,10 @@ SELECT
     a,
     b,
     x.*
-    WITHOUT
-        b,
-        a,
-        x.zz
+WITHOUT
+    b,
+    a,
+    x.zz
 FROM $src
     AS x
 ORDER BY
@@ -108,10 +112,10 @@ SELECT
     a,
     b,
     x.*
-    WITHOUT
-        b,
-        a,
-        x.zz
+WITHOUT
+    b,
+    a,
+    x.zz
 FROM $src
     AS x
 ORDER BY
@@ -124,41 +128,41 @@ FROM $src
     AS x
 JOIN $src1
     AS y
-ON x.a = y.e
+ON x.a == y.e
 ORDER BY
     x.zz;
 
 SELECT
     *
-    WITHOUT
-        x.a,
-        x.b,
+WITHOUT
+    x.a,
+    x.b,
 FROM $src
     AS x
 JOIN $src1
     AS y
-ON x.a = y.e
+ON x.a == y.e
 ORDER BY
     zz;
 
 SELECT
     x.*
-    WITHOUT
-        x.zz
+WITHOUT
+    x.zz
 FROM $src
     AS x
 JOIN $src1
     AS y
-ON x.a = y.e
+ON x.a == y.e
 ORDER BY
     x.zz;
 
 SELECT
     x.*,
     unwrap(x.zz) AS zz,
-    WITHOUT
-        x.a,
-        x.zz
+WITHOUT
+    x.a,
+    x.zz
 FROM $src
     AS x
 ORDER BY
@@ -167,27 +171,27 @@ ORDER BY
 SELECT
     x.*,
     unwrap(x.zz) AS zz,
-    WITHOUT
-        x.a,
-        x.zz
+WITHOUT
+    x.a,
+    x.zz
 FROM $src
     AS x
 JOIN $src1
     AS y
-ON x.a = y.e
+ON x.a == y.e
 ORDER BY
     x.zz;
 
 SELECT
     x.*,
     unwrap(x.zz) AS zz,
-    WITHOUT
-        x.a,
-        x.zz
+WITHOUT
+    x.a,
+    x.zz
 FROM $src
     AS x
 JOIN $src1
     AS y
-ON x.a = y.e
+ON x.a == y.e
 ORDER BY
     zz;

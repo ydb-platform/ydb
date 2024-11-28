@@ -12,7 +12,7 @@ FROM (
         AS i1
     INNER JOIN Leaves
         AS i2
-    ON i1.leaf = i2.key
+    ON i1.leaf == i2.key
     UNION ALL
     SELECT DISTINCT
         i1.key AS Key,
@@ -22,7 +22,7 @@ FROM (
         AS i1
     INNER JOIN Branches
         AS i2
-    ON i1.branch = i2.key
+    ON i1.branch == i2.key
 )
 ORDER BY
     Key,

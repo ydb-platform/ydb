@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 PRAGMA yt.JoinMergeTablesLimit = "10";
 PRAGMA yt.JoinAllowColumnRenames = "true";
 PRAGMA yt.JoinMergeUnsortedFactor = "5.0";
@@ -11,7 +12,7 @@ FROM Input1
     AS a
 LEFT JOIN AS_TABLE($t)
     AS b
-ON a.k1 = b.x
+ON a.k1 == b.x
 ORDER BY
     k1,
     y;

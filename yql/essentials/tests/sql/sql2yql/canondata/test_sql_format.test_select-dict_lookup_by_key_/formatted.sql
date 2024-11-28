@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $key_text = AsDict(
     ('911', 'emergency'),
     ('200', 'two hundred'),

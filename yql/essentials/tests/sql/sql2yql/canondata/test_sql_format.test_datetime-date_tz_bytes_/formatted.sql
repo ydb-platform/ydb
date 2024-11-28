@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 SELECT
     ToBytes(TzDate("2001-01-01,Europe/Moscow"));
 

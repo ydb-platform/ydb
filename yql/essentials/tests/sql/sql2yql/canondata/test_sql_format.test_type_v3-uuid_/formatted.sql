@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 PRAGMA yt.UseNativeYtTypes = "1";
 PRAGMA yt.NativeYtTypeCompatibility = "uuid";

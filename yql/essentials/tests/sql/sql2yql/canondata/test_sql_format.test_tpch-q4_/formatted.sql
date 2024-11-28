@@ -13,16 +13,16 @@ $join = (
         AS o
     JOIN ANY plato.lineitem
         AS l
-    ON o.o_orderkey = l.l_orderkey
+    ON o.o_orderkey == l.l_orderkey
 );
 
 SELECT
     o_orderpriority,
     count(*) AS order_count
 FROM $join
-WHERE CAST(o_orderdate AS Timestamp) >= $border AND
-    CAST(o_orderdate AS Timestamp) < DateTime::MakeDate(DateTime::ShiftMonths($border, 3)) AND
-    l_commitdate < l_receiptdate
+WHERE CAST(o_orderdate AS Timestamp) >= $border
+    AND CAST(o_orderdate AS Timestamp) < DateTime::MakeDate(DateTime::ShiftMonths($border, 3))
+    AND l_commitdate < l_receiptdate
 GROUP BY
     o_orderpriority
 ORDER BY

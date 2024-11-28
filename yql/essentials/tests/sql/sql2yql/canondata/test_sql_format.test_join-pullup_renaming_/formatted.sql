@@ -19,7 +19,7 @@ LEFT JOIN (
     FROM Input2
 )
     AS b
-ON a.akey1 = b.bkey1 AND a.akey1 = b.bkey2 AND a.akey2 = b.bkey1
+ON a.akey1 == b.bkey1 AND a.akey1 == b.bkey2 AND a.akey2 == b.bkey1
 SELECT
     a.akey1 AS akey1,
     b.bkey1 AS bkey1,

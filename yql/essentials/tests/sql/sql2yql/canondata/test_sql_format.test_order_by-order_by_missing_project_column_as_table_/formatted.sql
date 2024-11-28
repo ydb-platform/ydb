@@ -1,4 +1,8 @@
-/* syntax version 1 *//* postgres can not *//* dq can not *//* dqfile can not *//* yt can not */
+/* syntax version 1 */
+/* postgres can not */
+/* dq can not */
+/* dqfile can not */
+/* yt can not */
 $src = [
     <|a: 4, b: 4, date: 4|>,
     <|a: 3, b: 3, date: 3|>,

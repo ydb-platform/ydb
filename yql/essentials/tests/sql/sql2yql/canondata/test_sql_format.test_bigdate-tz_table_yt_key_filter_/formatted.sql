@@ -1,4 +1,5 @@
-/* postgres can not *//* multirun can not */
+/* postgres can not */
+/* multirun can not */
 USE plato;
 PRAGMA yt.UseNewPredicateExtraction;
 
@@ -36,47 +37,47 @@ COMMIT;
 SELECT
     *
 FROM OutTzDate32
-WHERE key > TzDate32('-144169-1-1,UTC') AND
-    key > TzDatetime64('-144169-1-1T0:0:0,UTC') AND
-    key > TzTimestamp64('-144169-1-1T0:0:0,UTC') AND
-    key >= TzDate32('148107-12-31,UTC') AND
-    key >= TzDatetime64('148107-12-31T0:0:0,UTC') AND
-    key >= TzTimestamp64('148107-12-31T0:0:0,UTC');
+WHERE key > TzDate32('-144169-1-1,UTC')
+    AND key > TzDatetime64('-144169-1-1T0:0:0,UTC')
+    AND key > TzTimestamp64('-144169-1-1T0:0:0,UTC')
+    AND key >= TzDate32('148107-12-31,UTC')
+    AND key >= TzDatetime64('148107-12-31T0:0:0,UTC')
+    AND key >= TzTimestamp64('148107-12-31T0:0:0,UTC');
 
 SELECT
     *
 FROM OutTzDate32
-WHERE key < TzDate32('148107-12-31,UTC') AND
-    key < TzDatetime64('148107-12-31T23:59:59,UTC') AND
-    key < TzTimestamp64('148107-12-31T23:59:59.999999,UTC') AND
-    key <= TzDate32('-144169-1-1,UTC') AND
-    key <= TzDatetime64('-144169-1-1T0:0:0,UTC') AND
-    key <= TzTimestamp64('-144169-1-1T0:0:0,UTC');
+WHERE key < TzDate32('148107-12-31,UTC')
+    AND key < TzDatetime64('148107-12-31T23:59:59,UTC')
+    AND key < TzTimestamp64('148107-12-31T23:59:59.999999,UTC')
+    AND key <= TzDate32('-144169-1-1,UTC')
+    AND key <= TzDatetime64('-144169-1-1T0:0:0,UTC')
+    AND key <= TzTimestamp64('-144169-1-1T0:0:0,UTC');
 
 SELECT
     *
 FROM OutTzDatetime64
-WHERE key > TzDatetime64('-144169-1-1T0:0:0,UTC') AND
-    key > TzTimestamp64('-144169-1-1T0:0:0,UTC') AND
-    key >= TzDatetime64('148107-12-31T0:0:0,UTC') AND
-    key >= TzTimestamp64('148107-12-31T0:0:0,UTC');
+WHERE key > TzDatetime64('-144169-1-1T0:0:0,UTC')
+    AND key > TzTimestamp64('-144169-1-1T0:0:0,UTC')
+    AND key >= TzDatetime64('148107-12-31T0:0:0,UTC')
+    AND key >= TzTimestamp64('148107-12-31T0:0:0,UTC');
 
 SELECT
     *
 FROM OutTzDatetime64
-WHERE key < TzDatetime64('148107-12-31T23:59:59,UTC') AND
-    key < TzTimestamp64('148107-12-31T23:59:59.999999,UTC') AND
-    key <= TzDatetime64('-144169-1-1T0:0:0,UTC') AND
-    key <= TzTimestamp64('-144169-1-1T0:0:0,UTC');
+WHERE key < TzDatetime64('148107-12-31T23:59:59,UTC')
+    AND key < TzTimestamp64('148107-12-31T23:59:59.999999,UTC')
+    AND key <= TzDatetime64('-144169-1-1T0:0:0,UTC')
+    AND key <= TzTimestamp64('-144169-1-1T0:0:0,UTC');
 
 SELECT
     *
 FROM OutTzTimestamp64
-WHERE key > TzTimestamp64('-144169-1-1T0:0:0,UTC') AND
-    key >= TzTimestamp64('148107-12-31T0:0:0,UTC');
+WHERE key > TzTimestamp64('-144169-1-1T0:0:0,UTC')
+    AND key >= TzTimestamp64('148107-12-31T0:0:0,UTC');
 
 SELECT
     *
 FROM OutTzTimestamp64
-WHERE key < TzTimestamp64('148107-12-31T23:59:59.999999,UTC') AND
-    key <= TzTimestamp64('-144169-1-1T0:0:0,UTC');
+WHERE key < TzTimestamp64('148107-12-31T23:59:59.999999,UTC')
+    AND key <= TzTimestamp64('-144169-1-1T0:0:0,UTC');

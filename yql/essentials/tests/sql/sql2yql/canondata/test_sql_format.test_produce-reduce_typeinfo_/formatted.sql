@@ -1,4 +1,6 @@
-/* postgres can not *//* syntax version 1 *//* ignore runonopt plan diff */
+/* postgres can not */
+/* syntax version 1 */
+/* ignore runonopt plan diff */
 USE plato;
 PRAGMA warning("disable", "4510");
 

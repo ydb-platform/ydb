@@ -1,3 +1,4 @@
-/* postgres can not *//* postgres returns "t" as string representation */
+/* postgres can not */
+/* postgres returns "t" as string representation */
 SELECT
     TRUE;

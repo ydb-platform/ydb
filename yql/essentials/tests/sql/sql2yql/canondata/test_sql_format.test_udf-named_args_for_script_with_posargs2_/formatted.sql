@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 $udfScript = @@
 def AppendInfo(a_name, a_age = None, a_region = None):

@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $formatTagged = ($x) -> {
     RETURN AsStruct(FormatType($x.Base) AS Base, $x.Tag AS Tag)
 };

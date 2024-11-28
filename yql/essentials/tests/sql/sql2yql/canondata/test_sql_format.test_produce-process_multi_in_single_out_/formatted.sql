@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $udf = YQL::@@
 (lambda '(stream)
     (PartitionByKey stream
@@ -19,8 +20,7 @@ $udf = YQL::@@
 )
 @@;
 
-INSERT INTO plato.Output
-    WITH TRUNCATE
+INSERT INTO plato.Output WITH TRUNCATE
 PROCESS plato.Input0, (
     SELECT
         *

@@ -409,10 +409,10 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     }
 
     const auto& partConfig = Config.GetPartitionConfig();
-    const auto hasLifetime = partConfig.HasLifetimeSeconds() && partConfig.GetLifetimeSeconds() > 0;
+    const bool hasStorageLimit = partConfig.HasStorageLimitBytes();
+    const auto hasLifetime = !hasStorageLimit || (partConfig.HasLifetimeSeconds() && partConfig.GetLifetimeSeconds() > 0);
     const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
 
-    const bool hasStorageLimit = partConfig.HasStorageLimitBytes();
     const auto now = ctx.Now();
     const ui64 importantConsumerMinOffset = ImportantClientsMinOffset();
 
@@ -433,7 +433,6 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
         auto expiredByLifetime = hasLifetime && now >= firstKey.Timestamp + lifetimeLimit;
         auto expiredByStorageLimit = hasStorageLimit && (BodySize - firstKey.Size) >= partConfig.GetStorageLimitBytes();
-        PQ_LOG_I(">>>>>> expiredByLifetimp=" << expiredByLifetime << " expiredByStorageLimit=" << expiredByStorageLimit << " hasLifetime=" << hasLifetime << " hasStorageLimit=" << hasStorageLimit);
         if (!expiredByLifetime && !expiredByStorageLimit) {
             break;
         }

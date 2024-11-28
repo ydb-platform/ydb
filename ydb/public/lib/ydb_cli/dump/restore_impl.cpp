@@ -476,12 +476,12 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
     accumulatorWorkers.Start(accumulators.size(), accumulators.size());  
 
     const ui32 dataFilesPerAccumulator = dataFilesCount / accumulators.size();
+    const ui32 dataFilesPerAccumulatorRemainder = dataFilesCount % accumulators.size();
     for (ui32 i = 0; i < accumulators.size(); ++i) {
         auto* accumulator = accumulators[i].Get();
 
-        ui32 dataFileIdStart = dataFilesPerAccumulator * i;
-        ui32 dataFileIdEnd = std::min(dataFilesPerAccumulator * (i + 1), dataFilesCount);
-
+        ui32 dataFileIdStart = dataFilesPerAccumulator * i + std::min(i, dataFilesPerAccumulatorRemainder);
+        ui32 dataFileIdEnd = dataFilesPerAccumulator * (i + 1) + std::min(i + 1, dataFilesPerAccumulatorRemainder);
         auto func = [&, i, dataFileIdStart, dataFileIdEnd, accumulator]() {
             for (size_t id = dataFileIdStart; id < dataFileIdEnd; ++id) {
                 TFsPath dataFile = fsPath.Child(DataFileName(id));

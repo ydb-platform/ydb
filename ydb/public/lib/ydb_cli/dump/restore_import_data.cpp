@@ -899,6 +899,7 @@ public:
         , Log(log)
         , RateLimiterSettings(settings.RateLimiterSettings_)
         , RequestLimiter(RateLimiterSettings.GetRps(), RateLimiterSettings.GetRps())
+        , Stopped(0)
     {
         Y_ENSURE(!accumulators.empty());
         for (size_t i = 0; i < accumulators.size(); ++i) {

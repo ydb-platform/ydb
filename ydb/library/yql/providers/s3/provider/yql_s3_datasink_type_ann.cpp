@@ -26,6 +26,23 @@ TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
 
     return {};
 }
+
+bool ValidateSchemaForOutput(const TStructExprType* schemaStructRowType, TExprContext& ctx) {
+    for (const TItemExprType* item : schemaStructRowType->GetItems()) {
+        const TTypeAnnotationNode* rowType = item->GetItemType();
+        if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+            rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+            ctx.AddError(TIssue(TStringBuilder() << "Double optional types are not supported for output (you have '"
+                << item->GetName() << " " << FormatType(item->GetItemType()) << "' field)"));
+            return false;
+        }
+    }
+    return true;
+}
+
 }
 
 namespace {
@@ -71,6 +88,10 @@ private:
 
         const TTypeAnnotationNode* sourceType = source->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         if (!EnsureStructType(source->Pos(), *sourceType, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateSchemaForOutput(sourceType->Cast<TStructExprType>(), ctx)) {
             return TStatus::Error;
         }
 

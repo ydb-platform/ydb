@@ -29,38 +29,32 @@ $i4 =
 
 -- several publish consumers with and without groups
 -- test column group spec normalization
-INSERT INTO Output1
-    WITH column_groups = "{g1=[a;b;c];def=#}"
+INSERT INTO Output1 WITH column_groups = "{g1=[a;b;c];def=#}"
 SELECT
     *
 FROM $i1;
 
-INSERT INTO Output1
-    WITH column_groups = "{def=#;g1=[c;a;b];}"
+INSERT INTO Output1 WITH column_groups = "{def=#;g1=[c;a;b];}"
 SELECT
     *
 FROM $i2;
 
-INSERT INTO Output2
-    WITH column_groups = "{def=#}"
+INSERT INTO Output2 WITH column_groups = "{def=#}"
 SELECT
     *
 FROM $i2;
 
-INSERT INTO Output2
-    WITH column_groups = "{def=#}"
+INSERT INTO Output2 WITH column_groups = "{def=#}"
 SELECT
     *
 FROM $i3;
 
-INSERT INTO Output3
-    WITH column_groups = "{g1=[a;b;c];def=#}"
+INSERT INTO Output3 WITH column_groups = "{g1=[a;b;c];def=#}"
 SELECT
     *
 FROM $i1;
 
-INSERT INTO Output3
-    WITH column_groups = "{g1=[a;b;c];def=#}"
+INSERT INTO Output3 WITH column_groups = "{g1=[a;b;c];def=#}"
 SELECT
     *
 FROM $i4;

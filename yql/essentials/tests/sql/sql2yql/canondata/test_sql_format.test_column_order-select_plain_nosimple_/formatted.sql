@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 PRAGMA OrderedColumns;
 PRAGMA DisableSimpleColumns;
@@ -9,8 +10,8 @@ FROM Input;
 
 SELECT
     *
-    WITHOUT
-        key
+WITHOUT
+    key
 FROM Input;
 
 SELECT
@@ -20,8 +21,8 @@ FROM Input
 
 SELECT
     a.*
-    WITHOUT
-        key
+WITHOUT
+    key
 FROM Input
     AS a;
 
@@ -36,8 +37,8 @@ SELECT
     1 AS z,
     2 AS x,
     a.*
-    WITHOUT
-        key
+WITHOUT
+    key
 FROM Input
     AS a;
 

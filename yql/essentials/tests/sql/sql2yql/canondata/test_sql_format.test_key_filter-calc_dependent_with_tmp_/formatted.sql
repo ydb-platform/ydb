@@ -19,4 +19,4 @@ $last_key =
 SELECT
     *
 FROM Input
-WHERE key = $last_key;
+WHERE key == $last_key;

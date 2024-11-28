@@ -1,4 +1,5 @@
-/* postgres can not */-- not supported on windows
+/* postgres can not */
+-- not supported on windows
 $value = "1000000000000";
 $negative = -1000000000000;
 $longint = YQL::StrictFromString($value, AsAtom("Decimal"), AsAtom("32"), AsAtom("0"));

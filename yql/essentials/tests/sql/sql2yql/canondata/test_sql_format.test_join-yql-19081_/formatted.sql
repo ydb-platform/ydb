@@ -9,11 +9,11 @@ SELECT
     c.value
 FROM Input1
     AS a
-JOIN/*+ merge() */ Input2
+JOIN /*+ merge() */ Input2
     AS b
-ON a.key = b.key AND a.subkey = b.subkey
+ON a.key == b.key AND a.subkey == b.subkey
 JOIN Input3
     AS c
-ON b.key = c.key AND b.subkey = c.subkey
+ON b.key == c.key AND b.subkey == c.subkey
 ORDER BY
     c.value;

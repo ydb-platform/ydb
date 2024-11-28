@@ -19,6 +19,6 @@ FROM (
         FROM plato.Input
     )
         AS b
-    ON a.key = b.key
+    ON a.key == b.key
 )
     FLATTEN COLUMNS;

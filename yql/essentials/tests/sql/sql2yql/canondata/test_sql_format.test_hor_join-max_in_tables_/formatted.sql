@@ -1,4 +1,5 @@
-/* postgres can not *//* kikimr can not */
+/* postgres can not */
+/* kikimr can not */
 PRAGMA yt.MaxInputTables = "3";
 
 SELECT

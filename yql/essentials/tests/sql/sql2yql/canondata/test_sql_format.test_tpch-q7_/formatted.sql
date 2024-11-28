@@ -7,7 +7,7 @@ $n =
         n_nationkey
     FROM plato.nation
         AS n
-    WHERE n_name = 'PERU' OR n_name = 'MOZAMBIQUE';
+    WHERE n_name == 'PERU' OR n_name == 'MOZAMBIQUE';
 
 $l =
     SELECT
@@ -27,7 +27,7 @@ $j1 =
         AS supplier
     JOIN $n
         AS n1
-    ON supplier.s_nationkey = n1.n_nationkey;
+    ON supplier.s_nationkey == n1.n_nationkey;
 
 $j2 =
     SELECT
@@ -37,7 +37,7 @@ $j2 =
         AS customer
     JOIN $n
         AS n2
-    ON customer.c_nationkey = n2.n_nationkey;
+    ON customer.c_nationkey == n2.n_nationkey;
 
 $j3 =
     SELECT
@@ -47,7 +47,7 @@ $j3 =
         AS orders
     JOIN $j2
         AS customer
-    ON orders.o_custkey = customer.c_custkey;
+    ON orders.o_custkey == customer.c_custkey;
 
 $j4 =
     SELECT
@@ -60,7 +60,7 @@ $j4 =
         AS lineitem
     JOIN $j3
         AS orders
-    ON lineitem.l_orderkey = orders.o_orderkey;
+    ON lineitem.l_orderkey == orders.o_orderkey;
 
 $j5 =
     SELECT
@@ -72,9 +72,9 @@ $j5 =
         AS lineitem
     JOIN $j1
         AS supplier
-    ON lineitem.l_suppkey = supplier.s_suppkey
-    WHERE (supp_nation = 'PERU' AND cust_nation = 'MOZAMBIQUE') OR
-        (supp_nation = 'MOZAMBIQUE' AND cust_nation = 'PERU');
+    ON lineitem.l_suppkey == supplier.s_suppkey
+    WHERE (supp_nation == 'PERU' AND cust_nation == 'MOZAMBIQUE')
+    OR (supp_nation == 'MOZAMBIQUE' AND cust_nation == 'PERU');
 
 SELECT
     supp_nation,

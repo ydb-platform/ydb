@@ -1,4 +1,5 @@
-/* postgres can not *//* kikimr can not - no ref select mode */
+/* postgres can not */
+/* kikimr can not - no ref select mode */
 SELECT
     key,
     subkey,

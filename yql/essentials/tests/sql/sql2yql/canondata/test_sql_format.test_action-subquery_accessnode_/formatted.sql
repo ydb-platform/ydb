@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 DEFINE SUBQUERY $foo() AS
     SELECT
         <|a: 1, b: 2|> AS s;

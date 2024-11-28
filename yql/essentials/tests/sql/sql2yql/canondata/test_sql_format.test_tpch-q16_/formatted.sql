@@ -9,7 +9,7 @@ $join = (
         AS ps
     LEFT JOIN plato.supplier
         AS w
-    ON w.s_suppkey = ps.ps_suppkey
+    ON w.s_suppkey == ps.ps_suppkey
     WHERE NOT (s_comment LIKE "%Customer%Complaints%")
 );
 
@@ -22,10 +22,10 @@ FROM $join
     AS j
 JOIN plato.part
     AS p
-ON p.p_partkey = j.ps_partkey
-WHERE p.p_brand <> 'Brand#33' AND
-    (NOT StartsWith(p.p_type, 'PROMO POLISHED')) AND
-    (p.p_size = 20 OR p.p_size = 27 OR p.p_size = 11 OR p.p_size = 45 OR p.p_size = 40 OR p.p_size = 41 OR p.p_size = 34 OR p.p_size = 36)
+ON p.p_partkey == j.ps_partkey
+WHERE p.p_brand != 'Brand#33'
+    AND (NOT StartsWith(p.p_type, 'PROMO POLISHED'))
+    AND (p.p_size == 20 OR p.p_size == 27 OR p.p_size == 11 OR p.p_size == 45 OR p.p_size == 40 OR p.p_size == 41 OR p.p_size == 34 OR p.p_size == 36)
 GROUP BY
     p.p_brand,
     p.p_type,

@@ -1,4 +1,5 @@
-/* syntax version 1 *//* do not execute */
+/* syntax version 1 */
+/* do not execute */
 CREATE TABLE plato.Output (
     c_void Void,
     c_unit Unit,

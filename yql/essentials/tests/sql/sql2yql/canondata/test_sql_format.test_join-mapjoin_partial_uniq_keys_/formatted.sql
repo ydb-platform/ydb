@@ -1,5 +1,7 @@
 PRAGMA DisableSimpleColumns;
-/* postgres can not *//* kikimr can not *//* ignore runonopt plan diff */
+/* postgres can not */
+/* kikimr can not */
+/* ignore runonopt plan diff */
 USE plato;
 PRAGMA yt.MapJoinLimit = "1m";
 
@@ -18,7 +20,7 @@ $join = (
         AS a
     LEFT JOIN Input
         AS b
-    ON a.key = b.key
+    ON a.key == b.key
 );
 
 SELECT

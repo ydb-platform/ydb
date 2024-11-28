@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 $a = ListMap(ListFromRange(0, 2), ($_x) -> (CAST(Unicode::ToUpper("i"u) AS String) || "nput"));
 

@@ -2,6 +2,7 @@
 
 #include <yt/yt/core/concurrency/action_queue.h>
 
+#include <yt/yt/library/profiling/solomon/config.h>
 #include <yt/yt/library/profiling/solomon/exporter.h>
 #include <yt/yt/library/profiling/solomon/registry.h>
 
@@ -12,7 +13,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TSolomonExporter, MemoryLeak)
+TEST(TSolomonExporterTest, MemoryLeak)
 {
     auto registry = New<TSolomonRegistry>();
     auto counter = TProfiler{registry, "yt"}.Counter("/foo");
@@ -42,7 +43,7 @@ TEST(TSolomonExporter, MemoryLeak)
     exporter->Stop();
 }
 
-TEST(TSolomonExporter, MemoryLeakWithSelfProfiling)
+TEST(TSolomonExporterTest, MemoryLeakWithSelfProfiling)
 {
     auto registry = New<TSolomonRegistry>();
     auto counter = TProfiler{registry, "yt"}.Counter("/foo");
@@ -55,7 +56,7 @@ TEST(TSolomonExporter, MemoryLeakWithSelfProfiling)
     auto exporter = New<TSolomonExporter>(config, registry);
 }
 
-TEST(TSolomonExporter, ReadJsonHistogram)
+TEST(TSolomonExporterTest, ReadJsonHistogram)
 {
     auto registry = New<TSolomonRegistry>();
     auto hist = TProfiler{registry, "yt"}.TimeHistogram("/foo", TDuration::MilliSeconds(1), TDuration::Seconds(1));
@@ -83,7 +84,7 @@ TEST(TSolomonExporter, ReadJsonHistogram)
     exporter->Stop();
 }
 
-TEST(TSolomonExporter, ReadSpackHistogram)
+TEST(TSolomonExporterTest, ReadSpackHistogram)
 {
     auto registry = New<TSolomonRegistry>();
     auto hist = TProfiler{registry, "yt"}.TimeHistogram("/foo", TDuration::MilliSeconds(1), TDuration::Seconds(1));
@@ -111,7 +112,7 @@ TEST(TSolomonExporter, ReadSpackHistogram)
     exporter->Stop();
 }
 
-TEST(TSolomonExporter, ReadSensorsFilter)
+TEST(TSolomonExporterTest, ReadSensorsFilter)
 {
     auto registry = New<TSolomonRegistry>();
 
@@ -178,7 +179,7 @@ TEST(TSolomonExporter, ReadSensorsFilter)
     exporter->Stop();
 }
 
-TEST(TSolomonExporter, ReadSensorsStripSensorsOption)
+TEST(TSolomonExporterTest, ReadSensorsStripSensorsOption)
 {
     auto registry = New<TSolomonRegistry>();
 

@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 PRAGMA DistinctOverWindow;
 
@@ -14,6 +15,7 @@ SELECT
     subkey,
     key,
     value,
+
     -- assuming ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
     count(DISTINCT key) OVER (
         PARTITION BY

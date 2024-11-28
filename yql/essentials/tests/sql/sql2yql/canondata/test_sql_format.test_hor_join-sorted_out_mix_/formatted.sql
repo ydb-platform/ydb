@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not *//* kikimr can not */
+/* syntax version 1 */
+/* postgres can not */
+/* kikimr can not */
 PRAGMA yt.DisableOptimizers = "UnorderedOuts";
 
 $i1 = (

@@ -1,8 +1,7 @@
 /* syntax version 1 */
 USE plato;
 
-INSERT INTO Input
-    WITH TRUNCATE
+INSERT INTO Input WITH TRUNCATE
 SELECT
     *
 FROM Input

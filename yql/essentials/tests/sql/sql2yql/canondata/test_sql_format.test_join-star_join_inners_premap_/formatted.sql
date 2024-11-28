@@ -23,10 +23,10 @@ FROM ANY Input2
     AS b
 JOIN ANY $a
     AS a
-ON b.k2 = a.k1 AND a.v1 = b.v2
+ON b.k2 == a.k1 AND a.v1 == b.v2
 JOIN ANY $c
     AS c
-ON a.k1 = c.k3 AND c.v3 = a.v1
+ON a.k1 == c.k3 AND c.v3 == a.v1
 SELECT
     *
 ORDER BY

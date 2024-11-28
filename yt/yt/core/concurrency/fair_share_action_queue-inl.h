@@ -17,7 +17,7 @@ public:
         const TString& threadName,
         const std::vector<TString>& queueNames,
         const THashMap<TString, std::vector<TString>>& bucketToQueues,
-        NProfiling::IRegistryImplPtr registry)
+        NProfiling::IRegistryPtr registry)
         : Queue_(CreateFairShareActionQueue(threadName, queueNames, bucketToQueues, std::move(registry)))
     { }
 
@@ -41,7 +41,7 @@ template <typename EQueue, typename EBucket>
 IEnumIndexedFairShareActionQueuePtr<EQueue> CreateEnumIndexedFairShareActionQueue(
     const TString& threadName,
     const THashMap<EBucket, std::vector<EQueue>>& bucketToQueues,
-    NProfiling::IRegistryImplPtr registry)
+    NProfiling::IRegistryPtr registry)
 {
     std::vector<TString> queueNames;
     for (const auto& queueName : TEnumTraits<EQueue>::GetDomainNames()) {

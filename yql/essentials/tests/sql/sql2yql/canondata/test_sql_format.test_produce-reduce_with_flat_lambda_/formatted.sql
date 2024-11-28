@@ -1,4 +1,5 @@
-/* syntax version 1 *//* kikimr can not */
+/* syntax version 1 */
+/* kikimr can not */
 USE plato;
 $udf_stream = ($input) -> {
     RETURN $input

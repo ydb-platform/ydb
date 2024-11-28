@@ -15,9 +15,9 @@ FROM @Input1
     AS a
 JOIN Input2
     AS b
-ON (a.k1 = b.k2)
+ON (a.k1 == b.k2)
 RIGHT JOIN Input3
     AS c
-ON (a.k1 = c.k3)
+ON (a.k1 == c.k3)
 ORDER BY
     v3;

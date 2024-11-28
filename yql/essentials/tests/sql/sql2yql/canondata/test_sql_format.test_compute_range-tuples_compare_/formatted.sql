@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not *//* yt can not */
+/* syntax version 1 */
+/* postgres can not */
+/* yt can not */
 PRAGMA warning("disable", "4510");
 $type = Struct<x: Int32, y: Int32, z: Int32>;
 $keys = AsTuple(AsAtom("x"), AsAtom("y"), AsAtom("z"));

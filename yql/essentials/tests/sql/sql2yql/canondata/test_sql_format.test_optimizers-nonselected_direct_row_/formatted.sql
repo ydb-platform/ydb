@@ -12,4 +12,4 @@ FROM (
         value
     FROM concat(Input1, Input2)
 )
-WHERE tbl = "Input" AND value != "";
+WHERE tbl == "Input" AND value != "";

@@ -8,7 +8,7 @@ FROM Input1
     AS a
 LEFT SEMI JOIN Input2
     AS b
-ON a.k1 = b.k2 AND a.v1 = b.v2
+ON a.k1 == b.k2 AND a.v1 == b.v2
 SELECT
     *
 ORDER BY

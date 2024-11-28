@@ -21,14 +21,12 @@ $subquery2 =
             value2
         );
 
-INSERT INTO @tmp1
-    WITH TRUNCATE
+INSERT INTO @tmp1 WITH TRUNCATE
 SELECT
     *
 FROM $subquery1;
 
-INSERT INTO @tmp2
-    WITH TRUNCATE
+INSERT INTO @tmp2 WITH TRUNCATE
 SELECT
     *
 FROM $subquery2;

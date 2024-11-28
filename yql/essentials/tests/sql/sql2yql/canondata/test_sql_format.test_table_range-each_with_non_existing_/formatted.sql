@@ -1,4 +1,5 @@
-/* syntax version 1 *//* kikimr can not - range not supported */
+/* syntax version 1 */
+/* kikimr can not - range not supported */
 USE plato;
 
 SELECT

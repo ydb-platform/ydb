@@ -1,4 +1,10 @@
-/* Test is broken for now *//* syntax version 1 *//* postgres can not *//* ytfile can not *//* yt can not *//* dq can not *//* dqfile can not */
+/* Test is broken for now */
+/* syntax version 1 */
+/* postgres can not */
+/* ytfile can not */
+/* yt can not */
+/* dq can not */
+/* dqfile can not */
 PRAGMA dq.AnalyticsHopping = "true";
 
 SELECT

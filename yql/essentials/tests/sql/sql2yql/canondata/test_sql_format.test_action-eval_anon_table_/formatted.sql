@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 $a = CAST(Unicode::ToUpper("T"u) AS String) || "able";
 $b = CAST(Unicode::ToUpper("T"u) AS String) || "able";

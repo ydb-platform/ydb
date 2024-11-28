@@ -1,4 +1,5 @@
-/* syntax version 1 *//* yt can not */
+/* syntax version 1 */
+/* yt can not */
 $switch = ($x) -> {
     $res = CASE $x
         WHEN 0

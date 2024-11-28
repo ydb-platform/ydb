@@ -9,7 +9,7 @@ FROM Input1
     AS a
 INNER JOIN Input2
     AS b
-ON a.key = b.key
+ON a.key == b.key
 WHERE Math::IsFinite(CAST(a.key AS Double))
 ORDER BY
     a.key;

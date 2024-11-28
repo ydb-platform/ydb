@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $l1 = AsList(1, 2, 3, 1, 2, 3);
 $l2 = Just($l1);
 $l3 = Nothing(TypeOf($l2));

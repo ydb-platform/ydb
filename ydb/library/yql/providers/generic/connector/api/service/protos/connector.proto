@@ -355,7 +355,7 @@ message TExpression {
     // CAST($value AS $type)
     message TCast {
         TExpression value = 1;
-        string type = 2;
+        Ydb.Type type = 2;
     }
 
     message TNull {

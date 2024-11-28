@@ -1241,7 +1241,7 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace_DeadlineWork(bool ignoreQuo
     TString data = "data for write";
 
     // First message will be processed because used storage 0 and limit 0. That is, the limit is not exceeded.
-    SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data);
+    SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data, ignoreQuotaDeadline);
     messageNo++;
 
     WaitKeyValueRequest(kvCookie); // the partition saves the TEvPQ::TEvWrite event
@@ -1253,7 +1253,7 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace_DeadlineWork(bool ignoreQuo
     }
 
     // Second message will not be processed because the limit is exceeded.
-    SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data);
+    SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data, ignoreQuotaDeadline);
     messageNo++;
 
     {

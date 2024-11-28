@@ -29,8 +29,13 @@ public:
 
 using IDataBatcherPtr = TIntrusivePtr<IDataBatcher>;
 
-IDataBatcherPtr CreateRowDataBatcher();
-IDataBatcherPtr CreateColumnDataBatcher();
+IDataBatcherPtr CreateRowDataBatcher(
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+    std::vector<ui32> writeIndex);
+
+IDataBatcherPtr CreateColumnDataBatcher(
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+    std::vector<ui32> writeIndex);
 
 class IShardedWriteController : public TThrRefBase {
 public:

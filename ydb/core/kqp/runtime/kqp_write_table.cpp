@@ -38,7 +38,7 @@ public:
         return result;
     }
 
-    TColumnBatch(const TRecordBatchPtr& data)
+    explicit TColumnBatch(const TRecordBatchPtr& data)
         : Data(data)
         , Memory(NArrow::GetBatchDataSize(Data)) {
     }
@@ -303,9 +303,21 @@ private:
     TVector<TCellInfo> CellsInfo;
 };
 
-/*class TColumnDataBatcher : public IDataBatch {
+class TColumnDataBatcher : public IDataBatcher {
 public:
     using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
+
+    TColumnDataBatcher(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        std::vector<ui32> writeIndex)
+            : Columns(BuildColumns(inputColumns))
+            , WriteIndex(std::move(writeIndex))
+            , BatchBuilder(arrow::Compression::UNCOMPRESSED, BuildNotNullColumns(inputColumns)) {
+        TString err;
+        if (!BatchBuilder.Start(BuildBatchBuilderColumns(inputColumns), 0, 0, err)) {
+            yexception() << "Failed to start batch builder: " + err;
+        }
+    }
 
     void AddData(const NMiniKQL::TUnboxedValueBatch& data) override {
         TRowBuilder rowBuilder(Columns.size());
@@ -318,14 +330,19 @@ public:
         });
     }
 
+    i64 GetMemory() const override {
+        return BatchBuilder.Bytes();
+    }
+
     IDataBatchPtr Build() override {
-        return BatchBuilder.FlushBatch(true);
+        return MakeIntrusive<TColumnBatch>(BatchBuilder.FlushBatch(true));
     }
 
 private:
     const TVector<TSysTables::TTableColumnInfo> Columns;
+    const std::vector<ui32> WriteIndex;
     NArrow::TArrowBatchBuilder BatchBuilder;
-};*/
+};
 
 class TColumnShardPayloadSerializer : public IPayloadSerializer {
     using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
@@ -557,65 +574,117 @@ private:
     bool Closed = false;
 };
 
+ class TRowsBatcher {
+public:
+    explicit TRowsBatcher(ui16 columnCount, std::optional<ui64> maxBytesPerBatch)
+        : ColumnCount(columnCount)
+        , MaxBytesPerBatch(maxBytesPerBatch) {
+    }
+
+    bool IsEmpty() const {
+        return Batches.empty();
+    }
+
+    struct TBatch {
+        i64 Memory = 0;
+        i64 MemorySerialized = 0;
+        TVector<TCell> Cells;
+        TVector<NUdf::TStringValue> Data;
+    };
+
+    TBatch Flush(bool force) {
+        TBatch res;
+        if ((!Batches.empty() && force) || Batches.size() > 1) {
+            YQL_ENSURE(MaxBytesPerBatch || Batches.size() == 1);
+            res = std::move(Batches.front());
+            Batches.pop_front();
+            Memory -= res.Memory;
+        }
+        return res;
+    }
+
+    ui64 AddRow(TRowWithData&& rowWithData) {
+        YQL_ENSURE(rowWithData.Cells.size() == ColumnCount);
+        i64 newMemory = 0;
+        for (const auto& cell : rowWithData.Cells) {
+            newMemory += cell.Size();
+        }
+        if (Batches.empty() || (MaxBytesPerBatch && newMemory + GetCellHeaderSize() * ColumnCount + Batches.back().MemorySerialized > *MaxBytesPerBatch)) {
+            Batches.emplace_back();
+            Batches.back().Memory = 0;
+            Batches.back().MemorySerialized = GetCellMatrixHeaderSize();
+        }
+
+        for (auto& cell : rowWithData.Cells) {
+            Batches.back().Cells.emplace_back(std::move(cell));
+        }
+        Batches.back().Data.emplace_back(std::move(rowWithData.Data));
+
+        Memory += newMemory;
+        Batches.back().Memory += newMemory;
+        Batches.back().MemorySerialized += newMemory + GetCellHeaderSize() * ColumnCount;
+
+        return newMemory;
+    }
+
+    i64 GetMemory() const {
+        return Memory;
+    }
+
+private:
+    std::deque<TBatch> Batches;
+    ui16 ColumnCount;
+    std::optional<ui64> MaxBytesPerBatch;
+    i64 Memory = 0;
+};
+
+class TRowDataBatcher : public IDataBatcher {
+public:
+    using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
+
+    TRowDataBatcher(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        std::vector<ui32> writeIndex)
+            : Columns(BuildColumns(inputColumns))
+            , WriteIndex(std::move(writeIndex))
+            , RowBatcher(Columns.size(), std::nullopt) {
+    }
+
+    void AddData(const NMiniKQL::TUnboxedValueBatch& data) override {
+        TRowBuilder rowBuilder(Columns.size());
+        data.ForEachRow([&](const auto& row) {
+            for (size_t index = 0; index < Columns.size(); ++index) {
+                rowBuilder.AddCell(WriteIndex[index], Columns[index].PType, row.GetElement(index));
+            }
+            auto rowWithData = rowBuilder.Build();
+            RowBatcher.AddRow(std::move(rowWithData));
+        });
+    }
+
+    i64 GetMemory() const override {
+        return RowBatcher.GetMemory();
+    }
+
+    IDataBatchPtr Build() override {
+        auto batch = RowBatcher.Flush(true);
+        const ui32 rows = batch.Cells.size() / Columns.size();
+
+        return MakeIntrusive<TRowBatch>(
+            std::move(batch.Cells),
+            std::move(batch.Data),
+            batch.MemorySerialized,
+            rows,
+            static_cast<ui16>(Columns.size()));
+    }
+
+private:
+    const TVector<TSysTables::TTableColumnInfo> Columns;
+    const std::vector<ui32> WriteIndex;
+    TRowsBatcher RowBatcher;
+};
+
 class TDataShardPayloadSerializer : public IPayloadSerializer {
     using TBatch = TRowBatch;
-
-    class TRowsBatcher {
-    public:
-        explicit TRowsBatcher(ui16 columnCount, ui64 maxBytesPerBatch)
-            : ColumnCount(columnCount)
-            , MaxBytesPerBatch(maxBytesPerBatch) {
-        }
-
-        bool IsEmpty() const {
-            return Batches.empty();
-        }
-
-        struct TBatch {
-            ui64 Memory = 0;
-            ui64 MemorySerialized = 0;
-            TVector<TCell> Cells;
-            TVector<NUdf::TStringValue> Data;
-        };
-
-        TBatch Flush(bool force) {
-            TBatch res;
-            if ((!Batches.empty() && force) || Batches.size() > 1) {
-                res = std::move(Batches.front());
-                Batches.pop_front();
-            }
-            return res;
-        }
-
-        ui64 AddRow(TRowWithData&& rowWithData) {
-            YQL_ENSURE(rowWithData.Cells.size() == ColumnCount);
-            ui64 newMemory = 0;
-            for (const auto& cell : rowWithData.Cells) {
-                newMemory += cell.Size();
-            }
-            if (Batches.empty() || newMemory + GetCellHeaderSize() * ColumnCount + Batches.back().MemorySerialized > MaxBytesPerBatch) {
-                Batches.emplace_back();
-                Batches.back().Memory = 0;
-                Batches.back().MemorySerialized = GetCellMatrixHeaderSize();
-            }
-
-            for (auto& cell : rowWithData.Cells) {
-                Batches.back().Cells.emplace_back(std::move(cell));
-            }
-            Batches.back().Data.emplace_back(std::move(rowWithData.Data));
-
-            Batches.back().Memory += newMemory;
-            Batches.back().MemorySerialized += newMemory + GetCellHeaderSize() * ColumnCount;
-
-            return newMemory;
-        }
-
-    private:
-        std::deque<TBatch> Batches;
-
-        ui16 ColumnCount;
-        ui64 MaxBytesPerBatch;
-    };
 
 public:
     TDataShardPayloadSerializer(
@@ -772,7 +841,6 @@ private:
 
     bool Closed = false;
 };
-
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
@@ -790,6 +858,16 @@ IPayloadSerializerPtr CreateDataShardPayloadSerializer(
         partitionsEntry, keyColumns, inputColumns, std::move(writeIndex));
 }
 
+}
+
+IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        std::vector<ui32> writeIndex) {
+    return MakeIntrusive<TColumnDataBatcher>(inputColumns, std::move(writeIndex));
+}
+
+IDataBatcherPtr CreateRowDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        std::vector<ui32> writeIndex) {
+    return MakeIntrusive<TRowDataBatcher>(inputColumns, std::move(writeIndex));
 }
 
 bool IDataBatch::IsEmpty() const {

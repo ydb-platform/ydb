@@ -277,7 +277,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (type.has_optional_type() && type.optional_type().item().has_optional_type()) {
                 issues.AddIssue(MakeErrorIssue(
                     Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder{} << "Double optional types are not supported for bindings (you have '" 
+                    TStringBuilder{} << "Double optional types are not supported (you have '" 
                         << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
             }
         }

@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(ObjectStorageTest) {
         NKikimrExternalSources::TGeneral general;
         auto newColumn = schema.add_column();
         newColumn->mutable_type()->mutable_optional_type()->mutable_item()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT32);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Double optional types are not supported for bindings");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Double optional types are not supported");
     }
 
     Y_UNIT_TEST(WildcardsValidation) {

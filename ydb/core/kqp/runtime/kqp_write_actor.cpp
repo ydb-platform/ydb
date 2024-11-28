@@ -168,6 +168,7 @@ public:
         const ui64 lockTxId,
         const ui64 lockNodeId,
         const bool inconsistentTx,
+        const bool isOlap,
         const NMiniKQL::TTypeEnvironment& typeEnv,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const IKqpTransactionManagerPtr& txManager,
@@ -181,12 +182,13 @@ public:
         , LockTxId(lockTxId)
         , LockNodeId(lockNodeId)
         , InconsistentTx(inconsistentTx)
+        , IsOlap(isOlap)
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
         , Counters(counters)
         , TableWriteActorSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(traceId), "TKqpTableWriteActor")
     {
-        LogPrefix = TStringBuilder() << "SessionActorId: " << sessionActorId;
+        LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
         try {
             ShardedWriteController = CreateShardedWriteController(
                 TShardedWriteControllerSettings {
@@ -206,7 +208,7 @@ public:
     }
 
     void Bootstrap() {
-        LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", Table: `" << TablePath << "` (" << TableId << "), "<< LogPrefix;
+        LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         ResolveTable();
         Become(&TKqpTableWriteActor::StateProcessing);
     }
@@ -225,11 +227,6 @@ public:
 
     bool IsEmpty() const {
         return ShardedWriteController->IsEmpty();
-    }
-
-    bool IsOlap() const {
-        YQL_ENSURE(SchemeEntry);
-        return SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable;
     }
 
     TVector<NKikimrDataEvents::TLock> GetLocks() const {
@@ -306,7 +303,7 @@ public:
     void UpdateShards() {
         // TODO: Maybe there are better ways to initialize new shards...
         for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
-            TxManager->AddShard(shardInfo.ShardId, IsOlap(), TablePath);
+            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
             IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
             if (shardInfo.HasRead) {
                 flags |= IKqpTransactionManager::EAction::READ;
@@ -417,15 +414,17 @@ public:
         SchemeEntry = resultSet[0];
 
         CA_LOG_D("Resolved TableId=" << TableId << " ("
-            << SchemeEntry->TableId.PathId.ToString() << " "
-            << SchemeEntry->TableId.SchemaVersion << ")");
+            << TableId.PathId.ToString() << " "
+            << TableId.SchemaVersion << ")");
 
-        if (SchemeEntry->TableId.SchemaVersion != TableId.SchemaVersion) {
+        if (TableId.SchemaVersion != SchemeEntry->TableId.SchemaVersion) {
             RuntimeError(TStringBuilder() << "Schema was updated.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
             return;
         }
 
-        if (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+        YQL_ENSURE(IsOlap == (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable));
+
+        if (IsOlap) {
             Prepare();
         } else {
             ResolveShards();
@@ -434,9 +433,9 @@ public:
 
     void ResolveShards() {
         YQL_ENSURE(!SchemeRequest || InconsistentTx);
-        YQL_ENSURE(SchemeEntry);
         CA_LOG_D("Resolve shards for TableId=" << TableId);
 
+        //TODO: don't use navigatekeyset for datashards here
         TVector<TKeyDesc::TColumnOp> columns;
         TVector<NScheme::TTypeInfo> keyColumnTypes;
         for (const auto& [_, column] : SchemeEntry->Columns) {
@@ -452,7 +451,7 @@ public:
         const TVector<TCell> minKey(keyColumnTypes.size());
         const TTableRange range(minKey, true, {}, false, false);
         YQL_ENSURE(range.IsFullRange(keyColumnTypes.size()));
-        auto keyRange = MakeHolder<TKeyDesc>(SchemeEntry->TableId, range, TKeyDesc::ERowOperation::Update, keyColumnTypes, columns);
+        auto keyRange = MakeHolder<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Update, keyColumnTypes, columns);
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
         request->ResultSet.emplace_back(std::move(keyRange));
@@ -504,7 +503,7 @@ public:
         switch (ev->Get()->GetStatus()) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
             CA_LOG_E("Got UNSPECIFIED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
@@ -526,7 +525,7 @@ public:
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
             CA_LOG_E("Got ABORTED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
@@ -559,7 +558,7 @@ public:
             return;
         case NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR: {
             CA_LOG_E("Got INTERNAL ERROR for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
@@ -573,7 +572,7 @@ public:
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED: {
             CA_LOG_E("Got DISK_SPACE_EXHAUSTED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
@@ -587,7 +586,7 @@ public:
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             CA_LOG_W("Got OVERLOADED for table `"
-                << SchemeEntry->TableId.PathId.ToString() << "`."
+                << TableId.PathId.ToString() << "`."
                 << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                 << " Sink=" << this->SelfId() << "."
                 << " Ignored this error."
@@ -605,7 +604,7 @@ public:
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {
             CA_LOG_E("Got CANCELLED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
@@ -619,7 +618,7 @@ public:
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST: {
             CA_LOG_E("Got BAD REQUEST for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
@@ -633,7 +632,7 @@ public:
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED: {
             CA_LOG_E("Got SCHEME CHANGED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
@@ -652,7 +651,7 @@ public:
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
             CA_LOG_E("Got LOCKS BROKEN for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
@@ -912,7 +911,7 @@ public:
         } else {
             RuntimeError(
                 TStringBuilder()
-                    << "Error writing to table `" << SchemeEntry->TableId.PathId.ToString() << "`"
+                    << "Error writing to table `" << TableId.PathId.ToString() << "`"
                     << ": can't deliver message to tablet " << ev->Get()->TabletId << ".",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
@@ -923,7 +922,7 @@ public:
         ResolveAttempts = 0;
 
         try {
-            if (IsOlap()) {
+            if (IsOlap) {
                 YQL_ENSURE(SchemeEntry);
                 ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
             } else {
@@ -976,6 +975,7 @@ public:
     const ui64 LockTxId;
     const ui64 LockNodeId;
     const bool InconsistentTx;
+    const bool IsOlap;
 
     IKqpTableWriterCallbacks* Callbacks;
 
@@ -1032,6 +1032,7 @@ public:
             Settings.GetLockTxId(),
             Settings.GetLockNodeId(),
             Settings.GetInconsistentTx(),
+            Settings.GetIsOlap(),
             TypeEnv,
             Alloc,
             nullptr,
@@ -1243,6 +1244,7 @@ struct TWriteSettings {
     std::vector<ui32> WriteIndex;
     TTransactionSettings TransactionSettings;
     i64 Priority;
+    bool IsOlap;
 };
 
 struct TBufferWriteMessage {
@@ -1360,6 +1362,7 @@ public:
                     LockTxId,
                     LockNodeId,
                     InconsistentTx,
+                    settings.IsOlap,
                     TypeEnv,
                     Alloc,
                     TxManager,
@@ -2212,6 +2215,7 @@ private:
                     .InconsistentTx = Settings.GetInconsistentTx(),
                 },
                 .Priority = Settings.GetPriority(),
+                .IsOlap = Settings.GetIsOlap(),
             };
         }
 

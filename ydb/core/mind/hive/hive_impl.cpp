@@ -1595,6 +1595,11 @@ void THive::DeleteTablet(TTabletId tabletId) {
             }
             Y_ENSURE_LOG(nt->second.LockedTablets.count(&tablet) == 0, " Deleting tablet found on node " << nt->first << " in locked set");
         }
+        for (const auto& followerGroup : tablet.FollowerGroups) {
+            for (auto& [_, dataCenter] : DataCenters) {
+                dataCenter.Followers.erase({tabletId, followerGroup.Id});
+            }
+        }
         const i64 tabletsTotalDiff = -1 - (tablet.Followers.size());
         UpdateCounterTabletsTotal(tabletsTotalDiff);
         UpdateDomainTabletsTotal(tablet.ObjectDomain, tabletsTotalDiff);

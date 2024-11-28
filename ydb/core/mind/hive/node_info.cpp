@@ -110,13 +110,11 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
     bool result = false;
 
     for (const auto& candidate : effectiveAllowedDomains) {
-        if (Hive.DomainHasNodes(candidate)) {
-            result = std::find(ServicedDomains.begin(),
-                               ServicedDomains.end(),
-                               candidate) != ServicedDomains.end();
-            if (result) {
-                break;
-            }
+        result = std::find(ServicedDomains.begin(),
+                           ServicedDomains.end(),
+                           candidate) != ServicedDomains.end();
+        if (result) {
+            break;
         }
     }
 

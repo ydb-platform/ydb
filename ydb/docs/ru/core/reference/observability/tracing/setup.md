@@ -14,7 +14,7 @@
 
 ## Минимальная конфигурация
 
-Для включения трассировки в {{ ydb-short-name }} добавьте в [конфигурацию](../../../deploy/configuration/config.md) следующую секцию:
+Для включения трассировки в {{ ydb-short-name }} добавьте в [конфигурацию](../../../reference/configuration/index.md) следующую секцию:
 
 ```yaml
 tracing_config:

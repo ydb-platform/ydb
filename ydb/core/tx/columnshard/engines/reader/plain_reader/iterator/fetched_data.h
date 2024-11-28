@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -16,15 +17,40 @@ namespace NKikimr::NOlap {
 
 class TFetchedData {
 protected:
-    using TBlobs = THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>;
+    using TBlobs = THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>;
     YDB_ACCESSOR_DEF(TBlobs, Blobs);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Table);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
     YDB_READONLY(bool, UseFilter, false);
 
+    std::optional<TPortionDataAccessor> PortionAccessor;
+    bool DataAdded = false;
+
 public:
     TFetchedData(const bool useFilter)
         : UseFilter(useFilter) {
+    }
+
+    void SetUseFilter(const bool value) {
+        if (UseFilter == value) {
+            return;
+        }
+        AFL_VERIFY(!DataAdded);
+        UseFilter = value;
+    }
+
+    bool HasPortionAccessor() const {
+        return !!PortionAccessor;
+    }
+
+    void SetPortionAccessor(TPortionDataAccessor&& accessor) {
+        AFL_VERIFY(!PortionAccessor);
+        PortionAccessor = std::move(accessor);
+    }
+
+    const TPortionDataAccessor& GetPortionAccessor() const {
+        AFL_VERIFY(!!PortionAccessor);
+        return *PortionAccessor;
     }
 
     ui32 GetFilteredCount(const ui32 recordsCount, const ui32 defLimit) const {
@@ -59,7 +85,7 @@ public:
         }
     }
 
-    void AddDefaults(THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>&& blobs) {
+    void AddDefaults(THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>&& blobs) {
         for (auto&& i : blobs) {
             AFL_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
         }
@@ -75,6 +101,7 @@ public:
     }
 
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
+        DataAdded = true;
         if (!filter) {
             return;
         }
@@ -103,7 +130,6 @@ public:
         } else {
             AddFilter(*filter);
         }
-        
     }
 
     void AddFilter(const NArrow::TColumnFilter& filter) {
@@ -120,6 +146,7 @@ public:
     }
 
     void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& table) {
+        DataAdded = true;
         AFL_VERIFY(table);
         if (UseFilter) {
             AddBatch(table->BuildTableVerified());
@@ -134,6 +161,7 @@ public:
     }
 
     void AddBatch(const std::shared_ptr<arrow::Table>& table) {
+        DataAdded = true;
         auto tableLocal = table;
         if (Filter && UseFilter) {
             AFL_VERIFY(Filter->Apply(tableLocal));

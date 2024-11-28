@@ -1,11 +1,16 @@
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/metering/metering.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -295,7 +300,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
         UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
-        const TString meteringData = R"({"usage":{"start":0,"quantity":179,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-101-1818-101-1818","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
+        const TString meteringData = R"({"usage":{"start":0,"quantity":179,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-0-0-0-0-101-101-1818-1818","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
 
         UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData + "\n");
 
@@ -779,6 +784,227 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TestDropTable(runtime, ++txId, "/MyRoot", "Table");
         env.TestWaitNotification(runtime, txId);
 
+    }
+
+    Y_UNIT_TEST(MergeIndexTableShardsOnlyWhenReady) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        opts.DisableStatsBatching(true);
+        TTestEnv env(runtime, opts);
+
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::Table::GlobalIndexSettings settings;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+            partition_at_keys {
+                split_points {
+                    type { tuple_type { elements { optional_type { item { type_id: UINT64 } } } } }
+                    value { items { uint64_value: 10 } }
+                }
+                split_points {
+                    type { tuple_type { elements { optional_type { item { type_id: UINT64 } } } } }
+                    value { items { uint64_value: 20 } }
+                }
+                split_points {
+                    type { tuple_type { elements { optional_type { item { type_id: UINT64 } } } } }
+                    value { items { uint64_value: 30 } }
+                }
+            }
+        )", &settings));
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexApplicationBlocker(runtime, [](const auto& ev) {
+            const auto& modifyScheme = ev->Get()->Record.GetTransaction(0);
+            return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild;
+        });
+
+        ui64 indexInitializationTx = 0;
+        TWaitForFirstEvent<TEvSchemeShard::TEvModifySchemeTransaction> indexInitializationWaiter(runtime,
+            [&indexInitializationTx](const auto& ev){
+                const auto& record = ev->Get()->Record;
+                if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild) {
+                    indexInitializationTx = record.GetTxId();
+                    return true;
+                }
+                return false;
+            }
+        );
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime,  buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+            "ByValue", NKikimrSchemeOp::EIndexTypeGlobal, { "value" }, {},
+            { NYdb::NTable::TGlobalIndexSettings::FromProto(settings) }
+        });
+
+        indexInitializationWaiter.Wait();
+        UNIT_ASSERT_VALUES_UNEQUAL(indexInitializationTx, 0);
+        env.TestWaitNotification(runtime, indexInitializationTx);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/ByValue"), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateWriteOnly)
+        });
+
+        TVector<ui64> indexShards;
+        auto shardCollector = [&indexShards](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+            const auto& partitions = record.GetPathDescription().GetTablePartitions();
+            indexShards.clear();
+            indexShards.reserve(partitions.size());
+            for (const auto& partition : partitions) {
+                indexShards.emplace_back(partition.GetDatashardId());
+            }
+        };
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/ByValue/indexImplTable", true), {
+            NLs::PathExist,
+            NLs::PartitionCount(4),
+            shardCollector
+        });
+        UNIT_ASSERT_VALUES_EQUAL(indexShards.size(), 4);
+
+        {
+            // make sure no shards are merged
+            TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> mergeBlocker(runtime, [](const auto& ev) {
+                const auto& modifyScheme = ev->Get()->Record.GetTransaction(0);
+                return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions;
+            });
+
+            {
+                // wait for all index shards to send statistics
+                THashSet<ui64> shardsWithStats;
+                using TEvType = TEvDataShard::TEvPeriodicTableStats;
+                auto statsObserver = runtime.AddObserver<TEvType>([&shardsWithStats](const TEvType::TPtr& ev) {
+                    shardsWithStats.emplace(ev->Get()->Record.GetDatashardId());
+                });
+
+                runtime.WaitFor("all index shards to send statistics", [&]{
+                    return AllOf(indexShards, [&shardsWithStats](ui64 indexShard) {
+                        return shardsWithStats.contains(indexShard);
+                    });
+                });
+            }
+
+            // we expect to not have observed any attempts to merge
+            UNIT_ASSERT(mergeBlocker.empty());
+
+            // wait for 1 minute to ensure that no merges have been started by SchemeShard
+            env.SimulateSleep(runtime, TDuration::Minutes(1));
+            UNIT_ASSERT(mergeBlocker.empty());
+        }
+
+        // splits are allowed even if the index is not ready
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table/ByValue/indexImplTable", Sprintf(R"(
+                    SourceTabletId: %lu
+                    SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 5 } } } }
+                )",
+                indexShards.front()
+            )
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        indexApplicationBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/ByValue"), {
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)
+        });
+
+        // wait until all index impl table shards are merged into one
+        while (true) {
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/ByValue/indexImplTable", true), {
+                shardCollector
+            });
+            if (indexShards.size() > 1) {
+                // If a merge happens, old shards are deleted and replaced with a new one.
+                // That is why we need to wait for * all * the shards to be deleted.
+                env.TestWaitTabletDeletion(runtime, indexShards);
+            } else {
+                break;
+            }
+        }
+    }
+
+    Y_UNIT_TEST(IndexPartitioningIsPersisted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: [ "key" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::Table::GlobalIndexSettings settings;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+            partition_at_keys {
+                split_points {
+                    type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                    value { items { text_value: "alice" } }
+                }
+                split_points {
+                    type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                    value { items { text_value: "bob" } }
+                }
+            }
+            partitioning_settings {
+                min_partitions_count: 3
+                max_partitions_count: 3
+            }
+        )", &settings));
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexCreationBlocker(runtime, [](const auto& ev) {
+            const auto& modifyScheme = ev->Get()->Record.GetTransaction(0);
+            return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+            "Index", NKikimrSchemeOp::EIndexTypeGlobal, { "value" }, {},
+            { NYdb::NTable::TGlobalIndexSettings::FromProto(settings) }
+        });
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        indexCreationBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+            buildIndexOperation.DebugString()
+        );
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::IsTable,
+            NLs::IndexesCount(1)
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index"), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable", true, true), {
+            NLs::IsTable,
+            NLs::PartitionCount(3),
+            NLs::MinPartitionsCountEqual(3),
+            NLs::MaxPartitionsCountEqual(3),
+            NLs::PartitionKeys({"alice", "bob", ""})
+        });
     }
 
     Y_UNIT_TEST(DropIndex) {

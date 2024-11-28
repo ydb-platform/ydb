@@ -19,12 +19,12 @@
 #include <yt/yt/core/concurrency/thread_affinity.h>
 
 #include <yt/yt/core/misc/finally.h>
-#include <yt/yt/core/misc/atomic_object.h>
 
 #include <yt/yt/core/tracing/public.h>
 
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -178,12 +178,15 @@ private:
     TEnumIndexedArray<EMultiplexingBand, TBandBucket> Buckets_;
 
     std::atomic<bool> TerminationFlag_ = false;
-    TAtomicObject<TError> TerminationError_;
+    NThreading::TAtomicObject<TError> TerminationError_;
 
     TSessionPtr GetOrCreateSession(const TSendOptions& options)
     {
         auto& bucket = Buckets_[options.MultiplexingBand];
-        auto index = options.MultiplexingParallelism <= 1 ? 0 : bucket.CurrentSessionIndex++ % options.MultiplexingParallelism;
+        auto parallelism = TTcpDispatcher::Get()->GetMultiplexingParallelism(
+            options.MultiplexingBand,
+            options.MultiplexingParallelism);
+        auto index = parallelism <= 1 ? 0 : bucket.CurrentSessionIndex++ % parallelism;
 
         // Fast path.
         {
@@ -209,7 +212,7 @@ private:
                     << TerminationError_.Load();
             }
 
-            bucket.Sessions.reserve(options.MultiplexingParallelism);
+            bucket.Sessions.reserve(parallelism);
             while (bucket.Sessions.size() <= index) {
                 auto session = New<TSession>(
                     options.MultiplexingBand,
@@ -494,7 +497,7 @@ private:
                 ToProto(header.mutable_realm_id(), requestControl->GetRealmId());
             }
             header.set_sequence_number(payload.SequenceNumber);
-            header.set_codec(static_cast<int>(payload.Codec));
+            header.set_codec(ToProto(payload.Codec));
 
             auto message = CreateStreamingPayloadMessage(header, payload.Attachments);
             NBus::TSendOptions options;
@@ -684,7 +687,7 @@ private:
         std::array<TBucket, BucketCount> RequestBuckets_;
 
         std::atomic<bool> TerminationFlag_ = false;
-        TAtomicObject<TError> TerminationError_;
+        NThreading::TAtomicObject<TError> TerminationError_;
 
 
         TFuture<void> GetBusReadyFuture()
@@ -708,9 +711,9 @@ private:
             const TSendOptions& options)
         {
             auto& header = request->Header();
-            header.set_start_time(ToProto<i64>(TInstant::Now()));
+            header.set_start_time(ToProto(TInstant::Now()));
             if (options.Timeout) {
-                header.set_timeout(ToProto<i64>(*options.Timeout));
+                header.set_timeout(ToProto(*options.Timeout));
             } else {
                 header.clear_timeout();
             }
@@ -980,13 +983,12 @@ private:
                 return;
             }
 
-            NCompression::ECodec codec;
-            int intCodec = header.codec();
-            if (!TryEnumCast(intCodec, &codec)) {
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
+            if (!codecId) {
                 responseHandler->HandleError(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Streaming payload codec %v is not supported",
-                    intCodec));
+                    header.codec()));
                 return;
             }
 
@@ -997,13 +999,13 @@ private:
                 MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
                     builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
                 }),
-                codec,
+                *codecId,
                 !attachments.back());
 
             TStreamingPayload payload{
-                codec,
+                *codecId,
                 sequenceNumber,
-                std::move(attachments)
+                std::move(attachments),
             };
             responseHandler->HandleStreamingPayload(payload);
         }

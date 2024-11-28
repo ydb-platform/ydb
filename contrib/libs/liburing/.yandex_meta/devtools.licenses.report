@@ -1,0 +1,419 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  1ab8939609a4e5622eb5a05c88de6d39
+BELONGS ya.make
+    License text:
+        licence: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        CITATION.cff [11:11]
+
+KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" 1be8687cd0a58a0e6d4c2b5bdcc92cd6
+BELONGS ya.make
+	# We consider dual licensed to be interpreted as logical OR
+    License text:
+        dual licensed GPL with a Linux-syscall-note exception and MIT, see
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README [103:103]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        README [103:103]
+    Scancode info:
+        Original SPDX id: Linux-syscall-note
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://spdx.org/licenses/Linux-syscall-note
+    Files with this license:
+        README [103:103]
+
+KEEP     MIT                  1eaf467c6d00edd4a5876ad437b67edf
+BELONGS ya.make
+    License text:
+        /* SPDX-License-Identifier: MIT */
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/arch/aarch64/lib.h [1:1]
+        src/arch/aarch64/syscall.h [1:1]
+        src/arch/syscall-defs.h [1:1]
+        src/arch/x86/lib.h [1:1]
+        src/arch/x86/syscall.h [1:1]
+        src/include/liburing.h [1:1]
+        src/include/liburing/barrier.h [1:1]
+        src/include/liburing/compat.h [1:1]
+        src/include/liburing/io_uring_version.h [1:1]
+        src/include/liburing/sanitize.h [1:1]
+        src/int_flags.h [1:1]
+        src/lib.h [1:1]
+        src/nolibc.c [2:2]
+        src/queue.c [2:2]
+        src/register.c [2:2]
+        src/setup.c [2:2]
+        src/setup.h [1:1]
+        src/syscall.c [2:2]
+        src/syscall.h [1:1]
+        src/version.c [2:2]
+        test/232c93d07b74.c [2:2]
+        test/35fa71a030ca.c [2:2]
+        test/500f9fbadef8.c [2:2]
+        test/7ad0e4b2f83c.c [2:2]
+        test/8a9973408177.c [2:2]
+        test/917257daa0fe.c [2:2]
+        test/a0908ae19763.c [2:2]
+        test/a4c0b3decb33.c [2:2]
+        test/accept-link.c [2:2]
+        test/accept-non-empty.c [2:2]
+        test/accept-reuse.c [2:2]
+        test/accept-test.c [2:2]
+        test/accept.c [2:2]
+        test/across-fork.c [2:2]
+        test/b19062a56726.c [2:2]
+        test/b5837bd5311d.c [2:2]
+        test/bind-listen.c [2:2]
+        test/buf-ring-nommap.c [2:2]
+        test/buf-ring-put.c [2:2]
+        test/buf-ring.c [2:2]
+        test/ce593a6c480a.c [2:2]
+        test/cmd-discard.c [2:2]
+        test/connect-rep.c [2:2]
+        test/connect.c [2:2]
+        test/coredump.c [2:2]
+        test/cq-full.c [2:2]
+        test/cq-overflow.c [2:2]
+        test/cq-peek-batch.c [2:2]
+        test/cq-ready.c [2:2]
+        test/cq-size.c [2:2]
+        test/d4ae271dfaae.c [2:2]
+        test/d77a67ed5f27.c [2:2]
+        test/defer-tw-timeout.c [2:2]
+        test/defer.c [2:2]
+        test/double-poll-crash.c [2:2]
+        test/drop-submit.c [2:2]
+        test/eeed8b54e0df.c [2:2]
+        test/empty-eownerdead.c [2:2]
+        test/eploop.c [2:2]
+        test/eventfd-disable.c [2:2]
+        test/eventfd-reg.c [2:2]
+        test/eventfd-ring.c [2:2]
+        test/eventfd.c [2:2]
+        test/evloop.c [2:2]
+        test/exec-target.c [2:2]
+        test/exit-no-cleanup.c [2:2]
+        test/fadvise.c [2:2]
+        test/fallocate.c [2:2]
+        test/fc2a85cb02ef.c [2:2]
+        test/fd-install.c [2:2]
+        test/fd-pass.c [2:2]
+        test/fdinfo.c [2:2]
+        test/fifo-nonblock-read.c [2:2]
+        test/file-register.c [2:2]
+        test/file-update.c [2:2]
+        test/file-verify.c [2:2]
+        test/files-exit-hang-poll.c [2:2]
+        test/files-exit-hang-timeout.c [2:2]
+        test/fixed-buf-iter.c [2:2]
+        test/fixed-buf-merge.c [2:2]
+        test/fixed-hugepage.c [2:2]
+        test/fixed-link.c [2:2]
+        test/fixed-reuse.c [2:2]
+        test/fpos.c [2:2]
+        test/fsync.c [2:2]
+        test/futex.c [2:2]
+        test/hardlink.c [2:2]
+        test/helpers.c [2:2]
+        test/helpers.h [1:1]
+        test/ignore-single-mmap.c [2:2]
+        test/init-mem.c [2:2]
+        test/io-cancel.c [2:2]
+        test/io_uring_enter.c [2:2]
+        test/io_uring_passthrough.c [2:2]
+        test/io_uring_register.c [2:2]
+        test/io_uring_setup.c [2:2]
+        test/iopoll-leak.c [2:2]
+        test/iopoll-overflow.c [2:2]
+        test/iopoll.c [2:2]
+        test/kallsyms.c [2:2]
+        test/lfs-openat-write.c [2:2]
+        test/lfs-openat.c [2:2]
+        test/link-timeout.c [2:2]
+        test/link.c [2:2]
+        test/link_drain.c [2:2]
+        test/linked-defer-close.c [2:2]
+        test/madvise.c [2:2]
+        test/min-timeout-wait.c [2:2]
+        test/min-timeout.c [2:2]
+        test/mkdir.c [2:2]
+        test/msg-ring-fd.c [2:2]
+        test/msg-ring-flags.c [2:2]
+        test/msg-ring-overflow.c [2:2]
+        test/msg-ring.c [2:2]
+        test/multicqes_drain.c [2:2]
+        test/napi-test.c [2:2]
+        test/no-mmap-inval.c [2:2]
+        test/nolibc.c [2:2]
+        test/nop-all-sizes.c [2:2]
+        test/nop.c [2:2]
+        test/nvme.h [1:1]
+        test/ooo-file-unreg.c [2:2]
+        test/open-close.c [2:2]
+        test/open-direct-link.c [2:2]
+        test/open-direct-pick.c [2:2]
+        test/openat2.c [2:2]
+        test/personality.c [2:2]
+        test/pipe-eof.c [2:2]
+        test/pipe-reuse.c [2:2]
+        test/poll-cancel-all.c [2:2]
+        test/poll-cancel-ton.c [2:2]
+        test/poll-cancel.c [2:2]
+        test/poll-link.c [2:2]
+        test/poll-many.c [2:2]
+        test/poll-mshot-update.c [2:2]
+        test/poll-race-mshot.c [2:2]
+        test/poll-race.c [2:2]
+        test/poll-ring.c [2:2]
+        test/poll-v-poll.c [2:2]
+        test/poll.c [2:2]
+        test/pollfree.c [2:2]
+        test/probe.c [2:2]
+        test/read-before-exit.c [2:2]
+        test/read-mshot-empty.c [2:2]
+        test/read-mshot-stdin.c [2:2]
+        test/read-mshot.c [2:2]
+        test/read-write.c [2:2]
+        test/recv-msgall-stream.c [2:2]
+        test/recv-msgall.c [2:2]
+        test/recvsend_bundle-inc.c [2:2]
+        test/recvsend_bundle.c [2:2]
+        test/reg-fd-only.c [2:2]
+        test/reg-hint.c [2:2]
+        test/reg-reg-ring.c [2:2]
+        test/regbuf-clone.c [2:2]
+        test/regbuf-merge.c [2:2]
+        test/register-restrictions.c [2:2]
+        test/rename.c [2:2]
+        test/ring-leak.c [2:2]
+        test/ring-leak2.c [2:2]
+        test/ringbuf-read.c [2:2]
+        test/ringbuf-status.c [2:2]
+        test/rsrc_tags.c [2:2]
+        test/rw_merge_test.c [2:2]
+        test/self.c [2:2]
+        test/send-zerocopy.c [2:2]
+        test/send_recv.c [2:2]
+        test/send_recvmsg.c [2:2]
+        test/shared-wq.c [2:2]
+        test/short-read.c [2:2]
+        test/shutdown.c [2:2]
+        test/sigfd-deadlock.c [2:2]
+        test/single-issuer.c [2:2]
+        test/skip-cqe.c [2:2]
+        test/socket-getsetsock-cmd.c [2:2]
+        test/socket-io-cmd.c [2:2]
+        test/socket-rw-eagain.c [2:2]
+        test/socket-rw-offset.c [2:2]
+        test/socket-rw.c [2:2]
+        test/socket.c [2:2]
+        test/splice.c [2:2]
+        test/sq-full-cpp.cc [2:2]
+        test/sq-full.c [2:2]
+        test/sq-poll-dup.c [2:2]
+        test/sq-poll-kthread.c [2:2]
+        test/sq-poll-share.c [2:2]
+        test/sq-space_left.c [2:2]
+        test/sqpoll-disable-exit.c [2:2]
+        test/sqpoll-exec.c [2:2]
+        test/sqpoll-exit-hang.c [2:2]
+        test/sqpoll-sleep.c [2:2]
+        test/sqwait.c [2:2]
+        test/stdout.c [2:2]
+        test/submit-and-wait.c [2:2]
+        test/submit-link-fail.c [2:2]
+        test/submit-reuse.c [2:2]
+        test/symlink.c [2:2]
+        test/sync-cancel.c [2:2]
+        test/teardowns.c [2:2]
+        test/test.h [1:1]
+        test/thread-exit.c [2:2]
+        test/timeout-new.c [2:2]
+        test/timeout.c [2:2]
+        test/truncate.c [2:2]
+        test/tty-write-dpoll.c [2:2]
+        test/unlink.c [2:2]
+        test/uring_cmd_ublk.c [2:2]
+        test/version.c [2:2]
+        test/wait-timeout.c [2:2]
+        test/waitid.c [2:2]
+        test/wakeup-hang.c [2:2]
+        test/wq-aff.c [2:2]
+
+KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" 39bba7d2cf0ba1036f2a6e2be52fe3f0
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: COPYING.GPL at line 60
+FILE_INCLUDE LICENSE found in files: COPYING.GPL at line 1, COPYING.GPL at line 59
+	# As stated in README, this license only applies to 
+	# "the header coming from the kernel which is dual licensed GPL with a Linux-syscall-note exception and MIT"
+	# src/include/liburing/io_uring.h
+	#
+	# Which explicitly provides SPDX id (see below).
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        COPYING.GPL [1:339]
+
+KEEP     MIT                  3da80d64762de50e78a5aa8538e7fd8f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [3:20]
+
+KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" 59b2167fbd54495820591724b17ffb6e
+BELONGS ya.make
+    License text:
+        /* SPDX-License-Identifier: (GPL-2.0 WITH Linux-syscall-note) OR MIT */
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        src/include/liburing/io_uring.h [1:1]
+    Scancode info:
+        Original SPDX id: Linux-syscall-note
+        Score           : 100.00
+        Match type      : TAG
+        Links           : https://spdx.org/licenses/Linux-syscall-note
+    Files with this license:
+        src/include/liburing/io_uring.h [1:1]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/include/liburing/io_uring.h [1:1]
+
+KEEP     MIT                  8384d75c38c570f3edb87cf9f64f2ec2
+BELONGS ya.make
+    License text:
+        // SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        test/close-opath.c [2:2]
+        test/defer-taskrun.c [2:2]
+        test/pipe-bug.c [2:2]
+        test/poll-mshot-overflow.c [2:2]
+        test/recv-multishot.c [2:2]
+
+KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" 9566044df50ee1c37e39ed99e7926750
+BELONGS ya.make
+FILE_INCLUDE COPYING.GPL found in files: README at line 104
+    License text:
+        COPYING.GPL and <https://spdx.org/licenses/Linux-syscall-note.html>.
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        README [104:104]
+    Scancode info:
+        Original SPDX id: Linux-syscall-note
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : https://spdx.org/licenses/Linux-syscall-note
+    Files with this license:
+        README [104:104]
+
+KEEP     "(LGPL-2.1-only OR MIT)" 9d1d95673c01a94e06648bf72ecda12d
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: COPYING at line 116
+FILE_INCLUDE LICENSE found in files: COPYING at line 1, COPYING at line 115
+	# As stated in README, this library is dual licensed with LGPL and MIT
+	#
+	# We consider dual licensed to be interpreted as logical OR
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        COPYING [1:502]
+
+KEEP     "(LGPL-2.1-only OR MIT)" e07a3065773f5644ec66389abdf5c383
+BELONGS ya.make
+	# We consider dual licensed to be interpreted as logical OR
+    License text:
+        All software contained within this repo is dual licensed LGPL and MIT, see
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README [101:101]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        README [101:101]

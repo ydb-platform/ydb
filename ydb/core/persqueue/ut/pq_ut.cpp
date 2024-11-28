@@ -2326,6 +2326,100 @@ Y_UNIT_TEST(TestTabletRestoreEventsOrder) {
     });
 }
 
+Y_UNIT_TEST(TestReadAndDeleteConsumer) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetScheduledLimit(2000);
+        tc.Runtime->SetScheduledEventFilter(&tc.ImmediateLogFlushAndRequestTimeoutFilter);
+
+        TVector<std::pair<ui64, TString>> data;
+        TString msg;
+        msg.resize(102400, 'a');
+        for (ui64 i = 1; i <= 1000; ++i) {
+            data.emplace_back(i, msg);
+        }
+
+        PQTabletPrepare({.maxCountInPartition=100, .deleteTime=TDuration::Days(2).Seconds(), .partitions=1},
+                        {{"user1", true}, {"user2", true}}, tc);
+        CmdWrite(0, "sourceid1", data, tc, false, {}, true);
+
+        // Reset tablet cache
+        PQTabletRestart(tc);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvPersQueue::TEvResponse* readResult = nullptr;
+        THolder<TEvPersQueue::TEvRequest> readRequest;
+        TEvPersQueue::TEvUpdateConfigResponse* consumerDeleteResult = nullptr;
+        THolder<TEvPersQueue::TEvUpdateConfig> consumerDeleteRequest;
+
+        // Read request
+        {
+            readRequest.Reset(new TEvPersQueue::TEvRequest);
+            auto req = readRequest->Record.MutablePartitionRequest();
+            req->SetPartition(0);
+            auto read = req->MutableCmdRead();
+            read->SetOffset(1);
+            read->SetClientId("user1");
+            read->SetCount(1);
+            read->SetBytes(1'000'000);
+            read->SetTimeoutMs(5000);
+        }
+
+        // Consumer delete request
+        {
+            consumerDeleteRequest.Reset(new TEvPersQueue::TEvUpdateConfig());
+            consumerDeleteRequest->MutableRecord()->SetTxId(42);
+            auto& cfg = *consumerDeleteRequest->MutableRecord()->MutableTabletConfig();
+            cfg.SetVersion(42);
+            cfg.AddPartitionIds(0);
+            cfg.AddPartitions()->SetPartitionId(0);
+            cfg.SetLocalDC(true);
+            cfg.SetTopic("topic");
+            auto& cons = *cfg.AddConsumers();
+            cons.SetName("user2");
+            cons.SetImportant(true);
+        }
+
+        TActorId edge = tc.Runtime->AllocateEdgeActor();
+
+        // Delete consumer during read request
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, readRequest.Release(), 0, GetPipeConfigWithRetries());
+
+        // Intercept TEvPQ::TEvBlobResponse event
+        std::vector<TEvPQ::TEvBlobResponse::TPtr> capturedBlobResponses;
+        auto captureBlobResponsesObserver = tc.Runtime->AddObserver<TEvPQ::TEvBlobResponse>([&](TEvPQ::TEvBlobResponse::TPtr& ev) {
+            capturedBlobResponses.emplace_back().Swap(ev);
+        });
+
+        // Delete consumer while read request is still in progress
+        tc.Runtime->SendToPipe(tc.TabletId, edge, consumerDeleteRequest.Release(), 0, GetPipeConfigWithRetries());
+        consumerDeleteResult = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
+        {
+            //Cerr << "Got consumer delete response: " << consumerDeleteResult->Record << Endl;
+            UNIT_ASSERT(consumerDeleteResult->Record.HasStatus());
+            UNIT_ASSERT_VALUES_EQUAL((int)consumerDeleteResult->Record.GetStatus(), (int)NKikimrPQ::EStatus::OK);
+        }
+
+        // Resend intercepted blob responses and wait for read result
+        captureBlobResponsesObserver.Remove();
+        for (auto& ev : capturedBlobResponses) {
+            tc.Runtime->Send(ev.Release(), 0, true);
+        }
+
+        readResult = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+        {
+            //Cerr << "Got read response: " << readResult->Record << Endl;
+            UNIT_ASSERT(readResult->Record.HasStatus());
+            UNIT_ASSERT_EQUAL(readResult->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS_C(readResult->Record.GetErrorReason(), "Consumer user1 is gone from partition", readResult->Record.Utf8DebugString());
+        }
+    });
+}
 
 
 } // Y_UNIT_TEST_SUITE(TPQTest)

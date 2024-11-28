@@ -27,25 +27,25 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_mkql_compiler.h>
 
-#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/providers/stat/expr_nodes/yql_stat_expr_nodes.h>
 #include <ydb/library/yql/providers/stat/uploader/yql_stat_uploader.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -100,7 +100,7 @@ void DumpLocalTable(const TString& tableContent, const TString& path) {
     }
 
     TFileOutput out(path);
-    out.Write(tableContent.Data(), tableContent.Size());
+    out.Write(tableContent.data(), tableContent.size());
     out.Flush();
 }
 
@@ -1082,6 +1082,133 @@ public:
         return NYT::TRichYPath(table);
     }
 
+    TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) final {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+            auto logCtx = NYql::NLog::CurrentLogContextPath();
+
+            const auto epoch = options.Epoch();
+            THashMap<TString, TTransactionCache::TEntry::TPtr> entries;
+            TVector<TFuture<void>> waits;
+            for (auto& req: options.Tables()) {
+                const auto cluster = req.Cluster();
+                const auto table = req.Table();
+                const auto anon = req.Anonymous();
+                const auto targetPath = req.TargetPath();
+                YQL_CLOG(DEBUG, ProviderYt) << "Downloading " << cluster << '.' << table << " to " << targetPath;
+
+                TTransactionCache::TEntry::TPtr& entry = entries[cluster];
+                if (!entry) {
+                    auto ytServer = Clusters_->TryGetServer(cluster);
+                    YQL_ENSURE(ytServer);
+                    entry = session->TxCache_.GetEntry(ytServer);
+                }
+
+                auto richYPath = NYT::TRichYPath(table);
+                if (auto p = entry->Snapshots.FindPtr(std::make_pair(table, epoch))) {
+                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
+                } else {
+                    auto realTableName = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), table, anon, session->UserName_);
+                    realTableName = NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix);
+                    richYPath = NYT::TRichYPath(realTableName);
+                    richYPath.TransactionId(entry->Tx->GetId());
+                }
+
+                waits.push_back(session->Queue_->Async([entry, richYPath, targetPath, logCtx] () {
+                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+
+                    auto reader = entry->Tx->CreateRawReader(
+                        richYPath,
+                        NYT::TFormat::YsonText(),
+                        NYT::TTableReaderOptions()
+                            .CreateTransaction(false)
+                            .ControlAttributes(
+                                NYT::TControlAttributes()
+                                    .EnableRowIndex(false)
+                                    .EnableRangeIndex(false)
+                                )
+                        );
+
+                    TOFStream out(targetPath);
+                    TransferData(reader.Get(), &out);
+                    out.Finish();
+                }));
+            }
+            return WaitExceptionOrAll(waits).Apply([](const TFuture<void>& f) {
+                try {
+                    f.TryRethrow();
+                    TDownloadTablesResult res;
+                    res.SetSuccess();
+                    return res;
+                } catch (...) {
+                    YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                    return ResultFromCurrentException<TDownloadTablesResult>();
+                }
+            });
+        } catch (...) {
+            YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+            return MakeFuture(ResultFromCurrentException<TDownloadTablesResult>());
+        }
+    }
+
+    TFuture<TUploadTableResult> UploadTable(TUploadTableOptions&& options) final {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+            auto logCtx = NYql::NLog::CurrentLogContextPath();
+
+            const auto cluster = options.Cluster();
+            const auto table = options.Table();
+            const auto path = options.Path();
+            auto attrs = NYT::NodeFromYsonString(options.Attrs());
+            const auto config = options.Config();
+            YQL_CLOG(DEBUG, ProviderYt) << "Uploading " << path << " to " << cluster << '.' << table;
+
+            auto ytServer = Clusters_->TryGetServer(cluster);
+            YQL_ENSURE(ytServer);
+            auto entry = session->TxCache_.GetEntry(ytServer);
+
+            NYT::TTableWriterOptions writerOptions;
+            auto maxRowWeight = config->MaxRowWeight.Get(cluster);
+            auto maxKeyWeight = config->MaxKeyWeight.Get(cluster);
+
+            if (maxRowWeight || maxKeyWeight) {
+                NYT::TNode writeConfig;
+                if (maxRowWeight) {
+                    writeConfig["max_row_weight"] = static_cast<i64>(*maxRowWeight);
+                }
+                if (maxKeyWeight) {
+                    writeConfig["max_key_weight"] = static_cast<i64>(*maxKeyWeight);
+                }
+                writerOptions.Config(writeConfig);
+            }
+
+            NYT::MergeNodes(attrs, YqlOpOptionsToAttrs(session->OperationOptions_));
+
+            return session->Queue_->Async([entry, table, path, attrs, writerOptions, logCtx] () {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+                try {
+                    entry->Tx->Create(table, NT_TABLE, NYT::TCreateOptions().Force(true).Attributes(attrs));
+
+                    TRawTableWriterPtr writer = entry->Tx->CreateRawWriter(table, NYT::TFormat::YsonText(), writerOptions);
+                    TIFStream in(path);
+                    TransferData(&in, writer.Get());
+                    writer->Finish();
+                    TUploadTableResult res;
+                    res.SetSuccess();
+                    return res;
+                } catch (...) {
+                    YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                    return ResultFromCurrentException<TUploadTableResult>();
+                }
+            });
+        } catch (...) {
+            YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+            return MakeFuture(ResultFromCurrentException<TUploadTableResult>());
+        }
+    }
+
     TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
         auto nodePos = ctx.GetPosition(node->Pos());
@@ -1802,7 +1929,7 @@ private:
             auto cacheKey = std::make_tuple(prefix, suffix, filterLambda);
             with_lock(entry->Lock_) {
                 if (auto p = entry->RangeCache.FindPtr(cacheKey)) {
-                    YQL_CLOG(INFO, ProviderYt) << "Found range in cache for key ('" << prefix << "','" << suffix << "',<filter with size " << filterLambda.Size() << ">) - number of items " << p->size();
+                    YQL_CLOG(INFO, ProviderYt) << "Found range in cache for key ('" << prefix << "','" << suffix << "',<filter with size " << filterLambda.size() << ">) - number of items " << p->size();
                     return MakeFuture(MakeTableRangeResult(*p));
                 }
             }
@@ -2453,38 +2580,22 @@ private:
         TTableInfoResult& result)
     {
         TVector<NYT::TNode> attributes(tables.size());
+        TVector<TMaybe<NYT::TNode>> linkAttributes(tables.size());
+        std::atomic<bool> linksPresent = false;
         {
             auto batchGet = tx->CreateBatchRequest();
             TVector<TFuture<void>> batchRes(Reserve(idxs.size()));
             for (auto& idx: idxs) {
-                batchRes.push_back(batchGet->Get(idx.second + "/@").Apply([&attributes, idx] (const TFuture<NYT::TNode>& res) {
-                    attributes[idx.first] = res.GetValue();
-                }));
-            }
-            batchGet->ExecuteBatch();
-            WaitExceptionOrAll(batchRes).GetValue();
-        }
-        {
-            auto batchGet = tx->CreateBatchRequest();
-            TVector<TFuture<void>> batchRes;
-            auto getOpts = TGetOptions()
-                .AttributeFilter(TAttributeFilter()
-                    .AddAttribute("type")
-                    .AddAttribute(TString{QB2Premapper})
-                    .AddAttribute(TString{YqlRowSpecAttribute})
-                );
-            for (auto& idx: idxs) {
-                batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@", getOpts).Apply([idx, &attributes](const TFuture<NYT::TNode>& f) {
+                batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@").Apply(
+                     [&attributes, &linkAttributes, &linksPresent, idx] (const TFuture<NYT::TNode>& res) {
                     try {
-                        NYT::TNode attrs = f.GetValue();
-                        if (GetTypeFromAttributes(attrs, false) == "link") {
-                            // override some attributes by the link ones
-                            if (attrs.HasKey(QB2Premapper)) {
-                                attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
-                            }
-                            if (attrs.HasKey(YqlRowSpecAttribute)) {
-                                attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
-                            }
+                        NYT::TNode attrs = res.GetValue();
+                        auto type = GetTypeFromAttributes(attrs, false);
+                        if (type == "link") {
+                            linkAttributes[idx.first] = attrs;
+                            linksPresent.store(true);
+                        } else {
+                            attributes[idx.first] = attrs;
                         }
                     } catch (const TErrorResponse& e) {
                         // Yt returns NoSuchTransaction as inner issue for ResolveError
@@ -2498,7 +2609,30 @@ private:
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
         }
-
+        if (linksPresent.load()) {
+            auto batchGet = tx->CreateBatchRequest();
+            TVector<TFuture<void>> batchRes;
+            for (auto& idx : idxs) {
+                if (!linkAttributes[idx.first]) {
+                    continue;
+                }
+                const auto& linkAttr = *linkAttributes[idx.first];
+                batchRes.push_back(batchGet->Get(idx.second + "/@").Apply(
+                     [idx, &linkAttr, &attributes](const TFuture<NYT::TNode>& f) {
+                    NYT::TNode attrs = f.GetValue();
+                    attributes[idx.first] = attrs;
+                    // override some attributes by the link ones
+                    if (linkAttr.HasKey(QB2Premapper)) {
+                        attributes[idx.first][QB2Premapper] = linkAttr[QB2Premapper];
+                    }
+                    if (linkAttr.HasKey(YqlRowSpecAttribute)) {
+                        attributes[idx.first][YqlRowSpecAttribute] = linkAttr[YqlRowSpecAttribute];
+                    }
+                }));
+            }
+            batchGet->ExecuteBatch();
+            WaitExceptionOrAll(batchRes).GetValue();
+        }
         auto batchGet = tx->CreateBatchRequest();
         TVector<TFuture<void>> batchRes;
 
@@ -3283,6 +3417,7 @@ private:
 
     static TFuture<void> ExecMap(
         bool ordered,
+        bool blockInput,
         const TMaybe<ui64>& jobCount,
         const TMaybe<ui64>& limit,
         const TVector<TString>& sortLimitBy,
@@ -3293,7 +3428,7 @@ private:
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
-        return ret.Apply([ordered, jobCount, limit, sortLimitBy, mapLambda,
+        return ret.Apply([ordered, blockInput, jobCount, limit, sortLimitBy, mapLambda,
                           inputType, extraUsage, execCtx, testRun] (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -3390,6 +3525,7 @@ private:
 
             job->SetYamrInput(execCtx->YamrInput);
             job->SetUseSkiff(useSkiff, testRun ? TMkqlIOSpecs::ESystemField(0) : TMkqlIOSpecs::ESystemField::RowIndex);
+            job->SetUseBlockInput(blockInput);
 
             auto tmpFiles = std::make_shared<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
@@ -3468,6 +3604,8 @@ private:
 
     TFuture<void> DoMap(TYtMap map, const TExecContext<TRunOptions>::TPtr& execCtx, TExprContext& ctx) {
         const bool ordered = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::Ordered);
+        const bool blockInput = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied);
+
         TMaybe<ui64> jobCount;
         if (auto setting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::JobCount)) {
             jobCount = FromString<ui64>(setting->Child(1)->Content());
@@ -3490,10 +3628,10 @@ private:
         auto extraUsage = execCtx->ScanExtraResourceUsage(map.Mapper().Body().Ref(), true);
         TString inputType = NCommon::WriteTypeToYson(GetSequenceItemType(map.Input().Size() == 1U ? TExprBase(map.Input().Item(0)) : TExprBase(map.Mapper().Args().Arg(0)), true));
 
-        return execCtx->Session_->Queue_->Async([ordered, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, execCtx]() {
+        return execCtx->Session_->Queue_->Async([ordered, blockInput, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
-            return ExecMap(ordered, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, execCtx);
+            return ExecMap(ordered, blockInput, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, execCtx);
         });
     }
 
@@ -3720,13 +3858,14 @@ private:
         const TExpressionResorceUsage& reduceExtraUsage,
         NYT::TNode intermediateMeta,
         const NYT::TNode& intermediateSchema,
+        const NYT::TNode& intermediateStreams,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs,
                           mapExtraUsage, reduceLambda, reduceInputType, reduceExtraUsage,
-                          intermediateMeta, intermediateSchema, execCtx, testRun]
+                          intermediateMeta, intermediateSchema, intermediateStreams, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -3940,6 +4079,9 @@ private:
             NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
             FillSpec(spec, *execCtx, entry, mapExtraUsage.Cpu, reduceExtraUsage.Cpu,
                 EYtOpProp::IntermediateData | EYtOpProp::WithMapper | EYtOpProp::WithReducer | EYtOpProp::WithUserJobs | EYtOpProp::AllowSampling);
+            if (!intermediateStreams.IsUndefined()) {
+                spec["mapper"]["output_streams"] = intermediateStreams;
+            }
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -3961,12 +4103,13 @@ private:
         const TString& reduceInputType,
         const TExpressionResorceUsage& reduceExtraUsage,
         const NYT::TNode& intermediateSchema,
+        bool useIntermediateStreams,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType,
-                          reduceExtraUsage, intermediateSchema, execCtx, testRun]
+                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4010,7 +4153,7 @@ private:
             const bool useSkiff = execCtx->Options_.Config()->UseSkiff.Get(execCtx->Cluster_).GetOrElse(DEFAULT_USE_SKIFF);
 
             const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-            reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, intermediateSchema.IsUndefined() ? 0ul : nativeTypeCompat, true)); // Explicitly disable native types for intermediate data because of YT limitations
+            reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, nativeTypeCompat, !useIntermediateStreams));
             reduceJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
 
             mapReduceOpSpec.ReduceBy(ToYTSortColumns(reduceBy));
@@ -4080,6 +4223,9 @@ private:
             NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
             FillSpec(spec, *execCtx, entry, 0., reduceExtraUsage.Cpu,
                 EYtOpProp::IntermediateData | EYtOpProp::WithReducer | EYtOpProp::WithUserJobs | EYtOpProp::AllowSampling);
+            if (useIntermediateStreams) {
+                spec["reducer"]["enable_input_table_index"] = true;
+            }
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4097,16 +4243,26 @@ private:
         auto sortBy = NYql::GetSettingAsColumnPairList(mapReduce.Settings().Ref(), EYtSettingType::SortBy);
 
         const bool useNativeTypes = execCtx->Options_.Config()->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
-        const bool useIntermediateSchema = execCtx->Options_.Config()->UseIntermediateSchema.Get().GetOrElse(DEFAULT_USE_INTERMEDIATE_SCHEMA);
         const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
+        const auto useIntermediateStreams = execCtx->Options_.Config()->UseIntermediateStreams.Get().GetOrElse(DEFAULT_USE_INTERMEDIATE_STREAMS);
 
         NYT::TNode intermediateMeta;
         NYT::TNode intermediateSchema;
+        NYT::TNode intermediateStreams;
         TString mapLambda;
         TExpressionResorceUsage mapExtraUsage;
         TString mapInputType;
         size_t mapDirectOutputs = 0;
         if (!mapReduce.Mapper().Maybe<TCoVoid>()) {
+            auto createRowSpec = [](const TTypeAnnotationNode* itemType, bool useNativeTypes, ui64 nativeTypeCompat) -> NYT::TNode {
+                auto spec = NYT::TNode::CreateMap();
+                spec[RowSpecAttrType] = NCommon::TypeToYsonNode(itemType);
+                spec[RowSpecAttrNativeYtTypeFlags] = useNativeTypes
+                    ? (GetNativeYtTypeFlags(*itemType->Cast<TStructExprType>()) & nativeTypeCompat)
+                    : 0ul;
+                return spec;
+            };
+
             const auto mapTypeSet = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::MapOutputType);
             auto mapResultItem = mapTypeSet ?
                 mapTypeSet->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType():
@@ -4117,15 +4273,36 @@ private:
                 YQL_ENSURE(!items.empty());
                 mapDirectOutputs = items.size() - 1;
                 mapResultItem = items.front();
+
+                if (useIntermediateStreams) {
+                    intermediateStreams = NYT::TNode::CreateList();
+                    bool front = true;
+                    for (auto itemType: items) {
+                        auto ytSchema = RowSpecToYTSchema(createRowSpec(itemType, useNativeTypes, nativeTypeCompat), nativeTypeCompat);
+                        if (front) {
+                            ytSchema.SortBy(ToYTSortColumns(sortBy.empty() ? reduceBy : sortBy));
+                            front = false;
+                        }
+                        intermediateStreams.Add(
+                            NYT::TNode::CreateMap()("schema", ytSchema.ToNode())
+                        );
+                    }
+                }
+            } else {
+                if (useIntermediateStreams) {
+                    intermediateStreams = NYT::TNode::CreateList();
+                    auto ytSchema = RowSpecToYTSchema(createRowSpec(mapResultItem, useNativeTypes, nativeTypeCompat), nativeTypeCompat);
+                    ytSchema.SortBy(ToYTSortColumns(sortBy.empty() ? reduceBy : sortBy));
+                    intermediateStreams.Add(
+                        NYT::TNode::CreateMap()("schema", ytSchema.ToNode())
+                    );
+                }
             }
 
             intermediateMeta = NYT::TNode::CreateMap();
-            intermediateMeta[YqlRowSpecAttribute][RowSpecAttrType] = NCommon::TypeToYsonNode(mapResultItem);
-            if (useIntermediateSchema && useNativeTypes) {
-                intermediateMeta[YqlRowSpecAttribute][RowSpecAttrNativeYtTypeFlags] = (GetNativeYtTypeFlags(*mapResultItem->Cast<TStructExprType>()) & nativeTypeCompat);
+            intermediateMeta[YqlRowSpecAttribute] = createRowSpec(mapResultItem, useNativeTypes, nativeTypeCompat);
+            if (useNativeTypes && !useIntermediateStreams) {
                 intermediateSchema = RowSpecToYTSchema(intermediateMeta[YqlRowSpecAttribute], nativeTypeCompat).ToNode();
-            } else {
-                intermediateMeta[YqlRowSpecAttribute][RowSpecAttrNativeYtTypeFlags] = 0ul; // Explicitly disable native types for intermediate data because of YT limitations
             }
             if (NYql::HasSetting(mapReduce.Settings().Ref(), EYtSettingType::KeySwitch)) {
                 intermediateMeta[YqlSysColumnPrefix].Add("keyswitch");
@@ -4139,7 +4316,7 @@ private:
             mapLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, mapReduce.Mapper().Cast<TCoLambda>(), ctx);
             mapInputType = NCommon::WriteTypeToYson(GetSequenceItemType(mapReduce.Input().Size() == 1U ?
                 TExprBase(mapReduce.Input().Item(0)) : TExprBase(mapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0)), true));
-        } else if (useIntermediateSchema && useNativeTypes) {
+        } else if (useNativeTypes && !useIntermediateStreams) {
             YQL_ENSURE(mapReduce.Input().Size() == 1);
             const TTypeAnnotationNode* itemType = GetSequenceItemType(mapReduce.Input().Item(0), false);
             if (auto flags = GetNativeYtTypeFlags(*itemType->Cast<TStructExprType>())) {
@@ -4171,14 +4348,17 @@ private:
             limit.Clear();
         }
 
-        return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, execCtx]() {
+        return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage,
+            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, execCtx]()
+        {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             if (mapLambda) {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage,
-                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, execCtx);
+                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, execCtx);
             } else {
-                return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, intermediateSchema, execCtx);
+                return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, intermediateSchema,
+                    useIntermediateStreams, execCtx);
             }
         });
     }

@@ -4,8 +4,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 using namespace NYdb;
 
@@ -962,10 +962,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         for (ui32 i = 0; i < 256; ++i) {
             {
                 auto res = TestUpsertRow(client, "/Root/ui8", i, 42);
-                if (i <= 127)
-                    UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
-                else
-                    UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+                UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
             }
 
             {

@@ -5,7 +5,7 @@
 #include <util/generic/guid.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
-#include <ydb/library/yql/providers/common/metrics/sensors_group.h>
+#include <yql/essentials/providers/common/metrics/sensors_group.h>
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 
 

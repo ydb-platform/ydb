@@ -16,9 +16,9 @@
 
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
@@ -48,12 +48,15 @@ namespace NRpcService {
     };
 }
 
+struct TAppData;
+
 namespace NGRpcService {
 
 using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
 
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
+TString DatabaseFromDomain(const TAppData* appdata);
 
 inline TActorId CreateGRpcRequestProxyId(int n = 0) {
     if (n == 0) {
@@ -1316,6 +1319,10 @@ public:
 
     void ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details = "") {
         Ctx_->ReplyError(code, msg, details);
+    }
+
+    TString GetEndpointId() const {
+        return Ctx_->GetEndpointId();
     }
 
 private:

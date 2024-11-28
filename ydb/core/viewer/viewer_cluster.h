@@ -342,8 +342,10 @@ private:
     }
 
     void InitSystemWhiteboardRequest(NKikimrWhiteboard::TEvSystemStateRequest* request) {
-        //request->AddFieldsRequired(-1);
-        Y_UNUSED(request);
+        request->MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
+        request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
+        request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
+        request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
     }
 
     void InitTabletWhiteboardRequest(NKikimrWhiteboard::TEvTabletStateRequest* request) {
@@ -462,14 +464,22 @@ private:
             }
         }
 
+        struct TMemoryStats {
+            ui64 Total = 0;
+            ui64 Limit = 0;
+        };
+
+        std::unordered_set<TString> hostPassed;
+        std::unordered_map<TString, TMemoryStats> memoryStats;
+
         for (TNode& node : NodeData) {
             const NKikimrWhiteboard::TSystemStateInfo& systemState = node.SystemState;
             (*ClusterInfo.MutableMapDataCenters())[node.DataCenter]++;
-            if (systemState.HasNumberOfCpus()) {
+            if (hostPassed.insert(systemState.GetHost()).second) {
                 ClusterInfo.SetNumberOfCpus(ClusterInfo.GetNumberOfCpus() + systemState.GetNumberOfCpus());
-            }
-            if (systemState.LoadAverageSize() > 0) {
-                ClusterInfo.SetLoadAverage(ClusterInfo.GetLoadAverage() + systemState.GetLoadAverage(0));
+                if (systemState.LoadAverageSize() > 0) {
+                    ClusterInfo.SetLoadAverage(ClusterInfo.GetLoadAverage() + systemState.GetLoadAverage(0));
+                }
             }
             if (systemState.HasVersion()) {
                 (*ClusterInfo.MutableMapVersions())[systemState.GetVersion()]++;
@@ -477,8 +487,17 @@ private:
             if (systemState.HasClusterName() && !ClusterInfo.GetName()) {
                 ClusterInfo.SetName(systemState.GetClusterName());
             }
-            ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + systemState.GetMemoryLimit());
             ClusterInfo.SetMemoryUsed(ClusterInfo.GetMemoryUsed() + systemState.GetMemoryUsed());
+            if (systemState.HasMemoryStats()) {
+                TMemoryStats& stats = memoryStats[systemState.GetHost()];
+                if (systemState.GetMemoryLimit() > 0) {
+                    stats.Limit += systemState.GetMemoryLimit();
+                } else {
+                    stats.Total = systemState.GetMemoryStats().GetMemTotal();
+                }
+            } else {
+                ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + systemState.GetMemoryLimit());
+            }
             if (!node.Disconnected && node.SystemState.HasSystemState()) {
                 ClusterInfo.SetNodesAlive(ClusterInfo.GetNodesAlive() + 1);
             }
@@ -500,14 +519,32 @@ private:
                     targetPoolStat->SetName(poolName);
                 }
                 double poolUsage = targetPoolStat->GetUsage() * targetPoolStat->GetThreads();
-                poolUsage += poolStat.GetUsage() * poolStat.GetThreads();
+                ui32 usageThreads = poolStat.GetLimit() ? poolStat.GetLimit() : poolStat.GetThreads();
+                poolUsage += poolStat.GetUsage() * usageThreads;
                 ui32 poolThreads = targetPoolStat->GetThreads() + poolStat.GetThreads();
                 if (poolThreads != 0) {
                     double threadUsage = poolUsage / poolThreads;
                     targetPoolStat->SetUsage(threadUsage);
                     targetPoolStat->SetThreads(poolThreads);
                 }
-                ClusterInfo.SetCoresUsed(ClusterInfo.GetCoresUsed() + poolStat.GetUsage() * poolStat.GetThreads());
+                if (systemState.GetCoresTotal() == 0) {
+                    ClusterInfo.SetCoresUsed(ClusterInfo.GetCoresUsed() + poolStat.GetUsage() * usageThreads);
+                    if (poolStat.GetName() != "IO") {
+                        ClusterInfo.SetCoresTotal(ClusterInfo.GetCoresTotal() + poolStat.GetThreads());
+                    }
+                }
+            }
+            if (systemState.GetCoresTotal() != 0) {
+                ClusterInfo.SetCoresUsed(ClusterInfo.GetCoresUsed() + systemState.GetCoresUsed());
+                ClusterInfo.SetCoresTotal(ClusterInfo.GetCoresTotal() + systemState.GetCoresTotal());
+            }
+        }
+
+        for (const auto& memStats : memoryStats) {
+            if (memStats.second.Total > 0) {
+                ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + memStats.second.Total);
+            } else {
+                ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + memStats.second.Limit);
             }
         }
 
@@ -529,65 +566,75 @@ private:
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        NodesInfoResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (NodesInfoResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvNodeStateResponse::TPtr& ev) {
-        NodeStateResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (NodeStateResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
-        ListTenantsResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (ListTenantsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
-        PDisksResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (PDisksResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetStorageStatsResponse::TPtr& ev) {
-        StorageStatsResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (StorageStatsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
-        HiveNodeStatsResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (HiveNodeStatsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        SystemStateResponse[nodeId].Set(std::move(ev));
-        WhiteboardRequestDone();
+        if (SystemStateResponse[nodeId].Set(std::move(ev))) {
+            WhiteboardRequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        TabletStateResponse[nodeId].Set(std::move(ev));
-        WhiteboardRequestDone();
+        if (TabletStateResponse[nodeId].Set(std::move(ev))) {
+            WhiteboardRequestDone();
+        }
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         switch (ev->Get()->Record.Response_case()) {
             case NKikimrViewer::TEvViewerResponse::ResponseCase::kSystemResponse:
-                SystemViewerResponse[nodeId].Set(std::move(ev));
-                NodeBatches.erase(nodeId);
-                WhiteboardRequestDone();
+                if (SystemViewerResponse[nodeId].Set(std::move(ev))) {
+                    NodeBatches.erase(nodeId);
+                    WhiteboardRequestDone();
+                }
                 return;
             case NKikimrViewer::TEvViewerResponse::ResponseCase::kTabletResponse:
-                TabletViewerResponse[nodeId].Set(std::move(ev));
-                NodeBatches.erase(nodeId);
-                WhiteboardRequestDone();
+                if (TabletViewerResponse[nodeId].Set(std::move(ev))) {
+                    NodeBatches.erase(nodeId);
+                    WhiteboardRequestDone();
+                }
                 return;
             default:
                 break;

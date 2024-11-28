@@ -5,9 +5,9 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <util/system/env.h>
 
@@ -75,7 +75,7 @@ void ExecutePgInsert(
         --!syntax_pg\n\
         INSERT INTO %s (key, value) VALUES (\n\
             '%s'::%s, '%s'::%s\n\
-        )", tableName.Data(), keyIn.Data(), keyType.Data(), spec.TextIn(i).Data(), valType.Data());
+        )", tableName.data(), keyIn.data(), keyType.data(), spec.TextIn(i).data(), valType.data());
         Cerr << req << Endl;
         auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -100,16 +100,16 @@ void ExecutePgArrayInsert(
         auto keyEntry = Sprintf("'%u'::int2", i);
         auto valueEntry = Sprintf(
             "ARRAY ['%s'::%s, '%s'::%s]",
-            spec.TextIn(i).Data(),
-            valType.Data(),
-            spec.TextIn(i).Data(),
-            valType.Data()
+            spec.TextIn(i).data(),
+            valType.data(),
+            spec.TextIn(i).data(),
+            valType.data()
         );
         TString req = Sprintf("\
         --!syntax_pg\n\
         INSERT INTO %s (key, value) VALUES (\n\
             %s, %s\n\
-        );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
+        );", tableName.data(), keyEntry.data(), valueEntry.data());
         Cerr << req << Endl;
         auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -135,7 +135,7 @@ bool ExecutePgInsertForCoercion(
     --!syntax_pg\n\
     INSERT INTO %s (key, value) VALUES (\n\
         '0'::int2, '%s'::%s\n\
-    )", tableName.Data(), spec.TextIn().Data(), valType.Data());
+    )", tableName.data(), spec.TextIn().data(), valType.data());
     Cerr << req << Endl;
 
     auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -1129,7 +1129,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
     Y_UNIT_TEST(ReadPgArray) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         auto binaryStr = NPg::PgNativeBinaryFromNativeText("{1,1}", INT2ARRAYOID).Str;
-        Y_ENSURE(binaryStr.Size() == 32);
+        Y_ENSURE(binaryStr.size() == 32);
         auto value = NYql::NCommon::PgValueFromNativeBinary(binaryStr, INT2ARRAYOID);
     }
 
@@ -1354,7 +1354,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 %s,\n\
                 %s,\n\
                 PRIMARY KEY (key)\n\
-            );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
+            );", tableName.data(), keyEntry.data(), valueEntry.data());
             Cerr << req << Endl;
             auto result = session.ExecuteSchemeQuery(req).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1416,7 +1416,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             CREATE TABLE %s (\n\
                 %s PRIMARY KEY,\n\
                 %s\n\
-            );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
+            );", tableName.data(), keyEntry.data(), valueEntry.data());
             Cerr << req << Endl;
             auto result = session.ExecuteSchemeQuery(req).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -2650,7 +2650,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT(!resultAlter.IsSuccess());
         }
 
-         {
+        {
             auto session = client.GetSession().GetValueSync().GetSession();
             auto id = session.GetId();
 
@@ -2658,6 +2658,34 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 --!syntax_pg
                 ALTER SEQUENCE IF EXISTS seq
                     MAXVALUE 2147483647;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq
+                    RESTART WITH 101;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE seq
+                    RESTART;
             )";
 
             auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2734,7 +2762,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     START WITH 10
                     INCREMENT BY 2
                     MINVALUE 1
-                    CACHE 3
                     CYCLE;
             )";
 
@@ -2879,6 +2906,89 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 [["1";"1"];["5";"4"];["8";"5"];["10";"2"];["12";"3"];["13";"14"];["14";"16"]]
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
+
+        {
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq1
+                    RESTART WITH 105;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO Pg (key) values (105), (107);
+            )");
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM Pg;
+            )");
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"1"];["5";"4"];["8";"5"];["10";"2"];["12";"3"];["13";"14"];["14";"16"];["105"; "105"];["107";"107"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq1
+                    START WITH 206;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        } 
+
+        {
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq1
+                    RESTART;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO Pg (key) values (206), (208);
+            )");
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM Pg;
+            )");
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"1"];["5";"4"];["8";"5"];["10";"2"];["12";"3"];["13";"14"];["14";"16"];["105"; "105"];["107";"107"];["206"; "206"];["208";"208"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        } 
     }
 
     Y_UNIT_TEST(TempTablesSessionsIsolation) {
@@ -3371,7 +3481,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 session = db.CreateSession().GetValueSync().GetSession();
                 TString req = Sprintf("\
                     --!syntax_pg\n\
-                    DELETE FROM %s WHERE key = '%s'::%s", tableName.Data(), keyIn.Data(), keyType.Data());
+                    DELETE FROM %s WHERE key = '%s'::%s", tableName.data(), keyIn.data(), keyType.data());
                 Cerr << req << Endl;
                 auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -5075,10 +5185,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             SELECT 2 y, 1 x;
         )");
 
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetResponse().GetYdbResults().size(), 1);
-        Cerr << reply->Get()->Record.GetRef().GetResponse().DebugString() << Endl;
-        auto ydbResults = reply->Get()->Record.GetRef().GetResponse().GetYdbResults();
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetResponse().GetYdbResults().size(), 1);
+        Cerr << reply->Get()->Record.GetResponse().DebugString() << Endl;
+        auto ydbResults = reply->Get()->Record.GetResponse().GetYdbResults();
         TVector <TString> colNames = {"y", "x"};
         UNIT_ASSERT_VALUES_EQUAL(colNames.size(), ydbResults.begin()->Getcolumns().size());
         for (size_t i = 0; i < colNames.size(); i++) {

@@ -5,3 +5,5 @@ items:
   href: spring-data-jdbc.md
 - name: JOOQ
   href: jooq.md
+- name: Dapper
+  href: dapper.md

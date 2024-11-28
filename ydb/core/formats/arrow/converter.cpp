@@ -1,9 +1,9 @@
 #include "converter.h"
 #include "switch/switch_type.h"
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/generic/set.h>
 #include <util/memory/pool.h>
@@ -31,11 +31,12 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
         }
         case NScheme::NTypeIds::JsonDocument: {
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(cell.AsBuf());
-            if (!binaryJson.Defined()) {
-                errorMessage = "Invalid JSON for JsonDocument provided";
+            if (std::holds_alternative<TString>(binaryJson)) {
+                errorMessage = "Invalid JSON for JsonDocument provided: " + std::get<TString>(binaryJson);
                 return false;
             }
-            const auto saved = memPool.AppendString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
+            const auto& value = std::get<NBinaryJson::TBinaryJson>(binaryJson);
+            const auto saved = memPool.AppendString(TStringBuf(value.Data(), value.Size()));
             cell = TCell(saved.data(), saved.size());
             break;
         }
@@ -97,11 +98,13 @@ static arrow::Status ConvertColumn(const NScheme::TTypeInfo colType, std::shared
                         return appendResult;
                     }
                 } else {
-                    const auto binaryJson = NBinaryJson::SerializeToBinaryJson(valueBuf);
-                    if (!binaryJson.Defined()) {
-                        return arrow::Status::SerializationError("Cannot serialize json: ", valueBuf);
+                    const auto maybeBinaryJson = NBinaryJson::SerializeToBinaryJson(valueBuf);
+                    if (std::holds_alternative<TString>(maybeBinaryJson)) {
+                        return arrow::Status::SerializationError("Cannot serialize json (", std::get<TString>(maybeBinaryJson),
+                            "): ", valueBuf.SubStr(0, Min(valueBuf.Size(), size_t{1024})));
                     }
-                    auto appendResult = builder.Append(binaryJson->Data(), binaryJson->Size());
+                    const auto& binaryJson = std::get<NBinaryJson::TBinaryJson>(maybeBinaryJson);
+                    auto appendResult = builder.Append(binaryJson.Data(), binaryJson.Size());
                     if (!appendResult.ok()) {
                         return appendResult;
                     }

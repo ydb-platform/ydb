@@ -5,6 +5,7 @@
 #include "flat_writer_banks.h"
 #include "flat_writer_blocks.h"
 #include "util_basics.h"
+#include "util_channel.h"
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -13,17 +14,16 @@ namespace NWriter {
     class TBundle : public NTable::IPageWriter, protected ICone {
     public:
         struct TResult {
-            using TCache = TPrivatePageCache::TInfo;
-
-            TVector<TIntrusivePtr<TCache>> PageCollections;
+            TVector<TBlocks::TResult> PageCollections;
             TDeque<NTable::TScreen::THole> Growth;
             TString Overlay;
         };
 
         TBundle(const TLogoBlobID &base, const TConf &conf)
             : Groups(conf.Groups)
-            , BlobsChannel(conf.BlobsChannel)
+            , BlobsChannels(conf.BlobsChannels)
             , ExtraChannel(conf.ExtraChannel)
+            , ChannelsShares(conf.ChannelsShares)
             , Banks(base, conf.Slots)
         {
             Y_ABORT_UNLESS(Groups.size() >= 1, "There must be at least one page collection group");
@@ -83,7 +83,9 @@ namespace NWriter {
 
         NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept override
         {
-            auto glob = Banks.Data.Do(BlobsChannel, blob.size());
+            ui8 bestChannel = ChannelsShares.Select(BlobsChannels);
+            
+            auto glob = Banks.Data.Do(bestChannel, blob.size());
 
             Blobs.emplace_back(glob, std::move(blob));
             Growth->Pass(ref);
@@ -96,8 +98,8 @@ namespace NWriter {
             auto &result = Results_.emplace_back();
 
             for (auto num : xrange(Blocks.size())) {
-                if (auto cache = Blocks[num]->Finish()) {
-                    result.PageCollections.emplace_back(std::move(cache));
+                if (auto written = Blocks[num]->Finish(); written.PageCollection) {
+                    result.PageCollections.emplace_back(std::move(written));
                 } else if (num < Blocks.size() - 1) {
                     Y_ABORT("Finish produced an empty main page collection");
                 }
@@ -149,8 +151,9 @@ namespace NWriter {
 
     private:
         const TVector<TConf::TGroup> Groups;
-        const ui8 BlobsChannel;
+        const TVector<ui8> BlobsChannels;
         const ui8 ExtraChannel;
+        const NUtil::TChannelsShares& ChannelsShares;
         TBanks Banks;
         TVector<NPageCollection::TGlob> Blobs;
         TVector<THolder<TBlocks>> Blocks;

@@ -4,13 +4,13 @@
 #include <ydb/library/yql/providers/yt/lib/lambda_builder/lambda_builder.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/schema/parser/yql_type_parser.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_stats_registry.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_stats_registry.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <yt/cpp/mapreduce/client/structured_table_formats.h>
 #include <yt/cpp/mapreduce/io/yamr_table_reader.h>
@@ -79,10 +79,16 @@ namespace {
 
 
 std::pair<NYT::TFormat, NYT::TFormat> TYqlUserJob::GetIOFormats(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) const {
-    if (!UseSkiff) {
-        return std::make_pair(YamrInput ? MakeTableYaMRFormat(InputSpec) : NYT::TFormat::YsonBinary(), NYT::TFormat::YsonBinary());
-    }
     TScopedAlloc alloc(__LOCATION__);
+    TMkqlIOSpecs specs;
+    if (UseBlockInput) {
+        specs.SetUseBlockInput();
+    }
+
+    if (!UseSkiff) {
+        return std::make_pair(YamrInput ? MakeTableYaMRFormat(InputSpec) : specs.MakeInputFormat(AuxColumns), specs.MakeOutputFormat());
+    }
+    
     TTypeEnvironment env(alloc);
     NCommon::TCodecContext codecCtx(env, *functionRegistry);
 
@@ -94,7 +100,6 @@ std::pair<NYT::TFormat, NYT::TFormat> TYqlUserJob::GetIOFormats(const NKikimr::N
         YQL_ENSURE(itemType, << err.Str());
     }
 
-    TMkqlIOSpecs specs;
     specs.SetUseSkiff(OptLLVM, SkiffSysFields);
     specs.Init(codecCtx, InputSpec, InputGroups, TableNames, itemType, AuxColumns, OutSpec);
 
@@ -105,6 +110,7 @@ void TYqlUserJob::Save(IOutputStream& s) const {
     TYqlJobBase::Save(s);
     ::SaveMany(&s,
         UseSkiff,
+        UseBlockInput,
         SkiffSysFields,
         YamrInput,
         LambdaCode,
@@ -121,6 +127,7 @@ void TYqlUserJob::Load(IInputStream& s) {
     TYqlJobBase::Load(s);
     ::LoadMany(&s,
         UseSkiff,
+        UseBlockInput,
         SkiffSysFields,
         YamrInput,
         LambdaCode,
@@ -155,6 +162,9 @@ void TYqlUserJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles
     MkqlIOSpecs.Reset(new TMkqlIOSpecs());
     if (UseSkiff) {
         MkqlIOSpecs->SetUseSkiff(OptLLVM, SkiffSysFields);
+    }
+    if (UseBlockInput) {
+        MkqlIOSpecs->SetUseBlockInput();
     }
     MkqlIOSpecs->Init(*CodecCtx, InputSpec, InputGroups, TableNames, itemType, AuxColumns, OutSpec, JobStats.Get());
     if (!RowOffsets.empty()) {

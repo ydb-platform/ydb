@@ -13,7 +13,7 @@ PEERDIR(
     contrib/libs/protobuf
     ydb/core/base
     ydb/core/protos
-    ydb/library/yql/ast
+    yql/essentials/ast
     ydb/library/yql/dq/actors
     ydb/public/api/protos
 )

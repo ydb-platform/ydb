@@ -11,16 +11,16 @@
 #include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 #include <ydb/library/yql/providers/yt/lib/hash/yql_hash_builder.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/transform/yql_exec.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
-#include <ydb/library/yql/core/yql_execution.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/ast/yql_ast.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/transform/yql_exec.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/yql_execution.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/ast/yql_ast.h>
 
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 
@@ -94,7 +94,7 @@ public:
                 TYtMerge::CallableName(),
                 TYtMapReduce::CallableName(),
             },
-            RequireAllOf({TYtTransientOpBase::idx_World, TYtTransientOpBase::idx_Input}),
+            RequireForTransientOp(),
             Hndl(&TYtDataSinkExecTransformer::HandleOutputOp<true>)
         );
         AddHandler(
@@ -105,7 +105,7 @@ public:
             RequireFirst(),
             Hndl(&TYtDataSinkExecTransformer::HandleOutputOp<true>)
         );
-        AddHandler({TYtReduce::CallableName()}, RequireAllOf({TYtTransientOpBase::idx_World, TYtTransientOpBase::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandleReduce));
+        AddHandler({TYtReduce::CallableName()}, RequireForTransientOp(), Hndl(&TYtDataSinkExecTransformer::HandleReduce));
         AddHandler({TYtOutput::CallableName()}, RequireFirst(), Pass());
         AddHandler({TYtPublish::CallableName()}, RequireAllOf({TYtPublish::idx_World, TYtPublish::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandlePublish));
         AddHandler({TYtDropTable::CallableName()}, RequireFirst(), Hndl(&TYtDataSinkExecTransformer::HandleDrop));
@@ -122,6 +122,21 @@ public:
     void Rewind() override {
         Delegated_->clear();
         TExecTransformerBase::Rewind();
+    }
+
+    static TExecTransformerBase::TPrerequisite RequireForTransientOp() {
+        return [] (const TExprNode::TPtr& input) {
+            auto status = RequireChild(*input, TYtTransientOpBase::idx_World);
+            // We have to run input only if it has no settings to calculate.
+            // Otherwise, we first of all wait world completion.
+            // Then begins node execution, which run settings calculation.
+            // And after that, starts input execution
+            // See YQL-19303
+            if (!HasNodesToCalculate(input->ChildPtr(TYtTransientOpBase::idx_Input))) {
+                status = status.Combine(RequireChild(*input, TYtTransientOpBase::idx_Input));
+            }
+            return status;
+        };
     }
 
 private:
@@ -190,6 +205,10 @@ private:
             return CalculateNodes(State_, input, cluster, needCalc, ctx);
         }
 
+        if (auto opInput = op.Maybe<TYtTransientOpBase>().Input()) {
+            YQL_ENSURE(opInput.Ref().GetState() == TExprNode::EState::ExecutionComplete);
+        }
+
         auto outSection = op.Output();
 
         size_t outWithoutName = 0;
@@ -227,7 +246,7 @@ private:
         }
 
         bool hasNonDeterministicFunctions = false;
-        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
+        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx, false); status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
 
@@ -481,7 +500,7 @@ private:
             }
         }
         nextDescription.Hash = nextHash;
-        if (!nextDescription.Hash->Empty()) {
+        if (!nextDescription.Hash->empty()) {
             YQL_CLOG(INFO, ProviderYt) << "Using publish hash \"" << HexEncode(*nextDescription.Hash) << "\" for table " << cluster << "." << path << "#" << commitEpoch;
         }
 
@@ -652,7 +671,7 @@ private:
         }
 
         bool hasNonDeterministicFunctions = false;
-        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
+        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx, false); status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
 

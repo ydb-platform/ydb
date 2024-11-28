@@ -102,9 +102,11 @@ public:
         const TChecker& IsView(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir = false, EStatus status = EStatus::StatusPreconditionFailed) const;
         const TChecker& IsResourcePool(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsBackupCollection(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:
+    struct TSplitChildTag {};
     explicit TPath(TSchemeShard* ss);
     TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss);
 
@@ -142,6 +144,7 @@ public:
     bool IsDomain() const;
     TPath& Dive(const TString& name);
     TPath Child(const TString& name) const;
+    TPath Child(const TString& name, TSplitChildTag) const;
     TPathElement::TPtr Base() const;
     TPathElement* operator->() const;
     bool IsDeleted() const;
@@ -160,9 +163,11 @@ public:
     TPath FindOlapStore() const;
     bool IsCommonSensePath() const;
     bool AtLocalSchemeShardPath() const;
-    bool IsInsideTableIndexPath() const;
+    bool IsInsideTableIndexPath(bool failOnUnresolved = true) const;
     bool IsInsideCdcStreamPath() const;
-    bool IsTableIndex(const TMaybe<NKikimrSchemeOp::EIndexType>& type = {}) const;
+    bool IsTableIndex(
+        const TMaybe<NKikimrSchemeOp::EIndexType>& type = {},
+        bool failOnUnresolved = true) const;
     bool IsBackupTable() const;
     bool IsAsyncReplicaTable() const;
     bool IsCdcStream() const;

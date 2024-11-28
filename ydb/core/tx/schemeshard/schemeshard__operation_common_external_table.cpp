@@ -2,6 +2,8 @@
 
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <yql/essentials/minikql/mkql_type_ops.h>
+
 #include <utility>
 
 namespace NKikimr::NSchemeShard::NExternalTable {
@@ -23,16 +25,16 @@ bool ValidateLocation(const TString& location, TString& errStr) {
         errStr = "Location must not be empty";
         return false;
     }
-    if (location.Size() > MAX_FIELD_SIZE) {
-        errStr = Sprintf("Maximum length of location must be less or equal equal to %u but got %lu", MAX_FIELD_SIZE, location.Size());
+    if (location.size() > MAX_FIELD_SIZE) {
+        errStr = Sprintf("Maximum length of location must be less or equal equal to %u but got %lu", MAX_FIELD_SIZE, location.size());
         return false;
     }
     return true;
 }
 
 bool ValidateContent(const TString& content, TString& errStr) {
-    if (content.Size() > MAX_PROTOBUF_SIZE) {
-        errStr = Sprintf("Maximum size of content must be less or equal equal to %u but got %lu", MAX_PROTOBUF_SIZE, content.Size());
+    if (content.size() > MAX_PROTOBUF_SIZE) {
+        errStr = Sprintf("Maximum size of content must be less or equal equal to %u but got %lu", MAX_PROTOBUF_SIZE, content.size());
         return false;
     }
     return true;

@@ -1,9 +1,9 @@
 #pragma once
 
 #include <ydb/library/yql/providers/yt/lib/url_mapper/yql_yt_url_mapper.h>
-#include <ydb/library/yql/core/file_storage/storage.h>
-#include <ydb/library/yql/core/type_ann/type_ann_core.h>
-#include <ydb/library/yql/core/yql_user_data.h>
+#include <yql/essentials/core/file_storage/storage.h>
+#include <yql/essentials/core/type_ann/type_ann_core.h>
+#include <yql/essentials/core/yql_user_data.h>
 
 #include <util/system/mutex.h>
 #include <util/generic/ptr.h>

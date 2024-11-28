@@ -110,13 +110,11 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
     bool result = false;
 
     for (const auto& candidate : effectiveAllowedDomains) {
-        if (Hive.DomainHasNodes(candidate)) {
-            result = std::find(ServicedDomains.begin(),
-                               ServicedDomains.end(),
-                               candidate) != ServicedDomains.end();
-            if (result) {
-                break;
-            }
+        result = std::find(ServicedDomains.begin(),
+                           ServicedDomains.end(),
+                           candidate) != ServicedDomains.end();
+        if (result) {
+            break;
         }
     }
 
@@ -453,7 +451,7 @@ TResourceRawValues TNodeInfo::GetStDevResourceValues() {
     return GetStDev(values);
 }
 
-bool TNodeInfo::CanBeDeleted() const {
+bool TNodeInfo::CanBeDeleted(TInstant now) const {
     TInstant lastAlive(TInstant::MilliSeconds(Statistics.GetLastAliveTimestamp()));
     if (lastAlive) {
         return (IsDisconnected() || IsUnknown())
@@ -461,7 +459,7 @@ bool TNodeInfo::CanBeDeleted() const {
                 && GetTabletsTotal() == 0
                 && LockedTablets.empty()
                 && !Freeze
-                && (lastAlive + Hive.GetNodeDeletePeriod() < TInstant::Now());
+                && (lastAlive + Hive.GetNodeDeletePeriod() < now);
     } else {
         return (IsDisconnected() || IsUnknown()) && !Local && GetTabletsTotal() == 0 && LockedTablets.empty() && !Freeze;
     }

@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/data_events/write_data.h>
+#include <ydb/core/tx/priorities/usage/abstract.h>
 
 namespace NKikimr::NOlap::NReader {
 class IApplyAction;
@@ -55,11 +56,55 @@ struct TEvPrivate {
         EvTaskProcessedResult,
         EvPingSnapshotsUsage,
         EvWritePortionResult,
+        EvStartCompaction,
+
+        EvRegisterGranuleDataAccessor,
+        EvUnregisterGranuleDataAccessor,
+        EvAskTabletDataAccessors,
+        EvAskServiceDataAccessors,
+        EvAddPortionDataAccessor,
+        EvRemovePortionDataAccessor,
+        EvMetadataAccessorsInfo,
 
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
+    private:
+        const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
+        const ui64 Generation;
+        NOlap::TDataAccessorsResult Result;
+
+    public:
+        const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& GetProcessor() const {
+            return Processor;
+        }
+        ui64 GetGeneration() const {
+            return Generation;
+        }
+        NOlap::TDataAccessorsResult ExtractResult() {
+            return std::move(Result);
+        }
+
+        TEvMetadataAccessorsInfo(
+            const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen, NOlap::TDataAccessorsResult&& result)
+            : Processor(processor)
+            , Generation(gen)
+            , Result(std::move(result)) {
+        }
+    };
+
+    class TEvStartCompaction: public NActors::TEventLocal<TEvStartCompaction, EvStartCompaction> {
+    private:
+        YDB_READONLY_DEF(std::shared_ptr<NPrioritiesQueue::TAllocationGuard>, Guard);
+
+    public:
+        TEvStartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& g)
+            : Guard(g) {
+        }
+    };
 
     class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
     private:

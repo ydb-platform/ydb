@@ -70,7 +70,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )";
@@ -92,7 +91,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )");
@@ -137,7 +135,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -150,7 +147,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 Columns { Name: "comment" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -162,7 +158,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -175,7 +170,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
                 KeyColumnNames: "data"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -187,7 +181,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "nottimestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -199,7 +192,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "String" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -211,7 +203,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -235,7 +226,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusAccepted});
     }
@@ -339,7 +329,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" NotNull: true }
                 KeyColumnNames: "some"
                 KeyColumnNames: "data"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
             Sharding {
                 HashSharding {
@@ -587,7 +576,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )";
@@ -727,8 +715,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
             TSet<ui64> txIds;
             for (ui32 i = 0; i < 10; ++i) {
                 std::vector<ui64> writeIds;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
-                NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
+                ++txId;
+                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
 
@@ -739,9 +728,10 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
             // trigger periodic stats at shard (after timeout)
             std::vector<ui64> writeIds;
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
-            NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
-            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, {txId});
+            ++txId;
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+            NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, { txId });
         }
         csController->WaitIndexation(TDuration::Seconds(5));
         {

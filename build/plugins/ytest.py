@@ -759,7 +759,7 @@ def onadd_check(unit, *args):
         check_resource(unit, *args)
     elif check_type == "ktlint":
         ktlint(unit, *args)
-    elif check_type == "JAVA_STYLE" and (unit.get('YMAKE_JAVA_TEST') != 'yes' or unit.get('ALL_SRCDIRS')):
+    elif check_type == "JAVA_STYLE" and unit.get('ALL_SRCDIRS'):
         java_style(unit, *args)
     elif check_type == "gofmt":
         gofmt(unit, *args)
@@ -869,7 +869,6 @@ def onadd_pytest_bin(fields, unit, *args):
         df.JdkForTests.value,
         df.ModuleLang.value,
         df.TestClasspath.value,
-        df.TestClasspathOrigins.value,
         df.TestClasspathDeps.value,
         df.TestJar.value,
         df.DockerImage.value,

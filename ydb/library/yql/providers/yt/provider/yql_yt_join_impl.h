@@ -1,7 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_join.h>
+#include <yql/essentials/core/yql_join.h>
 
+#include <ydb/library/yql/providers/yt/opt/yql_yt_join.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 
@@ -61,6 +62,11 @@ struct TYtJoinNodeOp : TYtJoinNode {
     bool CostBasedOptPassed = false;
 };
 
+struct TOptimizerLinkSettings {
+    bool HasForceSortedMerge = false;
+    bool HasHints = false;
+};
+
 TYtJoinNodeOp::TPtr ImportYtEquiJoin(TYtEquiJoin equiJoin, TExprContext& ctx);
 
 IGraphTransformer::TStatus CollectCboStats(const TString& cluster, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx);
@@ -74,8 +80,47 @@ TString JoinLeafLabel(TExprNode::TPtr label);
 struct IBaseOptimizerNode;
 struct IProviderContext;
 
-void BuildOptimizerJoinTree(TYtState::TPtr state, const TString& cluster, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& providerCtx, TYtJoinNodeOp::TPtr op, TExprContext& ctx);
+void BuildOptimizerJoinTree(TYtState::TPtr state, const TString& cluster, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& providerCtx, TOptimizerLinkSettings& settings, TYtJoinNodeOp::TPtr op, TExprContext& ctx);
 TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TExprContext& ctx, TPositionHandle pos);
+
 bool AreSimilarTrees(TYtJoinNode::TPtr node1, TYtJoinNode::TPtr node2);
+
+IGraphTransformer::TStatus CollectPathsAndLabelsReady(
+    bool& ready, TVector<TYtPathInfo::TPtr>& tables, TJoinLabels& labels,
+    const TStructExprType*& itemType, const TStructExprType*& itemTypeBeforePremap,
+    const TYtJoinNodeLeaf& leaf, TExprContext& ctx);
+
+IGraphTransformer::TStatus CalculateJoinLeafSize(ui64& result, TMapJoinSettings& settings, TYtSection& inputSection,
+    const TYtJoinNodeOp& op, TExprContext& ctx, bool isLeft,
+    const TStructExprType* itemType, const TVector<TString>& joinKeyList, const TYtState::TPtr& state, const TString& cluster,
+    const TVector<TYtPathInfo::TPtr>& tables);
+
+enum class ESizeStatCollectMode {
+    NoSize,
+    RawSize,
+    ColumnarSize,
+};
+
+struct TJoinSideStats {
+    TString TableNames;
+    bool HasUniqueKeys = false;
+    bool IsDynamic = false;
+    bool NeedsRemap = false;
+
+    TVector<TString> SortedKeys;
+
+    ui64 RowsCount = 0;
+    ui64 Size = 0;
+};
+
+IGraphTransformer::TStatus CollectStatsAndMapJoinSettings(ESizeStatCollectMode sizeMode, TMapJoinSettings& mapSettings,
+    TJoinSideStats& leftStats, TJoinSideStats& rightStats,
+    bool leftTablesReady, const TVector<TYtPathInfo::TPtr>& leftTables, const THashSet<TString>& leftJoinKeys,
+    bool rightTablesReady, const TVector<TYtPathInfo::TPtr>& rightTables, const THashSet<TString>& rightJoinKeys,
+    TYtJoinNodeLeaf* leftLeaf, TYtJoinNodeLeaf* rightLeaf, const TYtState& state, bool isCross,
+    TString cluster, TExprContext& ctx);
+
+ui64 CalcInMemorySizeNoCrossJoin(const TJoinLabel& label, const TYtJoinNodeOp& op, const TMapJoinSettings& settings, bool isLeft,
+    TExprContext& ctx, bool needPayload, ui64 size);
 
 }

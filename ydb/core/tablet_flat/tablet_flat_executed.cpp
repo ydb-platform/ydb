@@ -216,7 +216,7 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
                 DIV_CLASS("col-md-12") {str << "Tablet type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)TabletType()); }
             }
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "Tablet id: " << TabletID() << (Executor()->GetStats().IsFollower ? " Follower" : " Leader"); }
+                DIV_CLASS("col-md-12") {str << "Tablet id: " << TabletID() << (Executor()->GetStats().IsFollower() ? Sprintf(" Follower %u", Executor()->GetStats().FollowerId) : " Leader"); }
             }
             DIV_CLASS("row") {
                 DIV_CLASS("col-md-12") {str << "Tablet generation: " << Executor()->Generation();}

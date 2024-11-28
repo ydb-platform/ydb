@@ -6,9 +6,9 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
+#include <yql/essentials/core/extract_predicate/extract_predicate.h>
 #include <ydb/core/protos/config.pb.h>
 
 
@@ -41,6 +41,34 @@ bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
     }
 
     return true;
+}
+
+TMaybeNode<TCoLambda> ExtractTopSortKeySelector(TExprBase node, const NYql::TParentsMap& parentsMap) {
+    auto it = parentsMap.find(node.Raw());
+    if (it != parentsMap.end()) {
+        if (it->second.size() != 1) {
+            return {};
+        }
+        for (auto* node : it->second) {
+            if (TCoTopSort::Match(node)) {
+                TCoTopSort topSort(node);
+                return topSort.KeySelectorLambda();
+            }
+        }
+    }
+    return {};
+}
+
+bool IsIdLambda(TExprBase body) {
+    if (auto cond = body.Maybe<TCoConditionalValueBase>()) {
+        if (auto boolLit = cond.Cast().Predicate().Maybe<TCoBool>()) {
+            return boolLit.Literal().Cast().Value() == "true" && cond.Value().Maybe<TCoArgument>();
+        }
+    }
+    if (body.Maybe<TCoArgument>()) {
+        return true;
+    }
+    return false;
 }
 
 } // namespace
@@ -120,7 +148,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     YQL_ENSURE(prepareSuccess);
 
     if (!indexName.IsValid() && !readSettings.ForcePrimary && kqpCtx.Config->IndexAutoChooserMode != NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_DISABLED) {
-        using TIndexComparisonKey = std::tuple<bool, size_t, bool, size_t, bool>;
+        using TIndexComparisonKey = std::tuple<bool, bool, size_t, bool, size_t, bool>;
         auto calcNeedsJoin = [&] (const TKikimrTableMetadataPtr& keyTable) -> bool {
             bool needsJoin = false;
             for (auto&& column : read.Columns()) {
@@ -131,8 +159,16 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
             return needsJoin;
         };
 
-        auto calcKey = [&](NYql::IPredicateRangeExtractor::TBuildResult buildResult, size_t descriptionKeyColumns, bool needsJoin) -> TIndexComparisonKey {
+        auto keySelector = ExtractTopSortKeySelector(flatmap, parentsMap);
+
+        auto calcKey = [&](
+            NYql::IPredicateRangeExtractor::TBuildResult buildResult,
+            size_t descriptionKeyColumns,
+            bool needsJoin,
+            const NYql::TKikimrTableDescription & tableDesc) -> TIndexComparisonKey
+        {
             return std::make_tuple(
+                keySelector.IsValid() && IsSortKeyPrimary(keySelector.Cast(), tableDesc) && IsIdLambda(TCoLambda(buildResult.PrunedLambda).Body()),
                 buildResult.PointPrefixLen >= descriptionKeyColumns,
                 buildResult.PointPrefixLen >= descriptionKeyColumns ? 0 : buildResult.PointPrefixLen,
                 buildResult.UsedPrefixLen >= descriptionKeyColumns,
@@ -144,7 +180,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         auto primaryBuildResult = extractor->BuildComputeNode(mainTableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
 
         if (primaryBuildResult.PointPrefixLen < mainTableDesc.Metadata->KeyColumnNames.size()) {
-            auto maxKey = calcKey(primaryBuildResult, mainTableDesc.Metadata->KeyColumnNames.size(), false);
+            auto maxKey = calcKey(primaryBuildResult, mainTableDesc.Metadata->KeyColumnNames.size(), false, mainTableDesc);
             for (auto& index : mainTableDesc.Metadata->Indexes) {
                 if (index.Type != TIndexDescription::EType::GlobalAsync) {
                     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(index.Name)).first->Name);
@@ -158,7 +194,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                         continue;
                     }
 
-                    auto key = calcKey(buildResult, index.KeyColumns.size(), needsJoin);
+                    auto key = calcKey(buildResult, index.KeyColumns.size(), needsJoin, tableDesc);
                     if (key > maxKey) {
                         maxKey = key;
                         chosenIndex = index.Name;

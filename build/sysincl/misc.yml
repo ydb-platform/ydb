@@ -9,6 +9,7 @@
 
 - includes:
   - cudnn.h:         contrib/libs/nvidia/cudnn/cudnn.h
+  - uuid/uuid.h:     contrib/libs/uuid/include/uuid/uuid.h
 
 # _cgo_export.h is generated into build dir of go package which uses cgo
 # and we are unable to resolve it correctly to whcih build dir to resolve
@@ -44,6 +45,14 @@
   includes:
     - complex.h:     contrib/libs/libm/include/complex.h
     - math.h:        contrib/libs/libm/include/math.h
+
+- source_filter: "^contrib/libs/jemalloc/"
+  includes:
+    - unwind.h:       contrib/libs/libunwind/include/unwind.h
+
+- source_filter: "^contrib/libs/libunwind/"
+  includes:
+    - unwind.h:       contrib/libs/libunwind/include/unwind.h
 
 - source_filter: "^contrib/tools/bison/"
   includes:
@@ -220,15 +229,6 @@
     - sqltypes.h
     - sqlucode.h
 
-- source_filter: "^contrib/libs/(apache/apr|httpd|llvm)"
-  includes:
-    - uuid.h
-    - uuid/uuid.h
-
-- source_filter: "^contrib/deprecated/glib"
-  includes:
-    - configmake.h
-
 - source_filter: "^contrib/libs/authparser"
   includes:
     - settings.h
@@ -237,29 +237,17 @@
   includes:
     - tbb/tbb_stddef.h
 
-- source_filter: "^contrib/libs/deprecated"
-  includes:
-    - hdf5.h
-
 - source_filter: "^contrib/libs/freetype"
   includes:
     - hb-ot.h
     - hb-ft.h
     - hb.h
 
-- source_filter: "^contrib/libs/httpd"
-  includes:
-    - nginx.h
-    - ngx_config.h
-    - ngx_core.h
-    - ngx_http.h
-    - ngx_log.h
-
 - source_filter: "^contrib/libs/libpcap"
   includes:
     - strerror.h
 
-- source_filter: "^contrib/libs/(apache/apr|httpd|openssl)"
+- source_filter: "^contrib/libs/(apache/apr|openssl)"
   includes:
     - netinet/sctp.h
 
@@ -267,12 +255,6 @@
   includes:
     - magic.h
     - xmlparse.h
-
-- source_filter: "^contrib/python/uWSGI"
-  includes:
-    - libxml/parser.h
-    - libxml/tree.h
-    - uuid/uuid.h
 
 - source_filter: "^contrib/tools/python"
   includes:
@@ -559,3 +541,7 @@
     - netdb.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/netdb.h
     - signal.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/wpa_supplicant_2_9/bk_patch/signal.h
     - check_config.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/mbedtls/mbedtls-2.27.0/include/mbedtls/check_config.h
+
+- source_filter: "^sdg/sdc"
+  includes:
+    - uuid/uuid.h: sdg/sdc/contrib/uuid/uuid/uuid.h

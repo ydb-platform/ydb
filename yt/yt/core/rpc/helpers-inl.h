@@ -20,12 +20,12 @@ void WriteAuthenticationIdentityToProto(T* proto, const TAuthenticationIdentity&
     if (identity.User == RootUserName) {
         proto->clear_user();
     } else {
-        proto->set_user(ToProto<TProtobufString>(identity.User));
+        proto->set_user(ToProto(identity.User));
     }
     if (identity.UserTag == identity.User) {
         proto->clear_user_tag();
     } else {
-        proto->set_user_tag(ToProto<TProtobufString>(identity.UserTag));
+        proto->set_user_tag(ToProto(identity.UserTag));
     }
 }
 

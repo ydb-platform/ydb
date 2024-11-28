@@ -24,12 +24,14 @@ from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.httputil import ResponseSource, get_pool_manager, get_response_data, \
     default_pool_manager, get_proxy_manager, all_managers, check_env_proxy, check_conn_expiration
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.query import QueryResult, QueryContext, quote_identifier, bind_query
+from clickhouse_connect.driver.query import QueryResult, QueryContext
+from clickhouse_connect.driver.binding import quote_identifier, bind_query
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.transform import NativeTransform
 
 logger = logging.getLogger(__name__)
 columns_only_re = re.compile(r'LIMIT 0\s*$', re.IGNORECASE)
+ex_header = 'X-ClickHouse-Exception-Code'
 
 
 # pylint: disable=too-many-instance-attributes
@@ -44,7 +46,7 @@ class HttpClient(Client):
                                    'enable_http_compression'}
     _owns_pool_manager = False
 
-    # pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements,unused-argument
+    # pylint: disable=too-many-positional-arguments,too-many-arguments,too-many-locals,too-many-branches,too-many-statements,unused-argument
     def __init__(self,
                  interface: str,
                  host: str,
@@ -70,7 +72,8 @@ class HttpClient(Client):
                  server_host_name: Optional[str] = None,
                  apply_server_timezone: Optional[Union[str, bool]] = None,
                  show_clickhouse_errors: Optional[bool] = None,
-                 autogenerate_session_id: Optional[bool] = None):
+                 autogenerate_session_id: Optional[bool] = None,
+                 tls_mode: Optional[str] = None):
         """
         Create an HTTP ClickHouse Connect client
         See clickhouse_connect.get_client for parameters
@@ -80,20 +83,20 @@ class HttpClient(Client):
         ch_settings = dict_copy(settings, self.params)
         self.http = pool_mgr
         if interface == 'https':
+            if isinstance(verify, str) and verify.lower() == 'proxy':
+                verify = True
+                tls_mode = tls_mode or 'proxy'
             if not https_proxy:
                 https_proxy = check_env_proxy('https', host, port)
-            if https_proxy and isinstance(verify, str) and verify.lower() == 'proxy':
-                verify = 'proxy'
-            else:
-                verify = coerce_bool(verify)
-            if client_cert and verify != 'proxy':
+            verify = coerce_bool(verify)
+            if client_cert and (tls_mode is None or tls_mode == 'mutual'):
                 if not username:
                     raise ProgrammingError('username parameter is required for Mutual TLS authentication')
                 self.headers['X-ClickHouse-User'] = username
                 self.headers['X-ClickHouse-SSL-Certificate-Auth'] = 'on'
             # pylint: disable=too-many-boolean-expressions
             if not self.http and (server_host_name or ca_cert or client_cert or not verify or https_proxy):
-                options = {'verify': verify is not False}
+                options = {'verify': verify}
                 dict_add(options, 'ca_cert', ca_cert)
                 dict_add(options, 'client_cert', client_cert)
                 dict_add(options, 'client_cert_key', client_cert_key)
@@ -111,7 +114,7 @@ class HttpClient(Client):
             else:
                 self.http = default_pool_manager()
 
-        if (not client_cert or verify == 'proxy') and username:
+        if (not client_cert or tls_mode in ('strict', 'proxy')) and username:
             self.headers['Authorization'] = 'Basic ' + b64encode(f'{username}:{password}'.encode()).decode()
         self.headers['User-Agent'] = common.build_client_name(client_name)
         self._read_format = self._write_format = 'Native'
@@ -157,7 +160,7 @@ class HttpClient(Client):
                          server_host_name=server_host_name,
                          apply_server_timezone=apply_server_timezone,
                          show_clickhouse_errors=show_clickhouse_errors)
-        self.params = self._validate_settings(ch_settings)
+        self.params = dict_copy(self.params, self._validate_settings(ch_settings))
         comp_setting = self._setting_status('enable_http_compression')
         self._send_comp_setting = not comp_setting.is_set and comp_setting.is_writable
         if comp_setting.is_set or comp_setting.is_writable:
@@ -195,7 +198,7 @@ class HttpClient(Client):
             context.block_info = True
         params.update(context.bind_params)
         params.update(self._validate_settings(context.settings))
-        if columns_only_re.search(context.uncommented_query):
+        if not context.is_insert and columns_only_re.search(context.uncommented_query):
             response = self._raw_request(f'{context.final_query}\n FORMAT JSON',
                                          params, headers, retries=self.query_retries)
             json_result = json.loads(response.data)
@@ -344,7 +347,7 @@ class HttpClient(Client):
         params.update(self._validate_settings(settings or {}))
 
         method = 'POST' if payload or fields else 'GET'
-        response = self._raw_request(payload, params, headers, method, fields=fields)
+        response = self._raw_request(payload, params, headers, method, fields=fields, server_wait=False)
         if response.data:
             try:
                 result = response.data.decode()[:-1].split('\t')
@@ -367,10 +370,14 @@ class HttpClient(Client):
             finally:
                 response.close()
 
-            err_str = f'HTTPDriver for {self.url} returned response code {response.status})'
+            err_str = f'HTTPDriver for {self.url} returned response code {response.status}'
+            err_code = response.headers.get(ex_header)
+            if err_code:
+                err_str = f'HTTPDriver for {self.url} received ClickHouse error code {err_code}'
             if err_content:
                 err_msg = common.format_error(err_content.decode(errors='backslashreplace'))
-                err_str = f'{err_str}\n {err_msg}'
+                if err_msg.startswith('Code'):
+                    err_str = f'{err_str}\n {err_msg}'
         else:
             err_str = 'The ClickHouse server returned an error.'
 
@@ -442,7 +449,7 @@ class HttpClient(Client):
             finally:
                 if query_session:
                     self._active_session = None  # Make sure we always clear this
-            if 200 <= response.status < 300:
+            if 200 <= response.status < 300 and not response.headers.get(ex_header):
                 return response
             if response.status in (429, 503, 504):
                 if attempts > retries:
@@ -475,7 +482,7 @@ class HttpClient(Client):
         See BaseClient doc_string for this method
         """
         body, params, fields = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
-        return self._raw_request(body, params, fields=fields, stream=True)
+        return self._raw_request(body, params, fields=fields, stream=True, server_wait=False)
 
     def _prep_raw_query(self, query: str,
                         parameters: Optional[Union[Sequence, Dict[str, Any]]],
@@ -512,6 +519,9 @@ class HttpClient(Client):
         except HTTPError:
             logger.debug('ping failed', exc_info=True)
             return False
+
+    def close_connections(self):
+        self.http.clear()
 
     def close(self):
         if self._owns_pool_manager:

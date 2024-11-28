@@ -1,22 +1,19 @@
 from __future__ import annotations
 
 import collections.abc as c
+import sys
 import typing as t
-import warnings
 import weakref
 from collections import defaultdict
-from contextlib import AbstractContextManager
 from contextlib import contextmanager
 from functools import cached_property
 from inspect import iscoroutinefunction
-from weakref import WeakValueDictionary
 
 from ._utilities import make_id
 from ._utilities import make_ref
 from ._utilities import Symbol
 
-if t.TYPE_CHECKING:
-    F = t.TypeVar("F", bound=c.Callable[..., t.Any])
+F = t.TypeVar("F", bound=c.Callable[..., t.Any])
 
 ANY = Symbol("ANY")
 """Symbol for "any sender"."""
@@ -139,15 +136,6 @@ class Signal:
                 self.disconnect(receiver, sender)
                 raise
 
-        if _receiver_connected.receivers and self is not _receiver_connected:
-            try:
-                _receiver_connected.send(
-                    self, receiver_arg=receiver, sender_arg=sender, weak_arg=weak
-                )
-            except TypeError:
-                self.disconnect(receiver, sender)
-                raise
-
         return receiver
 
     def connect_via(self, sender: t.Any, weak: bool = False) -> c.Callable[[F], F]:
@@ -212,24 +200,6 @@ class Signal:
             yield None
         finally:
             self.is_muted = False
-
-    def temporarily_connected_to(
-        self, receiver: c.Callable[..., t.Any], sender: t.Any = ANY
-    ) -> AbstractContextManager[None]:
-        """Deprecated alias for :meth:`connected_to`.
-
-        .. deprecated:: 1.1
-            Renamed to ``connected_to``. Will be removed in Blinker 1.9.
-
-        .. versionadded:: 0.9
-        """
-        warnings.warn(
-            "'temporarily_connected_to' is renamed to 'connected_to'. The old name is"
-            " deprecated and will be removed in Blinker 1.9.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.connected_to(receiver, sender)
 
     def send(
         self,
@@ -434,7 +404,10 @@ class Signal:
         """
 
         def cleanup(ref: weakref.ref[c.Callable[..., t.Any]]) -> None:
-            self._disconnect(receiver_id, ANY_ID)
+            # If the interpreter is shutting down, disconnecting can result in a
+            # weird ignored exception. Don't call it in that case.
+            if not sys.is_finalizing():
+                self._disconnect(receiver_id, ANY_ID)
 
         return cleanup
 
@@ -488,23 +461,6 @@ class Signal:
         self._by_receiver.clear()
 
 
-_receiver_connected = Signal(
-    """\
-Sent by a :class:`Signal` after a receiver connects.
-
-:argument: the Signal that was connected to
-:keyword receiver_arg: the connected receiver
-:keyword sender_arg: the sender to connect to
-:keyword weak_arg: true if the connection to receiver_arg is a weak reference
-
-.. deprecated:: 1.2
-    Individual signals have their own :attr:`~Signal.receiver_connected` and
-    :attr:`~Signal.receiver_disconnected` signals with a slightly simplified
-    call signature. This global signal will be removed in Blinker 1.9.
-"""
-)
-
-
 class NamedSignal(Signal):
     """A named generic notification emitter. The name is not used by the signal
     itself, but matches the key in the :class:`Namespace` that it belongs to.
@@ -524,18 +480,7 @@ class NamedSignal(Signal):
         return f"{base[:-1]}; {self.name!r}>"  # noqa: E702
 
 
-if t.TYPE_CHECKING:
-
-    class PNamespaceSignal(t.Protocol):
-        def __call__(self, name: str, doc: str | None = None) -> NamedSignal: ...
-
-    # Python < 3.9
-    _NamespaceBase = dict[str, NamedSignal]  # type: ignore[misc]
-else:
-    _NamespaceBase = dict
-
-
-class Namespace(_NamespaceBase):
+class Namespace(dict[str, NamedSignal]):
     """A dict mapping names to signals."""
 
     def signal(self, name: str, doc: str | None = None) -> NamedSignal:
@@ -551,39 +496,8 @@ class Namespace(_NamespaceBase):
         return self[name]
 
 
-class _WeakNamespace(WeakValueDictionary):  # type: ignore[type-arg]
-    """A weak mapping of names to signals.
-
-    Automatically cleans up unused signals when the last reference goes out
-    of scope. This namespace implementation provides similar behavior to Blinker
-    <= 1.2.
-
-    .. deprecated:: 1.3
-        Will be removed in Blinker 1.9.
-
-    .. versionadded:: 1.3
-    """
-
-    def __init__(self) -> None:
-        warnings.warn(
-            "'WeakNamespace' is deprecated and will be removed in Blinker 1.9."
-            " Use 'Namespace' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__()
-
-    def signal(self, name: str, doc: str | None = None) -> NamedSignal:
-        """Return the :class:`NamedSignal` for the given ``name``, creating it
-        if required. Repeated calls with the same name return the same signal.
-
-        :param name: The name of the signal.
-        :param doc: The docstring of the signal.
-        """
-        if name not in self:
-            self[name] = NamedSignal(name, doc)
-
-        return self[name]  # type: ignore[no-any-return]
+class _PNamespaceSignal(t.Protocol):
+    def __call__(self, name: str, doc: str | None = None) -> NamedSignal: ...
 
 
 default_namespace: Namespace = Namespace()
@@ -591,31 +505,8 @@ default_namespace: Namespace = Namespace()
 creates a :class:`NamedSignal` in this namespace.
 """
 
-signal: PNamespaceSignal = default_namespace.signal
+signal: _PNamespaceSignal = default_namespace.signal
 """Return a :class:`NamedSignal` in :data:`default_namespace` with the given
 ``name``, creating it if required. Repeated calls with the same name return the
 same signal.
 """
-
-
-def __getattr__(name: str) -> t.Any:
-    if name == "receiver_connected":
-        warnings.warn(
-            "The global 'receiver_connected' signal is deprecated and will be"
-            " removed in Blinker 1.9. Use 'Signal.receiver_connected' and"
-            " 'Signal.receiver_disconnected' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return _receiver_connected
-
-    if name == "WeakNamespace":
-        warnings.warn(
-            "'WeakNamespace' is deprecated and will be removed in Blinker 1.9."
-            " Use 'Namespace' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return _WeakNamespace
-
-    raise AttributeError(name)

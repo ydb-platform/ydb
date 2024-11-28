@@ -10,18 +10,19 @@
 #include <ydb/library/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
 #include <ydb/library/yql/providers/yt/proto/source.pb.h>
 
-#include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/config/yql_dispatch.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 
@@ -40,105 +41,112 @@ static const THashSet<TStringBuf> POOL_TREES_WHITELIST = {"physical",  "cloud", 
 
 using namespace NNodes;
 
+bool CheckSupportedTypesOld(const TTypeAnnotationNode::TListType& typesToCheck, const TSet<TString>& supportedTypes, const TSet<NUdf::EDataSlot>& supportedDataTypes, std::function<void(const TString&)> unsupportedTypeHandler) {
+    TSet<ETypeAnnotationKind> supported;
+    for (const auto &e: supportedTypes) {
+        if (e == "pg") {
+            supported.insert(ETypeAnnotationKind::Pg);
+        } else if (e == "tuple") {
+            supported.emplace(ETypeAnnotationKind::Tuple);
+        } else if (e == "struct") {
+            supported.emplace(ETypeAnnotationKind::Struct);
+        } else if (e == "dict") {
+            supported.emplace(ETypeAnnotationKind::Dict);
+        } else if (e == "list") {
+            supported.emplace(ETypeAnnotationKind::List);
+        } else if (e == "variant") {
+            supported.emplace(ETypeAnnotationKind::Variant);
+        } else {
+            // Unknown type
+            unsupportedTypeHandler(TStringBuilder() << "unknown type: " << e);
+            return false;
+        }
+    }
+    if (supportedDataTypes.size()) {
+        supported.emplace(ETypeAnnotationKind::Data);
+    }
+    auto checkType = [&] (const TTypeAnnotationNode* type) {
+            if (type->GetKind() == ETypeAnnotationKind::Data) {
+            if (!supported.contains(ETypeAnnotationKind::Data)) {
+                unsupportedTypeHandler(TStringBuilder() << "unsupported data types");
+                return false;
+            }
+            if (!supportedDataTypes.contains(type->Cast<TDataExprType>()->GetSlot())) {
+                unsupportedTypeHandler(TStringBuilder() << "unsupported data type: " << type->Cast<TDataExprType>()->GetSlot());
+                return false;
+            }
+        } else if (type->GetKind() == ETypeAnnotationKind::Pg) {
+            if (!supported.contains(ETypeAnnotationKind::Pg)) {
+                unsupportedTypeHandler(TStringBuilder() << "unsupported pg");
+                return false;
+            }
+            auto name = type->Cast<TPgExprType>()->GetName();
+            if (name == "float4" && !supportedDataTypes.contains(NUdf::EDataSlot::Float)) {
+                unsupportedTypeHandler(TStringBuilder() << "PgFloat4 unsupported yet since float is no supported");
+                return false;
+            }
+        } else {
+            unsupportedTypeHandler(TStringBuilder() << "unsupported annotation kind: " << type->GetKind());
+            return false;
+        }
+        return true;
+    };
+
+    TVector<const TTypeAnnotationNode*> stack(typesToCheck.begin(), typesToCheck.end());
+    while (!stack.empty()) {
+        auto el = stack.back();
+        stack.pop_back();
+        if (el->GetKind() == ETypeAnnotationKind::Optional) {
+            stack.push_back(el->Cast<TOptionalExprType>()->GetItemType());
+            continue;
+        }
+        if (!supported.contains(el->GetKind())) {
+            unsupportedTypeHandler(TStringBuilder() << "unsupported " << el->GetKind());
+            return false;
+        }
+        if (el->GetKind() == ETypeAnnotationKind::Tuple) {
+            for (auto e: el->Cast<TTupleExprType>()->GetItems()) {
+                stack.push_back(e);
+            }
+            continue;
+        } else if (el->GetKind() == ETypeAnnotationKind::Struct) {
+            for (auto e: el->Cast<TStructExprType>()->GetItems()) {
+                stack.push_back(e->GetItemType());
+            }
+            continue;
+        } else if (el->GetKind() == ETypeAnnotationKind::List) {
+            stack.push_back(el->Cast<TListExprType>()->GetItemType());
+            continue;
+        } else if (el->GetKind() == ETypeAnnotationKind::Dict) {
+            stack.push_back(el->Cast<TDictExprType>()->GetKeyType());
+            stack.push_back(el->Cast<TDictExprType>()->GetPayloadType());
+            continue;
+        } else if (el->GetKind() == ETypeAnnotationKind::Variant) {
+            stack.push_back(el->Cast<TVariantExprType>()->GetUnderlyingType());
+            continue;
+        }
+        if (!checkType(el)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 namespace {
     void BlockReaderAddInfo(TExprContext& ctx, const TPosition& pos, const TString& msg) {
         ctx.IssueManager.RaiseIssue(YqlIssue(pos, EYqlIssueCode::TIssuesIds_EIssueCode_INFO, "Can't use block reader: " + msg));
     }
 
-    bool CheckBlockReaderSupportedTypes(const TSet<TString>& list, const TSet<NUdf::EDataSlot>& dataTypesSupported, const TStructExprType* types, TExprContext& ctx, const TPosition& pos) {
-        TSet<ETypeAnnotationKind> supported;
-        for (const auto &e: list) {
-            if (e == "pg") {
-                supported.insert(ETypeAnnotationKind::Pg);
-            } else if (e == "tuple") {
-                supported.emplace(ETypeAnnotationKind::Tuple);
-            } else if (e == "struct") {
-                supported.emplace(ETypeAnnotationKind::Struct);
-            } else if (e == "dict") {
-                supported.emplace(ETypeAnnotationKind::Dict);
-            } else if (e == "list") {
-                supported.emplace(ETypeAnnotationKind::List);
-            } else if (e == "variant") {
-                supported.emplace(ETypeAnnotationKind::Variant);
-            } else {
-                // Unknown type
-                BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unknown type: " << e);
-                return false;
-            }
-        }
-        if (dataTypesSupported.size()) {
-            supported.emplace(ETypeAnnotationKind::Data);
-        }
-        auto checkType = [&] (const TTypeAnnotationNode* type) {
-             if (type->GetKind() == ETypeAnnotationKind::Data) {
-                if (!supported.contains(ETypeAnnotationKind::Data)) {
-                    BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported data types");
-                    return false;
-                }
-                if (!dataTypesSupported.contains(type->Cast<TDataExprType>()->GetSlot())) {
-                    BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported data type: " << type->Cast<TDataExprType>()->GetSlot());
-                    return false;
-                }
-            } else if (type->GetKind() == ETypeAnnotationKind::Pg) {
-                if (!supported.contains(ETypeAnnotationKind::Pg)) {
-                    BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported pg");
-                    return false;
-                }
-                auto name = type->Cast<TPgExprType>()->GetName();
-                if (name == "float4" && !dataTypesSupported.contains(NUdf::EDataSlot::Float)) {
-                    BlockReaderAddInfo(ctx, pos, TStringBuilder() << "PgFloat4 unsupported yet since float is no supported");
-                    return false;
-                }
-            } else {
-                BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported annotation kind: " << type->GetKind());
-                return false;
-            }
-            return true;
-        };
-
-        TVector<const TTypeAnnotationNode*> stack;
-
+    bool CheckBlockReaderSupportedTypes(const TSet<TString>& supportedTypes, const TSet<NUdf::EDataSlot>& supportedDataTypes, const TStructExprType* types, TExprContext& ctx, const TPosition& pos) {
+        TTypeAnnotationNode::TListType typesToCheck;
         for (auto sub: types->GetItems()) {
             auto subT = sub->GetItemType();
-            stack.push_back(subT);
+            typesToCheck.push_back(subT);
         }
-        while (!stack.empty()) {
-            auto el = stack.back();
-            stack.pop_back();
-            if (el->GetKind() == ETypeAnnotationKind::Optional) {
-                stack.push_back(el->Cast<TOptionalExprType>()->GetItemType());
-                continue;
-            }
-            if (!supported.contains(el->GetKind())) {
-                BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported " << el->GetKind());
-                return false;
-            }
-            if (el->GetKind() == ETypeAnnotationKind::Tuple) {
-                for (auto e: el->Cast<TTupleExprType>()->GetItems()) {
-                    stack.push_back(e);
-                }
-                continue;
-            } else if (el->GetKind() == ETypeAnnotationKind::Struct) {
-                for (auto e: el->Cast<TStructExprType>()->GetItems()) {
-                    stack.push_back(e->GetItemType());
-                }
-                continue;
-            } else if (el->GetKind() == ETypeAnnotationKind::List) {
-                stack.push_back(el->Cast<TListExprType>()->GetItemType());
-                continue;
-            } else if (el->GetKind() == ETypeAnnotationKind::Dict) {
-                stack.push_back(el->Cast<TDictExprType>()->GetKeyType());
-                stack.push_back(el->Cast<TDictExprType>()->GetPayloadType());
-                continue;
-            } else if (el->GetKind() == ETypeAnnotationKind::Variant) {
-                stack.push_back(el->Cast<TVariantExprType>()->GetUnderlyingType());
-                continue;
-            }
-            if (!checkType(el)) {
-                return false;
-            }
-        }
-        return true;
+
+        return CheckSupportedTypesOld(typesToCheck, supportedTypes, supportedDataTypes, [&ctx, &pos](const TString& msg) {
+            BlockReaderAddInfo(ctx, pos, msg);
+        });
     }
 };
 
@@ -512,17 +520,9 @@ public:
             auto section = sectionList.Item(i);
             auto paths = section.Paths();
             for (const auto& path : section.Paths()) {
-                auto meta = TYtTableBaseInfo::GetMeta(path.Table());
-                if (meta->InferredScheme) {
-                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with inferred schema");
-                    return false;
-                }
-                if (auto table = path.Table().Maybe<TYtTable>(); table && NYql::HasAnySetting(table.Cast().Settings().Ref(), EYtSettingType::UserColumns | EYtSettingType::UserSchema)) {
-                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with overridden schema/columns");
-                    return false;
-                }
-                if (meta->Attrs.contains("schema_mode") && meta->Attrs["schema_mode"] == "weak") {
-                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with weak schema");
+                if (!IsYtTableSuitableForArrowInput(path.Table(), [&ctx, &node](const TString& msg) {
+                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), msg);
+                })) {
                     return false;
                 }
             }

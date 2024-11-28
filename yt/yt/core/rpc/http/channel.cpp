@@ -272,7 +272,7 @@ private:
             THeadersPtr httpHeaders = New<THeaders>();
 
             if (rpcHeader.has_request_format()) {
-                auto format = CheckedEnumCast<EMessageFormat>(rpcHeader.request_format());
+                auto format = FromProto<EMessageFormat>(rpcHeader.request_format());
                 httpHeaders->Add(ContentTypeHeaderName, ToHttpContentType(format));
             }
 
@@ -281,7 +281,7 @@ private:
             }
 
             if (rpcHeader.has_response_format()) {
-                auto format = CheckedEnumCast<EMessageFormat>(rpcHeader.response_format());
+                auto format = FromProto<EMessageFormat>(rpcHeader.response_format());
                 httpHeaders->Add(AcceptHeaderName, ToHttpContentType(format));
             }
 

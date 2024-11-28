@@ -1,0 +1,28 @@
+--- a/include/fmt/ranges.h	(index)
++++ b/include/fmt/ranges.h	(working tree)
+@@ -487,21 +487,21 @@ auto write_range_entry(OutputIt out, basic_string_view<Char> str) -> OutputIt {
+     default:
+       if (is_utf8()) {
+         if (escape.cp < 0x100) {
+-          out = format_to(out, "\\x{:02x}", escape.cp);
++          out = fmt::format_to(out, "\\x{:02x}", escape.cp);
+           continue;
+         }
+         if (escape.cp < 0x10000) {
+-          out = format_to(out, "\\u{:04x}", escape.cp);
++          out = fmt::format_to(out, "\\u{:04x}", escape.cp);
+           continue;
+         }
+         if (escape.cp < 0x110000) {
+-          out = format_to(out, "\\U{:08x}", escape.cp);
++          out = fmt::format_to(out, "\\U{:08x}", escape.cp);
+           continue;
+         }
+       }
+       for (Char escape_char : basic_string_view<Char>(
+                escape.begin, to_unsigned(escape.end - escape.begin))) {
+-        out = format_to(
++        out = fmt::format_to(
+             out, "\\x{:02x}",
+             static_cast<typename std::make_unsigned<Char>::type>(escape_char));
+       }

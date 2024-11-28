@@ -68,12 +68,12 @@ void TCommandYql::Parse(TConfig& config) {
     if (ScriptFile) {
         Script = ReadFromFile(ScriptFile, "script");
     }
-    if (Script.Empty()) {
+    if (Script.empty()) {
         Cerr << "Neither text of script (\"--script\", \"-s\") "
             << "nor path to file with script text (\"--file\", \"-f\") were provided." << Endl;
         config.PrintHelpAndExit();
     }
-    if(FlameGraphPath && FlameGraphPath->Empty())
+    if(FlameGraphPath && FlameGraphPath->empty())
     {
         throw TMisuseException() << "FlameGraph path can not be empty.";
     }
@@ -94,7 +94,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
     if (FlameGraphPath && (settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Full
                            && settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Profile)) {
         throw TMisuseException() << "Flame graph is available for full or profile stats. Current: "
-                                    + (CollectStatsMode.Empty() ? "none" : CollectStatsMode) + '.';
+                                    + (CollectStatsMode.empty() ? "none" : CollectStatsMode) + '.';
     }
 
     SetInterruptHandlers();

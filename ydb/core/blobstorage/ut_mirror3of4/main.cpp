@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/core/actor_coroutine.h>
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>

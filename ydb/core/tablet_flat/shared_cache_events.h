@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "flat_bio_events.h"
 #include "shared_handle.h"
+#include "shared_page.h"
 #include <ydb/core/protos/shared_cache.pb.h>
 
 #include <util/generic/map.h>
@@ -10,10 +11,9 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
-namespace NKikimr {
-namespace NSharedCache {
-
+namespace NKikimr::NSharedCache {
     using EPriority = NTabletFlatExecutor::NBlockIO::EPriority;
+    using TPageId = NTable::NPage::TPageId;
 
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR),
@@ -22,10 +22,10 @@ namespace NSharedCache {
         EvUnregister,
         EvInvalidate,
         EvAttach,
+        EvSaveCompactedPages,
         EvRequest,
         EvResult,
         EvUpdated,
-        EvReplacementPolicySwitch,
 
         EvEnd
 
@@ -46,9 +46,9 @@ namespace NSharedCache {
     };
 
     struct TEvTouch : public TEventLocal<TEvTouch, EvTouch> {
-        THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> Touched;
+        THashMap<TLogoBlobID, THashSet<TPageId>> Touched;
 
-        TEvTouch(THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> &&touched)
+        TEvTouch(THashMap<TLogoBlobID, THashSet<TPageId>> &&touched)
             : Touched(std::move(touched))
         {}
     };
@@ -62,6 +62,19 @@ namespace NSharedCache {
             , Owner(owner)
         {
             Y_ABORT_UNLESS(Owner, "Cannot send request with empty owner");
+        }
+    };
+
+    // Note: compacted pages do not have an owner yet
+    // at first they should be accepted by an executor
+    // and it will send TEvAttach itself when it have happened
+    struct TEvSaveCompactedPages : public TEventLocal<TEvSaveCompactedPages, EvSaveCompactedPages> {
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TIntrusivePtr<TPage>> Pages;
+
+        TEvSaveCompactedPages(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
+            : PageCollection(std::move(pageCollection))
+        {
         }
     };
 
@@ -123,23 +136,11 @@ namespace NSharedCache {
 
     struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {
         struct TActions {
-            THashMap<ui32, TSharedPageRef> Accepted;
             THashSet<ui32> Dropped;
         };
 
         THashMap<TLogoBlobID, TActions> Actions;
     };
-
-    struct TEvReplacementPolicySwitch : public TEventLocal<TEvReplacementPolicySwitch, EvReplacementPolicySwitch> {
-        using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
-
-        TReplacementPolicy ReplacementPolicy;
-
-        TEvReplacementPolicySwitch(TReplacementPolicy replacementPolicy)
-            : ReplacementPolicy(replacementPolicy)
-        {}
-    };
-}
 }
 
 template<> inline

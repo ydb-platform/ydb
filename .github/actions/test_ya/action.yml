@@ -292,7 +292,7 @@ runs:
           debug)
             TESTMO_SOURCE="ya-${TESTMO_ARCH}-debug"
             ;;
-          release-*)
+          release*)
             TESTMO_SOURCE="ya-${TESTMO_ARCH}-${BUILD_PRESET/release-/}"
             ;;
           *)
@@ -407,7 +407,13 @@ runs:
             echo "ya make returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
-            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            # sed is to remove richness (tags like '[[rst]]')
+            (( \
+              cat $CURRENT_REPORT \
+              | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type = "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
+              | sed 's/\[\[[^]]*]\]//g' \
+            ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
+            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
             break
           fi
 

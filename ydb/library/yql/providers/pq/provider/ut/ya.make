@@ -8,13 +8,13 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     ydb/library/actors/wilson/protos
-    ydb/library/yql/core/facade
-    ydb/library/yql/core/file_storage
-    ydb/library/yql/core/services/mounts
+    yql/essentials/core/facade
+    yql/essentials/core/file_storage
+    yql/essentials/core/services/mounts
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/transform
-    ydb/library/yql/minikql/comp_nodes/llvm14
-    ydb/library/yql/providers/common/comp_nodes
+    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/providers/common/comp_nodes
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/dq/local_gateway
     ydb/library/yql/providers/dq/provider
@@ -23,7 +23,8 @@ PEERDIR(
     ydb/library/yql/providers/pq/provider
     ydb/library/yql/providers/solomon/gateway
     ydb/library/yql/providers/solomon/provider
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
     ydb/public/sdk/cpp/client/ydb_params
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
 )

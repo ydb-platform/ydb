@@ -201,6 +201,10 @@ struct TReadSessionEvent {
             return CompressedMessages;
         }
 
+        void SetReadInTransaction() {
+            ReadInTransaction = true;
+        }
+
         //! Commits all messages in batch.
         void Commit();
 
@@ -219,6 +223,7 @@ struct TReadSessionEvent {
         TVector<TMessage> Messages;
         TVector<TCompressedMessage> CompressedMessages;
         std::vector<std::pair<ui64, ui64>> OffsetRanges;
+        bool ReadInTransaction = false;
     };
 
     //! Acknowledgement for commit request.
@@ -289,12 +294,12 @@ struct TReadSessionEvent {
         TEndPartitionSessionEvent(TPartitionSession::TPtr partitionSession, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32>&& childPartitionIds);
 
         //! A list of the partition IDs that also participated in the partition's merge.
-        const std::vector<ui32> GetAdjacentPartitionIds() const {
+        const std::vector<ui32>& GetAdjacentPartitionIds() const {
             return AdjacentPartitionIds;
         }
 
         //! A list of partition IDs that were obtained as a result of merging or splitting this partition.
-        const std::vector<ui32> GetChildPartitionIds() const {
+        const std::vector<ui32>& GetChildPartitionIds() const {
             return ChildPartitionIds;
         }
 

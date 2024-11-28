@@ -9,7 +9,7 @@
 #include <ydb/core/testlib/test_client.h>
 
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 
 namespace NKqpRun {
@@ -612,7 +612,7 @@ TYdbSetup::TYdbSetup(const TYdbSetupSettings& settings)
 {}
 
 TRequestResult TYdbSetup::SchemeQueryRequest(const TRequestOptions& query, TSchemeMeta& meta) const {
-    auto schemeQueryOperationResponse = Impl_->SchemeQueryRequest(query)->Get()->Record.GetRef();
+    auto schemeQueryOperationResponse = Impl_->SchemeQueryRequest(query)->Get()->Record;
     const auto& responseRecord = schemeQueryOperationResponse.GetResponse();
 
     meta.Ast = responseRecord.GetQueryAst();
@@ -632,7 +632,7 @@ TRequestResult TYdbSetup::QueryRequest(const TRequestOptions& query, TQueryMeta&
     resultSets.clear();
 
     TQueryResponse queryResponse = Impl_->QueryRequest(query, progressCallback);
-    const auto& queryOperationResponse = queryResponse.Response->Get()->Record.GetRef();
+    const auto& queryOperationResponse = queryResponse.Response->Get()->Record;
     const auto& responseRecord = queryOperationResponse.GetResponse();
 
     resultSets = std::move(queryResponse.ResultSets);
@@ -644,7 +644,7 @@ TRequestResult TYdbSetup::QueryRequest(const TRequestOptions& query, TQueryMeta&
 TRequestResult TYdbSetup::YqlScriptRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const {
     resultSets.clear();
 
-    auto yqlQueryOperationResponse = Impl_->YqlScriptRequest(query)->Get()->Record.GetRef();
+    auto yqlQueryOperationResponse = Impl_->YqlScriptRequest(query)->Get()->Record;
     const auto& responseRecord = yqlQueryOperationResponse.GetResponse();
 
     FillQueryMeta(meta, responseRecord);

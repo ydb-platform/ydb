@@ -85,7 +85,7 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
     if (ScriptFile) {
         Script = ReadFromFile(ScriptFile, "script");
     }
-    if(FlameGraphPath && FlameGraphPath->Empty())
+    if(FlameGraphPath && FlameGraphPath->empty())
     {
         throw TMisuseException() << "FlameGraph path can not be empty.";
     }
@@ -111,7 +111,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
         if (FlameGraphPath && (settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Full
                                && settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Profile)) {
             throw TMisuseException() << "Flame graph is available for full or profile stats. Current: "
-                                        + (CollectStatsMode.Empty() ? "none" : CollectStatsMode) + '.';
+                                        + (CollectStatsMode.empty() ? "none" : CollectStatsMode) + '.';
         }
 
         if (!Parameters.empty() || InputParamStream) {

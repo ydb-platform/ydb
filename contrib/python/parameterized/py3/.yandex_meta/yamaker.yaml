@@ -1,0 +1,2 @@
+exclude:
+  - nose_parameterized/*

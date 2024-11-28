@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               KeyColumnNames: ["embedding"]
               DataColumnNames: ["covered"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings : { distance: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 }, clusters: 4, levels: 5 } }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -45,10 +45,11 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
               NLs::IndexKeys({"embedding"}),
               NLs::IndexDataColumns({"covered"}),
-              NLs::VectorIndexDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
-                                          Ydb::Table::VectorIndexSettings::SIMILARITY_UNSPECIFIED,
+              NLs::KMeansTreeDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
                                           Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                                          1024
+                                          1024,
+                                          4,
+                                          5
                                           ),
             });
 
@@ -63,8 +64,8 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
         TVector<ui64> dropTxIds;
         TestDropTable(runtime, dropTxIds.emplace_back(++txId), "/MyRoot", "vectors");
-        env.TestWaitNotification(runtime, dropTxIds);              
-    } 
+        env.TestWaitNotification(runtime, dropTxIds);
+    }
 
     Y_UNIT_TEST(CreateTableCoveredEmbedding) {
         TTestBasicRuntime runtime;
@@ -84,7 +85,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               KeyColumnNames: ["embedding"]
               DataColumnNames: ["embedding"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings : { distance: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 }, clusters: 4, levels: 5 } }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -95,10 +96,11 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
               NLs::IndexKeys({"embedding"}),
               NLs::IndexDataColumns({"embedding"}),
-              NLs::VectorIndexDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
-                                          Ydb::Table::VectorIndexSettings::SIMILARITY_UNSPECIFIED,
+              NLs::KMeansTreeDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
                                           Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                                          1024
+                                          1024,
+                                          4,
+                                          5
                                           ),
             });
 
@@ -133,7 +135,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               KeyColumnNames: ["embedding"]
               DataColumnNames: ["covered1", "covered2"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings : { distance: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -153,7 +155,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
               NLs::CheckColumns(PostingTable, {PostingTable_ParentColumn, "id1", "id2", "covered1", "covered2"}, {}, {PostingTable_ParentColumn, "id1", "id2"}, true) });
-    } 
+    }
 
     Y_UNIT_TEST(VectorKmeansTreePostingImplTable) {
       // partition
@@ -200,7 +202,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               Name: "idx_vector"
               KeyColumnNames: ["%s"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings : { distance: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }
         )", NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentColumn, NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentColumn), {NKikimrScheme::StatusInvalidParameter});
 
@@ -217,8 +219,8 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               KeyColumnNames: ["embedding"]
               DataColumnNames: ["id"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings : { distance: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }
         )", {NKikimrScheme::StatusInvalidParameter});
-    }     
+    }
 }

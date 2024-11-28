@@ -1,0 +1,1066 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     LicenseRef-scancode-other-copyleft 0d77d02a17cff9dbc838b97c4f47cf31
+BELONGS dynamic/ya.make static/ya.make
+    # GPL
+    License text:
+         * If not, write to the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-copyleft
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-copyleft.LICENSE
+    Files with this license:
+        hz.h [17:17]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    423adb88313c09f51e5b54b235a73f5f
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * If not, write to the Free Software Foundation, Inc., 51 Franklin Street,
+         * Fifth Floor, Boston, MA 02110-1301, USA.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-copyleft
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-copyleft.LICENSE
+    Files with this license:
+        aliases2.h [17:18]
+        armscii_8.h [17:18]
+        ascii.h [17:18]
+        atarist.h [17:18]
+        big5.h [17:18]
+        big5_2003.h [17:18]
+        big5hkscs1999.h [17:18]
+        big5hkscs2001.h [17:18]
+        big5hkscs2004.h [17:18]
+        c99.h [17:18]
+        ces_big5.h [17:18]
+        ces_gbk.h [17:18]
+        cjk_variants.h [17:18]
+        cns11643.h [17:18]
+        cns11643_1.h [17:18]
+        cns11643_15.h [17:18]
+        cns11643_2.h [17:18]
+        cns11643_3.h [17:18]
+        cns11643_4.h [17:18]
+        cns11643_4a.h [17:18]
+        cns11643_4b.h [17:18]
+        cns11643_5.h [17:18]
+        cns11643_6.h [17:18]
+        cns11643_7.h [17:18]
+        cns11643_inv.h [17:18]
+        converters.h [17:18]
+        cp1046.h [17:18]
+        cp1124.h [17:18]
+        cp1125.h [17:18]
+        cp1129.h [17:18]
+        cp1131.h [17:18]
+        cp1133.h [17:18]
+        cp1161.h [17:18]
+        cp1162.h [17:18]
+        cp1163.h [17:18]
+        cp1250.h [17:18]
+        cp1251.h [17:18]
+        cp1252.h [17:18]
+        cp1253.h [17:18]
+        cp1254.h [17:18]
+        cp1255.h [17:18]
+        cp1256.h [17:18]
+        cp1257.h [17:18]
+        cp1258.h [17:18]
+        cp437.h [17:18]
+        cp737.h [17:18]
+        cp775.h [17:18]
+        cp850.h [17:18]
+        cp852.h [17:18]
+        cp853.h [17:18]
+        cp855.h [17:18]
+        cp856.h [17:18]
+        cp857.h [17:18]
+        cp858.h [17:18]
+        cp860.h [17:18]
+        cp861.h [17:18]
+        cp862.h [17:18]
+        cp863.h [17:18]
+        cp864.h [17:18]
+        cp865.h [17:18]
+        cp866.h [17:18]
+        cp869.h [17:18]
+        cp874.h [17:18]
+        cp922.h [17:18]
+        cp932.h [17:18]
+        cp932ext.h [17:18]
+        cp936.h [17:18]
+        cp936ext.h [17:18]
+        cp943.h [17:18]
+        cp949.h [17:18]
+        cp950.h [17:18]
+        cp950ext.h [17:18]
+        dec_hanyu.h [17:18]
+        dec_kanji.h [17:18]
+        euc_cn.h [17:18]
+        euc_jisx0213.h [17:18]
+        euc_jp.h [17:18]
+        euc_kr.h [17:18]
+        euc_tw.h [17:18]
+        flushwc.h [17:18]
+        gb12345.h [17:18]
+        gb12345ext.h [17:18]
+        gb18030.h [17:18]
+        gb18030ext.h [17:18]
+        gb18030uni.h [17:18]
+        gb2312.h [17:18]
+        gbk.h [17:18]
+        gbkext1.h [17:18]
+        gbkext2.h [17:18]
+        gbkext_inv.h [17:18]
+        georgian_academy.h [17:18]
+        georgian_ps.h [17:18]
+        hkscs1999.h [17:18]
+        hkscs2001.h [17:18]
+        hkscs2004.h [17:18]
+        hp_roman8.h [17:18]
+        iconv.c [17:18]
+        iconv_open1.h [17:18]
+        iconv_open2.h [17:18]
+        iso2022_cn.h [17:18]
+        iso2022_cnext.h [17:18]
+        iso2022_jp.h [17:18]
+        iso2022_jp1.h [17:18]
+        iso2022_jp2.h [17:18]
+        iso2022_jp3.h [17:18]
+        iso2022_kr.h [17:18]
+        iso646_cn.h [17:18]
+        iso646_jp.h [17:18]
+        iso8859_1.h [17:18]
+        iso8859_10.h [17:18]
+        iso8859_11.h [17:18]
+        iso8859_13.h [17:18]
+        iso8859_14.h [17:18]
+        iso8859_15.h [17:18]
+        iso8859_16.h [17:18]
+        iso8859_2.h [17:18]
+        iso8859_3.h [17:18]
+        iso8859_4.h [17:18]
+        iso8859_5.h [17:18]
+        iso8859_6.h [17:18]
+        iso8859_7.h [17:18]
+        iso8859_8.h [17:18]
+        iso8859_9.h [17:18]
+        isoir165.h [17:18]
+        isoir165ext.h [17:18]
+        java.h [17:18]
+        jisx0201.h [17:18]
+        jisx0208.h [17:18]
+        jisx0212.h [17:18]
+        jisx0213.h [17:18]
+        johab.h [17:18]
+        johab_hangul.h [17:18]
+        koi8_r.h [17:18]
+        koi8_ru.h [17:18]
+        koi8_t.h [17:18]
+        koi8_u.h [17:18]
+        ksc5601.h [17:18]
+        loop_unicode.h [17:18]
+        loop_wchar.h [17:18]
+        loops.h [17:18]
+        mac_arabic.h [17:18]
+        mac_centraleurope.h [17:18]
+        mac_croatian.h [17:18]
+        mac_cyrillic.h [17:18]
+        mac_greek.h [17:18]
+        mac_hebrew.h [17:18]
+        mac_iceland.h [17:18]
+        mac_roman.h [17:18]
+        mac_romania.h [17:18]
+        mac_thai.h [17:18]
+        mac_turkish.h [17:18]
+        mac_ukraine.h [17:18]
+        mulelao.h [17:18]
+        nextstep.h [17:18]
+        pt154.h [17:18]
+        riscos1.h [17:18]
+        rk1048.h [17:18]
+        shift_jisx0213.h [17:18]
+        sjis.h [17:18]
+        tcvn.h [17:18]
+        tds565.h [17:18]
+        tis620.h [17:18]
+        translit.h [17:18]
+        ucs2.h [17:18]
+        ucs2be.h [17:18]
+        ucs2internal.h [17:18]
+        ucs2le.h [17:18]
+        ucs2swapped.h [17:18]
+        ucs4.h [17:18]
+        ucs4be.h [17:18]
+        ucs4internal.h [17:18]
+        ucs4le.h [17:18]
+        ucs4swapped.h [17:18]
+        uhc_1.h [17:18]
+        uhc_2.h [17:18]
+        utf16.h [17:18]
+        utf16be.h [17:18]
+        utf16le.h [17:18]
+        utf32.h [17:18]
+        utf32be.h [17:18]
+        utf32le.h [17:18]
+        utf7.h [17:18]
+        utf8.h [17:18]
+        vietcomb.h [17:18]
+        viscii.h [17:18]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    45290496d6992e3119d48f7a24da94c6
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        aliases2.h [5:8]
+        armscii_8.h [5:8]
+        ascii.h [5:8]
+        atarist.h [5:8]
+        big5.h [5:8]
+        big5_2003.h [5:8]
+        big5hkscs1999.h [5:8]
+        big5hkscs2001.h [5:8]
+        big5hkscs2004.h [5:8]
+        c99.h [5:8]
+        ces_big5.h [5:8]
+        ces_gbk.h [5:8]
+        cjk_variants.h [5:8]
+        cns11643.h [5:8]
+        cns11643_1.h [5:8]
+        cns11643_15.h [5:8]
+        cns11643_2.h [5:8]
+        cns11643_3.h [5:8]
+        cns11643_4.h [5:8]
+        cns11643_4a.h [5:8]
+        cns11643_4b.h [5:8]
+        cns11643_5.h [5:8]
+        cns11643_6.h [5:8]
+        cns11643_7.h [5:8]
+        cns11643_inv.h [5:8]
+        converters.h [5:8]
+        cp1046.h [5:8]
+        cp1124.h [5:8]
+        cp1125.h [5:8]
+        cp1129.h [5:8]
+        cp1131.h [5:8]
+        cp1133.h [5:8]
+        cp1161.h [5:8]
+        cp1162.h [5:8]
+        cp1163.h [5:8]
+        cp1250.h [5:8]
+        cp1251.h [5:8]
+        cp1252.h [5:8]
+        cp1253.h [5:8]
+        cp1254.h [5:8]
+        cp1255.h [5:8]
+        cp1256.h [5:8]
+        cp1257.h [5:8]
+        cp1258.h [5:8]
+        cp437.h [5:8]
+        cp737.h [5:8]
+        cp775.h [5:8]
+        cp850.h [5:8]
+        cp852.h [5:8]
+        cp853.h [5:8]
+        cp855.h [5:8]
+        cp856.h [5:8]
+        cp857.h [5:8]
+        cp858.h [5:8]
+        cp860.h [5:8]
+        cp861.h [5:8]
+        cp862.h [5:8]
+        cp863.h [5:8]
+        cp864.h [5:8]
+        cp865.h [5:8]
+        cp866.h [5:8]
+        cp869.h [5:8]
+        cp874.h [5:8]
+        cp922.h [5:8]
+        cp932.h [5:8]
+        cp932ext.h [5:8]
+        cp936.h [5:8]
+        cp936ext.h [5:8]
+        cp943.h [5:8]
+        cp949.h [5:8]
+        cp950.h [5:8]
+        cp950ext.h [5:8]
+        dec_hanyu.h [5:8]
+        dec_kanji.h [5:8]
+        euc_cn.h [5:8]
+        euc_jisx0213.h [5:8]
+        euc_jp.h [5:8]
+        euc_kr.h [5:8]
+        euc_tw.h [5:8]
+        flushwc.h [5:8]
+        gb12345.h [5:8]
+        gb12345ext.h [5:8]
+        gb18030.h [5:8]
+        gb18030ext.h [5:8]
+        gb18030uni.h [5:8]
+        gb2312.h [5:8]
+        gbk.h [5:8]
+        gbkext1.h [5:8]
+        gbkext2.h [5:8]
+        gbkext_inv.h [5:8]
+        georgian_academy.h [5:8]
+        georgian_ps.h [5:8]
+        hkscs1999.h [5:8]
+        hkscs2001.h [5:8]
+        hkscs2004.h [5:8]
+        hp_roman8.h [5:8]
+        hz.h [5:8]
+        iconv.c [5:8]
+        iconv_open1.h [5:8]
+        iconv_open2.h [5:8]
+        iso2022_cn.h [5:8]
+        iso2022_cnext.h [5:8]
+        iso2022_jp.h [5:8]
+        iso2022_jp1.h [5:8]
+        iso2022_jp2.h [5:8]
+        iso2022_jp3.h [5:8]
+        iso2022_kr.h [5:8]
+        iso646_cn.h [5:8]
+        iso646_jp.h [5:8]
+        iso8859_1.h [5:8]
+        iso8859_10.h [5:8]
+        iso8859_11.h [5:8]
+        iso8859_13.h [5:8]
+        iso8859_14.h [5:8]
+        iso8859_15.h [5:8]
+        iso8859_16.h [5:8]
+        iso8859_2.h [5:8]
+        iso8859_3.h [5:8]
+        iso8859_4.h [5:8]
+        iso8859_5.h [5:8]
+        iso8859_6.h [5:8]
+        iso8859_7.h [5:8]
+        iso8859_8.h [5:8]
+        iso8859_9.h [5:8]
+        isoir165.h [5:8]
+        isoir165ext.h [5:8]
+        java.h [5:8]
+        jisx0201.h [5:8]
+        jisx0208.h [5:8]
+        jisx0212.h [5:8]
+        jisx0213.h [5:8]
+        johab.h [5:8]
+        johab_hangul.h [5:8]
+        koi8_r.h [5:8]
+        koi8_ru.h [5:8]
+        koi8_t.h [5:8]
+        koi8_u.h [5:8]
+        ksc5601.h [5:8]
+        loop_unicode.h [5:8]
+        loop_wchar.h [5:8]
+        loops.h [5:8]
+        mac_arabic.h [5:8]
+        mac_centraleurope.h [5:8]
+        mac_croatian.h [5:8]
+        mac_cyrillic.h [5:8]
+        mac_greek.h [5:8]
+        mac_hebrew.h [5:8]
+        mac_iceland.h [5:8]
+        mac_roman.h [5:8]
+        mac_romania.h [5:8]
+        mac_thai.h [5:8]
+        mac_turkish.h [5:8]
+        mac_ukraine.h [5:8]
+        mulelao.h [5:8]
+        nextstep.h [5:8]
+        pt154.h [5:8]
+        riscos1.h [5:8]
+        rk1048.h [5:8]
+        shift_jisx0213.h [5:8]
+        sjis.h [5:8]
+        tcvn.h [5:8]
+        tds565.h [5:8]
+        tis620.h [5:8]
+        translit.h [5:8]
+        ucs2.h [5:8]
+        ucs2be.h [5:8]
+        ucs2internal.h [5:8]
+        ucs2le.h [5:8]
+        ucs2swapped.h [5:8]
+        ucs4.h [5:8]
+        ucs4be.h [5:8]
+        ucs4internal.h [5:8]
+        ucs4le.h [5:8]
+        ucs4swapped.h [5:8]
+        uhc_1.h [5:8]
+        uhc_2.h [5:8]
+        utf16.h [5:8]
+        utf16be.h [5:8]
+        utf16le.h [5:8]
+        utf32.h [5:8]
+        utf32be.h [5:8]
+        utf32le.h [5:8]
+        utf7.h [5:8]
+        utf8.h [5:8]
+        vietcomb.h [5:8]
+        viscii.h [5:8]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    46295c1deeff52542eca2ef71d620273
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        libcharset.h [4:7]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+SKIP     LicenseRef-scancode-other-copyleft 593735d3234a09e42e2341e4b2853dab
+BELONGS dynamic/ya.make static/ya.make
+    # GPL
+    License text:
+           write to the Free Software Foundation, Inc., 51 Franklin Street,
+           Fifth Floor, Boston, MA 02110-1301, USA.  */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-copyleft
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-copyleft.LICENSE
+    Files with this license:
+        libcharset.h [16:17]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    5d7cc05fc37b928faa274f015523eb21
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        translit.def [4:7]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later AND LGPL-2.0-or-later 6335240ce1fa19980d2f6b65a369cda5
+BELONGS dynamic/ya.make static/ya.make
+FILE_INCLUDE COPYING.LIB found in files: cp1046.h at line 16, cp1124.h at line 16, cp1125.h at line 16, cp1129.h at line 16, cp1131.h at line 16, cp1161.h at line 16, cp1250.h at line 16, cp1251.h at line 16, cp1253.h at line 16, cp1256.h at line 16, cp1257.h at line 16, cp437.h at line 16, cp737.h at line 16, cp775.h at line 16, cp850.h at line 16, cp852.h at line 16, cp853.h at line 16, cp855.h at line 16, cp856.h at line 16, cp857.h at line 16, cp860.h at line 16, cp861.h at line 16, cp862.h at line 16, cp863.h at line 16, cp865.h at line 16, cp866.h at line 16, cp869.h at line 16, cp874.h at line 16, gbkext_inv.h at line 16, hkscs1999.h at line 16, iso8859_11.h at line 16, nextstep.h at line 16, rk1048.h at line 16
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 61.42
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        armscii_8.h [8:17]
+        ascii.h [8:17]
+        atarist.h [8:17]
+        big5.h [8:17]
+        c99.h [8:17]
+        ces_big5.h [8:17]
+        ces_gbk.h [8:17]
+        cjk_variants.h [8:17]
+        cns11643_1.h [8:17]
+        cns11643_15.h [8:17]
+        cns11643_2.h [8:17]
+        cns11643_3.h [8:17]
+        cns11643_4a.h [8:17]
+        cns11643_4b.h [8:17]
+        cns11643_5.h [8:17]
+        cns11643_6.h [8:17]
+        cns11643_7.h [8:17]
+        cp1133.h [8:17]
+        cp1162.h [8:17]
+        cp1163.h [8:17]
+        cp1252.h [8:17]
+        cp1254.h [8:17]
+        cp858.h [8:17]
+        cp922.h [8:17]
+        cp932ext.h [8:17]
+        cp936.h [8:17]
+        cp949.h [8:17]
+        dec_hanyu.h [8:17]
+        dec_kanji.h [8:17]
+        euc_cn.h [8:17]
+        euc_jisx0213.h [8:17]
+        euc_jp.h [8:17]
+        euc_kr.h [8:17]
+        euc_tw.h [8:17]
+        gb18030uni.h [8:17]
+        gb2312.h [8:17]
+        gbkext1.h [8:17]
+        gbkext2.h [8:17]
+        georgian_academy.h [8:17]
+        georgian_ps.h [8:17]
+        hkscs2001.h [8:17]
+        hp_roman8.h [8:17]
+        iconv_open1.h [8:17]
+        iso646_cn.h [8:17]
+        iso646_jp.h [8:17]
+        iso8859_1.h [8:17]
+        iso8859_10.h [8:17]
+        iso8859_13.h [8:17]
+        iso8859_14.h [8:17]
+        iso8859_15.h [8:17]
+        iso8859_16.h [8:17]
+        iso8859_2.h [8:17]
+        iso8859_3.h [8:17]
+        iso8859_4.h [8:17]
+        iso8859_5.h [8:17]
+        iso8859_6.h [8:17]
+        iso8859_7.h [8:17]
+        iso8859_8.h [8:17]
+        iso8859_9.h [8:17]
+        isoir165ext.h [8:17]
+        java.h [8:17]
+        jisx0201.h [8:17]
+        jisx0208.h [8:17]
+        koi8_r.h [8:17]
+        koi8_ru.h [8:17]
+        koi8_t.h [8:17]
+        koi8_u.h [8:17]
+        ksc5601.h [8:17]
+        mac_arabic.h [8:17]
+        mac_centraleurope.h [8:17]
+        mac_croatian.h [8:17]
+        mac_cyrillic.h [8:17]
+        mac_greek.h [8:17]
+        mac_hebrew.h [8:17]
+        mac_iceland.h [8:17]
+        mac_roman.h [8:17]
+        mac_romania.h [8:17]
+        mac_thai.h [8:17]
+        mac_turkish.h [8:17]
+        mac_ukraine.h [8:17]
+        mulelao.h [8:17]
+        pt154.h [8:17]
+        riscos1.h [8:17]
+        shift_jisx0213.h [8:17]
+        tds565.h [8:17]
+        tis620.h [8:17]
+        translit.h [8:17]
+        utf7.h [8:17]
+        utf8.h [8:17]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 62.90
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        cp1046.h [8:17]
+        cp1124.h [8:17]
+        cp1125.h [8:17]
+        cp1129.h [8:17]
+        cp1131.h [8:17]
+        cp1161.h [8:17]
+        cp1250.h [8:17]
+        cp1251.h [8:17]
+        cp1253.h [8:17]
+        cp1256.h [8:17]
+        cp1257.h [8:17]
+        cp437.h [8:17]
+        cp737.h [8:17]
+        cp775.h [8:17]
+        cp850.h [8:17]
+        cp852.h [8:17]
+        cp853.h [8:17]
+        cp855.h [8:17]
+        cp856.h [8:17]
+        cp857.h [8:17]
+        cp860.h [8:17]
+        cp861.h [8:17]
+        cp862.h [8:17]
+        cp863.h [8:17]
+        cp865.h [8:17]
+        cp866.h [8:17]
+        cp869.h [8:17]
+        cp874.h [8:17]
+        gbkext_inv.h [8:17]
+        hkscs1999.h [8:17]
+        iso8859_11.h [8:17]
+        nextstep.h [8:17]
+        rk1048.h [8:17]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-only        6c5bd0a332365b8f0ecb14277dae773c
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-only
+        Score           : 99.98
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.0.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-only
+    Files with this license:
+        COPYING.LIB [1:482]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    8f24b8a3e425d2451f7340d424d60db4
+BELONGS dynamic/ya.make static/ya.make
+FILE_INCLUDE COPYING.LIB found in files: hz.h at line 16
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 61.42
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        hz.h [8:17]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    a0a3247f9a7f8863362d285cb8bf61e6
+BELONGS dynamic/ya.make static/ya.make
+FILE_INCLUDE COPYING.LIB found in files: iconv.h at line 15
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 61.42
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        genaliases.c [7:16]
+        genaliases2.c [7:16]
+        genflags.c [7:16]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 62.90
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        iconv.h [7:16]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    ad1179666d71eb94df438ea7eedf86e2
+BELONGS dynamic/ya.make static/ya.make
+    # GPL
+    License text:
+        \# If not, write to the Free Software Foundation, Inc., 51 Franklin Street,
+        \# Fifth Floor, Boston, MA 02110-1301, USA.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-copyleft
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-copyleft.LICENSE
+    Files with this license:
+        translit.def [16:17]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    b0d7e9887bea1aa7f059908071379b35
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           You should have received a copy of the GNU Library General Public License
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 9.59
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        libcharset.h [14:14]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    b26f6570087f14aad0ffafa6a2d9fcb7
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 52.05
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        config.h [10:13]
+        encodings.def [9:12]
+        encodings_aix.def [9:12]
+        encodings_dos.def [9:12]
+        encodings_extra.def [9:12]
+        encodings_local.def [9:12]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        encodings_osf1.def [9:12]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    c9ab45ca8173afcff63565a1f6c5a282
+BELONGS dynamic/ya.make static/ya.make
+FILE_INCLUDE COPYING.LIB found in files: cp932.h at line 16
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: AGPL-3.0-or-later
+        Score           : 44.71
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/agpl-3.0.html, http://www.gnu.org/licenses/agpl.txt, https://spdx.org/licenses/AGPL-3.0-or-later
+    Files with this license:
+        cp932.h [10:16]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    caf02560e87db8ae3ffaf50340106845
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        localcharset.h [5:18]
+        relocatable.c [5:18]
+        relocatable.h [5:18]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later AND LGPL-2.0-or-later AND LGPL-2.0-or-later ccabd4ff4298e16af41b58abc2b65111
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 52.05
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        aliases2.h [10:13]
+        big5_2003.h [10:13]
+        big5hkscs1999.h [10:13]
+        big5hkscs2001.h [10:13]
+        big5hkscs2004.h [10:13]
+        cns11643_4.h [10:13]
+        cp1255.h [10:13]
+        cp1258.h [10:13]
+        cp936ext.h [10:13]
+        cp950.h [10:13]
+        cp950ext.h [10:13]
+        flushwc.h [10:13]
+        gb12345.h [10:13]
+        gb12345ext.h [10:13]
+        gb18030ext.h [10:13]
+        hkscs2004.h [10:13]
+        iconv.c [10:13]
+        iconv_open2.h [10:13]
+        iso2022_cn.h [10:13]
+        iso2022_cnext.h [10:13]
+        iso2022_jp.h [10:13]
+        iso2022_jp1.h [10:13]
+        iso2022_jp3.h [10:13]
+        jisx0212.h [10:13]
+        johab.h [10:13]
+        johab_hangul.h [10:13]
+        sjis.h [10:13]
+        tcvn.h [10:13]
+        ucs2.h [10:13]
+        ucs2internal.h [10:13]
+        ucs4internal.h [10:13]
+        uhc_1.h [10:13]
+        uhc_2.h [10:13]
+        vietcomb.h [10:13]
+        viscii.h [10:13]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        cns11643.h [10:13]
+        cns11643_inv.h [10:13]
+        converters.h [10:13]
+        cp864.h [10:13]
+        gb18030.h [10:13]
+        gbk.h [10:13]
+        iso2022_jp2.h [10:13]
+        iso2022_kr.h [10:13]
+        isoir165.h [10:13]
+        jisx0213.h [10:13]
+        loop_unicode.h [10:13]
+        loop_wchar.h [10:13]
+        ucs2be.h [10:13]
+        ucs2le.h [10:13]
+        ucs2swapped.h [10:13]
+        ucs4.h [10:13]
+        ucs4be.h [10:13]
+        ucs4le.h [10:13]
+        ucs4swapped.h [10:13]
+        utf16.h [10:13]
+        utf16be.h [10:13]
+        utf16le.h [10:13]
+        utf32.h [10:13]
+        utf32be.h [10:13]
+        utf32le.h [10:13]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 48.72
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        cp943.h [10:13]
+        loops.h [10:13]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    dc89b79ac6d4a18eaba41145988dfeb1
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           If not, write to the Free Software Foundation, Inc., 51 Franklin Street,
+           Fifth Floor, Boston, MA 02110-1301, USA.  */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-copyleft
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-copyleft.LICENSE
+    Files with this license:
+        config.h [17:18]
+        encodings.def [16:17]
+        encodings_aix.def [16:17]
+        encodings_dos.def [16:17]
+        encodings_extra.def [16:17]
+        encodings_local.def [16:17]
+        encodings_osf1.def [16:17]
+        genaliases.c [16:17]
+        genaliases2.c [16:17]
+        genflags.c [16:17]
+        iconv.h [16:17]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later AND LGPL-2.0-or-later e23ca1d9d6cf5a8d3de05ac197b8a4f7
+BELONGS dynamic/ya.make static/ya.make
+FILE_INCLUDE COPYING.LIB found in files: encodings_osf1.def at line 15
+    License text:
+           You should have received a copy of the GNU Library General Public
+           License along with the GNU LIBICONV Library; see the file COPYING.LIB.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 9.59
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        config.h [15:16]
+        encodings.def [14:15]
+        encodings_aix.def [14:15]
+        encodings_dos.def [14:15]
+        encodings_extra.def [14:15]
+        encodings_local.def [14:15]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 9.09
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        encodings_osf1.def [14:15]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    e9808eaa142ccce2f7f0e5a3e0f39a0c
+BELONGS dynamic/ya.make static/ya.make
+FILE_INCLUDE COPYING.LIB found in files: translit.def at line 15
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 61.42
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        translit.def [7:16]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later AND LGPL-2.0-or-later AND LGPL-2.0-or-later AND LGPL-2.0-or-later ef414e59eedf93e160f35b38787d3e72
+BELONGS dynamic/ya.make static/ya.make
+FILE_INCLUDE COPYING.LIB found in files: iso2022_kr.h at line 16, jisx0213.h at line 16, loop_wchar.h at line 16
+    License text:
+         * You should have received a copy of the GNU Library General Public
+         * License along with the GNU LIBICONV Library; see the file COPYING.LIB.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 9.59
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        aliases2.h [15:16]
+        big5_2003.h [15:16]
+        big5hkscs1999.h [15:16]
+        big5hkscs2001.h [15:16]
+        big5hkscs2004.h [15:16]
+        cns11643_4.h [15:16]
+        cp1255.h [15:16]
+        cp1258.h [15:16]
+        cp936ext.h [15:16]
+        cp950.h [15:16]
+        cp950ext.h [15:16]
+        flushwc.h [15:16]
+        gb12345.h [15:16]
+        gb12345ext.h [15:16]
+        gb18030ext.h [15:16]
+        hkscs2004.h [15:16]
+        iconv.c [15:16]
+        iconv_open2.h [15:16]
+        iso2022_cn.h [15:16]
+        iso2022_cnext.h [15:16]
+        iso2022_jp.h [15:16]
+        iso2022_jp1.h [15:16]
+        iso2022_jp3.h [15:16]
+        jisx0212.h [15:16]
+        johab.h [15:16]
+        johab_hangul.h [15:16]
+        sjis.h [15:16]
+        tcvn.h [15:16]
+        ucs2.h [15:16]
+        ucs2internal.h [15:16]
+        ucs4internal.h [15:16]
+        uhc_1.h [15:16]
+        uhc_2.h [15:16]
+        vietcomb.h [15:16]
+        viscii.h [15:16]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 9.09
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        cns11643.h [15:16]
+        cns11643_inv.h [15:16]
+        cp864.h [15:16]
+        cp932.h [15:16]
+        cp943.h [15:16]
+        gb18030.h [15:16]
+        gbk.h [15:16]
+        iso2022_jp2.h [15:16]
+        loops.h [15:16]
+        ucs2be.h [15:16]
+        ucs2le.h [15:16]
+        ucs4.h [15:16]
+        ucs4be.h [15:16]
+        ucs4le.h [15:16]
+        utf16be.h [15:16]
+        utf16le.h [15:16]
+        utf32be.h [15:16]
+        utf32le.h [15:16]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 7.22
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        converters.h [15:16]
+        isoir165.h [15:16]
+        loop_unicode.h [15:16]
+        ucs2swapped.h [15:16]
+        ucs4swapped.h [15:16]
+        utf16.h [15:16]
+        utf32.h [15:16]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 8.64
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        iso2022_kr.h [15:16]
+        jisx0213.h [15:16]
+        loop_wchar.h [15:16]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    f0103ec3131339fbd17d095286235383
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        config.h [5:8]
+        encodings.def [4:7]
+        encodings_aix.def [4:7]
+        encodings_dos.def [4:7]
+        encodings_extra.def [4:7]
+        encodings_local.def [4:7]
+        encodings_osf1.def [4:7]
+        genaliases.c [4:7]
+        genaliases2.c [4:7]
+        genflags.c [4:7]
+        iconv.h [4:7]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    fe91a03ccaf35c2756226c94ae221821
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 52.05
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        libcharset.h [9:12]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make

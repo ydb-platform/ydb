@@ -15,6 +15,7 @@ namespace NKikimr::NKqp {
 Y_UNIT_TEST_SUITE(KqpOlapTiering) {
     Y_UNIT_TEST(Eviction) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->SetSkipSpecialCheckForEvict(true);
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

@@ -33,7 +33,7 @@ std::vector<TString> TTopicWorkloadWriterWorker::GenerateMessages(size_t message
     std::vector<TString> generatedMessages;
     for (size_t i = 0; i < GENERATED_MESSAGES_COUNT; i++) {
         TStringBuilder stringBuilder;
-        while (stringBuilder.Size() < messageSize)
+        while (stringBuilder.size() < messageSize)
             stringBuilder << RandomNumber<ui64>(UINT64_MAX);
         stringBuilder.resize(messageSize);
         generatedMessages.push_back(std::move(stringBuilder));

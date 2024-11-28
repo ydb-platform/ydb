@@ -4,12 +4,12 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_optimize.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -23,7 +23,7 @@ TMaybe<bool> TYtPhysicalOptProposalTransformer::CanFuseLambdas(const TCoLambda& 
 
     TExprNode::TPtr updatedBody = innerLambda.Body().Ptr();
     if (maxJobMemoryLimit) {
-        auto status = UpdateTableContentMemoryUsage(innerLambda.Body().Ptr(), updatedBody, State_, ctx);
+        auto status = UpdateTableContentMemoryUsage(innerLambda.Body().Ptr(), updatedBody, State_, ctx, false);
         if (status.Level != TStatus::Ok) {
             return {};
         }
@@ -36,7 +36,7 @@ TMaybe<bool> TYtPhysicalOptProposalTransformer::CanFuseLambdas(const TCoLambda& 
 
     updatedBody = outerLambda.Body().Ptr();
     if (maxJobMemoryLimit) {
-        auto status = UpdateTableContentMemoryUsage(outerLambda.Body().Ptr(), updatedBody, State_, ctx);
+        auto status = UpdateTableContentMemoryUsage(outerLambda.Body().Ptr(), updatedBody, State_, ctx, false);
         if (status.Level != TStatus::Ok) {
             return {};
         }
@@ -290,7 +290,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseInnerMap(TExprBase 
         return node;
     }
     if (NYql::HasAnySetting(outerMap.Input().Item(0).Settings().Ref(),
-        EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::DirectRead | EYtSettingType::Sample | EYtSettingType::SysColumns))
+        EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::DirectRead | EYtSettingType::Sample | EYtSettingType::SysColumns | EYtSettingType::BlockInputApplied))
     {
         return node;
     }
@@ -382,7 +382,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseInnerMap(TExprBase 
     }
 
     const auto mergedSettings = MergeSettings(
-        *NYql::RemoveSettings(outerMap.Settings().Ref(), EYtSettingType::Flow, ctx),
+        *NYql::RemoveSettings(outerMap.Settings().Ref(), EYtSettingType::Flow | EYtSettingType::BlockInputReady, ctx),
         *NYql::RemoveSettings(innerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::KeepSorted, ctx), ctx);
 
     return Build<TYtMap>(ctx, node.Pos())
@@ -435,7 +435,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
     if (NYql::HasAnySetting(inner.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::JobCount)) {
         return node;
     }
-    if (NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)) {
+    if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount | EYtSettingType::BlockInputApplied)) {
         return node;
     }
     if (outerMap.Input().Item(0).Settings().Size() != 0) {
@@ -533,7 +533,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
         lambda.Ptr());
     res = ctx.ChangeChild(*res, TYtWithUserJobsOpBase::idx_Output, outerMap.Output().Ptr());
 
-    auto mergedSettings = NYql::RemoveSettings(outerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::Sharded | EYtSettingType::Flow, ctx);
+    auto mergedSettings = NYql::RemoveSettings(outerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::Sharded | EYtSettingType::Flow | EYtSettingType::BlockInputReady, ctx);
     mergedSettings = MergeSettings(inner.Settings().Ref(), *mergedSettings, ctx);
     res = ctx.ChangeChild(*res, TYtWithUserJobsOpBase::idx_Settings, std::move(mergedSettings));
     res = ctx.ChangeChild(*res, TYtWithUserJobsOpBase::idx_World,

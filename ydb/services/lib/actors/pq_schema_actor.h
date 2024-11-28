@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
@@ -28,6 +29,10 @@ struct TYdbPqCodes {
         PQCode(PQCode) {}
 };
 
+namespace Ydb::Topic {
+    class CreateTopicRequest;
+    class AlterTopicRequest;
+}
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -174,7 +179,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                     if (ProcessCdc(response)) {
                         return;
                     }
-
                     AddIssue(
                         FillIssue(
                             TStringBuilder() << "path '" << path << "' is not compatible scheme object",
@@ -290,6 +294,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TMaybe<TString>& GetCdcStreamName() const {
             return CdcStreamName;
         }
+
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             return static_cast<TDerived*>(this)->HandleCacheNavigateResponse(ev);
         }
@@ -537,11 +542,19 @@ namespace NKikimr::NGRpcProxy::V1 {
         virtual void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) = 0;
 
         TString GetTopicPath() const override {
-            return TBase::TopicPath;
+            auto path = TBase::TopicPath;
+            if (PrivateTopicName) {
+                path = JoinPath(ChildPath(NKikimr::SplitPath(path), *PrivateTopicName));
+            }
+            return path;
         }
 
-        void SendDescribeProposeRequest() {
-            return TBase::SendDescribeProposeRequest(this->ActorContext(), false);
+        const TMaybe<TString>& GetCdcStreamName() const {
+            return CdcStreamName;
+        }
+
+        void SendDescribeProposeRequest(bool showPrivate = false) {
+            return TBase::SendDescribeProposeRequest(this->ActorContext(), showPrivate);
         }
 
         bool HandleCacheNavigateResponseBase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -590,16 +603,34 @@ namespace NKikimr::NGRpcProxy::V1 {
             return false;
         }
 
+        bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
+            if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
+                if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
+                    Y_ABORT_UNLESS(response.ListNodeEntry->Children.size() == 1);
+                    PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
+
+                    if (response.Self) {
+                        CdcStreamName = response.Self->Info.GetName();
+                    }
+                    SendDescribeProposeRequest(true);
+                    return true;
+                }
+            }
+            return false;
+        }
+
 
     private:
         TRequest Request;
         TActorId Requester;
-        TMaybe<TString> PrivateTopicName;
 
     protected:
         THolder<TEvResponse> Response;
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
+        TMaybe<TString> PrivateTopicName;
+        TMaybe<TString> CdcStreamName;
+
     };
 
 }

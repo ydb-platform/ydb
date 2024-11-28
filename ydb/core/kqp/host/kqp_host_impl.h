@@ -43,7 +43,6 @@ public:
         YQL_ENSURE(Status.GetValue() == NYql::IGraphTransformer::TStatus::Ok);
 
         TResult result;
-        result.ProtobufArenaPtr.reset(new google::protobuf::Arena());
 
         result.SetSuccess();
 

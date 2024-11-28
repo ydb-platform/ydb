@@ -2,16 +2,16 @@
 #include "yql_yt_file_mkql_compiler.h"
 #include "yql_yt_file_comp_nodes.h"
 
-#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
@@ -26,20 +26,20 @@
 #include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <ydb/library/yql/providers/yt/gateway/lib/query_cache.h>
 #include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_table.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/type_ann/type_ann_core.h>
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
-#include <ydb/library/yql/utils/threading/async_queue.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/type_ann/type_ann_core.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+#include <yql/essentials/utils/threading/async_queue.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -58,6 +58,7 @@
 #include <util/system/fstat.h>
 #include <util/string/split.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <util/folder/path.h>
 #include <util/generic/yexception.h>
 #include <util/generic/xrange.h>
@@ -189,9 +190,11 @@ public:
                 const TString name(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
                 auto block = TUserDataStorage::FindUserDataBlock(UserDataBlocks, name);
                 MKQL_ENSURE(block, "File not found: " << name);
-                MKQL_ENSURE(block->Type == EUserDataType::PATH, "FilePath not supported for non-file data block, name: "
+                MKQL_ENSURE(block->Type == EUserDataType::PATH || block->FrozenFile, "File is not frozen, name: "
                     << name << ", block type: " << block->Type);
-                return TProgramBuilder(env, *Services->GetFunctionRegistry()).NewDataLiteral<NUdf::EDataSlot::String>(block->Data);
+                return TProgramBuilder(env, *Services->GetFunctionRegistry()).NewDataLiteral<NUdf::EDataSlot::String>(
+                    block->Type == EUserDataType::PATH ? block->Data : block->FrozenFile->GetPath().GetPath()
+                );
             };
         }
 
@@ -206,7 +209,7 @@ public:
                         continue;
                     }
 
-                    MKQL_ENSURE(x.second.Type == EUserDataType::PATH, "FilePath not supported for non-file data block, name: "
+                    MKQL_ENSURE(x.second.Type == EUserDataType::PATH, "FolderPath not supported for non-file data block, name: "
                         << x.first.Alias() << ", block type: " << x.second.Type);
                     auto newFolderPath = x.second.Data.substr(0, x.second.Data.size() - (x.first.Alias().size() - folderName.size()));
                     if (!folderPath) {
@@ -234,9 +237,8 @@ public:
                 else if (block->Type == EUserDataType::RAW_INLINE_DATA) {
                     return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(block->Data);
                 }
-                else if (Services->GetFileStorage() && block->Type == EUserDataType::URL) {
-                    auto link = Services->GetFileStorage()->PutUrl(block->Data, "");
-                    auto content = TFileInput(link->GetPath()).ReadAll();
+                else if (block->FrozenFile && block->Type == EUserDataType::URL) {
+                    auto content = TFileInput(block->FrozenFile->GetPath().GetPath()).ReadAll();
                     return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(content);
                 } else {
                    MKQL_ENSURE(false, "Unsupported block type");
@@ -335,6 +337,23 @@ private:
     const TUserDataTable& UserDataBlocks;
     std::shared_ptr<THashMap<TString, TRuntimeNode>> ExtraArgs;
 };
+
+template <typename TType>
+static inline TType OptionFromString(const TStringBuf value) {
+    if constexpr (std::is_same_v<TString, TType>) {
+        return TString{value};
+    } else if constexpr (std::is_same_v<NYT::TNode, TType>) {
+        return NYT::NodeFromYsonString(value);
+    } else {
+        return FromString<TType>(value);
+    }
+}
+
+template <typename TType>
+static inline const TType& NoOp(const TType& value) {
+    return value;
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -455,8 +474,8 @@ public:
             TSession* session = GetSession(options);
 
             TSet<TString> uniqueTables;
-            const auto fullPrefix = options.Prefix().Empty() ? TString() : (options.Prefix() + '/');
-            const auto fullSuffix = options.Suffix().Empty() ? TString() : ('/' + options.Suffix());
+            const auto fullPrefix = options.Prefix().empty() ? TString() : (options.Prefix() + '/');
+            const auto fullSuffix = options.Suffix().empty() ? TString() : ('/' + options.Suffix());
             for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
                 TVector<TString> parts;
                 Split(tableName, ".", parts);
@@ -541,7 +560,7 @@ public:
         auto pos = options.Pos();
         try {
             TSet<TString> uniqueTables;
-            const auto fullPrefix = options.Prefix().Empty() ? "" : (options.Prefix() + '/');
+            const auto fullPrefix = options.Prefix().empty() ? "" : (options.Prefix() + '/');
             for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
                 TVector<TString> parts;
                 Split(tableName, ".", parts);
@@ -844,8 +863,12 @@ public:
 
             auto publish = TYtPublish(node);
 
-            auto mode = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::Mode);
-            bool append = mode && FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Append;
+            EYtWriteMode mode = EYtWriteMode::Renew;
+            if (const auto modeSetting = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::Mode)) {
+                mode = FromString<EYtWriteMode>(modeSetting->Child(1)->Content());
+            }
+
+            bool append = mode == EYtWriteMode::Append;
             auto cluster = TString{publish.DataSink().Cluster().Value()};
 
             bool isAnonymous = NYql::HasSetting(publish.Publish().Settings().Ref(), EYtSettingType::Anonymous);
@@ -939,9 +962,65 @@ public:
                         columnGroupsSpec = NYT::NodeFromYsonString(setting->Tail().Content());
                     }
                 }
-                if (!append || !attrs.HasKey("schema") || !columnGroupsSpec.IsUndefined()) {
+                if (!append || !attrs.HasKey("schema") || !columnGroupsSpec.IsUndefined() || dstRowSpec->IsSorted()) {
                     attrs["schema"] = RowSpecToYTSchema(spec[YqlRowSpecAttribute], nativeYtTypeCompatibility, columnGroupsSpec).ToNode();
                 }
+
+                if (EYtWriteMode::Renew == mode || EYtWriteMode::RenewKeepMeta == mode) {
+                    bool isTimestamp = false, isDuration = false;
+                    TInstant stamp;
+                    TDuration duration;
+                    if (auto e = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::Expiration)) {
+                        isDuration = TDuration::TryParse(e->Tail().Content(), duration);
+                        if (!isDuration) {
+                            isTimestamp = TInstant::TryParseIso8601(e->Tail().Content(), stamp);
+                        }
+                    }
+                    const TMaybe<TInstant> deadline = options.Config()->ExpirationDeadline.Get(cluster);
+                    const TMaybe<TDuration> interval = options.Config()->ExpirationInterval.Get(cluster);
+                    if (deadline || isTimestamp) {
+                        attrs["expiration_time"] = isTimestamp ? stamp.ToStringUpToSeconds() : deadline->ToStringUpToSeconds();
+                    }
+                    if (interval || isDuration) {
+                        attrs["expiration_timeout"] = isDuration ? duration.MilliSeconds() : interval->MilliSeconds();
+                    }
+                    if (options.Config()->NightlyCompress.Get(cluster).GetOrElse(false)) {
+                        attrs["force_nightly_compress"] = true;
+                    }
+                }
+
+#define HANDLE_OPT(name, attr, conv)                                                                        \
+                auto dst##name = isAnonymous                                                                \
+                    ? options.Config()->Temporary##name.Get(cluster)                                        \
+                    : options.Config()->Published##name.Get(cluster);                                       \
+                if (auto s = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::name)) {  \
+                    dst##name = OptionFromString<decltype(dst##name)::value_type>(s->Tail().Content());     \
+                }                                                                                           \
+                if (dst##name && dst##name != options.Config()->Temporary##name.Get(cluster)) {             \
+                    attrs[attr] = conv(*dst##name);                                                         \
+                }
+
+                HANDLE_OPT(CompressionCodec, "compression_codec", NoOp);
+                HANDLE_OPT(ErasureCodec, "erasure_codec", ToString);
+                HANDLE_OPT(ReplicationFactor, "replication_factor", static_cast<i64>);
+                HANDLE_OPT(Media, "media", NoOp);
+                HANDLE_OPT(PrimaryMedium, "primary_medium", NoOp);
+#undef DEFINE_OPT
+
+                if (auto optimizeFor = options.Config()->OptimizeFor.Get(cluster)) {
+                    if (dstRowSpec->GetType()->GetSize()) {
+                        attrs["optimize_for"] = ToString(*optimizeFor);
+                    }
+                }
+
+                if (auto ua = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::UserAttrs)) {
+                    const NYT::TNode mapNode = NYT::NodeFromYsonString(ua->Tail().Content());
+                    const auto& map = mapNode.AsMap();
+                    for (auto it = map.cbegin(); it != map.cend(); ++it) {
+                        attrs[it->first] = it->second;
+                    }
+                }
+
                 TOFStream ofAttr(destFilePath + ".attr");
                 ofAttr.Write(NYT::NodeToYsonString(attrs, NYson::EYsonFormat::Pretty));
             }
@@ -1035,6 +1114,16 @@ public:
         NYT::TRichYPath res{realTableName};
         res.TransactionId(TGUID());
         return res;
+    }
+
+    TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) final {
+        Y_UNUSED(options);
+        return MakeFuture<TDownloadTablesResult>();
+    }
+
+    TFuture<TUploadTableResult> UploadTable(TUploadTableOptions&& options) final {
+        Y_UNUSED(options);
+        return MakeFuture<TUploadTableResult>();
     }
 
     TFullResultTableResult PrepareFullResultTable(TFullResultTableOptions&& options) final {
@@ -1505,6 +1594,41 @@ private:
                     columnarStatsHistory.insert(TString(c));
                 }
                 res.DataSize.back() += out.Str().size();
+
+                if (options.Extended()) {
+                    if (attrs.HasKey("extended_stats")) {
+                        THashMap<TString, i64> dataWeight;
+                        THashMap<TString, ui64> estimatedUniqueCounts;
+                        auto extendedStats = attrs["extended_stats"].AsList();
+                        std::sort(extendedStats.begin(), extendedStats.end(),
+                            [](NYT::TNode& lhs, NYT::TNode& rhs) {
+                                return lhs.AsMap()["column_name"].AsString() < rhs.AsMap()["column_name"].AsString();
+                            });
+                        for (const auto& column : columns) {
+                            auto pos = std::lower_bound(extendedStats.begin(), extendedStats.end(), nullptr,
+                                [&column](NYT::TNode& item, nullptr_t) {
+                                    return item.AsMap()["column_name"].AsString() < column;
+                                });
+                            if (pos != extendedStats.end() && pos->AsMap()["column_name"] == column) {
+                                const auto& m = pos->AsMap();
+                                auto dataWeightPos = m.find("data_weight");
+                                if (dataWeightPos != m.end()) {
+                                    dataWeight[column] = dataWeightPos->second.ConvertTo<i64>();
+                                }
+                                auto uniqueValPos = m.find("num_unique_vals");
+                                if (uniqueValPos != m.end()) {
+                                    estimatedUniqueCounts[column] = uniqueValPos->second.ConvertTo<ui64>();
+                                }
+                            }
+                        }
+                        res.Extended.push_back(IYtGateway::TPathStatResult::TExtendedResult{
+                            .DataWeight = dataWeight,
+                            .EstimatedUniqueCounts = estimatedUniqueCounts
+                        });
+                    } else {
+                        res.Extended.push_back(Nothing());
+                    }
+                }
             } else {
                 res.DataSize.back() += TFileStat(path).Size;
             }

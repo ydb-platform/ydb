@@ -7,16 +7,16 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_table.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/transform/yql_visit.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_join.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/generic/xrange.h>
 
@@ -40,16 +40,25 @@ bool IsWideRepresentation(const TTypeAnnotationNode* leftType, const TTypeAnnota
     return true;
 }
 
-const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, const TExprNode::TPtr& setting, TExprContext& ctx) {
-    if (!setting)
+const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, const TExprNode::TPtr& useFlowSetting, const TExprNode::TPtr& blockInputAppliedSetting, TExprContext& ctx) {
+    if (!useFlowSetting) {
         return ctx.MakeType<TStreamExprType>(itemType);
+    }
 
     if (const auto structType = dynamic_cast<const TStructExprType*>(itemType)) {
-        if (ui32 limit; structType && 2U == setting->ChildrenSize() && TryFromString<ui32>(setting->Tail().Content(), limit) && structType->GetSize() < limit && structType->GetSize() > 0U) {
+        if (ui32 limit; structType && 2U == useFlowSetting->ChildrenSize() && TryFromString<ui32>(useFlowSetting->Tail().Content(), limit) && structType->GetSize() < limit && structType->GetSize() > 0U) {
             TTypeAnnotationNode::TListType types;
             const auto& items = structType->GetItems();
             types.reserve(items.size());
+
             std::transform(items.cbegin(), items.cend(), std::back_inserter(types), std::bind(&TItemExprType::GetItemType, std::placeholders::_1));
+            if (blockInputAppliedSetting) {
+                std::transform(types.begin(), types.end(), types.begin(), [&](auto type) {
+                    return ctx.MakeType<TBlockExprType>(type);
+                });
+                types.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+            }
+
             return ctx.MakeType<TFlowExprType>(ctx.MakeType<TMultiExprType>(types));
         }
     }
@@ -956,6 +965,10 @@ private:
             if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
                 inputColGroupSpec = setting->Tail().Content();
             }
+        } else if (auto outTable = path.Table().Maybe<TYtOutTable>()) {
+            if (auto setting = NYql::GetSetting(outTable.Cast().Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                inputColGroupSpec = setting->Tail().Content();
+            }
         }
 
         if (outGroup != inputColGroupSpec) {
@@ -1061,7 +1074,9 @@ private:
             | EYtSettingType::JobCount
             | EYtSettingType::Flow
             | EYtSettingType::KeepSorted
-            | EYtSettingType::NoDq;
+            | EYtSettingType::NoDq
+            | EYtSettingType::BlockInputReady
+            | EYtSettingType::BlockInputApplied;
         if (!ValidateSettings(map.Settings().Ref(), accpeted, ctx)) {
             return TStatus::Error;
         }
@@ -1085,9 +1100,11 @@ private:
 
         const auto inputItemType = GetInputItemType(map.Input(), ctx);
         const auto useFlow = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::Flow);
-        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, ctx);
+        const auto blockInputApplied = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied);
+        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, blockInputApplied, ctx);
 
         auto& lambda = input->ChildRef(TYtMap::idx_Mapper);
+
         if (!UpdateLambdaAllArgumentsTypes(lambda, {lambdaInputType}, ctx)) {
             return TStatus::Error;
         }
@@ -1201,7 +1218,7 @@ private:
         }
 
         const auto useFlow = NYql::GetSetting(reduce.Settings().Ref(), EYtSettingType::Flow);
-        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, ctx);
+        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, TExprNode::TPtr(), ctx);
 
         auto& lambda = input->ChildRef(TYtReduce::idx_Reducer);
         if (!UpdateLambdaAllArgumentsTypes(lambda, {lambdaInputType}, ctx)) {
@@ -1295,7 +1312,7 @@ private:
         auto& mapLambda = input->ChildRef(TYtMapReduce::idx_Mapper);
         TTypeAnnotationNode::TListType mapDirectOutputTypes;
         if (hasMapLambda) {
-            const auto mapLambdaInputType = MakeInputType(itemType, useFlow, ctx);
+            const auto mapLambdaInputType = MakeInputType(itemType, useFlow, TExprNode::TPtr(), ctx);
 
             if (!UpdateLambdaAllArgumentsTypes(mapLambda, {mapLambdaInputType}, ctx)) {
                 return TStatus::Error;
@@ -1402,7 +1419,7 @@ private:
         }
 
         auto& reduceLambda = input->ChildRef(TYtMapReduce::idx_Reducer);
-        const auto reduceLambdaInputType = MakeInputType(itemType, useFlow, ctx);
+        const auto reduceLambdaInputType = MakeInputType(itemType, useFlow, TExprNode::TPtr(), ctx);
 
         if (!UpdateLambdaAllArgumentsTypes(reduceLambda, {reduceLambdaInputType}, ctx)) {
             return TStatus::Error;

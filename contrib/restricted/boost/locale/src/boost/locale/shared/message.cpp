@@ -20,6 +20,7 @@
 
 #include <boost/locale/encoding.hpp>
 #include <boost/locale/message.hpp>
+#include "boost/locale/shared/message.hpp"
 #include "boost/locale/shared/mo_hash.hpp"
 #include "boost/locale/shared/mo_lambda.hpp"
 #include "boost/locale/util/encoding.hpp"
@@ -242,13 +243,25 @@ namespace boost { namespace locale { namespace gnu_gettext {
     template<>
     struct mo_file_use_traits<char> {
         static constexpr bool in_use = true;
-        typedef char CharType;
-        using string_view_type = basic_string_view<CharType>;
+        using string_view_type = basic_string_view<char>;
         static string_view_type use(const mo_file& mo, const char* context, const char* key)
         {
             return mo.find(context, key);
         }
     };
+
+#ifdef __cpp_char8_t
+    template<>
+    struct mo_file_use_traits<char8_t> {
+        static constexpr bool in_use = true;
+        using string_view_type = basic_string_view<char8_t>;
+        static string_view_type use(const mo_file& mo, const char8_t* context, const char8_t* key)
+        {
+            string_view res = mo.find(reinterpret_cast<const char*>(context), reinterpret_cast<const char*>(key));
+            return {reinterpret_cast<const char8_t*>(res.data()), res.size()};
+        }
+    };
+#endif
 
     template<typename CharType>
     class converter : conv::utf_encoder<CharType> {
@@ -467,7 +480,7 @@ namespace boost { namespace locale { namespace gnu_gettext {
                        domain_data_type& data,
                        const messages_info::callback_type& callback)
         {
-            locale_encoding_ = locale_encoding;
+            locale_encoding_ = util::is_char8_t<CharType>::value ? "UTF-8" : locale_encoding;
             key_encoding_ = key_encoding;
 
             key_conversion_required_ =
@@ -585,6 +598,40 @@ namespace boost { namespace locale { namespace gnu_gettext {
 #define BOOST_LOCALE_INSTANTIATE(CHARTYPE) \
     template BOOST_LOCALE_DECL message_format<CHARTYPE>* create_messages_facet(const messages_info& info);
 
-    BOOST_LOCALE_FOREACH_CHAR(BOOST_LOCALE_INSTANTIATE)
+    BOOST_LOCALE_FOREACH_CHAR_STRING(BOOST_LOCALE_INSTANTIATE)
 
 }}} // namespace boost::locale::gnu_gettext
+
+namespace boost { namespace locale { namespace detail {
+    std::locale install_message_facet(const std::locale& in,
+                                      const char_facet_t type,
+                                      const util::locale_data& data,
+                                      const std::vector<std::string>& domains,
+                                      const std::vector<std::string>& paths)
+    {
+        gnu_gettext::messages_info minf;
+        minf.language = data.language();
+        minf.country = data.country();
+        minf.variant = data.variant();
+        minf.encoding = data.encoding();
+        minf.domains = gnu_gettext::messages_info::domains_type(domains.begin(), domains.end());
+        minf.paths = paths;
+        switch(type) {
+            case char_facet_t::nochar: break;
+            case char_facet_t::char_f: return std::locale(in, gnu_gettext::create_messages_facet<char>(minf));
+            case char_facet_t::wchar_f: return std::locale(in, gnu_gettext::create_messages_facet<wchar_t>(minf));
+#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+            case char_facet_t::char8_f: return std::locale(in, gnu_gettext::create_messages_facet<char8_t>(minf));
+#elif defined(__cpp_char8_t)
+            case char_facet_t::char8_f: break;
+#endif
+#ifdef BOOST_LOCALE_ENABLE_CHAR16_T
+            case char_facet_t::char16_f: return std::locale(in, gnu_gettext::create_messages_facet<char16_t>(minf));
+#endif
+#ifdef BOOST_LOCALE_ENABLE_CHAR32_T
+            case char_facet_t::char32_f: return std::locale(in, gnu_gettext::create_messages_facet<char32_t>(minf));
+#endif
+        }
+        return in;
+    }
+}}} // namespace boost::locale::detail

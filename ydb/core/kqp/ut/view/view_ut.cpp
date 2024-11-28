@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/library/yql/sql/sql.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <util/folder/filelist.h>
@@ -139,10 +139,10 @@ void CompareResults(const NQuery::TExecuteQueryResult& first, const NQuery::TExe
     CompareResults(first.GetResultSets(), second.GetResultSets());
 }
 
-void InitializeTablesAndSecondaryViews(TSession& session) {
+void InitializeTablesAndSecondaryViews(NQuery::TSession& session) {
     const auto inputFolder = ArcadiaFromCurrentLocation(__SOURCE_FILE__, "input");
-    ExecuteDataDefinitionQuery(session, ReadWholeFile(inputFolder + "/create_tables_and_secondary_views.sql"));
-    ExecuteDataModificationQuery(session, ReadWholeFile(inputFolder + "/fill_tables.sql"));
+    ExecuteQuery(session, ReadWholeFile(inputFolder + "/create_tables_and_secondary_views.sql"));
+    ExecuteQuery(session, ReadWholeFile(inputFolder + "/fill_tables.sql"));
 }
 
 }
@@ -344,8 +344,58 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         {
             const auto creationResult = session.ExecuteSchemeQuery(creationQuery).GetValueSync();
             UNIT_ASSERT(!creationResult.IsSuccess());
-            UNIT_ASSERT(creationResult.GetIssues().ToString().Contains("error: path exist, request accepts it"));
+            UNIT_ASSERT_STRING_CONTAINS(creationResult.GetIssues().ToString(), "error: path exist, request accepts it");
         }
+    }
+
+    Y_UNIT_TEST(CreateViewOccupiedName) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* path = "table";
+
+        const TString createTable = std::format(R"(
+                CREATE TABLE {} (key Int32, value Utf8, PRIMARY KEY (key));
+            )", path
+        );
+        ExecuteQuery(session, createTable);
+
+        auto checkError = [&session](const TString& query, const TString& expectedError) {
+            const auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
+        };
+
+        const TString queryTemplate = std::format(R"(
+                CREATE VIEW {{}}{} WITH (security_invoker = true) AS SELECT 1;
+            )", path
+        );
+        const TString expectedError = std::format("path: '/Root/{}', error: unexpected path type", path);
+
+        for (std::string existenceCheck : {"", "IF NOT EXISTS "}) {
+            const TString createView = std::vformat(queryTemplate, std::make_format_args(existenceCheck));
+            checkError(createView, expectedError);
+        }
+    }
+
+    Y_UNIT_TEST(CreateViewIfNotExists) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* path = "/Root/TheView";
+        constexpr const char* queryInView = "SELECT 1";
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW IF NOT EXISTS `{}` WITH (security_invoker = true) AS {};
+            )",
+            path,
+            queryInView
+        );
+        ExecuteQuery(session, creationQuery);
+        // an attempt to create a duplicate does not produce an error
+        ExecuteQuery(session, creationQuery);
     }
 
     Y_UNIT_TEST(DropView) {
@@ -399,6 +449,42 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Views are disabled");
     }
 
+    Y_UNIT_TEST(DropNonexistingView) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        const auto dropResult = session.ExecuteQuery(
+            "DROP VIEW NonexistingView;", NQuery::TTxControl::NoTx()
+        ).ExtractValueSync();
+
+        UNIT_ASSERT(!dropResult.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path does not exist");
+    }
+
+    Y_UNIT_TEST(CallDropViewOnTable) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* path = "table";
+
+        const TString createTable = std::format(R"(
+                CREATE TABLE {} (key Int32, value Utf8, PRIMARY KEY (key));
+            )", path
+        );
+        ExecuteQuery(session, createTable);
+
+        auto checkError = [&session](const TString& query, const TString& expectedError) {
+            const auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
+        };
+        const TString expectedError = std::format("path: '/Root/{}', error: path is not a view", path);
+        checkError(std::format("DROP VIEW {};", path), expectedError);
+        checkError(std::format("DROP VIEW IF EXISTS {};", path), expectedError);
+    }
+
     Y_UNIT_TEST(DropSameViewTwice) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         EnableViewsFeatureFlag(kikimr);
@@ -424,8 +510,34 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         {
             const auto dropResult = session.ExecuteSchemeQuery(dropQuery).GetValueSync();
             UNIT_ASSERT(!dropResult.IsSuccess());
-            UNIT_ASSERT(dropResult.GetIssues().ToString().Contains("Error: Path does not exist"));
+            UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path does not exist");
         }
+    }
+
+    Y_UNIT_TEST(DropViewIfExists) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* path = "/Root/TheView";
+        constexpr const char* queryInView = "SELECT 1";
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+            )",
+            path,
+            queryInView
+        );
+        ExecuteQuery(session, creationQuery);
+
+        const TString dropQuery = std::format(R"(
+                DROP VIEW IF EXISTS `{}`;
+            )",
+            path
+        );
+        ExecuteQuery(session, dropQuery);
+        // an attempt to drop an already deleted view does not produce an error
+        ExecuteQuery(session, dropQuery);
     }
 
     Y_UNIT_TEST(DropViewInFolder) {
@@ -582,7 +694,7 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
     Y_UNIT_TEST(ReadTestCasesFromFiles) {
         TKikimrRunner kikimr;
         EnableViewsFeatureFlag(kikimr);
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
 
         InitializeTablesAndSecondaryViews(session);
         EnableLogging();
@@ -593,13 +705,13 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
         TString testcase;
         while (testcase = testcases.Next()) {
             const auto pathPrefix = TStringBuilder() << testcasesFolder << '/' << testcase << '/';
-            ExecuteDataDefinitionQuery(session, ReadWholeFile(pathPrefix + "create_view.sql"));
+            ExecuteQuery(session, ReadWholeFile(pathPrefix + "create_view.sql"));
 
-            const auto etalonResults = ExecuteDataModificationQuery(session, ReadWholeFile(pathPrefix + "etalon_query.sql"));
-            const auto selectFromViewResults = ExecuteDataModificationQuery(session, ReadWholeFile(pathPrefix + "select_from_view.sql"));
+            const auto etalonResults = ExecuteQuery(session, ReadWholeFile(pathPrefix + "etalon_query.sql"));
+            const auto selectFromViewResults = ExecuteQuery(session, ReadWholeFile(pathPrefix + "select_from_view.sql"));
             CompareResults(etalonResults, selectFromViewResults);
 
-            ExecuteDataDefinitionQuery(session, ReadWholeFile(pathPrefix + "drop_view.sql"));
+            ExecuteQuery(session, ReadWholeFile(pathPrefix + "drop_view.sql"));
         }
     }
 

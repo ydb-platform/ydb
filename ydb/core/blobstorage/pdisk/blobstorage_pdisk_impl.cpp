@@ -322,36 +322,27 @@ void TPDisk::Stop() {
         delete req;
     }
     JointLogReads.clear();
+
     for (auto& req : JointChunkReads) {
+        Y_VERIFY_DEBUG_S(req->GetType() == ERequestType::RequestChunkReadPiece,
+                "Unexpected request type# " << TypeName(*req));
         TRequestBase::AbortDelete(req.Get(), PCtx->ActorSystem);
     }
     JointChunkReads.clear();
     for (TRequestBase* req : JointChunkWrites) {
-        switch (req->GetType()) {
-            case ERequestType::RequestChunkWrite:
-            {
-                TChunkWrite *write = static_cast<TChunkWrite*>(req);
-                if (write->IsTotallyEnqueued()) {
-                    delete write;
-                }
-                break;
-            }
-            case ERequestType::RequestChunkWritePiece:
-                delete req;
-                break;
-            default:
-                Y_FAIL_S("Unexpected request type# " << ui64(req->GetType()) << " in JointChunkWrites");
-        }
+        Y_VERIFY_DEBUG_S(req->GetType() == ERequestType::RequestChunkWritePiece,
+                "Unexpected request type# " << TypeName(req));
+        TRequestBase::AbortDelete(req, PCtx->ActorSystem);
     }
     JointChunkWrites.clear();
     for (TLogWrite* req : JointLogWrites) {
-        delete req;
+        TRequestBase::AbortDelete(req, PCtx->ActorSystem);
     }
     JointLogWrites.clear();
     JointCommits.clear();
     JointChunkForgets.clear();
-    for (const auto& req : FastOperationsQueue) {
-        TRequestBase::AbortDelete(req.get(), PCtx->ActorSystem);
+    for (auto& req : FastOperationsQueue) {
+        TRequestBase::AbortDelete(req.release(), PCtx->ActorSystem);
     }
     FastOperationsQueue.clear();
     for (TRequestBase* req : PausedQueue) {

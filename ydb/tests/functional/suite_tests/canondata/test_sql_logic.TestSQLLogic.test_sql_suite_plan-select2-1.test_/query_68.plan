@@ -96,7 +96,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.b > item.c Or Not Exist(item.a)"
+                                                "Predicate": "item.b > item.c OR NOT Exist(item.a)"
                                             }
                                         ],
                                         "PlanNodeId": 2,

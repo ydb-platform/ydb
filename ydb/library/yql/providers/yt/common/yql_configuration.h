@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <util/system/types.h>
 #include <util/datetime/base.h>
@@ -22,7 +22,7 @@ constexpr bool DEFAULT_USE_FLOW = true;
 
 constexpr bool DEFAULT_USE_NATIVE_YT_TYPES = false;
 
-constexpr bool DEFAULT_USE_INTERMEDIATE_SCHEMA = true;
+constexpr bool DEFAULT_USE_INTERMEDIATE_STREAMS = false;
 
 constexpr bool DEFAULT_USE_SKIFF = true;
 
@@ -69,6 +69,17 @@ const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES =
         NUdf::EDataSlot::String, NUdf::EDataSlot::Json,
         NUdf::EDataSlot::Yson, NUdf::EDataSlot::Utf8
     };
+const TSet<TString> DEFAULT_BLOCK_INPUT_SUPPORTED_TYPES = {"tuple"};
+const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES =
+    {
+        NUdf::EDataSlot::Int8, NUdf::EDataSlot::Uint8,
+        NUdf::EDataSlot::Int16, NUdf::EDataSlot::Uint16,
+        NUdf::EDataSlot::Int32, NUdf::EDataSlot::Uint32,
+        NUdf::EDataSlot::Int64, NUdf::EDataSlot::Uint64,
+        NUdf::EDataSlot::Bool, NUdf::EDataSlot::Double,
+        NUdf::EDataSlot::String, NUdf::EDataSlot::Utf8,
+        NUdf::EDataSlot::Yson
+    };
 
 constexpr auto DEFAULT_SWITCH_MEMORY_LIMIT = 128_MB;
 
@@ -76,7 +87,7 @@ constexpr ui32 DEFAULT_MAX_INPUT_TABLES = 3000;
 constexpr ui32 DEFAULT_MAX_OUTPUT_TABLES = 100;
 constexpr ui64 DEFAULT_APPLY_STORED_CONSTRAINTS = 0ULL;
 
-constexpr bool DEFAULT_TABLE_CONTENT_LOCAL_EXEC = false;
+constexpr ui64 DEFAULT_TABLE_CONTENT_LOCAL_EXEC = 0;
 
 constexpr ui32 DEFAULT_BATCH_LIST_FOLDER_CONCURRENCY = 5;
 

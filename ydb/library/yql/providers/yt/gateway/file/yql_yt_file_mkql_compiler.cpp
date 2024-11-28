@@ -5,15 +5,16 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_table.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_mkql_compiler.h>
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/defs.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/defs.h>
 
 #include <yt/cpp/mapreduce/interface/node.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
@@ -625,8 +626,15 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
             values = ApplyPathRangesAndSampling(values, itemType, ytMap.Input().Ref(), ctx);
 
-            if (ETypeAnnotationKind::Multi == GetSeqItemType(*ytMap.Mapper().Args().Arg(0).Ref().GetTypeAnn()).GetKind())
+            auto& lambdaInputType = GetSeqItemType(*ytMap.Mapper().Args().Arg(0).Ref().GetTypeAnn());
+
+            if (lambdaInputType.GetKind() == ETypeAnnotationKind::Multi) {
                 values = ExpandFlow(values, ctx);
+            }
+
+            if (IsWideBlockType(lambdaInputType)) {
+                values = ctx.ProgramBuilder.WideToBlocks(values);
+            }
 
             NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMap.Mapper().Ref().UniqueId());
             values = NCommon::MkqlBuildExpr(ytMap.Mapper().Body().Ref(), innerCtx);

@@ -2,7 +2,7 @@
 
 #include <yt/yt/client/api/connection.h>
 #include <yt/yt/client/api/client.h>
-#include <yt/yt/client/api/distributed_table_sessions.h>
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
 #include <yt/yt/client/api/journal_writer.h>
@@ -626,6 +626,11 @@ public:
         const TGetJobStderrOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TGetJobTraceOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<TSharedRef>, GetJobFailContext, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
@@ -836,20 +841,16 @@ public:
         const TDistributedWriteSessionFinishOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<ITableWriterPtr>, CreateParticipantTableWriter, (
-        const TDistributedWriteCookiePtr& cookie,
-        const TParticipantTableWriterOptions& options),
+    MOCK_METHOD(TFuture<ITableWriterPtr>, CreateFragmentTableWriter, (
+        const TFragmentWriteCookiePtr& cookie,
+        const TFragmentTableWriterOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (
-        const TString& account,
+        const std::string& account,
         int partitionCount,
+        NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options),
-        (override));
-
-    MOCK_METHOD(TFuture<void>, FinishShuffle, (
-        const TShuffleHandlePtr& shuffleHandle,
-        const TFinishShuffleOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
@@ -860,7 +861,7 @@ public:
 
     MOCK_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TShuffleHandlePtr& shuffleHandle,
-        const TString& partitionColumn,
+        const std::string& partitionColumn,
         const NTableClient::TTableWriterConfigPtr& config),
         (override));
 

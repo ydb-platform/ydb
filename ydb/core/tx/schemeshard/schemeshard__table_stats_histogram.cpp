@@ -1,12 +1,12 @@
 #include "schemeshard_impl.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
 
 static bool IsIntegerType(NScheme::TTypeInfo type) {
-    // TODO: support pg types
     switch (type.GetTypeId()) {
     case NScheme::NTypeIds::Bool:
 
@@ -45,7 +45,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
         for (const auto& point : histogram.GetBuckets()) {
             ui64 leftSize = Min(point.GetValue(), total);
             ui64 rightSize = total - leftSize;
-            
+
             // search for a median point at which abs(leftSize - rightSize) is minimum
             ui64 sizesDiff = Max(leftSize, rightSize) - Min(leftSize, rightSize);
             if (idxMedDiff > sizesDiff) {
@@ -90,6 +90,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
             splitKey[i] = keyMed.GetCells()[i];
         } else {
             // med == lo and med != hi, so we want to find a value that is > med and <= hi
+            // TODO: support this optimization for integer pg types
             if (IsIntegerType(columnType) && !keyMed.GetCells()[i].IsNull()) {
                 // For integer types we can add 1 to med
                 ui64 val = 0;

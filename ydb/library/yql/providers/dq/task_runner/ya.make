@@ -4,15 +4,16 @@ PEERDIR(
     library/cpp/svnversion
     library/cpp/threading/task_scheduler
     library/cpp/yson/node
-    ydb/library/yql/dq/integration/transform
-    ydb/library/yql/minikql/invoke_builtins
-    ydb/library/yql/protos
-    ydb/library/yql/utils
-    ydb/library/yql/utils/backtrace
-    ydb/library/yql/utils/log
+    yql/essentials/core/dq_integration/transform
+    yql/essentials/minikql/invoke_builtins
+    yql/essentials/protos
+    yql/essentials/utils
+    yql/essentials/utils/backtrace
+    yql/essentials/utils/log
+    ydb/library/yql/dq/common
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime
-    ydb/library/yql/providers/common/proto
+    yql/essentials/providers/common/proto
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/counters
 )

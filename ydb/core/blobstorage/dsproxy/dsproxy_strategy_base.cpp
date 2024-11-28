@@ -25,26 +25,49 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
     ui32 lostDisks = 0;
     ui32 unknownDisks = 0;
 
+    TString parts;
+    TStringOutput s(parts);
+
     const ui32 totalPartCount = info.Type.TotalPartCount();
     for (ui32 diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
+        if (diskIdx) {
+            s << ' ';
+        }
+
         TBlobState::TDisk &disk = state.Disks[diskIdx];
-        bool isHandoff = (diskIdx >= totalPartCount);
-        ui32 beginPartIdx = (isHandoff ? 0 : diskIdx);
-        ui32 endPartIdx = (isHandoff ? totalPartCount : (diskIdx + 1));
+        const bool isHandoff = diskIdx >= totalPartCount;
+        const ui32 beginPartIdx = isHandoff ? 0 : diskIdx;
+        const ui32 endPartIdx = isHandoff ? totalPartCount : (diskIdx + 1);
         EDiskEvaluation diskEvaluation = ((considerSlowAsError && disk.IsSlow) ? EDE_ERROR : EDE_UNKNOWN);
         for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
-            TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-            if (partSituation == TBlobState::ESituation::Error) {
-                DSP_LOG_DEBUG_SX(logCtx, "BPG41", "Id# " << state.Id.ToString()
-                        << " Restore Disk# " << diskIdx << " Part# " << partIdx << " Error");
-                diskEvaluation = EDE_ERROR;
-            }
-            if (partSituation == TBlobState::ESituation::Lost) {
-                DSP_LOG_DEBUG_SX(logCtx, "BPG65", "Id# " << state.Id.ToString()
-                        << " Restore Disk# " << diskIdx << " Part# " << partIdx << " Lost");
-                if (diskEvaluation != EDE_ERROR) {
-                    diskEvaluation = EDE_LOST;
-                }
+            switch (disk.DiskParts[partIdx].Situation) {
+                case TBlobState::ESituation::Unknown:
+                    s << '?';
+                    break;
+
+                case TBlobState::ESituation::Error:
+                    s << 'E';
+                    diskEvaluation = EDE_ERROR;
+                    break;
+
+                case TBlobState::ESituation::Absent:
+                    s << '-';
+                    break;
+
+                case TBlobState::ESituation::Lost:
+                    s << 'L';
+                    if (diskEvaluation != EDE_ERROR) {
+                        diskEvaluation = EDE_LOST;
+                    }
+                    break;
+
+                case TBlobState::ESituation::Present:
+                    s << '+';
+                    break;
+
+                case TBlobState::ESituation::Sent:
+                    s << 'S';
+                    break;
             }
         }
         if (diskEvaluation == EDE_ERROR) {
@@ -57,23 +80,25 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
             // If there are some error disks at the same moment, the group should be actually disintegrated.
         } else {
             for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
-                TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                if (partSituation == TBlobState::ESituation::Present) {
-                    DSP_LOG_DEBUG_SX(logCtx, "BPG42", "Request# "
-                        << " Id# " << state.Id.ToString()
-                        << " Disk# " << diskIdx << " Part# " << partIdx << " Present");
-                    presentLayout.AddItem(diskIdx, partIdx, info.Type);
-                    optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
-                    altruisticLayout.AddItem(diskIdx, partIdx, info.Type);
-                    diskEvaluation = EDE_NORMAL;
-                } else if (partSituation == TBlobState::ESituation::Unknown
-                        || partSituation == TBlobState::ESituation::Sent) {
-                    DSP_LOG_DEBUG_SX(logCtx, "BPG43", "Id# " << state.Id.ToString()
-                        << " Disk# " << diskIdx << " Part# " << partIdx << " Unknown");
-                    optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
-                    altruisticLayout.AddItem(diskIdx, partIdx, info.Type);
-                } else if (partSituation == TBlobState::ESituation::Absent) {
-                    diskEvaluation = EDE_NORMAL;
+                switch (disk.DiskParts[partIdx].Situation) {
+                    case TBlobState::ESituation::Present:
+                        presentLayout.AddItem(diskIdx, partIdx, info.Type);
+                        optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
+                        altruisticLayout.AddItem(diskIdx, partIdx, info.Type);
+                        [[fallthrough]];
+                    case TBlobState::ESituation::Absent:
+                        diskEvaluation = EDE_NORMAL;
+                        break;
+
+                    case TBlobState::ESituation::Unknown:
+                    case TBlobState::ESituation::Sent:
+                        optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
+                        altruisticLayout.AddItem(diskIdx, partIdx, info.Type);
+                        break;
+
+                    case TBlobState::ESituation::Error:
+                    case TBlobState::ESituation::Lost:
+                        Y_ABORT("impossible case");
                 }
             }
         }
@@ -100,12 +125,14 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
     *altruisticState = info.BlobState(altruisticReplicas, lostDisks);
 
     DSP_LOG_DEBUG_SX(logCtx, "BPG44", "Id# " << state.Id.ToString()
+        << " considerSlowAsError# " << considerSlowAsError
+        << " Parts# {" << parts << '}'
         << " pessimisticReplicas# " << pessimisticReplicas
-        << " altruisticState# " << TBlobStorageGroupInfo::BlobStateToString(*altruisticState)
+        << " p.State# " << TBlobStorageGroupInfo::BlobStateToString(*pessimisticState)
         << " optimisticReplicas# " << optimisticReplicas
-        << " optimisticState# " << TBlobStorageGroupInfo::BlobStateToString(*optimisticState)
+        << " o.State# " << TBlobStorageGroupInfo::BlobStateToString(*optimisticState)
         << " altruisticReplicas# " << altruisticReplicas
-        << " pessimisticState# " << TBlobStorageGroupInfo::BlobStateToString(*pessimisticState));
+        << " a.State# " << TBlobStorageGroupInfo::BlobStateToString(*altruisticState));
 }
 
 

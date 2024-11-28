@@ -1,6 +1,9 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/blobstorage/crypto/default.h>
+#include <ydb/core/blobstorage/incrhuge/incrhuge_keeper.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/wcache.h>
 #include <util/string/split.h>

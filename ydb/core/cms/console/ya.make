@@ -53,6 +53,8 @@ SRCS(
     console__update_tenant_state.cpp
     console__update_tenant_pool_config.cpp
     defs.h
+    feature_flags_configurator.cpp
+    feature_flags_configurator.h
     grpc_library_helper.cpp
     http.cpp
     http.h
@@ -67,8 +69,6 @@ SRCS(
     modifications_validator.cpp
     modifications_validator.h
     net_classifier_updater.cpp
-    shared_cache_configurator.cpp
-    shared_cache_configurator.h
     tx_processor.cpp
     tx_processor.h
     util.cpp

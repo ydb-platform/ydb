@@ -71,10 +71,19 @@ struct TEvKqpExecuter {
         TKqpExecuterEvents::EvStreamData> {};
 
     struct TEvStreamDataAck : public TEventPB<TEvStreamDataAck, NKikimrKqp::TEvExecuterStreamDataAck,
-        TKqpExecuterEvents::EvStreamDataAck> {};
+        TKqpExecuterEvents::EvStreamDataAck>
+    {
+        friend class TEventPBBase;
+        explicit TEvStreamDataAck(ui64 seqno, ui64 channelId)
+        {
+            Record.SetSeqNo(seqno);
+            Record.SetChannelId(channelId);
+        }
 
-    struct TEvStreamProfile : public TEventPB<TEvStreamProfile, NKikimrKqp::TEvExecuterStreamProfile,
-        TKqpExecuterEvents::EvStreamProfile> {};
+    private:
+        // using a little hack to hide default empty constructor
+        TEvStreamDataAck() = default;
+    };
 
     // deprecated event, remove in the future releases.
     struct TEvExecuterProgress : public TEventPB<TEvExecuterProgress, NKikimrKqp::TEvExecuterProgress,
@@ -97,7 +106,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo);
+    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId);
 
 IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,

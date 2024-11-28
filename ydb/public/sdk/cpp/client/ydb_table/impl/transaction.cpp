@@ -14,12 +14,19 @@ TAsyncStatus TTransaction::TImpl::Precommit() const
     auto result = NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
 
     for (auto& callback : PrecommitCallbacks) {
-        auto action = [curr = callback()](const TAsyncStatus& prev) {
+        if (!callback) {
+            continue;
+        }
+
+        // If you send multiple requests in parallel, the `KQP` service can respond with `SESSION_BUSY`.
+        // Therefore, precommit operations are performed sequentially. Here we capture the closure to
+        // trigger it later.
+        auto action = [callback = std::move(callback)](const TAsyncStatus& prev) {
             if (const TStatus& status = prev.GetValue(); !status.IsSuccess()) {
                 return prev;
             }
 
-            return curr;
+            return callback();
         };
 
         result = result.Apply(action);
@@ -38,6 +45,8 @@ TAsyncCommitTransactionResult TTransaction::TImpl::Commit(const TCommitTxSetting
         if (const TStatus& status = result.GetValue(); !status.IsSuccess()) {
             return NThreading::MakeFuture(TCommitTransactionResult(TStatus(status), Nothing()));
         }
+
+        PrecommitCallbacks.clear();
 
         return Session_.Client_->CommitTransaction(Session_,
                                                    TxId_,

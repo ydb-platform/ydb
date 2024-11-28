@@ -3,13 +3,13 @@
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/schema/parser/yql_type_parser.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -570,6 +570,11 @@ NYT::TFormat TMkqlIOSpecs::MakeOutputFormat(size_t tableIndex) const {
 }
 
 NYT::TFormat TMkqlIOSpecs::MakeInputFormat(const THashSet<TString>& auxColumns) const {
+    if (UseBlockInput_) {
+        YQL_ENSURE(auxColumns.empty());
+        return NYT::TFormat(NYT::TNode("arrow"));
+    }
+
     if (!UseSkiff_ || Inputs.empty()) {
         return NYT::TFormat::YsonBinary();
     }
@@ -608,6 +613,11 @@ NYT::TFormat TMkqlIOSpecs::MakeInputFormat(const THashSet<TString>& auxColumns) 
 
 NYT::TFormat TMkqlIOSpecs::MakeInputFormat(size_t tableIndex) const {
     Y_ENSURE(tableIndex < Inputs.size(), "Invalid output table index: " << tableIndex);
+
+    if (UseBlockInput_) {
+        YQL_ENSURE(tableIndex == 0);
+        return NYT::TFormat(NYT::TNode("arrow"));
+    }
 
     if (!UseSkiff_) {
         return NYT::TFormat::YsonBinary();

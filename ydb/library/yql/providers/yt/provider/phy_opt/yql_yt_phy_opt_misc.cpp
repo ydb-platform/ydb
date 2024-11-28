@@ -4,11 +4,11 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_optimize.h>
 #include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
 
 #include <util/generic/xrange.h>
 namespace NYql {
@@ -894,32 +894,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TransientOpWithSettings
         }
     }
     return TExprBase(res);
-}
-
-TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AddTrivialMapperForNativeYtTypes(TExprBase node, TExprContext& ctx) const {
-    if (State_->Configuration->UseIntermediateSchema.Get().GetOrElse(DEFAULT_USE_INTERMEDIATE_SCHEMA)) {
-        return node;
-    }
-
-    auto op = node.Cast<TYtMapReduce>();
-    if (!op.Maybe<TYtMapReduce>().Mapper().Maybe<TCoVoid>()) {
-        return node;
-    }
-
-    bool needMapper = AnyOf(op.Input(), [](const TYtSection& section) {
-        return AnyOf(section.Paths(), [](const TYtPath& path) {
-            auto rowSpec = TYtTableBaseInfo::GetRowSpec(path.Table());
-            return rowSpec && 0 != rowSpec->GetNativeYtTypeFlags();
-        });
-    });
-
-    if (!needMapper) {
-        return node;
-    }
-
-    auto mapper = Build<TCoLambda>(ctx, node.Pos()).Args({"stream"}).Body("stream").Done();
-
-    return ctx.ChangeChild(node.Ref(), TYtMapReduce::idx_Mapper, mapper.Ptr());
 }
 
 }  // namespace NYql

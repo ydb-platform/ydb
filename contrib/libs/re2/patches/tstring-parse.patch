@@ -1,0 +1,26 @@
+--- a/re2/re2.cc	(index)
++++ b/re2/re2.cc	(working tree)
+@@ -1050,6 +1050,13 @@ bool Parse(const char* str, size_t n, std::string* dest) {
+   return true;
+ }
+ 
++template <>
++bool Parse(const char* str, size_t n, TString* dest) {
++  if (dest == NULL) return true;
++  dest->assign(str, n);
++  return true;
++}
++
+ template <>
+ bool Parse(const char* str, size_t n, absl::string_view* dest) {
+   if (dest == NULL) return true;
+--- a/re2/re2.h	(index)
++++ b/re2/re2.h	(working tree)
+@@ -794,6 +794,7 @@ template <typename T> struct Parse3ary : public std::false_type {};
+ template <> struct Parse3ary<void> : public std::true_type {};
+ template <> struct Parse3ary<std::string> : public std::true_type {};
+ template <> struct Parse3ary<absl::string_view> : public std::true_type {};
++template <> struct Parse3ary<TString> : public std::true_type {};
+ template <> struct Parse3ary<char> : public std::true_type {};
+ template <> struct Parse3ary<signed char> : public std::true_type {};
+ template <> struct Parse3ary<unsigned char> : public std::true_type {};

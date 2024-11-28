@@ -13,6 +13,7 @@ namespace NYdb::NConsoleClient {
     TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs);
     TVector<NTopic::ECodec> InitAllowedCodecs();
     const TVector<NTopic::ECodec> AllowedCodecs = InitAllowedCodecs();
+    std::function<void(const TString& opt)> TimestampOptionHandler(TMaybe<TInstant>* destination); // parses timestamp in the following formats: unix time, ISO-8601
 
     class TCommandWithSupportedCodecs {
     protected:
@@ -73,6 +74,7 @@ namespace NYdb::NConsoleClient {
         ui32 MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
+        TMaybe<ui32> PartitionsPerTablet_;
     };
 
     class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
@@ -122,7 +124,7 @@ namespace NYdb::NConsoleClient {
     private:
         TString ConsumerName_;
         bool IsImportant_;
-        TMaybe<ui64> StartingMessageTimestamp_;
+        TMaybe<TInstant> StartingMessageTimestamp_;
     };
 
     class TCommandTopicConsumerDrop: public TYdbCommand, public TCommandWithTopicName {
@@ -192,7 +194,7 @@ namespace NYdb::NConsoleClient {
         TVector<ui64> PartitionIds_;
         TMaybe<uint32_t> Offset_;
         TMaybe<uint32_t> Partition_;
-        TMaybe<ui64> Timestamp_;
+        TMaybe<TInstant> Timestamp_;
         TMaybe<TString> File_;
         TMaybe<TString> TransformStr_;
 

@@ -34,10 +34,7 @@
 #define CURL_GOOD_SHARE 0x7e117a1e
 #define GOOD_SHARE_HANDLE(x) ((x) && (x)->magic == CURL_GOOD_SHARE)
 
-#define CURL_SHARE_KEEP_CONNECT(s)    \
-        ((s) && ((s)->specifier & (1<< CURL_LOCK_DATA_CONNECT)))
-
-/* this struct is libcurl-private, do not export details */
+/* this struct is libcurl-private, don't export details */
 struct Curl_share {
   unsigned int magic; /* CURL_GOOD_SHARE */
   unsigned int specifier;
@@ -46,7 +43,7 @@ struct Curl_share {
   curl_lock_function lockfunc;
   curl_unlock_function unlockfunc;
   void *clientdata;
-  struct cpool cpool;
+  struct conncache conn_cache;
   struct Curl_hash hostcache;
 #if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_COOKIES)
   struct CookieInfo *cookies;

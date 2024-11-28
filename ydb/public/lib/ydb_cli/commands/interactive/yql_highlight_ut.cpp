@@ -1,8 +1,10 @@
 #include "yql_highlight.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+
 #include <util/string/split.h>
 #include <util/system/compiler.h>
+#include <util/charset/wide.h>
 
 using namespace NYdb::NConsoleClient;
 
@@ -32,18 +34,19 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }();
 
     TVector<YQLHighlight::Color> ColorsFromPattern(const TStringBuf& symbols) {
-        TVector<YQLHighlight::Color> result(symbols.Size());
-        for (std::size_t i = 0; i < symbols.Size(); ++i) {
+        TVector<YQLHighlight::Color> result(symbols.size());
+        for (std::size_t i = 0; i < symbols.size(); ++i) {
             result[i] = colors.at(symbols[i]);
         }
         return result;
     }
 
     TVector<YQLHighlight::Color> Apply(YQLHighlight& highlight,
-                                       const TStringBuf& query) {
-        TVector<YQLHighlight::Color> colors(query.Size(),
+                                       const TStringBuf& queryUtf8) {
+        const auto queryUtf32 = UTF8ToUTF32</* robust = */ false>(queryUtf8);
+        TVector<YQLHighlight::Color> colors(queryUtf32.size(),
                                             YQLHighlight::Color::DEFAULT);
-        highlight.Apply(query, colors);
+        highlight.Apply(queryUtf8, colors);
         return colors;
     }
 
@@ -67,6 +70,22 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "", "");
         Check(highlight, " ", " ");
         Check(highlight, "   ", "   ");
+        Check(highlight, "\n", " ");
+        Check(highlight, "\n\n", "  ");
+        Check(highlight, "\r\n", "  ");
+        Check(highlight, "\r", " ");
+        Check(highlight, "\r\n\n", "   ");
+        Check(highlight, "\r\n\r\n", "    ");
+    }
+
+    Y_UNIT_TEST(Invalid) {
+        YQLHighlight highlight(Coloring);
+        Check(highlight, "!", "u");
+        Check(highlight, "й", "u");
+        Check(highlight, "编", "u");
+        Check(highlight, "\xF0\x9F\x98\x8A", "u");
+        Check(highlight, "!select", "uuvvvvv");
+        Check(highlight, "!sselect", "uukkkkkk");
     }
 
     Y_UNIT_TEST(Keyword) {
@@ -115,22 +134,82 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     Y_UNIT_TEST(QuotedIdentifier) {
         YQLHighlight highlight(Coloring);
         Check(highlight, "`/cluster/database`", "qqqqqqqqqqqqqqqqqqq");
+        Check(highlight, "`test`select", "qqqqqqkkkkkk");
+        Check(highlight, "`/cluster", "uuuuuuuuu");
+        Check(highlight, "`\xF0\x9F\x98\x8A`", "qqq");
     }
 
     Y_UNIT_TEST(String) {
         YQLHighlight highlight(Coloring);
         Check(highlight, "\"\"", "ss");
         Check(highlight, "\"test\"", "ssssss");
-        Check(highlight, "\"", "o");
-        Check(highlight, "\"\"\"", "sso");
-        Check(highlight, "\"\\\"", "ooo");
+        Check(highlight, "\"", "u");
+        Check(highlight, "\"\"\"", "ssu");
+        Check(highlight, "\"\\\"", "uuu");
+        Check(highlight, "\"test select from", "uuuuu uuuuuu uuuu");
         Check(highlight, "\"\\\"\"", "ssss");
+        Check(highlight, "\"select\"select", "sssssssssvvvvv");
+        Check(highlight, "\"select\"group", "sssssssskkkkk");
+        Check(highlight, "SELECT \\\"\xF0\x9F\x98\x8A\\\" FROM test", "kkkkkk uuuuu uuuu uuuu");
+    }
+
+    Y_UNIT_TEST(MultilineString) {
+        YQLHighlight highlight(Coloring);
+
+        Check(highlight, "@@", "oo");
+        Check(highlight, "@@@", "ooo");
+        Check(highlight, "@@@@", "ssss");
+        Check(highlight, "@@@@@", "sssss");
+        Check(highlight, "@@test@@@", "sssssssss");
+
+        Check(
+            highlight,
+            ("$txt = @@some\n"
+             "multiline\n"
+             "text@@;"),
+            ("ovvv o sssssss"
+             "ssssssssss"
+             "sssssso"));
+        Check(
+            highlight,
+            ("$txt = @@some\n"
+             "multiline with double at: @@@@\n"
+             "text@@;"),
+            ("ovvv o sssssss"
+             "sssssssssssssssssssssssssssssss"
+             "sssssso"));
+    }
+
+    Y_UNIT_TEST(TypedString) {
+        YQLHighlight highlight(Coloring);
+        Check(
+            highlight,
+            "SELECT \"foo\"u, '[1;2]'y, @@{\"a\":null}@@j;",
+            "kkkkkk sssssso sssssssso ssssssssssssssso");
     }
 
     Y_UNIT_TEST(Number) {
         YQLHighlight highlight(Coloring);
+
         Check(highlight, "1234", "nnnn");
         Check(highlight, "-123", "onnn");
+
+        Check(
+            highlight,
+            ("SELECT "
+             "123l AS `Int64`, "
+             "0b01u AS `Uint32`, "
+             "0xfful AS `Uint64`, "
+             "0o7ut AS `Uint8`, "
+             "456s AS `Int16`, "
+             "1.2345f AS `Float`;"),
+            ("kkkkkk "
+             "nnnn kk qqqqqqqo "
+             "nnnnn kk qqqqqqqqo "
+             "nnnnnn kk qqqqqqqqo "
+             "nnnnn kk qqqqqqqo "
+             "nnnn kk qqqqqqqo "
+             "nnnnnnn kk qqqqqqqo"));
     }
 
     Y_UNIT_TEST(SQL) {
@@ -151,34 +230,38 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
 
     Y_UNIT_TEST(Emoji) {
         YQLHighlight highlight(Coloring);
-        Check(highlight, "☺", "uuu");
-        Check(highlight, "\"☺\"", "sssuu");
-        Check(highlight, "`☺`", "qqquu");
+        Check(highlight, "☺", "u");
+        Check(highlight, "\"☺\"", "sss");
+        Check(highlight, "`☺`", "qqq");
+        Check(highlight, "SELECT \"\xF0\x9F\x98\x8A\" FROM test", "kkkkkk sss kkkk vvvv");
+        Check(highlight, "SELECT \"编码\" FROM test", "kkkkkk ssss kkkk vvvv");
+        Check(highlight, "SELECT \"ай\" FROM test", "kkkkkk ssss kkkk vvvv");
+        Check(highlight, "\xF0\x9F\x98\x8A\xF0\x9F\x98\x8A\xF0\x9F\x98\x8A\xF0\x9F\x98\x8A\xF0\x9F\x98\x8A\xF0\x9F\x98\x8A select", "uuuuuu kkkkkk");
     }
 
     Y_UNIT_TEST(Typing) {
         const TString query =
-            "SELECT "
-            "  123467, \"Hello, {name}!\", "
-            "  (1 + (5 * 1 / 0)), MIN(identifier), "
-            "  Bool(field), Math::Sin(var) "
+            "SELECT \n"
+            "  123467, \"Hello, {name}!\", \n"
+            "  (1 + (5 * 1 / 0)), MIN(identifier), \n"
+            "  Bool(field), Math::Sin(var) \n"
             "FROM `local/test/space/table` JOIN test;";
 
         const TString pattern =
-            "kkkkkk "
-            "  nnnnnno sssssssssssssssso "
-            "  on o on o n o nooo fffovvvvvvvvvvoo "
-            "  ttttovvvvvoo ffffoofffovvvo "
+            "kkkkkk  "
+            "  nnnnnno sssssssssssssssso  "
+            "  on o on o n o nooo fffovvvvvvvvvvoo  "
+            "  ttttovvvvvoo ffffoofffovvvo  "
             "kkkk qqqqqqqqqqqqqqqqqqqqqqqq kkkk vvvvo";
 
         YQLHighlight highlight(Coloring);
-        for (std::size_t size = 0; size <= query.Size(); ++size) {
+        for (std::size_t size = 0; size <= query.size(); ++size) {
             const TStringBuf prefix(query, 0, size);
 
             auto colors = Apply(highlight, prefix);
             Y_DO_NOT_OPTIMIZE_AWAY(colors);
 
-            if (size == query.Size() || IsSpace(pattern[size])) {
+            if (size == query.size() || IsSpace(pattern[size])) {
                 const TStringBuf pattern_prefix(pattern, 0, size);
                 Check(highlight, prefix, pattern_prefix);
             }
@@ -194,5 +277,92 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "select /* select */ select", "kkkkkk cccccccccccc kkkkkk");
         Check(highlight, "/**/ --", "cccc cc");
         Check(highlight, "/*/**/*/", "ccccccoo");
+    }
+
+    Y_UNIT_TEST(Multiline) {
+        YQLHighlight highlight(Coloring);
+        Check(
+            highlight,
+            "SELECT *\n"
+            "FROM test",
+            "kkkkkk o kkkk vvvv");
+        Check(
+            highlight,
+            "SELECT *\n"
+            "\n"
+            "\r\n"
+            "FROM test",
+            "kkkkkk o    kkkk vvvv");
+        Check(
+            highlight,
+            "SELECT *\r\n"
+            "FROM test",
+            "kkkkkk o  kkkk vvvv");
+        Check(
+            highlight,
+            "SELECT *\r\n"
+            "FROM test\n",
+            "kkkkkk o  kkkk vvvv ");
+    }
+
+    Y_UNIT_TEST(ANSI) {
+        YQLHighlight highlight(Coloring);
+
+        Check(
+            highlight,
+            "--!ansi_lexer\n"
+            "SELECT * FROM T; /* this is a comment /* this is a nested comment */ */",
+            "cccccccccccccc"
+            "kkkkkk o kkkk vo cccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        Check(
+            highlight,
+            "--!ansi_lexer\n"
+            "SELECT 1 as \"column with \"\" double quote\";",
+            "cccccccccccccc"
+            "kkkkkk n kk ssssssssssssssssssssssssssssso");
+        Check(
+            highlight,
+            "--!ansi_lexer\n"
+            "SELECT 'string with '' quote';",
+            "cccccccccccccc"
+            "kkkkkk sssssssssssssssssssssso");
+
+        Check(
+            highlight,
+            " \t\n --!ansi_lexer \n"
+            "/* /* */ */",
+            "    ccccccccccccccc"
+            "ccccccccccc");
+
+        Check(
+            highlight,
+            (
+                "\n"
+                "\t --!ansi_lexer \n"
+                "-- Some comment\n"
+                "pragma SimpleColumns;\n"
+                "select 1, '''' as empty;"),
+            (
+                " "
+                "  ccccccccccccccc"
+                "cccccccccccccccc"
+                "kkkkkk vvvvvvvvvvvvvo "
+                "kkkkkk no ssss kk kkkkko"));
+        Check(
+            highlight,
+            (
+                "$str = '\n"
+                "--!ansi_lexer\n"
+                "--!syntax_v1\n"
+                "';\n"
+                "\n"
+                "select 1, $str, \"\" as empty;"),
+            (
+                "ovvv o ss"
+                "ssssssssssssss"
+                "sssssssssssss"
+                "so "
+                " "
+                "kkkkkk no ovvvo ss kk kkkkko"));
     }
 }

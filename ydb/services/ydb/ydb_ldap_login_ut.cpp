@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "User is unauthorized in LDAP server");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
         ldapServer.Stop();
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "User is unauthorized in LDAP server");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
         ldapServer.Stop();
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "User is unauthorized in LDAP server");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
         ldapServer.Stop();
@@ -270,23 +270,23 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
     }
 
     Y_UNIT_TEST(LdapAuthServerIsUnavailable) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "User is unauthorized in LDAP server");
+        CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "Could not login via LDAP");
     }
 
     Y_UNIT_TEST(LdapAuthSettingsWithEmptyHosts) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHosts, "List of ldap server hosts is empty");
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHosts, "Could not login via LDAP");
     }
 
     Y_UNIT_TEST(LdapAuthSettingsWithEmptyBaseDn) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBaseDn, "Parameter BaseDn is empty");
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBaseDn, "Could not login via LDAP");
     }
 
     Y_UNIT_TEST(LdapAuthSettingsWithEmptyBindDn) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindDn, "Parameter BindDn is empty");
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindDn, "Could not login via LDAP");
     }
 
     Y_UNIT_TEST(LdapAuthSettingsWithEmptyBindPassword) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindPassword, "Parameter BindPassword is empty");
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindPassword, "Could not login via LDAP");
     }
 
     Y_UNIT_TEST(LdapAuthWithInvalidLogin) {
@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = nonExistentUser + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "User is unauthorized in LDAP server");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
         ldapServer.Stop();
@@ -358,7 +358,47 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "User is unauthorized in LDAP server");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
+
+        loginConnection.Stop();
+        ldapServer.Stop();
+    }
+
+    Y_UNIT_TEST(LdapAuthWithEmptyPassword) {
+        TString login = "ldapUser";
+        TString password = "";
+
+        LdapMock::TLdapMockResponses responses;
+        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
+
+        LdapMock::TSearchRequestInfo fetchUserSearchRequestInfo {
+            {
+                .BaseDn = "dc=search,dc=yandex,dc=net",
+                .Scope = 2,
+                .DerefAliases = 0,
+                .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
+                .Attributes = {"1.1"}
+            }
+        };
+
+        std::vector<LdapMock::TSearchEntry> fetchUserSearchResponseEntries {
+            {
+                .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net"
+            }
+        };
+
+        LdapMock::TSearchResponseInfo fetchUserSearchResponseInfo {
+            .ResponseEntries = fetchUserSearchResponseEntries,
+            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+        };
+        responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
+
+        TLoginClientConnection loginConnection(InitLdapSettings);
+        LdapMock::TLdapSimpleServer ldapServer(loginConnection.GetLdapPort(), responses);
+
+        auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
+        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
         ldapServer.Stop();

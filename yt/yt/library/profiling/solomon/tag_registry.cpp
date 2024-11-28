@@ -88,8 +88,8 @@ void TTagRegistry::DumpTags(NProto::TSensorDump* dump)
 
     for (int i = 0; i < std::ssize(TagById_); i++) {
         auto* tag = dump->add_tags();
-        tag->set_key(ToProto<TProtobufString>(TagById_[i].first));
-        tag->set_value(ToProto<TProtobufString>(TagById_[i].second));
+        tag->set_key(ToProto(TagById_[i].first));
+        tag->set_value(ToProto(TagById_[i].second));
     }
 }
 

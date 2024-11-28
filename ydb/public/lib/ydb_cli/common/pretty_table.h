@@ -53,7 +53,7 @@ public:
             TString lines = TStringBuilder() << data;
 
             for (auto& line : StringSplitter(lines).Split('\n')) {
-                if (line.Empty()) {
+                if (line.empty()) {
                     continue;
                 }
 

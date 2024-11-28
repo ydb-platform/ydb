@@ -1,5 +1,4 @@
 #include "data_generator.h"
-#include "driver.h"
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <library/cpp/charset/wide.h>
 #include <util/string/escape.h>
@@ -54,21 +53,6 @@ TBulkDataGeneratorList TTpcdsWorkloadDataInitializerGenerator::DoGetBulkInitialD
     return TBulkDataGeneratorList(gens.begin(), gens.end());
 }
 
-ui64 TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::CalcCountToGenerate(const TTpcdsWorkloadDataInitializerGenerator& owner, int tableNum, bool useState) {
-    const auto* tdef = getTdefsByNumber(tableNum);
-    if (!tdef) {
-        return 0;
-    }
-    i64 position = 0;
-    if (useState && owner.StateProcessor && owner.StateProcessor->GetState().contains(tdef->name)) {
-        position = owner.StateProcessor->GetState().at(tdef->name).Position;
-    }
-    ds_key_t firstRow;
-    ds_key_t rowCount;
-    split_work(tableNum, &firstRow, &rowCount);
-    return rowCount > position ? (rowCount - position) : 0;
-}
-
 TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::TContext(const TBulkDataGenerator& owner, int tableNum)
     : Owner(owner)
     , TableNum(tableNum)
@@ -86,35 +70,28 @@ TStringBuilder& TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TCon
     return Csv;
 }
 
-namespace {
-    const TString FormatString = [] () {
-        Ydb::Formats::CsvSettings settings;
-        settings.set_delimiter("|");
-        settings.set_header(true);
-        settings.mutable_quoting()->set_disabled(true);
-        return settings.SerializeAsString();
-    } ();
-}
 void TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::AppendPortions(TDataPortions& result) {
-    const auto name = getTdefsByNumber(TableNum)->name;
+    const auto* tdef = getTdefsByNumber(TableNum);
+    const auto name = tdef->name;
     const auto path = Owner.GetFullTableName(name);
+    auto* stateProcessor = (tdef->flags & FL_CHILD) ? nullptr : Owner.Owner.StateProcessor.Get();
     if (Builder) {
         Builder->EndList();
         result.push_back(MakeIntrusive<TDataPortionWithState>(
-            Owner.Owner.StateProcessor.Get(),
+            stateProcessor,
             path,
             name,
             Builder->Build(),
-            Start - 1,
+            Start - Owner.FirstRow,
             Count
         ));
     } else if (Csv) {
         result.push_back(MakeIntrusive<TDataPortionWithState>(
-            Owner.Owner.StateProcessor.Get(),
+            stateProcessor,
             path,
             name,
-            TDataPortion::TCsv(std::move(Csv), FormatString),
-            Start - 1,
+            TDataPortion::TCsv(std::move(Csv), TWorkloadGeneratorBase::PsvFormatString),
+            Start - Owner.FirstRow,
             Count
         ));
     }
@@ -125,15 +102,45 @@ TString TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::GetFullTable
 }
 
 TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TBulkDataGenerator(const TTpcdsWorkloadDataInitializerGenerator& owner, int tableNum)
-    : IBulkDataGenerator(getTdefsByNumber(tableNum)->name, CalcCountToGenerate(owner, tableNum, true))
+    : IBulkDataGenerator(getTdefsByNumber(tableNum)->name, 0)
     , TableNum(tableNum)
     , Owner(owner)
-    , TableSize(CalcCountToGenerate(owner, tableNum, false))
-{}
+{
+    static const TSet<ui32> allowedModules{1, 2, 4};
+    const auto* tdef = getTdefsByNumber(TableNum);
+    if (!tdef) {
+        return;
+    }
+    ds_key_t rowsCount;
+    split_work(TableNum, &FirstRow, &rowsCount);
+    //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
+    while (FirstRow > 1 && !allowedModules.contains(FirstRow % 6)) {
+        --FirstRow;
+        ++rowsCount;
+    }
+    if (owner.StateProcessor) {
+        if (const auto* state = MapFindPtr(Owner.StateProcessor->GetState(), tdef->name)) {
+            StartPosition = state->Position;
+
+            //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
+            while (StartPosition && !allowedModules.contains((1 + StartPosition) % 6)) {
+                --StartPosition;
+            }
+            if (StartPosition) {
+                FirstPortion = MakeIntrusive<TDataPortion>(
+                    GetFullTableName(tdef->name),
+                    TDataPortion::TSkip(),
+                    StartPosition
+                );
+            }
+        }
+    }
+    Size = rowsCount;
+}
 
 TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::GenerateDataPortion() {
     TDataPortions result;
-    if (TableSize == 0) {
+    if (GetSize() == 0) {
         return result;
     }
     TContexts ctxs;
@@ -144,35 +151,27 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpcds
         ctxs.emplace_back(*this, tdef->nParam);
     }
 
-    with_lock(Lock) {
-        ds_key_t firstRow;
-        ds_key_t rowCount;
-        split_work(TableNum, &firstRow, &rowCount);
-        if (!Generated) {
-            ui32 toSkip = firstRow - 1;
-            if (!!Owner.StateProcessor && Owner.StateProcessor->GetState().contains(GetName())) {
-                Generated = Owner.StateProcessor->GetState().at(TString(GetName())).Position;
-                toSkip += Generated;
-            }
-            if (toSkip) {
-                row_skip(TableNum, toSkip);
-                if (tdef->flags & FL_PARENT) {
-                    row_skip(tdef->nParam, toSkip);
-                }
-            }
-            if (tdef->flags & FL_SMALL) {
-                resetCountCount();
+    auto g = Guard(Lock);
+    if (!Generated) {
+        Generated = StartPosition;
+        if (const auto toSkip = FirstRow + StartPosition - 1) {
+            row_skip(TableNum, toSkip);
+            if (tdef->flags & FL_PARENT) {
+                row_skip(tdef->nParam, toSkip);
             }
         }
-        const auto count = TableSize > Generated ? std::min(ui64(TableSize - Generated), Owner.Params.BulkSize) : 0;
-        if (!count) {
-            return result;
-        }
-        ctxs.front().SetCount(count);
-        ctxs.front().SetStart(firstRow + Generated);
-        Generated += count;
-        GenerateRows(ctxs);
     }
+    if (FirstPortion) {
+        result.emplace_back(std::move(FirstPortion));
+    }
+    const auto count = GetSize() > Generated ? std::min(ui64(GetSize() - Generated), Owner.Params.BulkSize) : 0;
+    if (!count) {
+        return result;
+    }
+    ctxs.front().SetCount(count);
+    ctxs.front().SetStart(FirstRow + Generated);
+    Generated += count;
+    GenerateRows(ctxs, std::move(g));
     for(auto& ctx: ctxs) {
         ctx.AppendPortions(result);
     }

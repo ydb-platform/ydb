@@ -193,13 +193,13 @@ void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
 
 void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     // Deprecated options with defaults:
-    if (!DeprecatedSkipRows.Empty()) {
+    if (!DeprecatedSkipRows.empty()) {
         SkipRows = FromString<size_t>(DeprecatedSkipRows);
     }
-    if (!DeprecatedBatchLimit.Empty()) {
+    if (!DeprecatedBatchLimit.empty()) {
         BatchLimit = FromString<size_t>(DeprecatedBatchLimit);
     }
-    if (!DeprecatedBatchMaxDelay.Empty()) {
+    if (!DeprecatedBatchMaxDelay.empty()) {
         BatchMaxDelay = FromString<TDuration>(DeprecatedBatchMaxDelay);
     }
 
@@ -276,8 +276,8 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
         }
     }
 
-    if (InputFormat != EDataFormat::Csv && InputFormat != EDataFormat::Tsv && (!Columns.Empty()
-            || SkipRows != 0 || !DeprecatedSkipRows.Empty())) {
+    if (InputFormat != EDataFormat::Csv && InputFormat != EDataFormat::Tsv && (!Columns.empty()
+            || SkipRows != 0 || !DeprecatedSkipRows.empty())) {
         throw TMisuseException() << "Options \"--input-columns\" and  \"--input-skip-rows\" requires \"csv\" or \"tsv\" formats";
     }
     if (InputParamNames.empty() && InputFormat == EDataFormat::Raw) {
@@ -405,7 +405,7 @@ bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString&
                     }
                     case EDataFormat::Csv:
                     case EDataFormat::Tsv: {
-                        CsvParser.GetParams(std::move(*data), *paramBuilder, TCsvParser::TParseMetadata{});
+                        CsvParser.BuildParams(*data, *paramBuilder, TCsvParser::TParseMetadata{});
                         break;
                     }
                     default:
@@ -449,7 +449,7 @@ bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString&
                         case EDataFormat::Csv:
                         case EDataFormat::Tsv: {
                             TValueBuilder valueBuilder;
-                            CsvParser.GetValue(std::move(*data), valueBuilder, type, TCsvParser::TParseMetadata{});
+                            CsvParser.BuildValue(*data, valueBuilder, type, TCsvParser::TParseMetadata{});
                             paramBuilder->AddParam(fullname, valueBuilder.Build());
                             break;
                         }
@@ -533,7 +533,7 @@ bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString&
                     case EDataFormat::Csv:
                     case EDataFormat::Tsv: {
                         valueBuilder.AddListItem();
-                        CsvParser.GetValue(std::move(*data), valueBuilder, type.GetProto().list_type().item(), TCsvParser::TParseMetadata{});
+                        CsvParser.BuildValue(*data, valueBuilder, type.GetProto().list_type().item(), TCsvParser::TParseMetadata{});
                         break;
                     }
                     default:

@@ -19,6 +19,9 @@ namespace NKikimr {
     namespace NGRpcService {
         class TInFlightLimiterRegistry;
     }
+    namespace NSharedCache {
+        class TSharedCachePages;
+    }
 }
 
 namespace NKikimrCms {
@@ -64,6 +67,7 @@ namespace NKikimrConfig {
     class TGraphConfig;
     class TMetadataCacheConfig;
     class TMemoryControllerConfig;
+    class TFeatureFlags;
 }
 
 namespace NKikimrReplication {
@@ -188,6 +192,7 @@ struct TAppData {
     ::NMonitoring::TDynamicCounterPtr Counters;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
+    TIntrusivePtr<NSharedCache::TSharedCachePages> SharedCachePages;
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
 
@@ -271,6 +276,9 @@ struct TAppData {
             TProgramShouldContinue *kikimrShouldContinue);
 
     ~TAppData();
+
+    void InitFeatureFlags(const NKikimrConfig::TFeatureFlags& flags);
+    void UpdateRuntimeFlags(const NKikimrConfig::TFeatureFlags& flags);
 };
 
 inline TAppData* AppData(NActors::TActorSystem* actorSystem) {

@@ -28,7 +28,9 @@ using namespace NNet;
 using namespace NConcurrency;
 using namespace NLogging;
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Tls");
+////////////////////////////////////////////////////////////////////////////////
+
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Tls");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -340,10 +342,12 @@ public:
 
     bool IsIdle() const override
     {
-        return
-            Underlying_->IsIdle() &&
-            ActiveIOCount_ == 0 &&
-            !Failed_;
+        return ActiveIOCount_ == 0 && !Failed_;
+    }
+
+    bool IsReusable() const override
+    {
+        return IsIdle() && Underlying_->IsReusable();
     }
 
     TFuture<void> Abort() override
@@ -537,19 +541,19 @@ private:
 
             WriteActive_ = false;
             WriteBuffer_.Reset();
+            --ActiveIOCount_;
             WritePromise_.Set();
             WritePromise_.Reset();
-            --ActiveIOCount_;
         }
 
         if (ReadActive_) {
             int count = SSL_read(Ssl_, ReadBuffer_.Begin(), ReadBuffer_.Size());
             if (count >= 0) {
                 ReadActive_ = false;
-                ReadPromise_.Set(count);
-                ReadPromise_.Reset();
                 ReadBuffer_.Reset();
                 --ActiveIOCount_;
+                ReadPromise_.Set(count);
+                ReadPromise_.Reset();
             } else {
                 int sslError = SSL_get_error(Ssl_, count);
                 if (sslError == SSL_ERROR_WANT_READ) {

@@ -5,6 +5,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 

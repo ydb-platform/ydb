@@ -6,10 +6,15 @@
 
 #include "common.h"
 #include "counters_logger.h"
+#include "offsets_collector.h"
+#include "transaction.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
@@ -1159,6 +1164,13 @@ public:
         EventsQueue->SetCallbackContext(TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SelfContext);
     }
 
+    void CollectOffsets(NTable::TTransaction& tx,
+                        const TVector<TReadSessionEvent::TEvent>& events,
+                        std::shared_ptr<TTopicClient::TImpl> client);
+    void CollectOffsets(NTable::TTransaction& tx,
+                        const TReadSessionEvent::TEvent& event,
+                        std::shared_ptr<TTopicClient::TImpl> client);
+
 private:
     void BreakConnectionAndReconnectImpl(TPlainStatus&& status, TDeferredActions<UseMigrationProtocol>& deferred);
 
@@ -1303,6 +1315,22 @@ private:
     };
 
 private:
+    struct TTransactionInfo {
+        TSpinLock Lock;
+        bool IsActive = false;
+        bool Subscribed = false;
+        bool CommitCalled = false;
+        TOffsetsCollector OffsetsCollector;
+    };
+
+    using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
+    using TTransactionMap = THashMap<TTransactionId, TTransactionInfoPtr>;
+
+    void TrySubscribeOnTransactionCommit(NTable::TTransaction& tx,
+                                         std::shared_ptr<TTopicClient::TImpl> client);
+    TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
+    void DeleteTx(const TTransactionId& txId);
+
     const TAReadSessionSettings<UseMigrationProtocol> Settings;
     const TString Database;
     const TString SessionId;
@@ -1350,6 +1378,8 @@ private:
 
     std::unordered_map<ui32, std::vector<TParentInfo>> HierarchyData;
     std::unordered_set<ui64> ReadingFinishedData;
+
+    TTransactionMap Txs;
 };
 
 }  // namespace NYdb::NTopic

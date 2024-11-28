@@ -12,16 +12,18 @@ void TRetryEventsQueue::Init(
     const NActors::TActorId& senderId,
     const NActors::TActorId& selfId,
     ui64 eventQueueId,
-    bool keepAlive) {
+    bool keepAlive,
+    bool useConnect) {
     TxId = txId;
     SenderId = senderId;
     SelfId = selfId;
     Y_ASSERT(SelfId.NodeId() == SenderId.NodeId());
     EventQueueId = eventQueueId;
     KeepAlive = keepAlive;
+    UseConnect = useConnect;
 }
 
-void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe) {
+void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe, bool connected) {
     if (unsubscribe) {
         Unsubscribe();
     }
@@ -31,8 +33,11 @@ void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, b
     Events.clear();
     MyConfirmedSeqNo = 0;
     ReceivedEventsSeqNos.clear();
-    Connected = false;
+    Connected = connected;
     RetryState = Nothing();
+    if (Connected) {
+        ScheduleHeartbeat();
+    }
 }
 
 void TRetryEventsQueue::HandleNodeDisconnected(ui32 nodeId) {
@@ -54,27 +59,25 @@ void TRetryEventsQueue::HandleNodeConnected(ui32 nodeId) {
             }
         }
         if (KeepAlive) {
-            SchedulePing();
+            ScheduleHeartbeat();
         }
     }
 }
 
-bool TRetryEventsQueue::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-    if (ev->Sender == RecipientId && ev->Get()->Reason == NActors::TEvents::TEvUndelivered::Disconnected) {
+TRetryEventsQueue::ESessionState TRetryEventsQueue::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+    if (ev->Sender != RecipientId) {
+        return ESessionState::WrongSession;
+    }
+    if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::Disconnected) {
         Connected = false;
         ScheduleRetry();
-        return true;
+        return ESessionState::Disconnected;
     }
 
-    if (ev->Sender == RecipientId && ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
-        if (KeepAlive) {
-            NActors::TActivationContext::Send(
-                new NActors::IEventHandle(SelfId, SelfId, new TEvRetryQueuePrivate::TEvSessionClosed(EventQueueId), 0, 0));
-        }
-        return true;
+    if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
+        return ESessionState::SessionClosed;
     }
-
-    return false;
+    return ESessionState::Disconnected;
 }
 
 void TRetryEventsQueue::Retry() {
@@ -84,21 +87,16 @@ void TRetryEventsQueue::Retry() {
     }
 }
 
-void TRetryEventsQueue::Ping() {
-    PingScheduled = false;
+bool TRetryEventsQueue::Heartbeat() {
+    HeartbeatScheduled = false;
 
     if (!Connected) {
-        return;
+        return false;
     }
-
-    if (TInstant::Now() - LastReceivedDataTime < TDuration::Seconds(PingPeriodSeconds)) {
-        SchedulePing();
-        return;
-    }
-
-    auto ev = MakeHolder<NActors::TEvents::TEvPing>();
-    NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), NActors::IEventHandle::FlagTrackDelivery));
-    SchedulePing();
+    ScheduleHeartbeat();
+    auto now = TInstant::Now();
+    return (now - LastReceivedDataTime >= TDuration::Seconds(PingPeriodSeconds)
+        || (now - LastSentDataTime >= TDuration::Seconds(PingPeriodSeconds)));
 }
 
 void TRetryEventsQueue::Connect() {
@@ -131,11 +129,12 @@ void TRetryEventsQueue::RemoveConfirmedEvents(ui64 confirmedSeqNo) {
 }
 
 void TRetryEventsQueue::SendRetryable(const IRetryableEvent::TPtr& ev) {
+    LastSentDataTime = TInstant::Now();
     NActors::TActivationContext::Send(ev->Clone(MyConfirmedSeqNo).Release());
 }
 
 void TRetryEventsQueue::ScheduleRetry() {
-    if (RetryScheduled) {
+    if (!UseConnect || RetryScheduled) {
         return;
     } 
     RetryScheduled = true;
@@ -146,13 +145,13 @@ void TRetryEventsQueue::ScheduleRetry() {
     NActors::TActivationContext::Schedule(RetryState->GetNextDelay(), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
 }
 
-void TRetryEventsQueue::SchedulePing() {
-    if (!KeepAlive || PingScheduled) {
+void TRetryEventsQueue::ScheduleHeartbeat() {
+    if (!KeepAlive || HeartbeatScheduled) {
         return;
     }
 
-    PingScheduled = true;
-    auto ev = MakeHolder<TEvRetryQueuePrivate::TEvPing>(EventQueueId);
+    HeartbeatScheduled = true;
+    auto ev = MakeHolder<TEvRetryQueuePrivate::TEvEvHeartbeat>(EventQueueId);
     NActors::TActivationContext::Schedule(TDuration::Seconds(PingPeriodSeconds), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
 }
 
@@ -170,9 +169,15 @@ TDuration TRetryEventsQueue::TRetryState::RandomizeDelay(TDuration baseDelay) {
 }
 
 void TRetryEventsQueue::PrintInternalState(TStringStream& stream) const {
-    stream << "RetryQueue: id " << EventQueueId << ", NextSeqNo " 
-        << NextSeqNo << ", MyConfirmedSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " << Events.size() << "\n";
+    stream << "id " << EventQueueId;
+    if (LocalRecipient) {
+        stream << ", LocalRecipient\n";
+        return;
+    }
+    stream << ", NextSeqNo "
+        << NextSeqNo << ", MyConfSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " 
+        << Events.size() << ", connected " << Connected  << ", heartbeat shed " << HeartbeatScheduled 
+        << ", last received " << LastReceivedDataTime << ", last sent " << LastSentDataTime << "\n";
 }
-
 
 } // namespace NYql::NDq

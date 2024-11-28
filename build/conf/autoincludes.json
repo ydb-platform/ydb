@@ -1,1 +1,5 @@
-[]
+[
+    "library/cpp/geo",
+    "util"
+]
+

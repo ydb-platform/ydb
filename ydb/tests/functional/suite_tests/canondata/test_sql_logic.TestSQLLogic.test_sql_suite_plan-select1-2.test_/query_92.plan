@@ -107,7 +107,7 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Filter",
-                                                                "Predicate": "item.c <= item.d - 2 Or item.c >= item.d + 2 Or item.a > item.b"
+                                                                "Predicate": "item.c <= item.d - 2 OR item.c >= item.d + 2 OR item.a > item.b"
                                                             }
                                                         ],
                                                         "PlanNodeId": 10,

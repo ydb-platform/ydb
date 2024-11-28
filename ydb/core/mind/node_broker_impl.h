@@ -23,7 +23,7 @@ using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
-using NConsole::TEvConsole;
+namespace TEvConsole = NConsole::TEvConsole;
 using NConsole::ITxExecutor;
 using NConsole::TTxProcessor;
 
@@ -56,7 +56,7 @@ public:
         struct TEvUpdateEpoch : public TEventLocal<TEvUpdateEpoch, EvUpdateEpoch> {};
 
         struct TEvResolvedRegistrationRequest : public TEventLocal<TEvResolvedRegistrationRequest, EvResolvedRegistrationRequest> {
-            
+
             TEvResolvedRegistrationRequest(
                     TEvNodeBroker::TEvRegistrationRequest::TPtr request,
                     NActors::TScopeId scopeId,
@@ -287,6 +287,8 @@ private:
     void DbUpdateNodeLease(const TNodeInfo &node,
                            TTransactionContext &txc);
     void DbUpdateNodeLocation(const TNodeInfo &node,
+                              TTransactionContext &txc);
+    void DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
                               TTransactionContext &txc);
 
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,

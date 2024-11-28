@@ -1,0 +1,40 @@
+diff --git a/src/cpp/ext/proto_server_reflection.cc b/src/cpp/ext/proto_server_reflection.cc
+index f26f007..ceca602 100644
+--- a/src/cpp/ext/proto_server_reflection.cc
++++ b/src/cpp/ext/proto_server_reflection.cc
+@@ -116,7 +116,7 @@ Status ProtoServerReflection::GetFileByName(
+   }
+
+   const protobuf::FileDescriptor* file_desc =
+-      descriptor_pool_->FindFileByName(file_name);
++      descriptor_pool_->FindFileByName(TProtoStringType(file_name));
+   if (file_desc == nullptr) {
+     return Status(StatusCode::NOT_FOUND, "File not found.");
+   }
+@@ -134,7 +134,7 @@ Status ProtoServerReflection::GetFileContainingSymbol(
+   }
+ 
+   const protobuf::FileDescriptor* file_desc =
+-      descriptor_pool_->FindFileContainingSymbol(symbol);
++      descriptor_pool_->FindFileContainingSymbol(TProtoStringType(symbol));
+   if (file_desc == nullptr) {
+     return Status(StatusCode::NOT_FOUND, "Symbol not found.");
+   }
+@@ -175,7 +175,7 @@ Status ProtoServerReflection::GetAllExtensionNumbers(
+   }
+ 
+   const protobuf::Descriptor* desc =
+-      descriptor_pool_->FindMessageTypeByName(type);
++      descriptor_pool_->FindMessageTypeByName(TProtoStringType(type));
+   if (desc == nullptr) {
+     return Status(StatusCode::NOT_FOUND, "Type not found.");
+   }
+@@ -199,7 +199,7 @@ void ProtoServerReflection::FillFileDescriptorResponse(
+   seen_files->insert(file_desc->name());
+ 
+   protobuf::FileDescriptorProto file_desc_proto;
+-  TString data;
++  TProtoStringType data;
+   file_desc->CopyTo(&file_desc_proto);
+   file_desc_proto.SerializeToString(&data);
+   response->mutable_file_descriptor_response()->add_file_descriptor_proto(data);

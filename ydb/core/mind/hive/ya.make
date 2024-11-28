@@ -48,9 +48,11 @@ SRCS(
     tx__configure_subdomain.cpp
     tx__create_tablet.cpp
     tx__cut_tablet_history.cpp
+    tx__delete_node.cpp
     tx__delete_tablet.cpp
     tx__delete_tablet_result.cpp
     tx__disconnect_node.cpp
+    tx__generate_data_ut.cpp
     tx__init_scheme.cpp
     tx__kill_node.cpp
     tx__load_everything.cpp

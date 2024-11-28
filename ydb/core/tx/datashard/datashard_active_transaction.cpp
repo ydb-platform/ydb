@@ -442,6 +442,7 @@ bool TActiveTransaction::BuildSchemeTx()
         + (ui32)SchemeTx->HasDropCdcStreamNotice()
         + (ui32)SchemeTx->HasMoveIndex()
         + (ui32)SchemeTx->HasCreateIncrementalRestoreSrc()
+        + (ui32)SchemeTx->HasCreateIncrementalBackupSrc()
         ;
     if (count != 1)
         return false;
@@ -480,6 +481,8 @@ bool TActiveTransaction::BuildSchemeTx()
         SchemeTxType = TSchemaOperation::ETypeMoveIndex;
     else if (SchemeTx->HasCreateIncrementalRestoreSrc())
         SchemeTxType = TSchemaOperation::ETypeCreateIncrementalRestoreSrc;
+    else if (SchemeTx->HasCreateIncrementalBackupSrc())
+        SchemeTxType = TSchemaOperation::ETypeCreateIncrementalBackupSrc;
     else
         SchemeTxType = TSchemaOperation::ETypeUnknown;
 

@@ -33,7 +33,7 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
 
     if (checkStateResult.IsSuccess()) {
         if (restoreContextResult.IsSuccess()) {
-            if (code.Empty()) {
+            if (code.empty()) {
                 LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore oidc session failed: receive empty 'code' parameter");
                 RetryRequestToProtectedResourceAndDie(ctx);
             } else {

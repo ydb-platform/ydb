@@ -76,7 +76,7 @@ void TSearchEventsProcessor::HandleWakeup(TEvWakeup::TPtr&, const TActorContext&
 }
 
 void TSearchEventsProcessor::HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-    const auto& record = ev->Get()->Record.GetRef();
+    const auto& record = ev->Get()->Record;
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
         LOG_ERROR_S(ctx, NKikimrServices::SQS,
                     "YC Search events processor: Got error trying to perform request: " << record);
@@ -143,7 +143,7 @@ void TSearchEventsProcessor::RunQueuesListQuery(const TActorContext& ctx) {
 void TSearchEventsProcessor::OnQueuesListQueryComplete(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
                                                        const TActorContext& ctx) {
 
-    auto& response = ev->Get()->Record.GetRef().GetResponse();
+    auto& response = ev->Get()->Record.GetResponse();
 
     Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
     TString queueName, cloudId;
@@ -184,7 +184,7 @@ void TSearchEventsProcessor::RunEventsListing(const TActorContext& ctx) {
 
 void TSearchEventsProcessor::OnEventsListingDone(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     QueuesEvents.clear();
-    const auto& record = ev->Get()->Record.GetRef();
+    const auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.GetResponse().YdbResultsSize() == 1);
     NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
 
@@ -209,7 +209,7 @@ void TSearchEventsProcessor::RunEventsCleanup(const TActorContext& ctx) {
     State = EState::CleanupExecute;
 
     NYdb::TParamsBuilder paramsBuilder;
-    
+
     auto& param = paramsBuilder.AddParam("$Events");
     param.BeginList();
 

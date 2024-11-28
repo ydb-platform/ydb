@@ -4,7 +4,7 @@
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
 
-$border = Date("1993-12-01");
+$border = Date("1993-10-01");
 $join1 = (
 select
     c.c_custkey as c_custkey,
@@ -23,7 +23,7 @@ on
     c.c_custkey = o.o_custkey
 where
     o.o_orderdate >= $border
-    and o.o_orderdate < ($border + Interval("P90D"))
+    and o.o_orderdate < ($border + Interval("P92D"))
 );
 $join2 = (
 select

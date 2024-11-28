@@ -8,10 +8,10 @@ namespace NKikimr::NColumnShard {
 void TInsertedPortion::Finalize(TColumnShard* shard, NTabletFlatExecutor::TTransactionContext& txc) {
     AFL_VERIFY(PortionInfoConstructor);
     auto* lastPortionId = shard->MutableIndexAs<NOlap::TColumnEngineForLogs>().GetLastPortionPointer();
-    PortionInfoConstructor->SetPortionId(++*lastPortionId);
+    PortionInfoConstructor->MutablePortionConstructor().SetPortionId(++*lastPortionId);
     NOlap::TDbWrapper wrapper(txc.DB, nullptr);
     wrapper.WriteCounter(NOlap::TColumnEngineForLogs::LAST_PORTION, *lastPortionId);
-    PortionInfo = PortionInfoConstructor->BuildPtr(true);
+    PortionInfo = PortionInfoConstructor->Build(true);
     PortionInfoConstructor = nullptr;
 }
 

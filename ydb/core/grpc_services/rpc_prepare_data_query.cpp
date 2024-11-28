@@ -11,8 +11,8 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -84,7 +84,7 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
         SetCost(record.GetConsumedRu());
         AddServerHintsIfAny(record);
 

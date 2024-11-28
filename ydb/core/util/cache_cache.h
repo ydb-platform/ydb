@@ -7,7 +7,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/intrlist.h>
 
-namespace NKikimr::NCache {
+namespace NKikimr::NSharedCache {
 
 enum class ECacheCacheGeneration {
     None,
@@ -60,24 +60,24 @@ public:
         , WarmWeight(0)
     {}
 
-    TItem* EvictNext() override {
-        TItem* ret = nullptr;
-
+    TIntrusiveList<TItem> EvictNext() override {
+        TIntrusiveList<TItem> evictedList;
+        
         if (!StagingList.Empty()) {
-            ret = EvictNext(StagingList, StagingWeight);
+            evictedList.PushBack(EvictNext(StagingList, StagingWeight));
             if (Config.ReportedStaging)
                 *Config.ReportedStaging = StagingWeight;
         } else if (!FreshList.Empty()) {
-            ret = EvictNext(FreshList, FreshWeight);
+            evictedList.PushBack(EvictNext(FreshList, FreshWeight));
             if (Config.ReportedFresh)
                 *Config.ReportedFresh = FreshWeight;
         } else if (!WarmList.Empty()) {
-            ret = EvictNext(WarmList, WarmWeight);
+            evictedList.PushBack(EvictNext(WarmList, WarmWeight));
             if (Config.ReportedWarm)
                 *Config.ReportedWarm = WarmWeight;
         }
 
-        return ret;
+        return evictedList;
     }
 
     // returns evicted elements as list
@@ -137,6 +137,10 @@ public:
 
     void UpdateLimit(ui64 limit) override {
         Config.SetLimit(limit);
+    }
+
+    ui64 GetSize() const override {
+        return FreshWeight + StagingWeight + WarmWeight;
     }
 
 private:

@@ -17,7 +17,7 @@
 #include <ydb/library/actors/util/memory_tracker.h>
 #include <util/system/valgrind.h>
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 namespace NKikimr {
 
@@ -2631,7 +2631,7 @@ Y_UNIT_TEST(TestImmediateQueueThenSplit) {
     int failures = 0;
     for (auto writeSender : writeSenders) {
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(writeSender);
-        if (ev->Get()->Record.GetRef().GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+        if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             ++successes;
         } else {
             ++failures;
@@ -2751,7 +2751,7 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query) {
 
         Cerr << "--- waiting for result" << Endl;
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
         Cerr << response.DebugString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
         auto& issue = response.GetResponse().GetQueryIssues(0);

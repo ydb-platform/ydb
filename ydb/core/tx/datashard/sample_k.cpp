@@ -14,7 +14,7 @@
 
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
@@ -44,8 +44,8 @@ protected:
         auto operator<=>(const TProbability&) const noexcept = default;
     };
 
-    ui64 RowsCount = 0;
-    ui64 RowsBytes = 0;
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
 
     // We are using binary heap, because we don't want to do batch processing here,
     // serialization is more expensive than compare
@@ -116,27 +116,28 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
         LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
-        ++RowsCount;
+        ++ReadRows;
+        ReadBytes += CountBytes(key, row);
 
         const auto probability = GetProbability();
         if (probability > MaxProbability) {
-            // TODO(mbkkt) it's not nice that we need to compute this, probably can be precomputed in TRow
-            RowsBytes += TSerializedCellVec::SerializedSize(*row);
             return EScan::Feed;
         }
 
-        auto serialized = TSerializedCellVec::Serialize(*row);
-        RowsBytes += serialized.size();
-
         if (DataRows.size() < K) {
             MaxRows.push_back({probability, DataRows.size()});
-            DataRows.emplace_back(std::move(serialized));
+            DataRows.emplace_back(TSerializedCellVec::Serialize(*row));
             if (DataRows.size() == K) {
                 std::make_heap(MaxRows.begin(), MaxRows.end());
                 MaxProbability = MaxRows.front().P;
             }
         } else {
-            ReplaceRow(std::move(serialized), probability);
+            // TODO(mbkkt) use tournament tree to make less compare and swaps
+            std::pop_heap(MaxRows.begin(), MaxRows.end());
+            TSerializedCellVec::Serialize(DataRows[MaxRows.back().I], *row);
+            MaxRows.back().P = probability;
+            std::push_heap(MaxRows.begin(), MaxRows.end());
+            MaxProbability = MaxRows.front().P;
         }
 
         if (MaxProbability == 0) {
@@ -147,6 +148,8 @@ public:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
         Y_ABORT_UNLESS(Response);
+        Response->Record.SetReadRows(ReadRows);
+        Response->Record.SetReadBytes(ReadBytes);
         if (abort == EAbort::None) {
             FillResponse();
         } else {
@@ -187,15 +190,6 @@ private:
         }
     }
 
-    void ReplaceRow(TString&& row, ui64 p) {
-        // TODO(mbkkt) use tournament tree to make less compare and swaps
-        std::pop_heap(MaxRows.begin(), MaxRows.end());
-        DataRows[MaxRows.back().I] = std::move(row);
-        MaxRows.back().P = p;
-        std::push_heap(MaxRows.begin(), MaxRows.end());
-        MaxProbability = MaxRows.front().P;
-    }
-
     void FillResponse() {
         std::sort(MaxRows.begin(), MaxRows.end());
         auto& record = Response->Record;
@@ -203,8 +197,6 @@ private:
             record.AddProbabilities(p);
             record.AddRows(std::move(DataRows[i]));
         }
-        record.SetRowsDelta(RowsCount);
-        record.SetBytesDelta(RowsBytes);
         record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
     }
 
@@ -245,7 +237,11 @@ void TDataShard::Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorC
 
 void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
+    const bool needsSnapshot = record.HasSnapshotStep() || record.HasSnapshotTxId();
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
+    if (!needsSnapshot) {
+        rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
+    }
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -308,14 +304,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         return;
     }
 
-    if (!record.HasSnapshotStep() || !record.HasSnapshotTxId()) {
-        badRequest(TStringBuilder() << " request doesn't have Shapshot Step or TxId");
-        return;
-    }
-
     const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
-    const TSnapshot* snapshot = SnapshotManager.FindAvailable(snapshotKey);
-    if (!snapshot) {
+    if (needsSnapshot && !SnapshotManager.FindAvailable(snapshotKey)) {
         badRequest(TStringBuilder()
                    << "no snapshot has been found"
                    << " , path id is " << pathId.OwnerId << ":" << pathId.LocalPathId
@@ -353,7 +343,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
                                       record.GetMaxProbability(),
                                       record.GetColumns(),
                                       userTable),
-                                  ev->Cookie,
+                                  0,
                                   scanOpts);
 
     TScanRecord recCard = {scanId, seqNo};

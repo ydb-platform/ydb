@@ -15,6 +15,7 @@
 
 #include <library/cpp/yt/misc/optional.h>
 #include <library/cpp/yt/misc/preprocessor.h>
+#include <library/cpp/yt/misc/strong_typedef.h>
 
 #include <google/protobuf/duration.pb.h>
 #include <google/protobuf/message.h>
@@ -23,26 +24,46 @@
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
+#include <type_traits>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline void ToProto(::google::protobuf::int64* serialized, TDuration original);
-inline void FromProto(TDuration* original, ::google::protobuf::int64 serialized);
-
-inline void ToProto(::google::protobuf::Duration* serialized, TDuration original);
-inline void FromProto(TDuration* original, ::google::protobuf::Duration serialized);
+template <class T>
+struct TProtoTraits
+{ };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline void ToProto(::google::protobuf::int64* serialized, TInstant original);
-inline void FromProto(TInstant* original, ::google::protobuf::int64 serialized);
+void ToProto(::google::protobuf::uint64* serialized, TDuration original);
+void FromProto(TDuration* original, ::google::protobuf::uint64 serialized);
 
-inline void ToProto(::google::protobuf::uint64* serialized, TInstant original);
-inline void FromProto(TInstant* original, ::google::protobuf::uint64 serialized);
+void ToProto(::google::protobuf::Duration* serialized, TDuration original);
+void FromProto(TDuration* original, ::google::protobuf::Duration serialized);
 
-inline void ToProto(::google::protobuf::Timestamp* serialized, TInstant original);
-inline void FromProto(TInstant* original, ::google::protobuf::Timestamp serialized);
+template <>
+struct TProtoTraits<TDuration>
+{
+    using TSerialized = TDuration::TValue; // ui64
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToProto(::google::protobuf::uint64* serialized, TInstant original);
+void FromProto(TInstant* original, ::google::protobuf::uint64 serialized);
+
+void ToProto(::google::protobuf::uint64* serialized, TInstant original);
+void FromProto(TInstant* original, ::google::protobuf::uint64 serialized);
+
+void ToProto(::google::protobuf::Timestamp* serialized, TInstant original);
+void FromProto(TInstant* original, ::google::protobuf::Timestamp serialized);
+
+template <>
+struct TProtoTraits<TInstant>
+{
+    using TSerialized = TInstant::TValue; // ui64
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -55,6 +76,8 @@ typename std::enable_if<std::is_convertible_v<T*, ::google::protobuf::MessageLit
     T* original,
     const T& serialized);
 
+////////////////////////////////////////////////////////////////////////////////
+
 template <class T>
     requires TEnumTraits<T>::IsEnum && (!TEnumTraits<T>::IsBitEnum)
 void ToProto(int* serialized, T original);
@@ -63,13 +86,30 @@ template <class T>
 void FromProto(T* original, int serialized);
 
 template <class T>
+    requires TEnumTraits<T>::IsEnum && (!TEnumTraits<T>::IsBitEnum)
+struct TProtoTraits<T>
+{
+    using TSerialized = int;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
     requires TEnumTraits<T>::IsBitEnum
 void ToProto(ui64* serialized, T original);
 template <class T>
     requires TEnumTraits<T>::IsBitEnum
 void FromProto(T* original, ui64 serialized);
 
+template <class T>
+    requires TEnumTraits<T>::IsBitEnum
+struct TProtoTraits<T>
+{
+    using TSerialized = ui64;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
+
 template <class TSerialized, class TOriginalArray, class... TArgs>
 void ToProto(
     ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
@@ -102,16 +142,47 @@ void CheckedHashSetFromProto(
     THashSet<TOriginal>* originalHashSet,
     const ::google::protobuf::RepeatedField<TSerialized>& serializedHashSet);
 
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TSerialized, class T, class TTag>
 void FromProto(TStrongTypedef<T, TTag>* original, const TSerialized& serialized);
 
 template <class TSerialized, class T, class TTag>
 void ToProto(TSerialized* serialized, const TStrongTypedef<T, TTag>& original);
 
+template <class T, class TTag>
+struct TProtoTraits<TStrongTypedef<T, TTag>>
+{
+    using TSerialized = T;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TSerialized, class TOriginal, class... TArgs>
-TSerialized ToProto(const TOriginal& original, TArgs&&... args);
+namespace NDetail {
+
+struct TToProtoAutoDerivedSerializedTag
+{ };
+
+template <class TSerialized, class TOriginal>
+struct TToProtoResult
+{
+    using T = TSerialized;
+};
+
+template <class TOriginal>
+struct TToProtoResult<TToProtoAutoDerivedSerializedTag, TOriginal>
+{
+    using T = typename TProtoTraits<TOriginal>::TSerialized;
+};
+
+//! A simple heuristic to distinguish between `ToProto(original)` and `ToProto(&original, serialized)`.
+template <class T>
+concept CToProtoOriginal = !std::is_pointer_v<T>;
+
+} // namespace NDetail
+
+template <class TSerialized = NYT::NDetail::TToProtoAutoDerivedSerializedTag, NYT::NDetail::CToProtoOriginal TOriginal, class... TArgs>
+auto ToProto(const TOriginal& original, TArgs&&... args);
 
 template <class TOriginal, class TSerialized, class... TArgs>
 TOriginal FromProto(const TSerialized& serialized, TArgs&&... args);
@@ -475,6 +546,24 @@ class TProtobufOutputStreamAdaptor
 {
 public:
     explicit TProtobufOutputStreamAdaptor(IOutputStream* stream);
+};
+
+class TProtobufZeroCopyOutputStream
+    : public ::google::protobuf::io::ZeroCopyOutputStream
+{
+public:
+    explicit TProtobufZeroCopyOutputStream(IZeroCopyOutput* stream);
+
+    bool Next(void** data, int* size) override;
+    void BackUp(int count) override;
+    int64_t ByteCount() const override;
+
+    void ThrowOnError() const;
+
+private:
+    IZeroCopyOutput* const Stream_;
+    std::exception_ptr Error_;
+    int64_t ByteCount_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

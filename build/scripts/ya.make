@@ -15,7 +15,6 @@ IF (PY2)
         fetch_from.py
         fetch_from_archive.py
         fetch_from_mds.py
-        fetch_from_npm.py
         fetch_from_sandbox.py
         fetch_resource.py
         fix_py2_protobuf.py
@@ -118,6 +117,7 @@ ELSEIF (PY3)
         py_compile.py
         resolve_java_srcs.py
         retry.py
+        retry_cc.py
         rodata2asm.py
         rodata2cpp.py
         run_javac.py
@@ -134,7 +134,6 @@ ELSEIF (PY3)
         with_coverage.py
         with_kapt_args.py
         with_pathsep_resolve.py
-        wrap_groovyc.py
         wrapcc.py
         wrapper.py
         write_file_size.py

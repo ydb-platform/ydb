@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr::NKqp {
@@ -60,6 +61,7 @@ void FillCreateViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
     const auto pathPair = SplitPathByDb(settings.GetObjectId(), context.GetDatabase());
     modifyScheme.SetWorkingDir(pathPair.first);
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateView);
+    modifyScheme.SetFailedOnAlreadyExists(!settings.GetExistingOk());
 
     auto& viewDesc = *modifyScheme.MutableCreateView();
     viewDesc.SetName(pathPair.second);
@@ -77,6 +79,7 @@ void FillDropViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
     const auto pathPair = SplitPathByObjectId(settings.GetObjectId());
     modifyScheme.SetWorkingDir(pathPair.first);
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropView);
+    modifyScheme.SetSuccessOnNotExist(settings.GetMissingOk());
 
     auto& drop = *modifyScheme.MutableDrop();
     drop.SetName(pathPair.second);
@@ -84,9 +87,12 @@ void FillDropViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
 
 NThreading::TFuture<TYqlConclusionStatus> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request,
                                                             TActorSystem* actorSystem,
-                                                            bool failOnAlreadyExists) {
+                                                            bool failedOnAlreadyExists,
+                                                            bool successOnNotExist) {
     const auto promiseScheme = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
-    IActor* const requestHandler = new TSchemeOpRequestHandler(request, promiseScheme, failOnAlreadyExists);
+    IActor* const requestHandler = new TSchemeOpRequestHandler(
+        request, promiseScheme, failedOnAlreadyExists, successOnNotExist
+    );
     actorSystem->Register(requestHandler);
     return promiseScheme.GetFuture().Apply([](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& opResult) {
         if (opResult.HasValue()) {
@@ -109,7 +115,12 @@ NThreading::TFuture<TYqlConclusionStatus> CreateView(const NYql::TCreateObjectSe
     auto& schemeTx = *proposal->Record.MutableTransaction()->MutableModifyScheme();
     FillCreateViewProposal(schemeTx, settings, context.GetExternalData());
 
-    return SendSchemeRequest(proposal.Release(), context.GetExternalData().GetActorSystem(), true);
+    return SendSchemeRequest(
+        proposal.Release(),
+        context.GetExternalData().GetActorSystem(),
+        schemeTx.GetFailedOnAlreadyExists(),
+        schemeTx.GetSuccessOnNotExist()
+    );
 }
 
 NThreading::TFuture<TYqlConclusionStatus> DropView(const NYql::TDropObjectSettings& settings,
@@ -122,7 +133,12 @@ NThreading::TFuture<TYqlConclusionStatus> DropView(const NYql::TDropObjectSettin
     auto& schemeTx = *proposal->Record.MutableTransaction()->MutableModifyScheme();
     FillDropViewProposal(schemeTx, settings);
 
-    return SendSchemeRequest(proposal.Release(), context.GetExternalData().GetActorSystem(), false);
+    return SendSchemeRequest(
+        proposal.Release(),
+        context.GetExternalData().GetActorSystem(),
+        schemeTx.GetFailedOnAlreadyExists(),
+        schemeTx.GetSuccessOnNotExist()
+    );
 }
 
 void PrepareCreateView(NKqpProto::TKqpSchemeOperation& schemeOperation,
@@ -214,10 +230,10 @@ NThreading::TFuture<TYqlConclusionStatus> TViewManager::ExecutePrepared(const NK
     switch (schemeOperation.GetOperationCase()) {
         case NKqpProto::TKqpSchemeOperation::kCreateView:
             schemeTx.CopyFrom(schemeOperation.GetCreateView());
-            return SendSchemeRequest(proposal.Release(), context.GetActorSystem(), true);
+            break;
         case NKqpProto::TKqpSchemeOperation::kDropView:
             schemeTx.CopyFrom(schemeOperation.GetDropView());
-            return SendSchemeRequest(proposal.Release(), context.GetActorSystem(), false);
+            break;
         default:
             return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
                     TStringBuilder()
@@ -226,6 +242,12 @@ NThreading::TFuture<TYqlConclusionStatus> TViewManager::ExecutePrepared(const NK
                 )
             );
     }
+    return SendSchemeRequest(
+        proposal.Release(),
+        context.GetActorSystem(),
+        schemeTx.GetFailedOnAlreadyExists(),
+        schemeTx.GetSuccessOnNotExist()
+    );
 }
 
 }

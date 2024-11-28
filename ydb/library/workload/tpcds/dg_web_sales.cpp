@@ -59,7 +59,8 @@ public:
         genrand_integer(&ItemIndex, DIST_UNIFORM, 1, itemCount, 0, WS_ITEM_SK);
     }
 
-    void MakeDetail(TVector<W_WEB_SALES_TBL>& sales, TVector<W_WEB_RETURNS_TBL>& returns) {
+    void MakeDetail(TVector<W_WEB_SALES_TBL>& sales, TVector<W_WEB_RETURNS_TBL>& returns,
+                    TTpcdsCsvItemWriter<W_WEB_SALES_TBL>& writerSales, TTpcdsCsvItemWriter<W_WEB_RETURNS_TBL>& writerReturns) {
         static int *itemPermutation, itemCount;
         static bool init = false;
         int shipLag, temp;
@@ -91,8 +92,10 @@ public:
         if (temp < WR_RETURN_PCT) {
             returns.emplace_back();
             mk_w_web_returns(&returns.back(), 1);
+            writerReturns.RegisterRow();
         }
         sales.emplace_back(g_w_web_sales);
+        writerSales.RegisterRow();
     }
 
 private:
@@ -105,7 +108,48 @@ TTpcDSGeneratorWebSales::TTpcDSGeneratorWebSales(const TTpcdsWorkloadDataInitial
     : TBulkDataGenerator(owner, WEB_SALES)
 {}
 
-void TTpcDSGeneratorWebSales::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorWebSales::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
+    TTpcdsCsvItemWriter<W_WEB_SALES_TBL> writerSales(ctxs.front().GetCsv().Out, ctxs.front().GetCount());
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_sold_date_sk, WS_SOLD_DATE_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_sold_time_sk, WS_SOLD_TIME_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_ship_date_sk, WS_SHIP_DATE_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_item_sk, WS_ITEM_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_bill_customer_sk, WS_BILL_CUSTOMER_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_bill_cdemo_sk, WS_BILL_CDEMO_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_bill_hdemo_sk, WS_BILL_HDEMO_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_bill_addr_sk, WS_BILL_ADDR_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_ship_customer_sk, WS_SHIP_CUSTOMER_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_ship_cdemo_sk, WS_SHIP_CDEMO_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_ship_hdemo_sk, WS_SHIP_HDEMO_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_ship_addr_sk, WS_SHIP_ADDR_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_web_page_sk, WS_WEB_PAGE_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_web_site_sk, WS_WEB_SITE_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_ship_mode_sk, WS_SHIP_MODE_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_warehouse_sk, WS_WAREHOUSE_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_promo_sk, WS_PROMO_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_order_number, WS_ORDER_NUMBER);
+    constexpr int WS_PRICING_EXT_DISCOUNT_AMOUNT = WS_PRICING_EXT_DISCOUNT_AMT;
+    CSV_WRITER_REGISTER_PRICING_FIELDS(writerSales, ws, ws_pricing, true, WS);
+
+    TTpcdsCsvItemWriter<W_WEB_RETURNS_TBL> writerReturns(ctxs[1].GetCsv().Out, ctxs.front().GetCount());
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_returned_date_sk, WR_RETURNED_DATE_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_returned_time_sk, WR_RETURNED_TIME_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_item_sk, WR_ITEM_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_refunded_customer_sk, WR_REFUNDED_CUSTOMER_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_refunded_cdemo_sk, WR_REFUNDED_CDEMO_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_refunded_hdemo_sk, WR_REFUNDED_HDEMO_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_refunded_addr_sk, WR_REFUNDED_ADDR_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_returning_customer_sk, WR_RETURNING_CUSTOMER_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_returning_cdemo_sk, WR_RETURNING_CDEMO_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_returning_hdemo_sk, WR_RETURNING_HDEMO_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_returning_addr_sk, WR_RETURNING_ADDR_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_web_page_sk, WR_WEB_PAGE_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_reason_sk, WR_REASON_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_order_number, WR_ORDER_NUMBER);
+    CSV_WRITER_REGISTER_RETURN_PRICING_FIELDS(writerReturns, wr, wr_pricing, WR);
+    CSV_WRITER_REGISTER_FIELD_DECIMAL(writerReturns, "wr_account_credit", wr_pricing.store_credit, WR_PRICING_STORE_CREDIT);
+    CSV_WRITER_REGISTER_FIELD_DECIMAL(writerReturns, "wr_net_loss", wr_pricing.net_loss, WR_PRICING_NET_LOSS);
+
     TVector<W_WEB_SALES_TBL> webSalesList;
     TVector<W_WEB_RETURNS_TBL> webReturnsList;
     webReturnsList.reserve(ctxs.front().GetCount() * 16);
@@ -116,50 +160,13 @@ void TTpcDSGeneratorWebSales::GenerateRows(TContexts& ctxs) {
         int nLineitems;
         genrand_integer(&nLineitems, DIST_UNIFORM, 8, 16, 9, WS_ORDER_NUMBER);
         for (int j = 0; j < nLineitems; j++) {
-            generator.MakeDetail(webSalesList, webReturnsList);
+            generator.MakeDetail(webSalesList, webReturnsList, writerSales, writerReturns);
         }
         tpcds_row_stop(TableNum);
     }
-    TCsvItemWriter<W_WEB_SALES_TBL> writerSales(ctxs.front().GetCsv().Out);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_item_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_order_number);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_sold_date_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_sold_time_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_ship_date_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_bill_customer_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_bill_cdemo_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_bill_hdemo_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_bill_addr_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_ship_customer_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_ship_cdemo_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_ship_hdemo_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_ship_addr_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_web_page_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_web_site_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_ship_mode_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_warehouse_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, ws_promo_sk);
-    CSV_WRITER_REGISTER_PRICING_FIELDS(writerSales, ws, ws_pricing);
+    g.Release();
+
     writerSales.Write(webSalesList);
-
-    TCsvItemWriter<W_WEB_RETURNS_TBL> writerReturns(ctxs[1].GetCsv().Out);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_item_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_order_number);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_returned_date_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_returned_time_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_refunded_customer_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_refunded_cdemo_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_refunded_hdemo_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_refunded_addr_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_returning_customer_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_returning_cdemo_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_returning_hdemo_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_returning_addr_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_web_page_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerReturns, wr_reason_sk);
-    CSV_WRITER_REGISTER_RETURN_PRICING_FIELDS(writerReturns, wr, wr_pricing);
-    CSV_WRITER_REGISTER_FIELD_DECIMAL(writerReturns, "wr_account_credit", wr_pricing.store_credit);
-
     writerReturns.Write(webReturnsList);
 };
 

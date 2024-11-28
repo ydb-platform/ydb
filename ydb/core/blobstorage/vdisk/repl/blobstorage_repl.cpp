@@ -156,7 +156,7 @@ namespace NKikimr {
         };
 
         std::shared_ptr<TReplCtx> ReplCtx;
-        ui32 NextMinREALHugeBlobInBytes;
+        ui32 NextMinHugeBlobInBytes;
         THistory History;
         EState State;
         TInstant LastReplStart;
@@ -175,6 +175,8 @@ namespace NKikimr {
         TEvResumeForce *ResumeForceToken = nullptr;
         TInstant ReplicationEndTime;
         bool UnrecoveredNonphantomBlobs = false;
+        bool RequestedReplicationToken = false;
+        bool HoldingReplicationToken = false;
 
         TWatchdogTimer<TEvReplCheckProgress> ReplProgressWatchdog;
 
@@ -255,7 +257,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvMinHugeBlobSizeUpdate::TPtr ev) {
-            NextMinREALHugeBlobInBytes = ev->Get()->MinREALHugeBlobInBytes;
+            NextMinHugeBlobInBytes = ev->Get()->MinHugeBlobInBytes;
         }
 
         void StartReplication() {
@@ -268,8 +270,8 @@ namespace NKikimr {
             ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
             ReplCtx->MonGroup.ReplItemsRemaining() = 0;
             ReplCtx->MonGroup.ReplItemsDone() = 0;
-            Y_ABORT_UNLESS(NextMinREALHugeBlobInBytes);
-            ReplCtx->MinREALHugeBlobInBytes = NextMinREALHugeBlobInBytes;
+            Y_ABORT_UNLESS(NextMinHugeBlobInBytes);
+            ReplCtx->MinHugeBlobInBytes = NextMinHugeBlobInBytes;
             UnrecoveredNonphantomBlobs = false;
 
             Become(&TThis::StateRepl);
@@ -288,6 +290,12 @@ namespace NKikimr {
                 case Plan:
                     // this is a first quantum of replication, so we have to register it in the broker
                     State = AwaitToken;
+                    Y_DEBUG_ABORT_UNLESS(!RequestedReplicationToken);
+                    if (RequestedReplicationToken) {
+                        STLOG(PRI_CRIT, BS_REPL, BSVR38, ReplCtx->VCtx->VDiskLogPrefix << "excessive replication token requested");
+                        break;
+                    }
+                    RequestedReplicationToken = true;
                     if (!Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(ReplCtx->VDiskCfg->BaseInfo.PDiskId))) {
                         HandleReplToken();
                     }
@@ -304,6 +312,10 @@ namespace NKikimr {
         }
 
         void HandleReplToken() {
+            Y_ABORT_UNLESS(RequestedReplicationToken);
+            RequestedReplicationToken = false;
+            HoldingReplicationToken = true;
+
             // switch to replication state
             Transition(AwaitToken, Replication);
             if (!ResumeIfReady()) {
@@ -410,6 +422,9 @@ namespace NKikimr {
                 if (State == WaitQueues || State == Replication) {
                     // release token as we have finished replicating
                     Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+                    Y_DEBUG_ABORT_UNLESS(!RequestedReplicationToken);
+                    Y_DEBUG_ABORT_UNLESS(HoldingReplicationToken);
+                    HoldingReplicationToken = false;
                 }
                 ResetReplProgressTimer(true);
 
@@ -638,7 +653,15 @@ namespace NKikimr {
 
             // return replication token if we have one
             if (State == AwaitToken || State == WaitQueues || State == Replication) {
-                Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+                Y_DEBUG_ABORT_UNLESS(RequestedReplicationToken || HoldingReplicationToken);
+                if (RequestedReplicationToken || HoldingReplicationToken) {
+                    Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+                }
+            } else {
+                Y_DEBUG_ABORT_UNLESS(!RequestedReplicationToken && !HoldingReplicationToken);
+                if (RequestedReplicationToken || HoldingReplicationToken) {
+                    STLOG(PRI_CRIT, BS_REPL, BSVR37, ReplCtx->VCtx->VDiskLogPrefix << "stuck replication token");
+                }
             }
 
             if (ReplJobActorId) {
@@ -674,7 +697,7 @@ namespace NKikimr {
         TReplScheduler(std::shared_ptr<TReplCtx> &replCtx)
             : TActorBootstrapped<TReplScheduler>()
             , ReplCtx(replCtx)
-            , NextMinREALHugeBlobInBytes(ReplCtx->MinREALHugeBlobInBytes)
+            , NextMinHugeBlobInBytes(ReplCtx->MinHugeBlobInBytes)
             , History(HistorySize)
             , State(Relaxation)
             , ReplProgressWatchdog(

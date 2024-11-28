@@ -41,13 +41,13 @@ table_output = create_table_output()
 def parse_vdisk_storage_efficiency(host, node_id, pdisk_id, vslot_id):
     idx_size, inplace_size, huge_size, comp_idx_size, comp_inplace_size, comp_huge_size = 0, 0, 0, 0, 0, 0
     items, comp_items = 0, 0
-    page = 'actors/vdisks/vdisk%09u_%09u' % (pdisk_id, vslot_id)
+    page = 'node/%d/actors/vdisks/vdisk%09u_%09u' % (node_id, pdisk_id, vslot_id)
     size_col = 'Idx / Inplaced / Huge Size'
     items_col = 'Items / WInplData / WHugeData'
     usage_col = 'Idx% / IdxB% / InplB% / HugeB%'
     count_items = True
     try:
-        data = common.fetch(page, {}, host, fmt='raw').decode('utf-8')
+        data = common.fetch(page, {}, fmt='raw').decode('utf-8')
         for t in re.finditer(r'<thead><tr>(.*?)</tr></thead><tbody>(.*?)</tbody>', data, re.S):
             cols = [m.group(1) for m in re.finditer('<th>(.*?)</th>', t.group(1))]
             if size_col not in cols or usage_col not in cols or items_col not in cols:
@@ -111,7 +111,7 @@ def parse_vdisk_storage_efficiency(host, node_id, pdisk_id, vslot_id):
                 huge_waste_bytes += num_chunks * (chunk_size - slot_size * num_slots_per_chunk)
                 huge_defrag_bytes += (used_slot_count[slot_size, num_slots_per_chunk] + num_slots_per_chunk - 1) // num_slots_per_chunk * chunk_size
     except Exception as e:
-        print('Failed to process VDisk %s: %s' % (page, e))
+        print('Failed to process VDisk %s from node %d: %s' % (page, node_id, e))
         return None
     return idx_size, inplace_size, huge_size, comp_idx_size, comp_inplace_size, comp_huge_size, items, comp_items, \
         huge_useful_bytes, huge_unused_bytes, huge_waste_bytes, huge_defrag_bytes

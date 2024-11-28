@@ -299,6 +299,10 @@ public:
         return it->second;
     }
 
+    bool WasNotOkResponses() {
+        return AtLeastOneResponseWasNotOk;
+    }
+
 protected:
     void RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults, const TBlobStorageGroupInfo::TGroupVDisks& expired,
         bool accelerate);

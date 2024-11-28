@@ -5,13 +5,15 @@
 
 #include "changes/actualization/controller/controller.h"
 #include "scheme/tier_info.h"
-#include "storage/granule.h"
-#include "storage/storage.h"
+#include "storage/granule/granule.h"
+#include "storage/granule/storage.h"
 
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
+#include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 
 namespace NKikimr::NArrow {
 struct TSortDescription;
@@ -29,6 +31,10 @@ class TCleanupTablesColumnEngineChanges;
 namespace NDataSharing {
 class TDestinationSession;
 }
+namespace NEngineLoading {
+class TEngineShardingInfoReader;
+class TEngineCountersReader;
+}
 
 struct TReadMetadata;
 
@@ -45,11 +51,14 @@ class TColumnEngineForLogs: public IColumnEngine {
     friend class TCleanupPortionsColumnEngineChanges;
     friend class TCleanupTablesColumnEngineChanges;
     friend class NDataSharing::TDestinationSession;
+    friend class NEngineLoading::TEngineShardingInfoReader;
+    friend class NEngineLoading::TEngineCountersReader;
 
 private:
     bool ActualizationStarted = false;
     const NColumnShard::TEngineLogsCounters SignalCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
+    std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::shared_ptr<IStoragesManager> StoragesManager;
 
     std::shared_ptr<NActualizer::TController> ActualizationController;
@@ -81,10 +90,10 @@ public:
         ADD,
     };
 
-    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot,
-        const NKikimrSchemeOp::TColumnTableSchema& schema);
-    TColumnEngineForLogs(
-        ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema);
+    TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const TSchemaInitializationData& schema);
+    TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema);
 
     virtual void OnTieringModified(
         const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;
@@ -104,15 +113,28 @@ public:
     }
 
     virtual void DoRegisterTable(const ui64 pathId) override;
+    void DoFetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const override {
+        GranulesStorage->FetchDataAccessors(request);
+    }
+
+    bool TestingLoadColumns(IDbWrapper& db);
+    bool LoadCounters(IDbWrapper& db);
 
 public:
-    bool Load(IDbWrapper& db) override;
+    virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;
+    bool FinishLoading();
+    bool StartActualization(const THashMap<ui64, TTiering>& specialPathEviction);
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const override {
         return limit < TGranulesStat::GetSumMetadataMemoryPortionsSize();
     }
 
+    virtual std::vector<TCSMetadataRequest> CollectMetadataRequests() const override {
+        return GranulesStorage->CollectMetadataRequests();
+    }
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept override;
+    ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<ui64>& pathIds,
+        const std::optional<ui64> waitingPriority) noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<ui64>& pathsToDrop,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
@@ -128,7 +150,8 @@ public:
         IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
 
     void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) override;
-    void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) override;
+    void RegisterSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) override;
+    void RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) override;
 
     std::shared_ptr<TSelectInfo> Select(
         ui64 pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const override;
@@ -179,19 +202,32 @@ public:
         return TabletId;
     }
 
-    void AddCleanupPortion(const TPortionInfo& info) {
-        CleanupPortions[info.GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
+    void AddCleanupPortion(const TPortionInfo::TConstPtr& info) {
+        AFL_VERIFY(info->HasRemoveSnapshot());
+        CleanupPortions[info->GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
     }
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
         VersionedIndex.AddShardingInfo(shardingInfo);
     }
-    void UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo = nullptr);
+
+    bool TestingLoad(IDbWrapper& db);
+
+    template <class TModifier>
+    void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
+        auto exPortion = portion->MakeCopy();
+        AFL_VERIFY(portion);
+        auto granule = GetGranulePtrVerified(portion->GetPathId());
+        granule->ModifyPortionOnComplete(portion, modifier);
+        UpdatePortionStats(*portion, EStatsUpdateType::DEFAULT, &exPortion);
+    }
+
+    void AppendPortion(const TPortionDataAccessor& portionInfo, const bool addAsAccessor = true);
 
 private:
     TVersionedIndex VersionedIndex;
     ui64 TabletId;
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats;   // per path_id stats sorted by path_id
-    std::map<TInstant, std::vector<TPortionInfo>> CleanupPortions;
+    std::map<TInstant, std::vector<TPortionInfo::TConstPtr>> CleanupPortions;
     TColumnEngineStats Counters;
     ui64 LastPortion;
     ui64 LastGranule;
@@ -199,10 +235,6 @@ private:
     bool Loaded = false;
 
 private:
-    bool LoadColumns(IDbWrapper& db);
-    bool LoadShardingInfo(IDbWrapper& db);
-    bool LoadCounters(IDbWrapper& db);
-
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
     void UpdatePortionStats(
         const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT, const TPortionInfo* exPortionInfo = nullptr);

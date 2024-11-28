@@ -1,8 +1,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <util/system/env.h>
 
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         keys.EndList();
         auto selectResult = db.ReadRows("/Root/WrongTable", keys.Build()).GetValueSync();
         UNIT_ASSERT_C(!selectResult.IsSuccess(), selectResult.GetIssues().ToString());
-        UNIT_ASSERT_C(selectResult.GetIssues().ToString().Size(), "Expect non-empty issue in case of error");
+        UNIT_ASSERT_C(selectResult.GetIssues().ToString().size(), "Expect non-empty issue in case of error");
         UNIT_ASSERT_EQUAL(selectResult.GetStatus(), EStatus::SCHEME_ERROR);
         auto res = FormatResultSetYson(selectResult.GetResultSet());
         CompareYson("[]", res);
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
         auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
         UNIT_ASSERT_C(!selectResult.IsSuccess(), selectResult.GetIssues().ToString());
-        UNIT_ASSERT_C(selectResult.GetIssues().ToString().Size(), "Expect non-empty issues in case of error");
+        UNIT_ASSERT_C(selectResult.GetIssues().ToString().size(), "Expect non-empty issues in case of error");
     }
 
     Y_UNIT_TEST(ReadRows_SpecificReturnValue) {

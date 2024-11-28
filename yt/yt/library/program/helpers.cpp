@@ -123,12 +123,7 @@ private:
 
     i64 GetAnonymousMemoryLimit() const
     {
-        auto resourceTracker = NProfiling::GetResourceTracker();
-        if (!resourceTracker) {
-            return 0;
-        }
-
-        return resourceTracker->GetAnonymousMemoryLimit();
+        return NProfiling::TResourceTracker::GetAnonymousMemoryLimit();
     }
 
     TAllocatorMemoryLimit ProposeHeapMemoryLimit(i64 totalMemory, const TTCMallocConfigPtr& config) const
@@ -251,9 +246,9 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
     }
 
     if (config->EnableResourceTracker) {
-        NProfiling::EnableResourceTracker();
+        NProfiling::TResourceTracker::Enable();
         if (config->ResourceTrackerVCpuFactor.has_value()) {
-            NProfiling::SetVCpuFactor(config->ResourceTrackerVCpuFactor.value());
+            NProfiling::TResourceTracker::SetVCpuFactor(config->ResourceTrackerVCpuFactor.value());
         }
     }
 

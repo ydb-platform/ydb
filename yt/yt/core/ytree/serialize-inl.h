@@ -344,6 +344,14 @@ void Serialize(T value, NYson::IYsonConsumer* consumer)
     }
 }
 
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void Serialize(T value, NYson::IYsonConsumer* consumer)
+{
+    static_assert(CanFitSubtype<i64, std::underlying_type_t<T>>());
+    consumer->OnInt64Scalar(static_cast<i64>(value));
+}
+
 // std::optional
 template <class T>
 void Serialize(const std::optional<T>& value, NYson::IYsonConsumer* consumer)
@@ -525,6 +533,23 @@ void Deserialize(T& value, INodePtr node)
                 THROW_ERROR_EXCEPTION("Cannot deserialize enum from %Qlv node",
                     node->GetType());
         }
+    }
+}
+
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void Deserialize(T& value, INodePtr node)
+{
+    switch (node->GetType()) {
+        case ENodeType::Int64: {
+            // TODO: CheckedEnumCast via __PRETTY_FUNCTION__?
+            i64 serialized = node->AsInt64()->GetValue();
+            value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>(serialized));
+            break;
+        }
+        default:
+            THROW_ERROR_EXCEPTION("Cannot deserialize enum from %Qlv node",
+                node->GetType());
     }
 }
 

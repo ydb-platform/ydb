@@ -1,0 +1,4 @@
+requirements:
+- certifi # because of ca bundle
+- backports-abc
+- singledispatch

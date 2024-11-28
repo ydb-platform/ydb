@@ -1,8 +1,8 @@
 #include "yql_yt_native_folders.h"
 
 #include <yt/cpp/mapreduce/interface/error_codes.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
 
 namespace NYql::NNative {
@@ -202,7 +202,7 @@ IYtGateway::TBatchFolderResult ExecGetFolder(const TExecContext<IYtGateway::TBat
                     folderItems.reserve(nodeList.size());
                     for (const auto& node : nodeList) {
                         TStringBuilder path;
-                        if (!folder.Prefix.Empty()) {
+                        if (!folder.Prefix.empty()) {
                             path << folder.Prefix << "/";
                         }
                         path << node.AsString();

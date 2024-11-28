@@ -31,7 +31,7 @@ private:
     TString TxId_;
 
     bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
-    TVector<TPrecommitTransactionCallback> PrecommitCallbacks;
+    mutable TVector<TPrecommitTransactionCallback> PrecommitCallbacks;
 };
 
 }

@@ -576,7 +576,9 @@ class TCdcChangeSenderMain
 
         PartitionToShard.clear();
         for (const auto& partition : pqDesc.GetPartitions()) {
-            PartitionToShard.emplace(partition.GetPartitionId(), partition.GetTabletId());
+            if (NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {
+                PartitionToShard.emplace(partition.GetPartitionId(), partition.GetTabletId());
+            }
         }
 
         const bool topicAutoPartitioning = IsTopicAutoPartitioningEnabled(pqConfig.GetPartitionStrategy().GetPartitionStrategyType());

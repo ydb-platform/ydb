@@ -8,6 +8,7 @@ RECURSE(
     clickbench
     cms
     compatibility
+    config
     dynumber
     encryption
     hive
@@ -29,6 +30,7 @@ RECURSE(
     serverless
     sqs
     suite_tests
+    tpc
     tenants
     ttl
     wardens

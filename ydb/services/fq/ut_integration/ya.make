@@ -21,7 +21,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/udfs/common/clickhouse/client
-    ydb/library/yql/utils
+    yql/essentials/utils/network
     ydb/public/lib/fq
     ydb/services/ydb
 )

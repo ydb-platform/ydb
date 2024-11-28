@@ -4,9 +4,9 @@
 
 #include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/generic/xrange.h>
 #include <util/generic/algorithm.h>
@@ -54,7 +54,7 @@ bool THorizontalJoinBase::IsGoodForHorizontalJoin(TYtMap map) const {
     }
 
     // Map has output limit or is sharded MapJoin
-    if (NYql::HasAnySetting(map.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::Sharded | EYtSettingType::JobCount)) {
+    if (NYql::HasAnySetting(map.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::Sharded | EYtSettingType::JobCount | EYtSettingType::BlockInputApplied)) {
         return false;
     }
 
@@ -665,7 +665,7 @@ TExprNode::TPtr THorizontalJoinOptimizer::HandleList(const TExprNode::TPtr& node
 
             TExprNode::TPtr updatedLambda = map.Mapper().Ptr();
             if (MaxJobMemoryLimit) {
-                auto status = UpdateTableContentMemoryUsage(map.Mapper().Ptr(), updatedLambda, State_, ctx);
+                auto status = UpdateTableContentMemoryUsage(map.Mapper().Ptr(), updatedLambda, State_, ctx, false);
                 if (status.Level != IGraphTransformer::TStatus::Ok) {
                     return {};
                 }
@@ -1346,7 +1346,7 @@ bool TMultiHorizontalJoinOptimizer::HandleGroup(const TVector<TYtMap>& maps, TEx
 
         TExprNode::TPtr updatedLambda = map.Mapper().Ptr();
         if (MaxJobMemoryLimit) {
-            if (UpdateTableContentMemoryUsage(map.Mapper().Ptr(), updatedLambda, State_, ctx).Level != IGraphTransformer::TStatus::Ok) {
+            if (UpdateTableContentMemoryUsage(map.Mapper().Ptr(), updatedLambda, State_, ctx, false).Level != IGraphTransformer::TStatus::Ok) {
                 return false;
             }
         }
@@ -1734,7 +1734,7 @@ bool TOutHorizontalJoinOptimizer::HandleGroup(TPositionHandle pos, const TGroupK
 
         TExprNode::TPtr updatedLambda = map.Mapper().Ptr();
         if (MaxJobMemoryLimit) {
-            if (UpdateTableContentMemoryUsage(map.Mapper().Ptr(), updatedLambda, State_, ctx).Level != IGraphTransformer::TStatus::Ok) {
+            if (UpdateTableContentMemoryUsage(map.Mapper().Ptr(), updatedLambda, State_, ctx, false).Level != IGraphTransformer::TStatus::Ok) {
                 return false;
             }
         }

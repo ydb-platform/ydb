@@ -4,6 +4,7 @@ PEERDIR(
     ydb/library/actors/wilson
     library/cpp/deprecated/atomic
     library/cpp/lwtrace
+    ydb/core/base
     ydb/core/protos
 )
 

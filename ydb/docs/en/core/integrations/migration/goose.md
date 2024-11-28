@@ -167,7 +167,7 @@ Status `Pending` changed to timestamp `Fri Jan 12 11:55:18 2024` - this means th
 
 There are alternative options to see the applied changes:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Using {{ ydb-short-name }} UI on `http://localhost:8765`
 
@@ -261,7 +261,7 @@ Both migration are fully applied.
 
 Let's use the same methods to see the new changes:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Using {{ ydb-short-name }} UI on `http://localhost:8765`
 
@@ -327,7 +327,7 @@ Status `Fri Jan 12 12:04:56 2024` changed to `Pending` - this means that the lat
 
 Let's check the changes again:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Using {{ ydb-short-name }} UI on `http://localhost:8765`
 

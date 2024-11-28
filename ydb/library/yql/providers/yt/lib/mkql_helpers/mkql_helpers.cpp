@@ -1,10 +1,10 @@
 #include "mkql_helpers.h"
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 
 #include <util/generic/strbuf.h>
 #include <util/generic/utility.h>

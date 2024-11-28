@@ -1,6 +1,6 @@
 #include "protobuf_options.h"
 
-#include <util/generic/variant.h>
+#include <variant>
 
 namespace NYT::NFormats {
 
@@ -95,7 +95,7 @@ TOneofOption OneofFlagToOption(EWrapperOneofFlag::Enum flag)
     Y_ABORT();
 }
 
-TString OptionToFieldFlagName(TFieldOption option)
+TProtobufString OptionToFieldFlagName(TFieldOption option)
 {
     using EFlag = EWrapperFieldFlag;
     struct TVisitor
@@ -165,7 +165,7 @@ TString OptionToFieldFlagName(TFieldOption option)
     return EWrapperFieldFlag_Enum_Name(std::visit(TVisitor(), option));
 }
 
-TString OptionToMessageFlagName(TMessageOption option)
+TProtobufString OptionToMessageFlagName(TMessageOption option)
 {
     using EFlag = EWrapperMessageFlag;
     struct TVisitor
@@ -185,7 +185,7 @@ TString OptionToMessageFlagName(TMessageOption option)
     return EWrapperMessageFlag_Enum_Name(std::visit(TVisitor(), option));
 }
 
-TString OptionToOneofFlagName(TOneofOption option)
+TProtobufString OptionToOneofFlagName(TOneofOption option)
 {
     using EFlag = EWrapperOneofFlag;
     struct TVisitor
@@ -430,12 +430,12 @@ TProtobufOneofOptions GetOneofOptions(
     auto variantFieldName = oneofDescriptor->options().GetExtension(variant_field_name);
     switch (options.Mode) {
         case EProtobufOneofMode::SeparateFields:
-            if (variantFieldName) {
+            if (!variantFieldName.empty()) {
                 ythrow yexception() << "\"variant_field_name\" requires (NYT.oneof_flags) = VARIANT";
             }
             break;
         case EProtobufOneofMode::Variant:
-            if (variantFieldName) {
+            if (!variantFieldName.empty()) {
                 options.VariantFieldName = variantFieldName;
             } else {
                 options.VariantFieldName = oneofDescriptor->name();
@@ -462,13 +462,13 @@ TString GetColumnName(const FieldDescriptor* field)
     const auto& options = field->options();
     const auto columnName = options.GetExtension(column_name);
     if (!columnName.empty()) {
-        return columnName;
+        return TString(columnName);
     }
     const auto keyColumnName = options.GetExtension(key_column_name);
     if (!keyColumnName.empty()) {
-        return keyColumnName;
+        return TString(keyColumnName);
     }
-    return field->name();
+    return TString(field->name());
 }
 
 void ValidateProtobufType(const FieldDescriptor* fieldDescriptor, ESpecialProtobufType protobufType)

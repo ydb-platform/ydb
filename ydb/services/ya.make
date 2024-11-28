@@ -2,6 +2,7 @@ RECURSE(
     auth
     backup
     bg_tasks
+    bsconfig
     cms
     datastreams
     deprecated/persqueue_v0
@@ -21,6 +22,7 @@ RECURSE(
     rate_limiter
     replication
     tablet
+    view
     ydb
     ymq
 )

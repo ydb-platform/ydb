@@ -6,7 +6,7 @@
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/reader/result_builder.h>
 
-#include <ydb/library/binary_json/write.h>
+#include <yql/essentials/types/binary_json/write.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/printf.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
@@ -222,10 +222,11 @@ struct TDataRow {
         NKikimr::TDbTupleRef value = ToDbTupleRef();
         std::vector<TCell> cells(value.Cells().data(), value.Cells().data() + value.Cells().size());
 
-        auto binaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(JsonDocument.data(), JsonDocument.size()));
-        UNIT_ASSERT(binaryJson.Defined());
+        auto maybeBinaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(JsonDocument.data(), JsonDocument.size()));
+        UNIT_ASSERT(std::holds_alternative<NBinaryJson::TBinaryJson>(maybeBinaryJson));
 
-        cells[19] = TCell(binaryJson->Data(), binaryJson->Size());
+        const auto& binaryJson = std::get<NBinaryJson::TBinaryJson>(maybeBinaryJson);
+        cells[19] = TCell(binaryJson.Data(), binaryJson.Size());
         return TOwnedCellVec(cells);
     }
 };
@@ -454,7 +455,7 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
     TString err;
     NArrow::TArrowBatchBuilder batchBuilder;
     batchBuilder.Start(TDataRow::MakeYdbSchema(), 0, 0, err);
-    UNIT_ASSERT_C(err.Empty(), err);
+    UNIT_ASSERT_C(err.empty(), err);
 
     for (const TDataRow& row : rows) {
         NKikimr::TDbTupleRef key;

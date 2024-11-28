@@ -1,11 +1,10 @@
 #include "adapters.h"
-#include "private.h"
 
+#include "private.h"
+#include "schema.h"
 #include "row_batch.h"
 
 #include <yt/yt/client/api/table_writer.h>
-
-#include <yt/yt/client/table_client/schema.h>
 
 #include <yt/yt/core/concurrency/scheduler.h>
 #include <yt/yt/core/concurrency/throughput_throttler.h>
@@ -213,7 +212,9 @@ void PipeReaderToWriterByBatches(
                 continue;
             }
 
-            if (!batch->IsEmpty() && pipeDelay != TDuration::Zero()) {
+            auto rowsRead = batch->GetRowCount();
+
+            if (pipeDelay != TDuration::Zero()) {
                 TDelayedExecutor::WaitForDuration(pipeDelay);
             }
 
@@ -229,6 +230,7 @@ void PipeReaderToWriterByBatches(
             }
 
             if (optionsUpdater) {
+                options.MaxRowsPerRead = rowsRead;
                 optionsUpdater(&options, timer.GetElapsedTime());
             }
         }

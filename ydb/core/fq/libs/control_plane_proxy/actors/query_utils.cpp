@@ -46,10 +46,10 @@ TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& c
     auto withOptions = std::unordered_map<TString, TString>{};
     withOptions.insert({"DATA_SOURCE", TStringBuilder{} << '"' << connectionName << '"'});
     withOptions.insert({"LOCATION", EncloseAndEscapeString(subset.path_pattern(), '"')});
-    if (!subset.format().Empty()) {
+    if (!subset.format().empty()) {
         withOptions.insert({"FORMAT", EncloseAndEscapeString(subset.format(), '"')});
     }
-    if (!subset.compression().Empty()) {
+    if (!subset.compression().empty()) {
         withOptions.insert(
             {"COMPRESSION", EncloseAndEscapeString(subset.compression(), '"')});
     }
@@ -257,7 +257,6 @@ TString MakeCreateExternalDataSourceQuery(
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().greenplum_cluster().database_name(), '"'),
                 "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true",
                 "schema"_a =  gpschema ? ", SCHEMA=" + EncloseAndEscapeString(gpschema, '"') : TString{});
-
         }
         break;
         case FederatedQuery::ConnectionSetting::kMysqlCluster: {
@@ -271,7 +270,15 @@ TString MakeCreateExternalDataSourceQuery(
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().mysql_cluster().database_id(), '"'),
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().mysql_cluster().database_name(), '"'),
                 "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true");
-
+        }
+        case FederatedQuery::ConnectionSetting::kLogging: {
+            properties = fmt::format(
+                R"(
+                    SOURCE_TYPE="Logging",
+                    FOLDER_ID={folder_id}
+                )",
+                "folder_id"_a = EncloseAndEscapeString(connectionContent.setting().logging().folder_id(), '"'));
+            break;
         }
         break;
     }

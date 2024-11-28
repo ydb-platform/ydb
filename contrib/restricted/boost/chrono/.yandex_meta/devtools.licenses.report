@@ -1,0 +1,254 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     NCSA AND MIT         38e692f6c8ccfacfe3b038aeea770be4
+BELONGS ya.make
+    License text:
+        // This file is dual licensed under the MIT and the University of Illinois Open
+        // Source Licenses. See LICENSE.TXT for details.
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        include/boost/chrono/io/time_point_io.hpp [11:12]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/boost/chrono/io/time_point_io.hpp [11:12]
+
+KEEP     BSL-1.0              4c9557897114277994abc82dcb05944a
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or
+        // copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/chrono/typeof/boost/chrono/chrono.hpp [4:6]
+        include/boost/chrono/typeof/boost/ratio.hpp [4:6]
+
+KEEP     BSL-1.0              52079c0b53c8857e80de09aa3fcd4632
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost
+        // Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or
+        // copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/chrono.hpp [4:7]
+
+KEEP     NCSA AND MIT         72d4e9e6f06ffb6f0c77cb800c3ac442
+BELONGS ya.make
+    License text:
+        // This file is dual licensed under the MIT and the University of Illinois Open
+        // Source Licenses. See LICENSE.TXT for details.
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        include/boost/chrono/detail/scan_keyword.hpp [6:7]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/boost/chrono/detail/scan_keyword.hpp [6:7]
+
+KEEP     BSL-1.0              7526d5c5fd651b8d0d6103857fbf3a46
+BELONGS ya.make
+    License text:
+        //  Use, modification and distribution are subject to the Boost Software License,
+        //  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+        //  http://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/chrono/chrono_io.hpp [6:8]
+        include/boost/chrono/clock_string.hpp [3:5]
+        include/boost/chrono/include.hpp [5:7]
+        include/boost/chrono/io/duration_get.hpp [3:5]
+        include/boost/chrono/io/duration_io.hpp [3:5]
+        include/boost/chrono/io/duration_put.hpp [3:5]
+        include/boost/chrono/io/duration_style.hpp [3:5]
+        include/boost/chrono/io/duration_units.hpp [3:5]
+        include/boost/chrono/io/ios_base_state.hpp [2:4]
+        include/boost/chrono/io/time_point_get.hpp [3:5]
+        include/boost/chrono/io/time_point_put.hpp [3:5]
+        include/boost/chrono/io/time_point_units.hpp [4:6]
+        include/boost/chrono/io/timezone.hpp [3:5]
+        include/boost/chrono/io/utility/to_string.hpp [4:6]
+        include/boost/chrono/io_v1/chrono_io.hpp [6:8]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 9846f410e5ae3b7caf8d5be1ece846cf
+BELONGS ya.make
+    License text:
+        Distributed under the [Boost Software License, Version 1.0](http://boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README.md [8:8]
+
+KEEP     BSL-1.0              99b6858285788dea8099fc1db476bbc4
+BELONGS ya.make
+    License text:
+        Many thanks to Howard for making his code available under the Boost license.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/chrono/duration.hpp [13:13]
+        include/boost/chrono/system_clocks.hpp [13:13]
+        include/boost/chrono/time_point.hpp [13:13]
+
+KEEP     BSL-1.0              aa58ff9cdc0b0b6a3fedf7f97fd19c54
+BELONGS ya.make
+    License text:
+        //  Use, modification and distribution are subject to the Boost Software License,
+        //  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+        //  http://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/chrono/io/time_point_io.hpp [3:5]
+
+KEEP     BSL-1.0              d7f87ea2cced5bb8dd0a81e515f54c30
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost Software License, Version 1.0. (See accompanying
+        //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/chrono/ceil.hpp [6:7]
+        include/boost/chrono/config.hpp [7:8]
+        include/boost/chrono/floor.hpp [6:7]
+        include/boost/chrono/io/utility/ios_base_state_ptr.hpp [5:6]
+        include/boost/chrono/io/utility/manip_base.hpp [5:6]
+        include/boost/chrono/round.hpp [6:7]
+
+KEEP     BSL-1.0              da2a87ccf5ae416e33c8d6bfe78baa14
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost Software License, Version 1.0.
+        //  See http://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/chrono/chrono.hpp [5:6]
+        include/boost/chrono/detail/inlined/chrono.hpp [6:7]
+        include/boost/chrono/detail/inlined/mac/chrono.hpp [6:7]
+        include/boost/chrono/detail/inlined/mac/process_cpu_clocks.hpp [6:7]
+        include/boost/chrono/detail/inlined/mac/thread_clock.hpp [7:8]
+        include/boost/chrono/detail/inlined/posix/chrono.hpp [6:7]
+        include/boost/chrono/detail/inlined/posix/process_cpu_clocks.hpp [6:7]
+        include/boost/chrono/detail/inlined/posix/thread_clock.hpp [6:7]
+        include/boost/chrono/detail/inlined/process_cpu_clocks.hpp [5:6]
+        include/boost/chrono/detail/inlined/thread_clock.hpp [5:6]
+        include/boost/chrono/detail/inlined/win/chrono.hpp [6:7]
+        include/boost/chrono/detail/inlined/win/process_cpu_clocks.hpp [7:8]
+        include/boost/chrono/detail/inlined/win/thread_clock.hpp [5:6]
+        include/boost/chrono/detail/is_evenly_divisible_by.hpp [5:6]
+        include/boost/chrono/detail/no_warning/signed_unsigned_cmp.hpp [5:6]
+        include/boost/chrono/detail/scan_keyword.hpp [14:15]
+        include/boost/chrono/detail/static_assert.hpp [5:6]
+        include/boost/chrono/detail/system.hpp [3:4]
+        include/boost/chrono/duration.hpp [7:8]
+        include/boost/chrono/process_cpu_clocks.hpp [6:7]
+        include/boost/chrono/system_clocks.hpp [7:8]
+        include/boost/chrono/thread_clock.hpp [5:6]
+        include/boost/chrono/time_point.hpp [7:8]
+        src/chrono.cpp [6:7]
+        src/process_cpu_clocks.cpp [5:6]
+        src/thread_clock.cpp [5:6]
+
+KEEP     BSL-1.0              e9df2954141aa96551bf39192c39d2fe
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 94.44
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/chrono/detail/requires_cxx11.hpp [5:6]
+
+KEEP     BSL-1.0              ec84ef7d82db8f7839a7d4dc7fcbce41
+BELONGS ya.make
+    License text:
+        \### License
+        Distributed under the [Boost Software License, Version 1.0](http://boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 50.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [6:8]

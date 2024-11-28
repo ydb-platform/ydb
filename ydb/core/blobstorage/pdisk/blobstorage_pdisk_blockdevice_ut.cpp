@@ -9,12 +9,12 @@
 #include "blobstorage_pdisk_ut_helpers.h"
 
 #include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/util/random.h>
 
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
-#include <util/random/entropy.h>
 #include <util/string/printf.h>
 #include <util/system/condvar.h>
 #include <util/system/file.h>
@@ -139,19 +139,6 @@ private:
     TDuration WorkTime;
 };
 
-TString CreateFile(const char *baseDir, ui32 dataSize) {
-    TString databaseDirectory = MakeDatabasePath(baseDir);
-    MakeDirIfNotExist(databaseDirectory.c_str());
-    TString path = MakePDiskPath(baseDir);
-    {
-        TFile file(path.c_str(), OpenAlways | RdWr | Seq | Direct);
-        file.Resize(dataSize);
-        file.Close();
-    }
-    UNIT_ASSERT_EQUAL_C(NFs::Exists(path), true, "File " << path << " does not exist.");
-    return path;
-}
-
 void WaitForValue(TAtomic *counter, TDuration maxDuration, TAtomicBase expectedValue) {
     TInstant finishTime = TInstant::Now() + maxDuration;
     while (TInstant::Now() < finishTime) {
@@ -185,7 +172,8 @@ void RunWriteTestWithSectorMap(NSectorMap::EDiskMode diskMode, ui64 diskSize, ui
     TAlignedData writeData(bufferSize);
     TAlignedData readData(bufferSize);
     TSimpleTimer t;
-    EntropyPool().Read(writeData.Get(), writeData.Size());
+
+    SafeEntropyPoolRead(writeData.Get(), writeData.Size());
     Ctest << bufferSize / t.Get().SecondsFloat() / 1e9 << " GB/s" << Endl;
 
     for (ui64 offset : {ui64(0), NSectorMap::SECTOR_SIZE, 7 * NSectorMap::SECTOR_SIZE, diskSize - bufferSize}) {

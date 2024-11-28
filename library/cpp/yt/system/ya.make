@@ -7,4 +7,8 @@ SRCS(
     thread_id.cpp
 )
 
+PEERDIR(
+    library/cpp/yt/misc
+)
+
 END()

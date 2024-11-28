@@ -7,10 +7,11 @@
 
 #include <ydb/library/yql/providers/yt/common/yql_yt_settings.h>
 #include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/core/yql_execution.h>
-#include <ydb/library/yql/ast/yql_constraint.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_execution.h>
+#include <yql/essentials/ast/yql_constraint.h>
 
 #include <library/cpp/time_provider/monotonic.h>
 #include <library/cpp/yson/writer.h>
@@ -89,13 +90,18 @@ struct TYtState : public TThrRefBase {
     bool IsHybridEnabled() const;
     bool IsHybridEnabledForCluster(const std::string_view& cluster) const;
     bool HybridTakesTooLong() const;
+    
+    TYtState(TTypeAnnotationContext* types) {
+        Types = types;
+        Configuration = MakeIntrusive<TYtVersionedConfiguration>(*types);
+    }
 
     TString SessionId;
     IYtGateway::TPtr Gateway;
     TTypeAnnotationContext* Types = nullptr;
     TMaybe<std::pair<ui32, size_t>> LoadEpochMetadata; // Epoch being committed, settings versions
     THashMap<ui32, TSet<std::pair<TString, TString>>> EpochDependencies; // List of tables, which have to be updated after committing specific epoch
-    TYtVersionedConfiguration::TPtr Configuration = MakeIntrusive<TYtVersionedConfiguration>();
+    TYtVersionedConfiguration::TPtr Configuration;
     TYtTablesData::TPtr TablesData = MakeIntrusive<TYtTablesData>();
     THashMap<std::pair<TString, TString>, TString> AnonymousLabels; // cluster + label -> name
     std::unordered_map<ui64, TString> NodeHash; // unique id -> hash
@@ -113,7 +119,8 @@ struct TYtState : public TThrRefBase {
     std::unordered_set<ui32> HybridInFlightOprations;
     THashMap<ui64, TWalkFoldersImpl> WalkFoldersState;
     ui32 PlanLimits = 10;
-
+    i32 FlowDependsOnId = 0;
+    IOptimizerFactory::TPtr OptimizerFactory_;
 private:
     std::unordered_map<ui64, TYtVersionedConfiguration::TState> ConfigurationEvalStates_;
     std::unordered_map<ui64, ui32> EpochEvalStates_;
@@ -121,11 +128,13 @@ private:
 
 
 class TYtGatewayConfig;
-std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId, const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx);
+std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId,
+    const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+    const IOptimizerFactory::TPtr& optFactory);
 TIntrusivePtr<IDataProvider> CreateYtDataSource(TYtState::TPtr state);
 TIntrusivePtr<IDataProvider> CreateYtDataSink(TYtState::TPtr state);
 
-TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway, ui32 planLimits = 10);
+TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway, IOptimizerFactory::TPtr optFactory, ui32 planLimits = 10);
 
 const THashSet<TStringBuf>& YtDataSourceFunctions();
 const THashSet<TStringBuf>& YtDataSinkFunctions();

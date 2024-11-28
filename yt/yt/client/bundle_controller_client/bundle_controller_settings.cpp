@@ -73,6 +73,8 @@ void TInstanceSize::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("default_config", &TThis::DefaultConfig)
         .DefaultNew();
+    registrar.Parameter("host_tag_filter", &TThis::HostTagFilter)
+        .Optional();
 }
 
 void TBundleTargetConfig::Register(TRegistrar registrar)
@@ -107,6 +109,10 @@ void TBundleResourceQuota::Register(TRegistrar registrar)
         .Default(0);
 
     registrar.Parameter("memory", &TThis::Memory)
+        .GreaterThanOrEqual(0)
+        .Default(0);
+
+    registrar.Parameter("network", &TThis::Network)
         .GreaterThanOrEqual(0)
         .Default(0);
 }

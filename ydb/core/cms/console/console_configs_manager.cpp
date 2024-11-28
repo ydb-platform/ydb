@@ -9,7 +9,8 @@
 #include <ydb/core/cms/console/validators/registry.h>
 #include <ydb/core/base/feature_flags.h>
 
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <ydb/library/yaml_config/yaml_config.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #include <util/generic/bitmap.h>
 #include <util/random/random.h>
@@ -979,6 +980,7 @@ void TConfigsManager::HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest
     AuditLogReplaceConfigTransaction(
         /* peer = */ ev->Get()->Record.GetPeerName(),
         /* userSID = */ ev->Get()->Record.GetUserToken(),
+        /* sanitizedToken = */ TString(),
         /* oldConfig = */ YamlConfig,
         /* newConfig = */ ev->Get()->Record.GetRequest().config(),
         /* reason = */ "Unauthorized.",
@@ -989,6 +991,7 @@ void TConfigsManager::HandleUnauthorized(TEvConsole::TEvSetYamlConfigRequest::TP
     AuditLogReplaceConfigTransaction(
         /* peer = */ ev->Get()->Record.GetPeerName(),
         /* userSID = */ ev->Get()->Record.GetUserToken(),
+        /* sanitizedToken = */ TString(),
         /* oldConfig = */ YamlConfig,
         /* newConfig = */ ev->Get()->Record.GetRequest().config(),
         /* reason = */ "Unauthorized.",

@@ -7,7 +7,7 @@
 
 namespace NKikimr {
 
-struct TEvFileStore {
+namespace TEvFileStore {
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_FILESTORE),
 

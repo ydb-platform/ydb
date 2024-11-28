@@ -4,7 +4,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
@@ -20,7 +20,7 @@
 namespace NYql::NDq {
 class TDqAsyncIoFactory;
 
-const i64 PQRdReadDefaultFreeSpace = 16_MB;
+const i64 PQRdReadDefaultFreeSpace = 256_MB;
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,

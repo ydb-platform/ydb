@@ -80,7 +80,6 @@ YT_DEFINE_ERROR_ENUM(
     ((LocationDiskWaitingReplacement)        (751))
     ((ChunkMetaCacheFetchFailed)             (752))
     ((LocationMediumIsMisconfigured)         (753))
-    ((DiskIdsMismatched)                     (754))
     ((LocationDisabled)                      (755))
     ((DiskFailed)                            (756))
     ((DiskWaitingReplacement)                (757))
@@ -88,6 +87,14 @@ YT_DEFINE_ERROR_ENUM(
     ((DiskHealthCheckFailed)                 (759))
     ((TooManyChunksToFetch)                  (760))
     ((TotalMemoryLimitExceeded)              (761))
+    ((ForbiddenErasureCodec)                 (762))
+    ((ReadMetaTimeout)                       (763))
+);
+
+DEFINE_ENUM(EUpdateMode,
+    ((None)                     (0))
+    ((Append)                   (1))
+    ((Overwrite)                (2))
 );
 
 using TChunkId = NObjectClient::TObjectId;

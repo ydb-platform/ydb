@@ -1,0 +1,11 @@
+--- a/src/google/protobuf/compiler/csharp/names.cc	(index)
++++ b/src/google/protobuf/compiler/csharp/names.cc	(working tree)
+@@ -210,7 +210,7 @@ TProtoStringType UnderscoresToCamelCase(y_absl::string_view input,
+   if (result.size() > 0 && ('0' <= result[0] && result[0] <= '9')
+       && input.size() > 0 && input[0] == '_')
+   {
+-      result.insert(0, 1, '_');
++      result.insert(static_cast<size_t>(0), 1, '_');
+   }
+   return result;
+ }

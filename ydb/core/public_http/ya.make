@@ -23,7 +23,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/public_http/protos
     ydb/core/viewer/json
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/public/sdk/cpp/client/ydb_types
 
 )

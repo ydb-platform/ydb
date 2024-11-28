@@ -31,7 +31,7 @@ WHERE key IN $subquery;
 
 ## TableName {#tablename}
 
-Получить имя таблицы из пути к таблице. Путь можно получить через функцию [TablePath](#tablepath), или в виде колонки `Path` при использовании табличной функции {% if feature_map_reduce %}[FOLDER](../../../syntax/select/index.md#folder){% else %} `FOLDER`{% endif %}.
+Получить имя таблицы из пути к таблице. Путь можно получить через функцию [TablePath](#tablepath), или в виде колонки `Path` при использовании табличной функции {% if feature_mapreduce %}[FOLDER](../../../syntax/select/index.md#folder){% else %} `FOLDER`{% endif %}.
 
 ### Сигнатура
 

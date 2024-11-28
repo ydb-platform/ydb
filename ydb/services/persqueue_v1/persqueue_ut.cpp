@@ -1,4 +1,5 @@
 #include "actors/read_session_actor.h"
+#include "actors/helpers.h"
 #include <ydb/services/persqueue_v1/ut/pq_data_writer.h>
 #include <ydb/services/persqueue_v1/ut/api_test_setup.h>
 #include <ydb/services/persqueue_v1/ut/rate_limiter_test_setup.h>
@@ -43,6 +44,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
+#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 #include <thread>
 
 
@@ -74,7 +76,7 @@ TAutoPtr<IEventHandle> GetClassifierUpdate(TServer& server, const TActorId sende
 THolder<TTempFileHandle> CreateNetDataFile(const TString& content) {
     auto netDataFile = MakeHolder<TTempFileHandle>();
 
-    netDataFile->Write(content.Data(), content.Size());
+    netDataFile->Write(content.data(), content.size());
     netDataFile->FlushData();
 
     return netDataFile;
@@ -1167,7 +1169,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
     }
 
     Y_UNIT_TEST(DirectReadCleanCache) {
-        TPersQueueV1TestServer server;
+        TPersQueueV1TestServer server{{.NodeCount=1}};
         SET_LOCALS;
         TString topicPath{"/Root/PQ/rt3.dc1--acc--topic2"};
         server.Server->AnnoyingClient->CreateTopicNoLegacy(topicPath, 1);
@@ -3698,6 +3700,35 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
                 UNIT_ASSERT(equal);
             };
 
+            auto checkUserAgentCounters = [](
+                auto monPort,
+                const TString& sensor,
+                const TString& protocol,
+                const TString& userAgent,
+                const TString& topic,
+                const TString& consumer
+            ) {
+                auto counters = SendQuery(monPort, "/counters/counters=pqproxy/subsystem=userAgents/json");
+                const auto sensors = counters["sensors"].GetArray();
+                for (const auto& s : sensors) {
+                    const auto& labels = s["labels"];
+                    if (labels["sensor"].GetString() != sensor) {
+                        continue;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(labels["host"].GetString(), "");
+                    UNIT_ASSERT_VALUES_EQUAL(labels["protocol"].GetString(), protocol);
+                    if (!topic.empty()) {
+                        UNIT_ASSERT_VALUES_EQUAL(labels["topic"].GetString(), topic);
+                    } else if (!consumer.empty()) {
+                        UNIT_ASSERT_VALUES_EQUAL(labels["consumer"].GetString(), consumer);
+                    } else {
+                        UNIT_FAIL("Neither topic nor consumer were provided");
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(labels["user_agent"].GetString(), "test-client/v0.1");
+                    UNIT_ASSERT_VALUES_EQUAL(labels["user_agent"].GetString(), NGRpcProxy::V1::DropUserAgentSuffix(NGRpcProxy::V1::CleanupCounterValueString(userAgent)));
+                }
+            };
+
             auto settings = PQSettings(0, 1, "10");
             settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
 
@@ -3729,7 +3760,18 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
 
             auto driver = server.AnnoyingClient->GetDriver();
 
-            auto writer = CreateWriter(*driver, "account/topic1", "base64:AAAAaaaa____----12", 0, "raw");
+            static constexpr auto userAgent = "test-client/v0.1 ' ?*'\"`| (some build info (codename); os 1.0)";
+
+            auto writer = CreateWriter(
+                *driver,
+                NYdb::NPersQueue::TWriteSessionSettings()
+                    .Path("account/topic1")
+                    .MessageGroupId("base64:AAAAaaaa____----12")
+                    .PartitionGroupId(0)
+                    .Codec(NYdb::NPersQueue::ECodec::RAW)
+                    .Header({{NYdb::YDB_APPLICATION_NAME, userAgent}}),
+                nullptr
+            );
 
             auto msg = writer->GetEvent(true);
             UNIT_ASSERT(msg); // ReadyToAcceptEvent
@@ -3785,10 +3827,13 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
                           "", "cluster", "", ""
                           );
 
+            checkUserAgentCounters(monPort, "BytesWrittenByUserAgent", "pqv1", userAgent, "account/topic1", "");
+
             {
                 NYdb::NPersQueue::TReadSessionSettings settings;
                 settings.ConsumerName(originallyProvidedConsumerName)
-                    .AppendTopics(TString("account/topic1")).ReadOriginal({"dc1"});
+                    .AppendTopics(TString("account/topic1")).ReadOriginal({"dc1"})
+                    .Header({{NYdb::YDB_APPLICATION_NAME, userAgent}});
 
                 auto reader = CreateReader(*driver, settings);
 
@@ -3868,6 +3913,8 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
                               },
                               "", "Dc1", consumerName, consumerPath
                               );
+
+                checkUserAgentCounters(monPort, "BytesReadByUserAgent", "pqv1", userAgent, "", consumerPath);
             }
         };
 

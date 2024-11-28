@@ -615,7 +615,7 @@ void TQueueLeader::OnMessageSent(const TString& requestId, size_t index, const T
         answer->Statuses.swap(reqInfo.Statuses);
         ui64 bytesWritten = 0;
         for (auto& message : reqInfo.Event->Get()->Messages) {
-            bytesWritten += message.Body.Size();
+            bytesWritten += message.Body.size();
         }
 
         INC_COUNTER_COUPLE(Counters_, SendMessage_Count, sent_count_per_second);

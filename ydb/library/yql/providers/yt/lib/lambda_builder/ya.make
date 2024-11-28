@@ -7,11 +7,11 @@ SRCS(
 PEERDIR(
     library/cpp/random_provider
     library/cpp/time_provider
-    ydb/library/yql/ast
-    ydb/library/yql/minikql/computation
-    ydb/library/yql/public/udf
-    ydb/library/yql/utils
-    ydb/library/yql/providers/common/mkql
+    yql/essentials/ast
+    yql/essentials/minikql/computation
+    yql/essentials/public/udf
+    yql/essentials/utils
+    yql/essentials/providers/common/mkql
 )
 
 YQL_LAST_ABI_VERSION()

@@ -6,7 +6,7 @@
 
 #include <library/cpp/yt/threading/public.h>
 
-#include <library/cpp/yt/error/origin_attributes.h>
+#include <library/cpp/yt/error/mergeable_dictionary.h>
 
 #include <library/cpp/yt/yson/public.h>
 
@@ -141,15 +141,15 @@ public:
 
     bool HasAttributes() const noexcept;
 
-    const NYTree::IAttributeDictionary& Attributes() const;
-    NYTree::IAttributeDictionary* MutableAttributes();
+    const TErrorAttributes& Attributes() const;
+    TErrorAttributes* MutableAttributes();
 
     const std::vector<TError>& InnerErrors() const;
     std::vector<TError>* MutableInnerErrors();
 
     // Used for deserialization only.
     TOriginAttributes* MutableOriginAttributes() const noexcept;
-    void SetAttributes(NYTree::IAttributeDictionaryPtr attributes);
+    void UpdateOriginAttributes();
 
     TError Truncate(
         int maxInnerErrorCount = 2,
@@ -223,7 +223,8 @@ public:
     TError& operator <<= (TError&& innerError) &;
     TError& operator <<= (const std::vector<TError>& innerErrors) &;
     TError& operator <<= (std::vector<TError>&& innerErrors) &;
-    TError& operator <<= (const NYTree::IAttributeDictionary& attributes) &;
+    template <CMergeableDictionary TDictionary>
+    TError& operator <<= (const TDictionary& attributes) &;
 
     template <CErrorNestable TValue>
     TError&& operator << (TValue&& operand) &&;
@@ -244,6 +245,8 @@ private:
     explicit TErrorOr(std::unique_ptr<TImpl> impl);
 
     void MakeMutable();
+
+    friend class TErrorAttributes;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -75,7 +75,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.b > item.c And Exist(item.b) And item.a > item.b - 2 And item.a < item.b + 2"
+                                                "Predicate": "item.b > item.c AND Exist(item.b) AND item.a > item.b - 2 AND item.a < item.b + 2"
                                             }
                                         ],
                                         "PlanNodeId": 2,

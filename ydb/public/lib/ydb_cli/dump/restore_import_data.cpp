@@ -1,7 +1,9 @@
 #include "restore_import_data.h"
 
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
+#include <ydb/public/lib/ydb_cli/dump/util/log.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
+
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
 
@@ -377,19 +379,26 @@ class TKeyBuilder {
     }
 
 public:
-    explicit TKeyBuilder(const TVector<TColumn>& columns, const TVector<TString>& keyColumns)
+    explicit TKeyBuilder(
+            const TVector<TColumn>& columns,
+            const TVector<TString>& keyColumns,
+            const std::shared_ptr<TLog>& log)
         : Columns(columns)
         , KeyColumnIds(MakeKeyColumnIds(keyColumns))
+        , Log(log)
     {
     }
 
-    TKey Build(TStringBuf line) const {
+    TKey Build(const NPrivate::TLine& line) const {
         TMap<ui32, TValue> values;
 
-        const TStringBuf origLine = line;
+        TStringBuf buf = line;
         for (const auto& column : Columns) {
-            TStringBuf value = line.NextTok(',');
-            Y_ENSURE(value, "Empty token on line: " << origLine);
+            TStringBuf value = buf.NextTok(',');
+            if (!value) {
+                LOG_E("Empty token: " << line.GetLocation());
+                return {};
+            }
 
             auto it = KeyColumnIds.find(column.Name);
             if (it == KeyColumnIds.end()) {
@@ -411,6 +420,7 @@ public:
 private:
     const TVector<TColumn> Columns;
     const THashMap<TString, ui32> KeyColumnIds;
+    const std::shared_ptr<TLog> Log;
 
 }; // TKeyBuilder
 
@@ -444,7 +454,7 @@ public:
         return RecordsSizeCounter;
     }
 
-    bool Add(TKey&& key, TString&& record) {
+    bool Add(TKey&& key, NPrivate::TLine&& record) {
         auto ret = Rows.emplace(std::move(key), std::move(record));
         if (!ret.second) {
             return ret.second;
@@ -466,8 +476,8 @@ public:
         return ret;
     }
 
-    TString Serialize(ui64 maxSize) {
-        TStringBuilder result;
+    NPrivate::TBatch Serialize(ui64 maxSize) {
+        NPrivate::TBatch result;
 
         if (Empty()) {
             return result;
@@ -475,7 +485,7 @@ public:
 
         auto handle = Pop();
         do {
-            result << handle.mapped() << "\n";
+            result.Add(handle.mapped());
 
             if (Empty()) {
                 return result;
@@ -489,7 +499,7 @@ public:
     }
 
 private:
-    TMap<TKey, TString> Rows;
+    TMap<TKey, NPrivate::TLine> Rows;
     ui64 MemSizeCounter;
     ui64 RecordsSizeCounter;
 
@@ -551,7 +561,7 @@ class TTableRows {
         return it;
     }
 
-    static auto Add(TRows& emplaceTo, TKey&& key, TString&& record) {
+    static auto Add(TRows& emplaceTo, TKey&& key, NPrivate::TLine&& record) {
         auto it = FindPartition(emplaceTo, key);
         Y_ENSURE(it != emplaceTo.end());
 
@@ -595,7 +605,9 @@ public:
         return true;
     }
 
-    void Add(TKey&& key, TString&& record) {
+    void Add(TKey&& key, NPrivate::TLine&& record) {
+        Y_ENSURE(key);
+
         const ui64 recordSize = record.size();
         const ui64 memSize = key.MemSize() + recordSize;
 
@@ -661,7 +673,7 @@ public:
         return false;
     }
 
-    TString GetData(ui64 memLimit, ui64 batchSize, bool force = false)  {
+    NPrivate::TBatch GetData(ui64 memLimit, ui64 batchSize, bool force = false) {
         Y_ENSURE(HasData(memLimit, batchSize, force));
         Y_ENSURE(!ByMemSize.empty());
         Y_ENSURE(!ByRecordsSize.empty());
@@ -669,21 +681,21 @@ public:
         Y_ENSURE(!ByRecordsSize.begin()->second.empty());
 
         auto get = [this, batchSize](TRowsBy& from) {
-            auto it = from.begin()->second.begin();
-            auto& rows = (*it)->second;
+            auto it = *from.begin()->second.begin();
+            auto& rows = it->second;
 
-            RemoveFromSizeTracker(ByMemSize, rows.MemSize(), *it);
-            RemoveFromSizeTracker(ByRecordsSize, rows.RecordsSize(), *it);
+            RemoveFromSizeTracker(ByMemSize, rows.MemSize(), it);
+            RemoveFromSizeTracker(ByRecordsSize, rows.RecordsSize(), it);
 
             MemSize -= rows.MemSize();
             auto ret = rows.Serialize(batchSize);
             MemSize += rows.MemSize();
 
             if (rows.MemSize()) {
-                Y_ENSURE(ByMemSize[rows.MemSize()].insert(*it).second);
+                Y_ENSURE(ByMemSize[rows.MemSize()].insert(it).second);
             }
             if (rows.RecordsSize()) {
-                Y_ENSURE(ByRecordsSize[rows.RecordsSize()].insert(*it).second);
+                Y_ENSURE(ByRecordsSize[rows.RecordsSize()].insert(it).second);
             }
 
             return ret;
@@ -710,20 +722,25 @@ public:
     explicit TDataAccumulator(
             const TTableDescription& dumpedDesc,
             const TTableDescription& actualDesc,
-            const TRestoreSettings& settings)
-        : KeyBuilder(dumpedDesc.GetColumns(), dumpedDesc.GetPrimaryKeyColumns())
-        , Rows(actualDesc.GetKeyRanges())
+            const TRestoreSettings& settings,
+            const std::shared_ptr<TLog>& log)
+        : KeyBuilder(dumpedDesc.GetColumns(), dumpedDesc.GetPrimaryKeyColumns(), log)
         , MemLimit(settings.MemLimit_)
         , BatchSize(settings.BytesPerRequest_)
+        , Rows(actualDesc.GetKeyRanges())
     {
     }
 
-    bool Fits(const TString& line) const override {
+    EStatus Check(const NPrivate::TLine& line) const override {
         TGuard<TMutex> lock(Mutex);
-        return Rows.CanAdd(KeyBuilder.Build(line), line, MemLimit, BatchSize);
+        if (const auto key = KeyBuilder.Build(line)) {
+            return Rows.CanAdd(key, line, MemLimit, BatchSize) ? OK : FULL;
+        } else {
+            return ERROR;
+        }
     }
 
-    void Feed(TString&& line) override {
+    void Feed(NPrivate::TLine&& line) override {
         TGuard<TMutex> lock(Mutex);
         Rows.Add(KeyBuilder.Build(line), std::move(line));
     }
@@ -733,23 +750,31 @@ public:
         return Rows.HasData(MemLimit, BatchSize, force);
     }
 
-    TString GetData(bool force) override {
+    NPrivate::TBatch GetData(bool force) override {
         TGuard<TMutex> lock(Mutex);
         return Rows.GetData(MemLimit, BatchSize, force);
     }
 
-    void Reshard(const TVector<TKeyRange>& keyRanges) {
+    void Reshard(const TVector<TKeyRange>& keyRanges, const NPrivate::TBatch& data) {
         TGuard<TMutex> lock(Mutex);
         Rows.Reshard(keyRanges);
+
+        TStringInput input(data.GetData());
+        TString line;
+
+        ui64 idx = 0;
+        while (input.ReadLine(line)) {
+            auto l = NPrivate::TLine(std::move(line), data.GetLocation(idx++));
+            Rows.Add(KeyBuilder.Build(l), std::move(l));
+        }
     }
 
 private:
     const TKeyBuilder KeyBuilder;
-    TTableRows Rows;
-
     const ui64 MemLimit;
     const ui64 BatchSize;
 
+    TTableRows Rows;
     TMutex Mutex;
 
 }; // TDataAccumulator
@@ -766,7 +791,7 @@ class TDataWriter: public NPrivate::IDataWriter {
         return importDataSettings;
     }
 
-    bool Write(const TString& data) {
+    bool Write(const NPrivate::TBatch& data) {
         const ui32 maxRetries = 10;
         TDuration retrySleep = TDuration::MilliSeconds(500);
 
@@ -791,28 +816,22 @@ class TDataWriter: public NPrivate::IDataWriter {
             }
 
             if (retryNumber == maxRetries) {
+                LOG_E("There is no retries left, last result: " << importResult.GetIssues().ToOneLineString());
                 return false;
             }
 
             switch (importResult.GetStatus()) {
                 case EStatus::PRECONDITION_FAILED: {
-                    // table's partitioning has been changed
+                    LOG_D("Partitioning of " << Path.Quote() << " has been changed while importing: " << data.GetLocation());
                     TMaybe<TTableDescription> desc;
                     auto descResult = DescribeTable(TableClient, Path, desc);
                     if (!descResult.IsSuccess()) {
+                        LOG_E("Error describing table " << Path.Quote() << ": " << descResult.GetIssues().ToOneLineString());
                         return false;
                     }
 
-                    Accumulator->Reshard(desc->GetKeyRanges());
-
-                    TStringInput input(data);
-                    TString line;
-
-                    while (input.ReadLine(line)) {
-                        Accumulator->Feed(std::move(line));
-                    }
-
-                    break;
+                    Accumulator->Reshard(desc->GetKeyRanges(), data);
+                    return true;
                 }
 
                 case EStatus::ABORTED:
@@ -854,12 +873,14 @@ public:
             const TRestoreSettings& settings,
             TImportClient& importClient,
             TTableClient& tableClient,
-            NPrivate::IDataAccumulator* accumulator)
+            NPrivate::IDataAccumulator* accumulator,
+            const std::shared_ptr<TLog>& log)
         : Path(path)
         , Settings(MakeSettings(settings, desc))
         , ImportClient(importClient)
         , TableClient(tableClient)
         , Accumulator(dynamic_cast<TDataAccumulator*>(accumulator))
+        , Log(log)
         , RateLimiterSettings(settings.RateLimiterSettings_)
         , RequestLimiter(RateLimiterSettings.GetRps(), RateLimiterSettings.GetRps())
     {
@@ -869,8 +890,11 @@ public:
         TasksQueue->Start(settings.InFly_, settings.InFly_ + 1);
     }
 
-    bool Push(TString&& data) override {
-        Y_ENSURE(data.size() < TRestoreSettings::MaxBytesPerRequest, "Data is too long");
+    bool Push(NPrivate::TBatch&& data) override {
+        if (data.size() >= TRestoreSettings::MaxBytesPerRequest) {
+            LOG_E("Too much data: " << data.GetLocation());
+            return false;
+        }
 
         if (IsStopped()) {
             return false;
@@ -882,7 +906,7 @@ public:
             }
         };
 
-        return TasksQueue->AddFunc(func);
+        return TasksQueue->AddFunc(std::move(func));
     }
 
     void Wait() override {
@@ -895,6 +919,7 @@ private:
     TImportClient& ImportClient;
     TTableClient& TableClient;
     TDataAccumulator* Accumulator;
+    const std::shared_ptr<TLog> Log;
 
     const TRateLimiterSettings RateLimiterSettings;
 
@@ -911,8 +936,9 @@ private:
 NPrivate::IDataAccumulator* CreateImportDataAccumulator(
         const NTable::TTableDescription& dumpedDesc,
         const NTable::TTableDescription& actualDesc,
-        const TRestoreSettings& settings) {
-    return new TDataAccumulator(dumpedDesc, actualDesc, settings);
+        const TRestoreSettings& settings,
+        const std::shared_ptr<TLog>& log) {
+    return new TDataAccumulator(dumpedDesc, actualDesc, settings, log);
 }
 
 NPrivate::IDataWriter* CreateImportDataWriter(
@@ -921,8 +947,9 @@ NPrivate::IDataWriter* CreateImportDataWriter(
         TImportClient& importClient,
         TTableClient& tableClient,
         NPrivate::IDataAccumulator* accumulator,
-        const TRestoreSettings& settings) {
-    return new TDataWriter(path, desc, settings, importClient, tableClient, accumulator);
+        const TRestoreSettings& settings,
+        const std::shared_ptr<TLog>& log) {
+    return new TDataWriter(path, desc, settings, importClient, tableClient, accumulator, log);
 }
 
 } // NDump

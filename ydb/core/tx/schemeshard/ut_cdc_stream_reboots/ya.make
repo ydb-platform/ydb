@@ -16,6 +16,7 @@ ENDIF()
 PEERDIR(
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/persqueue/writer
+    yql/essentials/sql/pg_dummy
 )
 
 SRCS(

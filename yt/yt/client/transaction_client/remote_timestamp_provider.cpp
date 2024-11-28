@@ -92,7 +92,7 @@ private:
                 req->RequireServerFeature(ETimestampProviderFeature::AlienClocks);
             }
 
-            req->set_clock_cluster_tag(ToProto<int>(clockClusterTag));
+            req->set_clock_cluster_tag(ToProto(clockClusterTag));
         }
 
         return req->Invoke().Apply(
@@ -135,7 +135,7 @@ ITimestampProviderPtr CreateRemoteTimestampProvider(
     return CreateRemoteTimestampProvider(
         std::move(config),
         std::move(channel),
-        false);
+        /*allowOldClocks*/ false);
 }
 
 ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
@@ -159,7 +159,7 @@ ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
     return CreateBatchingRemoteTimestampProvider(
         std::move(config),
         std::move(channel),
-        false);
+        /*allowOldClocks*/ false);
 }
 
 ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
@@ -180,7 +180,7 @@ ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
     return CreateBatchingRemoteTimestampProvider(
         config,
         channelFactory,
-        false);
+        /*allowOldClocks*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -215,7 +215,7 @@ TAlienRemoteTimestampProvidersMap CreateAlienTimestampProvidersMap(
             CreateBatchingRemoteTimestampProvider(
                 foreignProviderConfig->TimestampProvider,
                 channelFactory,
-                true));
+                /*allowOldClocks*/ true));
     }
 
     return alienProvidersMap;

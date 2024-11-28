@@ -1,7 +1,0 @@
-<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
-
-    <tmp_path>/program.sql:<main>: Info: Optimization
-    
-        <tmp_path>/program.sql:<main>:6:21: Info: Cannot execute self join in DQ
-        	FROM plato.Input AS i1 JOIN plato.Input AS i2 on i1.key == i2.subkey
-	                    ^

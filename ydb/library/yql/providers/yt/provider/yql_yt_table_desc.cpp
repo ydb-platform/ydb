@@ -1,13 +1,13 @@
 #include "yql_yt_table_desc.h"
 
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/qplayer/storage/interface/yql_qstorage.h>
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/sql/sql.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <util/generic/scope.h>
 

@@ -100,7 +100,7 @@ Y_UNIT_TEST(ResolveTableError) {
     SendRequest(*fixture.Runtime, fixture.Client, MakeSQLRequest("select * from `/Root/table-1`"));
 
     auto ev = fixture.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(fixture.Client);
-    auto& record = ev->Get()->Record.GetRef();
+    auto& record = ev->Get()->Record;
 
     // Cerr << record.DebugString() << Endl;
 
@@ -140,7 +140,7 @@ Y_UNIT_TEST(ProposeError) {
         SendRequest(*fixture.Runtime, client, MakeSQLRequest(Q_("upsert into `/Root/table-1` (key, value) values (5, 5);")));
 
         auto ev = fixture.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(client);
-        auto& record = ev->Get()->Record.GetRef();
+        auto& record = ev->Get()->Record;
         UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), ydbStatus, record.DebugString());
 
         // Cerr << record.DebugString() << Endl;
@@ -263,7 +263,7 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(client);
     UNIT_ASSERT(droppedEvents > 0 && droppedEvents < 4);
 
-    auto& record = ev->Get()->Record.GetRef();
+    auto& record = ev->Get()->Record;
     // Cerr << record.DebugString() << Endl;
     fn(record);
 }

@@ -12,9 +12,9 @@
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -3843,6 +3843,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
     Y_UNIT_TEST(TestDescribeTableWithShardStats) {
         TKikimrWithGrpcAndRootSchema server;
+        auto nodeId = server.Server_->GetRuntime()->GetNodeId(0);
+        UNIT_ASSERT(nodeId > 0);
 
         auto connection = NYdb::TDriver(
             TDriverConfig()
@@ -3902,7 +3904,26 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionsCount(), 2);
             UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats()[0].LeaderNodeId, 0);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats()[1].LeaderNodeId, 0);
         }
+
+        {
+            TDescribeTableSettings describeTableSettings =
+                TDescribeTableSettings()
+                    .WithTableStatistics(true)
+                    .WithPartitionStatistics(true)
+                    .WithShardNodesInfo(true);
+
+            auto res = session.DescribeTable("Root/Foo", describeTableSettings).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionsCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats()[0].LeaderNodeId, nodeId);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats()[1].LeaderNodeId, nodeId);
+        }
+
     }
 
     Y_UNIT_TEST(TestExplicitPartitioning) {

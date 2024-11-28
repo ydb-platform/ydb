@@ -4,7 +4,7 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
+#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -126,6 +126,10 @@ private:
     std::atomic<ui64> TxMaxAllocation = 0;
     std::atomic<ui64> TxFailedAllocation = 0;
 
+    // TODO(ilezhankin): it's better to use std::atomic<std::shared_ptr<>> which is not supported at the moment.
+    std::atomic<TBackTrace*> TxMaxAllocationBacktrace = nullptr;
+    std::atomic<TBackTrace*> TxFailedAllocationBacktrace = nullptr;
+
 public:
     explicit TTxState(ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters, const TString& poolId, const double memoryPoolPercent,
         const TString& database)
@@ -137,11 +141,16 @@ public:
         , Database(database)
     {}
 
+    ~TTxState() {
+        delete TxMaxAllocationBacktrace.load();
+        delete TxFailedAllocationBacktrace.load();
+    }
+
     std::pair<TString, TString> MakePoolId() const {
         return std::make_pair(Database, PoolId);
     }
 
-    TString ToString() const {
+    TString ToString(bool verbose = false) const {
         auto res = TStringBuilder() << "TxResourcesInfo { "
             << "TxId: " << TxId
             << ", Database: " << Database;
@@ -157,7 +166,14 @@ public:
             << ", tx largest failed memory allocation: " << HumanReadableSize(TxFailedAllocation.load(), SF_BYTES)
             << ", tx total execution units: " << TxExecutionUnits.load()
             << ", started at: " << CreatedAt
-            << " }";
+            << " }" << Endl;
+
+        if (verbose && TxMaxAllocationBacktrace.load()) {
+            res << "TxMaxAllocationBacktrace:" << Endl << TxMaxAllocationBacktrace.load()->PrintToString();
+        }
+        if (verbose && TxFailedAllocationBacktrace.load()) {
+            res << "TxFailedAllocationBacktrace:" << Endl << TxFailedAllocationBacktrace.load()->PrintToString();
+        }
 
         return res;
     }
@@ -167,8 +183,23 @@ public:
     }
 
     void AckFailedMemoryAlloc(ui64 memory) {
+        auto* oldBacktrace = TxFailedAllocationBacktrace.load();
         ui64 maxAlloc = TxFailedAllocation.load();
-        while(maxAlloc < memory && !TxFailedAllocation.compare_exchange_weak(maxAlloc, memory));
+        bool exchanged = false;
+
+        while(maxAlloc < memory && !exchanged) {
+            exchanged = TxFailedAllocation.compare_exchange_weak(maxAlloc, memory);
+        }
+
+        if (exchanged) {
+            auto* newBacktrace = new TBackTrace();
+            newBacktrace->Capture();
+            if (TxFailedAllocationBacktrace.compare_exchange_strong(oldBacktrace, newBacktrace)) {
+                delete oldBacktrace;
+            } else {
+                delete newBacktrace;
+            }
+        }
     }
 
     void Released(TIntrusivePtr<TTaskState>& taskState, const TKqpResourcesRequest& resources) {
@@ -185,9 +216,6 @@ public:
         TxScanQueryMemory.fetch_sub(resources.Memory);
         taskState->ScanQueryMemory -= resources.Memory;
         Counters->RmMemory->Sub(resources.Memory);
-
-        ui64 maxAlloc = TxMaxAllocation.load();
-        while(maxAlloc < resources.Memory && !TxMaxAllocation.compare_exchange_weak(maxAlloc, resources.Memory));
 
         TxExecutionUnits.fetch_sub(resources.ExecutionUnits);
         taskState->ExecutionUnits -= resources.ExecutionUnits;
@@ -208,6 +236,24 @@ public:
         Counters->RmMemory->Add(resources.Memory);
         if (resources.Memory) {
             Counters->RmExtraMemAllocs->Inc();
+        }
+
+        auto* oldBacktrace = TxMaxAllocationBacktrace.load();
+        ui64 maxAlloc = TxMaxAllocation.load();
+        bool exchanged = false;
+
+        while(maxAlloc < resources.Memory && !exchanged) {
+            exchanged = TxMaxAllocation.compare_exchange_weak(maxAlloc, resources.Memory);
+        }
+
+        if (exchanged) {
+            auto* newBacktrace = new TBackTrace();
+            newBacktrace->Capture();
+            if (TxMaxAllocationBacktrace.compare_exchange_strong(oldBacktrace, newBacktrace)) {
+                delete oldBacktrace;
+            } else {
+                delete newBacktrace;
+            }
         }
 
         TxExecutionUnits.fetch_add(resources.ExecutionUnits);

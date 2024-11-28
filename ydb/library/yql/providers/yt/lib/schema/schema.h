@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 

@@ -212,9 +212,10 @@ private:
     TFuture<IChannelPtr> Channel_;
 };
 
-TConnectionConfigPtr GetPostprocessedConfig(TConnectionConfigPtr config)
+TConnectionConfigPtr GetPostprocessedConfigAndValidate(TConnectionConfigPtr config)
 {
     config->Postprocess();
+    ValidateConnectionConfig(config);
     return config;
 }
 
@@ -223,7 +224,7 @@ TConnectionConfigPtr GetPostprocessedConfig(TConnectionConfigPtr config)
 ////////////////////////////////////////////////////////////////////////////////
 
 TConnection::TConnection(TConnectionConfigPtr config, TConnectionOptions options)
-    : Config_(GetPostprocessedConfig(std::move(config)))
+    : Config_(GetPostprocessedConfigAndValidate(std::move(config)))
     , ConnectionId_(TGuid::Create())
     , LoggingTag_(MakeConnectionLoggingTag(Config_, ConnectionId_))
     , ClusterId_(MakeConnectionClusterId(Config_))
@@ -355,10 +356,16 @@ void TConnection::ClearMetadataCaches()
 void TConnection::Terminate()
 {
     YT_LOG_DEBUG("Terminating connection");
+    Terminated_ = true;
     ChannelPool_->Terminate(TError("Connection terminated"));
     if (Config_->EnableProxyDiscovery) {
         YT_UNUSED_FUTURE(UpdateProxyListExecutor_->Stop());
     }
+}
+
+bool TConnection::IsTerminated() const
+{
+    return Terminated_;
 }
 
 const TConnectionConfigPtr& TConnection::GetConfig()

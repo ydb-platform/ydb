@@ -1,6 +1,6 @@
 #include "kqp_opt_impl.h"
 
-#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
 
 #include <util/generic/yexception.h>
 

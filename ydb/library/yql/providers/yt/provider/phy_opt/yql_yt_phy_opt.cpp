@@ -1,16 +1,15 @@
 
 #include "yql_yt_phy_opt.h"
 
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/providers/stat/expr_nodes/yql_stat_expr_nodes.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 
 namespace NYql {
 
 using namespace NNodes;
-using namespace NDq;
 using namespace NPrivate;
 
 TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::TPtr state)
@@ -54,10 +53,11 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(0, &TCoAssumeConstraints::Match, HNDL(AssumeConstraints));
     AddHandler(0, &TCoAssumeUnique::Match, HNDL(AssumeConstraints));
     AddHandler(0, &TCoAssumeDistinct::Match, HNDL(AssumeConstraints));
-    AddHandler(0, &TYtMapReduce::Match, HNDL(AddTrivialMapperForNativeYtTypes));
     AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
     AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
     AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
+    AddHandler(0, &TYtOutputOpBase::Match, HNDL(TableContentWithSettings));
+    AddHandler(0, &TYtOutputOpBase::Match, HNDL(NonOptimalTableContent));
 
     if (!State_->Configuration->DisableFuseOperations.Get().GetOrElse(DEFAULT_DISABLE_FUSE_OPERATIONS)) {
         AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
@@ -70,8 +70,6 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(WeakFields));
     AddHandler(1, &TYtTransientOpBase::Match, HNDL(BypassMerge));
     AddHandler(1, &TYtPublish::Match, HNDL(BypassMergeBeforePublish));
-    AddHandler(1, &TYtOutputOpBase::Match, HNDL(TableContentWithSettings));
-    AddHandler(1, &TYtOutputOpBase::Match, HNDL(NonOptimalTableContent));
     AddHandler(1, &TCoRight::Match, HNDL(ReadWithSettings));
     AddHandler(1, &TYtTransientOpBase::Match, HNDL(PushDownKeyExtract));
     AddHandler(1, &TYtTransientOpBase::Match, HNDL(TransientOpWithSettings));

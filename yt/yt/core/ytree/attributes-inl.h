@@ -8,9 +8,13 @@
 // #include "serialize.h"
 #include "convert.h"
 
-namespace NYT::NYTree {
+#include <library/cpp/yt/error/error_attributes.h>
+
+namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+namespace NYTree {
 
 template <class T>
 T IAttributeDictionary::Get(TStringBuf key) const
@@ -86,4 +90,19 @@ void IAttributeDictionary::Set(const TString& key, const T& value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NYTree
+} // namespace NYTree
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct TMergeDictionariesTraits<NYTree::IAttributeDictionary>
+{
+    static auto MakeIterableView(const NYTree::IAttributeDictionary& dict)
+    {
+        return dict.ListPairs();
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

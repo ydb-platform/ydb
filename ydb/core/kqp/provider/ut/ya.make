@@ -7,8 +7,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/client/minikql_result_lib
     ydb/core/kqp/ut/common
+    yql/essentials/ast
+    yql/essentials/sql/pg_dummy
+    yql/essentials/sql/v1
     library/cpp/testing/gmock_in_unittest
 )
 

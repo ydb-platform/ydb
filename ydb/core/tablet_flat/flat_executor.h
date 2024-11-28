@@ -558,7 +558,6 @@ class TExecutor
     void Handle(TEvents::TEvFlushLog::TPtr &ev);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr&);
     void Handle(NSharedCache::TEvResult::TPtr &ev);
-    void Handle(NSharedCache::TEvRequest::TPtr &ev);
     void Handle(NSharedCache::TEvUpdated::TPtr &ev);
     void Handle(NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr&);
     void Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx);
@@ -591,7 +590,7 @@ class TExecutor
 
     ui64 OwnerTabletId() const override;
     const NTable::TScheme& DatabaseScheme() override;
-    TIntrusiveConstPtr<NTable::TRowScheme> RowScheme(ui32 table) override;
+    TIntrusiveConstPtr<NTable::TRowScheme> RowScheme(ui32 table) const override;
     const NTable::TScheme::TTableInfo* TableScheme(ui32 table) override;
     ui64 TableMemSize(ui32 table, NTable::TEpoch epoch) override;
     NTable::TPartView TablePart(ui32 table, const TLogoBlobID& label) override;
@@ -615,17 +614,17 @@ class TExecutor
     void CommitCompactionChanges(
             ui32 tableId,
             const NTable::TCompactionChanges& changes,
-            NKikimrSchemeOp::ECompactionStrategy strategy);
+            NKikimrCompaction::ECompactionStrategy strategy);
     void ApplyCompactionChanges(
             TCompactionChangesCtx& ctx,
             const NTable::TCompactionChanges& changes,
-            NKikimrSchemeOp::ECompactionStrategy strategy);
+            NKikimrCompaction::ECompactionStrategy strategy);
 
 public:
     void Describe(IOutputStream &out) const noexcept override
     {
         out
-            << (Stats->IsFollower ? "Follower" : "Leader")
+            << (Stats->IsFollower() ? "Follower" : "Leader")
             << "{" << Owner->TabletID()
             << ":" << Generation() << ":" << Step() << "}";
     }
@@ -652,6 +651,8 @@ public:
     bool CancelScan(ui32 tableId, ui64 taskId) override;
 
     TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 tableId) const override;
+    bool HasSchemaChanges(ui32 table) const override;
+    bool HasSchemaChanges(const NTable::TPartView& partView, const NTable::TScheme::TTableInfo& tableInfo, const NTable::TRowScheme& rowScheme) const;
     ui64 CompactBorrowed(ui32 tableId) override;
     ui64 CompactMemTable(ui32 tableId) override;
     ui64 CompactTable(ui32 tableId) override;

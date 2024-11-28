@@ -2,7 +2,7 @@
 
 #include "kqp_opt.h"
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -54,5 +54,8 @@ TVector<std::pair<NYql::TExprNode::TPtr, const NYql::TIndexDescription*>> BuildS
         NYql::TPositionHandle, NYql::TExprContext&)>& tableBuilder);
 
 bool IsBuiltEffect(const NYql::NNodes::TExprBase& effect);
+
+bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TKikimrTableDescription& tableDesc,
+    const TMaybe<THashSet<TStringBuf>>& passthroughFields = {});
 
 } // namespace NKikimr::NKqp::NOpt

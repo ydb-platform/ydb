@@ -13,17 +13,18 @@
 #include <ydb/library/yql/providers/yt/lib/config_clusters/config_clusters.h>
 #include <ydb/library/yql/providers/dq/local_gateway/yql_dq_gateway_local.h>
 
-#include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
-#include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
+#include <yql/essentials/utils/log/proto/logger_config.pb.h>
+#include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
 #include <ydb/library/yql/utils/actor_system/manager.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
-#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
@@ -44,45 +45,49 @@
 #include <ydb/library/yql/providers/solomon/async_io/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
-#include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
-#include <ydb/library/yql/providers/common/metrics/protos/metrics_registry.pb.h>
+#include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/providers/common/metrics/protos/metrics_registry.pb.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_utils.h>
-#include <ydb/library/yql/protos/yql_mount.pb.h>
-#include <ydb/library/yql/protos/pg_ext.pb.h>
-#include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
-#include <ydb/library/yql/core/file_storage/http_download/http_download.h>
-#include <ydb/library/yql/core/file_storage/file_storage.h>
-#include <ydb/library/yql/core/facade/yql_facade.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/core/services/yql_out_transformers.h>
-#include <ydb/library/yql/core/url_lister/url_lister_manager.h>
-#include <ydb/library/yql/core/yql_library_compiler.h>
-#include <ydb/library/yql/core/pg_ext/yql_pg_ext.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
-#include <ydb/library/yql/utils/log/tls_backend.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_utils.h>
+#include <yql/essentials/protos/yql_mount.pb.h>
+#include <yql/essentials/protos/pg_ext.pb.h>
+#include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
+#include <yql/essentials/core/file_storage/http_download/http_download.h>
+#include <yql/essentials/core/file_storage/file_storage.h>
+#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/core/url_lister/url_lister_manager.h>
+#include <yql/essentials/core/yql_library_compiler.h>
+#include <yql/essentials/core/pg_ext/yql_pg_ext.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
+#include <yql/essentials/utils/log/tls_backend.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/bindings/utils.h>
-#include <ydb/library/yql/core/qplayer/storage/file/yql_qstorage_file.h>
-#include <ydb/library/yql/public/result_format/yql_result_format_response.h>
-#include <ydb/library/yql/public/result_format/yql_result_format_type.h>
-#include <ydb/library/yql/public/result_format/yql_result_format_data.h>
+#include <yql/essentials/core/qplayer/storage/file/yql_qstorage_file.h>
+#include <yql/essentials/public/result_format/yql_result_format_response.h>
+#include <yql/essentials/public/result_format/yql_result_format_type.h>
+#include <yql/essentials/public/result_format/yql_result_format_data.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+#include <ydb/core/fq/libs/init/init.h>
+#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
+
 #include <ydb/core/util/pb.h>
 
 #include <yt/cpp/mapreduce/interface/init.h>
@@ -177,6 +182,17 @@ void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config, THas
 
     if (config->HasSqlCore()) {
         sqlFlags.insert(config->GetSqlCore().GetTranslationFlags().begin(), config->GetSqlCore().GetTranslationFlags().end());
+    }
+}
+
+void ReadFqConfig(const TString& fqCfgFile, NFq::NConfig::TConfig* fqConfig) {
+    if (fqCfgFile.empty()) {
+        return;
+    }
+    auto configData = TFileInput(fqCfgFile).ReadAll();
+    using ::google::protobuf::TextFormat;
+    if (!TextFormat::ParseFromString(configData, fqConfig)) {
+        ythrow yexception() << "Bad format of fq configuration";
     }
 }
 
@@ -461,7 +477,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
                 }
             }
 
-            options.ResultOut->Write(str.Data(), str.Size());
+            options.ResultOut->Write(str.data(), str.size());
         }
     }
 
@@ -483,7 +499,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
     return 0;
 }
 
-void InitFq(const NFq::NConfig::TConfig& fqConfig, TVector<std::pair<TActorId, TActorSetupCmd>>& additionalLocalServices) {
+void InitFq(const NFq::NConfig::TConfig& fqConfig, IPqGateway::TPtr pqGateway, TVector<std::pair<TActorId, TActorSetupCmd>>& additionalLocalServices) {
     if (fqConfig.HasRowDispatcher() && fqConfig.GetRowDispatcher().GetEnabled()) {
         NFq::IYqSharedResources::TPtr iSharedResources = NFq::CreateYqSharedResources(
             fqConfig,
@@ -498,7 +514,8 @@ void InitFq(const NFq::NConfig::TConfig& fqConfig, TVector<std::pair<TActorId, T
             yqSharedResources,
             credentialsFactory,
             "/tenant",
-            MakeIntrusive<NMonitoring::TDynamicCounters>());
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            pqGateway);
 
         additionalLocalServices.emplace_back(
             NFq::RowDispatcherServiceActorId(),
@@ -509,6 +526,7 @@ void InitFq(const NFq::NConfig::TConfig& fqConfig, TVector<std::pair<TActorId, T
 int RunMain(int argc, const char* argv[])
 {
     TString gatewaysCfgFile;
+    TString fqCfgFile;
     TString progFile;
     TVector<TString> tablesMappingList;
     THashMap<TString, TString> tablesMapping;
@@ -604,6 +622,10 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .RequiredArgument("FILE")
         .StoreResult(&gatewaysCfgFile);
+    opts.AddLongOption("fq-cfg", "federated query configuration file")
+        .Optional()
+        .RequiredArgument("FILE")
+        .StoreResult(&fqCfgFile);
     opts.AddLongOption("fs-cfg", "Path to file storage config")
         .Optional()
         .StoreResult(&fileStorageCfg);
@@ -890,12 +912,16 @@ int RunMain(int argc, const char* argv[])
 
     TGatewaysConfig gatewaysConfig;
     ReadGatewaysConfig(gatewaysCfgFile, &gatewaysConfig, sqlFlags);
+    UpdateSqlFlagsFromQContext(qContext, sqlFlags);
     PatchGatewaysConfig(&gatewaysConfig, mrJobBin, mrJobUdfsDir, numYtThreads, res.Has("keep-temp"));
     if (runOptions.AnalyzeQuery) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
         setting->SetName("AnalyzeQuery");
         setting->SetValue("1");
     }
+
+    NFq::NConfig::TConfig fqConfig;
+    ReadFqConfig(fqCfgFile, &fqConfig);
 
     if (res.Has("enable-spilling")) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
@@ -938,7 +964,7 @@ int RunMain(int argc, const char* argv[])
         factories.push_back(GetYtFileFactory(ytFileServices));
         clusters["plato"] = YtProviderName;
         auto ytNativeGateway = CreateYtFileGateway(ytFileServices, &emulateOutputForMultirun);
-        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory()));
     } else if (gatewaysConfig.HasYt()) {
         TYtNativeServices ytServices;
         ytServices.FunctionRegistry = funcRegistry.Get();
@@ -949,7 +975,7 @@ int RunMain(int argc, const char* argv[])
         for (auto& cluster: gatewaysConfig.GetYt().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{YtProviderName});
         }
-        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory()));
     }
 
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
@@ -1066,6 +1092,8 @@ int RunMain(int argc, const char* argv[])
             clusters.emplace(to_lower(cluster.GetName()), TString{NYql::SolomonProviderName});
         }
     }
+    TVector<std::pair<TActorId, TActorSetupCmd>> additionalLocalServices;
+    InitFq(fqConfig, pqGateway, additionalLocalServices);
 
     std::function<NActors::IActor*(void)> metricsPusherFactory = {};
 
@@ -1090,7 +1118,7 @@ int RunMain(int argc, const char* argv[])
             bool enableSpilling = res.Has("enable-spilling");
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
                 CreateAsyncIoFactory(driver, httpGateway, ytFileServices, genericClient, credentialsFactory, *funcRegistry, requestTimeout, maxRetries, pqGateway), threads,
-                metricsRegistry, metricsPusherFactory);
+                metricsRegistry, metricsPusherFactory, std::move(additionalLocalServices));
         }
 
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));
@@ -1113,7 +1141,7 @@ int RunMain(int argc, const char* argv[])
 
         moduleResolver = std::make_shared<TModuleResolver>(std::move(modules), ctx.NextUniqueId, clusterMapping, sqlFlags, hasValidate);
     } else {
-        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusters)) {
+        if (GetYqlModuleResolver(ctx, moduleResolver, {}, clusters, sqlFlags).empty()) {
             *runOptions.ErrStream << "Errors loading default YQL libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*runOptions.ErrStream);
             return 1;

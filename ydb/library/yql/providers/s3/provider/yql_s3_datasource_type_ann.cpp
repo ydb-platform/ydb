@@ -1,6 +1,7 @@
 #include "yql_s3_provider_impl.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
@@ -490,6 +491,10 @@ public:
             TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
             auto format = s3Object.Format().Ref().Content();
             const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
+
+            if (!NS3Util::ValidateS3ReadWriteSchema(structRowType, ctx)) {
+                return TStatus::Error;
+            }
 
             THashSet<TStringBuf> columns;
             for (const TItemExprType* item : structRowType->GetItems()) {

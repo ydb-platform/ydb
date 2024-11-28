@@ -2771,9 +2771,6 @@ void TExecutor::Handle(NSharedCache::TEvUpdated::TPtr &ev) {
 
     for (auto &kv : msg->Actions) {
         if (auto *info = PrivatePageCache->Info(kv.first)) {
-            for (auto &kvCorrected : kv.second.Accepted) {
-                PrivatePageCache->UpdateSharedBody(info, kvCorrected.first, std::move(kvCorrected.second));
-            }
             for (ui32 pageId : kv.second.Dropped) {
                 PrivatePageCache->DropSharedBody(info, pageId);
             }
@@ -3598,7 +3595,6 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_SHARED_BODY].Set(stats.TotalSharedBody);
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_PINNED_BODY].Set(stats.TotalPinnedBody);
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_EXCLUSIVE].Set(stats.TotalExclusive);
-                Counters->Simple()[TExecutorCounters::CACHE_TOTAL_SHARED_PENDING].Set(stats.TotalSharedPending);
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY].Set(stats.TotalSticky);
             }
 
@@ -4119,7 +4115,6 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
             DIV_CLASS("row") {str << "Total bytes in shared cache: " << PrivatePageCache->GetStats().TotalSharedBody; }
             DIV_CLASS("row") {str << "Total bytes in local cache: " << PrivatePageCache->GetStats().TotalPinnedBody; }
             DIV_CLASS("row") {str << "Total bytes exclusive to local cache: " << PrivatePageCache->GetStats().TotalExclusive; }
-            DIV_CLASS("row") {str << "Total bytes in transit to shared cache: " << PrivatePageCache->GetStats().TotalSharedPending; }
             DIV_CLASS("row") {str << "Total bytes marked as sticky: " << PrivatePageCache->GetStats().TotalSticky; }
 
             if (GcLogic) {

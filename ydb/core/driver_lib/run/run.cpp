@@ -1781,7 +1781,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         using TEvent = TEvNodeBroker::TEvGracefulShutdownRequest;
         
         const ui32 nodeId = ActorSystem->NodeId;
-        bool isDynamicNode = AppData->DynamicNameserviceConfig->GetMinDynamicNodeId() <= nodeId;
+        bool isDynamicNode = AppData->DynamicNameserviceConfig->MinDynamicNodeId <= nodeId;
         
         if (isDynamicNode) {
             NTabletPipe::TClientConfig pipeConfig;

@@ -168,6 +168,8 @@ namespace NSQLTranslationV1 {
         virtual TString GetOpName() const;
         virtual const TString* GetLiteral(const TString& type) const;
         virtual const TString* GetColumnName() const;
+        virtual bool IsPlainColumn() const;
+        virtual bool IsTableRow() const;
         virtual void AssumeColumn();
         virtual const TString* GetSourceName() const;
         virtual const TString* GetAtomContent() const;
@@ -299,6 +301,8 @@ namespace NSQLTranslationV1 {
         virtual TString GetOpName() const override;
         virtual const TString* GetLiteral(const TString &type) const override;
         virtual const TString* GetColumnName() const override;
+        virtual bool IsPlainColumn() const override;
+        virtual bool IsTableRow() const override;
         virtual void AssumeColumn() override;
         virtual const TString* GetSourceName() const override;
         virtual const TString* GetAtomContent() const override;
@@ -1112,11 +1116,18 @@ namespace NSQLTranslationV1 {
             Nanoseconds /* "nanoseconds" */,
         };
 
+        struct TTierSettings {
+            TNodePtr EvictionDelay;
+            std::optional<TIdentifier> StorageName;
+
+            TTierSettings(const TNodePtr& evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
+        };
+
         TIdentifier ColumnName;
-        TNodePtr Expr;
+        std::vector<TTierSettings> Tiers;
         TMaybe<EUnit> ColumnUnit;
 
-        TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr, const TMaybe<EUnit>& columnUnit = {});
+        TTtlSettings(const TIdentifier& columnName, const std::vector<TTierSettings>& tiers, const TMaybe<EUnit>& columnUnit = {});
     };
 
     struct TTableSettings {
@@ -1291,6 +1302,14 @@ namespace NSQLTranslationV1 {
         TMaybe<TDeferredAtom> Password;
         bool IsPasswordEncrypted = false;
         TVector<TDeferredAtom> Roles;
+    };
+
+    struct TSequenceParameters {
+        bool MissingOk = false;
+        TMaybe<TDeferredAtom> StartValue;
+        bool IsRestart = false;
+        TMaybe<TDeferredAtom> RestartValue;
+        TMaybe<TDeferredAtom> Increment;
     };
 
     struct TTopicConsumerSettings {

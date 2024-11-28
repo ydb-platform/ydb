@@ -19,7 +19,8 @@ struct TActorFactory : public IActorFactory {
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        const NYql::IPqGateway::TPtr& pqGateway) const override {
+        const NYql::IPqGateway::TPtr& pqGateway,
+        ui64 maxBufferSize) const override {
 
         auto actorPtr = NFq::NewTopicSession(
             topicPath,
@@ -32,7 +33,8 @@ struct TActorFactory : public IActorFactory {
             credentialsProviderFactory,
             pureCalcProgramFactory,
             counters,
-            pqGateway
+            pqGateway,
+            maxBufferSize
         );
         return NActors::TlsActivationContext->ExecutorThread.RegisterActor(actorPtr.release(), NActors::TMailboxType::HTSwap, Max<ui32>());
     }

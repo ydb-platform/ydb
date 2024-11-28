@@ -1019,15 +1019,16 @@ private:
                 auto pred = [](const TExprNode::TPtr& n) -> bool { 
                     if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false; 
                 };
-                if (auto maybeOlapFilter = FindNode(olapTable.Process().Body().Ptr(), pred)) {
-                    auto olapFilter = TExprBase(maybeOlapFilter).Cast<TKqpOlapFilter>();
+
+                if (auto maybeKqpOlapFilter = FindNode(olapTable.Process().Body().Ptr(), pred)) {
+                    auto kqpOlapFilter = TExprBase(maybeKqpOlapFilter).Cast<TKqpOlapFilter>();
 
                     TOperator op;
                     op.Properties["Name"] = "Filter";
-                    
-                    op.Properties["Predicate"] = OlapStr(olapFilter.Condition().Ptr());
+                    op.Properties["Predicate"] = OlapFilterStr(kqpOlapFilter);
+                    op.Properties["Pushdown"] = "True";
 
-                    AddOptimizerEstimates(op, olapFilter);
+                    AddOptimizerEstimates(op, kqpOlapFilter);
 
                     operatorId = AddOperator(planNode, "Filter", std::move(op));
                     inputIds.push_back(Visit(olapTable, planNode));
@@ -1060,30 +1061,42 @@ private:
         return inputIds;
     }
 
-    TString OlapStr(const TExprNode::TPtr& node) {
+    TString OlapFilterExpr(const TExprNode::TPtr& node) {
         TVector<TString> s;
-
         if (TMaybeNode<TKqpOlapNot>(node)) {
-            s.emplace_back("Not");
+            s.emplace_back("NOT");
         } else if (auto maybeList = TMaybeNode<TCoAtomList>(node)) {
             auto listPtr = maybeList.Cast().Ptr();
             size_t listSize = listPtr->Children().size();
             if (listSize == 3) {
                 THashMap<TString, TString> strComp = {
-                    {"eq", "=="}, 
-                    {"neq", "!="},
-                    {"lt", "<"},
-                    {"lte", "<="},
-                    {"gt", ">"},
-                    {"gte", ">="}
+                    {"eq", " == "},
+                    {"neq", " != "},
+                    {"lt", " < "},
+                    {"lte", " <= "},
+                    {"gt", " > "},
+                    {"gte", " >= "}
                 };
-                THashSet<TString> strRegexp = {
-                    "string_contains",
-                    "starts_with",
-                    "ends_with"
+                THashMap<TString, TString> strRegexp = {
+                    {"string_contains", "%s LIKE \"%%%s%%\""},
+                    {"starts_with", "%s LIKE \"%s%%\""},
+                    {"ends_with", "%s LIKE \"%%%s\""}
                 };
                 TString compSign = TString(listPtr->Child(0)->Content());
                 if (strComp.contains(compSign)) {
+                    TString attr = TString(listPtr->Child(1)->Content());
+                    TString value;
+                    if (listPtr->Child(2)->ChildrenSize() >= 1) {
+                        value = TString(listPtr->Child(2)->Child(0)->Content());
+                        if (TString(listPtr->Child(2)->Content()) == "String") {
+                            value = TStringBuilder() << '"' << value << '"';
+                        }
+                    } else if (listPtr->Child(2)->ChildrenSize() == 0 && listPtr->Child(2)->Content()) {
+                        value = TString(listPtr->Child(2)->Content());
+                    }
+                    
+                    return TStringBuilder() << attr << strComp[compSign] << value;
+                } else if (strRegexp.contains(compSign)) {
                     TString attr = TString(listPtr->Child(1)->Content());
                     TString value;
                     if (listPtr->Child(2)->ChildrenSize() >= 1) {
@@ -1092,15 +1105,13 @@ private:
                         value = TString(listPtr->Child(2)->Content());
                     }
                     
-                    return Sprintf("%s %s %s", attr.c_str(), strComp[compSign].c_str(), value.c_str());
-                } else if (strRegexp.contains(compSign)) {
-                    return compSign;
+                    return Sprintf(strRegexp[compSign].c_str(), attr.c_str(), value.c_str());
                 }
             }
         }
 
         for (const auto& child: node->Children()) {
-            auto childStr = OlapStr(child);
+            auto childStr = OlapFilterExpr(child);
             if (!childStr.empty()) {
                 s.push_back(std::move(childStr));
             }
@@ -1108,11 +1119,19 @@ private:
 
         TString delim = " ";
         if (TMaybeNode<TKqpOlapAnd>(node)) {
-            delim = " And ";
+            delim = " AND ";
         } else if (TMaybeNode<TKqpOlapOr>(node)) {
-            delim = " Or ";
+            delim = " OR ";
         } 
         return JoinStrings(s, delim);
+    }
+
+    TString OlapFilterStr(const TKqpOlapFilter& filter) {
+        auto result = OlapFilterExpr(filter.Condition().Ptr());
+        if (auto maybeInnerFilter = TMaybeNode<TKqpOlapFilter>(filter.Input().Ptr())) {
+            return TStringBuilder() << '(' << OlapFilterStr(maybeInnerFilter.Cast()) << ") AND (" << result << ')';
+        }
+        return result;
     }
 
     TVector<std::variant<ui32, TArgContext>> Visit(const TCoMap& map, TQueryPlanNode& planNode) {

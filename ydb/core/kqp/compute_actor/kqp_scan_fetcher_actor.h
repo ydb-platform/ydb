@@ -108,7 +108,8 @@ private:
 
     bool SendScanFinished();
 
-    virtual std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges) const override;
+    virtual std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> BuildEvKqpScan(const ui32 scanId, const ui32 gen,
+        const TSmallVec<TSerializedTableRange>& ranges, const std::optional<NKikimrKqp::TEvKqpScanCursor>& cursor) const override;
     virtual const TVector<NScheme::TTypeInfo>& GetKeyColumnTypes() const override {
         return KeyColumnTypes;
     }
@@ -118,7 +119,7 @@ private:
 
     void HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev);
 
-    void ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt) noexcept;
+    void ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt);
 
     void ProcessScanData();
 

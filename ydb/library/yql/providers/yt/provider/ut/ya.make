@@ -11,6 +11,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/dq/opt
     ydb/library/yql/providers/yt/lib/schema
     ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/yt/gateway/file

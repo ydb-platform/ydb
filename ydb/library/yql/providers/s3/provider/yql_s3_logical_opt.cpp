@@ -302,7 +302,7 @@ public:
 
         TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
         NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
-        NPushdown::CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg.Get(), TExprBase(lambdaArg), TPushdownSettings());
+        NPushdown::CollectPredicates(optionalIf.Predicate(), predicateTree, TExprBase(lambdaArg), TExprBase(lambdaArg), TPushdownSettings());
         YQL_ENSURE(predicateTree.IsValid(), "Collected filter predicates are invalid");
 
         NPushdown::TPredicateNode predicateToPush = SplitForPartialPushdown(predicateTree, ctx, pos);
@@ -426,12 +426,6 @@ public:
             State_->Configuration->MaxDirectoriesAndFilesPerQuery);
         if (count > maxFiles) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too many objects to read: " << count << ", but limit is " << maxFiles));
-            return TStatus::Error;
-        }
-
-        const auto maxSize = State_->Configuration->MaxReadSizePerQuery;
-        if (totalSize > maxSize) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too large objects to read: " << totalSize << ", but limit is " << maxSize));
             return TStatus::Error;
         }
 

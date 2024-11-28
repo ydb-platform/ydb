@@ -111,7 +111,7 @@
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "item.IsRefresh == 0 And If And item.RefererHash == 3594120000172545465"
+                                                                                        "Predicate": "item.IsRefresh == 0 AND If AND item.RefererHash == 3594120000172545465"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],

@@ -7,6 +7,7 @@
 #include "viewer_tabletinfo.h"
 #include "wb_aggregate.h"
 #include "wb_merge.h"
+#include <ydb/core/base/memory_stats.h>
 
 namespace NKikimr::NViewer {
 
@@ -44,6 +45,7 @@ class TJsonTenantInfo : public TViewerPipeClient {
     bool Tablets = false;
     bool SystemTablets = false;
     bool Storage = false;
+    bool MemoryStats = false;
     bool Nodes = false;
     bool Users = false;
     bool OffloadMerge = false;
@@ -108,6 +110,7 @@ public:
         Tablets = FromStringWithDefault<bool>(params.Get("tablets"), Tablets);
         SystemTablets = FromStringWithDefault<bool>(params.Get("system_tablets"), Tablets); // Tablets here is by design
         Storage = FromStringWithDefault<bool>(params.Get("storage"), Storage);
+        MemoryStats = FromStringWithDefault<bool>(params.Get("memory"), MemoryStats);
         Nodes = FromStringWithDefault<bool>(params.Get("nodes"), Nodes);
         Users = FromStringWithDefault<bool>(params.Get("users"), Users);
         User = params.Get("user");
@@ -124,18 +127,17 @@ public:
         if (Database.empty()) {
             ListTenantsResponse = MakeRequestConsoleListTenants();
         } else {
-            TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
             NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
-        }
-
-        if (Database.empty() || Database == DomainPath) {
-            NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[rootPathId];
-            tenant.SetId(RootId);
-            tenant.SetState(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
-            tenant.SetType(NKikimrViewer::Domain);
-            tenant.SetName(DomainPath);
-            NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
-            RequestMetadataCacheHealthCheck(DomainPath);
+            if (Database != DomainPath) {
+                TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
+            } else {
+                NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[rootPathId];
+                tenant.SetId(RootId);
+                tenant.SetState(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
+                tenant.SetType(NKikimrViewer::Domain);
+                tenant.SetName(DomainPath);
+                RequestMetadataCacheHealthCheck(DomainPath);
+            }
         }
 
         HiveDomainStats[RootHiveId] = MakeRequestHiveDomainStats(RootHiveId);
@@ -274,6 +276,9 @@ public:
             request->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
             request->Record.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
             request->Record.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
+            if (MemoryStats) {
+                request->Record.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
+            }
             SystemStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request.release()));
         }
     }
@@ -781,6 +786,7 @@ public:
                 }
 
                 THashSet<TNodeId> tenantNodes;
+                NMemory::TMemoryStatsAggregator tenantMemoryStats;
 
                 for (TNodeId nodeId : tenant.GetNodeIds()) {
                     auto itNodeInfo = nodeSystemStateInfo.find(nodeId);
@@ -828,16 +834,21 @@ public:
                         if (nodeInfo.HasMemoryLimit()) {
                             tenant.SetMemoryLimit(tenant.GetMemoryLimit() + nodeInfo.GetMemoryLimit());
                         }
+                        if (nodeInfo.HasMemoryStats()) {
+                            tenantMemoryStats.Add(nodeInfo.GetMemoryStats(), nodeInfo.GetHost());
+                        }
                         overall = Max(overall, GetViewerFlag(nodeInfo.GetSystemState()));
                     }
                     tenantNodes.emplace(nodeId);
                 }
+                tenant.MutableMemoryStats()->CopyFrom(tenantMemoryStats.Aggregate());
                 if (tenant.GetType() == NKikimrViewer::Serverless) {
                     tenant.SetStorageAllocatedSize(tenant.GetMetrics().GetStorage());
                     const bool noExclusiveNodes = tenantNodes.empty();
                     if (noExclusiveNodes) {
                         tenant.SetMemoryUsed(tenant.GetMetrics().GetMemory());
                         tenant.ClearMemoryLimit();
+                        tenant.ClearMemoryStats();
                         tenant.SetCoresUsed(static_cast<double>(tenant.GetMetrics().GetCPU()) / 1000000);
                     }
                 }
@@ -959,6 +970,11 @@ public:
         yaml.AddParameter({
             .Name = "storage",
             .Description = "return storage info",
+            .Type = "boolean",
+        });
+        yaml.AddParameter({
+            .Name = "memory",
+            .Description = "return memory info",
             .Type = "boolean",
         });
         yaml.AddParameter({

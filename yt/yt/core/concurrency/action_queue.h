@@ -94,14 +94,6 @@ ISuspendableInvokerPtr CreateSuspendableInvoker(IInvokerPtr underlyingInvoker);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Creates an invoker that creates a codicil guard with a given string before each
-//! callback invocation.
-IInvokerPtr CreateCodicilGuardedInvoker(
-    IInvokerPtr underlyingInvoker,
-    TString codicil);
-
-////////////////////////////////////////////////////////////////////////////////
-
 //! Creates an invoker that emits warning into #logger when callback executes
 //! longer than #threshold without interruptions.
 IInvokerPtr CreateWatchdogInvoker(

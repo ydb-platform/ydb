@@ -1468,15 +1468,7 @@ class GnuCompiler(Compiler):
             '-Wall',
             '-Wextra',
         ]
-        self.cxx_warnings = [
-            # Issue a warning if certain overload is hidden due to inheritance
-            '-Woverloaded-virtual',
-        ]
-
-        # Disable some warnings which will fail compilation at the time
-        self.c_warnings += [
-            '-Wno-parentheses',
-        ]
+        self.cxx_warnings = []
 
         self.c_defines = ['${hide:CPP_FAKEID}']
         if self.target.is_android:
@@ -1537,13 +1529,16 @@ class GnuCompiler(Compiler):
             self.sfdl_flags.append('-Qunused-arguments')
 
             self.c_warnings += [
+                '-Wno-parentheses',
                 '-Wno-implicit-const-int-float-conversion',
-                # For nvcc to accept the above.
+                # For nvcc to accept the above
                 '-Wno-unknown-warning-option',
             ]
 
             self.cxx_warnings += [
                 '-Wimport-preprocessor-directive-pedantic',
+                # Issue a warning if certain overload is hidden due to inheritance
+                '-Woverloaded-virtual',
                 '-Wno-ambiguous-reversed-operator',
                 '-Wno-defaulted-function-deleted',
                 '-Wno-deprecated-anon-enum-enum-conversion',
@@ -1551,7 +1546,6 @@ class GnuCompiler(Compiler):
                 '-Wno-deprecated-enum-float-conversion',
                 '-Wno-deprecated-volatile',
                 '-Wno-pessimizing-move',
-                '-Wno-return-std-move',
                 '-Wno-undefined-var-template',
             ]
 
@@ -2082,14 +2076,15 @@ class MSVCCompiler(MSVC, Compiler):
             elif target.is_x86_64:
                 flags.append('-m64')
 
-            c_warnings.extend((
-                '-Wno-format',
+            c_warnings += [
                 '-Wno-parentheses',
+                # For nvcc to accept the above
                 '-Wno-unknown-warning-option',
-            ))
+            ]
 
             cxx_warnings += [
                 '-Wimport-preprocessor-directive-pedantic',
+                # Issue a warning if certain overload is hidden due to inheritance
                 '-Woverloaded-virtual',
                 '-Wno-ambiguous-reversed-operator',
                 '-Wno-defaulted-function-deleted',
@@ -2472,7 +2467,7 @@ class Cuda(object):
 
     def auto_cuda_version(self):
         if self.use_arcadia_cuda.value:
-            return '12.2'
+            return '12.6'
 
         if not self.have_cuda.value:
             return None

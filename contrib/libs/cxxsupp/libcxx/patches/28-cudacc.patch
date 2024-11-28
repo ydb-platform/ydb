@@ -1,3 +1,16 @@
+diff --git a/include/__iterator/reverse_iterator.h b/include/__iterator/reverse_iterator.h
+index beb10f7..c1241da 100644
+--- a/include/__iterator/reverse_iterator.h
++++ b/include/__iterator/reverse_iterator.h
+@@ -144,7 +144,7 @@ public:
+     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_SINCE_CXX17
+     reference operator*() const {_Iter __tmp = current; return *--__tmp;}
+ 
+-#if _LIBCPP_STD_VER >= 20
++#if (_LIBCPP_STD_VER >= 20) && !defined(__CUDACC__)
+     _LIBCPP_INLINE_VISIBILITY
+     constexpr pointer operator->() const
+       requires is_pointer_v<_Iter> || requires(const _Iter __i) { __i.operator->(); }
 diff --git a/include/__iterator/segmented_iterator.h b/include/__iterator/segmented_iterator.h
 index f3cd1e5..c0a77ef 100644
 --- a/include/__iterator/segmented_iterator.h
@@ -57,7 +70,7 @@ index c8ffde9..7f44242 100644
  } // namespace literals
  #endif
 diff --git a/include/tuple b/include/tuple
-index e7fc1e2..eb1785c 100644
+index 138c132..63adb8e 100644
 --- a/include/tuple
 +++ b/include/tuple
 @@ -308,7 +308,7 @@ class __tuple_leaf
@@ -69,3 +82,16 @@ index e7fc1e2..eb1785c 100644
        return !__reference_binds_to_temporary(_Hp, _Tp);
  #else
        return true;
+@@ -670,6 +670,12 @@ _LIBCPP_GCC_DIAGNOSTIC_IGNORED("-Wc++20-extensions")
+         _And<
+             _BoolConstant<sizeof...(_Up) == sizeof...(_Tp)>,
+             _EnableUTypesCtor<_Up...>
++// nvcc 12.2 cannot choose between tuple(const T& ... t) and tuple(U&&... u)
++// so we have to added an explicit requires in enable_if
++#ifdef __CUDACC__
++            ,
++            _Not<_And<is_copy_constructible<_Tp>..., _Lazy<_And, is_convertible<_Up, const _Tp&>...>> >
++#endif
+         >::value
+     , int> = 0>
+     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_SINCE_CXX14

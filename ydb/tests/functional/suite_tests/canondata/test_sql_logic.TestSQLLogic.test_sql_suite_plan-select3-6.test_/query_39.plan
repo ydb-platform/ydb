@@ -66,7 +66,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.a > item.b Or item.c > item.d"
+                                                "Predicate": "item.a > item.b OR item.c > item.d"
                                             }
                                         ],
                                         "PlanNodeId": 2,

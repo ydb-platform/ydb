@@ -22,6 +22,7 @@ PEERDIR(
     contrib/ydb/library/yql/providers/yt/provider
     contrib/ydb/library/yql/providers/yt/codec/codegen
     contrib/ydb/library/yql/providers/yt/comp_nodes/llvm14
+    yql/essentials/core/cbo/simple
     yql/essentials/minikql/comp_nodes/llvm14
     yql/essentials/minikql/invoke_builtins/llvm14
     yql/essentials/sql/pg

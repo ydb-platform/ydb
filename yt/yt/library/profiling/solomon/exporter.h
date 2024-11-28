@@ -55,6 +55,7 @@ struct TSolomonExporterConfig
 
     bool ConvertCountersToRateForSolomon;
     bool RenameConvertedCounters;
+    bool ConvertCountersToDeltaGauge;
 
     bool ExportSummary;
     bool ExportSummaryAsMax;

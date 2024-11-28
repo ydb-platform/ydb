@@ -14,9 +14,7 @@ namespace NWriter {
     class TBundle : public NTable::IPageWriter, protected ICone {
     public:
         struct TResult {
-            using TCache = TPrivatePageCache::TInfo;
-
-            TVector<TIntrusivePtr<TCache>> PageCollections;
+            TVector<TBlocks::TResult> PageCollections;
             TDeque<NTable::TScreen::THole> Growth;
             TString Overlay;
         };
@@ -100,8 +98,8 @@ namespace NWriter {
             auto &result = Results_.emplace_back();
 
             for (auto num : xrange(Blocks.size())) {
-                if (auto cache = Blocks[num]->Finish()) {
-                    result.PageCollections.emplace_back(std::move(cache));
+                if (auto written = Blocks[num]->Finish(); written.PageCollection) {
+                    result.PageCollections.emplace_back(std::move(written));
                 } else if (num < Blocks.size() - 1) {
                     Y_ABORT("Finish produced an empty main page collection");
                 }

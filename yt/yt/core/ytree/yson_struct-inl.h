@@ -249,6 +249,19 @@ void TYsonStructRegistrar<TStruct>::ExternalPostprocessor(TExternalPostprocessor
 }
 
 template <class TStruct>
+template <class TBase, class TValue>
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalBaseClassParameter(const TString& key, TValue(TBase::*field))
+{
+    static_assert(std::derived_from<TStruct, TExternalizedYsonStruct>);
+    static_assert(std::derived_from<typename TStruct::TExternal, TBase>);
+    auto universalAccessor = [field] (TStruct* serializer) -> auto& {
+        return serializer->That_->*field;
+    };
+
+    return ParameterWithUniversalAccessor<TValue>(key, universalAccessor);
+}
+
+template <class TStruct>
 void TYsonStructRegistrar<TStruct>::UnrecognizedStrategy(EUnrecognizedStrategy strategy)
 {
     Meta_->SetUnrecognizedStrategy(strategy);

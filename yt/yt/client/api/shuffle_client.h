@@ -10,8 +10,8 @@ struct TShuffleHandle
     : public NYTree::TYsonStruct
 {
     NObjectClient::TTransactionId TransactionId;
-    TString CoordinatorAddress;
-    TString Account;
+    std::string CoordinatorAddress;
+    std::string Account;
     int PartitionCount;
 
     REGISTER_YSON_STRUCT(TShuffleHandle);
@@ -34,7 +34,7 @@ struct IShuffleClient
     virtual ~IShuffleClient() = default;
 
     virtual TFuture<TShuffleHandlePtr> StartShuffle(
-        const TString& account,
+        const std::string& account,
         int partitionCount,
         NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) = 0;

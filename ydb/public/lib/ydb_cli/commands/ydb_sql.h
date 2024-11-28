@@ -33,6 +33,7 @@ private:
     TString Syntax;
     bool ExplainMode = false;
     bool ExplainAnalyzeMode = false;
+    bool ExplainAst = false;
 };
 
 }

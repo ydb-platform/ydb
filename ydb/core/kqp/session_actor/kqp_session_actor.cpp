@@ -627,7 +627,10 @@ public:
 
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
-        QueryState->SaveAndCheckSplitResult(ev->Get());
+        if (!QueryState->SaveAndCheckSplitResult(ev->Get())) {
+            ReplySplitError(ev->Get());
+            return;
+        }
         OnSuccessSplitRequest();
     }
 
@@ -1922,6 +1925,25 @@ public:
         Cleanup(IsFatalError(record->GetYdbStatus()));
     }
 
+    void ReplySplitError(TEvKqp::TEvSplitResponse* ev) {
+        QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+        auto& record = QueryResponse->Record;
+
+        record.SetYdbStatus(ev->Status);
+        auto& response = *record.MutableResponse();
+        AddQueryIssues(response, ev->Issues);
+
+        auto txId = TTxId();
+        if (auto ctx = Transactions.ReleaseTransaction(txId)) {
+            ctx->Invalidate();
+            Transactions.AddToBeAborted(std::move(ctx));
+        }
+
+        FillTxInfo(record.MutableResponse());
+
+        Cleanup(false);
+    }
+
     void ReplyProcessError(const TEvKqp::TEvQueryRequest::TPtr& request, Ydb::StatusIds::StatusCode ydbStatus,
             const TString& message)
     {
@@ -2003,7 +2025,7 @@ public:
             TlsActivationContext->AsActorContext()
         );
 
-        Send(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
+        Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         LOG_D("Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId
             << ", proxyId: " << QueryState->Sender.ToString());
 

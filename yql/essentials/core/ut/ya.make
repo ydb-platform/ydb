@@ -22,6 +22,7 @@ PEERDIR(
     library/cpp/yson/node
     yql/essentials/ast
     yql/essentials/core
+    yql/essentials/core/cbo/simple
     yql/essentials/core/facade
     yql/essentials/core/services
     yql/essentials/core/services/mounts
@@ -46,7 +47,7 @@ PEERDIR(
 )
 
 RESOURCE(
-    contrib/ydb/library/yql/cfg/tests/fs.conf fs.conf
+    yql/essentials/cfg/tests/fs.conf fs.conf
 )
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)

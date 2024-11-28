@@ -526,6 +526,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKLOAD_SERVICE);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
 
     RunCall([this, domain = settings.DomainRoot]{

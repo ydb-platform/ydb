@@ -384,6 +384,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
     }
 
+    Y_UNIT_TEST(ExplainQueryPlan) {
+        UNIT_ASSERT(SqlToYql("EXPLAIN SELECT 1;").IsOk());
+        UNIT_ASSERT(SqlToYql("EXPLAIN QUERY PLAN SELECT 1;").IsOk());
+    }
+
     Y_UNIT_TEST(JoinParseCorrect) {
         NYql::TAstParseResult res = SqlToYql(
             "PRAGMA DisableSimpleColumns;"
@@ -622,6 +627,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(SelectOrderBySimpleExpr) {
         NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by a + a");
+        UNIT_ASSERT(res.Root);
+    }
+
+    Y_UNIT_TEST(SelectAssumeOrderByTableRowAccess) {
+        NYql::TAstParseResult res = SqlToYql("$key = 'foo';select * from plato.Input assume order by TableRow().$key");
         UNIT_ASSERT(res.Root);
     }
 
@@ -2053,7 +2063,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("expireAfter"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
             }
         };
@@ -2075,10 +2086,85 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("expireAfter"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("columnUnit"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("seconds"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(TtlTieringParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                CREATE TABLE tableName (Key Uint32, CreatedAt Uint32, PRIMARY KEY (Key))
+                WITH (TTL =
+                    Interval("P1D") TO EXTERNAL DATA SOURCE Tier1,
+                    Interval("P2D") TO EXTERNAL DATA SOURCE Tier2,
+                    Interval("P30D") DELETE
+                On CreatedAt AS SECONDS);)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("storageName"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier1"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier2"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("172800000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("2592000000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("columnUnit"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("seconds"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(TtlTieringWithOtherActionsParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                ALTER TABLE tableName
+                    ADD FAMILY cold (DATA = "rot"),
+                    SET TTL
+                        Interval("P1D") TO EXTERNAL DATA SOURCE Tier1,
+                        Interval("P2D") TO EXTERNAL DATA SOURCE Tier2,
+                        Interval("P30D") DELETE
+                    ON CreatedAt,
+                    ALTER COLUMN payload_v2 SET FAMILY cold,
+                    ALTER FAMILY default SET DATA "ssd"
+                ;)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("addColumnFamilies"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("cold"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alterColumnFamilies"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("default"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("storageName"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier1"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier2"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("172800000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("2592000000"));
             }
         };
 
@@ -2612,6 +2698,153 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TWordCountHive elementStat({TString("\'mode \'alter")});
         VerifyProgram(reqSetNull, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+    }
+
+    Y_UNIT_TEST(AlterSequence) {
+        UNIT_ASSERT(SqlToYql(R"(
+            USE plato;
+            ALTER SEQUENCE sequence START WITH 10 INCREMENT 2 RESTART WITH 5;
+        )").IsOk());
+        UNIT_ASSERT(SqlToYql(R"(
+            USE plato;
+            ALTER SEQUENCE sequence INCREMENT 2;
+        )").IsOk());
+        UNIT_ASSERT(SqlToYql(R"(
+            USE plato;
+            ALTER SEQUENCE sequence INCREMENT 2 START 1000;
+        )").IsOk());
+        UNIT_ASSERT(SqlToYql(R"(
+            USE plato;
+            ALTER SEQUENCE sequence RESTART START 1000;
+        )").IsOk());
+        UNIT_ASSERT(SqlToYql(R"(
+            USE plato;
+            ALTER SEQUENCE IF EXISTS sequence INCREMENT 1000 START 100 RESTART;
+        )").IsOk());
+        UNIT_ASSERT(SqlToYql(R"(
+            USE plato;
+            ALTER SEQUENCE IF EXISTS sequence RESTART 1000 START WITH 100 INCREMENT BY 7;
+        )").IsOk());
+    }
+
+    Y_UNIT_TEST(AlterSequenceIncorrect) {
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence START WITH 10 INCREMENT 2 RESTART WITH 5 RESTART;");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:75: Error: Restart value defined more than once\n");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence START WITH 10 INCREMENT 2 START 100 RESTART WITH 5;");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:60: Error: Start value defined more than once\n");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence INCREMENT BY 7 START WITH 10 INCREMENT 2 RESTART WITH 5 RESTART;");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:62: Error: Increment defined more than once\n");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 100 START WITH 10 INCREMENT 2 RESTART WITH 5;");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:77: Error: Restart value defined more than once\n");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 1234234543563435151456 START WITH 10 INCREMENT 2;");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:49: Error: Failed to parse number from string: 1234234543563435151456, number limit overflow\n");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 1 START WITH 9223372036854775817 INCREMENT 4;");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Start value: 9223372036854775817 cannot be greater than max value: 9223372036854775807\n");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 9223372036854775827 START WITH 5 INCREMENT 4;");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Restart value: 9223372036854775827 cannot be greater than max value: 9223372036854775807\n");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 1 START WITH 4 INCREMENT 0;");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Increment must not be zero\n");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 0 START WITH 4 INCREMENT 1;");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Restart value: 0 cannot be less than min value: 1\n");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 1 START WITH 0 INCREMENT 1;");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Start value: 0 cannot be less than min value: 1\n");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 1 START WITH 1 INCREMENT 9223372036854775837;");
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Increment: 9223372036854775837 cannot be greater than max value: 9223372036854775807\n");
+        }
+    }
+
+    Y_UNIT_TEST(AlterSequenceCorrect) {
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence START WITH 10 INCREMENT 2 RESTART WITH 5;");
+            UNIT_ASSERT(res.Root);
+
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                if (word == "Write") {
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("sequence"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alter"));
+                    UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("alter_if_exists"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("start"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("increment"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("restart"));
+                }
+            };
+
+            TWordCountHive elementStat = { {TString("Write"), 0}};
+            VerifyProgram(res, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        }
+
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE IF EXISTS sequence INCREMENT 2 RESTART;");
+            UNIT_ASSERT(res.Root);
+
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                if (word == "Write") {
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("sequence"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alter_if_exists"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("increment"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("restart"));
+                }
+            };
+
+            TWordCountHive elementStat = { {TString("Write"), 0}};
+            VerifyProgram(res, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        }
+
+        {
+            NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE IF EXISTS sequence START 10 INCREMENT BY 2;");
+            UNIT_ASSERT(res.Root);
+
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                if (word == "Write") {
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("sequence"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alter_if_exists"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("start"));
+                    UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("restart"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("increment"));
+                }
+            };
+
+            TWordCountHive elementStat = { {TString("Write"), 0}};
+            VerifyProgram(res, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        }
     }
 
     Y_UNIT_TEST(OptionalAliases) {
@@ -3259,6 +3492,12 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
             "<main>:2:22: Warning: GROUP BY will aggregate by column `c` instead of aggregating by SELECT expression with same alias, code: 4532\n"
             "<main>:1:10: Warning: You should probably use alias in GROUP BY instead of using it here. Please consult documentation for more details, code: 4532\n"
             "<main>:1:8: Error: Column `c` must either be a key column in GROUP BY or it should be used in aggregation function\n");
+    }
+
+    Y_UNIT_TEST(ExplainQueryPlan) {
+        NYql::TAstParseResult res = SqlToYql("EXPLAIN Q U E R Y PLAN SELECT 1;");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:1:8: Error: mismatched input 'Q' expecting {");
     }
 
     Y_UNIT_TEST(SelectWithDuplicateGroupingColumns) {

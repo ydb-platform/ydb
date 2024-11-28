@@ -4322,7 +4322,46 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(SequentialReadsPragma, Enabled) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
+        NYdb::NTable::TExecDataQuerySettings querySettings;
+        querySettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        TString query = R"(
+            SELECT Key, Data FROM `/Root/EightShard` 
+                WHERE Text = "Value1" 
+                ORDER BY Key 
+                LIMIT 1;
+        )";
+
+        if (Enabled) {
+            TString pragma = TString(R"(
+                PRAGMA ydb.MaxSequentialReadsInFlight = "1";
+            )");
+
+            query = pragma + query;
+        }
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), querySettings).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([[[101u];[1]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        for (const auto& phase : stats.query_phases()) {
+            for (const auto& access : phase.table_access()) {
+                if (access.name() == "/Root/EightShard") {
+                    if (Enabled) {
+                        UNIT_ASSERT_LT(access.partitions_count(), 8);
+                    } else {
+                        UNIT_ASSERT_EQUAL(access.partitions_count(), 8);
+                    }
+                }
+            }
+        }
+    }
 
 }
 

@@ -164,28 +164,23 @@ template class TT1ha0HasherBase<ET1haFunc::T1HA0_AVX2>;
 ////////////////////////////////////////////////////////////////////////////
 #define CYPHER_ROUNDS 8
 
+#if (defined(_win_) || defined(_arm64_))
+const bool TStreamCypher::HasAVX512 = false;
+#else
 const bool TStreamCypher::HasAVX512 = NX86::HaveAVX512F();
+#endif
 
 Y_FORCE_INLINE void TStreamCypher::Encipher(const ui8* plaintext, ui8* ciphertext, size_t len) { 
-#ifdef __AVX512F__
     std::visit([&](auto&& chacha) {
         chacha.Encipher(plaintext, ciphertext, len);
-    }, *Cypher);
-#else
-    Cypher->Encipher(plaintext, ciphertext, len);
-#endif
+    }, Cypher);
 }
 
 Y_FORCE_INLINE void TStreamCypher::SetKeyAndIV(const ui64 blockIdx) {
-#ifdef __AVX512F__
     std::visit([&](auto&& chacha) {
         chacha.SetKey((ui8*)&Key[0], sizeof(Key));
         chacha.SetIV((ui8*)&Nonce, (ui8*)&blockIdx);
-    }, *Cypher);
-#else
-    Cypher->SetKey((ui8*)&Key[0], sizeof(Key));
-    Cypher->SetIV((ui8*)&Nonce, (ui8*)&blockIdx);
-#endif
+    }, Cypher);
 }
 
 TStreamCypher::TStreamCypher()
@@ -194,19 +189,12 @@ TStreamCypher::TStreamCypher()
 {
 #if ENABLE_ENCRYPTION
     memset(Key, 0, sizeof(Key));
-
-#ifdef __AVX512F__
-    auto* chacha = new std::variant<ChaChaVec, ChaCha512>;
     
     if (HasAVX512) {
-        chacha->emplace<ChaCha512>(CYPHER_ROUNDS);
+        Cypher.emplace<ChaCha512>(CYPHER_ROUNDS);
     } else {
-        chacha->emplace<ChaChaVec>(CYPHER_ROUNDS);
+        Cypher.emplace<ChaChaVec>(CYPHER_ROUNDS);
     }
-    Cypher.reset(chacha);
-#else
-    Cypher.reset(new ChaChaVec(CYPHER_ROUNDS));
-#endif
 #else
     Y_UNUSED(Leftover);
     Y_UNUSED(Key);
@@ -303,31 +291,31 @@ void TStreamCypher::EncryptZeroes(void* destination, ui32 size) {
 
 #if ENABLE_ENCRYPTION
 static void Xor(void* destination, const void* a, const void* b, ui32 size) {
+#if (defined(_win_) || defined(_arm64_))
     ui8 *dst = (ui8*)destination;
     const ui8 *srcA = (const ui8*)a;
     const ui8 *srcB = (const ui8*)b;
-
-#ifdef __AVX512F__
-    // Process 64 bytes at a time with AVX-512
-    size_t i;
-    for (i = 0; i + 63 < size; i += 64) {
-        __m512i vA = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(srcA + i));
-        __m512i vB = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(srcB + i));
-        __m512i vXor = _mm512_xor_si512(vA, vB);
-        _mm512_storeu_si512(reinterpret_cast<__m512i*>(dst + i), vXor);
-    }
-
-    // Process remaining bytes
-    for (; i < size; ++i) {
-        dst[i] = srcA[i] ^ srcB[i];
-    }
-#else
     ui8 *endDst = dst + size;
     while (dst != endDst) {
         *dst = *srcA ^ *srcB;
         ++dst;
         ++srcA;
         ++srcB;
+    }
+#else
+    if (TStreamCypher::HasAVX512) {
+        XorAVX512(destination, a, b, size);
+    } else {
+        ui8 *dst = (ui8*)destination;
+        const ui8 *srcA = (const ui8*)a;
+        const ui8 *srcB = (const ui8*)b;
+        ui8 *endDst = dst + size;
+        while (dst != endDst) {
+            *dst = *srcA ^ *srcB;
+            ++dst;
+            ++srcA;
+            ++srcB;
+        }
     }
 #endif
 }

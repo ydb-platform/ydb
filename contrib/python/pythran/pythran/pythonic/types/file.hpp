@@ -173,6 +173,14 @@ namespace types
     return res;
   }
 
+  template <class T>
+  inline void file::read_as(long n, T *buffer)
+  {
+    if (fread(buffer, sizeof(T), n, **data) < size_t(n)) {
+      throw EOFError("read() didn't return enough bytes");
+    }
+  }
+
   inline types::str file::readline(long size)
   {
     if (!is_open)
@@ -266,7 +274,7 @@ namespace types
 
   inline file_iterator::file_iterator()
       : f(nullptr), set(false), curr(),
-        position(std::numeric_limits<long>::max()){};
+        position(std::numeric_limits<long>::max()) {};
 
   inline bool file_iterator::operator==(file_iterator const &f2) const
   {

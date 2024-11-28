@@ -64,17 +64,13 @@ public:
         , NodeId(nodeId)
     {}
 
-    ui32 GetReadyActivation(TWorkerContext& /*wctx*/, ui64 /*revolvingCounter*/) override {
+    TMailbox* GetReadyActivation(TWorkerContext& /*wctx*/, ui64 /*revolvingCounter*/) override {
         Y_ABORT();
     }
 
-    void ReclaimMailbox(TMailboxType::EType /*mailboxType*/, ui32 /*hint*/, NActors::TWorkerId /*workerId*/, ui64 /*revolvingCounter*/) override {
-        Y_ABORT();
-    }
-
-    TMailboxHeader *ResolveMailbox(ui32 hint) override {
+    TMailbox* ResolveMailbox(ui32 hint) override {
         const auto it = Context->Mailboxes.find({NodeId, PoolId, hint});
-        return it != Context->Mailboxes.end() ? &it->second.Header : nullptr;
+        return it != Context->Mailboxes.end() ? &it->second : nullptr;
     }
 
     void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, NActors::TWorkerId /*workerId*/) override {
@@ -105,15 +101,15 @@ public:
         return Send(ev);
     }
 
-    void ScheduleActivation(ui32 /*activation*/) override {
+    void ScheduleActivation(TMailbox* /*mailbox*/) override {
         Y_ABORT();
     }
 
-    void SpecificScheduleActivation(ui32 /*activation*/) override {
+    void SpecificScheduleActivation(TMailbox* /*mailbox*/) override {
         Y_ABORT();
     }
 
-    void ScheduleActivationEx(ui32 /*activation*/, ui64 /*revolvingCounter*/) override {
+    void ScheduleActivationEx(TMailbox* /*mailbox*/, ui64 /*revolvingCounter*/) override {
         Y_ABORT();
     }
 
@@ -121,8 +117,12 @@ public:
         return Context->Register(actor, parentId, PoolId, std::nullopt, NodeId);
     }
 
-    TActorId Register(IActor* actor, TMailboxHeader* /*mailbox*/, ui32 hint, const TActorId& parentId) override {
-        return Context->Register(actor, parentId, PoolId, hint, NodeId);
+    TActorId Register(IActor* actor, TMailboxCache& /*cache*/, ui64 /*revolvingCounter*/, const TActorId& parentId) override {
+        return Context->Register(actor, parentId, PoolId, std::nullopt, NodeId);
+    }
+
+    TActorId Register(IActor* actor, TMailbox* mailbox, const TActorId& parentId) override {
+        return Context->Register(actor, parentId, PoolId, mailbox->Hint, NodeId);
     }
 
     void Prepare(TActorSystem* /*actorSystem*/, NSchedulerQueue::TReader** /*scheduleReaders*/, ui32* /*scheduleSz*/) override {

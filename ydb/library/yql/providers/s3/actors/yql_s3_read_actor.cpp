@@ -1831,7 +1831,7 @@ private:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         LOG_T("TS3StreamReadActor", "Handle undelivered FileQueue ");
-        if (!FileQueueEvents.HandleUndelivered(ev)) {
+        if (FileQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
             TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
         }
@@ -2245,6 +2245,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
         if (const auto it = settings.find("data.timestamp.format"); settings.cend() != it) {
             readSpec->Settings.timestamp_format = it->second;
+        }
+
+        if (const auto it = settings.find("data.date.format"); settings.cend() != it) {
+            readSpec->Settings.date_format = it->second;
         }
 
         if (readSpec->Settings.date_time_format_name == NDB::FormatSettings::DateTimeFormat::Unspecified && readSpec->Settings.date_time_format.empty()) {

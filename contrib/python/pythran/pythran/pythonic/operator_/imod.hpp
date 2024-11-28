@@ -20,7 +20,7 @@ namespace operator_
   {
     return a %= std::forward<B>(b);
   }
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

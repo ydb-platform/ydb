@@ -203,6 +203,22 @@ public:
     virtual int Run(TConfig& config) override;
 };
 
+class TCommandPermissionSetInheritance : public TYdbOperationCommand, public TCommandWithPath {
+public:
+    TCommandPermissionSetInheritance();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+};
+
+class TCommandPermissionClearInheritance : public TYdbOperationCommand, public TCommandWithPath {
+public:
+    TCommandPermissionClearInheritance();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+};
+
 class TCommandPermissionList : public TYdbOperationCommand, public TCommandWithPath {
 public:
     TCommandPermissionList();

@@ -15,6 +15,8 @@ DECLARE_REFCOUNTED_CLASS(TChannelCredentialsConfig)
 DECLARE_REFCOUNTED_CLASS(TChannelConfigTemplate)
 DECLARE_REFCOUNTED_CLASS(TChannelConfig)
 
+DECLARE_REFCOUNTED_STRUCT(IGrpcChannel)
+
 ////////////////////////////////////////////////////////////////////////////////
 
 extern const char* const TracingTraceIdMetadataKey;

@@ -3,10 +3,10 @@
 
 #include "pythonic/include/numpy/diag.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
-#include "pythonic/utils/numpy_conversion.hpp"
 #include "pythonic/numpy/asarray.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
+#include "pythonic/utils/numpy_conversion.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -37,11 +37,12 @@ namespace numpy
 
   template <class T, class pS>
   typename std::enable_if<std::tuple_size<pS>::value == 1,
-                          types::ndarray<T, types::array<long, 2>>>::type
+                          types::ndarray<T, types::array_tuple<long, 2>>>::type
   diag(types::ndarray<T, pS> const &a, long k)
   {
     long n = a.flat_size() + std::abs(k);
-    types::ndarray<T, types::array<long, 2>> out(types::make_tuple(n, n), 0);
+    types::ndarray<T, types::array_tuple<long, 2>> out(types::make_tuple(n, n),
+                                                       0);
     if (k >= 0)
       for (long i = 0, j = k; i < n && j < n; ++i, ++j)
         out[i][j] = a[i];
@@ -58,7 +59,7 @@ namespace numpy
   }
 
   NUMPY_EXPR_TO_NDARRAY0_IMPL(diag);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

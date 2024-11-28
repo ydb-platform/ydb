@@ -5,8 +5,6 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
-#include <library/cpp/pop_count/popcount.h>
-
 namespace NKikimr {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -41,12 +39,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
     };
     TVector<TBlobQueryItem> BlobsToGet;
 
-    template<typename TPtr>
-    void SendReply(TPtr& reply) {
-        /*ui32 size = 0;
-        for (const TEvBlobStorage::TEvRangeResult::TResponse& resp : reply->Responses) {
-            size += resp.Buffer.size();
-        }*/
+    void SendReply(std::unique_ptr<TEvBlobStorage::TEvRangeResult> reply) {
         Mon->CountRangeResponseTime(TActivationContext::Monotonic() - RequestStartTime);
         SendResponseAndDie(std::move(reply));
     }
@@ -183,8 +176,12 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         }
 
         if (!NumVGetsPending) {
-            for (const auto& item : BlobStatus) {
-                const TBlobStatusTracker& tracker = item.second;
+            std::unique_ptr<TEvBlobStorage::TEvRangeResult> result;
+            if (IsIndexOnly && !MustRestoreFirst) {
+                result.reset(new TEvBlobStorage::TEvRangeResult(NKikimrProto::OK, From, To, Info->GroupID));
+            }
+
+            for (const auto& [blobId, tracker] : BlobStatus) {
                 bool lostByIngress = false;
                 bool requiredToBePresent = false;
                 switch (tracker.GetBlobState(Info.Get(), &lostByIngress)) {
@@ -214,11 +211,22 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
                         break;
                 }
 
-                BlobsToGet.emplace_back(item.first, requiredToBePresent);
+                if (result) {
+                    const auto& [keep, doNotKeep] = tracker.GetKeepFlags();
+                    result->Responses.emplace_back(blobId, TString(), keep, doNotKeep);
+                } else {
+                    BlobsToGet.emplace_back(blobId, requiredToBePresent);
+                }
             }
 
-            // send request
-            if (BlobsToGet) {
+            if (result) {
+                if (To < From) { // BlobsToGet are kept in ascending order, but we are expected to reply in descending one
+                    auto& r = result->Responses;
+                    std::reverse(r.begin(), r.end());
+                }
+                DSP_LOG_LOG_S(NLog::PRI_INFO, "DSR00", "Result# " << result->Print(false));
+                SendReply(std::move(result));
+            } else if (BlobsToGet) {
                 SendGetRequest();
             } else {
                 // reply with empty set
@@ -238,10 +246,9 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         }
         Y_ABORT_UNLESS(query == queries.Get() + queryCount);
 
-        // register query in wilson and send it to DS proxy; issue non-index query when MustRestoreFirst is false to
-        // prevent IndexRestoreGet invocation
+        // register query in wilson and send it to DS proxy
         auto get = std::make_unique<TEvBlobStorage::TEvGet>(queries, queryCount, Deadline,
-                NKikimrBlobStorage::EGetHandleClass::FastRead, MustRestoreFirst, MustRestoreFirst ? IsIndexOnly : false,
+                NKikimrBlobStorage::EGetHandleClass::FastRead, MustRestoreFirst, IsIndexOnly,
                 TEvBlobStorage::TEvGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
         get->IsInternal = true;
         get->Decommission = Decommission;
@@ -301,7 +308,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
             std::reverse(result->Responses.begin(), result->Responses.end());
         }
         DSP_LOG_LOG_S(NLog::PRI_INFO, "DSR05", "Result# " << result->Print(false));
-        SendReply(result);
+        SendReply(std::move(result));
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
@@ -309,7 +316,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
                     status, From, To, Info->GroupID));
         result->ErrorReason = ErrorReason;
         DSP_LOG_LOG_S(NLog::PRI_NOTICE, "DSR06", "Result# " << result->Print(false));
-        SendReply(result);
+        SendReply(std::move(result));
     }
 
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {

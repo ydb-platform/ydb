@@ -29,9 +29,9 @@ namespace numpy
     }
 
     inline auto normal(double loc, double scale, long size)
-        -> decltype(normal(loc, scale, types::array<long, 1>{{size}}))
+        -> decltype(normal(loc, scale, types::array_tuple<long, 1>{{size}}))
     {
-      return normal(loc, scale, types::array<long, 1>{{size}});
+      return normal(loc, scale, types::array_tuple<long, 1>{{size}});
     }
 
     inline double normal(double loc, double scale, types::none_type d)

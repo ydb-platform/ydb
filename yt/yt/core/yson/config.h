@@ -21,6 +21,9 @@ public:
     EEnumYsonStorageType DefaultEnumYsonStorageType;
     // Check if string field contains actual UTF-8 string.
     EUtf8Check Utf8Check;
+    // If `true` convert all field names in camel case to snake case.
+    // Note: Applies to each protobuf message only on first seen, changes of flag after do not have effect.
+    bool ForceSnakeCaseNames;
 
     TProtobufInteropConfigPtr ApplyDynamic(const TProtobufInteropDynamicConfigPtr& dynamicConfig) const;
 

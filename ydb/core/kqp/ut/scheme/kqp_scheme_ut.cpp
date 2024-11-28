@@ -5450,10 +5450,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
             UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
-            auto ttl = desc.GetTableDescription().GetTtlSettings()->GetDateTypeColumn();
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetStorageName(), "tier1");
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetEvictionDelay(), TDuration::Seconds(10));
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).StorageName, "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers()[0].GetApplyAfter(), TDuration::Seconds(10));
         }
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
@@ -5466,10 +5466,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
             UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
-            auto ttl = desc.GetTableDescription().GetTtlSettings()->GetDateTypeColumn();
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetStorageName(), "tier2");
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetEvictionDelay(), TDuration::Seconds(10));
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).StorageName, "tier2");
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers()[0].GetApplyAfter(), TDuration::Seconds(10));
         }
 
         auto query3 = TStringBuilder() << R"(
@@ -5497,10 +5497,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
             UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
-            auto ttl = desc.GetTableDescription().GetTtlSettings()->GetDateTypeColumn();
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetStorageName(), "tier1");
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetEvictionDelay(), TDuration::Seconds(10));
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).StorageName, "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers()[0].GetApplyAfter(), TDuration::Seconds(10));
         }
 
         auto query5 = TStringBuilder() << R"(
@@ -8228,10 +8228,15 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
             const auto& description = describeResult.GetTableDescription();
             UNIT_ASSERT(describeResult.GetTableDescription().GetTtlSettings());
-            auto ttl = describeResult.GetTableDescription().GetTtlSettings()->GetDateTypeColumn();
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetExpireAfter(), TDuration::Hours(1));
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetStorageName(), "tier1");
+            auto ttl = describeResult.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 2);
+            auto evictTier = ttl->GetTiers()[0];
+            UNIT_ASSERT(std::holds_alternative<TTtlEvictToExternalStorageAction>(evictTier.GetAction()));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(evictTier.GetAction()).StorageName, "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(evictTier.GetApplyAfter(), TDuration::Seconds(10));
+            auto deleteTier = ttl->GetTiers()[1];
+            UNIT_ASSERT(std::holds_alternative<TTtlDeleteAction>(deleteTier.GetAction()));
+            UNIT_ASSERT_VALUES_EQUAL(deleteTier.GetApplyAfter(), TDuration::Hours(1));
         }
         {
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() <<  R"(` RESET (TTL);)";

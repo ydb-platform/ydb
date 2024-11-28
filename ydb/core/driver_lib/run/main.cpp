@@ -47,7 +47,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         runner->BusyLoop();
         // exit busy loop by a signal
         Cout << "Shutting Kikimr down" << Endl;
-        runner->KikimrStop(false, runConfig);
+        runner->KikimrStop(false);
     }
 
     return 0;

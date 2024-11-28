@@ -325,19 +325,16 @@ struct TEvPQ {
     };
 
     struct TEvMonResponse : public TEventLocal<TEvMonResponse, EvMonResponse> {
-        TEvMonResponse(const NPQ::TPartitionId& partition, const TVector<TString>& res, const TString& str)
+        TEvMonResponse(const NPQ::TPartitionId& partition, const TString& str)
         : Partition(partition)
-        , Res(res)
         , Str(str)
         {}
 
-        TEvMonResponse(const TVector<TString>& res, const TString& str)
-        : Res(res)
-        , Str(str)
+        TEvMonResponse(const TString& str)
+        : Str(str)
         {}
 
         TMaybe<NPQ::TPartitionId> Partition;
-        TVector<TString> Res;
         TString Str;
     };
 

@@ -75,6 +75,8 @@ struct TDistributedTransaction {
     bool HaveAllRecipientsReceive() const;
 
     void AddCmdWrite(NKikimrClient::TKeyValueRequest& request, EState state);
+    NKikimrPQ::TTransaction Serialize();
+    NKikimrPQ::TTransaction Serialize(EState state);
 
     static void SetDecision(NKikimrTx::TReadSetData::EDecision& var, NKikimrTx::TReadSetData::EDecision value);
 

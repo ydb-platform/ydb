@@ -1,5 +1,6 @@
 
 #include "pq_impl.h"
+#include "pq_impl_types.h"
 #include "event_helpers.h"
 #include "partition_log.h"
 #include "partition.h"
@@ -39,53 +40,6 @@ static constexpr ui32 CACHE_SIZE = 100_MB;
 static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
-
-struct TPartitionInfo {
-    TPartitionInfo(const TActorId& actor,
-                   TMaybe<TPartitionKeyRange>&& keyRange,
-                   const TTabletCountersBase& baseline)
-        : Actor(actor)
-        , KeyRange(std::move(keyRange))
-        , InitDone(false)
-    {
-        Baseline.Populate(baseline);
-    }
-
-    TPartitionInfo(const TPartitionInfo& info)
-        : Actor(info.Actor)
-        , KeyRange(info.KeyRange)
-        , InitDone(info.InitDone)
-        , PendingRequests(info.PendingRequests)
-    {
-        Baseline.Populate(info.Baseline);
-    }
-
-    TActorId Actor;
-    TMaybe<TPartitionKeyRange> KeyRange;
-    bool InitDone;
-    TTabletCountersBase Baseline;
-    THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
-
-    struct TPendingRequest {
-        TPendingRequest(ui64 cookie,
-                        std::shared_ptr<TEvPersQueue::TEvRequest> event,
-                        const TActorId& sender) :
-            Cookie(cookie),
-            Event(std::move(event)),
-            Sender(sender)
-        {
-        }
-
-        TPendingRequest(const TPendingRequest& rhs) = default;
-        TPendingRequest(TPendingRequest&& rhs) = default;
-
-        ui64 Cookie;
-        std::shared_ptr<TEvPersQueue::TEvRequest> Event;
-        TActorId Sender;
-    };
-
-    TDeque<TPendingRequest> PendingRequests;
-};
 
 struct TChangeNotification {
     TChangeNotification(const TActorId& actor, const ui64 txId)
@@ -532,130 +486,6 @@ TActorId CreateStatusProxyActor(const ui64 tabletId, const TActorId& sender, con
                                           NKikimrPQ::TStatusResponse,
                                           TEvPersQueue::TEvStatusResponse>(tabletId, sender, count, cookie));
 }
-
-/******************************************************* MonitoringProxy *********************************************************/
-
-
-class TMonitoringProxy : public TActorBootstrapped<TMonitoringProxy> {
-public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::PERSQUEUE_MON_ACTOR;
-    }
-
-    TMonitoringProxy(const TActorId& sender, const TString& query, const TMap<ui32, TActorId>& partitions, const TActorId& cache,
-                     const TString& topicName, ui64 tabletId, ui32 inflight)
-    : Sender(sender)
-    , Query(query)
-    , Partitions(partitions)
-    , Cache(cache)
-    , TotalRequests(partitions.size() + 1)
-    , TotalResponses(0)
-    , TopicName(topicName)
-    , TabletID(tabletId)
-    , Inflight(inflight)
-    {
-        for (auto& p : Partitions) {
-            Results[p.first].push_back(Sprintf("Partition %u: NO DATA", p.first));
-        }
-    }
-
-    void Bootstrap(const TActorContext& ctx)
-    {
-        Become(&TThis::StateFunc);
-        ctx.Send(Cache, new TEvPQ::TEvMonRequest(Sender, Query));
-        for (auto& p : Partitions) {
-            ctx.Send(p.second, new TEvPQ::TEvMonRequest(Sender, Query));
-        }
-        ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
-    }
-
-private:
-
-    void Reply(const TActorContext& ctx) {
-        TStringStream str;
-        ui32 mx = 0;
-        for (auto& r: Results) mx = Max<ui32>(mx, r.second.size());
-
-        HTML(str) {
-            TAG(TH2) {str << "PersQueue Tablet";}
-            TAG(TH3) {str << "Topic: " << TopicName;}
-            TAG(TH4) {str << "inflight: " << Inflight;}
-            UL_CLASS("nav nav-tabs") {
-                LI_CLASS("active") {
-                    str << "<a href=\"#main\" data-toggle=\"tab\">main</a>";
-                }
-                LI() {
-                    str << "<a href=\"#cache\" data-toggle=\"tab\">cache</a>";
-                }
-                for (auto& r: Results) {
-                    LI() {
-                        str << "<a href=\"#partition_" << r.first << "\" data-toggle=\"tab\">" << r.first << "</a>";
-                    }
-                }
-            }
-            DIV_CLASS("tab-content") {
-                DIV_CLASS_ID("tab-pane fade in active", "main") {
-                    TABLE() {
-                        for (ui32 i = 0; i < mx; ++i) {
-                            TABLER() {
-                                for (auto& r : Results) {
-                                    TABLED() {
-                                        if (r.second.size() > i)
-                                            str << r.second[i];
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                for (auto& s: Str) {
-                    str << s;
-                }
-            }
-            TAG(TH3) {str << "<a href=\"app?TabletID=" << TabletID << "&kv=1\">KV-tablet internals</a>";}
-        }
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Answer TEvRemoteHttpInfoRes: to " << Sender << " self " << ctx.SelfID);
-        ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
-        Die(ctx);
-    }
-
-    void Wakeup(const TActorContext& ctx) {
-        Reply(ctx);
-    }
-
-    void Handle(TEvPQ::TEvMonResponse::TPtr& ev, const TActorContext& ctx)
-    {
-        if (ev->Get()->Partition.Defined()) {
-            Results[ev->Get()->Partition->InternalPartitionId] = ev->Get()->Res;
-        }
-        Str.push_back(ev->Get()->Str);
-        if(++TotalResponses == TotalRequests) {
-            Reply(ctx);
-        }
-    }
-
-    STFUNC(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
-            CFunc(TEvents::TSystem::Wakeup, Wakeup);
-            HFunc(TEvPQ::TEvMonResponse, Handle);
-        default:
-            break;
-        };
-    }
-
-    TActorId Sender;
-    TString Query;
-    TMap<ui32, TVector<TString>> Results;
-    TVector<TString> Str;
-    TMap<ui32, TActorId> Partitions;
-    TActorId Cache;
-    ui32 TotalRequests;
-    ui32 TotalResponses;
-    TString TopicName;
-    ui64 TabletID;
-    ui32 Inflight;
-};
-
 
 /******************************************************* TPersQueue *********************************************************/
 
@@ -3079,24 +2909,6 @@ void TPersQueue::RestartPipe(ui64 tabletId, const TActorContext& ctx)
         }
     }
 }
-
-bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx)
-{
-    if (!ev)
-        return true;
-
-    if (ev->Get()->Cgi().Has("kv")) {
-        return TKeyValueFlat::OnRenderAppHtmlPage(ev, ctx);
-    }
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvRemoteHttpInfo: " << ev->Get()->Query);
-    TMap<ui32, TActorId> res;
-    for (auto& p : Partitions) {
-        res.emplace(p.first.InternalPartitionId, p.second.Actor);
-    }
-    ctx.Register(new TMonitoringProxy(ev->Sender, ev->Get()->Query, res, CacheActor, TopicName, TabletID(), ResponseProxy.size()));
-    return true;
-}
-
 
 void TPersQueue::HandleDie(const TActorContext& ctx)
 {

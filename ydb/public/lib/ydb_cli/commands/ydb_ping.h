@@ -24,7 +24,7 @@ class TCommandPing : public TYdbCommand, public TCommandWithFormat,
     public TInterruptibleCommand
 {
 public:
-    enum class EPingType {
+    enum class EPingKind {
         PlainGrpc = 0,
         GrpcProxy,
         PlainKqp,
@@ -55,7 +55,7 @@ private:
     int Count;
     int IntervalMs;
 
-    EPingType PingType;
+    EPingKind PingKind;
 };
 
 } // NYdb::NConsoleClient

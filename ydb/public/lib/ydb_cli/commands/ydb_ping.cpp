@@ -11,9 +11,9 @@ namespace {
 
 constexpr int DEFAULT_COUNT = 100;
 constexpr int DEFAULT_INTERVAL_MS = 100;
-constexpr TCommandPing::EPingType DEFAULT_PING_TYPE = TCommandPing::EPingType::Select1;
+constexpr TCommandPing::EPingKind DEFAULT_PING_KIND = TCommandPing::EPingKind::Select1;
 
-const TVector<TString> PingTypeDescriptions = {
+const TVector<TString> PingKindDescriptions = {
     "ping returns right from the GRPC layer",
     "ping goes through GRPC layer right to the GRPC proxy and returns",
     "ping goes until query processing layer and returns without any query execution",
@@ -30,22 +30,22 @@ TCommandPing::TCommandPing()
     : TYdbCommand("ping", {}, "ping YDB")
     , Count(DEFAULT_COUNT)
     , IntervalMs(DEFAULT_INTERVAL_MS)
-    , PingType(DEFAULT_PING_TYPE)
+    , PingKind(DEFAULT_PING_KIND)
 {}
 
 void TCommandPing::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    TStringStream pingTypesDescription;
-    pingTypesDescription << "Ping types, available options:";
-    for (size_t i = 0; i < PingTypeDescriptions.size(); ++i) {
-        EPingType type = static_cast<EPingType>(i);
+    TStringStream pingKindsDescription;
+    pingKindsDescription << "Ping kind, available options:";
+    for (size_t i = 0; i < PingKindDescriptions.size(); ++i) {
+        EPingKind kind = static_cast<EPingKind>(i);
 
-        pingTypesDescription << "\n" << colors.ItalicOn() << type << colors.ItalicOff()
-            << "\n    " << PingTypeDescriptions[i];
+        pingKindsDescription << "\n" << colors.ItalicOn() << kind << colors.ItalicOff()
+            << "\n    " << PingKindDescriptions[i];
     }
-    pingTypesDescription << "\nDefault: " << PingType << Endl;
+    pingKindsDescription << "\nDefault: " << PingKind << Endl;
 
 
     config.Opts->AddLongOption(
@@ -56,8 +56,9 @@ void TCommandPing::Config(TConfig& config) {
         'i', "interval", TStringBuilder() << "<interval> ms between pings, default " << DEFAULT_INTERVAL_MS)
             .RequiredArgument("INTERVAL").StoreResult(&IntervalMs);
 
-    config.Opts->AddLongOption('t', "type", pingTypesDescription.Str())
-        .OptionalArgument("STRING").StoreResult(&PingType);
+    config.Opts->AddLongOption(
+        'k', "kind", pingKindsDescription.Str())
+            .OptionalArgument("STRING").StoreResult(&PingKind);
 }
 
 void TCommandPing::Parse(TConfig& config) {
@@ -84,27 +85,27 @@ int TCommandPing::RunCommand(TConfig& config) {
         bool isOk;
         auto start = NMonotonic::TMonotonic::Now();
 
-        switch (PingType) {
-        case EPingType::PlainGrpc:
+        switch (PingKind) {
+        case EPingKind::PlainGrpc:
             isOk = PingPlainGrpc(pingClient);
             break;
-        case EPingType::PlainKqp:
+        case EPingKind::PlainKqp:
             isOk = PingPlainKqp(pingClient);
             break;
-        case EPingType::GrpcProxy:
+        case EPingKind::GrpcProxy:
             isOk = PingGrpcProxy(pingClient);
             break;
-        case EPingType::Select1:
+        case EPingKind::Select1:
             isOk = PingKqpSelect1(queryClient, query);
             break;
-        case EPingType::SchemeCache:
+        case EPingKind::SchemeCache:
             isOk = PingSchemeCache(pingClient);
             break;
-        case EPingType::TxProxy:
+        case EPingKind::TxProxy:
             isOk = PingTxProxy(pingClient);
             break;
         default:
-            std::cerr << "Unknown ping type" << std::endl;
+            std::cerr << "Unknown ping kind" << std::endl;
             return EXIT_FAILURE;
         }
 

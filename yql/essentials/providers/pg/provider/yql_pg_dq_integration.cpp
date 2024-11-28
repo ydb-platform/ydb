@@ -25,7 +25,7 @@ public:
         return Nothing();
     }
 
-    ui64 Partition(const TDqSettings&, size_t, const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
+    ui64 Partition(const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
         partitions.clear();
         partitions.emplace_back();
         return 0ULL;

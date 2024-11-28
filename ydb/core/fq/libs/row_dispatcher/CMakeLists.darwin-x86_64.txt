@@ -29,7 +29,6 @@ target_link_libraries(fq-libs-row_dispatcher PUBLIC
   yutil
   contrib-libs-fmt
   contrib-libs-simdjson
-  ydb-core-base
   libs-actors-logging
   libs-config-protos
   libs-row_dispatcher-events

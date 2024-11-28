@@ -496,7 +496,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDirectReadAc
     it->second.MaxProcessedDirectReadId = ev->Get()->DirectReadId;
 
     BytesInflight_ -= drIt->second.ByteSize;
-    ReadSizeBudget += drIt->second.ByteSize;
     if (BytesInflight) {
         (*BytesInflight) -= drIt->second.ByteSize;
     }

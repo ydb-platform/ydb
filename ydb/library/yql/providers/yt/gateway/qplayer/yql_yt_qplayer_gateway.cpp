@@ -48,6 +48,7 @@ public:
     {}
 
     void OpenSession(TOpenSessionOptions&& options) final {
+        SessionGenerations_[options.SessionId()] = 0;
         return Inner_->OpenSession(std::move(options));
     }
 
@@ -56,6 +57,7 @@ public:
     }
 
     NThreading::TFuture<void> CleanupSession(TCleanupSessionOptions&& options) final {
+        ++SessionGenerations_[options.SessionId()];
         return Inner_->CleanupSession(std::move(options));
     }
 
@@ -166,8 +168,9 @@ public:
             });
     }
 
-    static TString MakeGetTableInfoKey(const TTableReq& req, ui32 epoch) {
+    static TString MakeGetTableInfoKey(const TTableReq& req, ui32 epoch, ui64 generation) {
         auto tableNode = NYT::TNode()
+            ("Generation", generation)
             ("Cluster", req.Cluster())
             ("Table", req.Table());
 
@@ -199,12 +202,13 @@ public:
     }
 
     NThreading::TFuture<TTableInfoResult> GetTableInfo(TGetTableInfoOptions&& options) final {
+        ui64 generation = SessionGenerations_[options.SessionId()];
         if (QContext_.CanRead()) {
             TTableInfoResult res;
             res.SetSuccess();
             for (const auto& req : options.Tables()) {
                 TTableInfoResult::TTableData data;
-                auto key = MakeGetTableInfoKey(req, options.Epoch());
+                auto key = MakeGetTableInfoKey(req, options.Epoch(), generation);
                 auto item = QContext_.GetReader()->Get({YtGateway_GetTableInfo, key}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
@@ -246,7 +250,7 @@ public:
 
         auto optionsDup = options;
         return Inner_->GetTableInfo(std::move(options))
-            .Subscribe([optionsDup, qContext = QContext_](const NThreading::TFuture<TTableInfoResult>& future) {
+            .Subscribe([optionsDup, qContext = QContext_, generation](const NThreading::TFuture<TTableInfoResult>& future) {
                 if (!qContext.CanWrite() || future.HasException()) {
                     return;
                 }
@@ -260,7 +264,7 @@ public:
                 for (size_t i = 0; i < res.Data.size(); ++i) {
                     const auto& req = optionsDup.Tables()[i];
                     const auto& data = res.Data[i];
-                    auto key = MakeGetTableInfoKey(req, optionsDup.Epoch());
+                    auto key = MakeGetTableInfoKey(req, optionsDup.Epoch(), generation);
 
                     auto attrsNode = NYT::TNode::CreateMap();
                     if (data.Meta) {
@@ -303,8 +307,9 @@ public:
             });
     }
 
-    static TString MakeGetTableRangeKey(const TTableRangeOptions& options) {
+    static TString MakeGetTableRangeKey(const TTableRangeOptions& options, ui64 generation) {
         auto keyNode = NYT::TNode()
+            ("Generation", generation)
             ("Cluster", options.Cluster())
             ("Prefix", options.Prefix())
             ("Suffix", options.Suffix());
@@ -317,9 +322,10 @@ public:
     }
 
     NThreading::TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
+        ui64 generation = SessionGenerations_[options.SessionId()];
         TString key;
         if (QContext_) {
-            key = MakeGetTableRangeKey(options);
+            key = MakeGetTableRangeKey(options, generation);
         }
 
         if (QContext_.CanRead()) {
@@ -407,13 +413,14 @@ public:
         });
     }
 
-    static TString MakeGetFolderKey(const TFolderOptions& options) {
+    static TString MakeGetFolderKey(const TFolderOptions& options, ui64 generation) {
         auto attrNode = NYT::TNode::CreateList();
         for (const auto& attr : options.Attributes()) {
             attrNode.Add(NYT::TNode(attr));
         }
 
         auto keyNode = NYT::TNode()
+            ("Generation", generation)
             ("Cluster", options.Cluster())
             ("Prefix", options.Prefix())
             ("Attributes", attrNode);
@@ -421,7 +428,7 @@ public:
         return MakeHash(NYT::NodeToCanonicalYsonString(keyNode, NYT::NYson::EYsonFormat::Binary));
     }
 
-    static TString MakeResolveLinksKey(const TResolveOptions& options) {
+    static TString MakeResolveLinksKey(const TResolveOptions& options, ui64 generation) {
         auto itemsNode = NYT::TNode::CreateList();
         for (const auto& item : options.Items()) {
             auto attrNode = NYT::TNode::CreateList();
@@ -438,13 +445,14 @@ public:
         }
 
         auto keyNode = NYT::TNode()
+            ("Generation", generation)
             ("Cluster", options.Cluster())
             ("Items", itemsNode);
 
         return MakeHash(NYT::NodeToCanonicalYsonString(keyNode, NYT::NYson::EYsonFormat::Binary));
     }
 
-    static TString MakeGetFoldersKey(const TBatchFolderOptions& options) {
+    static TString MakeGetFoldersKey(const TBatchFolderOptions& options, ui64 generation) {
         auto itemsNode = NYT::TNode();
         TMap<TString, size_t> order;
         for (size_t i = 0; i < options.Folders().size(); ++i) {
@@ -464,6 +472,7 @@ public:
         }
 
         auto keyNode = NYT::TNode()
+            ("Generation", generation)
             ("Cluster", options.Cluster())
             ("Items", itemsNode);
 
@@ -490,8 +499,9 @@ public:
     }
 
     NThreading::TFuture<TFolderResult> GetFolder(TFolderOptions&& options) final {
+        ui64 generation = SessionGenerations_[options.SessionId()];
         if (QContext_.CanRead()) {
-            const auto& key = MakeGetFolderKey(options);
+            const auto& key = MakeGetFolderKey(options, generation);
             auto item = QContext_.GetReader()->Get({YtGateway_GetFolder, key}).GetValueSync();
             if (!item) {
                 throw yexception() << "Missing replay data";
@@ -520,7 +530,7 @@ public:
 
         auto optionsDup = options;
         return Inner_->GetFolder(std::move(options))
-            .Subscribe([optionsDup, qContext = QContext_](const NThreading::TFuture<TFolderResult>& future) {
+            .Subscribe([optionsDup, qContext = QContext_, generation](const NThreading::TFuture<TFolderResult>& future) {
                 if (!qContext.CanWrite() || future.HasException()) {
                     return;
                 }
@@ -530,7 +540,7 @@ public:
                     return;
                 }
 
-                const auto& key = MakeGetFolderKey(optionsDup);
+                const auto& key = MakeGetFolderKey(optionsDup, generation);
                 auto valueNode = NYT::TNode();
 
                 if (std::holds_alternative<TFileLinkPtr>(res.ItemsOrFileLink)) {
@@ -550,10 +560,11 @@ public:
     }
 
     NThreading::TFuture<TBatchFolderResult> ResolveLinks(TResolveOptions&& options) final {
+        ui64 generation = SessionGenerations_[options.SessionId()];
         if (QContext_.CanRead()) {
             TBatchFolderResult res;
             res.SetSuccess();
-            const auto& key = MakeResolveLinksKey(options);
+            const auto& key = MakeResolveLinksKey(options, generation);
             auto item = QContext_.GetReader()->Get({YtGateway_ResolveLinks, key}).GetValueSync();
             if (!item) {
                 throw yexception() << "Missing replay data";
@@ -571,7 +582,7 @@ public:
 
         auto optionsDup = options;
         return Inner_->ResolveLinks(std::move(options))
-            .Subscribe([optionsDup, qContext = QContext_](const NThreading::TFuture<TBatchFolderResult>& future) {
+            .Subscribe([optionsDup, qContext = QContext_, generation](const NThreading::TFuture<TBatchFolderResult>& future) {
                 if (!qContext.CanWrite() || future.HasException()) {
                     return;
                 }
@@ -581,7 +592,7 @@ public:
                     return;
                 }
 
-                const auto& key = MakeResolveLinksKey(optionsDup);
+                const auto& key = MakeResolveLinksKey(optionsDup, generation);
                 NYT::TNode valueNode = NYT::TNode::CreateList();
                 for (const auto& item : res.Items) {
                     valueNode.Add(SerializeFolderItem(item));
@@ -593,10 +604,11 @@ public:
     }
 
     NThreading::TFuture<TBatchFolderResult> GetFolders(TBatchFolderOptions&& options) final {
+        ui64 generation = SessionGenerations_[options.SessionId()];
         if (QContext_.CanRead()) {
             TBatchFolderResult res;
             res.SetSuccess();
-            const auto& key = MakeGetFoldersKey(options);
+            const auto& key = MakeGetFoldersKey(options, generation);
             auto item = QContext_.GetReader()->Get({YtGateway_GetFolders, key}).GetValueSync();
             if (!item) {
                 throw yexception() << "Missing replay data";
@@ -614,7 +626,7 @@ public:
 
         auto optionsDup = options;
         return Inner_->GetFolders(std::move(options))
-            .Subscribe([optionsDup, qContext = QContext_](const NThreading::TFuture<TBatchFolderResult>& future) {
+            .Subscribe([optionsDup, qContext = QContext_, generation](const NThreading::TFuture<TBatchFolderResult>& future) {
                 if (!qContext.CanWrite() || future.HasException()) {
                     return;
                 }
@@ -624,7 +636,7 @@ public:
                     return;
                 }
 
-                const auto& key = MakeGetFoldersKey(optionsDup);
+                const auto& key = MakeGetFoldersKey(optionsDup, generation);
                 NYT::TNode valueNode = NYT::TNode::CreateList();
                 for (const auto& item : res.Items) {
                     valueNode.Add(SerializeFolderItem(item));
@@ -699,8 +711,9 @@ public:
         return Inner_->DropTrackables(std::move(options));
     }
 
-    static TString MakePathStatKey(const TString& cluster, bool extended, const TPathStatReq& req) {
+    static TString MakePathStatKey(const TString& cluster, bool extended, const TPathStatReq& req, ui64 generation) {
         auto node = NYT::TNode()
+            ("Generation", generation)
             ("Cluster", cluster)
             ("Extended", extended);
 
@@ -734,12 +747,13 @@ public:
     }
 
     NThreading::TFuture<TPathStatResult> PathStat(TPathStatOptions&& options) final {
+        ui64 generation = SessionGenerations_[options.SessionId()];
         if (QContext_.CanRead()) {
             TPathStatResult res;
             res.DataSize.resize(options.Paths().size(), 0);
 
             for (ui32 index = 0; index < options.Paths().size(); ++index) {
-                const auto& key = MakePathStatKey(options.Cluster(), false, options.Paths()[index]);
+                const auto& key = MakePathStatKey(options.Cluster(), false, options.Paths()[index], generation);
                 auto item = QContext_.GetReader()->Get({YtGateway_PathStat, key}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
@@ -756,7 +770,7 @@ public:
 
         auto optionsDup = options;
         return Inner_->PathStat(std::move(options))
-            .Subscribe([optionsDup, qContext = QContext_](const NThreading::TFuture<TPathStatResult>& future) {
+            .Subscribe([optionsDup, qContext = QContext_, generation](const NThreading::TFuture<TPathStatResult>& future) {
                 if (!qContext.CanWrite() || future.HasException()) {
                     return;
                 }
@@ -767,7 +781,7 @@ public:
                 }
 
                 for (ui32 index = 0; index < optionsDup.Paths().size(); ++index) {
-                    const auto& key = MakePathStatKey(optionsDup.Cluster(), false, optionsDup.Paths()[index]);
+                    const auto& key = MakePathStatKey(optionsDup.Cluster(), false, optionsDup.Paths()[index], generation);
                     auto value = SerializePathStat(res, index);
                     qContext.GetWriter()->Put({YtGateway_PathStat, key}, value).GetValueSync();
                 }
@@ -775,12 +789,13 @@ public:
     }
 
     TPathStatResult TryPathStat(TPathStatOptions&& options) final {
+        ui64 generation = SessionGenerations_[options.SessionId()];
         if (QContext_.CanRead()) {
             TPathStatResult res;
             res.DataSize.resize(options.Paths().size(), 0);
 
             for (ui32 index = 0; index < options.Paths().size(); ++index) {
-                const auto& key = MakePathStatKey(options.Cluster(), false, options.Paths()[index]);
+                const auto& key = MakePathStatKey(options.Cluster(), false, options.Paths()[index], generation);
                 bool allow = false;
                 if (PathStatKeys_.contains(key)) {
                     allow = true;
@@ -817,7 +832,7 @@ public:
 
         if (!res.Success()) {
             for (ui32 index = 0; index < optionsDup.Paths().size(); ++index) {
-                const auto& key = MakePathStatKey(optionsDup.Cluster(), false, optionsDup.Paths()[index]);
+                const auto& key = MakePathStatKey(optionsDup.Cluster(), false, optionsDup.Paths()[index], generation);
                 QContext_.GetWriter()->Put({YtGateway_PathStatMissing, key}, "1").GetValueSync();
             }
 
@@ -825,7 +840,7 @@ public:
         }
 
         for (ui32 index = 0; index < optionsDup.Paths().size(); ++index) {
-            const auto& key = MakePathStatKey(optionsDup.Cluster(), false, optionsDup.Paths()[index]);
+            const auto& key = MakePathStatKey(optionsDup.Cluster(), false, optionsDup.Paths()[index], generation);
             auto value = SerializePathStat(res, index);
             QContext_.GetWriter()->Put({YtGateway_PathStat, key}, value).GetValueSync();
         }
@@ -887,6 +902,7 @@ private:
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const TFileStoragePtr FileStorage_;
     THashSet<TString> PathStatKeys_;
+    THashMap<TString, ui64> SessionGenerations_;
 };
 
 }

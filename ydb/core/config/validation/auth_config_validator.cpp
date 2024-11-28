@@ -13,7 +13,7 @@ EValidationResult ValidatePasswordComplexitySettings(const NKikimrProto::TPasswo
                                      passwordComplexitySettings.GetMinNumbersCount() +
                                      passwordComplexitySettings.GetMinSpecialCharsCount();
     if (passwordComplexitySettings.GetMinLength() < minCountOfRequiredChars) {
-        msg = std::vector<TString>{"Min length of password must be no less than sum of min count of lower case chars, upper case chars, numbers and special chars"};
+        msg = std::vector<TString>{"Min length of password must be not less than the sum of min count of lower case chars, upper case chars, numbers and special chars"};
         return EValidationResult::Error;
     }
     return EValidationResult::Ok;

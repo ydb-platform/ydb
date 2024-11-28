@@ -37,9 +37,9 @@ public:
     }
 
 private:
-    void SendTokenExchangeRequest(const TCgiParameters& body, const ETokenExchangeType exchangeType, const NActors::TActorContext& ctx);
-    void ExchangeSessionToken(TString& sessionToken, const NActors::TActorContext& ctx);
-    void ExchangeImpersonatedToken(TString& sessionToken, TString& impersonatedToken, const NActors::TActorContext& ctx);
+    void SendTokenExchangeRequest(const TCgiParameters& body, const ETokenExchangeType exchangeType);
+    void ExchangeSessionToken(const TString& sessionToken);
+    void ExchangeImpersonatedToken(const TString& sessionToken, const TString& impersonatedToken);
     void ClearImpersonatedCookie();
     void RequestAuthorizationCode();
     void ForwardUserRequest(TStringBuf authHeader, bool secure = false) override;

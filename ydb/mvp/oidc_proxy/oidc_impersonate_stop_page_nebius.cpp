@@ -22,9 +22,7 @@ void THandlerImpersonateStop::Bootstrap() {
     responseHeaders.Set("Set-Cookie", ClearSecureCookie(impersonatedCookieName));
     SetCORS(Request, &responseHeaders);
 
-    NHttp::THttpOutgoingResponsePtr httpResponse;
-    httpResponse = Request->CreateResponse("200", "OK", responseHeaders);
-    ReplyAndPassAway(std::move(httpResponse));
+    ReplyAndPassAway(Request->CreateResponse("200", "OK", responseHeaders));
 }
 
 void THandlerImpersonateStop::ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse) {
@@ -38,8 +36,8 @@ TImpersonateStopPageHandler::TImpersonateStopPageHandler(const NActors::TActorId
     , Settings(settings)
 {}
 
-void TImpersonateStopPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
-    ctx.Register(new THandlerImpersonateStop(event->Sender, event->Get()->Request, HttpProxyId, Settings));
+void TImpersonateStopPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
+    Register(new THandlerImpersonateStop(event->Sender, event->Get()->Request, HttpProxyId, Settings));
 }
 
 } // NMVP::NOIDC

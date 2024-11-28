@@ -14,7 +14,7 @@ public:
                                 const NActors::TActorId& httpProxyId,
                                 const TOpenIdConnectSettings& settings);
 
-    void RequestSessionToken(TString& code, const NActors::TActorContext& ctx) override;
+    void RequestSessionToken(const TString& code) override;
     void ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) override;
 
 private:

@@ -33,7 +33,7 @@ void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
 
 void THandlerSessionServiceCheck::HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     if (event->Get()->Response != nullptr) {
-        NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
+        NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
         BLOG_D("Incoming response for protected resource: " << response->Status);
         if (NeedSendSecureHttpRequest(response)) {
             return SendSecureHttpRequest(response);

@@ -1,6 +1,4 @@
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/string_utils/quote/quote.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_tokens.h>
@@ -18,7 +16,7 @@ THandlerSessionServiceCheckNebius::THandlerSessionServiceCheckNebius(const NActo
     : THandlerSessionServiceCheck(sender, request, httpProxyId, settings)
 {}
 
-void THandlerSessionServiceCheckNebius::StartOidcProcess(const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheckNebius::StartOidcProcess(const NActors::TActorContext&) {
     NHttp::THeaders headers(Request->Headers);
     BLOG_D("Start OIDC process");
 
@@ -30,25 +28,24 @@ void THandlerSessionServiceCheckNebius::StartOidcProcess(const NActors::TActorCo
     if (sessionToken) {
         TString impersonatedToken = DecodeToken(impersonatedCookieValue);
         if (impersonatedToken) {
-            ExchangeImpersonatedToken(sessionToken, impersonatedToken, ctx);
+            ExchangeImpersonatedToken(sessionToken, impersonatedToken);
         } else {
-            ExchangeSessionToken(sessionToken, ctx);
+            ExchangeSessionToken(sessionToken);
         }
     } else{
         RequestAuthorizationCode();
     }
 }
 
-void THandlerSessionServiceCheckNebius:: HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
+void THandlerSessionServiceCheckNebius::HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     if (!event->Get()->Response) {
         BLOG_D("Getting access token: Bad Request");
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
-        NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
-        return ReplyAndPassAway(std::move(httpResponse));
+        return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error));
     }
 
-    NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
+    NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
     BLOG_D("Getting access token: " << response->Status << " " << response->Message);
     if (response->Status == "200") {
         TString iamToken;
@@ -69,14 +66,12 @@ void THandlerSessionServiceCheckNebius:: HandleExchange(NHttp::TEvHttpProxy::TEv
         }
     }
     // don't know what to do, just forward response
-    NHttp::THttpOutgoingResponsePtr httpResponse;
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Parse(response->Headers);
-    httpResponse = Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body);
-    ReplyAndPassAway(std::move(httpResponse));
+    ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
 }
 
-void THandlerSessionServiceCheckNebius::SendTokenExchangeRequest(const TCgiParameters& params, const ETokenExchangeType exchangeType, const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheckNebius::SendTokenExchangeRequest(const TCgiParameters& params, const ETokenExchangeType exchangeType) {
     tokenExchangeType = exchangeType;
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetExchangeEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
@@ -89,32 +84,32 @@ void THandlerSessionServiceCheckNebius::SendTokenExchangeRequest(const TCgiParam
     httpRequest->Set("Authorization", token); // Bearer included
     httpRequest->Set<&NHttp::THttpRequest::Body>(params());
 
-    ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+    Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     Become(&THandlerSessionServiceCheckNebius::StateExchange);
 }
 
-void THandlerSessionServiceCheckNebius::ExchangeSessionToken(TString& sessionToken, const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheckNebius::ExchangeSessionToken(const TString& sessionToken) {
     BLOG_D("Exchange session token");
     TCgiParameters params;
-    params.InsertEscaped("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
-    params.InsertEscaped("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
-    params.InsertEscaped("subject_token_type", "urn:ietf:params:oauth:token-type:session_token");
-    params.InsertEscaped("subject_token", sessionToken);
+    params.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
+    params.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
+    params.emplace("subject_token_type", "urn:ietf:params:oauth:token-type:session_token");
+    params.emplace("subject_token", sessionToken);
 
-    SendTokenExchangeRequest(params, ETokenExchangeType::SessionToken, ctx);
+    SendTokenExchangeRequest(params, ETokenExchangeType::SessionToken);
 }
 
-void THandlerSessionServiceCheckNebius::ExchangeImpersonatedToken(TString& sessionToken, TString& impersonatedToken, const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheckNebius::ExchangeImpersonatedToken(const TString& sessionToken, const TString& impersonatedToken) {
     BLOG_D("Exchange impersonated token");
     TCgiParameters params;
-    params.InsertEscaped("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
-    params.InsertEscaped("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
-    params.InsertEscaped("subject_token_type", "urn:ietf:params:oauth:token-type:jwt");
-    params.InsertEscaped("subject_token", impersonatedToken);
-    params.InsertEscaped("actor_token", sessionToken);
-    params.InsertEscaped("actor_token_type", "urn:ietf:params:oauth:token-type:session_token");
+    params.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
+    params.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
+    params.emplace("subject_token_type", "urn:ietf:params:oauth:token-type:jwt");
+    params.emplace("subject_token", impersonatedToken);
+    params.emplace("actor_token", sessionToken);
+    params.emplace("actor_token_type", "urn:ietf:params:oauth:token-type:session_token");
 
-    SendTokenExchangeRequest(params, ETokenExchangeType::ImpersonatedToken, ctx);
+    SendTokenExchangeRequest(params, ETokenExchangeType::ImpersonatedToken);
 }
 
 void THandlerSessionServiceCheckNebius::ClearImpersonatedCookie() {
@@ -124,9 +119,7 @@ void THandlerSessionServiceCheckNebius::ClearImpersonatedCookie() {
     SetCORS(Request, &responseHeaders);
     responseHeaders.Set("Set-Cookie", ClearSecureCookie(impersonatedCookieName));
     responseHeaders.Set("Location", Request->URL);
-
-    NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("307", "Temporary Redirect", responseHeaders);
-    ReplyAndPassAway(std::move(httpResponse));
+    ReplyAndPassAway(Request->CreateResponse("307", "Temporary Redirect", responseHeaders));
 }
 
 void THandlerSessionServiceCheckNebius::RequestAuthorizationCode() {

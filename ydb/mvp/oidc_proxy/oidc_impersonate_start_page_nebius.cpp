@@ -1,5 +1,4 @@
 #include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/string_utils/quote/quote.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/security/util.h>
 #include <ydb/mvp/core/mvp_log.h>
@@ -20,7 +19,7 @@ THandlerImpersonateStart::THandlerImpersonateStart(const NActors::TActorId& send
     , Settings(settings)
 {}
 
-void THandlerImpersonateStart::Bootstrap(const NActors::TActorContext& ctx) {
+void THandlerImpersonateStart::Bootstrap() {
     BLOG_D("Start impersonation process");
 
     NHttp::TUrlParameters urlParameters(Request->URL);
@@ -29,11 +28,7 @@ void THandlerImpersonateStart::Bootstrap(const NActors::TActorContext& ctx) {
     NHttp::THeaders headers(Request->Headers);
     NHttp::TCookies cookies(headers.Get("Cookie"));
 
-    TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
-    TStringBuf sessionCookieValue = cookies.Get(sessionCookieName);
-    if (!sessionCookieValue.Empty()) {
-        BLOG_D("Using session cookie (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
-    }
+    TStringBuf sessionCookieValue = GetCookie(cookies, CreateNameSessionCookie(Settings.ClientId));
     TString sessionToken = DecodeToken(sessionCookieValue);
     TStringBuf impersonatedCookieValue = GetCookie(cookies, CreateNameImpersonatedCookie(Settings.ClientId));
 
@@ -47,10 +42,10 @@ void THandlerImpersonateStart::Bootstrap(const NActors::TActorContext& ctx) {
         return ReplyBadRequestAndPassAway("Wrong impersonate parameter: service_account_id not found");
     }
 
-    RequestImpersonatedToken(sessionToken, serviceAccountId, ctx);
+    RequestImpersonatedToken(sessionToken, serviceAccountId);
 }
 
-void THandlerImpersonateStart::RequestImpersonatedToken(TString& sessionToken, TString& serviceAccountId, const NActors::TActorContext& ctx) {
+void THandlerImpersonateStart::RequestImpersonatedToken(TString& sessionToken, TString& serviceAccountId) {
     BLOG_D("Request impersonated token");
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetImpersonateEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
@@ -63,11 +58,11 @@ void THandlerImpersonateStart::RequestImpersonatedToken(TString& sessionToken, T
     httpRequest->Set("Authorization", token); // Bearer included
 
     TCgiParameters params;
-    params.InsertEscaped("session", sessionToken);
-    params.InsertEscaped("service_account_id", serviceAccountId);
+    params.emplace("session", sessionToken);
+    params.emplace("service_account_id", serviceAccountId);
     httpRequest->Set<&NHttp::THttpRequest::Body>(params());
 
-    ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+    Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     Become(&THandlerImpersonateStart::StateWork);
 }
 
@@ -79,14 +74,12 @@ void THandlerImpersonateStart::ProcessImpersonatedToken(const TString& impersona
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", CreateSecureCookie(impersonatedCookieName, impersonatedCookieValue));
     SetCORS(Request, &responseHeaders);
-    NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("200", "OK", responseHeaders);
-    ReplyAndPassAway(std::move(httpResponse));
+    ReplyAndPassAway(Request->CreateResponse("200", "OK", responseHeaders));
 }
 
 void THandlerImpersonateStart::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
-    NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Error.empty() && event->Get()->Response) {
-        NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
+        NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
         BLOG_D("Incoming response from authorization server: " << response->Status);
         if (response->Status == "200") {
             TStringBuf errorMessage;
@@ -134,8 +127,7 @@ void THandlerImpersonateStart::ReplyBadRequestAndPassAway(const TString& errorMe
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Content-Type", "text/plain");
     SetCORS(Request, &responseHeaders);
-    NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage);
-    ReplyAndPassAway(std::move(httpResponse));
+    ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage));
 }
 
 TImpersonateStartPageHandler::TImpersonateStartPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings)
@@ -144,8 +136,8 @@ TImpersonateStartPageHandler::TImpersonateStartPageHandler(const NActors::TActor
     , Settings(settings)
 {}
 
-void TImpersonateStartPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
-    ctx.Register(new THandlerImpersonateStart(event->Sender, event->Get()->Request, HttpProxyId, Settings));
+void TImpersonateStartPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
+    Register(new THandlerImpersonateStart(event->Sender, event->Get()->Request, HttpProxyId, Settings));
 }
 
 } // NMVP::NOIDC

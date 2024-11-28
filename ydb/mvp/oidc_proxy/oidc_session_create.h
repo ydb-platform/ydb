@@ -28,10 +28,10 @@ public:
                           const NActors::TActorId& httpProxyId,
                           const TOpenIdConnectSettings& settings);
 
-    virtual void RequestSessionToken(TString&, const NActors::TActorContext&) = 0;
+    virtual void RequestSessionToken(const TString&) = 0;
     virtual void ProcessSessionToken(const TString& accessToken, const NActors::TActorContext&) = 0;
 
-    void Bootstrap(const NActors::TActorContext& ctx);
+    void Bootstrap();
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
 
 protected:

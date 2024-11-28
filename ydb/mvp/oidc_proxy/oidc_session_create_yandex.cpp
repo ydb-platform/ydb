@@ -4,7 +4,6 @@
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_log.h>
-#include <library/cpp/string_utils/quote/quote.h>
 #include "oidc_session_create_yandex.h"
 
 namespace NMVP {
@@ -17,18 +16,17 @@ THandlerSessionCreateYandex::THandlerSessionCreateYandex(const NActors::TActorId
     : THandlerSessionCreate(sender, request, httpProxyId, settings)
 {}
 
-void THandlerSessionCreateYandex::RequestSessionToken(TString& code, const NActors::TActorContext& ctx) {
+void THandlerSessionCreateYandex::RequestSessionToken(const TString& code) {
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
     httpRequest->Set("Authorization", Settings.GetAuthorizationString());
 
-    CGIEscape(code);
-    TStringBuilder body;
-    body << "grant_type=authorization_code"
-         << "&code=" << code;
-    httpRequest->Set<&NHttp::THttpRequest::Body>(body);
+    TCgiParameters params;
+    params.emplace("grant_type", "authorization_code");
+    params.emplace("code", code);
+    httpRequest->Set<&NHttp::THttpRequest::Body>(params());
 
-    ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+    Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     Become(&THandlerSessionCreateYandex::StateWork);
 }
 
@@ -78,8 +76,7 @@ void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
         SetCORS(Request, &responseHeaders);
-        NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details);
-        ReplyAndPassAway(std::move(httpResponse));
+        ReplyAndPassAway(Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details));
     }
 }
 

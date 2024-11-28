@@ -1,5 +1,4 @@
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/mvp/core/mvp_log.h>
 #include "openid_connect.h"
@@ -18,8 +17,8 @@ THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
     , Settings(settings)
 {}
 
-void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore oidc session");
+void THandlerSessionCreate::Bootstrap() {
+    BLOG_D("Restore oidc session");
     NHttp::TUrlParameters urlParameters(Request->URL);
     TString code = urlParameters["code"];
     TString state = urlParameters["state"];
@@ -34,14 +33,14 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
     if (checkStateResult.IsSuccess()) {
         if (restoreContextResult.IsSuccess()) {
             if (code.empty()) {
-                LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore oidc session failed: receive empty 'code' parameter");
+                BLOG_D("Restore oidc session failed: receive empty 'code' parameter");
                 RetryRequestToProtectedResourceAndDie();
             } else {
-                RequestSessionToken(code, ctx);
+                RequestSessionToken(code);
             }
         } else {
             const auto& restoreSessionStatus = restoreContextResult.Status;
-            LOG_DEBUG_S(ctx, NMVP::EService::MVP, restoreSessionStatus.ErrorMessage);
+            BLOG_D(restoreSessionStatus.ErrorMessage);
             if (restoreSessionStatus.IsErrorRetryable) {
                 RetryRequestToProtectedResourceAndDie();
             } else {
@@ -49,7 +48,7 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
             }
         }
     } else {
-        LOG_DEBUG_S(ctx, NMVP::EService::MVP, checkStateResult.ErrorMessage);
+        BLOG_D(checkStateResult.ErrorMessage);
         if (restoreContextResult.IsSuccess() || restoreContextResult.Status.IsErrorRetryable) {
             RetryRequestToProtectedResourceAndDie();
         } else {
@@ -60,9 +59,8 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
 }
 
 void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-    NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Error.empty() && event->Get()->Response) {
-        NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
+        NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
         BLOG_D("Incoming response from authorization server: " << response->Status);
         if (response->Status == "200") {
             TStringBuf errorMessage;
@@ -72,8 +70,7 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
                 const NJson::TJsonValue* jsonAccessToken;
                 if (jsonValue.GetValuePointer("access_token", &jsonAccessToken)) {
                     TString sessionToken = jsonAccessToken->GetStringRobust();
-                    ProcessSessionToken(sessionToken, ctx);
-                    return;
+                    return ProcessSessionToken(sessionToken, ctx);
                 } else {
                     errorMessage = "Wrong OIDC provider response: access_token not found";
                 }
@@ -82,18 +79,17 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
             }
             NHttp::THeadersBuilder responseHeaders;
             responseHeaders.Set("Content-Type", "text/plain");
-            httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage);
+            return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage));
         } else {
             NHttp::THeadersBuilder responseHeaders;
             responseHeaders.Parse(response->Headers);
-            httpResponse = Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body);
+            return ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
         }
     } else {
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
-        httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
+        return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error));
     }
-    ReplyAndPassAway(std::move(httpResponse));
 }
 
 TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString& cookie) {

@@ -21,8 +21,8 @@ public:
                              const NHttp::THttpIncomingRequestPtr& request,
                              const NActors::TActorId& httpProxyId,
                              const TOpenIdConnectSettings& settings);
-    void Bootstrap(const NActors::TActorContext& ctx);
-    void RequestImpersonatedToken(TString&, TString&, const NActors::TActorContext&);
+    void Bootstrap();
+    void RequestImpersonatedToken(TString&, TString&);
     void ProcessImpersonatedToken(const TString& impersonatedToken);
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
     void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);
@@ -43,11 +43,11 @@ class TImpersonateStartPageHandler : public NActors::TActor<TImpersonateStartPag
 
 public:
     TImpersonateStartPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings);
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx);
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event);
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
             cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }

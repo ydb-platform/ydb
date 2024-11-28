@@ -16,11 +16,11 @@ class TSessionCreateHandler : public NActors::TActor<TSessionCreateHandler> {
 
 public:
     TSessionCreateHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings);
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx);
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event);
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
             cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }

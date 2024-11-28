@@ -728,8 +728,9 @@ public:
                 PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, "Deadline timer hit", putResults);
             }
         }
-        ReplyAndDieWithLastResponse(putResults);
-        ScheduleWakeup();
+        if (!ReplyAndDieWithLastResponse(putResults)) {
+            ScheduleWakeup();
+        }
     }
 
     void UpdatePengingVDiskResponseCount(const TDeque<TPutImpl::TPutEvent>& putEvents) {
@@ -801,12 +802,11 @@ public:
         while (!PutDeadlines.empty()) {
             TInstant deadline = *PutDeadlines.begin();
             PutDeadlines.erase(PutDeadlines.begin());
-            if (deadline > now) {
+            if (deadline > now && deadline != TInstant::Max()) {
                 Schedule(deadline, new TKikimrEvents::TEvWakeup);
                 return;
             }
         }
-        Schedule(TDuration::MilliSeconds(DsPutWakeupMs), new TKikimrEvents::TEvWakeup);
     }
 
     STATEFN(StateWait) {

@@ -565,8 +565,16 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
 
     for (const auto& partRes : record.GetPartResult()) {
         ui32 partitionId = partRes.GetPartition();
-        if (!PartitionsInfo.contains(partitionId)) {
+
+        auto p = PartitionsInfo.find(partitionId);
+        if (p == PartitionsInfo.end()) {
             continue;
+        }
+        auto& partitionInfo = p->second;
+
+        if (partRes.HasPartitionStatus() && partRes.HasEndWriteTimestampMs()) {
+            partitionInfo.Status = partRes.GetPartitionStatus();
+            partitionInfo.EndWriteTimestamp = TInstant::MilliSeconds(partRes.GetEndWriteTimestampMs());
         }
 
         if (SplitMergeEnabled(TabletConfig) && PartitionsScaleManager) {

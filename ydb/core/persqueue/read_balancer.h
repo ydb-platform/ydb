@@ -177,6 +177,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 public:
     struct TPartitionInfo {
         ui64 TabletId;
+        NKikimrPQ::ETopicPartitionStatus Status = NKikimrPQ::ETopicPartitionStatus::Active;
+        TInstant EndWriteTimestamp;
     };
 
 private:

@@ -150,6 +150,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
         const bool hasPartitioning = objectStorage.projection_size() || objectStorage.partitioned_by_size();
         issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting(), location, hasPartitioning));
+        issues.AddIssues(ValidateSchema(schema, objectStorage.partitioned_by()));
         issues.AddIssues(ValidateJsonListFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
         issues.AddIssues(ValidateRawFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
         if (hasPartitioning) {
@@ -265,6 +266,28 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "unknown format setting " + key));
             }
         }
+        return issues;
+    }
+
+    template<typename TScheme>
+    static NYql::TIssues ValidateSchema(const TScheme& schema, const google::protobuf::RepeatedPtrField<TString>& partitionedBy) {
+        NYql::TIssues issues;
+        TSet<TString> partitionedBySet{partitionedBy.begin(), partitionedBy.end()};
+
+        for (const auto& column: schema.column()) {
+            if (partitionedBySet.contains(column.name())) {
+                continue;
+            }
+
+            const auto type = column.type();
+            if (type.has_optional_type() && type.optional_type().item().has_optional_type()) {
+                issues.AddIssue(MakeErrorIssue(
+                    Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder{} << "Double optional types are not supported for bindings (you have '" 
+                        << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
+            }
+        }
+
         return issues;
     }
 

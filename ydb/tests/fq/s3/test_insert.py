@@ -543,17 +543,12 @@ class TestS3(object):
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
-        bucket = resource.Bucket("fbucket")
+        bucket = resource.Bucket("insert_bucket")
         bucket.create(ACL='public-read')
         bucket.objects.all().delete()
 
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = unique_prefix + "ibucket"
+        client.create_storage_connection(storage_connection_name, "insert_bucket")
 
         sql = f'''
             INSERT INTO `{storage_connection_name}`.`insert/`
@@ -565,5 +560,6 @@ class TestS3(object):
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
 
-        assert "Double optional types are not supported for output" in str(client.describe_query(query_id).result)
+        assert "Double optional types are not supported for output" in issues, "Incorrect issues: " + issues

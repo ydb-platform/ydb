@@ -37,6 +37,7 @@ target_link_libraries(providers-s3-common PUBLIC
   providers-s3-events
   essentials-public-issue
   public-issue-protos
+  yql-essentials-ast
 )
 
 target_sources(providers-s3-common PRIVATE

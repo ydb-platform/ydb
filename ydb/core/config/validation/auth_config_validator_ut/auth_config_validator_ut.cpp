@@ -37,6 +37,6 @@ Y_UNIT_TEST_SUITE(AuthConfigValidation) {
         EValidationResult result = ValidateAuthConfig(authConfig, error);
         UNIT_ASSERT_EQUAL(result, EValidationResult::Error);
         UNIT_ASSERT_VALUES_EQUAL(error.size(), 1);
-        UNIT_ASSERT_STRINGS_EQUAL(error[0], "Min length of password must be no less than sum of min count of lower case chars, upper case chars, numbers and special chars");
+        UNIT_ASSERT_STRINGS_EQUAL(error[0], "Min length of password must be not less than the sum of min count of lower case chars, upper case chars, numbers and special chars");
     }
 }

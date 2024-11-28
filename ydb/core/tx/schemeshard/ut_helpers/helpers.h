@@ -515,9 +515,20 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, ui64 schemeShard, ui64 tabletId,
         NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);
 
-    // Login
-    TEvTx* CreateAlterLoginCreateUser(ui64 txId, const TString& user, const TString& password);
-    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
+    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
+        const TString& user, const TString& password,
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
+    void AlterLoginAddGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
+        const TString& member, const TString& group, 
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
+    void AlterLoginRemoveGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
+        const TString& member, const TString& group, 
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
+    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, 
+        const TString& user, const TString& password);
 
     // Mimics data query to a single table with multiple partitions
     class TFakeDataReq {

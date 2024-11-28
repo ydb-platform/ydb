@@ -14,28 +14,13 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-namespace NSchemeShardUT_Private {
-
-// convert into generic test helper?
-void TestCreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& password, const TVector<TExpectedResult>& expectedResults) {
-    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> modifyTx(CreateAlterLoginCreateUser(txId, user, password));
-    //TODO: move setting of TModifyScheme.WorkingDir into CreateAlterLoginCreateUser()
-    //NOTE: TModifyScheme.Name isn't set, intentionally
-    modifyTx->Record.MutableTransaction(0)->SetWorkingDir(database);
-    AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
-    // AlterLoginCreateUser is synchronous in nature, result is returned immediately
-    TestModificationResults(runtime, txId, expectedResults);
-}
-
-}  // namespace NSchemeShardUT_Private
-
 Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
     Y_UNIT_TEST(BasicLogin) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -56,7 +41,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         runtime.GetAppData().AuthConfig.SetEnableLoginAuthentication(false);
         ui64 txId = 100;
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed}});
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Login authentication is disabled");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
@@ -128,7 +113,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
 
         ui64 txId = 100;
 
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);   // +user creation
 
         // test body
@@ -169,7 +154,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
 
         ui64 txId = 100;
 
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);   // +user creation
 
         // test body
@@ -598,7 +583,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
 
         ui64 txId = 100;
 
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user creation
 
         // test body

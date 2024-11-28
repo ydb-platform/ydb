@@ -292,6 +292,7 @@ private:
     // PLANNED -> CALCULATING -> CALCULATED -> WAIT_RS -> EXECUTING -> EXECUTED
     THashMap<TDistributedTransaction::EState, TDeque<ui64>> TxsOrder;
 
+    void PushTxInQueue(TDistributedTransaction& tx, TDistributedTransaction::EState state);
     void ChangeTxState(TDistributedTransaction& tx, TDistributedTransaction::EState newState);
     bool TryChangeTxState(TDistributedTransaction& tx, TDistributedTransaction::EState newState);
     bool CanExecute(const TDistributedTransaction& tx);

@@ -4046,6 +4046,13 @@ TDistributedTransaction* TPersQueue::GetTransaction(const TActorContext& ctx,
     return &p->second;
 }
 
+void TPersQueue::PushTxInQueue(TDistributedTransaction& tx, TDistributedTransaction::EState state)
+{
+    auto& txQueue = TxsOrder[state];
+    txQueue.push_back(tx.TxId);
+    tx.Pending = txQueue.size() > 1;
+}
+
 void TPersQueue::ChangeTxState(TDistributedTransaction& tx,
                                TDistributedTransaction::EState newState)
 {
@@ -4081,7 +4088,7 @@ bool TPersQueue::TryChangeTxState(TDistributedTransaction& tx,
         TxsOrder[oldState].pop_front();
     }
     if (TxsOrder.contains(newState)) {
-        TxsOrder[newState].push_back(tx.TxId);
+        PushTxInQueue(tx, newState);
     }
 
     PQ_LOG_D("TxId " << tx.TxId << " moved from " <<
@@ -4680,9 +4687,7 @@ void TPersQueue::EndInitTransactions()
             continue;
         }
 
-        auto& txQueue = TxsOrder[tx.State];
-        txQueue.push_back(txId);
-        tx.Pending = txQueue.size() > 1;
+        PushTxInQueue(tx, tx.State);
 
         PQ_LOG_D("TxsOrder: " <<
                  txId << " " << NKikimrPQ::TTransaction_EState_Name(tx.State) << " " << tx.Pending);

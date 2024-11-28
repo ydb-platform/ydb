@@ -66,7 +66,7 @@ bool TTTLValidator::ValidateTiers(const NKikimrSchemeOp::TTTLSettings::TEnabled 
             return false;
         }
         if (i != 0 && tier.GetApplyAfterSeconds() <= ttlSettings.GetTiers(i - 1).GetApplyAfterSeconds()) {
-            errStr = TStringBuilder() << "Tiers in the sequence have must have increasing ApplyAfterSeconds: "
+            errStr = TStringBuilder() << "Tiers in the sequence must have increasing ApplyAfterSeconds: "
                                       << ttlSettings.GetTiers(i - 1).GetApplyAfterSeconds() << " >= " << tier.GetApplyAfterSeconds();
             return false;
         }

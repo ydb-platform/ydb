@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLUtility) {
         TestValidateTiers({ makeEvictTier(1), makeDeleteTier(2) }, TConclusionStatus::Success());
         TestValidateTiers({ makeEvictTier(1), makeEvictTier(2), makeDeleteTier(3) }, TConclusionStatus::Success());
         TestValidateTiers({ makeEvictTier(1), makeEvictTier(2) }, TConclusionStatus::Success());
-        TestValidateTiers({ makeEvictTier(2), makeEvictTier(1) }, TConclusionStatus::Fail("Tiers in the sequence have must have increasing ApplyAfterSeconds"));
+        TestValidateTiers({ makeEvictTier(2), makeEvictTier(1) }, TConclusionStatus::Fail("Tiers in the sequence must have increasing ApplyAfterSeconds"));
         TestValidateTiers({ makeDeleteTier(1), makeEvictTier(2) }, TConclusionStatus::Fail("Only the last tier in TTL settings can have Delete action"));
         TestValidateTiers({ makeDeleteTier(1), makeDeleteTier(2) }, TConclusionStatus::Fail("Only the last tier in TTL settings can have Delete action"));
     }

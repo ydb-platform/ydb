@@ -157,6 +157,8 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
         UNIT_ASSERT(!last.contains("reason"));
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
+        UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
     }
 
     Y_UNIT_TEST(AuditLogLoginBadPassword) {
@@ -198,6 +200,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "status=ERROR");
         UNIT_ASSERT_STRING_CONTAINS(last, "reason=Invalid password");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
     }
 
     Y_UNIT_TEST(AuditLogLdapLoginSuccess) {
@@ -292,6 +295,8 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT(!last.contains("detailed_status"));
         UNIT_ASSERT(!last.contains("reason"));
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
+        UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
     }
 
     Y_UNIT_TEST(AuditLogLdapLoginBadPassword) {
@@ -386,6 +391,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=UNAUTHORIZED");
         UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: LDAP login failed for user uid=user1,dc=search,dc=yandex,dc=net on server ldap://localhost:");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
     }
 
     Y_UNIT_TEST(AuditLogLdapLoginBadUser) {
@@ -480,6 +486,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=UNAUTHORIZED");
         UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: LDAP user bad_user does not exist. LDAP search for filter uid=bad_user on server ldap://localhost:");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=bad_user@ldap");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
     }
 
     // LDAP responses to bad BindDn or bad BindPassword are the same, so this test covers the both cases.
@@ -575,6 +582,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=UNAUTHORIZED");
         UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: Could not perform initial LDAP bind for dn cn=robouser,dc=search,dc=yandex,dc=net on server ldap://localhost:");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
     }
 
     Y_UNIT_TEST(AuditLogLogout) {
@@ -677,6 +685,8 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             UNIT_ASSERT_STRING_CONTAINS(last, "subject=user1");
             UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGOUT");
             UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
+            UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
         }
     }
 }

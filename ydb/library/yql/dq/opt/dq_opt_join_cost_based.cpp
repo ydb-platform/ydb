@@ -235,7 +235,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
 
 class TOptimizerNativeNew: public IOptimizerNew {
 public:
-    TOptimizerNativeNew(IProviderContext& ctx, ui32 maxDPhypDPTableSize, TExprContext* exprCtx)
+    TOptimizerNativeNew(IProviderContext& ctx, ui32 maxDPhypDPTableSize, TExprContext& exprCtx)
         : IOptimizerNew(ctx)
         , MaxDPHypTableSize_(maxDPhypDPTableSize)
         , ExprCtx(exprCtx)
@@ -275,15 +275,13 @@ private:
 
         if (solver.CountCC(MaxDPHypTableSize_) >= MaxDPHypTableSize_) {
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
-            if (ExprCtx) {
-                ExprCtx->AddWarning(
-                    YqlIssue(
-                        {}, TIssuesIds::DQ_OPTIMIZE_ERROR, 
-                        "Cost Based Optimizer could not be applied to this query: "
-                        "Enumeration is too large, use PRAGMA MaxDPHypDPTableSize='4294967295' to disable the limitation"
-                    )
-                );
-            }
+            ExprCtx.AddWarning(
+                YqlIssue(
+                    {}, TIssuesIds::DQ_OPTIMIZE_ERROR, 
+                    "Cost Based Optimizer could not be applied to this query: "
+                    "Enumeration is too large, use PRAGMA MaxDPHypDPTableSize='4294967295' to disable the limitation"
+                )
+            );
             ComputeStatistics(joinTree, this->Pctx);
             return joinTree;
         }
@@ -315,10 +313,10 @@ private:
 
 private:
     ui32 MaxDPHypTableSize_;
-    TExprContext* ExprCtx;
+    TExprContext& ExprCtx;
 };
 
-IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& pctx, const ui32 maxDPhypDPTableSize, TExprContext* ectx) {
+IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& pctx, const ui32 maxDPhypDPTableSize, TExprContext& ectx) {
     return new TOptimizerNativeNew(pctx, maxDPhypDPTableSize, ectx);
 }
 

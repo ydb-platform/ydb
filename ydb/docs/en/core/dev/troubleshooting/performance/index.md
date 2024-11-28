@@ -71,7 +71,7 @@ To troubleshoot {{ ydb-short-name }} performance issues, treat each potential ca
 
 If any known changes occurred in the system around the time the performance issues first appeared, investigate those first. Otherwise, follow this recommended order for evaluating potential root causes. This order is loosely based on the descending frequency of their occurrence on large production {{ ydb-short-name }} clusters.
 
-1. [Overloaded shards](schemas/overloaded-shards.md)
+1. Overloaded [shards](schemas/overloaded-shards.md) and [errors](./queries/overloaded-errors.md)
 1. [Excessive tablet splits and merges](schemas/splits-merges.md)
 1. [Frequent tablet moves between nodes](ydb/tablets-moved.md)
 1. Insufficient hardware resources:
@@ -79,8 +79,11 @@ If any known changes occurred in the system around the time the performance issu
     - [Disk I/O bandwidth](hardware/io-bandwidth.md)
     - [Disk space](hardware/disk-space.md)
     - [Insufficient CPU](hardware/cpu-bottleneck.md)
+    - [Insufficient memory](hardware/insufficient-memory.md)
 
 1. [Hardware issues](infrastructure/hardware.md) and [data center outages](infrastructure/dc-outage.md)
 1. [Network issues](infrastructure/network.md)
-1. [{{ ydb-short-name }} updates](ydb/ydb-updates.md)
+1. [{#T}](ydb/ydb-updates.md)
 1. [System clock drift](system/system-clock-drift.md)
+1. [{#T}](queries/transaction-lock-invalidation.md)
+1. [{#T}](infrastructure/dc-drills.md)

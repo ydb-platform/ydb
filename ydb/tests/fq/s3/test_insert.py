@@ -535,31 +535,3 @@ class TestS3(object):
         issues = str(client.describe_query(query_id).result.query.issue)
 
         assert "Missing format - please use WITH FORMAT when writing into S3" in issues, "Incorrect Issues: " + issues
-
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_insert_type_validation(self, kikimr, s3, client, unique_prefix):
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        bucket = resource.Bucket("insert_bucket")
-        bucket.create(ACL='public-read')
-        bucket.objects.all().delete()
-
-        storage_connection_name = unique_prefix + "ibucket"
-        client.create_storage_connection(storage_connection_name, "insert_bucket")
-
-        sql = f'''
-            INSERT INTO `{storage_connection_name}`.`insert/`
-            WITH
-            (
-                FORMAT="csv_with_names"
-            )
-            SELECT CAST(42 AS Int32??) as Weight;'''
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        issues = str(client.describe_query(query_id).result.query.issue)
-
-        assert "Double optional types are not supported for output" in issues, "Incorrect issues: " + issues

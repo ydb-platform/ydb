@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -25,22 +26,6 @@ TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
     }
 
     return {};
-}
-
-bool ValidateSchemaForOutput(const TStructExprType* schemaStructRowType, TExprContext& ctx) {
-    for (const TItemExprType* item : schemaStructRowType->GetItems()) {
-        const TTypeAnnotationNode* rowType = item->GetItemType();
-        if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
-            rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
-        }
-
-        if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
-            ctx.AddError(TIssue(TStringBuilder() << "Double optional types are not supported for output (you have '"
-                << item->GetName() << " " << FormatType(item->GetItemType()) << "' field)"));
-            return false;
-        }
-    }
-    return true;
 }
 
 }
@@ -91,7 +76,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateSchemaForOutput(sourceType->Cast<TStructExprType>(), ctx)) {
+        if (!NS3Util::ValidateS3ReadWriteSchema(sourceType->Cast<TStructExprType>(), ctx)) {
             return TStatus::Error;
         }
 

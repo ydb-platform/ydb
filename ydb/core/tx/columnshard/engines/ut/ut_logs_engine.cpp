@@ -443,7 +443,7 @@ private:
     TColumnEngineForLogs& Engine;
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
-        Processor->ApplyResult(std::move(result), Engine, ExtractResourcesGuardOptional());
+        Processor->ApplyResult(std::move(result), Engine);
     }
 
 public:

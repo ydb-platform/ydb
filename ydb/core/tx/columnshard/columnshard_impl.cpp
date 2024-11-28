@@ -915,8 +915,9 @@ private:
     const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
     const ui64 Generation;
     virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override {
+        result.SetResourcesGuard(ExtractResourcesGuard());
         NActors::TActivationContext::Send(
-            TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation, std::move(result), ExtractResourcesGuard()));
+            TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation, std::move(result)));
     }
 
 public:
@@ -939,9 +940,9 @@ void TColumnShard::SetupMetadata() {
         const ui64 accessorsMemory =
             i.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
         NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor,
-            std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, TGUID::CreateTimebased().AsGuidString(), TTLTaskSubscription,
-                std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()), std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()),
-                DataAccessorsManager.GetObjectPtrVerified()));
+            std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i.GetRequest()->GetTaskId(), TTLTaskSubscription,
+                std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()),
+                std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()), DataAccessorsManager.GetObjectPtrVerified()));
     }
 }
 
@@ -1086,8 +1087,8 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActor
 
 void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
-    ev->Get()->GetProcessor()->ApplyResult(ev->Get()->ExtractResult(),
-        TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>(), ev->Get()->ExtractResourcesGuard());
+    ev->Get()->GetProcessor()->ApplyResult(
+        ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
     SetupMetadata();
 }
 

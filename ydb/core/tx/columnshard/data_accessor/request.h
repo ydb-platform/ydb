@@ -8,12 +8,13 @@ namespace NKikimr::NOlap {
 
 class TDataAccessorsRequest;
 
-class TDataAccessorsResult {
+class TDataAccessorsResult : private NNonCopyable::TMoveOnly {
 private:
     THashMap<ui64, TString> ErrorsByPathId;
     THashMap<ui64, std::vector<TPortionDataAccessor>> AccessorsByPathId;
     THashMap<ui64, TPortionDataAccessor> PortionsById;
     std::vector<TPortionDataAccessor> Portions;
+    std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
 public:
     const std::vector<TPortionDataAccessor>& GetPortions() const {
@@ -61,6 +62,11 @@ public:
     bool HasErrors() const {
         return ErrorsByPathId.size();
     }
+
+    void SetResourcesGuard(std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>&& guard) {
+        AFL_VERIFY(!ResourcesGuard);
+        ResourcesGuard = std::move(guard);
+    }
 };
 
 class IDataAccessorRequestsSubscriber: public NColumnShard::TMonitoringObjectsCounter<IDataAccessorRequestsSubscriber> {
@@ -94,14 +100,12 @@ public:
 
     void SetResourcesGuard(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
         AFL_VERIFY(!DataAccessorsResources);
+        AFL_VERIFY(guard);
         DataAccessorsResources = guard;
     }
 
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& ExtractResourcesGuard() {
-        return TValidator::CheckNotNull(ExtractResourcesGuardOptional());
-    }
-
-    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& ExtractResourcesGuardOptional() {
+        AFL_VERIFY(DataAccessorsResources);
         return std::move(DataAccessorsResources);
     }
 
@@ -329,6 +333,10 @@ public:
                 AddAccessor(std::move(a));
             }
         }
+    }
+
+    TString GetTaskId() const {
+        return TStringBuilder() << "data-accessor-request-" << RequestId;
     }
 };
 

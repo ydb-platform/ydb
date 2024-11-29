@@ -69,7 +69,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
 
-    NCommon::TConfSetting<ui32, false> MaxDPccpDPTableSize;
+    NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;
 
 
     NCommon::TConfSetting<ui32, false> MaxTasksPerStage;

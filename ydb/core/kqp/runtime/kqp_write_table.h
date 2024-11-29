@@ -42,7 +42,7 @@ public:
     virtual void OnPartitioningChanged(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
     virtual void OnPartitioningChanged(
-        NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) = 0;
+        THolder<TKeyDesc>&& keyDescription) = 0;
 
     using TWriteToken = ui64;
 

@@ -370,7 +370,7 @@ public:
     void ResolveTable() {
         Counters->WriteActorsShardResolve->Inc();
         SchemeEntry.reset();
-        SchemeRequest.reset();
+        KeyDescription.Reset();
 
         if (ResolveAttempts++ >= MessageSettings.MaxResolveAttempts) {
             CA_LOG_E(TStringBuilder()
@@ -399,7 +399,7 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        YQL_ENSURE(!SchemeRequest || InconsistentTx);
+        YQL_ENSURE(!KeyDescription || InconsistentTx);
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
 
@@ -431,16 +431,11 @@ public:
     }
 
     void ResolveShards() {
-        YQL_ENSURE(!SchemeRequest || InconsistentTx);
+        YQL_ENSURE(!KeyDescription || InconsistentTx);
         CA_LOG_D("Resolve shards for TableId=" << TableId);
 
-        //TODO: don't use navigatekeyset for datashards here
-        TVector<TKeyDesc::TColumnOp> columns;
         TVector<NScheme::TTypeInfo> keyColumnTypes;
         for (const auto& [_, column] : SchemeEntry->Columns) {
-            TKeyDesc::TColumnOp op = { column.Id, TKeyDesc::EColumnOperation::Set, column.PType, 0, 0 };
-            columns.push_back(op);
-
             if (column.KeyOrder >= 0) {
                 keyColumnTypes.resize(Max<size_t>(keyColumnTypes.size(), column.KeyOrder + 1));
                 keyColumnTypes[column.KeyOrder] = column.PType;
@@ -450,7 +445,12 @@ public:
         const TVector<TCell> minKey(keyColumnTypes.size());
         const TTableRange range(minKey, true, {}, false, false);
         YQL_ENSURE(range.IsFullRange(keyColumnTypes.size()));
-        auto keyRange = MakeHolder<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Update, keyColumnTypes, columns);
+        auto keyRange = MakeHolder<TKeyDesc>(
+            TableId,
+            range,
+            TKeyDesc::ERowOperation::Update,
+            keyColumnTypes,
+            TVector<TKeyDesc::TColumnOp>{});
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
         request->ResultSet.emplace_back(std::move(keyRange));
@@ -460,7 +460,7 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        YQL_ENSURE(!SchemeRequest || InconsistentTx);
+        YQL_ENSURE(!KeyDescription || InconsistentTx);
         auto* request = ev->Get()->Request.Get();
 
         if (request->ErrorCount > 0) {
@@ -471,9 +471,9 @@ public:
         }
 
         YQL_ENSURE(request->ResultSet.size() == 1);
-        SchemeRequest = std::move(request->ResultSet[0]);
+        KeyDescription = std::move(request->ResultSet[0].KeyDescription);
 
-        CA_LOG_D("Resolved shards for TableId=" << TableId << ". PartitionsCount=" << SchemeRequest->KeyDescription->GetPartitions().size() << ".");
+        CA_LOG_D("Resolved shards for TableId=" << TableId << ". PartitionsCount=" << KeyDescription->GetPartitions().size() << ".");
 
         Prepare();
     }
@@ -925,9 +925,8 @@ public:
                 YQL_ENSURE(SchemeEntry);
                 ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
             } else {
-                YQL_ENSURE(SchemeRequest);
-                ShardedWriteController->OnPartitioningChanged(std::move(*SchemeRequest));
-                SchemeRequest.reset();
+                ShardedWriteController->OnPartitioningChanged(std::move(KeyDescription));
+                KeyDescription.Reset();
             }
         } catch (...) {
             RuntimeError(
@@ -979,7 +978,7 @@ public:
     IKqpTableWriterCallbacks* Callbacks;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    std::optional<NSchemeCache::TSchemeCacheRequest::TEntry> SchemeRequest;
+    THolder<TKeyDesc> KeyDescription;
     ui64 ResolveAttempts = 0;
 
     IKqpTransactionManagerPtr TxManager;

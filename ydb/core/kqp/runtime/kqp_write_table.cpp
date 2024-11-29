@@ -662,11 +662,11 @@ class TDataShardPayloadSerializer : public IPayloadSerializer {
 
 public:
     TDataShardPayloadSerializer(
-        const NSchemeCache::TSchemeCacheRequest::TEntry& partitionsEntry,
+        const TKeyDesc& keyDescription,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>& inputColumns,
         std::vector<ui32> writeIndex)
-        : KeyDescription(partitionsEntry.KeyDescription)
+        : KeyDescription(keyDescription)
         , Columns(BuildColumns(inputColumns))
         , WriteIndex(std::move(writeIndex))
         , WriteColumnIds(BuildWriteColumnIds(inputColumns, WriteIndex))
@@ -715,7 +715,7 @@ public:
                     TVector<TCell>(cells.begin() + (rowIndex * Columns.size()), cells.begin() + (rowIndex * Columns.size()) + Columns.size()),
                     data[rowIndex],
                 },
-                GetKeyRange());
+                KeyDescription);
         }
     }
 
@@ -789,12 +789,7 @@ public:
     }
 
 private:
-    const TKeyDesc& GetKeyRange() const {
-        return *KeyDescription;
-    }
-
-    const THolder<TKeyDesc>& KeyDescription;
-
+    const TKeyDesc& KeyDescription;
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;
     const std::vector<ui32> WriteColumnIds;
@@ -816,12 +811,12 @@ IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
 }
 
 IPayloadSerializerPtr CreateDataShardPayloadSerializer(
-        const NSchemeCache::TSchemeCacheRequest::TEntry& partitionsEntry,
+        const TKeyDesc& keyDescription,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const std::vector<ui32> writeIndex) {
     return MakeIntrusive<TDataShardPayloadSerializer>(
-        partitionsEntry, keyColumns, inputColumns, std::move(writeIndex));
+        keyDescription, keyColumns, inputColumns, std::move(writeIndex));
 }
 
 }
@@ -1073,13 +1068,13 @@ public:
     }
 
     void OnPartitioningChanged(
-        NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) override {
+        THolder<TKeyDesc>&& keyDescription) override {
         IsOlap = false;
-        PartitionsEntry = std::move(partitionsEntry);
+        KeyDescription = std::move(keyDescription);
         BeforePartitioningChanged();
         for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateDataShardPayloadSerializer(
-                *PartitionsEntry,
+                *KeyDescription,
                 writeInfo.Metadata.KeyColumnsMetadata,
                 writeInfo.Metadata.InputColumnsMetadata,
                 writeInfo.Metadata.WriteIndex);
@@ -1142,9 +1137,9 @@ public:
                 .Serializer = nullptr,
                 .Closed = false,
             }).first;
-        if (PartitionsEntry) {
+        if (KeyDescription) {
             iter->second.Serializer = CreateDataShardPayloadSerializer(
-                *PartitionsEntry,
+                *KeyDescription,
                 iter->second.Metadata.KeyColumnsMetadata,
                 iter->second.Metadata.InputColumnsMetadata,
                 iter->second.Metadata.WriteIndex);
@@ -1455,7 +1450,7 @@ private:
     TShardsInfo ShardsInfo;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    std::optional<NSchemeCache::TSchemeCacheRequest::TEntry> PartitionsEntry;
+    THolder<TKeyDesc> KeyDescription;
     std::optional<bool> IsOlap;
 };
 

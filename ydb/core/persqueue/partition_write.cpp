@@ -27,6 +27,7 @@ namespace NKikimr::NPQ {
 
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 static const ui32 MAX_INLINE_SIZE = 1000;
+static const TDuration SubDomainQuotaWaitDurationMs = TDuration::Seconds(60);
 
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
 
@@ -1483,8 +1484,12 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 
 void TPartition::SetDeadlinesForWrites(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::SetDeadlinesForWrites.");
-    if (AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs() > 0 && QuotaDeadline == TInstant::Zero()) {
-        QuotaDeadline = ctx.Now() + TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs());
+    auto quotaWaitDurationMs = TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs());
+    if (SubDomainOutOfSpace) {
+        quotaWaitDurationMs = quotaWaitDurationMs ? std::min(quotaWaitDurationMs, SubDomainQuotaWaitDurationMs) : SubDomainQuotaWaitDurationMs;
+    }
+    if (quotaWaitDurationMs > TDuration::Zero() && QuotaDeadline == TInstant::Zero()) {
+        QuotaDeadline = ctx.Now() + quotaWaitDurationMs;
 
         ctx.Schedule(QuotaDeadline, new TEvPQ::TEvQuotaDeadlineCheck());
     }
@@ -1513,7 +1518,7 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& 
 {
     TMessageQueue newRequests;
     for (auto& w : requests) {
-        if (!w.IsWrite() || w.GetWrite().Msg.IgnoreQuotaDeadline) {
+        if (!w.IsWrite() || (w.GetWrite().Msg.IgnoreQuotaDeadline && !SubDomainOutOfSpace)) {
             newRequests.emplace_back(std::move(w));
             continue;
         }
@@ -1529,7 +1534,8 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& 
             WriteInflightSize -= msg.Data.size();
         }
 
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::OVERLOAD, "quota exceeded");
+        TString errorMsg = SubDomainOutOfSpace ? "database size exceeded" : "quota exceeded";
+        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::OVERLOAD, errorMsg);
     }
     requests = std::move(newRequests);
 }

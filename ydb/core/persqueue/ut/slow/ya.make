@@ -4,7 +4,6 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(5)
 SIZE(MEDIUM)
-TIMEOUT(600)
 
 PEERDIR(
     library/cpp/getopt

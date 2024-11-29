@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/public/lib/json_value)
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 FORK_SUBTESTS()

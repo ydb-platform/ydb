@@ -4,8 +4,6 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
-TIMEOUT(600)
-
 PEERDIR(
     library/cpp/testing/unittest
     yql/essentials/minikql/comp_nodes/llvm14

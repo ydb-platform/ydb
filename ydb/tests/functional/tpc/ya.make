@@ -7,7 +7,6 @@ TEST_SRCS(
     test_init.py
 )
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")

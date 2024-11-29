@@ -474,7 +474,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     ColumnName: "timestamp"
                     ColumnUnit: UNIT_AUTO
                     Tiers: {
-                        EvictAfterSeconds: 360
+                        ApplyAfterSeconds: 360
                         StorageName: "Tier1"
                     }
                 }
@@ -498,7 +498,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     ColumnName: "timestamp"
                     ColumnUnit: UNIT_AUTO
                     Tiers: {
-                        EvictAfterSeconds: 3600000000
+                        ApplyAfterSeconds: 3600000000
                         StorageName: "Tier1"
                     }
                 }
@@ -649,7 +649,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     ColumnName: "timestamp"
                     ColumnUnit: UNIT_AUTO
                     Tiers: {
-                        EvictAfterSeconds: 3600000000
+                        ApplyAfterSeconds: 3600000000
                         StorageName: "Tier1"
                     }
                 }

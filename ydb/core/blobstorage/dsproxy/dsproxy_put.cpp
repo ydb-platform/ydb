@@ -42,7 +42,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     TErasureSplitContext ErasureSplitContext = TErasureSplitContext::Init(MaxBytesToSplitAtOnce);
     TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>> PartSets;
 
-    std::set<TInstant> PutDeadlines;
+    static_assert(MaxBatchedPutRequests <= sizeof(ui64) * 8);
+    std::map<TInstant, ui64> PutDeadlineMasks;
+    ui64 DeadlineMask = 0; 
+
     TStackVec<ui64, TypicalDisksInGroup> WaitingVDiskResponseCount;
     ui64 WaitingVDiskCount = 0;
 
@@ -648,7 +651,7 @@ public:
             << " RestartCounter# " << RestartCounter);
 
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            PutDeadlines.insert(PutImpl.Blobs[blobIdx].Deadline);
+            PutDeadlineMasks[PutImpl.Blobs[blobIdx].Deadline] |= (1 << blobIdx);
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }
 
@@ -670,7 +673,7 @@ public:
         );
 
         Become(&TBlobStorageGroupPutRequest::StateWait);
-        ScheduleWakeup();
+        ScheduleWakeup(TInstant::Zero());
 
         PartSets.resize(PutImpl.Blobs.size());
         for (auto& partSet : PartSets) {
@@ -721,15 +724,26 @@ public:
             << " BlobIDs# " << BlobIdSequenceToString()
             << " Not answered in "
             << (TActivationContext::Monotonic() - RequestStartTime) << " seconds");
+
         const TInstant now = TActivationContext::Now();
+        while (!PutDeadlineMasks.empty()) {
+            auto [deadline, mask] = *PutDeadlineMasks.begin();
+            if (deadline <= now) {
+                DeadlineMask |= mask;
+                PutDeadlineMasks.erase(PutDeadlineMasks.begin());
+            } else {
+                break;
+            }
+        }
+
         TPutImpl::TPutResultVec putResults;
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            if (!PutImpl.Blobs[blobIdx].Replied && now >= PutImpl.Blobs[blobIdx].Deadline) {
+            if (!PutImpl.Blobs[blobIdx].Replied && (DeadlineMask & (1 << blobIdx))) {
                 PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, "Deadline timer hit", putResults);
             }
         }
         if (!ReplyAndDieWithLastResponse(putResults)) {
-            ScheduleWakeup();
+            ScheduleWakeup(now);
         }
     }
 
@@ -797,16 +811,19 @@ public:
             << " State# " << PutImpl.DumpFullState());
     }
 
-    void ScheduleWakeup() {
+    void ScheduleWakeup(TInstant lastWakeup) {
         TInstant now = TActivationContext::Now();
-        while (!PutDeadlines.empty()) {
-            TInstant deadline = *PutDeadlines.begin();
-            PutDeadlines.erase(PutDeadlines.begin());
-            if (deadline > now && deadline != TInstant::Max()) {
-                Schedule(deadline, new TKikimrEvents::TEvWakeup);
-                return;
+        TInstant deadline = lastWakeup + DsMinimumDelayBetweenPutWakeups;
+
+        // find first deadline after now
+        for (auto it = PutDeadlineMasks.begin(); it != PutDeadlineMasks.end(); ++it) {
+            deadline = std::max(deadline, it->first);
+            if (it->first > now) {
+                break;
             }
         }
+
+        Schedule(deadline, new TKikimrEvents::TEvWakeup);
     }
 
     STATEFN(StateWait) {

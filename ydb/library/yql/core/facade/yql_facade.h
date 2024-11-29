@@ -386,8 +386,8 @@ private:
 
     TAstNode* AstRoot_;
     std::unique_ptr<TMemoryPool> AstPool_;
-    const IModuleResolver::TPtr Modules_;
     TAutoPtr<TExprContext> ExprCtx_;
+    const IModuleResolver::TPtr Modules_;
     TTypeAnnotationContextPtr TypeCtx_;
 
     TVector<TDataProviderInitializer> DataProvidersInit_;

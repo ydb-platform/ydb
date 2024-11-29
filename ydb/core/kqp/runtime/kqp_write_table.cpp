@@ -32,6 +32,10 @@ public:
         return Memory;
     }
 
+    bool IsEmpty() const override {
+        return GetMemory() == 0;
+    }
+
     TRecordBatchPtr Extract() {
         Memory = 0;
         TRecordBatchPtr result = std::move(Data);
@@ -59,17 +63,17 @@ public:
         return Size;
     }
 
-    bool IsEmpty() const {
+    bool IsEmpty() const override {
         return Cells.empty();
     }
 
-    std::pair<std::vector<TCell>, std::vector<NUdf::TStringValue>> Extract() {
+    std::pair<std::vector<TCell>, std::vector<std::string>> Extract() {
         Size = 0;
         Rows = 0;
         return {std::move(Cells), std::move(Data)};
     }
 
-    TRowBatch(std::vector<TCell>&& cells, std::vector<NUdf::TStringValue>&& data, i64 size, ui32 rows, ui16 columns)
+    TRowBatch(std::vector<TCell>&& cells, std::vector<std::string>&& data, i64 size, ui32 rows, ui16 columns)
         : Cells(std::move(cells))
         , Data(std::move(data))
         , Size(size)
@@ -79,7 +83,7 @@ public:
 
 private:
     std::vector<TCell> Cells;
-    std::vector<NUdf::TStringValue> Data;
+    std::vector<std::string> Data;
     ui64 Size = 0;
     ui32 Rows = 0;
     ui16 Columns = 0;
@@ -87,8 +91,8 @@ private:
 
 class IPayloadSerializer : public TThrRefBase {
 public:
-    virtual void AddData(const NMiniKQL::TUnboxedValueBatch& data) = 0;
-    virtual void AddBatch(const IDataBatchPtr& batch) = 0;
+    virtual void AddData(IDataBatchPtr&& batch) = 0;
+    virtual void AddBatch(IDataBatchPtr&& batch) = 0;
 
     virtual void Close() = 0;
 
@@ -175,7 +179,7 @@ TVector<NScheme::TTypeInfo> BuildKeyColumnTypes(
 
 struct TRowWithData {
     TVector<TCell> Cells;
-    NUdf::TStringValue Data;
+    std::string Data;
 };
 
 class TRowBuilder {
@@ -229,13 +233,13 @@ public:
         cells.reserve(CellsInfo.size());
         const auto size = DataSize();
         auto data = Allocate(size);
-        char* ptr = data.Data();
+        char* ptr = data.data();
 
         for (const auto& cellInfo : CellsInfo) {
             cells.push_back(BuildCell(cellInfo, ptr));
         }
 
-        AFL_ENSURE(ptr == data.Data() + size);
+        AFL_ENSURE(ptr == data.data() + size);
 
         return TRowWithData {
             .Cells = std::move(cells),
@@ -295,9 +299,8 @@ private:
         return cellInfo.Value.AsStringRef().Size();
     }
 
-    NUdf::TStringValue Allocate(size_t size) {
-        Y_DEBUG_ABORT_UNLESS(NMiniKQL::TlsAllocState);
-        return NUdf::TStringValue(size);
+    std::string Allocate(size_t size) {
+        return std::string(size, 0);
     }
 
     TVector<TCellInfo> CellsInfo;
@@ -358,15 +361,8 @@ public:
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const std::vector<ui32> writeIndex) // key columns then value columns
-        : Columns(BuildColumns(inputColumns))
-        , WriteIndex(std::move(writeIndex))
-        , WriteColumnIds(BuildWriteColumnIds(inputColumns, WriteIndex))
-        , BatchBuilder(arrow::Compression::UNCOMPRESSED, BuildNotNullColumns(inputColumns)) {
-        TString err;
-        if (!BatchBuilder.Start(BuildBatchBuilderColumns(inputColumns), 0, 0, err)) {
-            yexception() << "Failed to start batch builder: " + err;
-        }
-
+            : Columns(BuildColumns(inputColumns))
+            , WriteColumnIds(BuildWriteColumnIds(inputColumns, writeIndex)) {
         YQL_ENSURE(schemeEntry.ColumnTableInfo);
         const auto& description = schemeEntry.ColumnTableInfo->Description;
         YQL_ENSURE(description.HasSchema());
@@ -384,38 +380,20 @@ public:
         Sharding = shardingConclusion.DetachResult();
     }
 
-    void AddData(const NMiniKQL::TUnboxedValueBatch& data) override {
+    void AddData(IDataBatchPtr&& batch) override {
         YQL_ENSURE(!Closed);
-        if (data.empty()) {
-            return;
-        }
-
-        TRowBuilder rowBuilder(Columns.size());
-        data.ForEachRow([&](const auto& row) {
-            for (size_t index = 0; index < Columns.size(); ++index) {
-                rowBuilder.AddCell(WriteIndex[index], Columns[index].PType, row.GetElement(index));
-            }
-            auto rowWithData = rowBuilder.Build();
-            BatchBuilder.AddRow(TConstArrayRef<TCell>{rowWithData.Cells.begin(), rowWithData.Cells.end()});
-        });
-
-        FlushUnsharded(false);
+        AddBatch(std::move(batch));
     }
 
-    void AddBatch(const IDataBatchPtr& batch) override {
+    void AddBatch(IDataBatchPtr&& batch) override {
         auto columnshardBatch = dynamic_cast<TBatch*>(batch.Get());
         YQL_ENSURE(columnshardBatch);
+        if (columnshardBatch->IsEmpty()) {
+            return;
+        }
         auto data = columnshardBatch->Extract();
         YQL_ENSURE(data);
         ShardAndFlushBatch(data, false);
-    }
-
-    void FlushUnsharded(bool force) {
-        if (BatchBuilder.Bytes() > 0 && force) {
-            const auto unshardedBatch = BatchBuilder.FlushBatch(true);
-            YQL_ENSURE(unshardedBatch);
-            ShardAndFlushBatch(unshardedBatch, force);
-        }
     }
 
     void ShardAndFlushBatch(const TRecordBatchPtr& unshardedBatch, bool force) {
@@ -501,13 +479,12 @@ public:
     }
 
     i64 GetMemory() override {
-        return Memory + BatchBuilder.Bytes();
+        return Memory;
     }
 
     void Close() override {
         YQL_ENSURE(!Closed);
         Closed = true;
-        FlushUnsharded(true);
         FlushUnpreparedForce();
     }
 
@@ -524,7 +501,6 @@ public:
     }
 
     TBatches FlushBatchesForce() override {
-        FlushUnsharded(true);
         FlushUnpreparedForce();
 
         TBatches newBatches;
@@ -561,10 +537,8 @@ private:
     std::shared_ptr<NSharding::IShardingBase> Sharding;
 
     const TVector<TSysTables::TTableColumnInfo> Columns;
-    const std::vector<ui32> WriteIndex;
     const std::vector<ui32> WriteColumnIds;
 
-    NArrow::TArrowBatchBuilder BatchBuilder;
     THashMap<ui64, TUnpreparedBatch> UnpreparedBatches;
     TBatches Batches;
     THashSet<ui64> ShardIds;
@@ -574,7 +548,7 @@ private:
     bool Closed = false;
 };
 
- class TRowsBatcher {
+class TRowsBatcher {
 public:
     explicit TRowsBatcher(ui16 columnCount, std::optional<ui64> maxBytesPerBatch)
         : ColumnCount(columnCount)
@@ -589,7 +563,7 @@ public:
         i64 Memory = 0;
         i64 MemorySerialized = 0;
         TVector<TCell> Cells;
-        TVector<NUdf::TStringValue> Data;
+        TVector<std::string> Data;
     };
 
     TBatch Flush(bool force) {
@@ -723,20 +697,12 @@ public:
         ShardIds.insert(shardIter->ShardId);
     }
 
-    void AddData(const NMiniKQL::TUnboxedValueBatch& data) override {
+    void AddData(IDataBatchPtr&& data) override {
         YQL_ENSURE(!Closed);
-
-        TRowBuilder rowBuilder(Columns.size());
-        data.ForEachRow([&](const auto& row) {
-            for (size_t index = 0; index < Columns.size(); ++index) {
-                rowBuilder.AddCell(WriteIndex[index], Columns[index].PType, row.GetElement(index));
-            }
-            auto rowWithData = rowBuilder.Build();
-            AddRow(std::move(rowWithData), GetKeyRange());
-        });
+        AddBatch(std::move(data));
     }
 
-    void AddBatch(const IDataBatchPtr& batch) override {
+    void AddBatch(IDataBatchPtr&& batch) override {
         auto datashardBatch = dynamic_cast<TBatch*>(batch.Get());
         YQL_ENSURE(datashardBatch);
         auto [cells, data] = datashardBatch->Extract();
@@ -941,6 +907,10 @@ public:
             }
             YQL_ENSURE(BatchesInFlight != 0);
             YQL_ENSURE(BatchesInFlight == Batches.size() || BatchesInFlight >= maxCount || dataSize + GetBatch(BatchesInFlight).GetMemory() > maxDataSize);
+        }
+
+        TBatchWithMetadata& GetBatch(size_t index) {
+            return Batches.at(index);
         }
 
         const TBatchWithMetadata& GetBatch(size_t index) const {
@@ -1187,14 +1157,13 @@ public:
         return token;
     }
 
-    void Write(TWriteToken token, const NMiniKQL::TUnboxedValueBatch& data) override {
-        YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
+    void Write(TWriteToken token, IDataBatchPtr&& data) override {
         auto& info = WriteInfos.at(token);
         YQL_ENSURE(!info.Closed);
 
         auto allocGuard = TypeEnv.BindAllocator();
         YQL_ENSURE(info.Serializer);
-        info.Serializer->AddData(data);
+        info.Serializer->AddData(std::move(data));
 
         if (info.Metadata.Priority == 0) {
             FlushSerializer(token, GetMemory() >= Settings.MemoryLimitTotal);
@@ -1460,12 +1429,12 @@ private:
         YQL_ENSURE(!Settings.Inconsistent);
         for (auto& [_, shardInfo] : ShardsInfo.GetShards()) {
             for (size_t index = 0; index < shardInfo.Size(); ++index) {
-                const auto& batch = shardInfo.GetBatch(index);
+                auto& batch = shardInfo.GetBatch(index);
                 const auto& writeInfo = WriteInfos.at(batch.Token);
                 // Resharding supported only for inconsistent write,
                 // so convering empty batches don't exist in this case.
                 YQL_ENSURE(batch.Data);
-                writeInfo.Serializer->AddBatch(batch.Data);
+                writeInfo.Serializer->AddBatch(std::move(batch.Data));
             }
         }
     }

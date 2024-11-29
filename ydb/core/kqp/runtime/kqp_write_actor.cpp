@@ -263,13 +263,12 @@ public:
         return token;
     }
 
-    void Write(TWriteToken token, const NMiniKQL::TUnboxedValueBatch& data) {
-        YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
+    void Write(TWriteToken token, IDataBatchPtr&& data) {
         YQL_ENSURE(!Closed);
         YQL_ENSURE(ShardedWriteController);
         CA_LOG_D("Write: token=" << token);
         try {
-            ShardedWriteController->Write(token, data);
+            ShardedWriteController->Write(token, std::move(data));
             UpdateShards();
         } catch (...) {
             RuntimeError(
@@ -1020,6 +1019,19 @@ public:
         , DirectWriteActorSpan(TWilsonKqp::DirectWriteActor, NWilson::TTraceId(args.TraceId), "TKqpDirectWriteActor")
     {
         EgressStats.Level = args.StatsLevel;
+
+        TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
+            Settings.GetColumns().begin(),
+            Settings.GetColumns().end());
+        std::vector<ui32> writeIndex(
+            Settings.GetWriteIndexes().begin(),
+            Settings.GetWriteIndexes().end());
+
+        if (Settings.GetIsOlap()) {
+            Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex));
+        } else {
+            Batcher = CreateRowDataBatcher(columnsMetadata, std::move(writeIndex));
+        }
     }
 
     void Bootstrap() {
@@ -1042,17 +1054,15 @@ public:
 
         WriteTableActorId = RegisterWithSameMailbox(WriteTableActor);
 
-        TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata;
-        keyColumnsMetadata.reserve(Settings.GetKeyColumns().size());
-        for (const auto & column : Settings.GetKeyColumns()) {
-            keyColumnsMetadata.push_back(column);
-        }
-        TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata;
-        columnsMetadata.reserve(Settings.GetColumns().size());
-        for (const auto & column : Settings.GetColumns()) {
-            columnsMetadata.push_back(column);
-        }
-        std::vector<ui32> writeIndex(Settings.GetWriteIndexes().begin(), Settings.GetWriteIndexes().end());
+        TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata(
+            Settings.GetKeyColumns().begin(),
+            Settings.GetKeyColumns().end());
+        TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
+            Settings.GetColumns().begin(),
+            Settings.GetColumns().end());
+        std::vector<ui32> writeIndex(
+            Settings.GetWriteIndexes().begin(),
+            Settings.GetWriteIndexes().end());
         YQL_ENSURE(Settings.GetPriority() == 0);
         WriteToken = WriteTableActor->Open(
             GetOperation(Settings.GetType()),
@@ -1115,8 +1125,9 @@ private:
         EgressStats.Resume();
         Y_UNUSED(size);
 
+        Batcher->AddData(data);
         YQL_ENSURE(WriteTableActor);
-        WriteTableActor->Write(*WriteToken, data);
+        WriteTableActor->Write(*WriteToken, Batcher->Build());
         if (Closed) {
             WriteTableActor->Close(*WriteToken);
             WriteTableActor->Close();
@@ -1201,6 +1212,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    IDataBatcherPtr Batcher;
 
     const ui64 TxId;
     const TTableId TableId;
@@ -1251,24 +1263,14 @@ struct TBufferWriteMessage {
     TActorId From;
     TWriteToken Token;
     bool Close = false;
-    // TODO: move to serialized data
-    std::shared_ptr<TVector<NMiniKQL::TUnboxedValueBatch>> Data;
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    IDataBatchPtr Data;
 };
 
 struct TEvBufferWrite : public TEventLocal<TEvBufferWrite, TKqpEvents::EvBufferWrite> {
     bool Close = false;
     std::optional<TWriteToken> Token;
     std::optional<TWriteSettings> Settings;
-    std::shared_ptr<TVector<NMiniKQL::TUnboxedValueBatch>> Data;
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-
-    ~TEvBufferWrite() {
-        if (Alloc) {
-            TGuard guard(*Alloc);
-            Data = nullptr;
-        }
-    }
+    IDataBatchPtr Data;
 };
 
 struct TEvBufferWriteResult : public TEventLocal<TEvBufferWriteResult, TKqpEvents::EvBufferWriteResult> {
@@ -1392,11 +1394,7 @@ public:
         message.From = ev->Sender;
         message.Close = ev->Get()->Close;
         message.Data = ev->Get()->Data;
-        message.Alloc = ev->Get()->Alloc;
-
-        ev->Get()->Data = nullptr;
-        ev->Get()->Alloc = nullptr;
-
+        
         Process();
     }
 
@@ -1428,11 +1426,10 @@ public:
             while (!queue.empty()) {
                 auto& message = queue.front();
 
-                if (!message.Data->empty()) {
-                    for (const auto& data : *message.Data) {
-                        writeInfo.WriteTableActor->Write(message.Token.Cookie, data);
-                    }
+                if (message.Data) {
+                    writeInfo.WriteTableActor->Write(message.Token.Cookie, std::move(message.Data));
                 }
+
                 if (message.Close) {
                     writeInfo.WriteTableActor->Close(message.Token.Cookie);
                 }
@@ -1443,10 +1440,6 @@ public:
                     .DataSize = 0,
                 });
 
-                {
-                    TGuard guard(*message.Alloc);
-                    message.Data = nullptr;
-                }
                 queue.pop();
             }
         }
@@ -1688,11 +1681,6 @@ public:
     void PassAway() override {
         for (auto& [_, queue] : DataQueues) {
             while (!queue.empty()) {
-                auto& message = queue.front();
-                {
-                    TGuard guard(*message.Alloc);
-                    message.Data = nullptr;
-                }
                 queue.pop();
             }
         }
@@ -2119,8 +2107,6 @@ public:
         , OutputIndex(args.OutputIndex)
         , Callbacks(args.Callback)
         , Counters(counters)
-        , TypeEnv(args.TypeEnv)
-        , Alloc(args.Alloc)
         , BufferActorId(ActorIdFromProto(Settings.GetBufferActorId()))
         , TxId(std::get<ui64>(args.TxId))
         , TableId(
@@ -2131,6 +2117,18 @@ public:
     {
         EgressStats.Level = args.StatsLevel;
         Counters->ForwardActorsCount->Inc();
+
+        TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
+            Settings.GetColumns().begin(),
+            Settings.GetColumns().end());
+        std::vector<ui32> writeIndex(
+            Settings.GetWriteIndexes().begin(),
+            Settings.GetWriteIndexes().end());
+        if (Settings.GetIsOlap()) {
+            Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex));
+        } else {
+            Batcher = CreateRowDataBatcher(columnsMetadata, std::move(writeIndex));
+        }
     }
 
     void Bootstrap() {
@@ -2165,10 +2163,6 @@ private:
 
         WriteToken = result->Get()->Token;
         DataSize = 0;
-        {
-            auto alloc = TypeEnv.BindAllocator();
-            Data = nullptr;
-        }
 
         if (Closed) {
             CA_LOG_D("Finished");
@@ -2182,24 +2176,21 @@ private:
     void WriteToBuffer() {
         auto ev = std::make_unique<TEvBufferWrite>();
 
-        ev->Data = Data;
+        ev->Data = Batcher->Build();
         ev->Close = Closed;
-        ev->Alloc = Alloc;
 
         if (!WriteToken.IsEmpty()) {
             ev->Token = WriteToken;
         } else {
-            TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata;
-            keyColumnsMetadata.reserve(Settings.GetKeyColumns().size());
-            for (const auto & column : Settings.GetKeyColumns()) {
-                keyColumnsMetadata.push_back(column);
-            }
-            TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata;
-            columnsMetadata.reserve(Settings.GetColumns().size());
-            for (const auto & column : Settings.GetColumns()) {
-                columnsMetadata.push_back(column);
-            }
-            std::vector<ui32> writeIndex(Settings.GetWriteIndexes().begin(), Settings.GetWriteIndexes().end());
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata(
+                Settings.GetKeyColumns().begin(),
+                Settings.GetKeyColumns().end());
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
+                Settings.GetColumns().begin(),
+                Settings.GetColumns().end());
+            std::vector<ui32> writeIndex(
+                Settings.GetWriteIndexes().begin(),
+                Settings.GetWriteIndexes().end());
 
             ev->Settings = TWriteSettings{
                 .TableId = TableId,
@@ -2249,10 +2240,7 @@ private:
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 size, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
         Closed |= finished;
-        if (!Data) {
-            Data = std::make_shared<TVector<NMiniKQL::TUnboxedValueBatch>>();
-        }
-        Data->emplace_back(std::move(data));
+        Batcher->AddData(data);
         DataSize += size;
 
         CA_LOG_D("Add data: " << size << " / " << DataSize);
@@ -2276,13 +2264,6 @@ private:
         Callbacks->OnAsyncOutputError(OutputIndex, std::move(issues), statusCode);
     }
 
-    ~TKqpForwardWriteActor() {
-        {
-            TGuard guard(*Alloc);
-            Data = nullptr;
-        }
-    }
-
     void PassAway() override {
         TActorBootstrapped<TKqpForwardWriteActor>::PassAway();
     }
@@ -2294,12 +2275,10 @@ private:
     NYql::NDq::TDqAsyncStats EgressStats;
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks * Callbacks = nullptr;
     TIntrusivePtr<TKqpCounters> Counters;
-    const NMiniKQL::TTypeEnvironment& TypeEnv;
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     TActorId BufferActorId;
+    IDataBatcherPtr Batcher;
 
-    std::shared_ptr<TVector<NMiniKQL::TUnboxedValueBatch>> Data;
     i64 DataSize = 0;
     bool Closed = false;
 

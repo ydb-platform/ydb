@@ -14,7 +14,7 @@ class IDataBatch : public TThrRefBase {
 public:
     virtual TString SerializeToString() const = 0;
     virtual i64 GetMemory() const = 0;
-    bool IsEmpty() const;
+    virtual bool IsEmpty() const = 0;
 };
 
 using IDataBatchPtr = TIntrusivePtr<IDataBatch>;
@@ -57,7 +57,7 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         std::vector<ui32>&& writeIndexes,
         const i64 priority) = 0;
-    virtual void Write(TWriteToken token, const NMiniKQL::TUnboxedValueBatch& data) = 0;
+    virtual void Write(TWriteToken token, IDataBatchPtr&& data) = 0;
     virtual void Close(TWriteToken token) = 0;
 
     virtual void FlushBuffers() = 0;

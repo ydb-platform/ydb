@@ -208,7 +208,6 @@ void Init(
             CreatePqNativeGateway(pqServices),
             appData->Mon);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
-        actorRegistrator(NFq::PurecalcCompileServiceActorId(), NRowDispatcher::CreatePurecalcCompileService());
     }
 
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();

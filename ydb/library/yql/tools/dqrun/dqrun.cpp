@@ -87,7 +87,6 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
-#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 
 #include <ydb/core/util/pb.h>
 
@@ -521,10 +520,6 @@ void InitFq(const NFq::NConfig::TConfig& fqConfig, IPqGateway::TPtr pqGateway, T
         additionalLocalServices.emplace_back(
             NFq::RowDispatcherServiceActorId(),
             TActorSetupCmd(rowDispatcher.release(), TMailboxType::Simple, 0));
-
-        additionalLocalServices.emplace_back(
-            NFq::PurecalcCompileServiceActorId(),
-            TActorSetupCmd(NFq::NRowDispatcher::CreatePurecalcCompileService(), TMailboxType::Simple, 0));
     }
 }
 

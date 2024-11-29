@@ -13,7 +13,6 @@
 namespace NFq {
 
 NActors::TActorId RowDispatcherServiceActorId();
-NActors::TActorId PurecalcCompileServiceActorId();
 
 struct TPurecalcCompileSettings {
     bool EnabledLLVM = false;

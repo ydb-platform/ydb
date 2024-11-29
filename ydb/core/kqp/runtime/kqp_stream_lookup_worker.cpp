@@ -377,9 +377,7 @@ public:
                     }
                 }
 
-                storageRowSize = std::max(storageRowSize, (i64)8);
-
-                if (rowsInBatch && storageRowSize > freeSpace - (i64)resultStats.ResultBytesCount) {
+                if (rowsInBatch && rowSize > freeSpace - (i64)resultStats.ResultBytesCount) {
                     row.DeleteUnreferenced();
                     sizeLimitExceeded = true;
                     break;
@@ -387,6 +385,8 @@ public:
 
                 batch.push_back(std::move(row));
                 ++rowsInBatch;
+
+                storageRowSize = std::max(storageRowSize, (i64)8);
 
                 resultStats.ReadRowsCount += 1;
                 resultStats.ReadBytesCount += storageRowSize;

@@ -59,7 +59,7 @@ bool TTTLValidator::ValidateUnit(const NScheme::TTypeInfo columnType, NKikimrSch
 }
 
 bool TTTLValidator::ValidateTiers(const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTTLSettings_TTier>& tiers, TString& errStr) {
-    for (ui64 i = 0; i < tiers.size(); ++i) {
+    for (i64 i = 0; i < tiers.size(); ++i) {
         const auto& tier = tiers[i];
         if (!tier.HasApplyAfterSeconds()) {
             errStr = TStringBuilder() << "Tier " << i << ": missing ApplyAfterSeconds";
@@ -73,7 +73,7 @@ bool TTTLValidator::ValidateTiers(const google::protobuf::RepeatedPtrField<NKiki
         }
         switch (tier.GetActionCase()) {
             case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
-                if (i + 1 != ttlSettings.TiersSize()) {
+                if (i + 1 != tiers.size()) {
                     errStr = TStringBuilder() << "Tier " << i << ": only the last tier in TTL settings can have Delete action";
                     return false;
                 }

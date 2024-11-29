@@ -89,7 +89,7 @@ namespace NTable {
                     if (type != EPage::FlatIndex) {
                         // hack: saving flat index to private cache will break sticky logic
                         // keep it in shared cache only for now
-                        Cache->Fill(loaded.PageId, std::move(loaded.Page), NeedIn(type));
+                        Cache->Fill(loaded.PageId, std::move(loaded.Page)); // TODO
                     }
                 }
             }

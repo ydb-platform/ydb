@@ -208,6 +208,7 @@ void TExecutor::Broken() {
 void TExecutor::RecreatePageCollectionsCache() noexcept
 {
     PrivatePageCache = MakeHolder<TPrivatePageCache>();
+    PageCollectionStates = new TPageCollectionStates();
 
     Stats->PacksMetaBytes = 0;
 
@@ -634,6 +635,7 @@ void TExecutor::DropCachesOfBundle(const NTable::TPart &part) noexcept
 void TExecutor::DropSingleCache(const TLogoBlobID &label) noexcept
 {
     auto toActivate = PrivatePageCache->ForgetPageCollection(label);
+    PageCollectionStates->erase(label);
     ActivateWaitingTransactions(toActivate);
     if (!PrivatePageCache->Info(label))
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvInvalidate(label));
@@ -1350,8 +1352,9 @@ void TExecutor::RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartV
 
             TPrivatePageCache::TInfo *info = PrivatePageCache->Info(req->PageCollection->Label());
             Y_ABORT_UNLESS(info);
-            for (ui32 pageId : req->Pages)
-                PrivatePageCache->MarkSticky(pageId, info);
+            // TODO
+            // for (ui32 pageId : req->Pages)
+                // PrivatePageCache->MarkSticky(pageId, info);
 
             // TODO: only request missing pages
             RequestFromSharedCache(req, NBlockIO::EPriority::Bkgr, EPageCollectionRequest::CacheSync);

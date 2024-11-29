@@ -416,6 +416,7 @@ class TExecutor
 
     THolder<TExecutorBootLogic> BootLogic;
     THolder<TPrivatePageCache> PrivatePageCache;
+    TAutoPtr<TPageCollectionStates> PageCollectionStates;
     THolder<TExecutorCounters> Counters;
     THolder<TTabletCountersBase> AppCounters;
     THolder<TTabletCountersBase> CountersBaseline;

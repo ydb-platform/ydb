@@ -6,7 +6,6 @@ namespace NTabletFlatExecutor {
 
 TPrivatePageCache::TPage::TPage(size_t size, TPageId pageId, TInfo* info)
     : LoadState(LoadStateNo)
-    , Sticky(false)
     , Id(pageId)
     , Size(size)
     , Info(info)
@@ -34,7 +33,6 @@ TPrivatePageCache::TInfo::TInfo(const TInfo &info)
             dst->LoadState = TPage::LoadStateLoaded;
             dst->SharedBody = src->SharedBody;
             dst->PinnedBody = src->PinnedBody;
-            dst->Sticky = src->Sticky;
         }
     }
 }
@@ -52,8 +50,6 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
         Stats.TotalSharedBody += page->Size;
         if (page->PinnedBody)
             Stats.TotalPinnedBody += page->Size;
-        if (page->Sticky)
-            Stats.TotalSticky += page->Size;
 
         TryUnload(page);
         Y_DEBUG_ABORT_UNLESS(!page->IsUnnecessary());
@@ -126,8 +122,6 @@ bool TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
                 Stats.TotalPinnedBody -= page->Size;
             if (page->PinnedBody && !page->SharedBody)
                 Stats.TotalExclusive -= page->Size;
-            if (page->Sticky)
-                Stats.TotalSticky -= page->Size;
         }
 
         info->PageMap.clear();
@@ -145,16 +139,6 @@ TPrivatePageCache::TInfo* TPrivatePageCache::Info(TLogoBlobID id) {
         return x->Get();
     else
         return nullptr;
-}
-
-void TPrivatePageCache::MarkSticky(TPageId pageId, TInfo *collectionInfo) {
-    TPage *page = collectionInfo->EnsurePage(pageId);
-    if (Y_LIKELY(!page->Sticky)) {
-        // N.B. the call site that marks pages as sticky starts to load them
-        // asynchronously later, so sticky pages may not be loaded yet.
-        page->Sticky = 1;
-        Stats.TotalSticky += page->Size;
-    }
 }
 
 TIntrusivePtr<TPrivatePageCachePinPad> TPrivatePageCache::Pin(TPage *page) {
@@ -251,7 +235,7 @@ void TPrivatePageCache::TryLoad(TPage *page) {
 
 void TPrivatePageCache::TPrivatePageCache::TryUnload(TPage *page) {
     if (page->LoadState == TPage::LoadStateLoaded) {
-        if (!page->PinPad && !page->Sticky) {
+        if (!page->PinPad) {
             ToTouchShared[page->Info->Id].insert(page->Id);
             page->LoadState = TPage::LoadStateNo;
             if (Y_LIKELY(page->PinnedBody)) {
@@ -290,9 +274,9 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
         if (page->Empty()) {
             Touches.PushBack(page);
             Stats.CurrentCacheHits++;
-            if (!page->Sticky) {
+            // if (!page->Sticky) { // TODO
                 Stats.CurrentCacheHitSize += page->Size;
-            }
+            // }
         }
         return &page->PinnedBody;
     }
@@ -301,9 +285,10 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
         ToLoad.PushBack(page);
 
         // Note: we mark flat index pages sticky before we load them
-        if (!page->Sticky && info->GetPageType(page->Id) == EPage::FlatIndex) {
-            MarkSticky(page->Id, info);
-        }
+        // TODO
+        // if (!page->Sticky && info->GetPageType(page->Id) == EPage::FlatIndex) {
+        //     MarkSticky(page->Id, info);
+        // }
 
         Stats.CurrentCacheMisses++;
     }
@@ -359,13 +344,13 @@ void TPrivatePageCache::CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newM
 
         // Note: it seems useless to count sticky pages in tx usage
         // also we want to read index from Env
-        if (!page.Sticky) {
+        // if (!page.Sticky) { TODO
             if (isPinned) {
                 pinnedMemory += page.Size;
             } else {
                 newMemory += page.Size;
             }
-        }
+        // }
     }
 }
 
@@ -378,9 +363,9 @@ void TPrivatePageCache::PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pi
             pinnedPages++;
             // Note: it seems useless to count sticky pages in tx usage
             // also we want to read index from Env
-            if (!page.Sticky) {
+            // if (!page.Sticky) { TODO
                 pinnedMemory += page.Size;
-            }
+            // }
         }
         touchedPages++;
     }
@@ -395,9 +380,9 @@ void TPrivatePageCache::PinToLoad(TPinned &pinned, ui32 &pinnedPages, ui64 &pinn
             pinnedPages++;
             // Note: it seems useless to count sticky pages in tx usage
             // also we want to read index from Env
-            if (!page.Sticky) {
+            // if (!page.Sticky) { TODO
                 pinnedMemory += page.Size;
-            }
+            // }
         }
     }
 }
@@ -482,8 +467,7 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(
     if (Y_UNLIKELY(page->PinnedBody && !page->SharedBody))
         Stats.TotalExclusive -= page->Size;
 
-    // Note: we must be careful not to accidentally drop the sticky bit
-    page->Fill(std::move(loaded.Page), page->Sticky);
+    page->Fill(std::move(loaded.Page));
     Stats.TotalSharedBody += page->Size;
     Stats.TotalPinnedBody += page->Size;
     TryUnload(page);

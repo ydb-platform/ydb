@@ -6,6 +6,30 @@
 #include <ydb/core/util/cache_cache.h>
 #include <ydb/core/util/page_map.h>
 
+namespace NKikimr::NSharedCache {
+
+    class TPageCollectionState : TMoveOnly {
+        // Note: storing sticky pages used refs guarantees that they won't be offload
+        // from Shared Cache
+        THashMap<TPageId, TSharedPageRef> StickyPages;
+        ui64 StickySize = 0;
+
+    public:
+        void AddStickyPage(TPageId pageId, TSharedPageRef page, ui64 pageSize) {
+            Y_ABORT_UNLESS(page.IsUsed());
+            auto inserted = StickyPages.emplace(pageId, std::move(page)).second;
+            if (Y_LIKELY(inserted)) {
+                StickySize += pageSize;
+            } else {
+                Y_DEBUG_ABORT("Sticky pages should be unique");
+            }
+        }
+    };
+
+    using TPageCollectionStates = THashMap<TLogoBlobID, TPageCollectionState>;
+
+}
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
@@ -20,9 +44,9 @@ struct TPrivatePageCacheWaitPad : public TExplicitSimpleCounter {
 };
 
 class TPrivatePageCache {
+    using TPageId = NTable::NPage::TPageId;
     using TPinned = THashMap<TLogoBlobID, THashMap<ui32, TIntrusivePtr<TPrivatePageCachePinPad>>>;
     using EPage = NTable::NPage::EPage;
-    using TPageId = NTable::NPage::TPageId;
 
 public:
     struct TInfo;
@@ -32,6 +56,7 @@ public:
         ui64 TotalSharedBody = 0; // total number of bytes currently referenced from shared cache
         ui64 TotalPinnedBody = 0; // total number of bytes currently pinned in memory
         ui64 TotalExclusive = 0; // total number of bytes exclusive to this cache (not from shared cache)
+        // TODO
         ui64 TotalSticky = 0; // total number of bytes marked as sticky (never unloaded from memory)
         ui64 PinnedSetSize = 0; // number of bytes pinned by transactions (even those not currently loaded)
         ui64 PinnedLoadSize = 0; // number of bytes pinned by transactions (which are currently being loaded)
@@ -52,7 +77,6 @@ public:
         };
 
         ui32 LoadState : 2;
-        ui32 Sticky : 1;
         
         const TPageId Id;
         const size_t Size;
@@ -71,14 +95,12 @@ public:
         bool IsUnnecessary() const noexcept {
             return (
                 LoadState == LoadStateNo &&
-                !Sticky &&
                 !PinPad &&
                 !WaitQueue &&
                 !SharedBody);
         }
 
-        void Fill(TSharedPageRef shared, bool sticky) {
-            Sticky = sticky;
+        void Fill(TSharedPageRef shared) {
             SharedBody = std::move(shared);
             LoadState = LoadStateLoaded;
             PinnedBody = TPinnedPageRef(SharedBody).GetData();
@@ -119,8 +141,8 @@ public:
             return page;
         }
 
-        void Fill(ui32 pageId, TSharedPageRef page, bool sticky) noexcept {
-            EnsurePage(pageId)->Fill(std::move(page), sticky);
+        void Fill(TPageId pageId, TSharedPageRef page) noexcept {
+            EnsurePage(pageId)->Fill(std::move(page));
         }
 
         const TLogoBlobID Id;
@@ -141,8 +163,6 @@ public:
     bool UnlockPageCollection(TLogoBlobID id);
 
     TInfo* Info(TLogoBlobID id);
-
-    void MarkSticky(TPageId pageId, TInfo *collectionInfo);
 
     const TStats& GetStats() const { return Stats; }
 

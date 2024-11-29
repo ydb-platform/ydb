@@ -50,6 +50,7 @@ namespace NTabletFlatExecutor {
         ui32 Step = Max<ui32>();
         TResults Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
+        NSharedCache::TPageCollectionStates PageCollectionStates;
         THolder<NTable::TCompactionParams> Params;
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
@@ -322,13 +323,18 @@ namespace NTabletFlatExecutor {
                     auto cache = MakeIntrusive<NTable::TLoader::TCache>(pageCollection.PageCollection);
                     auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
                     auto gcList = SharedCachePages->GCList;
-                    auto addPage = [&saveCompactedPages, &pageCollection, &cache, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
+                    TPageCollectionState pageCollectionState;
+                    auto addPage = [&saveCompactedPages, &pageCollection, &pageCollectionState, &cache, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
                         auto pageId = loadedPage.PageId;
                         auto pageSize = pageCollection.PageCollection->Page(pageId).Size;
                         auto sharedPage = MakeIntrusive<TPage>(pageId, pageSize, nullptr);
                         sharedPage->Initialize(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
-                        cache->Fill(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList), sticky);
+                        auto sharedPageRef = TSharedPageRef::MakeUsed(std::move(sharedPage), gcList);
+                        if (sticky) {
+                            pageCollectionState.AddStickyPage(pageId, sharedPageRef, pageSize);
+                        }
+                        cache->Fill(pageId, std::move(sharedPageRef));
                     };
                     for (auto &page : pageCollection.StickyPages) {
                         addPage(page, true);
@@ -339,6 +345,8 @@ namespace NTabletFlatExecutor {
 
                     Send(MakeSharedPageCacheId(), saveCompactedPages.Release());
 
+                    auto inserted = prod->PageCollectionStates.emplace(cache->Id, std::move(pageCollectionState)).second;
+                    Y_ABORT_UNLESS(inserted);
                     pageCollections.push_back(std::move(cache));
                 }
 
@@ -393,8 +401,9 @@ namespace NTabletFlatExecutor {
                 }
             }
 
-            if (fail) {
-                Y_ABORT_IF(prod->Results); /* shouldn't sent w/o fixation in bs */
+            if (fail) { /* shouldn't sent w/o fixation in bs */
+                Y_ABORT_IF(prod->Results); 
+                Y_ABORT_IF(prod->PageCollectionStates);
             } else if (bool(prod->Results) != bool(WriteStats.Rows > 0)) {
                 Y_ABORT("Unexpected rows production result after compaction");
             } else if ((bool(prod->Results) || bool(prod->TxStatus)) != bool(Blobs > 0)) {

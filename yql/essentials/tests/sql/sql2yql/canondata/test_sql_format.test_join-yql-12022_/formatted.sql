@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 
 DEFINE SUBQUERY $sub($name) AS
@@ -13,5 +14,5 @@ FROM $sub("Input")
     AS a
 INNER JOIN Input
     AS b
-ON a.key = b.key
+ON a.key == b.key
 WHERE JoinTableRow().`a.subkey` == "wat";

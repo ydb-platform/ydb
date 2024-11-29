@@ -11,4 +11,4 @@ SELECT
     Pg::max(c),
     Pg::avg(c),
 FROM Input
-WHERE d = "aaa";
+WHERE d == "aaa";

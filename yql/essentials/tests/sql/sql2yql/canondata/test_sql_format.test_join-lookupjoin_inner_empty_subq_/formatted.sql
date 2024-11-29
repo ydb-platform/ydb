@@ -11,7 +11,7 @@ INNER JOIN (
     SELECT
         *
     FROM Input2
-    WHERE k2 = "not_existent"
+    WHERE k2 == "not_existent"
 )
     AS b
-ON a.k1 = b.k2;
+ON a.k1 == b.k2;

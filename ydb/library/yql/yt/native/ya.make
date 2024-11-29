@@ -46,6 +46,7 @@ PEERDIR(
     ydb/library/yql/dq/opt
     ydb/library/yql/providers/dq/actors/yt
     ydb/library/yql/providers/dq/global_worker_manager
+    ydb/library/yql/providers/dq/helper
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/provider/exec
     ydb/library/yql/providers/dq/service

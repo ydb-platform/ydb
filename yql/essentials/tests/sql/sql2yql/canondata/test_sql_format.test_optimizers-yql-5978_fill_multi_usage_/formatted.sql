@@ -8,8 +8,7 @@ $ctl = (
     FROM Input
 );
 
-INSERT INTO Output
-    WITH TRUNCATE
+INSERT INTO Output WITH TRUNCATE
 SELECT
     *
 FROM $ctl;

@@ -83,7 +83,7 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
     auto ytGateway = CreateYtFileGateway(yqlNativeServices);
 
     TVector<TDataProviderInitializer> dataProvidersInit;
-    dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway, MakeSimpleCBOOptimizerFactory()));
+    dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway, MakeSimpleCBOOptimizerFactory(), {}));
 
     TExprContext modulesCtx;
     IModuleResolver::TPtr moduleResolver;

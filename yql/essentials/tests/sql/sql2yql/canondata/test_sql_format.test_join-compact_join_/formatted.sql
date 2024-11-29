@@ -7,7 +7,7 @@ $stream =
         a.v AS av
     FROM InputLeft
         AS a
-    INNER JOIN/*+ merge() compact() */ InputRight
+    INNER JOIN /*+ merge() compact() */ InputRight
         AS b
     USING (k, sk, v);
 
@@ -16,7 +16,7 @@ SELECT
     ask,
     av
 FROM $stream
-GROUP/*+ compact() */ BY
+GROUP /*+ compact() */ BY
     (k, ask, av)
 ORDER BY
     k,

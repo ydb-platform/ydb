@@ -15,10 +15,10 @@ $ru_hosts = (
         host
     FROM $data
     WHERE normalized_url IS NOT NULL AND (
-        tld = "ru" OR
-            tld = "su" OR
-            tld = "рф" OR
-            tld = "xn--p1ai"-- punycode рф
+        tld == "ru"
+        OR tld == "su"
+        OR tld == "рф"
+        OR tld == "xn--p1ai" -- punycode рф
     )
 );
 

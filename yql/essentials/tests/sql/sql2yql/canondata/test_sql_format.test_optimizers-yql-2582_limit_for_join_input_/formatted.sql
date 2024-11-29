@@ -22,6 +22,6 @@ FROM $data
     AS a
 INNER JOIN Input2
     AS b
-ON a.key = b.key
+ON a.key == b.key
 ORDER BY
     key;

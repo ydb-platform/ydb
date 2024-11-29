@@ -2,7 +2,6 @@
 #include "yql_yt_op_settings.h"
 #include "yql_yt_helpers.h"
 
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_table.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>

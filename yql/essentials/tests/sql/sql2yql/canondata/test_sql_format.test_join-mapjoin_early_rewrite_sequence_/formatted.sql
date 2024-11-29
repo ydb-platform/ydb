@@ -14,10 +14,10 @@ FROM $subq
     AS a
 JOIN Dict1
     AS d1
-ON a.subkey_plus_one = d1.subkey
+ON a.subkey_plus_one == d1.subkey
 JOIN Dict2
     AS d2
-ON a.key = d2.key
+ON a.key == d2.key
 SELECT
     *
 ORDER BY

@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $ages = [
     <|suffix: "0-0.5"u, begin: 0.f, end: 0.5f|>,
     <|suffix: "0.5-1"u, begin: 0.5f, end: 1.f|>,
@@ -17,12 +18,10 @@ $interval_fits_in = ($interval, $other) -> {
         $interval.end <= $other.begin OR $interval.begin >= $other.end,
         0.f,
         IF(
-            $interval.begin >= $other.begin AND $interval.end <= $other.end,
-            -- interval is completely within other
+            $interval.begin >= $other.begin AND $interval.end <= $other.end, -- interval is completely within other
             1.f,
             IF(
-                $interval.begin <= $other.begin AND $interval.end >= $other.end,
-                -- other is completely within the interval
+                $interval.begin <= $other.begin AND $interval.end >= $other.end, -- other is completely within the interval
                 ($other.end - $other.begin) / $length,
                 IF(
                     $interval.begin < $other.begin,

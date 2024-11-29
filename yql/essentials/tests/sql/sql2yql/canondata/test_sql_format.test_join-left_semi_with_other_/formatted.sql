@@ -25,9 +25,9 @@ FROM $data1
     AS i1
 LEFT SEMI JOIN $data2
     AS i2
-ON i1.key = i2.key
+ON i1.key == i2.key
 LEFT OUTER JOIN $data1
     AS i3
-ON i1.key = i3.key
+ON i1.key == i3.key
 ORDER BY
     i1.key;

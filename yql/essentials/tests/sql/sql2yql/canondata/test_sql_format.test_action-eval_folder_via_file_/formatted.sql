@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 PRAGMA yt.FolderInlineItemsLimit = "0";
 
@@ -9,7 +10,7 @@ $list = (
         SELECT
             Path
         FROM folder("")
-        WHERE Type = "table"
+        WHERE Type == "table"
         LIMIT 30
     )
 );

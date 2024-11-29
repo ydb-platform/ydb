@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 DEFINE SUBQUERY $t() AS
     SELECT
         *
@@ -15,9 +16,9 @@ DEFINE SUBQUERY $split_formula_log($in) AS
             )
         );
         RETURN CASE
-            WHEN $row.key = "0"
+            WHEN $row.key == "0"
                 THEN VARIANT ($row, "0", $varType)
-            WHEN $row.key = "1"
+            WHEN $row.key == "1"
                 THEN VARIANT ($row, "1", $varType)
             ELSE NULL
         END;

@@ -10,7 +10,7 @@ $join1 = (
         AS c
     JOIN plato.orders
         AS o
-    ON c.c_custkey = o.o_custkey
+    ON c.c_custkey == o.o_custkey
 );
 
 $join2 = (
@@ -25,7 +25,7 @@ $join2 = (
         AS j
     JOIN plato.lineitem
         AS l
-    ON l.l_orderkey = j.o_orderkey
+    ON l.l_orderkey == j.o_orderkey
 );
 
 $join3 = (
@@ -41,7 +41,7 @@ $join3 = (
         AS j
     JOIN plato.supplier
         AS s
-    ON j.l_suppkey = s.s_suppkey
+    ON j.l_suppkey == s.s_suppkey
 );
 
 $join4 = (
@@ -59,8 +59,8 @@ $join4 = (
         AS j
     JOIN plato.nation
         AS n
-    ON j.s_nationkey = n.n_nationkey AND
-        j.c_nationkey = n.n_nationkey
+    ON j.s_nationkey == n.n_nationkey
+    AND j.c_nationkey == n.n_nationkey
 );
 
 $join5 = (
@@ -79,7 +79,7 @@ $join5 = (
         AS j
     JOIN plato.region
         AS r
-    ON j.n_regionkey = r.r_regionkey
+    ON j.n_regionkey == r.r_regionkey
 );
 $border = Date("1995-01-01");
 
@@ -87,9 +87,9 @@ SELECT
     n_name,
     sum(l_extendedprice * (1 - l_discount)) AS revenue
 FROM $join5
-WHERE r_name = 'AFRICA' AND
-    CAST(o_orderdate AS Timestamp) >= $border AND
-    CAST(o_orderdate AS Timestamp) < ($border + Interval("P365D"))
+WHERE r_name == 'AFRICA'
+    AND CAST(o_orderdate AS Timestamp) >= $border
+    AND CAST(o_orderdate AS Timestamp) < ($border + Interval("P365D"))
 GROUP BY
     n_name
 ORDER BY

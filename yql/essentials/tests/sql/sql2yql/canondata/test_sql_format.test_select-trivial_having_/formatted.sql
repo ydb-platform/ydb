@@ -5,4 +5,4 @@ SELECT
 FROM plato.Input
 GROUP BY
     key
-HAVING Max(value) = "FOO";
+HAVING Max(value) == "FOO";

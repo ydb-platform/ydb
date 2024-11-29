@@ -18,5 +18,5 @@ JOIN (
     WHERE subkey != "foo"
 )
     AS b
-ON a.key = b.key
+ON a.key == b.key
 WHERE a.key != "1" OR b.key != "2";

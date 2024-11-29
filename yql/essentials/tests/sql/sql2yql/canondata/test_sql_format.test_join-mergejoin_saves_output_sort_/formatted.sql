@@ -9,7 +9,7 @@ FROM SortedBySubkeyValue
     AS a
 INNER JOIN SortedByKey
     AS b
-ON a.subkey = b.key
+ON a.subkey == b.key
 SELECT
     b.key,
     a.subkey,
@@ -23,7 +23,7 @@ FROM SortedBySubkeyValue
     AS a
 RIGHT JOIN SortedByKey
     AS b
-ON a.subkey = b.key
+ON a.subkey == b.key
 SELECT
     b.key,
     a.subkey,
@@ -35,7 +35,7 @@ FROM SortedBySubkeyValue
     AS a
 LEFT JOIN SortedByKey
     AS b
-ON a.subkey = b.key
+ON a.subkey == b.key
 SELECT
     b.key,
     a.subkey,
@@ -48,7 +48,7 @@ FROM SortedBySubkeyValue
     AS a
 FULL JOIN SortedByKey
     AS b
-ON a.subkey = b.key
+ON a.subkey == b.key
 SELECT
     b.key,
     a.subkey,
@@ -62,7 +62,7 @@ FROM SortedBySubkeyValue
     AS a
 RIGHT ONLY JOIN SortedByKey
     AS b
-ON a.subkey = b.key
+ON a.subkey == b.key
 SELECT
     b.key
 ORDER BY
@@ -72,7 +72,7 @@ FROM SortedBySubkeyValue
     AS a
 LEFT ONLY JOIN SortedByKey
     AS b
-ON a.subkey = b.key
+ON a.subkey == b.key
 SELECT
     a.subkey,
     a.value
@@ -84,7 +84,7 @@ FROM SortedBySubkeyValue
     AS a
 EXCLUSION JOIN SortedByKey
     AS b
-ON a.subkey = b.key
+ON a.subkey == b.key
 SELECT
     b.key,
     a.subkey,
@@ -98,7 +98,7 @@ FROM SortedBySubkeyValue
     AS a
 RIGHT SEMI JOIN SortedByKey
     AS b
-ON a.subkey = b.key
+ON a.subkey == b.key
 SELECT
     b.key
 ORDER BY
@@ -108,7 +108,7 @@ FROM SortedBySubkeyValue
     AS a
 LEFT SEMI JOIN SortedByKey
     AS b
-ON a.subkey = b.key
+ON a.subkey == b.key
 SELECT
     a.subkey,
     a.value

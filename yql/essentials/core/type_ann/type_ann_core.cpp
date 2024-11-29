@@ -12741,6 +12741,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["AssumeColumnOrderPartial"] = &AssumeColumnOrderWrapper;
         ExtFunctions["UnionAllPositional"] = &UnionAllPositionalWrapper;
         ExtFunctions["UnionPositional"] = &UnionAllPositionalWrapper;
+        ExtFunctions["UnionMergePositional"] = &UnionAllPositionalWrapper;
         ExtFunctions["SafeCast"] = &CastWrapper<false>;
         ExtFunctions["StrictCast"] = &CastWrapper<true>;
         ExtFunctions["Version"] = &VersionWrapper;

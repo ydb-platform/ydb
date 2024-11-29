@@ -31,7 +31,7 @@ CROSS JOIN $two
     AS b
 LEFT JOIN $three
     AS c
-ON (c.key = a.key AND c.value = b.value)
+ON (c.key == a.key AND c.value == b.value)
 SELECT
     *
 ORDER BY

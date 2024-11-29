@@ -10,8 +10,8 @@ ORDER BY
 
 SELECT DISTINCT
     *
-    WITHOUT
-        subkey
+WITHOUT
+    subkey
 FROM Input2
 ORDER BY
     key,
@@ -20,8 +20,8 @@ ORDER BY
 SELECT DISTINCT
     a.*,
     TableName() AS tn,
-    WITHOUT
-        subkey
+WITHOUT
+    subkey
 FROM Input2
     AS a
 ORDER BY

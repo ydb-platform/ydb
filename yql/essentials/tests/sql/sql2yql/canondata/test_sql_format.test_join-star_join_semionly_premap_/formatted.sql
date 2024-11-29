@@ -31,10 +31,10 @@ FROM $a
     AS a
 LEFT SEMI JOIN $b
     AS b
-ON a.k1 = b.k2
+ON a.k1 == b.k2
 LEFT ONLY JOIN $c
     AS c
-ON a.k1 = c.k3
+ON a.k1 == c.k3
 SELECT
     *
 ORDER BY

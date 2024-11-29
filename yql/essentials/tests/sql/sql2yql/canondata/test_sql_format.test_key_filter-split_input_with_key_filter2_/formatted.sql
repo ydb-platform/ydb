@@ -6,4 +6,4 @@ SELECT
     "" AS subkey,
     "value:" || value AS value
 FROM concat(Input, Input, Input)
-WHERE key = "07" || "5";
+WHERE key == "07" || "5";

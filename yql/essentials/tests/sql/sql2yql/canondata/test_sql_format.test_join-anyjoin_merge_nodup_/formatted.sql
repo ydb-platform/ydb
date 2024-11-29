@@ -9,7 +9,7 @@ FROM Input1
     AS a
 JOIN Input2
     AS b
-ON a.k1 = b.k2
+ON a.k1 == b.k2
 ORDER BY
     a.v1,
     b.v2;
@@ -20,7 +20,7 @@ FROM ANY Input1
     AS a
 JOIN Input2
     AS b
-ON a.k1 = b.k2
+ON a.k1 == b.k2
 ORDER BY
     a.v1,
     b.v2;
@@ -31,7 +31,7 @@ FROM Input1
     AS a
 JOIN ANY Input2
     AS b
-ON a.k1 = b.k2
+ON a.k1 == b.k2
 ORDER BY
     a.v1,
     b.v2;
@@ -42,7 +42,7 @@ FROM ANY Input1
     AS a
 JOIN ANY Input2
     AS b
-ON a.k1 = b.k2
+ON a.k1 == b.k2
 ORDER BY
     a.v1,
     b.v2;

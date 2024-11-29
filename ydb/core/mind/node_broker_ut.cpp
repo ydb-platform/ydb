@@ -370,6 +370,26 @@ void CheckRegistration(TTestActorRuntime &runtime,
                       false, path, Nothing(), name);
 }
 
+THolder<TEvNodeBroker::TEvGracefulShutdownRequest>
+MakeEventGracefulShutdown (ui32 nodeId) 
+{
+    auto eventGracefulShutdown = MakeHolder<TEvNodeBroker::TEvGracefulShutdownRequest>();
+    eventGracefulShutdown->Record.SetNodeId(nodeId);
+    return eventGracefulShutdown;
+}
+
+void CheckGracefulShutdown(TTestActorRuntime &runtime,
+                           TActorId sender,
+                           ui32 nodeId)
+{   
+    auto eventGracefulShutdown = MakeEventGracefulShutdown(nodeId);
+    TAutoPtr<IEventHandle> handle;
+    runtime.SendToPipe(MakeNodeBrokerID(), sender, eventGracefulShutdown.Release(), 0, GetPipeConfigWithRetries());
+    auto replyGracefulShutdown = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvGracefulShutdownResponse>(handle);
+
+    UNIT_ASSERT_VALUES_EQUAL(replyGracefulShutdown->Record.GetStatus().GetCode(), TStatus::OK);
+}
+
 NKikimrNodeBroker::TEpoch GetEpoch(TTestActorRuntime &runtime,
                                    TActorId sender)
 {
@@ -1792,6 +1812,26 @@ Y_UNIT_TEST_SUITE(TSlotIndexesPoolTest) {
         pool.Release(200);
         UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(pool.Capacity(), 128);
+    }
+}
+
+Y_UNIT_TEST_SUITE(GracefulShutdown) {
+    Y_UNIT_TEST(TTxGracefulShutdown) {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto epoch = GetEpoch(runtime, sender);
+
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd(),
+                          false, DOMAIN_NAME, {}, "slot-0");
+
+        CheckGracefulShutdown(runtime, sender, NODE1);    
+
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
+                          1, 2, 3, 5, TStatus::OK, NODE2, epoch.GetNextEnd(),
+                          false, DOMAIN_NAME, {}, "slot-0");
     }
 }
 

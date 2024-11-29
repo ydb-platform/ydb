@@ -14,9 +14,8 @@ $data = (
 --INSERT INTO Output
 SELECT
     value,
-    key
--- value is conflicted between Input and d sources
+    key -- value is conflicted between Input and d sources
 FROM Input
 JOIN $data
     AS d
-ON Input.subkey = d.kk;
+ON Input.subkey == d.kk;

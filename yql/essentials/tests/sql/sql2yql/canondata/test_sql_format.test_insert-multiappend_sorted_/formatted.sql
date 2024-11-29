@@ -1,6 +1,6 @@
-/* postgres can not *//* multirun can not */
-INSERT INTO plato.Output
-    WITH truncate
+/* postgres can not */
+/* multirun can not */
+INSERT INTO plato.Output WITH truncate
 SELECT
     *
 FROM plato.Input
@@ -14,8 +14,7 @@ FROM plato.Input;
 COMMIT;
 
 ----------------------------------------
-INSERT INTO plato.Output
-    WITH truncate
+INSERT INTO plato.Output WITH truncate
 SELECT
     *
 FROM plato.Input;
@@ -29,8 +28,7 @@ ORDER BY
 COMMIT;
 
 ----------------------------------------
-INSERT INTO plato.Output
-    WITH truncate
+INSERT INTO plato.Output WITH truncate
 SELECT
     *
 FROM plato.Input
@@ -48,8 +46,7 @@ ORDER BY
 COMMIT;
 
 ----------------------------------------
-INSERT INTO plato.Output
-    WITH truncate
+INSERT INTO plato.Output WITH truncate
 SELECT
     *
 FROM plato.Input
@@ -65,8 +62,7 @@ ORDER BY
 COMMIT;
 
 ----------------------------------------
-INSERT INTO plato.Output
-    WITH truncate
+INSERT INTO plato.Output WITH truncate
 SELECT
     *
 FROM plato.Input
@@ -82,8 +78,7 @@ ORDER BY
 COMMIT;
 
 ----------------------------------------
-INSERT INTO plato.Output
-    WITH truncate
+INSERT INTO plato.Output WITH truncate
 SELECT
     *
 FROM plato.Input
@@ -99,8 +94,7 @@ ORDER BY
 COMMIT;
 
 ----------------------------------------
-INSERT INTO plato.Output
-    WITH truncate
+INSERT INTO plato.Output WITH truncate
 SELECT
     *
 FROM plato.Input

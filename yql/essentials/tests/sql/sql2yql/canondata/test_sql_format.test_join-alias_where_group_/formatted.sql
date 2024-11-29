@@ -10,7 +10,7 @@ FROM Input3
 INNER JOIN Input4
     AS ib
 USING (key)
-WHERE ib.subkey = '2'
+WHERE ib.subkey == '2'
 GROUP BY
     ia.key AS key,
     ia.value AS subkey

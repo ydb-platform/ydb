@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/library/ncloud/impl)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 PEERDIR(

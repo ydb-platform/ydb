@@ -5,9 +5,9 @@ $src =
     SELECT DISTINCT
         key
     FROM Input
-    WHERE value = 'ddd';
+    WHERE value == 'ddd';
 
 SELECT
     *
 FROM Input
-WHERE key = $src;
+WHERE key == $src;

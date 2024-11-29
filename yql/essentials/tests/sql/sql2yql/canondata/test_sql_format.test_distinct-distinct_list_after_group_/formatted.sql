@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     listsort(aggregate_list(DISTINCT key)) AS key_list,
     value AS name

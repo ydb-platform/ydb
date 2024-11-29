@@ -7,4 +7,4 @@ FROM plato.Input1
     AS A
 INNER JOIN plato.Input2
     AS B
-ON A.key = B.key;
+ON A.key == B.key;

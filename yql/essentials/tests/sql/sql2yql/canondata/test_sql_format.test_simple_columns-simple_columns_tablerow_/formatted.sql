@@ -27,7 +27,7 @@ JOIN (
         2 AS v2
 )
     AS b
-ON a.k = b.k;
+ON a.k == b.k;
 
 SELECT
     *
@@ -43,4 +43,4 @@ JOIN (
         2 AS v2
 )
     AS b
-ON a.k = b.k;
+ON a.k == b.k;

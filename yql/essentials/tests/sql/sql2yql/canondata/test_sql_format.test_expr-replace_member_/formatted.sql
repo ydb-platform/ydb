@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $data = <|x: [<|y: 2|>], z: 5|>;
 -- set field function
 $F = ($field, $function) -> (
@@ -11,7 +12,7 @@ $E = ($index, $function) -> (
     ($list) -> (
         ListMap(
             ListEnumerate($list), ($pair) -> (
-                IF($pair.0 = $index, $function($pair.1), $pair.1)
+                IF($pair.0 == $index, $function($pair.1), $pair.1)
             )
         )
     )

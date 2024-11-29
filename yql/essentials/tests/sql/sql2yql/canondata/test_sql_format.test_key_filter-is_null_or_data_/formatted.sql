@@ -1,4 +1,4 @@
 SELECT
     *
 FROM plato.Input
-WHERE key IS NULL OR key = "023";
+WHERE key IS NULL OR key == "023";

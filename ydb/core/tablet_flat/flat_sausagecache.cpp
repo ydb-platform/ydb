@@ -402,36 +402,6 @@ void TPrivatePageCache::PinToLoad(TPinned &pinned, ui32 &pinnedPages, ui64 &pinn
     }
 }
 
-void TPrivatePageCache::RepinPages(TPinned &newPinned, TPinned &oldPinned, size_t &pinnedPages) {
-    auto repinTouched = [&](TPage* page) {
-        auto& newPinnedCollection = newPinned[page->Info->Id];
-        
-        if (auto* oldPinnedCollection = oldPinned.FindPtr(page->Info->Id)) {
-            // We had previously pinned pages from this page collection
-            // Create new or move used old pins to the new map
-            if (auto it = oldPinnedCollection->find(page->Id); it != oldPinnedCollection->end()) {
-                Y_DEBUG_ABORT_UNLESS(it->second);
-                newPinnedCollection[page->Id] = std::move(it->second);
-                oldPinnedCollection->erase(it);
-            } else {
-                newPinnedCollection[page->Id] = Pin(page);
-                pinnedPages++;
-            }
-        } else {
-            newPinnedCollection[page->Id] = Pin(page);
-            pinnedPages++;
-        }
-    };
-
-    // Everything touched during this read iteration must be pinned
-    for (auto& page : Touches) {
-        repinTouched(&page);
-    }
-    for (auto& page : ToLoad) {
-        repinTouched(&page);
-    }
-}
-
 void TPrivatePageCache::UnpinPages(TPinned &pinned, size_t &unpinnedPages) {
     for (auto &xinfoid : pinned) {
         if (TPrivatePageCache::TInfo *info = Info(xinfoid.first)) {

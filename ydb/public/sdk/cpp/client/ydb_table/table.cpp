@@ -1111,6 +1111,11 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompress
     return *this;
 }
 
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetKeepInMemory(bool enabled) {
+    Impl_->Proto.set_keep_in_memory(enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+    return *this;
+}
+
 TColumnFamilyDescription TColumnFamilyBuilder::Build() const {
     return TColumnFamilyDescription(Impl_->Proto);
 }

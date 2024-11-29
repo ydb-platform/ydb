@@ -2,6 +2,6 @@
 
 | Среда | Уровень поддержки  | Инструкция |
 | --- | :---: | --- |
-| [Apache Superset](https://superset.apache.org) | Через [PostgreSQL-совместимость](../../../postgresql/intro.md) | [Инструкция](../superset.md) |
+| [Apache Superset](https://superset.apache.org) | [YDB-SQLAlchemy](https://github.com/ydb-platform/ydb-sqlalchemy/releases)| [Инструкция](../superset.md) |
 | [FineBI](https://intl.finebi.com) | Через [PostgreSQL-совместимость](../../../postgresql/intro.md) | [Инструкция](../finebi.md) |
 | [Grafana](https://grafana.com) | Полный| [Инструкция](../grafana.md) |

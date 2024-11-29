@@ -47,6 +47,7 @@ IndentWidth:     4
 TabWidth:        4
 UseTab:          Never
 BreakBeforeBraces: Attach
+InsertBraces: true
 
 # NB: BraceWrapping has no effect unless BreakBeforeBraces is set to Custom
 BraceWrapping:

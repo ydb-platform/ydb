@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/yson
     library/cpp/yson/node
     yql/essentials/sql/pg
+    yql/essentials/core/cbo/simple
     yql/essentials/core/facade
     yql/essentials/core/file_storage
     yql/essentials/core/file_storage/proto

@@ -26,9 +26,11 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <yql/essentials/core/facade/yql_facade.h>
 #include <yql/essentials/core/file_storage/file_storage.h>
 #include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
@@ -353,7 +355,7 @@ public:
             }
 
             auto ytNativeGateway = CreateYtNativeGateway(ytServices);
-            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
 
             ProgramFactory_ = std::make_unique<NYql::TProgramFactory>(
                 false, FuncRegistry_.Get(), ExprContext_.NextUniqueId, dataProvidersInit, "embedded");

@@ -222,11 +222,24 @@ message TTTLSettings {
         optional uint32 MaxShardsInFlight = 6 [default = 0]; // zero means no limit
     }
 
+    message TEvictionToExternalStorageSettings {
+        optional string StorageName = 1;
+    }
+
+    message TTier {
+        optional uint32 ApplyAfterSeconds = 1;
+        oneof Action {
+            google.protobuf.Empty Delete = 2;
+            TEvictionToExternalStorageSettings EvictToExternalStorage = 3;
+        }
+    }
+
     message TEnabled {
         optional string ColumnName = 1;
-        optional uint32 ExpireAfterSeconds = 2;
+        optional uint32 ExpireAfterSeconds = 2 [deprecated = true];
         optional EUnit ColumnUnit = 3;
         optional TSysSettings SysSettings = 4;
+        repeated TTier Tiers = 5;
     }
 
     message TDisabled {
@@ -581,10 +594,11 @@ message TColumnDataLifeCycle {
     message TTtl {
         optional string ColumnName = 1;
         oneof Expire {
-            uint32 ExpireAfterSeconds = 2;
+            uint32 ExpireAfterSeconds = 2 [deprecated = true]; // ignored if Tiers are not empty
             uint64 ExpireAfterBytes = 4;
         }
         optional TTTLSettings.EUnit ColumnUnit = 3;
+        repeated TTTLSettings.TTier Tiers = 5;
     }
 
     message TDisabled {
@@ -1655,8 +1669,11 @@ message TModifyScheme {
     optional TBackupCollectionDescription AlterBackupCollection = 75;
     optional TBackupCollectionDescription DropBackupCollection = 76;
     optional TBackupBackupCollection BackupBackupCollection = 78;
+    optional TBackupBackupCollection BackupIncrementalBackupCollection = 79;
 
     optional TMove MoveSequence = 77;
+
+    // Some entries are grouped by semantics, so are out of order
 }
 
 message TCopySequence {

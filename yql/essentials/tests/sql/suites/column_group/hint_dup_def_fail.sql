@@ -1,3 +1,4 @@
+/* custom error:Not more than one group should have # value: "def2"*/
 USE plato;
 
 -- duplicate column

@@ -7,7 +7,6 @@ namespace NTabletFlatExecutor {
 TPrivatePageCache::TPage::TPage(size_t size, TPageId pageId, TInfo* info)
     : LoadState(LoadStateNo)
     , Sticky(false)
-    , SharedPending(false)
     , Id(pageId)
     , Size(size)
     , Info(info)
@@ -47,19 +46,14 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
 
     for (const auto& kv : info->PageMap) {
         auto* page = kv.second.Get();
-        Y_DEBUG_ABORT_UNLESS(page);
-        
-        if (page->SharedBody)
-            Stats.TotalSharedBody += page->Size;
+        Y_ABORT_UNLESS(page);
+        Y_ABORT_UNLESS(page->SharedBody, "New filled pages can't be without a shared body");
+
+        Stats.TotalSharedBody += page->Size;
         if (page->PinnedBody)
             Stats.TotalPinnedBody += page->Size;
-        if (page->PinnedBody && !page->SharedBody)
-            Stats.TotalExclusive += page->Size;
         if (page->Sticky)
             Stats.TotalSticky += page->Size;
-
-        Y_DEBUG_ABORT_UNLESS(!page->SharedPending, "New page shouldn't be shared pending");
-        TryShareBody(page);
 
         TryUnload(page);
         Y_DEBUG_ABORT_UNLESS(!page->IsUnnecessary());
@@ -132,8 +126,6 @@ bool TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
                 Stats.TotalPinnedBody -= page->Size;
             if (page->PinnedBody && !page->SharedBody)
                 Stats.TotalExclusive -= page->Size;
-            if (page->SharedPending)
-                Stats.TotalSharedPending -= page->Size;
             if (page->Sticky)
                 Stats.TotalSticky -= page->Size;
         }
@@ -204,8 +196,6 @@ std::pair<ui32, ui64> TPrivatePageCache::Request(TVector<ui32> &pages, TPrivateP
         TPage *page = info->EnsurePage(*it);
         switch (page->LoadState) {
         case TPage::LoadStateNo:
-            Y_DEBUG_ABORT_UNLESS(!page->SharedPending, "Trying to load a page that may be restored");
-            [[fallthrough]];
         case TPage::LoadStateRequestedAsync:
             page->LoadState = TPage::LoadStateRequested;
             bytesToRequest += page->Size;
@@ -261,8 +251,8 @@ void TPrivatePageCache::TryLoad(TPage *page) {
 
 void TPrivatePageCache::TPrivatePageCache::TryUnload(TPage *page) {
     if (page->LoadState == TPage::LoadStateLoaded) {
-        if (!page->SharedPending && !page->PinPad && !page->Sticky) {
-            ToTouchShared[page->Info->Id][page->Id];
+        if (!page->PinPad && !page->Sticky) {
+            ToTouchShared[page->Info->Id].insert(page->Id);
             page->LoadState = TPage::LoadStateNo;
             if (Y_LIKELY(page->PinnedBody)) {
                 Stats.TotalPinnedBody -= page->Size;
@@ -288,19 +278,6 @@ void TPrivatePageCache::TPrivatePageCache::TryEraseIfUnnecessary(TPage *page) {
         auto* info = page->Info;
         Y_DEBUG_ABORT_UNLESS(info->PageMap[pageId].Get() == page);
         Y_ABORT_UNLESS(info->PageMap.erase(pageId));
-    }
-}
-
-void TPrivatePageCache::TPrivatePageCache::TryShareBody(TPage *page) {
-    if (page->LoadState == TPage::LoadStateLoaded) {
-        auto &x = ToTouchShared[page->Info->Id][page->Id];
-        if (!page->SharedPending && !page->SharedBody && page->PinnedBody) {
-            // We keep pinned body around until it's either
-            // accepted or dropped by the shared cache
-            page->SharedPending = true;
-            Stats.TotalSharedPending += page->Size;
-            x = page->PinnedBody;
-        }
     }
 }
 
@@ -425,36 +402,6 @@ void TPrivatePageCache::PinToLoad(TPinned &pinned, ui32 &pinnedPages, ui64 &pinn
     }
 }
 
-void TPrivatePageCache::RepinPages(TPinned &newPinned, TPinned &oldPinned, size_t &pinnedPages) {
-    auto repinTouched = [&](TPage* page) {
-        auto& newPinnedCollection = newPinned[page->Info->Id];
-        
-        if (auto* oldPinnedCollection = oldPinned.FindPtr(page->Info->Id)) {
-            // We had previously pinned pages from this page collection
-            // Create new or move used old pins to the new map
-            if (auto it = oldPinnedCollection->find(page->Id); it != oldPinnedCollection->end()) {
-                Y_DEBUG_ABORT_UNLESS(it->second);
-                newPinnedCollection[page->Id] = std::move(it->second);
-                oldPinnedCollection->erase(it);
-            } else {
-                newPinnedCollection[page->Id] = Pin(page);
-                pinnedPages++;
-            }
-        } else {
-            newPinnedCollection[page->Id] = Pin(page);
-            pinnedPages++;
-        }
-    };
-
-    // Everything touched during this read iteration must be pinned
-    for (auto& page : Touches) {
-        repinTouched(&page);
-    }
-    for (auto& page : ToLoad) {
-        repinTouched(&page);
-    }
-}
-
 void TPrivatePageCache::UnpinPages(TPinned &pinned, size_t &unpinnedPages) {
     for (auto &xinfoid : pinned) {
         if (TPrivatePageCache::TInfo *info = Info(xinfoid.first)) {
@@ -502,44 +449,10 @@ void TPrivatePageCache::ResetTouchesAndToLoad(bool verifyEmpty) {
     Stats.CurrentCacheMisses = 0;
 }
 
-void TPrivatePageCache::UpdateSharedBody(TInfo *info, TPageId pageId, TSharedPageRef shared) {
-    TPage *page = info->GetPage(pageId);
-    if (!page)
-        return;
-
-    // Note: shared cache may accept a pending page if it is used by multiple private caches
-    // (for example, used by tablet and its follower)
-    if (Y_UNLIKELY(!page->SharedPending)) {
-        return;
-    }
-    Y_DEBUG_ABORT_UNLESS(page->LoadState == TPage::LoadStateLoaded, "Shared pending page should be loaded");
-    
-    // Shared cache accepted our page and provided its shared reference
-    Stats.TotalSharedPending -= page->Size;
-    page->SharedPending = false;
-    if (Y_LIKELY(!page->SharedBody)) {
-        Stats.TotalSharedBody += page->Size;
-        if (Y_LIKELY(page->PinnedBody)) {
-            Stats.TotalExclusive -= page->Size;
-        }
-    }
-    page->SharedBody = std::move(shared);
-    TryUnload(page);
-}
-
 void TPrivatePageCache::DropSharedBody(TInfo *info, TPageId pageId) {
     TPage *page = info->GetPage(pageId);
     if (!page)
         return;
-
-    // Note: shared cache may drop a pending page if it is used by multiple private caches
-    // (for example, used by tablet and its follower)
-    if (Y_UNLIKELY(page->SharedPending)) {
-        // Shared cache rejected our page so we should drop it too
-        Stats.TotalSharedPending -= page->Size;
-        page->SharedPending = false;
-        TryUnload(page);
-    }
 
     if (!page->SharedBody.IsUsed()) {
         if (Y_LIKELY(page->SharedBody)) {
@@ -568,8 +481,6 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(
         Stats.TotalPinnedBody -= page->Size;
     if (Y_UNLIKELY(page->PinnedBody && !page->SharedBody))
         Stats.TotalExclusive -= page->Size;
-    if (Y_UNLIKELY(page->SharedPending))
-        Stats.TotalSharedPending -= page->Size;
 
     // Note: we must be careful not to accidentally drop the sticky bit
     page->Fill(std::move(loaded.Page), page->Sticky);
@@ -603,7 +514,7 @@ THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache
     return ret;
 }
 
-THashMap<TLogoBlobID, THashMap<TPrivatePageCache::TPageId, TSharedData>> TPrivatePageCache::GetPrepareSharedTouched() {
+THashMap<TLogoBlobID, THashSet<TPrivatePageCache::TPageId>> TPrivatePageCache::GetPrepareSharedTouched() {
     return std::move(ToTouchShared);
 }
 

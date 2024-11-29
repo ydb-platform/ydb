@@ -1124,6 +1124,14 @@ struct TRichYPath
     /// Allows to start cross-transactional operations.
     FLUENT_FIELD_OPTION(TTransactionId, TransactionId);
 
+    ///
+    /// @brief Wether to create operation output path.
+    ///
+    /// If set to `true` output path is created by YT server.
+    /// If set to `false` output path is not created explicitly (and operation will fail if it doesn't exist)
+    /// If attribute is not set output path is created by this library using explicit master call.
+    FLUENT_FIELD_OPTION(bool, Create);
+
     using TRenameColumnsDescriptor = THashMap<TString, TString>;
 
     /// Specifies columnar mapping which will be applied to columns before transfer to job.

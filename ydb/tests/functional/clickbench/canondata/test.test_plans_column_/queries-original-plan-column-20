@@ -72,7 +72,8 @@
                                                             }
                                                         ],
                                                         "Name": "Filter",
-                                                        "Predicate": "string_contains"
+                                                        "Predicate": "URL LIKE \"%google%\"",
+                                                        "Pushdown": "True"
                                                     },
                                                     {
                                                         "Inputs": [],

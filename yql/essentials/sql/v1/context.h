@@ -321,11 +321,12 @@ namespace NSQLTranslationV1 {
         bool BlockEngineForce = false;
         bool UnorderedResult = false;
         ui64 ParallelModeCount = 0;
-        bool CompactNamedExprs = false;
+        bool CompactNamedExprs = true;
         bool ValidateUnusedExprs = false;
         bool AnsiImplicitCrossJoin = false; // select * from A,B
         bool DistinctOverWindow = false;
         bool SeqMode = false;
+        bool EmitUnionMerge = false;
     };
 
     class TColumnRefScope {

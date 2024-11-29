@@ -22,6 +22,7 @@ PEERDIR(
     library/cpp/yson/node
     yql/essentials/ast
     yql/essentials/core
+    yql/essentials/core/cbo/simple
     yql/essentials/core/facade
     yql/essentials/core/services
     yql/essentials/core/services/mounts

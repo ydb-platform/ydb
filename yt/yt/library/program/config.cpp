@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include <yt/yt/library/profiling/solomon/config.h>
+
 #include <yt/yt/core/concurrency/fiber_scheduler_thread.h>
 
 namespace NYT {

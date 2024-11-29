@@ -239,10 +239,10 @@ private:
         TActionQueuePtr DelayedQueue_;
         IInvokerPtr DelayedInvoker_;
 
-        NProfiling::TGauge ScheduledCallbacksGauge_ = ConcurrencyProfiler.Gauge("/delayed_executor/scheduled_callbacks");
-        NProfiling::TCounter SubmittedCallbacksCounter_ = ConcurrencyProfiler.Counter("/delayed_executor/submitted_callbacks");
-        NProfiling::TCounter CanceledCallbacksCounter_ = ConcurrencyProfiler.Counter("/delayed_executor/canceled_callbacks");
-        NProfiling::TCounter StaleCallbacksCounter_ = ConcurrencyProfiler.Counter("/delayed_executor/stale_callbacks");
+        NProfiling::TGauge ScheduledCallbacksGauge_ = ConcurrencyProfiler().Gauge("/delayed_executor/scheduled_callbacks");
+        NProfiling::TCounter SubmittedCallbacksCounter_ = ConcurrencyProfiler().Counter("/delayed_executor/submitted_callbacks");
+        NProfiling::TCounter CanceledCallbacksCounter_ = ConcurrencyProfiler().Counter("/delayed_executor/canceled_callbacks");
+        NProfiling::TCounter StaleCallbacksCounter_ = ConcurrencyProfiler().Counter("/delayed_executor/stale_callbacks");
 
         class TCallbackGuard
         {

@@ -14,28 +14,13 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-namespace NSchemeShardUT_Private {
-
-// convert into generic test helper?
-void TestCreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& password, const TVector<TExpectedResult>& expectedResults) {
-    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> modifyTx(CreateAlterLoginCreateUser(txId, user, password));
-    //TODO: move setting of TModifyScheme.WorkingDir into CreateAlterLoginCreateUser()
-    //NOTE: TModifyScheme.Name isn't set, intentionally
-    modifyTx->Record.MutableTransaction(0)->SetWorkingDir(database);
-    AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
-    // AlterLoginCreateUser is synchronous in nature, result is returned immediately
-    TestModificationResults(runtime, txId, expectedResults);
-}
-
-}  // namespace NSchemeShardUT_Private
-
 Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
     Y_UNIT_TEST(BasicLogin) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -56,7 +41,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         runtime.GetAppData().AuthConfig.SetEnableLoginAuthentication(false);
         ui64 txId = 100;
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed}});
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Login authentication is disabled");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
@@ -128,7 +113,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
 
         ui64 txId = 100;
 
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);   // +user creation
 
         // test body
@@ -157,6 +142,8 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
         UNIT_ASSERT(!last.contains("reason"));
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
+        UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
     }
 
     Y_UNIT_TEST(AuditLogLoginBadPassword) {
@@ -169,7 +156,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
 
         ui64 txId = 100;
 
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);   // +user creation
 
         // test body
@@ -198,6 +185,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "status=ERROR");
         UNIT_ASSERT_STRING_CONTAINS(last, "reason=Invalid password");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
     }
 
     Y_UNIT_TEST(AuditLogLdapLoginSuccess) {
@@ -292,6 +280,8 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT(!last.contains("detailed_status"));
         UNIT_ASSERT(!last.contains("reason"));
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
+        UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
     }
 
     Y_UNIT_TEST(AuditLogLdapLoginBadPassword) {
@@ -386,6 +376,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=UNAUTHORIZED");
         UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: LDAP login failed for user uid=user1,dc=search,dc=yandex,dc=net on server ldap://localhost:");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
     }
 
     Y_UNIT_TEST(AuditLogLdapLoginBadUser) {
@@ -480,6 +471,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=UNAUTHORIZED");
         UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: LDAP user bad_user does not exist. LDAP search for filter uid=bad_user on server ldap://localhost:");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=bad_user@ldap");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
     }
 
     // LDAP responses to bad BindDn or bad BindPassword are the same, so this test covers the both cases.
@@ -575,6 +567,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=UNAUTHORIZED");
         UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: Could not perform initial LDAP bind for dn cn=robouser,dc=search,dc=yandex,dc=net on server ldap://localhost:");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
     }
 
     Y_UNIT_TEST(AuditLogLogout) {
@@ -598,7 +591,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
 
         ui64 txId = 100;
 
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user creation
 
         // test body
@@ -677,6 +670,8 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             UNIT_ASSERT_STRING_CONTAINS(last, "subject=user1");
             UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGOUT");
             UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
+            UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
         }
     }
 }

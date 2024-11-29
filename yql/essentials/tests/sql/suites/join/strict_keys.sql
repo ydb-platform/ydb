@@ -1,5 +1,4 @@
-/* syntax version 1 */
-/* postgres can not */
+/* custom error:Strict key type match requested, but keys have different types*/
 use plato;
 
 define subquery $strict() as

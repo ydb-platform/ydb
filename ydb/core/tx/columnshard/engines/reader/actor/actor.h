@@ -136,7 +136,7 @@ private:
 
     TChunksLimiter ChunksLimiter;
     THolder<NKqp::TEvKqpCompute::TEvScanData> Result;
-    std::shared_ptr<arrow::RecordBatch> CurrentLastReadKey;
+    std::shared_ptr<IScanCursor> CurrentLastReadKey;
     bool Finished = false;
     std::optional<TMonotonic> LastResultInstant;
 

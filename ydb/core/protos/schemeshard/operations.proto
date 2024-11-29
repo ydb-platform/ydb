@@ -162,7 +162,10 @@ enum EOperationType {
     ESchemeOpAlterBackupCollection = 106;
     ESchemeOpDropBackupCollection = 107;
     ESchemeOpBackupBackupCollection = 109;
+    ESchemeOpBackupIncrementalBackupCollection = 110;
 
     // Move sequence
     ESchemeOpMoveSequence = 108;
+
+    // Some entries are grouped by semantics, so are out of order
 }

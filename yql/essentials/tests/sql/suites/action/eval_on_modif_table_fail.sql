@@ -1,5 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
+/* custom error: Table  "Output" is used before commit */
 USE plato;
 
 insert into Output

@@ -61,7 +61,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Stage",
+                                                        "Node Type": "Collect",
                                                         "PlanNodeId": 9,
                                                         "Plans": [
                                                             {
@@ -93,7 +93,7 @@
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Stage",
+                                                                                        "Node Type": "Collect",
                                                                                         "PlanNodeId": 3,
                                                                                         "Plans": [
                                                                                             {
@@ -171,7 +171,14 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Stage",
+                                                        "Node Type": "ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [],
+                                                                "Iterator": "[{join_key: 0},{join_key: 1}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
                                                         "PlanNodeId": 11
                                                     }
                                                 ]

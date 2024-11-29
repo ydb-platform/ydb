@@ -68,7 +68,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Stage",
+                                                        "Node Type": "Collect",
                                                         "PlanNodeId": 9,
                                                         "Plans": [
                                                             {
@@ -109,7 +109,7 @@
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Stage",
+                                                                                        "Node Type": "Collect",
                                                                                         "PlanNodeId": 3,
                                                                                         "Plans": [
                                                                                             {

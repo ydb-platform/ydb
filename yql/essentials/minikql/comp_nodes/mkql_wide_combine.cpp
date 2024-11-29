@@ -16,6 +16,9 @@
 
 #include <util/string/cast.h>
 
+
+#include <contrib/libs/xxhash/xxhash.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -315,6 +318,7 @@ public:
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
+        StoredDataSize = 0;
 
         CleanupCurrentContext();
         return true;
@@ -345,6 +349,7 @@ public:
     EFetchResult InputStatus = EFetchResult::One;
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
+    i64 StoredDataSize = 0;
 
 private:
     std::optional<TStorageIterator> ExtractIt;
@@ -485,8 +490,7 @@ public:
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
 
-        auto hash = Hasher(ViewForKeyAndState.data());
-        auto bucketId = hash % SpilledBucketCount;
+        auto bucketId = ChooseBucket(ViewForKeyAndState.data());
         auto& bucket = SpilledBuckets[bucketId];
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
@@ -530,7 +534,14 @@ public:
 
         return value;
     }
+
 private:
+    ui64 ChooseBucket(const NUdf::TUnboxedValuePod *const key) {
+        auto provided_hash = Hasher(key);
+        XXH64_hash_t bucket = XXH64(&provided_hash, sizeof(provided_hash), 0) % SpilledBucketCount;
+        return bucket;
+    }
+
     EUpdateResult FlushSpillingBuffersAndWait() {
         UpdateSpillingBuckets();
 
@@ -593,14 +604,17 @@ private:
             SplitStateSpillingBucket = -1;
         }
         while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
-            auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
-            auto bucketId = hash % SpilledBucketCount;
+            auto bucketId = ChooseBucket(keyAndState);  // This uses only key for hashing
             auto& bucket = SpilledBuckets[bucketId];
 
             bucket.LineCount++;
 
             if (bucket.BucketState != TSpilledBucket::EBucketState::InMemory) {
-                bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+                if (bucket.BucketState != TSpilledBucket::EBucketState::SpillingState) {
+                    bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+                    SpillingBucketsCount++;
+                }
+
                 bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
                 for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
                     //releasing values stored in unsafe TUnboxedValue buffer
@@ -629,10 +643,11 @@ private:
                 ui32 bucketNumToSpill = GetLargestInMemoryBucketNumber();
 
                 SplitStateSpillingBucket = bucketNumToSpill;
-                InMemoryBucketsCount--;
 
                 auto& bucket = SpilledBuckets[bucketNumToSpill];
                 bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+                SpillingBucketsCount++;
+                InMemoryBucketsCount--;
 
                 while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
                     bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
@@ -662,6 +677,7 @@ private:
                 bucket.InMemoryProcessingState->ReadMore<false>();
 
                 bucket.BucketState = TSpilledBucket::EBucketState::SpillingData;
+                SpillingBucketsCount--;
             }
         }
 
@@ -846,6 +862,12 @@ private:
                 YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
+
+                std::sort(SpilledBuckets.begin(), SpilledBuckets.end(), [](const TSpilledBucket& lhs, const TSpilledBucket& rhs) {
+                    bool lhs_in_memory = lhs.BucketState == TSpilledBucket::EBucketState::InMemory;
+                    bool rhs_in_memory = rhs.BucketState == TSpilledBucket::EBucketState::InMemory;
+                    return lhs_in_memory > rhs_in_memory;
+                });
                 break;
             }
 
@@ -904,6 +926,7 @@ private:
     llvm::IntegerType* ValueType;
     llvm::PointerType* PtrValueType;
     llvm::IntegerType* StatusType;
+    llvm::IntegerType* StoredType;
 protected:
     using TBase::Context;
 public:
@@ -912,6 +935,7 @@ public:
         result.emplace_back(StatusType); //status
         result.emplace_back(PtrValueType); //tongue
         result.emplace_back(PtrValueType); //throat
+        result.emplace_back(StoredType); //StoredDataSize
         result.emplace_back(Type::getInt32Ty(Context)); //size
         result.emplace_back(Type::getInt32Ty(Context)); //size
         return result;
@@ -929,11 +953,16 @@ public:
         return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 2);
     }
 
+    llvm::Constant* GetStored() {
+        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 3);
+    }
+
     TLLVMFieldsStructureState(llvm::LLVMContext& context)
         : TBase(context)
         , ValueType(Type::getInt128Ty(Context))
         , PtrValueType(PointerType::getUnqual(ValueType))
-        , StatusType(Type::getInt32Ty(Context)) {
+        , StatusType(Type::getInt32Ty(Context))
+        , StoredType(Type::getInt64Ty(Context)) {
 
     }
 };
@@ -988,6 +1017,10 @@ public:
                     ptr->InputStatus = Flow->FetchValues(ctx, fields);
                     if constexpr (SkipYields) {
                         if (EFetchResult::Yield == ptr->InputStatus) {
+                            if (MemLimit) {
+                                const auto currentUsage = ctx.HolderFactory.GetMemoryUsed();
+                                ptr->StoredDataSize += currentUsage > initUsage ? currentUsage - initUsage : 0;
+                            }
                             return EFetchResult::Yield;
                         } else if (EFetchResult::Finish == ptr->InputStatus) {
                             break;
@@ -1000,7 +1033,7 @@ public:
 
                     Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                     Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage));
+                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize));
 
                 ptr->PushStat(ctx.Stats);
             }
@@ -1019,6 +1052,7 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
+        const auto storedType = Type::getInt64Ty(context);
 
         TLLVMFieldsStructureState stateFields(context);
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
@@ -1112,6 +1146,28 @@ public:
                 way->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), done);
 
                 block = save;
+
+                if (MemLimit) {
+                    const auto storedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStored() }, "stored_ptr", block);
+                    const auto lastStored = new LoadInst(storedType, storedPtr, "last_stored", block);
+                    const auto currentUsage = GetMemoryUsed(MemLimit, ctx, block);
+
+
+                    const auto skipSavingUsed = BasicBlock::Create(context, "skip_saving_used", ctx.Func);
+                    const auto saveUsed = BasicBlock::Create(context, "save_used", ctx.Func);
+                    const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGE, currentUsage, used, "check", block);
+                    BranchInst::Create(saveUsed, skipSavingUsed, check, block);
+
+                    block = saveUsed;
+
+                    const auto usedMemory = BinaryOperator::CreateSub(GetMemoryUsed(MemLimit, ctx, block), used, "used_memory", block);
+                    const auto inc = BinaryOperator::CreateAdd(lastStored, usedMemory, "inc", block);
+                    new StoreInst(inc, storedPtr, block);
+
+                    BranchInst::Create(skipSavingUsed, block);
+
+                    block = skipSavingUsed;
+                }
 
                 new StoreInst(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), statusPtr, block);
                 result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
@@ -1249,7 +1305,14 @@ public:
 
             block = test;
 
-            const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, used, ctx, block);
+            auto totalUsed = used;
+            if (MemLimit) {
+                const auto storedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStored() }, "stored_ptr", block);
+                const auto lastStored = new LoadInst(storedType, storedPtr, "last_stored", block);
+                totalUsed = BinaryOperator::CreateSub(used, lastStored, "decr", block);
+            }
+
+            const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, totalUsed, ctx, block);
             BranchInst::Create(done, loop, check, block);
 
             block = done;

@@ -1,4 +1,7 @@
-/* postgres can not *//* kikimr can not *//* hybridfile can not YQL-17284 *//* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 16 */
+/* postgres can not */
+/* kikimr can not */
+/* hybridfile can not YQL-17284 */
+/* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 16 */
 USE plato;
 
 SELECT

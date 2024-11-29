@@ -21,7 +21,7 @@ ORDER BY
 SELECT
     *
 FROM $ou
-WHERE subkey > "0" AND
-    key != $a
+WHERE subkey > "0"
+    AND key != $a
 ORDER BY
     key;

@@ -11,7 +11,7 @@ DEFINE SUBQUERY $last_tables($path, $limit) AS
         SELECT
             ListLast(String::SplitToList(Path, "/")) AS Name
         FROM FOLDER($path)
-        WHERE Type = "table"
+        WHERE Type == "table"
         ORDER BY
             Name DESC
         LIMIT $limit

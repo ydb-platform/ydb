@@ -15,6 +15,6 @@ FROM plato.lineitem
     AS l
 JOIN plato.part
     AS p
-ON l.l_partkey = p.p_partkey
-WHERE CAST(l.l_shipdate AS timestamp) >= $border AND
-    CAST(l.l_shipdate AS timestamp) < ($border + Interval("P31D"));
+ON l.l_partkey == p.p_partkey
+WHERE CAST(l.l_shipdate AS timestamp) >= $border
+    AND CAST(l.l_shipdate AS timestamp) < ($border + Interval("P31D"));

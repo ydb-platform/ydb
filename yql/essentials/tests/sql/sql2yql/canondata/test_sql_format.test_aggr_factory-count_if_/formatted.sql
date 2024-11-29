@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $t = AsList(AsStruct(TRUE AS a), AsStruct(FALSE AS a));
 $f = AGGREGATION_FACTORY("countif");
 

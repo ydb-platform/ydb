@@ -1,4 +1,5 @@
-/* postgres can not *//* custom error:Cannot infer common type for Int64 and Uint64*/
+/* postgres can not */
+/* custom error:Cannot infer common type for Int64 and Uint64*/
 PRAGMA warning("error", "1107");
 
 SELECT

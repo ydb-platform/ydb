@@ -6,6 +6,6 @@ FROM plato.Input
     AS a
 JOIN plato.Input
     AS b
-ON a.key = b.key
+ON a.key == b.key
 ORDER BY
     x;

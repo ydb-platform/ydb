@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 PRAGMA yt.JoinMergeTablesLimit = "100";
 PRAGMA yt.JoinMergeForce;
@@ -20,4 +21,4 @@ FROM @t1
     AS a
 JOIN @t2
     AS b
-ON a.k1 = b.k2 AND a.v1 = b.v2;
+ON a.k1 == b.k2 AND a.v1 == b.v2;

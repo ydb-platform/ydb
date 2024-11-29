@@ -72,8 +72,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto failed = ValidateTokens({
                 "ALL", "ANY", "AS", "ASSUME", "ASYMMETRIC", "AUTOMAP", "BETWEEN", "BITCAST",
                 "CALLABLE", "CASE", "CAST", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
-                "DICT", "DISTINCT", "ENUM", "ERASE", "EXCEPT", "EXISTS", "FLOW", "FROM", "FULL", "GLOBAL",
-                "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
+                "DICT", "DISTINCT", "ENUM", "ERASE", "EXCEPT", "EXISTS", "FLOW", "FROM", "FULL",
+                "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST",
                 "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "RETURNING", "ROLLUP",
                 "SELECT", "SET", "STREAM", "STRUCT", "SYMMETRIC", "TAGGED", "TUPLE", "UNBOUNDED",
                 "UNION", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
@@ -91,8 +91,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto failed = ValidateTokens({
                 "ALL", "AS", "ASSUME", "ASYMMETRIC", "AUTOMAP", "BETWEEN", "BITCAST",
                 "CALLABLE", "CASE", "CAST", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
-                "DICT", "DISTINCT", "EMPTY_ACTION", "ENUM", "EXCEPT", "EXISTS", "FALSE", "FLOW", "FROM", "FULL", "GLOBAL",
-                "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
+                "DICT", "DISTINCT", "EMPTY_ACTION", "ENUM", "EXCEPT", "EXISTS", "FALSE", "FLOW", "FROM", "FULL",
+                "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST",
                 "NOT", "NULL", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "RETURNING", "ROLLUP",
                 "SELECT", "SET", "STRUCT", "SYMMETRIC", "TAGGED", "TRUE", "TUPLE", "UNBOUNDED",
                 "UNION", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(TokensAsColumnNameInAddColumn) { //id_schema
         auto failed = ValidateTokens({
                 "ANY", "AUTOMAP", "CALLABLE", "COLUMN", "DICT", "ENUM", "ERASE", "FALSE", "FLOW",
-                "GLOBAL", "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
+                "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
                 "SET", "STREAM", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT"
             },
             [](const TString& token){
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(TokensAsColumnAlias) {
         auto failed = ValidateTokens({
                  "AUTOMAP", "FALSE",
-                 "GLOBAL", "REPEATABLE", "TRUE"
+                 "REPEATABLE", "TRUE"
              },
              [](const TString& token){
                  TStringBuilder req;
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(TokensAsTableName) { //id_table_or_type
         auto failed = ValidateTokens({
                 "ANY", "AUTOMAP", "COLUMN", "ERASE", "FALSE",
-                "GLOBAL", "REPEATABLE", "STREAM", "TRUE"
+                "REPEATABLE", "STREAM", "TRUE"
             },
             [](const TString& token){
                 TStringBuilder req;
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(TokensAsTableAlias) { //id_table
         auto failed = ValidateTokens({
                 "AUTOMAP", "CALLABLE", "DICT", "ENUM","FALSE", "FLOW",
-                "GLOBAL", "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
+                "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
                 "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT"
             },
             [](const TString& token){
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(TokensAsHints) { //id_hint
         auto failed = ValidateTokens({
                 "AUTOMAP", "CALLABLE", "COLUMNS", "DICT", "ENUM", "FALSE", "FLOW",
-                "GLOBAL", "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
+                "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
                 "SCHEMA", "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT"
             },
             [](const TString& token){
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(TokensAsWindow) { //id_window
         auto failed = ValidateTokens({
-                "AUTOMAP", "CALLABLE", "DICT", "ENUM", "FALSE", "FLOW", "GLOBAL", "GROUPS", "LIST", "OPTIONAL",
+                "AUTOMAP", "CALLABLE", "DICT", "ENUM", "FALSE", "FLOW", "GROUPS", "LIST", "OPTIONAL",
                 "RANGE", "REPEATABLE", "RESOURCE", "ROWS", "SET", "STRUCT", "TAGGED" ,"TRUE", "TUPLE", "VARIANT"
             },
             [](const TString& token){
@@ -197,8 +197,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto failed = ValidateTokens({
                 "ALL", "ANY", "AS", "ASSUME", "ASYMMETRIC", "AUTOMAP", "BETWEEN", "BITCAST",
                 "CALLABLE", "CASE", "CAST", "COMPACT", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
-                "DICT", "DISTINCT", "ENUM", "ERASE", "EXCEPT", "EXISTS", "FLOW", "FROM", "FULL", "GLOBAL",
-                "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
+                "DICT", "DISTINCT", "ENUM", "ERASE", "EXCEPT", "EXISTS", "FLOW", "FROM", "FULL",
+                "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST",
                 "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "RETURNING", "ROLLUP",
                 "SELECT", "SET", "STREAM", "STRUCT", "SYMMETRIC", "TAGGED", "TUPLE", "UNBOUNDED",
                 "UNION", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
@@ -1385,12 +1385,21 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(UnionAllTest) {
-        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION ALL select subkey FROM plato.Input;");
+        NYql::TAstParseResult res = SqlToYql("PRAGMA DisableEmitUnionMerge; SELECT key FROM plato.Input UNION ALL select subkey FROM plato.Input;");
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("UnionAll"), 0}};
         VerifyProgram(res, elementStat, {});
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["UnionAll"]);
+    }
+
+    Y_UNIT_TEST(UnionAllMergeTest) {
+        NYql::TAstParseResult res = SqlToYql("PRAGMA EmitUnionMerge; SELECT key FROM plato.Input UNION ALL select subkey FROM plato.Input;");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("UnionMerge"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["UnionMerge"]);
     }
 
     Y_UNIT_TEST(UnionTest) {
@@ -1404,6 +1413,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(UnionAggregationTest) {
         NYql::TAstParseResult res = SqlToYql(R"(
+            PRAGMA DisableEmitUnionMerge;
             SELECT 1
             UNION ALL
                 SELECT 1 UNION ALL SELECT 1 UNION ALL SELECT 1
@@ -1417,6 +1427,25 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TWordCountHive elementStat = {{TString("Union"), 0}, {TString("UnionAll"), 0}};
         VerifyProgram(res, elementStat, {});
         UNIT_ASSERT_VALUES_EQUAL(2, elementStat["UnionAll"]);
+        UNIT_ASSERT_VALUES_EQUAL(3, elementStat["Union"]);
+    }
+
+    Y_UNIT_TEST(UnionMergeAggregationTest) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            PRAGMA EmitUnionMerge;
+            SELECT 1
+            UNION ALL
+                SELECT 1 UNION ALL SELECT 1 UNION ALL SELECT 1
+            UNION
+                SELECT 1 UNION SELECT 1 UNION SELECT 1 UNION SELECT 1
+            UNION ALL
+                SELECT 1 UNION ALL SELECT 1 UNION ALL SELECT 1;
+        )");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Union"), 0}, {TString("UnionMerge"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["UnionMerge"]);
         UNIT_ASSERT_VALUES_EQUAL(3, elementStat["Union"]);
     }
 

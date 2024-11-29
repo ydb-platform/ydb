@@ -3,6 +3,8 @@
 #include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
 
+#include "schemeshard_utils.h"  // for PQGroupReserve
+
 #include <library/cpp/int128/int128.h>
 
 #include <ydb/core/base/subdomain.h>

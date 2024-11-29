@@ -17,9 +17,9 @@ $join1 = (
         AS c
     JOIN plato.orders
         AS o
-    ON c.c_custkey = o.o_custkey
-    WHERE CAST(o.o_orderdate AS timestamp) >= $border AND
-        CAST(o.o_orderdate AS timestamp) < ($border + Interval("P90D"))
+    ON c.c_custkey == o.o_custkey
+    WHERE CAST(o.o_orderdate AS timestamp) >= $border
+    AND CAST(o.o_orderdate AS timestamp) < ($border + Interval("P90D"))
 );
 
 $join2 = (
@@ -37,8 +37,8 @@ $join2 = (
         AS j
     JOIN plato.lineitem
         AS l
-    ON l.l_orderkey = j.o_orderkey
-    WHERE l.l_returnflag = 'R'
+    ON l.l_orderkey == j.o_orderkey
+    WHERE l.l_returnflag == 'R'
 );
 
 $join3 = (
@@ -57,7 +57,7 @@ $join3 = (
         AS j
     JOIN plato.nation
         AS n
-    ON n.n_nationkey = j.c_nationkey
+    ON n.n_nationkey == j.c_nationkey
 );
 
 SELECT

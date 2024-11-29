@@ -7,7 +7,7 @@ $customers = (
         c_custkey,
         Substring(c_phone, 0u, 2u) AS cntrycode
     FROM plato.customer
-    WHERE (Substring(c_phone, 0u, 2u) = '31' OR Substring(c_phone, 0u, 2u) = '29' OR Substring(c_phone, 0u, 2u) = '30' OR Substring(c_phone, 0u, 2u) = '26' OR Substring(c_phone, 0u, 2u) = '28' OR Substring(c_phone, 0u, 2u) = '25' OR Substring(c_phone, 0u, 2u) = '15')
+    WHERE (Substring(c_phone, 0u, 2u) == '31' OR Substring(c_phone, 0u, 2u) == '29' OR Substring(c_phone, 0u, 2u) == '30' OR Substring(c_phone, 0u, 2u) == '26' OR Substring(c_phone, 0u, 2u) == '28' OR Substring(c_phone, 0u, 2u) == '25' OR Substring(c_phone, 0u, 2u) == '15')
 );
 
 $avg = (
@@ -38,7 +38,7 @@ $join2 = (
         AS j
     LEFT ONLY JOIN plato.orders
         AS o
-    ON o.o_custkey = j.c_custkey
+    ON o.o_custkey == j.c_custkey
 );
 
 SELECT

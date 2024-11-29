@@ -1,8 +1,8 @@
-/* postgres can not *//* multirun can not */
+/* postgres can not */
+/* multirun can not */
 USE plato;
 
-INSERT INTO Output
-    WITH truncate
+INSERT INTO Output WITH truncate
 SELECT
     CAST(value AS tzdatetime) AS x
 FROM Input

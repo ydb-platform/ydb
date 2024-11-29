@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 
 $data = (
@@ -14,6 +15,7 @@ SELECT
     prefix,
     region,
     region + 2 AS region_2,
+
     --age,
     avg(age) AS avg_age,
     sum(age) AS sum_age,
@@ -27,6 +29,7 @@ FROM $data
 GROUP BY
     region,
     SUBSTRING(name, 0, 1) AS prefix
+
 -- how to use single avg_age?
 WINDOW
     w1 AS (
@@ -36,6 +39,7 @@ WINDOW
             avg(age) DESC,
             prefix
     )
+
 --window w1 as (order by avg(age) desc)
 ORDER BY
     region,

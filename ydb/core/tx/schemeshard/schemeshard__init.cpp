@@ -1,9 +1,10 @@
 #include "schemeshard_impl.h"
+#include "schemeshard_utils.h"  // for PQGroupReserve
 
+#include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/core/util/pb.h>
 
 namespace NKikimr {

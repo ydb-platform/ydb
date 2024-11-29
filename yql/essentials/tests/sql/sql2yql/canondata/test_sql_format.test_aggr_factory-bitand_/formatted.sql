@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $t = AsList(AsStruct(1u AS a), AsStruct(2u AS a));
 $f = AGGREGATION_FACTORY("bitand");
 

@@ -15,6 +15,6 @@ LEFT SEMI JOIN (
     WHERE k2 != "ccc"
 )
     AS b
-ON a.k1 = b.k2
+ON a.k1 == b.k2
 ORDER BY
     a.k1;

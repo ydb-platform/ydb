@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 $user_process = ($key, $t1, $t2, $t3) -> {
     RETURN AsStruct(
@@ -42,8 +43,7 @@ $reducer = ($key, $stream) -> {
     RETURN $user_process($key, $rec.t1, $rec.t2, $rec.t3);
 };
 
-INSERT INTO Output
-    WITH TRUNCATE
+INSERT INTO Output WITH TRUNCATE
 REDUCE (
     SELECT
         key,

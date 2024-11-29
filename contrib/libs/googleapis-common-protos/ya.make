@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.65.0)
+VERSION(1.66.0)
 
-ORIGINAL_SOURCE(https://github.com/googleapis/python-api-common-protos/archive/v1.65.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/googleapis/python-api-common-protos/archive/v1.66.0.tar.gz)
 
 PY_NAMESPACE(.)
 

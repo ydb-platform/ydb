@@ -34,6 +34,7 @@ PEERDIR(
     yql/essentials/core/issue
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/comp_nodes
+    yql/essentials/providers/common/metrics
     yql/essentials/providers/common/mkql
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/provider

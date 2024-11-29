@@ -43,7 +43,7 @@ FROM $results
     AS results
 INNER JOIN $bans
     AS bans
-ON bans.ip == results.ip AND
-    bans.host == results.host
+ON bans.ip == results.ip
+    AND bans.host == results.host
 ORDER BY
     fetcher_count DESC;

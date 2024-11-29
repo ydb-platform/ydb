@@ -17,7 +17,7 @@ JOIN (
     FROM Input2
 )
     AS b
-ON a.k1 = b.k2
+ON a.k1 == b.k2
 SELECT
     a.k1,
     a.u1,

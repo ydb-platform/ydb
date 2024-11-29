@@ -11,7 +11,7 @@ JOIN (
         0 AS id
 )
     AS m
-ON r.id = m.id
+ON r.id == m.id
 WINDOW
     w AS (
         PARTITION BY

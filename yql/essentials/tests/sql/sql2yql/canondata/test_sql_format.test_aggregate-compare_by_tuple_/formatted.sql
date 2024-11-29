@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     key,
     min_by(AsTuple(subkey, value), AsTuple(subkey, value)) AS min,

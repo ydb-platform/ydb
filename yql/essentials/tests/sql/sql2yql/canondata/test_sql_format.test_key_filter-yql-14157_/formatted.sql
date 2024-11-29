@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 SELECT
@@ -11,4 +12,4 @@ SELECT
     v1,
     v2
 FROM RANGE("", "Input1", "Input2")
-WHERE key == "150" AND subkey = "1";
+WHERE key == "150" AND subkey == "1";

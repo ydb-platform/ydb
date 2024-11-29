@@ -36,8 +36,7 @@ $tail = (
     LIMIT IF($clean ?? 0 < 2, 2 - $clean ?? 0, 0)
 );
 
-INSERT INTO Output
-    WITH TRUNCATE
+INSERT INTO Output WITH TRUNCATE
 SELECT
     key,
     subkey,

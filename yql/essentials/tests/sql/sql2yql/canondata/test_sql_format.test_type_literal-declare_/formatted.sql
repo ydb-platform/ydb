@@ -1,4 +1,5 @@
-/* syntax version 1 *//* do not execute */
+/* syntax version 1 */
+/* do not execute */
 DECLARE $c_void AS Void;
 DECLARE $c_unit AS Unit;
 DECLARE $c_bool AS Bool;

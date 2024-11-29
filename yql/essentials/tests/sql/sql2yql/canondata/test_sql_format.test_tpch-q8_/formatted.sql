@@ -10,8 +10,8 @@ $join1 = (
         AS p
     JOIN plato.lineitem
         AS l
-    ON p.p_partkey = l.l_partkey
-    WHERE p.p_type = 'ECONOMY PLATED COPPER'
+    ON p.p_partkey == l.l_partkey
+    WHERE p.p_type == 'ECONOMY PLATED COPPER'
 );
 
 $join2 = (
@@ -23,7 +23,7 @@ $join2 = (
         AS j
     JOIN plato.supplier
         AS s
-    ON s.s_suppkey = j.l_suppkey
+    ON s.s_suppkey == j.l_suppkey
 );
 
 $join3 = (
@@ -35,7 +35,7 @@ $join3 = (
         AS j
     JOIN plato.nation
         AS n
-    ON n.n_nationkey = j.s_nationkey
+    ON n.n_nationkey == j.s_nationkey
 );
 
 $join4 = (
@@ -48,7 +48,7 @@ $join4 = (
         AS j
     JOIN plato.orders
         AS o
-    ON o.o_orderkey = j.l_orderkey
+    ON o.o_orderkey == j.l_orderkey
     WHERE CAST(CAST(o_orderdate AS Timestamp) AS Date) BETWEEN Date('1995-01-01') AND Date('1996-12-31')
 );
 
@@ -62,7 +62,7 @@ $join5 = (
         AS j
     JOIN plato.customer
         AS c
-    ON c.c_custkey = j.o_custkey
+    ON c.c_custkey == j.o_custkey
 );
 
 $join6 = (
@@ -75,7 +75,7 @@ $join6 = (
         AS j
     JOIN plato.nation
         AS n
-    ON n.n_nationkey = j.c_nationkey
+    ON n.n_nationkey == j.c_nationkey
 );
 
 $join7 = (
@@ -87,15 +87,15 @@ $join7 = (
         AS j
     JOIN plato.region
         AS r
-    ON r.r_regionkey = j.n_regionkey
-    WHERE r.r_name = 'AFRICA'
+    ON r.r_regionkey == j.n_regionkey
+    WHERE r.r_name == 'AFRICA'
 );
 
 SELECT
     o_year,
     sum(
         CASE
-            WHEN nation = 'MOZAMBIQUE'
+            WHEN nation == 'MOZAMBIQUE'
                 THEN volume
             ELSE 0
         END

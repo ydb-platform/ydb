@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 DEFINE SUBQUERY $sub($a, $b?) AS
     SELECT
         $a + ($b ?? 0);

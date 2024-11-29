@@ -4,6 +4,8 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_cdc_stream_common.h"
 
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/base/subdomain.h>
 

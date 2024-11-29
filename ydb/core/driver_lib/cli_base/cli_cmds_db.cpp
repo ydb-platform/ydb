@@ -799,6 +799,90 @@ public:
     }
 };
 
+class TClientCommandSchemaAccessInheritanceBase : public TClientCommand {
+public:
+    TClientCommandSchemaAccessInheritanceBase(
+        const TString& name,
+        const std::initializer_list<TString>& aliases,
+        const TString& description,
+        bool interruptInheritance
+    )
+        : TClientCommand(name, aliases, description)
+        , InterruptInheritance(interruptInheritance)
+    {}
+
+    TAutoPtr<NKikimrClient::TSchemeOperation> Request;
+
+    virtual void Config(TConfig& config) override {
+        TClientCommand::Config(config);
+        config.SetFreeArgsNum(1);
+        SetFreeArgTitle(0, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n"
+            "            Or short pathname if profile path is set (e.g. test1/test2).");
+    }
+
+    TString Base;
+    TString Name;
+    bool InterruptInheritance = false;
+
+    virtual void Parse(TConfig& config) override {
+        TClientCommand::Parse(config);
+        TString pathname = config.ParseResult->GetFreeArgs()[0];
+        size_t pos = pathname.rfind('/');
+        if (config.Path) {
+            // Profile path is set
+            if (!pathname.StartsWith('/')) {
+                Base = config.Path;
+                Name = pathname;
+            } else {
+                WarnProfilePathSet();
+                Base = pathname.substr(0, pos);
+                Name = pathname.substr(pos + 1);
+            }
+        } else {
+            Base = pathname.substr(0, pos);
+            Name = pathname.substr(pos + 1);
+        }
+    }
+
+    virtual int Run(TConfig& config) override {
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        NKikimrClient::TSchemeOperation& record(request->Record);
+        auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
+        modifyScheme.SetWorkingDir(Base);
+        auto& modifyAcl = *modifyScheme.MutableModifyACL();
+        modifyAcl.SetName(Name);
+        NACLibProto::TDiffACL diffAcl;
+        {
+            diffAcl.SetInterruptInheritance(InterruptInheritance);
+        }
+        modifyAcl.SetDiffACL(diffAcl.SerializeAsString());
+        int result = MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request,
+            [](const NMsgBusProxy::TBusResponse& response) -> int {
+                if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+                    Cerr << ToCString(static_cast<NMsgBusProxy::EResponseStatus>(response.Record.GetStatus())) << " " << response.Record.GetErrorReason() << Endl;
+                    return 1;
+                }
+                return 0;
+        });
+        return result;
+    }
+};
+
+class TClientCommandSchemaAccessSetInheritance : public TClientCommandSchemaAccessInheritanceBase {
+public:
+    TClientCommandSchemaAccessSetInheritance()
+        : TClientCommandSchemaAccessInheritanceBase("set-inheritance", {}, "Enable permission inheritance from the parent", false)
+    {}
+};
+
+class TClientCommandSchemaAccessClearInheritance : public TClientCommandSchemaAccessInheritanceBase {
+public:
+    TClientCommandSchemaAccessClearInheritance()
+        : TClientCommandSchemaAccessInheritanceBase("clear-inheritance", {}, "Disable permission inheritance from the parent", true)
+    {}
+};
+
 class TClientCommandSchemaAccess : public TClientCommandTree {
 public:
     TClientCommandSchemaAccess()
@@ -808,6 +892,8 @@ public:
         AddCommand(std::make_unique<TClientCommandSchemaAccessRemove>());
         //AddCommand(std::make_unique<TClientCommandSchemaAccessGrant>());
         //AddCommand(std::make_unique<TClientCommandSchemaAccessRevoke>());
+        AddCommand(std::make_unique<TClientCommandSchemaAccessSetInheritance>());
+        AddCommand(std::make_unique<TClientCommandSchemaAccessClearInheritance>());
     }
 };
 

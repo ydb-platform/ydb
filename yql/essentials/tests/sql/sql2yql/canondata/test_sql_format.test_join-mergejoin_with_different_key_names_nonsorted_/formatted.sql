@@ -16,7 +16,7 @@ FROM SortedBySubkeyValue
     AS a
 JOIN $unsorted
     AS b
-ON a.subkey = b.sk AND a.value = b.val
+ON a.subkey == b.sk AND a.value == b.val
 SELECT
     *
 ORDER BY

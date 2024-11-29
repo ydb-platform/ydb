@@ -1,4 +1,5 @@
-/* postgres can not *//* kikimr can not */
+/* postgres can not */
+/* kikimr can not */
 PRAGMA yt.MaxOutputTables = "3";
 PRAGMA yt.DisableOptimizers = "HorizontalJoin,MultiHorizontalJoin";
 

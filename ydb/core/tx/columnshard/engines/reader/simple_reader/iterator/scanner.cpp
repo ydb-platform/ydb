@@ -2,6 +2,7 @@
 #include "scanner.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -36,8 +37,8 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
                 "source_idx", frontSource->GetSourceIdx())("table", table->num_rows());
             auto cursor =
                 std::make_shared<TSimpleScanCursor>(frontSource->GetStartPKRecordBatch(), frontSource->GetSourceId(), startIndex + recordsCount);
-            reader.OnIntervalResult(
-                std::make_shared<TPartialReadResult>(frontSource->GetResourceGuards(), frontSource->GetGroupGuard(), table, cursor, sourceIdxToContinue));
+            reader.OnIntervalResult(std::make_shared<TPartialReadResult>(frontSource->GetResourceGuards(), frontSource->GetGroupGuard(), table,
+                cursor, Context->GetCommonContext(), sourceIdxToContinue));
         } else if (sourceIdxToContinue) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "continue_source")("source_id", frontSource->GetSourceId())(
                 "source_idx", frontSource->GetSourceIdx());

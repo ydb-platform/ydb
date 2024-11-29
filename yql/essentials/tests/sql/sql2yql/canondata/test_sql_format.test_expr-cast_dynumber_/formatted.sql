@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 SELECT
     CAST(DyNumber("-21.33") AS String),
     CAST(DyNumber("0") AS Utf8),

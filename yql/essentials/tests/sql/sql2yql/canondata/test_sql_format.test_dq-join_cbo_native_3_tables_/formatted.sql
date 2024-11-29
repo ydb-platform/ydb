@@ -10,13 +10,13 @@ FROM Input1
     AS i1
 JOIN Input2
     AS i2
-ON i1.key = i2.key
+ON i1.key == i2.key
 JOIN Input3
     AS i3
-ON i1.key = i3.key
+ON i1.key == i3.key
 JOIN Input4
     AS i4
-ON i1.key = i4.key
+ON i1.key == i4.key
 ORDER BY
     i1.value,
     i2.value,

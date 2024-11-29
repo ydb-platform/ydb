@@ -16,4 +16,4 @@ FULL JOIN (
     FROM plato.Input1
 )
     AS b
-ON a.v1 = b.v2;
+ON a.v1 == b.v2;

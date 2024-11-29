@@ -1,4 +1,5 @@
-/* syntax version 1 */-- not supported on windows
+/* syntax version 1 */
+-- not supported on windows
 /* postgres can not */
 $udfScript = @@
 

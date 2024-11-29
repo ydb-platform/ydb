@@ -24,4 +24,4 @@ SELECT
     AsTuple(NULL) <= AsTuple(NULL);
 
 SELECT
-    AsTagged(1, "foo") = AsTagged(1u, "foo");
+    AsTagged(1, "foo") == AsTagged(1u, "foo");

@@ -16,8 +16,8 @@ SELECT
     InputD.value AS vald
 FROM InputA
 INNER JOIN InputD
-ON InputA.Key2 = InputD.k
+ON InputA.Key2 == InputD.k
 INNER JOIN InputB
-ON InputA.Fk1 = InputB.k
+ON InputA.Fk1 == InputB.k
 INNER JOIN InputC
-ON InputA.Key1 = InputC.k;
+ON InputA.Key1 == InputC.k;

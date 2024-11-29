@@ -1,4 +1,5 @@
-/* postgres can not *//* multirun can not */
+/* postgres can not */
+/* multirun can not */
 USE plato;
 
 INSERT INTO @tmpTable

@@ -1,9 +1,8 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_path_element.h"
-#include "schemeshard_utils.h"
 #include "schemeshard__op_traits.h"
+
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -274,7 +273,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
             *scheme.MutableCreateTable() = std::move(implTableDesc);
 
-            return CreateNewTable(NextPartId(nextId, result), scheme);    
+            return CreateNewTable(NextPartId(nextId, result), scheme);
         };
 
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
@@ -285,7 +284,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 userLevelDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 userPostingDesc = indexDescription.GetIndexImplTableDescriptions(1);
             }
-                
+
             result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
             result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPostingDesc)));
         } else {

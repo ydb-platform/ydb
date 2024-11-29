@@ -12,5 +12,5 @@ SELECT
     $Group,
     value
 FROM Input
-WHERE key = "150"
+WHERE key == "150"
 LIMIT 1;

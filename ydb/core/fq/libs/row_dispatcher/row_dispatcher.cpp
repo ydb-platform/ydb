@@ -10,7 +10,6 @@
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
 
-#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/mon/mon.h>
@@ -281,6 +280,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TRowDispatcherMetrics Metrics;
     NYql::IPqGateway::TPtr PqGateway;
+    NActors::TMon* Monitoring;
     TNodesTracker NodesTracker;
     TAggregatedStats AggrStats; 
 
@@ -336,9 +336,16 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TMap<TActorId, SessionInfo> Sessions;                         // key - TopicSession actor id
     };
 
+    struct ReadActorInfo {
+        TString InternalState;
+        TInstant RequestTime;
+        TInstant ResponseTime;
+    };
+
     THashMap<ConsumerSessionKey, TAtomicSharedPtr<ConsumerInfo>, ConsumerSessionKeyHash> Consumers;
     TMap<ui64, TAtomicSharedPtr<ConsumerInfo>> ConsumersByEventQueueId;
     THashMap<TopicSessionKey, TopicSessionInfo, TopicSessionKeyHash> TopicSessions;
+    TMap<TActorId, ReadActorInfo> ReadActorsInternalState;
 
 public:
     explicit TRowDispatcher(
@@ -349,7 +356,8 @@ public:
         const TString& tenant,
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        const NYql::IPqGateway::TPtr& pqGateway);
+        const NYql::IPqGateway::TPtr& pqGateway,
+        NActors::TMon* monitoring = nullptr);
 
     void Bootstrap();
 
@@ -371,6 +379,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvGetInternalStateResponse::TPtr& ev);
 
     void Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev);
     void Handle(const TEvPrivate::TEvTryConnect::TPtr&);
@@ -382,6 +391,8 @@ public:
     void DeleteConsumer(const ConsumerSessionKey& key);
     void UpdateMetrics();
     TString GetInternalState();
+    TString GetReadActorsInternalState();
+    void UpdateReadActorsInternalState();
     template <class TEventPtr>
     bool CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, const TEventPtr& ev);
     void SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax);
@@ -403,6 +414,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionStatistic, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateResponse, Handle);
         hFunc(TEvPrivate::TEvTryConnect, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvHeartbeat, Handle);
@@ -421,7 +433,8 @@ TRowDispatcher::TRowDispatcher(
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    const NYql::IPqGateway::TPtr& pqGateway,
+    NActors::TMon* monitoring)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , PureCalcProgramFactory(CreatePureCalcProgramFactory())
@@ -432,7 +445,9 @@ TRowDispatcher::TRowDispatcher(
     , ActorFactory(actorFactory)
     , Counters(counters)
     , Metrics(counters)
-    , PqGateway(pqGateway) {
+    , PqGateway(pqGateway)
+    , Monitoring(monitoring)
+{
 }
 
 void TRowDispatcher::Bootstrap() {
@@ -445,11 +460,9 @@ void TRowDispatcher::Bootstrap() {
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
     Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
-
-    NActors::TMon* mon = NKikimr::AppData()->Mon;
-    if (mon) {
-        ::NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(actorsMonPage, "row_dispatcher", "Row Dispatcher", false,
+    if (Monitoring) {
+        ::NMonitoring::TIndexMonPage* actorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
+        Monitoring->RegisterActorPage(actorsMonPage, "row_dispatcher", "Row Dispatcher", false,
             TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
     }
     NodesTracker.Init(SelfId());
@@ -671,6 +684,39 @@ TString TRowDispatcher::GetInternalState() {
         }
     }
     return str.Str();
+}
+
+TString TRowDispatcher::GetReadActorsInternalState() {
+    TStringStream str;
+    for (const auto& [_, internalState]: ReadActorsInternalState) {
+        str << "ResponseTime: " << internalState.ResponseTime << " " << internalState.InternalState << Endl;
+    }
+    return str.Str();
+}
+
+void TRowDispatcher::UpdateReadActorsInternalState() {
+    TSet<TActorId> ReadActors;
+    for (const auto& [key, _]: Consumers) {
+        ReadActors.insert(key.ReadActorId);
+    }
+
+    for(auto it = ReadActorsInternalState.begin(); it != ReadActorsInternalState.end();) {
+        if (!ReadActors.contains(it->first)) {
+            it = ReadActorsInternalState.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    auto now = TInstant::Now();
+    for (const auto& readActor: ReadActors) {
+        auto& internalStateInfo = ReadActorsInternalState[readActor];
+        if (now - internalStateInfo.RequestTime < TDuration::Seconds(30)) {
+            continue;
+        }
+        internalStateInfo.RequestTime = now;
+        Send(readActor, new NFq::TEvRowDispatcher::TEvGetInternalStateRequest{}, 0, 0);
+    }
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
@@ -936,11 +982,15 @@ void TRowDispatcher::PrintStateToLog() {
 }
 
 void TRowDispatcher::Handle(const NMon::TEvHttpInfo::TPtr& ev) {
+    UpdateReadActorsInternalState();
     TStringStream str;
     HTML(str) {
         PRE() {
+            str << "Current Time: " << TInstant::Now() << Endl;
             str << "Current state:" << Endl;
             str << GetInternalState() << Endl;
+            str << "Read actors state: " << Endl;
+            str << GetReadActorsInternalState() << Endl;
             str << Endl;
         }
     }
@@ -974,6 +1024,12 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
     }
 }
 
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetInternalStateResponse::TPtr& ev) {
+    auto& readActorInternalState = ReadActorsInternalState[ev->Sender];
+    readActorInternalState.InternalState = ev->Get()->Record.GetInternalState();
+    readActorInternalState.ResponseTime = TInstant::Now();
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -986,7 +1042,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    const NYql::IPqGateway::TPtr& pqGateway,
+    NActors::TMon* monitoring)
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
@@ -996,7 +1053,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         tenant,
         actorFactory,
         counters,
-        pqGateway));
+        pqGateway,
+        monitoring));
 }
 
 } // namespace NFq

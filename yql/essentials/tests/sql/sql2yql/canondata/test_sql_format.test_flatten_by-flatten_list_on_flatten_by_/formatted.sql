@@ -9,7 +9,7 @@ $flatten = (
         AS a
         FLATTEN BY
             parsed_answers_and_clicks AS answer_and_clicks
-    WHERE answer_and_clicks.1 = 1
+    WHERE answer_and_clicks.1 == 1
 );
 
 SELECT
@@ -19,8 +19,8 @@ FROM (
     SELECT
         asList(bc_type_tuple.0, 'total') AS bc_type,
         a.*
-        WITHOUT
-            bc_type_tuple
+    WITHOUT
+        bc_type_tuple
     FROM $flatten
         AS a
 )

@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 PRAGMA yt.JoinMergeTablesLimit = "100";
 PRAGMA yt.JoinMergeForce = "true";

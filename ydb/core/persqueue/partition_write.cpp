@@ -529,18 +529,22 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     //All ok
     UpdateAvgWriteBytes(WriteNewSize, now);
+    UpdateAvgWriteBytes(WriteNewSizeFromSupportivePartitions, now);
 
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(WriteNewSize, now);
+        avg.Update(WriteNewSizeFromSupportivePartitions, now);
     }
 
-    PQ_LOG_D("TPartition::HandleWriteResponse writeNewSize# " << WriteNewSize);
+    PQ_LOG_D("TPartition::HandleWriteResponse " <<
+             "writeNewSize# " << WriteNewSize <<
+             " WriteNewSizeFromSupportivePartitions# " << WriteNewSizeFromSupportivePartitions);
 
     if (SupportivePartitionTimeLag) {
         SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
     }
 
-    auto writeNewSizeFull = WriteNewSizeFull;
+    auto writeNewSizeFull = WriteNewSizeFull + WriteNewSizeFromSupportivePartitions;
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
@@ -550,6 +554,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
+    WriteNewSizeFromSupportivePartitions = 0;
     UpdateWriteBufferIsFullState(now);
 
     AnswerCurrentWrites(ctx);

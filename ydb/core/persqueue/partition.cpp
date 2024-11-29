@@ -1948,6 +1948,8 @@ void TPartition::RunPersist() {
             // Messages written
             MsgsWrittenTotal.Inc(writeInfo->MessagesWrittenTotal);
             MsgsWrittenGrpc.Inc(writeInfo->MessagesWrittenTotal);
+
+            WriteNewSizeFromSupportivePartitions += writeInfo->BytesWrittenTotal;
         }
         WriteInfosApplied.clear();
         //Done with counters.

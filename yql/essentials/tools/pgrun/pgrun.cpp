@@ -1170,7 +1170,7 @@ int Main(int argc, char* argv[])
     }
 
     TVector<TDataProviderInitializer> dataProvidersInit;
-    dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, MakeSimpleCBOOptimizerFactory()));
+    dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, MakeSimpleCBOOptimizerFactory(), {}));
     dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     TExprContext ctx;

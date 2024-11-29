@@ -9,9 +9,6 @@
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
 
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -22,7 +19,7 @@ using namespace NNodes;
 using namespace NPrivate;
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
-    if (State_->PassiveExecution) {
+    if (State_->PassiveExecution || !State_->DqHelper) {
         return node;
     }
 
@@ -38,7 +35,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
         return node;
     }
 
-    if (!NDq::IsSingleConsumerConnection(write.Content().Cast<TDqCnUnionAll>(), *getParents())) {
+    if (!State_->DqHelper->IsSingleConsumerConnection(write.Content().Ptr(), *getParents())) {
         return node;
     }
 
@@ -106,46 +103,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
             .Done();
     }
 
-    TMaybeNode<TDqConnection> result;
-    if (NDq::GetStageOutputsCount(dqUnion.Output().Stage()) > 1) {
-        result = Build<TDqCnUnionAll>(ctx, write.Pos())
-            .Output()
-                .Stage<TDqStage>()
-                    .Inputs()
-                        .Add(dqUnion)
-                    .Build()
-                    .Program(writeLambda)
-                    .Settings(NDq::TDqStageSettings().BuildNode(ctx, write.Pos()))
-                .Build()
-                .Index().Build("0")
-            .Build()
-            .Done().Ptr();
-    } else {
-        result = NDq::DqPushLambdaToStageUnionAll(dqUnion, writeLambda, {}, ctx, optCtx);
-        if (!result) {
-            return {};
-        }
+    auto result = State_->DqHelper->PushLambdaAndCreateCnResult(dqUnion.Ptr(), writeLambda.Ptr(), write.Pos(), ctx, optCtx);
+    if (!result) {
+        return {};
     }
 
-    result = CleanupWorld(result.Cast(), ctx);
-
-    auto dqCnResult = Build<TDqCnResult>(ctx, write.Pos())
-        .Output()
-            .Stage<TDqStage>()
-                .Inputs()
-                    .Add(result.Cast())
-                .Build()
-                .Program()
-                    .Args({"row"})
-                    .Body("row")
-                .Build()
-                .Settings(NDq::TDqStageSettings().BuildNode(ctx, write.Pos()))
-            .Build()
-            .Index().Build("0")
-        .Build()
-        .ColumnHints() // TODO: set column hints
-        .Build()
-        .Done().Ptr();
+    result = YtCleanupWorld(result, ctx, State_);
 
     auto writeOp = Build<TYtDqProcessWrite>(ctx, write.Pos())
         .World(ApplySyncListToWorld(ctx.NewWorld(write.Pos()), syncList, ctx))
@@ -153,7 +116,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
         .Output()
             .Add(outTable.ToExprNode(ctx, write.Pos()).Cast<TYtOutTable>())
         .Build()
-        .Input(dqCnResult)
+        .Input(result)
         .Done().Ptr();
 
     auto writeOutput = Build<TYtOutput>(ctx, write.Pos())
@@ -218,7 +181,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
 }
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqMaterialize(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
-    if (State_->PassiveExecution) {
+    if (State_->PassiveExecution || !State_->DqHelper) {
         return node;
     }
 
@@ -235,7 +198,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqMaterialize(TExprBase
         return node;
     }
 
-    if (!NDq::IsSingleConsumerConnection(materialize.Input().Cast<TDqCnUnionAll>(), *getParents())) {
+    if (!State_->DqHelper->IsSingleConsumerConnection(materialize.Input().Ptr(), *getParents())) {
         return node;
     }
 
@@ -281,46 +244,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqMaterialize(TExprBase
 
     const auto dqUnion = materialize.Input().Cast<TDqCnUnionAll>();
 
-    TMaybeNode<TDqConnection> result;
-    if (NDq::GetStageOutputsCount(dqUnion.Output().Stage()) > 1) {
-        result = Build<TDqCnUnionAll>(ctx, materialize.Pos())
-            .Output()
-                .Stage<TDqStage>()
-                    .Inputs()
-                        .Add(dqUnion)
-                    .Build()
-                    .Program(writeLambda)
-                    .Settings(NDq::TDqStageSettings().BuildNode(ctx, materialize.Pos()))
-                .Build()
-                .Index().Build("0")
-            .Build()
-            .Done().Ptr();
-    } else {
-        result = NDq::DqPushLambdaToStageUnionAll(dqUnion, writeLambda, {}, ctx, optCtx);
-        if (!result) {
-            return {};
-        }
+    auto result = State_->DqHelper->PushLambdaAndCreateCnResult(dqUnion.Ptr(), writeLambda.Ptr(), materialize.Pos(), ctx, optCtx);
+    if (!result) {
+        return {};
     }
 
-    result = CleanupWorld(result.Cast(), ctx);
-
-    auto dqCnResult = Build<TDqCnResult>(ctx, materialize.Pos())
-        .Output()
-            .Stage<TDqStage>()
-                .Inputs()
-                    .Add(result.Cast())
-                .Build()
-                .Program()
-                    .Args({"row"})
-                    .Body("row")
-                .Build()
-                .Settings(NDq::TDqStageSettings().BuildNode(ctx, materialize.Pos()))
-            .Build()
-            .Index().Build("0")
-        .Build()
-        .ColumnHints() // TODO: set column hints
-        .Build()
-        .Done().Ptr();
+    result = YtCleanupWorld(result, ctx, State_);
 
     auto writeOp = Build<TYtDqProcessWrite>(ctx, materialize.Pos())
         .World(ApplySyncListToWorld(materialize.World().Ptr(), syncList, ctx))
@@ -328,7 +257,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqMaterialize(TExprBase
         .Output()
             .Add(outTable.ToExprNode(ctx, materialize.Pos()).Cast<TYtOutTable>())
         .Build()
-        .Input(dqCnResult)
+        .Input(result)
         .Done().Ptr();
 
     return Build<TYtOutput>(ctx, materialize.Pos())

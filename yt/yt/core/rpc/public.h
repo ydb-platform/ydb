@@ -32,7 +32,9 @@ struct TServiceDescriptor;
 struct TMethodDescriptor;
 
 DECLARE_REFCOUNTED_CLASS(TRequestQueue)
+
 DECLARE_REFCOUNTED_STRUCT(IRequestQueueProvider)
+DECLARE_REFCOUNTED_CLASS(TPerUserRequestQueueProvider);
 
 using TInvokerProvider = TCallback<IInvokerPtr(const NRpc::NProto::TRequestHeader&)>;
 

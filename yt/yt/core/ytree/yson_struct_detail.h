@@ -90,6 +90,8 @@ struct IYsonStructParameter
     virtual void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
 
     virtual bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const = 0;
+
+    virtual int GetFieldIndex() const = 0;
 };
 
 DECLARE_REFCOUNTED_STRUCT(IYsonStructParameter)
@@ -252,7 +254,8 @@ public:
 
     TYsonStructParameter(
         TString key,
-        std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor);
+        std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor,
+        int fieldIndex);
 
     void Load(
         TYsonStructBase* self,
@@ -282,6 +285,8 @@ public:
     void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
 
     bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const override;
+
+    virtual int GetFieldIndex() const override;
 
     // Mark as optional. Field will be default-initialized if `init` is true, initialization is skipped otherwise.
     TYsonStructParameter& Optional(bool init = true);
@@ -328,6 +333,7 @@ private:
     bool TriviallyInitializedIntrusivePtr_ = false;
     bool Optional_ = false;
     bool ResetOnLoad_ = false;
+    const int FieldIndex_ = -1;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

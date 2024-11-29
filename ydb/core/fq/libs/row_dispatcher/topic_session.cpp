@@ -271,6 +271,7 @@ private:
     void UpdateFieldsIds(TClientsInfo& clientInfo);
     bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     TString GetAnyQueryIdByFieldName(const TString& fieldName);
+    void RestartSessionIfOldestClient(const TClientsInfo& info);
 
 private:
 
@@ -863,10 +864,14 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong ClientSettings");
+        LOG_ROW_DISPATCHER_WARN("Ignore TEvStopSession from " << ev->Sender << ", no client");
         return;
     }
+    DoParsing(true);        // Push everything from the parser buffer.
+
     auto& info = it->second;
+    RestartSessionIfOldestClient(info);
+
     UnreadBytes -= info.UnreadBytes;
     Clients.erase(it);
     ClientsWithoutPredicate.erase(ev->Sender);
@@ -875,6 +880,39 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     }
     UpdateParser();
     SubscribeOnNextEvent();
+}
+
+void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
+    // if we read historical data (because of this client), then we restart the session.
+
+    if (!ReadSession || !info.NextMessageOffset) {
+        return;
+    }
+    TMaybe<ui64> minMessageOffset;
+    for (auto& [readActorId, client] : Clients) {
+        if (info.ReadActorId == readActorId || !client.NextMessageOffset) {
+            continue;
+        }
+        if (!minMessageOffset) {
+            minMessageOffset = client.NextMessageOffset;
+            continue;
+        }
+        minMessageOffset = std::min(minMessageOffset, client.NextMessageOffset);
+    }
+    if (!minMessageOffset) {
+        return;
+    }
+
+    if (info.NextMessageOffset < minMessageOffset) {
+        LOG_ROW_DISPATCHER_INFO("Client (on StopSession) has less offset (" << info.NextMessageOffset << ") than others clients (" << minMessageOffset << "), stop (restart) topic session");
+        Metrics.RestartSessionByOffsets->Inc();
+        ++RestartSessionByOffsets;
+        info.RestartSessionByOffsetsByQuery->Inc();
+        StopReadSession();
+        if (!ReadSession) {
+            Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
+        }
+    }
 }
 
 void CollectColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, TSet<std::pair<TString, TString>>& columns) {

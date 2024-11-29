@@ -452,6 +452,10 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
     compiler.AddCallable(TYtTableContent::CallableName(),
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             TYtTableContent tableContent(&node);
+            if (node.GetConstraint<TEmptyConstraintNode>()) {
+                const auto itemType = NCommon::BuildType(node, GetSeqItemType(*node.GetTypeAnn()), ctx.ProgramBuilder);
+                return ctx.ProgramBuilder.NewEmptyList(itemType);
+            }
             TMaybe<ui64> itemsCount;
             TString name = ToString(TYtTableContent::CallableName());
             if (auto setting = NYql::GetSetting(tableContent.Settings().Ref(), EYtSettingType::ItemsCount)) {

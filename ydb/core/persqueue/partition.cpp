@@ -313,6 +313,14 @@ ui64 TPartition::ImportantClientsMinOffset() const {
     return minOffset;
 }
 
+TInstant TPartition::GetEndWriteTimestamp() const {
+    return EndWriteTimestamp;
+}
+
+THead& TPartition::GetHead() {
+    return Head;
+}
+
 void TPartition::HandleWakeup(const TActorContext& ctx) {
     FilterDeadlinedWrites(ctx);
 
@@ -356,6 +364,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     meta.SetStartOffset(StartOffset);
     meta.SetEndOffset(Max(NewHead.GetNextOffset(), EndOffset));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
+    meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
 
     if (IsSupportive()) {
         auto* counterData = meta.MutableCounterData();

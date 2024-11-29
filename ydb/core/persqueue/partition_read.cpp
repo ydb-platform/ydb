@@ -29,6 +29,24 @@ namespace NKikimr::NPQ {
 
 static const ui32 MAX_USER_ACTS = 1000;
 
+TMaybe<TInstant> GetReadFrom(ui32 maxTimeLagMs, ui64 readTimestampMs, TInstant consumerReadFromTimestamp, const TActorContext& ctx) {
+    if (!(maxTimeLagMs > 0 || readTimestampMs > 0 || consumerReadFromTimestamp > TInstant::MilliSeconds(1))) {
+        return {};
+    }
+
+    TInstant timestamp = maxTimeLagMs > 0 ? ctx.Now() - TDuration::MilliSeconds(maxTimeLagMs) : TInstant::Zero();
+    timestamp = Max(timestamp, TInstant::MilliSeconds(readTimestampMs));
+    timestamp = Max(timestamp, consumerReadFromTimestamp);
+    return timestamp;
+}
+
+ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const {
+    if (!readTimestamp) {
+        return offset;
+    }
+    return Max(GetOffsetEstimate(DataKeysBody, *readTimestamp, Min(Head.Offset, EndOffset - 1)), offset);
+}
+
 void TPartition::SendReadingFinished(const TString& consumer) {
     Send(Tablet, new TEvPQ::TEvReadingPartitionStatusRequest(consumer, Partition.OriginalPartitionId, TabletGeneration, ++PQRBCookie));
 }
@@ -132,7 +150,7 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     };
 
     for (auto request = HasDataRequests.begin(); request != HasDataRequests.end();) {
-        if (request->Offset < EndOffset) {
+        if (request->Offset < EndOffset && (IsActive() || !request->ReadTimestamp || *request->ReadTimestamp < EndWriteTimestamp)) {
             auto response = MakeHasDataInfoResponse(GetSizeLag(request->Offset), request->Cookie);
             ctx.Send(request->Sender, response.Release());
         } else if (!IsActive()) {
@@ -169,8 +187,10 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
 
     auto cookie = record.HasCookie() ? TMaybe<ui64>(record.GetCookie()) : TMaybe<ui64>();
 
+    auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero() /* TODO */, ctx);
+
     TActorId sender = ActorIdFromProto(record.GetSender());
-    if (InitDone && EndOffset > (ui64)record.GetOffset()) { //already has data, answer right now
+    if (InitDone && EndOffset > (ui64)record.GetOffset() && (!readTimestamp || EndWriteTimestamp >= *readTimestamp)) { //already has data, answer right now
         auto response = MakeHasDataInfoResponse(GetSizeLag(record.GetOffset()), cookie);
         ctx.Send(sender, response.Release());
     } else if (InitDone && !IsActive()) {
@@ -178,7 +198,7 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
         ctx.Send(sender, response.Release());
     } else {
         THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
-                        record.HasClientId() && InitDone ? record.GetClientId() : ""};
+                        record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
         THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
         auto res = HasDataRequests.insert(req);
         HasDataDeadlines.insert(dl);
@@ -756,11 +776,10 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     }
     userInfo->ReadsInQuotaQueue--;
     ui64 offset = read->Offset;
-    if (read->PartNo == 0 && (read->MaxTimeLagMs > 0 || read->ReadTimestampMs > 0 || userInfo->ReadFromTimestamp > TInstant::MilliSeconds(1))) {
-        TInstant timestamp = read->MaxTimeLagMs > 0 ? ctx.Now() - TDuration::MilliSeconds(read->MaxTimeLagMs) : TInstant::Zero();
-        timestamp = Max(timestamp, TInstant::MilliSeconds(read->ReadTimestampMs));
-        timestamp = Max(timestamp, userInfo->ReadFromTimestamp);
-        offset = Max(GetOffsetEstimate(DataKeysBody, timestamp, Min(Head.Offset, EndOffset - 1)), offset);
+
+    auto readTimestamp = GetReadFrom(read->MaxTimeLagMs, read->ReadTimestampMs, userInfo->ReadFromTimestamp, ctx);
+    if (read->PartNo == 0 && readTimestamp) {
+        offset = GetReadOffset(offset, readTimestamp);
         userInfo->ReadOffsetRewindSum += offset - read->Offset;
     }
 

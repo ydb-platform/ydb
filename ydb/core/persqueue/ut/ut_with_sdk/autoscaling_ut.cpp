@@ -1074,6 +1074,48 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "99 FF 7F");
         }
     }
+
+    void ReadFromTimestamp(bool autoscaleAwareSDK) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale();
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession1 = CreateWriteSession(client, "producer-1");
+        UNIT_ASSERT(writeSession1->Write(Msg("message_1.1", 1)));
+        Sleep(TDuration::Seconds(5));
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        UNIT_ASSERT(writeSession1->Write(Msg("message_2.1", 2)));
+        Sleep(TDuration::Seconds(1));
+
+        TTestReadSession readSession("Session-0", client, 1, false, {}, autoscaleAwareSDK, TDuration::Seconds(4));
+        readSession.Run();
+
+        readSession.WaitAllMessages();
+
+        for(const auto& info : readSession.Impl->ReceivedMessages) {
+            if (info.Data == "message_2.1") {
+                UNIT_ASSERT_VALUES_EQUAL(2, info.PartitionId);
+                UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
+            } else {
+                UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
+            }
+        }
+
+        writeSession1->Close(TDuration::Seconds(1));
+        readSession.Close();
+    }
+
+    Y_UNIT_TEST(ReadFromTimestamp_BeforeAutoscaleAwareSDK) {
+        ReadFromTimestamp(false);
+    }
+
+    Y_UNIT_TEST(ReadFromTimestamp_AutoscaleAwareSDK) {
+        ReadFromTimestamp(true);
+    }
 }
 
 } // namespace NKikimr

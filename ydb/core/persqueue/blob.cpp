@@ -399,6 +399,10 @@ void TBatch::Pack() {
         Header.SetPayloadSize(PackedData.size());
     }
 
+    for (auto& b : Blobs) {
+        EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
+    }
+
 
     TVector<TClientBlob> tmp;
     Blobs.swap(tmp);
@@ -414,11 +418,14 @@ void TBatch::Unpack() {
     UnpackTo(&Blobs);
     Y_ABORT_UNLESS(InternalPartsPos.empty());
     for (ui32 i = 0; i < Blobs.size(); ++i) {
-        if (!Blobs[i].IsLastPart())
+        auto& b = Blobs[i];
+        if (!b.IsLastPart()) {
             InternalPartsPos.push_back(i);
+        }
+        EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
     }
     Y_ABORT_UNLESS(InternalPartsPos.size() == GetInternalPartsCount());
-    
+
     PackedData.Clear();
 }
 
@@ -978,4 +985,3 @@ bool TPartitionedBlob::IsNextPart(const TString& sourceId, const ui64 seqNo, con
 
 }// NPQ
 }// NKikimr
-

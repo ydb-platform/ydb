@@ -3,15 +3,15 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
+
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/blob.h>
-
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <library/cpp/logger/stream.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYdb::NTopic::NTests {
@@ -184,6 +184,20 @@ protected:
     void Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
                                             const TString& consumerName,
                                             size_t count);
+
+    struct TAvgWriteBytes {
+        ui64 PerSec = 0;
+        ui64 PerMin = 0;
+        ui64 PerHour = 0;
+        ui64 PerDay = 0;
+    };
+
+    TAvgWriteBytes GetAvgWriteBytes(const TString& topicPath,
+                                    ui32 partitionId);
+
+    void CheckAvgWriteBytes(const TString& topicPath,
+                            ui32 partitionId,
+                            size_t minSize, size_t maxSize);
 
 private:
     template<class E>
@@ -1021,6 +1035,34 @@ void TFixture::Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
     }
 
     UNIT_ASSERT_VALUES_EQUAL(count, limit);
+}
+
+auto TFixture::GetAvgWriteBytes(const TString& topicName,
+                                ui32 partitionId) -> TAvgWriteBytes
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partitionId);
+
+    runtime.SendToPipe(tabletId, edge, new NKikimr::TEvPersQueue::TEvStatus());
+    auto response = runtime.GrabEdgeEvent<NKikimr::TEvPersQueue::TEvStatusResponse>();
+
+    UNIT_ASSERT_VALUES_EQUAL(tabletId, response->Record.GetTabletId());
+
+    TAvgWriteBytes result;
+
+    for (size_t i = 0; i < response->Record.PartResultSize(); ++i) {
+        const auto& partition = response->Record.GetPartResult(i);
+        if (partition.GetPartition() == static_cast<int>(partitionId)) {
+            result.PerSec = partition.GetAvgWriteSpeedPerSec();
+            result.PerMin = partition.GetAvgWriteSpeedPerMin();
+            result.PerHour = partition.GetAvgWriteSpeedPerHour();
+            result.PerDay = partition.GetAvgWriteSpeedPerDay();
+            break;
+        }
+    }
+
+    return result;
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
@@ -2265,6 +2307,51 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
     ExecuteDataQuery(tableSession, "SELECT 2", NTable::TTxControl::Tx(tx).CommitTx(true));
 
     Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
+}
+
+void TFixture::CheckAvgWriteBytes(const TString& topicPath,
+                                  ui32 partitionId,
+                                  size_t minSize, size_t maxSize)
+{
+#define UNIT_ASSERT_AVGWRITEBYTES(v, minSize, maxSize) \
+    UNIT_ASSERT_LE_C(minSize, v, ", actual " << minSize << " > " << v); \
+    UNIT_ASSERT_LE_C(v, maxSize, ", actual " << v << " > " << maxSize);
+
+    auto avgWriteBytes = GetAvgWriteBytes(topicPath, partitionId);
+
+    UNIT_ASSERT_AVGWRITEBYTES(avgWriteBytes.PerSec, minSize, maxSize);
+    UNIT_ASSERT_AVGWRITEBYTES(avgWriteBytes.PerMin, minSize, maxSize);
+    UNIT_ASSERT_AVGWRITEBYTES(avgWriteBytes.PerHour, minSize, maxSize);
+    UNIT_ASSERT_AVGWRITEBYTES(avgWriteBytes.PerDay, minSize, maxSize);
+
+#undef UNIT_ASSERT_AVGWRITEBYTES
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_45, TFixture)
+{
+    CreateTopic("topic_A", TEST_CONSUMER, 2);
+
+    auto session = CreateTableSession();
+    auto tx = BeginTx(session);
+
+    TString message(1'000, 'x');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    size_t minSize = (message.size() + TEST_MESSAGE_GROUP_ID_1.size()) * 2;
+    size_t maxSize = minSize + 200;
+
+    CheckAvgWriteBytes("topic_A", 0, minSize, maxSize);
+
+    minSize = (message.size() + TEST_MESSAGE_GROUP_ID_2.size());
+    maxSize = minSize + 200;
+
+    CheckAvgWriteBytes("topic_A", 1, minSize, maxSize);
 }
 
 }

@@ -857,7 +857,6 @@ class TestPqRowDispatcher(TestYdsBase):
         sql1 = Rf'''
             INSERT INTO `name1`.`{self.output_topic}`
             SELECT Cast(time as String) FROM `name1`.`{self.input_topic}` WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
-        
         sql2 = Rf'''
             INSERT INTO `name2`.`{self.output_topic}`
             SELECT Cast(time as String) FROM `name2`.`{self.input_topic}` WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''

@@ -1069,6 +1069,92 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
     }
 
+    Y_UNIT_TEST(ControlPlane_CDC_Enable) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto client = setup.MakeClient();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/origin` (
+                id Uint64,
+                value Text,
+                PRIMARY KEY (id)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/origin`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON',
+                    TOPIC_AUTO_PARTITIONING = 'DISABLED'
+                );
+        )");
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(3)
+                    .MaxActivePartitions(107)
+                    .BeginAlterAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                    .EndAlterAutoPartitioningSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic("/Root/origin/feed", alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(!v.IsSuccess(),  "Error: " << v);
+        }
+    }
+
+    Y_UNIT_TEST(ControlPlane_CDC_Disable) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto client = setup.MakeClient();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/origin` (
+                id Uint64,
+                value Text,
+                PRIMARY KEY (id)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/origin`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON',
+                    TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                );
+        )");
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(3)
+                    .MaxActivePartitions(107)
+                    .BeginAlterAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::Disabled)
+                    .EndAlterAutoPartitioningSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic("/Root/origin/feed", alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(!v.IsSuccess(),  "Error: " << v);
+        }
+    }
+
     Y_UNIT_TEST(BalancingAfterSplit_sessionsWithPartition) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);

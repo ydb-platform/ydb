@@ -70,6 +70,14 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         errors.AddError(errStr);
         return false;
     }
+    if (!AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
+        for (const auto& tier : ttl.GetTiers()) {
+            if (tier.HasEvictToExternalStorage()) {
+                errors.AddError(NKikimrScheme::StatusPreconditionFailed, "Tiering functionality is disabled for OLAP tables");
+                return false;
+            }
+        }
+    }
     {
         bool correct = false;
         if (column->GetKeyOrder() && *column->GetKeyOrder() == 0) {

@@ -271,12 +271,6 @@ public:
             return result;
         }
 
-        const bool hasTiering = Transaction.GetAlterColumnTable().GetAlterTtlSettings().GetEnabled().TiersSize();
-        if (hasTiering && HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Tiering functionality is disabled for OLAP tables");
-            return result;
-        }
-
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.HasAlterColumnTable() ? Transaction.GetAlterColumnTable().GetName() : Transaction.GetAlterTable().GetName();
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

@@ -287,6 +287,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
     NCommon::TConfSetting<bool, false> JobBlockInput;
     NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
+    NCommon::TConfSetting<bool, false> CompactForDistinct;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

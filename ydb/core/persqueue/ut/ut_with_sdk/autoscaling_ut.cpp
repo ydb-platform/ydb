@@ -1091,7 +1091,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT(writeSession1->Write(Msg("message_2.1", 2)));
         Sleep(TDuration::Seconds(1));
 
-        TTestReadSession readSession("Session-0", client, 2, false, {}, autoscaleAwareSDK, TDuration::Seconds(4));
+        TTestReadSession readSession("Session-0", client, 1, false, {}, autoscaleAwareSDK, TDuration::Seconds(4));
         readSession.Run();
 
         readSession.WaitAllMessages();

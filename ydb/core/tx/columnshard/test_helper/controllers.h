@@ -10,6 +10,7 @@ private:
     TAtomicCounter ExportsFinishedCount = 0;
     NMetadata::NFetcher::ISnapshot::TPtr CurrentConfig;
     ui32 TiersModificationsCount = 0;
+    YDB_READONLY(TAtomicCounter, TieringMetadataActualizationCount, 0);
     YDB_READONLY(TAtomicCounter, StatisticsUsageCount, 0);
     YDB_READONLY(TAtomicCounter, MaxValueUsageCount, 0);
     YDB_ACCESSOR_DEF(std::optional<ui64>, SmallSizeDetector);
@@ -53,6 +54,9 @@ public:
         return ExportsFinishedCount.Val();
     }
 
+    virtual void OnTieringMetadataActualized() override {
+        TieringMetadataActualizationCount.Inc();
+    }
     virtual void OnStatisticsUsage(const NKikimr::NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) override {
         StatisticsUsageCount.Inc();
     }

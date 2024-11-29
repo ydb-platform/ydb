@@ -100,11 +100,20 @@ bool TriggerTTL(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot s
     return (res.GetStatus() == NKikimrTxColumnShard::SUCCESS);
 }
 
-bool TriggerMetadata(TTestBasicRuntime& runtime, TActorId& sender) {
+bool TriggerMetadata(
+    TTestBasicRuntime& runtime, TActorId& sender, NYDBTest::TControllers::TGuard<NOlap::TWaitCompactionController>& controller) {
+    auto isDone = [initialCounter = controller->GetTieringMetadataActualizationCount().Val(), &controller]() {
+        return controller->GetTieringMetadataActualizationCount().Val() != initialCounter;
+    };
+
     auto event = std::make_unique<TEvPrivate::TEvPeriodicWakeup>();
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
-    runtime.GrabEdgeEvent<TEvPrivate::TEvMetadataAccessorsInfo>(sender, TDuration::Seconds(5));
-    return true;
+
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+    while (!isDone() && TInstant::Now() < deadline) {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
+    return isDone();
 }
 
 bool CheckSame(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 expectedSize,
@@ -339,7 +348,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         UNIT_ASSERT(CheckSame(rb, PORTION_ROWS, spec.TtlColumn, ts[0]));
     }
 
-    if (spec.NeedTestStatistics() && spec.TtlColumn != "timestamp") {
+    if (spec.TtlColumn != testYdbPk.front().GetName()) {
         AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
         AFL_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
     } else {
@@ -629,7 +638,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         if (specs[i].HasTiers() || reboots) {
             csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
         }
-        TriggerMetadata(runtime, sender);
+        UNIT_ASSERT(TriggerMetadata(runtime, sender, csControllerGuard));
 
         if (eventLoss) {
             if (*eventLoss == i) {
@@ -706,7 +715,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         }
     }
 
-//    if (specs[0].NeedTestStatistics()) {
+//    if (specs[0].TtlColumn != testYdbPk.front().GetName()) {
 //        AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
 //        AFL_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
 //    } else {

@@ -24,6 +24,7 @@ namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IBlobsGCAction;
 class TPortionInfo;
+class TDataAccessorsResult;
 namespace NIndexes {
 class TIndexMetaContainer;
 }
@@ -226,6 +227,8 @@ public:
     virtual void OnStatisticsUsage(const NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) {
     }
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) {
+    }
+    virtual void OnTieringMetadataActualized() {
     }
     virtual void OnMaxValueUsage() {
     }

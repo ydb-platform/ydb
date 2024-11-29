@@ -78,6 +78,17 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
     return {};
 }
 
+void TTieringActualizer::AddPortionImpl(const TPortionInfo& portion, const TInstant now) {
+    auto info = BuildActualizationInfo(portion, now);
+    if (!info) {
+        return;
+    }
+    AFL_VERIFY(PortionIdByWaitDuration[info->GetAddress()].AddPortion(*info, portion.GetPortionId(), now));
+    auto address = info->GetAddress();
+    TFindActualizationInfo findId(std::move(address), info->GetWaitInstant(now));
+    AFL_VERIFY(PortionsInfo.emplace(portion.GetPortionId(), std::move(findId)).second);
+}
+
 void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExternalContext& addContext) {
     AFL_VERIFY(PathId == portion.GetPathId());
     if (!addContext.GetPortionExclusiveGuarantee()) {
@@ -106,6 +117,9 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
 void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& accessor, const TActualizationContext& context) {
     if (!NewPortionIds.erase(accessor.GetPortionInfo().GetPortionId())) {
         return;
+    }
+    if (NewPortionIds.empty()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnTieringMetadataActualized();
     }
     auto& portion = accessor.GetPortionInfo();
     if (Tiering) {
@@ -245,6 +259,11 @@ public:
 
 std::vector<TCSMetadataRequest> TTieringActualizer::BuildMetadataRequests(
     const ui64 /*pathId*/, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index) {
+    if (NewPortionIds.empty()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnTieringMetadataActualized();
+        return {};
+    }
+
     static constexpr ui64 batchMemorySoftLimit = 100 * (1 << 20);
     std::vector<TCSMetadataRequest> requests;
     std::shared_ptr<TDataAccessorsRequest> currentRequest;

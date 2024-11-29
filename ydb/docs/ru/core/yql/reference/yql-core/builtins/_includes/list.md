@@ -799,7 +799,8 @@ SELECT ListFromRange(Datetime("2022-05-23T15:30:00Z"), Datetime("2022-05-30T15:3
 ### Сигнатура
 
 ```yql
-ListFromRange(T, T)->LazyList<T> -- T - числовой тип или тип, представляющий дату/время
+ListFromRange(T{Flags:AutoMap}, T{Flags:AutoMap}, T?)->LazyList<T> -- T — числовой тип
+ListFromRange(T{Flags:AutoMap}, T{Flags:AutoMap}, I?)->LazyList<T> -- T — тип, представляющий дату/время, I — интервал
 ```
 
 ## ListReplicate {#listreplicate}

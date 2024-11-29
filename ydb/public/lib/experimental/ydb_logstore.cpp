@@ -16,7 +16,7 @@ namespace NYdb {
 namespace NLogStore {
 
 TMaybe<TTtlSettings> TtlSettingsFromProto(const Ydb::Table::TtlSettings& proto) {
-    if (auto settings = TTtlSettings::DeserializeFromProto(proto)) {
+    if (auto settings = TTtlSettings::FromProto(proto)) {
         return *settings;
     }
     return Nothing();

@@ -6,21 +6,24 @@ Released on November 26, 2024. To update to version **2.16.0**, select the [Down
 
 ### Features
 
-* Improved throughput of the `ydb import file csv` up to 3 times
-* Allow running stock benchmark for OLAP shards
-* Added support for ISO-8601 formatted timestamps in `ydb topic` commands
-* Added `--explain-ast` option to `ydb sql` command that prints query AST
-* Added ANSI SQL syntax highlighting in `ydb` interactive mode
-* Added support for PostgreSQL syntax in `ydb workload tpch` и `ydb workload tpcds` benchmarks
-* Added `-c` option for `ydb workload tpcds run` command to compare the result with expected value and show the diff
-* In the `ydb topic write` command the `--codec` option now has default value RAW
-* Added log events for `ydb tools dump` and `ydb tools restore` commands
-* The `ydb tools restore` command now displays error locations
+* Improved throughput of the `{{ ydb-cli }} import file csv` command by up to 3 times.
+* Added support for running the [stock benchmark](./reference/ydb-cli/commands/workload/stock.md) with [column-oriented tables](./concepts/datamodel/table.md#column-oriented-tables).
+* Added support for [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601)–formatted timestamps in `{{ ydb-cli }} topic` commands.
+* Added the `--explain-ast` option to the `ydb sql` command, which prints the query AST.
+* Added ANSI SQL syntax highlighting in interactive mode.
+* Added support for [PostgreSQL syntax](./postgresql/intro.md) in the `{{ ydb-cli }} workload tpch` and `{{ ydb-cli }} workload tpcds` benchmarks.
+* Introduced the `-c` option for the `{{ ydb-cli }} workload tpcds run` command to compare results with expected values and display differences.
+* Added log events for the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` commands.
+* Enhanced the `{{ ydb-cli }} tools restore` command to display error locations.
+
+### Backward incompatible changes
+
+* Changed the default value of the `{{ ydb-cli }} topic write` command's `--codec` option to `RAW`.
 
 ### Bug fixes
 
-* Fixed progress bar in `ydb workload import` command
-* Fixed a bug where restoring from a backup using --import-data could fail if the partitioning of the table was changed
+* Fixed the progress bar in the `{{ ydb-cli }} workload import` command.
+* Resolved an issue where restoring from a backup using the `--import-data` option could fail if the table's partitioning had changed.
 
 ## Version 2.10.0 {#2-10-0}
 

@@ -448,7 +448,8 @@ public:
         auto keyRange = MakeHolder<TKeyDesc>(
             TableId,
             range,
-            TKeyDesc::ERowOperation::Update,
+            TKeyDesc::ERowOperation::Update, // InconsistentTx is used only for CTAS at current time
+                                             // TODO: support for erase
             keyColumnTypes,
             TVector<TKeyDesc::TColumnOp>{});
 

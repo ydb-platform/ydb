@@ -934,7 +934,7 @@ protected:
         output.SinkSettings = extSink.GetSettings();
     }
 
-    void BuildInternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) {
+    void BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TKqpTasksGraph::TTaskType& task) {
         const auto& intSink = sink.GetInternalSink();
         auto& output = task.Outputs[sink.GetOutputIndex()];
         output.Type = TTaskOutputType::Sink;
@@ -953,10 +953,6 @@ protected:
             }
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);
-
-            // output.ColumnTypes
-            // output.ColumnTypeInfos
-            // output.WriteIndexes
         } else {
             output.SinkSettings = intSink.GetSettings();
         }

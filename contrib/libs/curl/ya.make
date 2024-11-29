@@ -20,6 +20,8 @@ PEERDIR(
     contrib/libs/brotli/enc
     contrib/libs/libc_compat
     contrib/libs/nghttp2
+    contrib/libs/nghttp3
+    contrib/libs/ngtcp2
     contrib/libs/openssl
     contrib/libs/zlib
     contrib/libs/zstd

@@ -1,5 +1,7 @@
 #include "topic_session.h"
 
+#include "common.h"
+
 #include <ydb/core/fq/libs/actors/logging/log.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
@@ -38,6 +40,7 @@ struct TTopicSessionMetrics {
         SessionDataRate = PartitionGroup->GetCounter("SessionDataRate", true);
         WaitEventTimeMs = PartitionGroup->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(13, 2, 1)); // ~ 1ms -> ~ 8s
         AllSessionsDataRate = counters->GetCounter("AllSessionsDataRate", true);
+        InFlightCompileRequests = PartitionGroup->GetCounter("InFlightCompileRequests");
     }
 
     ::NMonitoring::TDynamicCounterPtr TopicGroup;
@@ -47,6 +50,7 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsets;
     ::NMonitoring::TDynamicCounters::TCounterPtr SessionDataRate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFlightCompileRequests;
     ::NMonitoring::THistogramPtr WaitEventTimeMs;
     ::NMonitoring::TDynamicCounters::TCounterPtr AllSessionsDataRate;
 
@@ -176,6 +180,11 @@ private:
         TString Type;
     };
 
+    struct TFiltersCompileState {
+        ui64 FreeId = 0;
+        std::unordered_map<ui64, NActors::TActorId> InFlightCompilations = {};
+    };
+
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
     const TString TopicPath;
@@ -183,10 +192,10 @@ private:
     const TString Endpoint;
     const TString Database;
     NActors::TActorId RowDispatcherActorId;
+    NActors::TActorId CompileServiceActorId;
     ui32 PartitionId;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     NYql::ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     const i64 BufferSize;
@@ -199,6 +208,7 @@ private:
     THashMap<NActors::TActorId, TClientsInfo> Clients;
     THashSet<NActors::TActorId> ClientsWithoutPredicate;
     std::unique_ptr<TJsonParser> Parser;
+    TFiltersCompileState FiltersCompilation;
     NConfig::TRowDispatcherConfig Config;
     ui64 UnreadBytes = 0;
     const ::NMonitoring::TDynamicCounterPtr Counters;
@@ -217,10 +227,10 @@ public:
         const TString& database,
         const NConfig::TRowDispatcherConfig& config,
         NActors::TActorId rowDispatcherActorId,
+        NActors::TActorId compileServiceActorId,
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const NYql::IPqGateway::TPtr& pqGateway,
         ui64 maxBufferSize);
@@ -262,6 +272,7 @@ private:
     void Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
+    void Handle(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev);
     void HandleException(const std::exception& err);
 
     void SendStatisticToRowDispatcher();
@@ -284,6 +295,7 @@ private:
         hFunc(NFq::TEvPrivate::TEvReconnectSession, Handle);
         hFunc(TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
+        hFunc(TEvRowDispatcher::TEvPurecalcCompileResponse, Handle);
         sFunc(NFq::TEvPrivate::TEvStartParsing, DoParsing);
         cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);,
@@ -301,6 +313,7 @@ private:
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
         IgnoreFunc(NFq::TEvPrivate::TEvSendStatisticToRowDispatcher);
+        IgnoreFunc(TEvRowDispatcher::TEvPurecalcCompileResponse);
     })
 };
 
@@ -310,10 +323,10 @@ TTopicSession::TTopicSession(
     const TString& database,
     const NConfig::TRowDispatcherConfig& config,
     NActors::TActorId rowDispatcherActorId,
+    NActors::TActorId compileServiceActorId,
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize)
@@ -322,10 +335,10 @@ TTopicSession::TTopicSession(
     , Endpoint(endpoint)
     , Database(database)
     , RowDispatcherActorId(rowDispatcherActorId)
+    , CompileServiceActorId(compileServiceActorId)
     , PartitionId(partitionId)
     , Driver(std::move(driver))
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , PureCalcProgramFactory(pureCalcProgramFactory)
     , BufferSize(maxBufferSize)
     , LogPrefix("TopicSession")
     , Config(config)
@@ -353,6 +366,11 @@ void TTopicSession::PassAway() {
 
 void TTopicSession::SubscribeOnNextEvent() {
     if (!ReadSession || IsWaitingEvents) {
+        return;
+    }
+
+    if (!FiltersCompilation.InFlightCompilations.empty()) {
+        LOG_ROW_DISPATCHER_TRACE("In flight filters compilation: " << FiltersCompilation.InFlightCompilations.size() << ", skip yds event handling");
         return;
     }
 
@@ -536,7 +554,12 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 }
 
 void TTopicSession::HandleNewEvents() {
-    ui64 handledEventsSize = 0;  
+    ui64 handledEventsSize = 0;
+
+    if (!FiltersCompilation.InFlightCompilations.empty()) {
+        LOG_ROW_DISPATCHER_TRACE("In flight filters compilation: " << FiltersCompilation.InFlightCompilations.size() << ", skip yds event handling");
+        return;
+    }
 
     for (ui64 i = 0; i < MaxHandledEventsCount; ++i) {
         if (!ReadSession) {
@@ -815,9 +838,15 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 [&, actorId = clientInfo.ReadActorId](ui64 offset, const TString& json){
                     Send(SelfId(), new NFq::TEvPrivate::TEvDataAfterFilteration(offset, json, actorId));
                 },
-                PureCalcProgramFactory,
                 {.EnabledLLVM = source.GetEnabledLLVM()}
             );
+
+            const ui64 eventId = FiltersCompilation.FreeId++;
+            Y_ENSURE(FiltersCompilation.InFlightCompilations.emplace(eventId, ev->Sender).second, "Got duplicated compilation event id");
+            LOG_ROW_DISPATCHER_TRACE("Send compile request with id " << eventId);
+
+            Send(CompileServiceActorId, clientInfo.Filter->GetCompileRequest().release(), 0, eventId);
+            Metrics.InFlightCompileRequests->Inc();
         } else {
             ClientsWithoutPredicate.insert(ev->Sender);
         }
@@ -831,12 +860,8 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 StopReadSession();
             }
         }
-    } catch (const NYql::NPureCalc::TCompileError& e) {
-        FatalError("Adding new client failed: CompileError: sql: " + e.GetYql() + ", error: " + e.GetIssues(), nullptr, true, Nothing());
-    } catch (const yexception &ex) {
-        FatalError(TString{"Adding new client failed: "} + ex.what(), nullptr, true, Nothing());
     } catch (...) {
-        FatalError("Adding new client failed, " + CurrentExceptionMessage(), nullptr, true, Nothing());
+        FatalError("Adding new client failed, got unexpected exception: " + CurrentExceptionMessage(), nullptr, true, Nothing());
     }
     ConsumerName = ev->Get()->Record.GetSource().GetConsumerName();
     UpdateParser();
@@ -1064,6 +1089,39 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
     return true;
 }
 
+void TTopicSession::Handle(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) {
+    LOG_ROW_DISPATCHER_TRACE("Got compile response for reauest with id " << ev->Cookie);
+
+    const auto requestIt = FiltersCompilation.InFlightCompilations.find(ev->Cookie);
+    if (requestIt == FiltersCompilation.InFlightCompilations.end()) {
+        LOG_ROW_DISPATCHER_TRACE("Compile response ignored for id " << ev->Cookie);
+        return;
+    }
+
+    const auto clientId = requestIt->second;
+    FiltersCompilation.InFlightCompilations.erase(requestIt);
+    Metrics.InFlightCompileRequests->Dec();
+    if (FiltersCompilation.InFlightCompilations.empty()) {
+        SubscribeOnNextEvent();
+    }
+
+    if (!ev->Get()->ProgramHolder) {
+        TString message = TStringBuilder() << "Filed to compile purecalc program, error: " << ev->Get()->Error;
+        LOG_ROW_DISPATCHER_ERROR(message);
+        FatalError(message, nullptr, false, Nothing());
+        return;
+    }
+
+    const auto clientIt = Clients.find(clientId);
+    if (clientIt == Clients.end()) {
+        LOG_ROW_DISPATCHER_TRACE("Compile response ignored for id " << ev->Cookie << ", client with id " << clientId << " not found");
+        return;
+    }
+    if (const auto& filter = clientIt->second.Filter) {
+        filter->OnCompileResponse(std::move(ev));
+    }
+}
+
 TString TTopicSession::GetAnyQueryIdByFieldName(const TString& fieldName) {
     TSet<std::pair<TString, TString>> namesWithTypes;
     for (auto& [readActorId, info] : Clients) {
@@ -1087,14 +1145,14 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     const TString& database,
     const NConfig::TRowDispatcherConfig& config,
     NActors::TActorId rowDispatcherActorId,
+    NActors::TActorId compileServiceActorId,
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize) {
-    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, pureCalcProgramFactory, counters, pqGateway, maxBufferSize));
+    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, pqGateway, maxBufferSize));
 }
 
 } // namespace NFq

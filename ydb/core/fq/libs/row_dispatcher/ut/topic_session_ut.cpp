@@ -5,6 +5,7 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -26,8 +27,7 @@ const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 class TFixture : public NUnitTest::TBaseFixture {
 public:
     TFixture()
-        : PureCalcProgramFactory(CreatePureCalcProgramFactory())
-        , Runtime(true)
+        : Runtime(true)
     {}
 
     void SetUp(NUnitTest::TTestContext&) override {
@@ -60,16 +60,18 @@ public:
             std::make_shared<NYql::TPqGatewayConfig>(),
             nullptr);
 
+        const auto compileServiceActorId = Runtime.Register(NRowDispatcher::CreatePurecalcCompileService());
+
         TopicSession = Runtime.Register(NewTopicSession(
             topicPath,
             GetDefaultPqEndpoint(),
             GetDefaultPqDatabase(),
             Config,
             RowDispatcherActorId,
+            compileServiceActorId,
             0,
             Driver,
             CredentialsProviderFactory,
-            PureCalcProgramFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(pqServices),
             16000000
@@ -171,7 +173,6 @@ public:
         }
     }
 
-    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
     TActorSystemStub ActorSystemStub;
     NActors::TActorId TopicSession;

@@ -247,7 +247,6 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     NConfig::TRowDispatcherConfig Config;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
-    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     TYqSharedResources::TPtr YqSharedResources;
     TMaybe<TActorId> CoordinatorActorId;
     ui64 CoordinatorGeneration = 0;
@@ -417,7 +416,6 @@ TRowDispatcher::TRowDispatcher(
     NActors::TMon* monitoring)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , PureCalcProgramFactory(CreatePureCalcProgramFactory())
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
     , LogPrefix("RowDispatcher: ")
@@ -746,13 +744,13 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             source.GetDatabase(),
             Config,
             SelfId(),
+            PurecalcCompileServiceActorId(),
             ev->Get()->Record.GetPartitionId(),
             YqSharedResources->UserSpaceYdbDriver,
             CreateCredentialsProviderFactoryForStructuredToken(
                 CredentialsFactory,
                 ev->Get()->Record.GetToken(),
                 source.GetAddBearerToToken()),
-            PureCalcProgramFactory,
             Counters,
             PqGateway,
             MaxSessionBufferSizeBytes

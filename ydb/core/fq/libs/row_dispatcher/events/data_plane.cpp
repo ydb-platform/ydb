@@ -7,4 +7,9 @@ NActors::TActorId RowDispatcherServiceActorId() {
     return NActors::TActorId(0, name);
 }
 
+NActors::TActorId PurecalcCompileServiceActorId() {
+    constexpr TStringBuf name = "PC_COMPL_DP";
+    return NActors::TActorId(0, name);
+}
+
 } // namespace NFq

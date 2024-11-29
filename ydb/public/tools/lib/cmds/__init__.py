@@ -359,7 +359,7 @@ def deploy(arguments):
     if 'YDB_EXPERIMENTAL_PG' in os.environ:
         optionals['pg_compatible_expirement'] = True
 
-    if os.environ.get('YDB_KAFKA_API_ENABLED', "0") == "1":
+    if _is_true_string(os.environ.get('YDB_KAFKA_API_ENABLED', "0")):
         kafka_api_port = int(os.environ.get("YDB_KAFKA_PROXY_PORT", "9092"))
         optionals['kafka_api_port'] = kafka_api_port
 
@@ -551,3 +551,11 @@ def start_recipe(args):
 def stop_recipe(args):
     arguments = produce_arguments(args)
     cleanup(arguments)
+
+
+def _is_true_string(s):
+    if s is None:
+        return False
+
+    s = s.lower()
+    return s in ['1', 'true', 'yes']

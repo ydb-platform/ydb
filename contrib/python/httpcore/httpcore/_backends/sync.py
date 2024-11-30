@@ -1,8 +1,10 @@
+from __future__ import annotations
+
+import functools
 import socket
 import ssl
 import sys
 import typing
-from functools import partial
 
 from .._exceptions import (
     ConnectError,
@@ -33,8 +35,8 @@ class TLSinTLSStream(NetworkStream):  # pragma: no cover
         self,
         sock: socket.socket,
         ssl_context: ssl.SSLContext,
-        server_hostname: typing.Optional[str] = None,
-        timeout: typing.Optional[float] = None,
+        server_hostname: str | None = None,
+        timeout: float | None = None,
     ):
         self._sock = sock
         self._incoming = ssl.MemoryBIO()
@@ -74,20 +76,20 @@ class TLSinTLSStream(NetworkStream):  # pragma: no cover
             if errno is None:
                 return ret
 
-    def read(self, max_bytes: int, timeout: typing.Optional[float] = None) -> bytes:
+    def read(self, max_bytes: int, timeout: float | None = None) -> bytes:
         exc_map: ExceptionMapping = {socket.timeout: ReadTimeout, OSError: ReadError}
         with map_exceptions(exc_map):
             self._sock.settimeout(timeout)
             return typing.cast(
-                bytes, self._perform_io(partial(self.ssl_obj.read, max_bytes))
+                bytes, self._perform_io(functools.partial(self.ssl_obj.read, max_bytes))
             )
 
-    def write(self, buffer: bytes, timeout: typing.Optional[float] = None) -> None:
+    def write(self, buffer: bytes, timeout: float | None = None) -> None:
         exc_map: ExceptionMapping = {socket.timeout: WriteTimeout, OSError: WriteError}
         with map_exceptions(exc_map):
             self._sock.settimeout(timeout)
             while buffer:
-                nsent = self._perform_io(partial(self.ssl_obj.write, buffer))
+                nsent = self._perform_io(functools.partial(self.ssl_obj.write, buffer))
                 buffer = buffer[nsent:]
 
     def close(self) -> None:
@@ -96,9 +98,9 @@ class TLSinTLSStream(NetworkStream):  # pragma: no cover
     def start_tls(
         self,
         ssl_context: ssl.SSLContext,
-        server_hostname: typing.Optional[str] = None,
-        timeout: typing.Optional[float] = None,
-    ) -> "NetworkStream":
+        server_hostname: str | None = None,
+        timeout: float | None = None,
+    ) -> NetworkStream:
         raise NotImplementedError()
 
     def get_extra_info(self, info: str) -> typing.Any:
@@ -119,13 +121,13 @@ class SyncStream(NetworkStream):
     def __init__(self, sock: socket.socket) -> None:
         self._sock = sock
 
-    def read(self, max_bytes: int, timeout: typing.Optional[float] = None) -> bytes:
+    def read(self, max_bytes: int, timeout: float | None = None) -> bytes:
         exc_map: ExceptionMapping = {socket.timeout: ReadTimeout, OSError: ReadError}
         with map_exceptions(exc_map):
             self._sock.settimeout(timeout)
             return self._sock.recv(max_bytes)
 
-    def write(self, buffer: bytes, timeout: typing.Optional[float] = None) -> None:
+    def write(self, buffer: bytes, timeout: float | None = None) -> None:
         if not buffer:
             return
 
@@ -142,8 +144,8 @@ class SyncStream(NetworkStream):
     def start_tls(
         self,
         ssl_context: ssl.SSLContext,
-        server_hostname: typing.Optional[str] = None,
-        timeout: typing.Optional[float] = None,
+        server_hostname: str | None = None,
+        timeout: float | None = None,
     ) -> NetworkStream:
         exc_map: ExceptionMapping = {
             socket.timeout: ConnectTimeout,
@@ -187,9 +189,9 @@ class SyncBackend(NetworkBackend):
         self,
         host: str,
         port: int,
-        timeout: typing.Optional[float] = None,
-        local_address: typing.Optional[str] = None,
-        socket_options: typing.Optional[typing.Iterable[SOCKET_OPTION]] = None,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: typing.Iterable[SOCKET_OPTION] | None = None,
     ) -> NetworkStream:
         # Note that we automatically include `TCP_NODELAY`
         # in addition to any other custom socket options.
@@ -216,8 +218,8 @@ class SyncBackend(NetworkBackend):
     def connect_unix_socket(
         self,
         path: str,
-        timeout: typing.Optional[float] = None,
-        socket_options: typing.Optional[typing.Iterable[SOCKET_OPTION]] = None,
+        timeout: float | None = None,
+        socket_options: typing.Iterable[SOCKET_OPTION] | None = None,
     ) -> NetworkStream:  # pragma: nocover
         if sys.platform == "win32":
             raise RuntimeError(

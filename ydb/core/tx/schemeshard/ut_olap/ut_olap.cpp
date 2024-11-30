@@ -426,7 +426,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(CreateTableTtl) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnvOptions options;
+        options.EnableTieringInColumnShard(true);
+        TTestEnv env(runtime, options);
         ui64 txId = 100;
 
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);

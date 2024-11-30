@@ -137,6 +137,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                         Ttl[pathId] = std::move(deserializedTtl);
                     } else {
                         Ttl.erase(pathId);
+                    }
                     vIt->second = version;
                 }
             }

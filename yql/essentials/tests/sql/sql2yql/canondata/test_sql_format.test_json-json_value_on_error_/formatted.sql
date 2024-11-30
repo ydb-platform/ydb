@@ -1,9 +1,10 @@
-/* syntax version 1 *//* postgres can not */-- Accessing absent object member will cause jsonpath error in strict mode
+/* syntax version 1 */
+/* postgres can not */
+-- Accessing absent object member will cause jsonpath error in strict mode
 $json = CAST("{}" AS Json);
 
 SELECT
-    JSON_VALUE ($json, "strict $.key"),
-    -- defaults to NULL ON ERROR
+    JSON_VALUE ($json, "strict $.key"), -- defaults to NULL ON ERROR
     JSON_VALUE ($json, "strict $.key" NULL ON ERROR),
     JSON_VALUE ($json, "strict $.key" DEFAULT "*** error ***" ON ERROR);
 

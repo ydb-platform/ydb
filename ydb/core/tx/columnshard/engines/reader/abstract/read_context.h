@@ -5,12 +5,13 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
-#include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap::NReader {
+
+class TPartialReadResult;
 
 class TComputeShardingPolicy {
 private:

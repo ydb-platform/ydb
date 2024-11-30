@@ -18,14 +18,14 @@ SELECT
     d.*,
     Input.value AS valueFromInput,
     d.subkey AS subkeyFromD
-    WITHOUT
-        Input.value,
-        d.subkey,
-        d.key
+WITHOUT
+    Input.value,
+    d.subkey,
+    d.key
 FROM Input
 JOIN $data
     AS d
-ON Input.subkey = d.key
+ON Input.subkey == d.key
 ORDER BY
     key,
     value;

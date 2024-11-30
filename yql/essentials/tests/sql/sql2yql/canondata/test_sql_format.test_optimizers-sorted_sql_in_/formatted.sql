@@ -21,8 +21,8 @@ ORDER BY
 SELECT
     *
 FROM $ou
-WHERE subkey > "0" AND
-    key NOT IN COMPACT (
+WHERE subkey > "0"
+    AND key NOT IN COMPACT (
         SELECT
             key
         FROM $a

@@ -77,7 +77,7 @@ public:
     }
 
     template <class TT, typename = std::enable_if_t<std::is_same<std::remove_const_t<T>, std::remove_const_t<TT>>::value>>
-    bool operator==(const TArrayRef<TT>& other) const noexcept {
+    bool operator==(const TArrayRef<TT>& other) const {
         return (S_ == other.size()) && std::equal(begin(), end(), other.begin());
     }
 
@@ -130,6 +130,8 @@ public:
     }
 
     constexpr inline reference front() const noexcept {
+        Y_ASSERT(S_ > 0);
+
         return *T_;
     }
 

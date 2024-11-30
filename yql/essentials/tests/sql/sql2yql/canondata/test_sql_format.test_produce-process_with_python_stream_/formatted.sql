@@ -1,4 +1,5 @@
-/* syntax version 1 *//* kikimr can not */
+/* syntax version 1 */
+/* kikimr can not */
 USE plato;
 $udfScript = @@
 def f(input,x):

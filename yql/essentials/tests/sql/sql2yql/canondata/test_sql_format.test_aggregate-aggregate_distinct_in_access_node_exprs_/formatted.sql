@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     key,
     AGGREGATE_LIST(DISTINCT CAST(subkey AS Int32))[COUNT(DISTINCT CAST(subkey AS Uint64)) - 1] AS foo

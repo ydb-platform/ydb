@@ -1,6 +1,9 @@
-/* syntax version 1 *//* postgres can not */--INSERT INTO Output
+/* syntax version 1 */
+/* postgres can not */
+--INSERT INTO Output
 SELECT
     a.key AS kk,
+
     --    key as kkk,
     aggregate_list(subkey)
 FROM plato.Input4

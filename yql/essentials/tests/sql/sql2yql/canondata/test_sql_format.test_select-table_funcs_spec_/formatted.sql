@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not *//* kikimr can not */
+/* syntax version 1 */
+/* postgres can not */
+/* kikimr can not */
 USE plato;
 
 --insert into Output
@@ -9,4 +11,4 @@ SELECT
     TableName("baz") AS table_name2,
     TableName() AS table_name3
 FROM Input
-WHERE key = '800';
+WHERE key == '800';

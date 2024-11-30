@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 PRAGMA OrderedColumns;
 
@@ -10,8 +11,8 @@ ORDER BY
 
 SELECT
     *
-    WITHOUT
-        key
+WITHOUT
+    key
 FROM Input
 ORDER BY
     subkey;
@@ -25,8 +26,8 @@ ORDER BY
 
 SELECT
     a.*
-    WITHOUT
-        key
+WITHOUT
+    key
 FROM Input
     AS a
 ORDER BY
@@ -45,8 +46,8 @@ SELECT
     1 AS z,
     2 AS x,
     a.*
-    WITHOUT
-        key
+WITHOUT
+    key
 FROM Input
     AS a
 ORDER BY

@@ -19,6 +19,7 @@ FROM $data
 GROUP BY
     region,
     SUBSTRING(name, 0, 1) AS prefix
+
 -- how to use single avg_age?
 WINDOW
     w1 AS (

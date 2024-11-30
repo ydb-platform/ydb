@@ -85,8 +85,6 @@ PEERDIR(
     yql/essentials/core/file_storage
     yql/essentials/core/url_lister/interface
     yql/essentials/core/dq_integration
-    ydb/library/yql/dq/opt
-    ydb/library/yql/dq/type_ann
     yql/essentials/minikql
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/config
@@ -98,7 +96,7 @@ PEERDIR(
     yql/essentials/providers/common/schema/expr
     yql/essentials/providers/common/structured_token
     yql/essentials/providers/common/transform
-    ydb/library/yql/providers/dq/common
+    ydb/library/yql/dq/expr_nodes
     ydb/library/yql/providers/dq/expr_nodes
     yql/essentials/providers/result/expr_nodes
     ydb/library/yql/providers/stat/expr_nodes

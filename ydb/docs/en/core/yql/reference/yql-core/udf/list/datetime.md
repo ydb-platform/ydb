@@ -198,8 +198,9 @@ Get the start (end) of the period including the date/time. If the result is inva
 * `DateTime::StartOfDay(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
 * `DateTime::EndOfDay(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
 * `DateTime::StartOf(Resource<TM>{Flags:AutoMap}, Interval{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::EndOf(Resource<TM>{Flags:AutoMap}, Interval{Flags:AutoMap}) -> Resource<TM>?`
 
-The `StartOf` function is intended for grouping by an arbitrary period within a day. The result differs from the input value only by time components. A period exceeding one day is treated as a day (an equivalent of `StartOfDay`). If a day doesn't include an integer number of periods, the number is rounded to the nearest time from the beginning of the day that is a multiple of the specified period. When the interval is zero, the output is same as the input. A negative interval is treated as a positive one.
+The `StartOf`/`EndOf` functions are intended for grouping by an arbitrary period within a day. The result differs from the input value only by time components. A period exceeding one day is treated as a day (an equivalent of `StartOfDay`/`EndOfDay`). If a day doesn't include an integer number of periods, the number is rounded to the nearest time from the beginning of the day that is a multiple of the specified period. When the interval is zero, the output is same as the input. A negative interval is treated as a positive one.
 
 The `EndOf...` functions are intended for obtaining the latest moment in the same period of time as the specified one.
 

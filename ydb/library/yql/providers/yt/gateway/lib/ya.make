@@ -29,6 +29,7 @@ PEERDIR(
     yql/essentials/core/type_ann
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/gateway
+    yql/essentials/providers/common/metrics
     ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/yt/common
     ydb/library/yql/providers/yt/lib/hash

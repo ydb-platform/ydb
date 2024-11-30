@@ -3047,6 +3047,9 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             Ctx.CompactNamedExprs = true;
             Ctx.IncrementMonCounter("sql_pragma", "CompactNamedExprs");
         } else if (normalizedPragma == "disablecompactnamedexprs") {
+            Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
+                << "Deprecated pragma DisableCompactNamedExprs - it will be removed soon. "
+                   "Consider submitting bug report if CompactNamedExprs doesn't work for you";
             Ctx.CompactNamedExprs = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableCompactNamedExprs");
         } else if (normalizedPragma == "validateunusedexprs") {
@@ -3073,6 +3076,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableseqmode") {
             Ctx.SeqMode = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableSeqMode");
+        } else if (normalizedPragma == "emitunionmerge") {
+            Ctx.EmitUnionMerge = true;
+            Ctx.IncrementMonCounter("sql_pragma", "EmitUnionMerge");
+        } else if (normalizedPragma == "disableemitunionmerge") {
+            Ctx.EmitUnionMerge = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableEmitUnionMerge");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

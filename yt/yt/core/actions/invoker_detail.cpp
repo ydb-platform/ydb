@@ -60,7 +60,7 @@ template struct NDetail::TMaybeVirtualInvokerBase<false>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TInvokerProfileWrapper::TInvokerProfileWrapper(NProfiling::IRegistryImplPtr registry, const TString& invokerFamily, const NProfiling::TTagSet& tagSet)
+TInvokerProfileWrapper::TInvokerProfileWrapper(NProfiling::IRegistryPtr registry, const TString& invokerFamily, const NProfiling::TTagSet& tagSet)
 {
     auto profiler = NProfiling::TProfiler("/invoker", NProfiling::TProfiler::DefaultNamespace, tagSet, registry).WithHot();
     WaitTimer_ = profiler.Timer(invokerFamily + "/wait");

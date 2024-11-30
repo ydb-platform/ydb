@@ -6,4 +6,4 @@ SELECT
     Input3.value
 FROM plato.Input1
 INNER JOIN plato.Input3
-ON Input1.key = Input3.key;
+ON Input1.key == Input3.key;

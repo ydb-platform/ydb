@@ -38,6 +38,7 @@ PEERDIR(
     yql/essentials/providers/common/udf_resolve
     ydb/library/yql/dq/opt
     ydb/library/yql/providers/dq/provider
+    ydb/library/yql/providers/dq/helper
     ydb/library/yql/providers/yt/gateway/file
     ydb/library/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/comp_nodes/llvm14

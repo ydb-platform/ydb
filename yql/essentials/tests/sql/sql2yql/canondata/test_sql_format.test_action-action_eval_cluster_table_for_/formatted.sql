@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 DEFINE ACTION $a($x) AS
     $foo = CAST(Unicode::ToLower($x) AS String);
 

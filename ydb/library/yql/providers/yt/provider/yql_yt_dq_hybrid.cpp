@@ -17,8 +17,6 @@
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/core/yql_data_provider.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -42,12 +40,14 @@ public:
         , State_(std::move(state)), Finalizer_(std::move(finalizer))
     {
 #define HNDL(name) "YtDqHybrid-"#name, Hndl(&TYtDqHybridTransformer::name)
-        AddHandler(0, &TYtFill::Match, HNDL(TryYtFillByDq));
-        AddHandler(0, &TYtSort::Match, HNDL(TryYtSortByDq));
-        AddHandler(0, &TYtMap::Match, HNDL(TryYtMapByDq));
-        AddHandler(0, &TYtReduce::Match, HNDL(TryYtReduceByDq));
-        AddHandler(0, &TYtMapReduce::Match, HNDL(TryYtMapReduceByDq));
-        AddHandler(0, &TYtMerge::Match, HNDL(TryYtMergeByDq));
+        if (State_->DqHelper) {
+            AddHandler(0, &TYtFill::Match, HNDL(TryYtFillByDq));
+            AddHandler(0, &TYtSort::Match, HNDL(TryYtSortByDq));
+            AddHandler(0, &TYtMap::Match, HNDL(TryYtMapByDq));
+            AddHandler(0, &TYtReduce::Match, HNDL(TryYtReduceByDq));
+            AddHandler(0, &TYtMapReduce::Match, HNDL(TryYtMapReduceByDq));
+            AddHandler(0, &TYtMerge::Match, HNDL(TryYtMergeByDq));
+        }
 #undef HNDL
     }
 private:
@@ -160,7 +160,7 @@ private:
             PushSkipStat("OverLimits", nodeName);
             return false;
         }
-                
+
         return true;
     }
 
@@ -228,7 +228,7 @@ private:
                                         .Settings<TCoNameValueTupleList>().Build()
                                     .Build()
                                 .Build()
-                                .Settings(TDqStageSettings{.PartitionMode = TDqStageSettings::EPartitionMode::Single}.BuildNode(ctx, fill.Pos()))
+                                .Settings(State_->DqHelper->CreateDqStageSettings(true, ctx, fill.Pos()))
                             .Build()
                             .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                         .Build()
@@ -315,7 +315,7 @@ private:
                                     .Settings<TCoNameValueTupleList>().Build()
                                 .Build()
                             .Build()
-                            .Settings(TDqStageSettings{.PartitionMode = TDqStageSettings::EPartitionMode::Single}.BuildNode(ctx, sort.Pos()))
+                            .Settings(State_->DqHelper->CreateDqStageSettings(true, ctx, sort.Pos()))
                         .Build()
                         .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                     .Build()
@@ -401,7 +401,7 @@ private:
                         .Settings<TCoNameValueTupleList>().Build()
                     .Build()
                 .Build()
-                .Settings(TDqStageSettings{.PartitionMode = ordered ? TDqStageSettings::EPartitionMode::Single : TDqStageSettings::EPartitionMode::Default}.BuildNode(ctx, map.Pos()))
+                .Settings(State_->DqHelper->CreateDqStageSettings(ordered, ctx, map.Pos()))
                 .Done();
 
             if (!ordered) {
@@ -415,7 +415,7 @@ private:
                             .Build()
                         .Build()
                     .Program().Args({"pass"}).Body("pass").Build()
-                    .Settings(TDqStageSettings().BuildNode(ctx, map.Pos()))
+                    .Settings(State_->DqHelper->CreateDqStageSettings(false, ctx, map.Pos()))
                     .Done();
             }
 
@@ -628,7 +628,7 @@ private:
                                     .template Settings<TCoNameValueTupleList>().Build()
                                 .Build()
                             .Build()
-                            .Settings(TDqStageSettings{.PartitionMode = TDqStageSettings::EPartitionMode::Single}.BuildNode(ctx, reduce.Pos()))
+                            .Settings(State_->DqHelper->CreateDqStageSettings(true, ctx, reduce.Pos()))
                         .Build()
                         .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                     .Build()

@@ -1,4 +1,5 @@
-/* postgres can not *//* yt can not */
+/* postgres can not */
+/* yt can not */
 USE plato;
 
 SELECT

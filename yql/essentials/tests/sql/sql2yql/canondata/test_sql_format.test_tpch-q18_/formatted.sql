@@ -22,7 +22,7 @@ $join1 = (
         AS c
     JOIN plato.orders
         AS o
-    ON c.c_custkey = o.o_custkey
+    ON c.c_custkey == o.o_custkey
 );
 
 SELECT
@@ -36,7 +36,7 @@ FROM $join1
     AS j
 JOIN $in
     AS i
-ON i.l_orderkey = j.o_orderkey
+ON i.l_orderkey == j.o_orderkey
 GROUP BY
     j.c_name,
     j.c_custkey,

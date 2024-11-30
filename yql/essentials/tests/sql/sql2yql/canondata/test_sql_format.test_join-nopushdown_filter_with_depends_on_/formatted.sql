@@ -1,4 +1,6 @@
-/* postgres can not *//* hybridfile can not  *//* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 4 */
+/* postgres can not */
+/* hybridfile can not  */
+/* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 4 */
 USE plato;
 
 -- should not pushdown

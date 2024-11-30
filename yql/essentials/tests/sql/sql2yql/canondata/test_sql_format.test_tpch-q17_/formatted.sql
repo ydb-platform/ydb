@@ -19,9 +19,9 @@ $join1 = (
         AS l
     JOIN plato.part
         AS p
-    ON p.p_partkey = l.l_partkey
-    WHERE p.p_brand = 'Brand#35' AND
-        p.p_container = 'LG DRUM'
+    ON p.p_partkey == l.l_partkey
+    WHERE p.p_brand == 'Brand#35'
+    AND p.p_container == 'LG DRUM'
 );
 
 SELECT
@@ -30,5 +30,5 @@ FROM $join1
     AS j
 JOIN $threshold
     AS t
-ON j.p_partkey = t.l_partkey
+ON j.p_partkey == t.l_partkey
 WHERE j.l_quantity < t.threshold;

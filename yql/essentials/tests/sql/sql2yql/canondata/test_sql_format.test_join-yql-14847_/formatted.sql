@@ -19,4 +19,4 @@ FROM $t
     AS l
 LEFT JOIN Input3
     AS r
-ON l.key = coalesce("" || r.key, "");
+ON l.key == coalesce("" || r.key, "");

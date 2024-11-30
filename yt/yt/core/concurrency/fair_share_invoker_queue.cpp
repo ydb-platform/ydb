@@ -17,7 +17,7 @@ using namespace NYTree;
 TFairShareInvokerQueue::TFairShareInvokerQueue(
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
     const std::vector<TBucketDescription>& bucketDescriptions,
-    NProfiling::IRegistryImplPtr registry)
+    NProfiling::IRegistryPtr registry)
     : Weights_(bucketDescriptions.size(), 1.0)
 {
     Buckets_.reserve(bucketDescriptions.size());

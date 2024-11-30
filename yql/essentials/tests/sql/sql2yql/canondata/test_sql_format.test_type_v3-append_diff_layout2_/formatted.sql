@@ -1,4 +1,5 @@
-/* multirun can not *//* postgres can not */
+/* multirun can not */
+/* postgres can not */
 USE plato;
 PRAGMA yt.UseNativeYtTypes = "1";
 PRAGMA yt.NativeYtTypeCompatibility = "complex";

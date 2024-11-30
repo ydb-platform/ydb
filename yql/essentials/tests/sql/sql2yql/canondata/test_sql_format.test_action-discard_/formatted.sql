@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 DEFINE SUBQUERY $a() AS
     $_x =
         SELECT

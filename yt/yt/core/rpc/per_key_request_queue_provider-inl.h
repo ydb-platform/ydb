@@ -16,7 +16,7 @@ TPerKeyRequestQueueProvider<T>::TPerKeyRequestQueueProvider(
     TReconfigurationCallback reconfigurationCallback)
     : DefaultConfigs_(TRequestQueueThrottlerConfigs{
         InfiniteRequestThrottlerConfig,
-        InfiniteRequestThrottlerConfig
+        InfiniteRequestThrottlerConfig,
     })
     , KeyFromRequestHeader_(std::move(keyFromRequestHeader))
     , ReconfigurationCallback_(std::move(reconfigurationCallback))
@@ -83,7 +83,7 @@ std::pair<bool, bool> TPerKeyRequestQueueProvider<T>::ReadThrottlingEnabledFlags
     auto guard = ReaderGuard(ThrottlingEnabledFlagsSpinLock_);
     return {
         WeightThrottlingEnabled_,
-        BytesThrottlingEnabled_
+        BytesThrottlingEnabled_,
     };
 }
 

@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $foo = CAST(Unicode::ToLower("PLATO"u) AS String);
 
 INSERT INTO yt: $foo.Output

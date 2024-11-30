@@ -1,4 +1,6 @@
-/* postgres can not *//* syntax version 1 *//* dqfile can not */
+/* postgres can not */
+/* syntax version 1 */
+/* dqfile can not */
 USE plato;
 $udfScript = @@
 import functools

@@ -1,4 +1,6 @@
-/* postgres can not *//* syntax version 1 *//* kikimr can not - yt pragma */
+/* postgres can not */
+/* syntax version 1 */
+/* kikimr can not - yt pragma */
 USE plato;
 PRAGMA yt.MaxExtraJobMemoryToFuseOperations = "512M";
 $udfScript = @@

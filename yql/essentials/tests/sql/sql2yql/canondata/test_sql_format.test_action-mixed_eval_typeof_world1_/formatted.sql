@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not *//* custom error:Anonymous table "@Output1" must be materialized*/
+/* syntax version 1 */
+/* postgres can not */
+/* custom error:Anonymous table "@Output1" must be materialized*/
 USE plato;
 $force_remove_members = ($struct, $to_remove) -> {
     $remover = EvaluateCode(
@@ -27,16 +29,14 @@ $force_remove_members = ($struct, $to_remove) -> {
 DEFINE ACTION $func($input, $output) AS
     $jname = $output;
 
-    INSERT INTO @$jname
-        WITH truncate
+    INSERT INTO @$jname WITH truncate
     SELECT
         *
     FROM $input
         AS input;
     COMMIT;
 
-    INSERT INTO $output
-        WITH truncate
+    INSERT INTO $output WITH truncate
     SELECT
         AGG_LIST(
             $force_remove_members(

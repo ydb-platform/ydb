@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/util
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
+    ydb/library/conclusion
     ydb/library/mkql_proto/protos
     yql/essentials/minikql/dom
     yql/essentials/public/udf

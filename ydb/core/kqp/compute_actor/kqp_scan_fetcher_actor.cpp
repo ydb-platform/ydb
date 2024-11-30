@@ -251,9 +251,6 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
 
         for (const auto& x : request->ResultSet) {
             if ((ui32)x.Status < (ui32)NSchemeCache::TSchemeCacheRequest::EStatus::OkScheme) {
-                // invalidate table
-                Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(ScanDataMeta.TableId, {}));
-
                 switch (x.Status) {
                     case NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist:
                         statusCode = NDqProto::StatusIds::SCHEME_ERROR;
@@ -633,7 +630,6 @@ void TKqpScanFetcherActor::ResolveShard(TShardState& state) {
 
     auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
     request->ResultSet.emplace_back(std::move(keyDesc));
-    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(ScanDataMeta.TableId, {}));
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 }
 

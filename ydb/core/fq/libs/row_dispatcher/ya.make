@@ -15,7 +15,6 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     contrib/libs/simdjson
-    ydb/core/base
     ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/row_dispatcher/events

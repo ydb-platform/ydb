@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 $data =
@@ -15,6 +16,6 @@ FROM ANY $data
     )
 JOIN Input
     AS y
-ON x.aa = y.key
+ON x.aa == y.key
 ORDER BY
     aa;

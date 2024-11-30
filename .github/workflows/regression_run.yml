@@ -2,26 +2,17 @@ name: Regression-run
 
 on:
   workflow_dispatch:
-    inputs:
-      build_preset:
-        type: choice
-        default: "relwithdebinfo"
-        description: "Build preset"
-        options:
-          - relwithdebinfo
-          - release-asan
-      runner_label:
-        type: string
-        default: "auto-provisioned"
-        description: "runner label"
+
 
 jobs:
   main:
-    name: Build and test all ydb tests
+    name: Build and run all tests
     runs-on: [ self-hosted, "${{ inputs.runner_label || 'auto-provisioned' }}", "${{ format('build-preset-{0}', inputs.build_preset || 'relwithdebinfo') }}" ]
     strategy:
+      fail-fast: false # do not stop wf if the tests in one of the configurations failed
       matrix:
-        branch: [main, stable-24-3]  # all branches to test
+        build_preset: [release, relwithdebinfo, release-asan] # list of build presets to run in each brunch
+        branch: [main]  # all branches to test
 
     steps:
     - name: Checkout
@@ -42,7 +33,7 @@ jobs:
     - name: Build and test
       uses: ./.github/actions/build_and_test_ya
       with:
-        build_preset: ${{ inputs.build_preset }}
+        build_preset: ${{ matrix.build_preset }}
         increment: false
         build_target: "ydb/"
         run_build: true

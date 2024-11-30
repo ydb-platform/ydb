@@ -1,8 +1,7 @@
 /* postgres can not */
 USE plato;
 
-INSERT INTO @ttt
-    WITH TRUNCATE
+INSERT INTO @ttt WITH TRUNCATE
 SELECT
     CAST(key AS int) AS key,
     subkey,

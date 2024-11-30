@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $init = ($row) -> (AsStruct($row.ts ?? 0 AS value, 1 AS count));
 $calculate = ($_row, $state) -> ($state.value);
 -- split partition into two-element grooups, make session key to be cumulative sum of ts from partition start

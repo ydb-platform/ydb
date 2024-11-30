@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     value,
     SUM(unwrap(CAST(subkey AS uint32))) OVER w1 AS sum1,

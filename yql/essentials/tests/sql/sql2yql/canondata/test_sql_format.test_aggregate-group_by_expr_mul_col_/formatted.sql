@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     count(*) AS count,
     mod_sk + mod_k AS mod_sum

@@ -2,10 +2,6 @@ GTEST(unittester-core-misc)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-IF (NOT OS_WINDOWS AND NOT ARCH_AARCH64)
-    ALLOCATOR(YT)
-ENDIF()
-
 PROTO_NAMESPACE(yt)
 
 SRCS(
@@ -46,7 +42,6 @@ SRCS(
     lock_free_hash_table_ut.cpp
     lru_cache_ut.cpp
     maybe_inf_ut.cpp
-    memory_tag_ut.cpp
     moving_average_ut.cpp
     mpsc_fair_share_queue_ut.cpp
     mpsc_stack_ut.cpp

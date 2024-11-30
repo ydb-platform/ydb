@@ -23,7 +23,7 @@
 def MyFunc(list):
     return list
 @@))
-(let udf (ScriptUdf 'Python 'MyFunc udfType udfScript))
+(let udf (ScriptUdf 'Python3 'MyFunc udfType udfScript))
 
 # filter keys less than '100'
 (let table (Filter table (lambda '(item)

@@ -475,7 +475,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     ColumnUnit: UNIT_AUTO
                     Tiers: {
                         ApplyAfterSeconds: 360
-                        StorageName: "Tier1"
+                        EvictToExternalStorage {
+                            StorageName: "Tier1"
+                        }
                     }
                 }
             }
@@ -499,7 +501,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     ColumnUnit: UNIT_AUTO
                     Tiers: {
                         ApplyAfterSeconds: 3600000000
-                        StorageName: "Tier1"
+                        EvictToExternalStorage {
+                            StorageName: "Tier1"
+                        }
                     }
                 }
             }
@@ -650,7 +654,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     ColumnUnit: UNIT_AUTO
                     Tiers: {
                         ApplyAfterSeconds: 3600000000
-                        StorageName: "Tier1"
+                        EvictToExternalStorage {
+                            StorageName: "Tier1"
+                        }
                     }
                 }
             }

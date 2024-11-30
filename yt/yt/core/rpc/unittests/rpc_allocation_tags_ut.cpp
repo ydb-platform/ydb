@@ -33,7 +33,7 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
     auto previousLimit = memoryUsageTracker->GetLimit();
     memoryUsageTracker->SetLimit(2_GB);
 
-    static TMemoryTag testMemoryTag = 1 << 20;
+    static int testMemoryTag = 1 << 20;
     testMemoryTag++;
 
     EnableMemoryProfilingTags();
@@ -70,11 +70,11 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
         req2->set_size(size);
 
         auto rspFutureProp = req2->Invoke()
-            .Apply(BIND([testMemoryTag=testMemoryTag] (const TRspPtr& res) {
+            .Apply(BIND([testMemoryTag = testMemoryTag] (const TRspPtr& res) {
                 auto localContext = TryGetCurrentTraceContext();
                 EXPECT_NE(localContext, nullptr);
                 if (localContext) {
-                    EXPECT_EQ(localContext->FindAllocationTag<TMemoryTag>(MemoryAllocationTag).value_or(NullMemoryTag), testMemoryTag);
+                    EXPECT_EQ(localContext->FindAllocationTag<int>(MemoryAllocationTag).value_or(NullMemoryTag), testMemoryTag);
                 }
                 return res;
             }).AsyncVia(actionQueue->GetInvoker()));

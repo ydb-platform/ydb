@@ -2,8 +2,6 @@
 
 #include <library/cpp/yt/misc/tag_invoke_cpo.h>
 
-#include <util/generic/strbuf.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -34,7 +32,7 @@ inline constexpr NConvertToImpl::TFn<T> ConvertTo = {};
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TTo, class TFrom>
-concept CConvertToWorks = requires (const TFrom& from) {
+concept CConvertsTo = requires (const TFrom& from) {
     { NYT::ConvertTo<TTo>(from) } -> std::same_as<TTo>;
 };
 

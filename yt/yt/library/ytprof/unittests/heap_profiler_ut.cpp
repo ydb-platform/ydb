@@ -64,9 +64,9 @@ TEST(THeapProfilerTest, ReadProfile)
 
     auto h0 = BlowHeap<0>();
 
-    auto tag = TMemoryTag(1);
+    int tag = 1;
     traceContext->SetAllocationTags({{"user", "second"}, {"sometag", "notmy"}, {MemoryAllocationTagKey, ToString(tag)}});
-    auto currentTag = traceContext->FindAllocationTag<TMemoryTag>(MemoryAllocationTagKey);
+    auto currentTag = traceContext->FindAllocationTag<int>(MemoryAllocationTagKey);
     ASSERT_EQ(currentTag, tag);
 
     auto h1 = BlowHeap<1>();
@@ -99,7 +99,7 @@ TEST(THeapProfilerTest, ReadProfile)
     output.Finish();
 }
 
-TEST(THeapProfilerTest, AllocationTagsWithMemoryTag)
+TEST(THeapProfilerTest, AllocationTags)
 {
     EnableMemoryProfilingTags();
     auto traceContext = TTraceContext::NewRoot("Root");
@@ -201,7 +201,7 @@ TEST(THeapProfilerTest, HugeAllocationsTagsWithMemoryTag)
     heap.push_back(BlowHeap<0>());
 
     traceContext->SetAllocationTag(MemoryAllocationTagKey, MemoryAllocationTagValues[1]);
-    ASSERT_EQ(traceContext->FindAllocationTag<TMemoryTag>(MemoryAllocationTagKey), 1);
+    ASSERT_EQ(traceContext->FindAllocationTag<int>(MemoryAllocationTagKey), 1);
 
     heap.push_back(BlowHeap<1>(100));
 

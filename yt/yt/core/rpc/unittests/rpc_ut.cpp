@@ -620,39 +620,6 @@ TYPED_TEST(TNotGrpcTest, Compression)
     }
 }
 
-#if !defined(_asan_enabled_) && !defined(_msan_enabled_) && defined(_linux_)
-
-TYPED_TEST(TRpcTest, ResponseMemoryTag)
-{
-    static TMemoryTag testMemoryTag = 12345;
-    testMemoryTag++;
-    auto initialMemoryUsage = GetMemoryUsageForTag(testMemoryTag);
-
-    std::vector<TTestProxy::TRspPassCallPtr> rsps;
-    {
-        TTestProxy proxy(this->CreateChannel());
-        TString userName("user");
-
-        TMemoryTagGuard guard(testMemoryTag);
-
-        for (int i = 0; i < 1000; ++i) {
-            auto req = proxy.PassCall();
-            req->SetUser(userName);
-            req->SetMutationId(TGuid::Create());
-            req->SetRetry(false);
-            auto err = req->Invoke().Get();
-            rsps.push_back(err.ValueOrThrow());
-        }
-    }
-
-    auto currentMemoryUsage = GetMemoryUsageForTag(testMemoryTag);
-    EXPECT_GE(currentMemoryUsage - initialMemoryUsage, 200_KB)
-        << "InitialUsage: " << initialMemoryUsage << std::endl
-        << "Current: " << currentMemoryUsage;
-}
-
-#endif
-
 TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
 {
     auto configText = TString(R"({

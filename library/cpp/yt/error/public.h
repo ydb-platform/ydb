@@ -9,6 +9,8 @@ namespace NYT {
 template <class T>
 class TErrorOr;
 
+
+struct TErrorAttribute;
 class TErrorAttributes;
 struct TOriginAttributes;
 

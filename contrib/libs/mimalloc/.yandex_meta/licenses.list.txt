@@ -5,19 +5,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 ====================COPYRIGHT====================
-Copyright (c) 2018-2020, Microsoft Research, Daan Leijen
-This is free software; you can redistribute it and/or modify it under the
-terms of the MIT license. A copy of the license can be found in the file
-
-
-====================COPYRIGHT====================
 Copyright (c) 2018-2021 Microsoft Corporation, Daan Leijen
-
-
-====================COPYRIGHT====================
-Copyright (c) 2018-2021 Microsoft Research, Daan Leijen
-This is free software; you can redistribute it and/or modify it under the
-terms of the MIT license. A copy of the license can be found in the file
 
 
 ====================COPYRIGHT====================
@@ -27,25 +15,43 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 ====================COPYRIGHT====================
-Copyright (c) 2019-2020 Microsoft Research, Daan Leijen
+Copyright (c) 2018-2022, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 
 
 ====================COPYRIGHT====================
-Copyright (c) 2019-2020, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2023 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 
 
 ====================COPYRIGHT====================
-Copyright (c) 2019-2021 Microsoft Research, Daan Leijen
+Copyright (c) 2018-2023, Microsoft Research, Daan Leijen
+This is free software; you can redistribute it and/or modify it under the
+terms of the MIT license. A copy of the license can be found in the file
+
+
+====================COPYRIGHT====================
+Copyright (c) 2018-2024, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 
 
 ====================COPYRIGHT====================
 Copyright (c) 2019-2021, Microsoft Research, Daan Leijen
+This is free software; you can redistribute it and/or modify it under the
+terms of the MIT license. A copy of the license can be found in the file
+
+
+====================COPYRIGHT====================
+Copyright (c) 2019-2023 Microsoft Research, Daan Leijen
+This is free software; you can redistribute it and/or modify it under the
+terms of the MIT license. A copy of the license can be found in the file
+
+
+====================COPYRIGHT====================
+Copyright (c) 2019-2023, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 
@@ -96,6 +102,11 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+====================MIT====================
+This is free software; you can redistribute it and/or modify it under the
+terms of the MIT license. A copy of the license can be found in the file
+
 
 ====================MIT AND MIT====================
 This is free software; you can redistribute it and/or modify it under the

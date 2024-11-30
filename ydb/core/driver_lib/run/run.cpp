@@ -124,6 +124,7 @@
 #include <ydb/services/backup/grpc_service.h>
 #include <ydb/services/ydb/ydb_logstore.h>
 #include <ydb/services/ydb/ydb_operation.h>
+#include <ydb/services/ydb/ydb_debug.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
 #include <ydb/services/ydb/ydb_scripting.h>
@@ -882,6 +883,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::TGRpcYdbQueryService(ActorSystem.Get(), Counters,
                 grpcRequestProxies, hasDataStreams.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
+
+        server.AddService(new NGRpcService::TGRpcYdbDebugService(ActorSystem.Get(), Counters,
+            grpcRequestProxies, hasDataStreams.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
 
         if (hasLogStore) {
             server.AddService(new NGRpcService::TGRpcYdbLogStoreService(ActorSystem.Get(), Counters,

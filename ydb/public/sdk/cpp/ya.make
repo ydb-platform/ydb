@@ -20,6 +20,7 @@ RECURSE(
     client/ydb_coordination
     client/ydb_coordination/ut
     client/ydb_datastreams
+    client/ydb_debug
     client/ydb_discovery
     client/ydb_driver
     client/ydb_driver/ut

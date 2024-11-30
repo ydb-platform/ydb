@@ -494,8 +494,7 @@ TReadAnswer TReadInfo::FormAnswer(
             PQ_LOG_D("FormAnswer processing batch offset "
                 << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount() << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
 
-            ui32 i = 0;
-            for (i = pos; i < batch.Blobs.size(); ++i) {
+            for (size_t i = pos; i < batch.Blobs.size(); ++i) {
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import pytest
-from conftest import LoadSuiteBase
+from .conftest import LoadSuiteBase
 from os import getenv
 from ydb.tests.olap.lib.ydb_cli import WorkloadType
 from ydb.tests.olap.lib.utils import get_external_param

@@ -1,6 +1,6 @@
 import allure
 import pytest
-from conftest import LoadSuiteBase
+from .conftest import LoadSuiteBase
 from os import getenv
 from ydb.tests.olap.lib.ydb_cli import WorkloadType, YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster

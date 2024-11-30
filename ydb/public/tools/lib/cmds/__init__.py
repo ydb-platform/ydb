@@ -388,6 +388,7 @@ def deploy(arguments):
 
     info = {'nodes': {}}
     endpoints = []
+    mon_port = 8765
     for node_id, node in cluster.nodes.items():
         info['nodes'][node_id] = {
             'pid': node.pid,
@@ -404,6 +405,7 @@ def deploy(arguments):
                 for drive in cluster.config.pdisks_info
             ]
         }
+        mon_port = node.mon_port
 
         endpoints.append("localhost:%d" % node.grpc_port)
 
@@ -413,6 +415,7 @@ def deploy(arguments):
     recipe.write_endpoint(endpoint)
     recipe.write_database(cluster.domain_name)
     recipe.write_connection_string(("grpcs://" if enable_tls() else "grpc://") + endpoint + "?database=/" + cluster.domain_name)
+    recipe.setenv('YDB_MON_PORT', str(mon_port))
     if enable_tls():
         recipe.write_certificates_path(configuration.grpc_tls_ca.decode("utf-8"))
     return endpoint, database

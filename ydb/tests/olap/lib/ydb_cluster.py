@@ -3,7 +3,7 @@ import allure
 import logging
 import os
 import requests
-from ydb.tests.olap.lib.utils import get_external_param
+from ydb.tests.olap.lib.utils import get_external_param, parse_connection_string
 import ydb
 from copy import deepcopy
 from time import sleep, time
@@ -51,8 +51,7 @@ class YdbCluster:
     _ydb_driver = None
     _results_driver = None
     _cluster_info = None
-    ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
-    ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
+    ydb_endpoint, ydb_database = parse_connection_string()
     tables_path = get_external_param('tables-path', 'olap_yatests')
     _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
 
@@ -77,7 +76,7 @@ class YdbCluster:
     def _get_service_url(cls):
         host = cls.ydb_endpoint.split('://', 2)
         host = host[1 if len(host) > 1 else 0].split('/')[0].split(':')[0]
-        port = 8765
+        port = os.getenv('YDB_MON_PORT', 8765)
         return f'http://{host}:{port}'
 
     @classmethod

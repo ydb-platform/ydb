@@ -19,6 +19,8 @@ class WorkloadType(StrEnum):
 class YdbCliHelper:
     @staticmethod
     def get_cli_command() -> list[str]:
+        if os.getenv('YDB_CLI_BINARY') is not None:
+            return [yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))]
         cli = get_external_param('ydb-cli', 'git')
         if cli == 'git':
             return [yatest.common.work_path('ydb')]

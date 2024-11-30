@@ -98,9 +98,9 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/partsupp` (
     ps_partkey Int64 NOT NULL,
     ps_suppkey Int64 NOT NULL,
     ps_supplycost Decimal(12,2) NOT NULL,
-    PRIMARY KEY (ps_partkey)
+    PRIMARY KEY (ps_partkey, ps_suppkey)
 )
-PARTITION BY HASH (ps_partkey)
+PARTITION BY HASH (ps_partkey, ps_suppkey)
 WITH (
     STORE = COLUMN,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64

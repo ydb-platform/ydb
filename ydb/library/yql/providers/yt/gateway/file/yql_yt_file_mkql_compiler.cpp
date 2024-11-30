@@ -1,14 +1,15 @@
 #include "yql_yt_file_mkql_compiler.h"
 
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_table.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_mkql_compiler.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
+#include <yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -31,6 +32,7 @@ namespace NYql {
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
+using namespace NNodes::NDq;
 
 namespace {
 

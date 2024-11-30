@@ -5,17 +5,17 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_optimize.h>
 #include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
 #include <ydb/library/yql/providers/stat/expr_nodes/yql_stat_expr_nodes.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-
+#include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
+#include <yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 
 namespace NYql {
 
 using namespace NNodes;
+using namespace NNodes::NDq;
 using namespace NPrivate;
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {

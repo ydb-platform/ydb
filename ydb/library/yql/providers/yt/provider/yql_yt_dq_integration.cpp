@@ -13,10 +13,10 @@
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
+#include <yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -39,6 +39,7 @@ static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight",  "la
 static const THashSet<TStringBuf> POOL_TREES_WHITELIST = {"physical",  "cloud", "cloud_default"};
 
 using namespace NNodes;
+using namespace NNodes::NDq;
 
 bool CheckSupportedTypesOld(const TTypeAnnotationNode::TListType& typesToCheck, const TSet<TString>& supportedTypes, const TSet<NUdf::EDataSlot>& supportedDataTypes, std::function<void(const TString&)> unsupportedTypeHandler) {
     TSet<ETypeAnnotationKind> supported;

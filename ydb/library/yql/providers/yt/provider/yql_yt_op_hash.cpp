@@ -4,7 +4,8 @@
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/lib/hash/yql_hash_builder.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+
+#include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <yql/essentials/utils/yql_panic.h>
@@ -17,6 +18,7 @@
 namespace NYql {
 
 using namespace NNodes;
+using namespace NNodes::NDq;
 
 TYtNodeHashCalculator::TYtNodeHashCalculator(const TYtState::TPtr& state, const TString& cluster, const TYtSettings::TConstPtr& config)
     : TNodeHashCalculator(*state->Types, state->NodeHash, MakeSalt(config, cluster))

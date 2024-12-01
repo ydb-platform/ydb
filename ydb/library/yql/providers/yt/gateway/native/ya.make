@@ -40,8 +40,6 @@ PEERDIR(
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/schema/expr
     yql/essentials/providers/result/expr_nodes
-    ydb/library/yql/providers/stat/expr_nodes
-    ydb/library/yql/providers/stat/uploader
     ydb/library/yql/providers/yt/codec
     ydb/library/yql/providers/yt/common
     ydb/library/yql/providers/yt/expr_nodes

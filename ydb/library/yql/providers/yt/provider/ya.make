@@ -77,6 +77,8 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/log
     yql/essentials/core
+    yql/essentials/core/dq_expr_nodes
+    yql/essentials/core/dqs_expr_nodes
     yql/essentials/core/expr_nodes
     yql/essentials/core/issue
     yql/essentials/core/issue/protos
@@ -96,8 +98,6 @@ PEERDIR(
     yql/essentials/providers/common/schema/expr
     yql/essentials/providers/common/structured_token
     yql/essentials/providers/common/transform
-    ydb/library/yql/dq/expr_nodes
-    ydb/library/yql/providers/dq/expr_nodes
     yql/essentials/providers/result/expr_nodes
     ydb/library/yql/providers/stat/expr_nodes
     ydb/library/yql/providers/yt/common

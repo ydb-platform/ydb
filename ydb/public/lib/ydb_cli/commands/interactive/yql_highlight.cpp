@@ -199,81 +199,40 @@ namespace NYdb {
         }
 
         bool YQLHighlight::IsOperation(const TParsedToken& token) const {
-            return (
-                token.Name == "EQUALS" ||
-                token.Name == "EQUALS2" ||
-                token.Name == "NOT_EQUALS" ||
-                token.Name == "NOT_EQUALS2" ||
-                token.Name == "LESS" ||
-                token.Name == "LESS_OR_EQ" ||
-                token.Name == "GREATER" ||
-                token.Name == "GREATER_OR_EQ" ||
-                token.Name == "SHIFT_LEFT" ||
-                token.Name == "ROT_LEFT" ||
-                token.Name == "AMPERSAND" ||
-                token.Name == "PIPE" ||
-                token.Name == "DOUBLE_PIPE" ||
-                token.Name == "STRUCT_OPEN" ||
-                token.Name == "STRUCT_CLOSE" ||
-                token.Name == "PLUS" ||
-                token.Name == "MINUS" ||
-                token.Name == "TILDA" ||
-                token.Name == "ASTERISK" ||
-                token.Name == "SLASH" ||
-                token.Name == "PERCENT" ||
-                token.Name == "SEMICOLON" ||
-                token.Name == "DOT" ||
-                token.Name == "COMMA" ||
-                token.Name == "LPAREN" ||
-                token.Name == "RPAREN" ||
-                token.Name == "QUESTION" ||
-                token.Name == "COLON" ||
-                token.Name == "COMMAT" ||
-                token.Name == "DOUBLE_COMMAT" ||
-                token.Name == "DOLLAR" ||
-                token.Name == "LBRACE_CURLY" ||
-                token.Name == "RBRACE_CURLY" ||
-                token.Name == "CARET" ||
-                token.Name == "NAMESPACE" ||
-                token.Name == "ARROW" ||
-                token.Name == "RBRACE_SQUARE" ||
-                token.Name == "LBRACE_SQUARE");
+            return IsOperationTokenName(token.Name);
         }
 
         bool YQLHighlight::IsFunctionIdentifier(const TParsedToken& token, size_t index) {
-            if (token.Name != "ID_PLAIN") {
+            if (!IsPlainIdentifierTokenName(token.Name)) {
                 return false;
             }
             return std::regex_search(token.Content.begin(), token.Content.end(), BuiltinFunctionRegex) ||
-                   (2 <= index && Tokens.at(index - 1).Name == "NAMESPACE" && Tokens.at(index - 2).Name == "ID_PLAIN") ||
-                   (index < Tokens.size() - 1 && Tokens.at(index + 1).Name == "NAMESPACE");
+                   (2 <= index && IsNamespaceTokenName(Tokens.at(index - 1).Name) && IsPlainIdentifierTokenName(Tokens.at(index - 2).Name)) ||
+                   (index < Tokens.size() - 1 && IsNamespaceTokenName(Tokens.at(index + 1).Name));
         }
 
         bool YQLHighlight::IsTypeIdentifier(const TParsedToken& token) const {
-            return token.Name == "ID_PLAIN" && std::regex_search(token.Content.begin(), token.Content.end(), TypeRegex);
+            return IsPlainIdentifierTokenName(token.Name) && std::regex_search(token.Content.begin(), token.Content.end(), TypeRegex);
         }
 
         bool YQLHighlight::IsVariableIdentifier(const TParsedToken& token) const {
-            return token.Name == "ID_PLAIN";
+            return IsPlainIdentifierTokenName(token.Name);
         }
 
         bool YQLHighlight::IsQuotedIdentifier(const TParsedToken& token) const {
-            return token.Name == "ID_QUOTED";
+            return IsQuotedIdentifierTokenName(token.Name);
         }
 
         bool YQLHighlight::IsString(const TParsedToken& token) const {
-            return token.Name == "STRING_VALUE";
+            return IsStringTokenName(token.Name);
         }
 
         bool YQLHighlight::IsNumber(const TParsedToken& token) const {
-            return token.Name == "DIGITS" ||
-                   token.Name == "INTEGER_VALUE" ||
-                   token.Name == "REAL" ||
-                   token.Name == "BLOB";
+            return IsNumberTokenName(token.Name);
         }
 
         bool YQLHighlight::IsComment(const TParsedToken& token) const {
-            return token.Name == "COMMENT";
+            return IsCommentTokenName(token.Name);
         }
 
     } // namespace NConsoleClient

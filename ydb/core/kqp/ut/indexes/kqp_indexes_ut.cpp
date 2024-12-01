@@ -4599,7 +4599,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
                 SELECT t.id as id, t.yandexuid as yandexuid, t.uid as uid
                     FROM AS_TABLE($ids) AS k
-                    INNER JOIN `/Root/user` AS t
+                    INNER JOIN `/Root/user` VIEW PPRIMARY KEY AS t
                     ON t.id = k.id
                     WHERE uid IS NULL
                 ;)"));

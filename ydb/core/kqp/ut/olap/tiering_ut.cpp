@@ -35,7 +35,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
 
         csController->WaitCompactions(TDuration::Seconds(5));
-        csController->WaitActualization(TDuration::Seconds(5));
 
         ui64 columnRawBytes = 0;
         {
@@ -56,7 +55,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
 
         testHelper.SetTiering("/Root/olapStore/olapTable", tieringRule);
-        csController->WaitActualization(TDuration::Seconds(5));
+        csController->WaitTtl(TDuration::Seconds(5));
 
         {
             auto selectQuery = TString(R"(
@@ -76,7 +75,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
 
         testHelper.ResetTiering("/Root/olapStore/olapTable");
-        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitTtl(TDuration::Seconds(5));
 
         {
             auto selectQuery = TString(R"(

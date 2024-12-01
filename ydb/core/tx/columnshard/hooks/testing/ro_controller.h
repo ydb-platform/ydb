@@ -77,40 +77,30 @@ protected:
 
 public:
     void WaitCompactions(const TDuration d) const {
-        TInstant start = TInstant::Now();
-        ui32 compactionsStart = GetCompactionStartedCounter().Val();
-        while (Now() - start < d) {
-            if (compactionsStart != GetCompactionStartedCounter().Val()) {
-                compactionsStart = GetCompactionStartedCounter().Val();
-                start = TInstant::Now();
-            }
-            Cerr << "WAIT_COMPACTION: " << GetCompactionStartedCounter().Val() << Endl;
-            Sleep(TDuration::Seconds(1));
-        }
+        return WaitCounterUpdate(d, GetCompactionStartedCounter(), "COMPACTION");
     }
 
     void WaitIndexation(const TDuration d) const {
-        TInstant start = TInstant::Now();
-        ui32 insertsStart = GetInsertStartedCounter().Val();
-        while (Now() - start < d) {
-            if (insertsStart != GetInsertStartedCounter().Val()) {
-                insertsStart = GetInsertStartedCounter().Val();
-                start = TInstant::Now();
-            }
-            Cerr << "WAIT_INDEXATION: " << GetInsertStartedCounter().Val() << Endl;
-            Sleep(TDuration::Seconds(1));
-        }
+        return WaitCounterUpdate(d, GetInsertStartedCounter(), "INDEXATION");
     }
 
     void WaitCleaning(const TDuration d) const {
+        return WaitCounterUpdate(d, GetCleaningStartedCounter(), "CLEANING");
+    }
+
+    void WaitTtl(const TDuration d) const {
+        return WaitCounterUpdate(d, GetTTLStartedCounter(), "TTL");
+    }
+
+    static void WaitCounterUpdate(const TDuration d, const TAtomicCounter& counter, const TString& counterName) {
         TInstant start = TInstant::Now();
-        ui32 countStart = GetCleaningStartedCounter().Val();
+        ui32 countStart = counter.Val();
         while (Now() - start < d) {
-            if (countStart != GetCleaningStartedCounter().Val()) {
-                countStart = GetCleaningStartedCounter().Val();
+            if (countStart != counter.Val()) {
+                countStart = counter.Val();
                 start = TInstant::Now();
             }
-            Cerr << "WAIT_CLEANING: " << GetCleaningStartedCounter().Val() << Endl;
+            Cerr << "WAIT_" << counterName << ": " << counter.Val() << Endl;
             Sleep(TDuration::Seconds(1));
         }
     }

@@ -29,6 +29,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, EFColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, PredicateColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, PKColumns);
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, AllUsageColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FFColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, ProgramInputColumns);
 

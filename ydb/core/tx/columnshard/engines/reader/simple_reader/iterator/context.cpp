@@ -277,6 +277,7 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     } else {
         ProgramInputColumns = FFColumns;
     }
+    AllUsageColumns = std::make_shared<TColumnsSet>(*FFColumns + *PredicateColumns);
 
     PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), readSchema);
     MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);

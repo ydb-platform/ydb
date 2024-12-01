@@ -47,11 +47,6 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         return false;
     }
 
-    if (!ttl.HasExpireAfterSeconds() && ttl.GetTiers().empty()) {
-        errors.AddError("TTL without eviction time");
-        return false;
-    }
-
     auto unit = ttl.GetColumnUnit();
 
     const auto& columnType = GetType(*column);
@@ -101,7 +96,10 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
     }
 
     for (const auto& tier : ttl.GetTiers()) {
-        const TString& tierPathString = tier.GetStorageName();
+        if (!tier.HasEvictToExternalStorage()) {
+            continue;
+        }
+        const TString& tierPathString = tier.GetEvictToExternalStorage().GetStorageName();
         TPath tierPath = TPath::Resolve(tierPathString, ctx);
         if (!tierPath.IsResolved() || tierPath.IsDeleted() || tierPath.IsUnderDeleting()) {
             errors.AddError("Object not found: " + tierPathString);

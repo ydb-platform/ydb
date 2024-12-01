@@ -4,7 +4,6 @@
 #include "yql_yt_helpers.h"
 #include "yql_yt_optimize.h"
 
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
@@ -21,8 +20,6 @@
 #include <yql/essentials/ast/yql_ast.h>
 
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 
@@ -94,7 +91,7 @@ public:
                 TYtMerge::CallableName(),
                 TYtMapReduce::CallableName(),
             },
-            RequireAllOf({TYtTransientOpBase::idx_World, TYtTransientOpBase::idx_Input}),
+            RequireForTransientOp(),
             Hndl(&TYtDataSinkExecTransformer::HandleOutputOp<true>)
         );
         AddHandler(
@@ -105,7 +102,7 @@ public:
             RequireFirst(),
             Hndl(&TYtDataSinkExecTransformer::HandleOutputOp<true>)
         );
-        AddHandler({TYtReduce::CallableName()}, RequireAllOf({TYtTransientOpBase::idx_World, TYtTransientOpBase::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandleReduce));
+        AddHandler({TYtReduce::CallableName()}, RequireForTransientOp(), Hndl(&TYtDataSinkExecTransformer::HandleReduce));
         AddHandler({TYtOutput::CallableName()}, RequireFirst(), Pass());
         AddHandler({TYtPublish::CallableName()}, RequireAllOf({TYtPublish::idx_World, TYtPublish::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandlePublish));
         AddHandler({TYtDropTable::CallableName()}, RequireFirst(), Hndl(&TYtDataSinkExecTransformer::HandleDrop));
@@ -122,6 +119,21 @@ public:
     void Rewind() override {
         Delegated_->clear();
         TExecTransformerBase::Rewind();
+    }
+
+    static TExecTransformerBase::TPrerequisite RequireForTransientOp() {
+        return [] (const TExprNode::TPtr& input) {
+            auto status = RequireChild(*input, TYtTransientOpBase::idx_World);
+            // We have to run input only if it has no settings to calculate.
+            // Otherwise, we first of all wait world completion.
+            // Then begins node execution, which run settings calculation.
+            // And after that, starts input execution
+            // See YQL-19303
+            if (!HasNodesToCalculate(input->ChildPtr(TYtTransientOpBase::idx_Input))) {
+                status = status.Combine(RequireChild(*input, TYtTransientOpBase::idx_Input));
+            }
+            return status;
+        };
     }
 
 private:
@@ -188,6 +200,10 @@ private:
         if (!needCalc.empty()) {
             YQL_CLOG(DEBUG, ProviderYt) << "Calculating nodes for " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
             return CalculateNodes(State_, input, cluster, needCalc, ctx);
+        }
+
+        if (auto opInput = op.Maybe<TYtTransientOpBase>().Input()) {
+            YQL_ENSURE(opInput.Ref().GetState() == TExprNode::EState::ExecutionComplete);
         }
 
         auto outSection = op.Output();

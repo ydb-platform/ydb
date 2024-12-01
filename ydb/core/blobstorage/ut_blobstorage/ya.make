@@ -7,11 +7,9 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -20,6 +18,7 @@ SRCS(
     assimilation.cpp
     block_race.cpp
     counting_events.cpp
+    deadlines.cpp
     decommit_3dc.cpp
     defrag.cpp
     discover.cpp

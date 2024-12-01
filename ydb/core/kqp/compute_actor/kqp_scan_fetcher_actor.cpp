@@ -37,8 +37,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , ShardsScanningPolicy(shardsScanningPolicy)
     , Counters(counters)
     , InFlightShards(ScanId, *this)
-    , InFlightComputes(ComputeActorIds)
-{
+    , InFlightComputes(ComputeActorIds) {
     Y_UNUSED(traceId);
     AFL_ENSURE(!Meta.GetReads().empty());
     AFL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
@@ -47,7 +46,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     for (size_t i = 0; i < Meta.KeyColumnTypesSize(); i++) {
         NScheme::TTypeId typeId = Meta.GetKeyColumnTypes().at(i);
         NScheme::TTypeInfo typeInfo = NScheme::NTypeIds::IsParametrizedType(typeId) ?
-            NScheme::TypeInfoFromProto(typeId,Meta.GetKeyColumnTypeInfos().at(i)) :
+            NScheme::TypeInfoFromProto(typeId, Meta.GetKeyColumnTypeInfos().at(i)) :
             NScheme::TTypeInfo(typeId);
         KeyColumnTypes.push_back(typeInfo);
     }
@@ -127,19 +126,19 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
         ("ScanId", ev->Get()->ScanId)
         ("Finished", ev->Get()->Finished)
         ("Lock", [&]() {
-            TStringBuilder builder;
-            for (const auto& lock : ev->Get()->LocksInfo.Locks) {
-                builder << lock.ShortDebugString();
-            }
-            return builder;
-        }())
+        TStringBuilder builder;
+        for (const auto& lock : ev->Get()->LocksInfo.Locks) {
+            builder << lock.ShortDebugString();
+        }
+        return builder;
+    }())
         ("BrokenLocks", [&]() {
-            TStringBuilder builder;
-            for (const auto& lock : ev->Get()->LocksInfo.BrokenLocks) {
-                builder << lock.ShortDebugString();
-            }
-            return builder;
-        }());
+        TStringBuilder builder;
+        for (const auto& lock : ev->Get()->LocksInfo.BrokenLocks) {
+            builder << lock.ShortDebugString();
+        }
+        return builder;
+    }());
 
     TInstant startTime = TActivationContext::Now();
     if (ev->Get()->Finished) {
@@ -252,9 +251,6 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
 
         for (const auto& x : request->ResultSet) {
             if ((ui32)x.Status < (ui32)NSchemeCache::TSchemeCacheRequest::EStatus::OkScheme) {
-                // invalidate table
-                Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(ScanDataMeta.TableId, {}));
-
                 switch (x.Status) {
                     case NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist:
                         statusCode = NDqProto::StatusIds::SCHEME_ERROR;
@@ -347,11 +343,12 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
 
     if (!state.LastKey.empty()) {
         PendingShards.front().LastKey = std::move(state.LastKey);
-        while(!PendingShards.empty() && PendingShards.front().GetScanRanges(KeyColumnTypes).empty()) {
+        while (!PendingShards.empty() && PendingShards.front().GetScanRanges(KeyColumnTypes).empty()) {
             CA_LOG_D("Nothing to read " << PendingShards.front().ToString(KeyColumnTypes));
             auto readShard = std::move(PendingShards.front());
             PendingShards.pop_front();
             PendingShards.front().LastKey = std::move(readShard.LastKey);
+            PendingShards.front().LastCursorProto = std::move(readShard.LastCursorProto);
         }
 
         AFL_ENSURE(!PendingShards.empty());
@@ -409,7 +406,8 @@ bool TKqpScanFetcherActor::SendScanFinished() {
     return true;
 }
 
-std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges) const {
+std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEvKqpScan(const ui32 scanId, const ui32 gen,
+    const TSmallVec<TSerializedTableRange>& ranges, const std::optional<NKikimrKqp::TEvKqpScanCursor>& cursor) const {
     auto ev = std::make_unique<TEvDataShard::TEvKqpScan>();
     ev->Record.SetLocalPathId(ScanDataMeta.TableId.PathId.LocalPathId);
     for (auto& column : ScanDataMeta.GetColumns()) {
@@ -423,6 +421,9 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
         }
     }
     ev->Record.MutableSkipNullKeys()->CopyFrom(Meta.GetSkipNullKeys());
+    if (cursor) {
+        *ev->Record.MutableScanCursor() = *cursor;
+    }
 
     auto protoRanges = ev->Record.MutableRanges();
     protoRanges->Reserve(ranges.size());
@@ -472,7 +473,7 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     return ev;
 }
 
-void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt) noexcept {
+void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt) {
     auto& msg = *ev->Get();
 
     auto state = InFlightShards.GetShardStateByActorId(ev->Sender);
@@ -489,10 +490,11 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
     AFL_ENSURE(state->ActorId == ev->Sender)("expected", state->ActorId)("got", ev->Sender);
 
     state->LastKey = std::move(msg.LastKey);
+    state->LastCursorProto = std::move(msg.LastCursorProto);
     const ui64 rowsCount = msg.GetRowsCount();
     AFL_ENSURE(!LockTxId || !msg.LocksInfo.Locks.empty() || !msg.LocksInfo.BrokenLocks.empty());
     AFL_ENSURE(LockTxId || (msg.LocksInfo.Locks.empty() && msg.LocksInfo.BrokenLocks.empty()));
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action","got EvScanData")("rows", rowsCount)("finished", msg.Finished)("exceeded", msg.RequestedBytesLimitReached)
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "got EvScanData")("rows", rowsCount)("finished", msg.Finished)("exceeded", msg.RequestedBytesLimitReached)
         ("scan", ScanId)("packs_to_send", InFlightComputes.GetPacksToSendCount())
         ("from", ev->Sender)("shards remain", PendingShards.size())
         ("in flight scans", InFlightShards.GetScansCount())
@@ -628,7 +630,6 @@ void TKqpScanFetcherActor::ResolveShard(TShardState& state) {
 
     auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
     request->ResultSet.emplace_back(std::move(keyDesc));
-    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(ScanDataMeta.TableId, {}));
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 }
 

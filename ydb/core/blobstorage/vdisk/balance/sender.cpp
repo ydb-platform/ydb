@@ -153,7 +153,7 @@ namespace {
                     auto& data = part.PartsData[i];
                     auto vDiskId = GetMainReplicaVDiskId(*GInfo, key);
 
-                    if (Ctx->HugeBlobCtx->IsHugeBlob(GInfo->GetTopology().GType, part.Key, Ctx->MinREALHugeBlobInBytes)) {
+                    if (Ctx->HugeBlobCtx->IsHugeBlob(GInfo->GetTopology().GType, part.Key, Ctx->MinHugeBlobInBytes)) {
                         auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
                             key, data, vDiskId,
                             true, nullptr,

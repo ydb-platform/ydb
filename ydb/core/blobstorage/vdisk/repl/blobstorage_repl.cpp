@@ -156,7 +156,7 @@ namespace NKikimr {
         };
 
         std::shared_ptr<TReplCtx> ReplCtx;
-        ui32 NextMinREALHugeBlobInBytes;
+        ui32 NextMinHugeBlobInBytes;
         THistory History;
         EState State;
         TInstant LastReplStart;
@@ -257,7 +257,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvMinHugeBlobSizeUpdate::TPtr ev) {
-            NextMinREALHugeBlobInBytes = ev->Get()->MinREALHugeBlobInBytes;
+            NextMinHugeBlobInBytes = ev->Get()->MinHugeBlobInBytes;
         }
 
         void StartReplication() {
@@ -270,8 +270,8 @@ namespace NKikimr {
             ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
             ReplCtx->MonGroup.ReplItemsRemaining() = 0;
             ReplCtx->MonGroup.ReplItemsDone() = 0;
-            Y_ABORT_UNLESS(NextMinREALHugeBlobInBytes);
-            ReplCtx->MinREALHugeBlobInBytes = NextMinREALHugeBlobInBytes;
+            Y_ABORT_UNLESS(NextMinHugeBlobInBytes);
+            ReplCtx->MinHugeBlobInBytes = NextMinHugeBlobInBytes;
             UnrecoveredNonphantomBlobs = false;
 
             Become(&TThis::StateRepl);
@@ -697,7 +697,7 @@ namespace NKikimr {
         TReplScheduler(std::shared_ptr<TReplCtx> &replCtx)
             : TActorBootstrapped<TReplScheduler>()
             , ReplCtx(replCtx)
-            , NextMinREALHugeBlobInBytes(ReplCtx->MinREALHugeBlobInBytes)
+            , NextMinHugeBlobInBytes(ReplCtx->MinHugeBlobInBytes)
             , History(HistorySize)
             , State(Relaxation)
             , ReplProgressWatchdog(

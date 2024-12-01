@@ -478,6 +478,8 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateBackupCollection = 45;
         NKikimrSchemeOp.TModifyScheme AlterBackupCollection = 46;
         NKikimrSchemeOp.TModifyScheme DropBackupCollection = 47;
+        NKikimrSchemeOp.TModifyScheme Backup = 48;
+        NKikimrSchemeOp.TModifyScheme BackupIncremental = 49;
     }
 }
 

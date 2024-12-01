@@ -37,7 +37,7 @@ namespace numpy
                          utils::int_<N - 1>());
       return found;
     }
-  }
+  } // namespace
 
   template <class E>
   typename E::dtype nanmax(E const &expr)
@@ -49,7 +49,7 @@ namespace numpy
       max = std::numeric_limits<typename E::dtype>::quiet_NaN();
     return max;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

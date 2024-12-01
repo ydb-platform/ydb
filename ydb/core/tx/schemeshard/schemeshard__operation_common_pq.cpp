@@ -269,7 +269,7 @@ bool CollectPQConfigChanged(const TOperationId& operationId,
 }
 
 bool CollectPQConfigChanged(const TOperationId& operationId,
-                            const TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev,
+                            const TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev,
                             TOperationContext& context)
 {
     Y_ABORT_UNLESS(context.SS->FindTx(operationId));
@@ -307,7 +307,7 @@ bool CollectPQConfigChanged(const TOperationId& operationId,
     txState.ShardsInProgress.erase(shardIdx);
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "CollectPQConfigChanged accept TEvPersQueue::TEvProposeTransactionAttachResult"
+                "CollectPQConfigChanged accept TEvDataShard::TEvProposeTransactionAttachResult"
                 << ", operationId: " << operationId
                 << ", shardIdx: " << shardIdx
                 << ", shard: " << shardId
@@ -631,7 +631,7 @@ bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, 
     return TryPersistState(context);
 }
 
-bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, TOperationContext& context)
+bool TPropose::HandleReply(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev, TOperationContext& context)
 {
     const auto ssId = context.SS->SelfTabletId();
     const auto& evRecord = ev->Get()->Record;

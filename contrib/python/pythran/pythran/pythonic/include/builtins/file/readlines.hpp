@@ -20,7 +20,7 @@ namespace builtins
     types::list<types::str> readlines(F &&f, long sizehint);
 
     DEFINE_FUNCTOR(pythonic::builtins::file, readlines);
-  }
-}
+  } // namespace file
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

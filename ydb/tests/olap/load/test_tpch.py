@@ -71,16 +71,19 @@ class TestTpch100(TpchSuiteBase):
 
 
 class TestTpch1000(TpchSuiteBase):
-    scale: int = 1000
-    check_canonical: bool = False
-    timeout = max(TpchSuiteBase.timeout, 1000.)
-    query_settings = {
-        9: LoadSuiteBase.QuerySettings(timeout=max(TpchSuiteBase.timeout, 3600.)),
+    tables_size: dict[str, int] = {
+        'lineitem': 5999989709,
     }
+    scale: int = 1000
+    check_canonical: bool = True
+    timeout = max(TpchSuiteBase.timeout, 3600.)
 
 
 class TestTpch10000(TpchSuiteBase):
+    tables_size: dict[str, int] = {
+        'lineitem': 59999994267,
+    }
     scale: int = 10000
     iterations: int = 2
-    check_canonical: bool = False
+    check_canonical: bool = True
     timeout = max(TpchSuiteBase.timeout, 3600.)

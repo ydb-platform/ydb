@@ -2,8 +2,9 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_pb.h>

@@ -213,6 +213,7 @@ public:
 
     using TProfilingTagValue = std::variant<std::string, i64>;
     std::vector<std::pair<std::string, TProfilingTagValue>> GetProfilingTags();
+    void SetProfilingTags(std::vector<std::pair<std::string, TProfilingTagValue>> profilingTags);
 
     friend void ToProto(NProto::TTracingExt* ext, const TTraceContextPtr& context);
 
@@ -278,7 +279,7 @@ TTraceContext* GetCurrentTraceContext();
 //! Flushes the elapsed time of the current trace context (if any).
 void FlushCurrentTraceContextElapsedTime();
 
-//!
+//! Returns a trace context from #storage (null if there is none).
 TTraceContext* TryGetTraceContextFromPropagatingStorage(const NConcurrency::TPropagatingStorage& storage);
 
 //! Creates a new trace context. If the current trace context exists, it becomes the parent of the

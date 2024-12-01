@@ -1,6 +1,7 @@
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/core/cbo/simple/cbo_simple.h>
 #include <yql/essentials/core/facade/yql_facade.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -1169,7 +1170,7 @@ int Main(int argc, char* argv[])
     }
 
     TVector<TDataProviderInitializer> dataProvidersInit;
-    dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+    dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, MakeSimpleCBOOptimizerFactory(), {}));
     dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     TExprContext ctx;

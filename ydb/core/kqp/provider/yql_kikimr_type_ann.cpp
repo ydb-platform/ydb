@@ -1609,7 +1609,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
     static bool CheckSequenceSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
         const static std::unordered_set<TString> sequenceSettingNames =
-            {"start", "increment", "cache", "minvalue", "maxvalue", "cycle"};
+            {"start", "increment", "cache", "minvalue", "maxvalue", "cycle", "restart"};
         for (const auto& setting : settings) {
             auto name = setting.Name().Value();
             if (!sequenceSettingNames.contains(TString(name))) {
@@ -2176,6 +2176,16 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleDropBackupCollection(TKiDropBackupCollection node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleBackup(TKiBackup node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleBackupIncremental(TKiBackupIncremental node, TExprContext&) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

@@ -11,6 +11,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/dq/opt
     ydb/library/yql/providers/yt/lib/schema
     ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/yt/gateway/file
@@ -25,8 +26,6 @@ PEERDIR(
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/config
     yql/essentials/providers/config
-    ydb/library/yql/providers/dq/common
-    ydb/library/yql/providers/dq/provider
     yql/essentials/providers/result/provider
     yql/essentials/sql
     yql/essentials/minikql/invoke_builtins/llvm14

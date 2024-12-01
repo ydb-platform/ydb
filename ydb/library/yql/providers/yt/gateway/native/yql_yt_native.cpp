@@ -33,14 +33,11 @@
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
-#include <ydb/library/yql/providers/stat/expr_nodes/yql_stat_expr_nodes.h>
-#include <ydb/library/yql/providers/stat/uploader/yql_stat_uploader.h>
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -5407,7 +5404,7 @@ private:
         const TExprNode* root,
         TExprContext* exprCtx) const
     {
-        auto ctx = MakeIntrusive<TExecContext<TOptions>>(Services_, Clusters_, MkqlCompiler_, std::move(options), session, cluster, UrlMapper_);
+        auto ctx = MakeIntrusive<TExecContext<TOptions>>(Services_, Clusters_, MkqlCompiler_, std::move(options), session, cluster, UrlMapper_, Services_.Metrics);
         if (root) {
             YQL_ENSURE(exprCtx);
             if (TYtTransientOpBase::Match(root)) {

@@ -9,6 +9,8 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+using namespace NSharedCache;
+
 struct TPrivatePageCachePinPad : public TAtomicRefCount<TPrivatePageCachePinPad> {
     // no internal state
 };
@@ -30,7 +32,6 @@ public:
         ui64 TotalSharedBody = 0; // total number of bytes currently referenced from shared cache
         ui64 TotalPinnedBody = 0; // total number of bytes currently pinned in memory
         ui64 TotalExclusive = 0; // total number of bytes exclusive to this cache (not from shared cache)
-        ui64 TotalSharedPending = 0; // total number of bytes waiting for transfer to shared cache
         ui64 TotalSticky = 0; // total number of bytes marked as sticky (never unloaded from memory)
         ui64 PinnedSetSize = 0; // number of bytes pinned by transactions (even those not currently loaded)
         ui64 PinnedLoadSize = 0; // number of bytes pinned by transactions (which are currently being loaded)
@@ -52,7 +53,6 @@ public:
 
         ui32 LoadState : 2;
         ui32 Sticky : 1;
-        ui32 SharedPending : 1;
         
         const TPageId Id;
         const size_t Size;
@@ -72,22 +72,13 @@ public:
             return (
                 LoadState == LoadStateNo &&
                 !Sticky &&
-                !SharedPending &&
                 !PinPad &&
                 !WaitQueue &&
                 !SharedBody);
         }
 
-        void Fill(TSharedData data, bool sticky = false) {
-            Y_DEBUG_ABORT_UNLESS(!SharedBody && !SharedPending, "Populating cache with shared data already present");
+        void Fill(TSharedPageRef shared, bool sticky) {
             Sticky = sticky;
-            LoadState = LoadStateLoaded;
-            PinnedBody = std::move(data);
-        }
-
-        void Fill(TSharedPageRef shared, bool sticky = false) {
-            Sticky = sticky;
-            SharedPending = false;
             SharedBody = std::move(shared);
             LoadState = LoadStateLoaded;
             PinnedBody = TPinnedPageRef(SharedBody).GetData();
@@ -128,12 +119,8 @@ public:
             return page;
         }
 
-        void Fill(const NPageCollection::TLoadedPage &paged, bool sticky = false) noexcept {
-            EnsurePage(paged.PageId)->Fill(paged.Data, sticky);
-        }
-
-        void Fill(NSharedCache::TEvResult::TLoaded&& loaded, bool sticky = false) noexcept {
-            EnsurePage(loaded.PageId)->Fill(std::move(loaded.Page), sticky);
+        void Fill(ui32 pageId, TSharedPageRef page, bool sticky) noexcept {
+            EnsurePage(pageId)->Fill(std::move(page), sticky);
         }
 
         const TLogoBlobID Id;
@@ -167,21 +154,19 @@ public:
     void CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory);
     void PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pinnedPages, ui64 &pinnedMemory);
     void PinToLoad(TPinned &pinned, ui32 &pinnedPages, ui64 &pinnedMemory);
-    void RepinPages(TPinned &newPinned, TPinned &oldPinned, size_t &pinnedPages);
     void UnpinPages(TPinned &pinned, size_t &unpinnedPages);
     THashMap<TPrivatePageCache::TInfo*, TVector<ui32>> GetToLoad() const;
     void ResetTouchesAndToLoad(bool verifyEmpty);
 
-    void UpdateSharedBody(TInfo *collectionInfo, TPageId pageId, TSharedPageRef shared);
     void DropSharedBody(TInfo *collectionInfo, TPageId pageId);
 
     TPage::TWaitQueuePtr ProvideBlock(NSharedCache::TEvResult::TLoaded&& loaded, TInfo *collectionInfo);
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
-    THashMap<TLogoBlobID, THashMap<TPageId, TSharedData>> GetPrepareSharedTouched();
+    THashMap<TLogoBlobID, THashSet<TPageId>> GetPrepareSharedTouched();
 
 private:
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> PageCollections;
-    THashMap<TLogoBlobID, THashMap<TPageId, TSharedData>> ToTouchShared;
+    THashMap<TLogoBlobID, THashSet<TPageId>> ToTouchShared;
 
     TStats Stats;
 
@@ -194,7 +179,6 @@ private:
     void TryLoad(TPage *page);
     void TryUnload(TPage *page);
     void TryEraseIfUnnecessary(TPage *page);
-    void TryShareBody(TPage *page);
 };
 
 }}

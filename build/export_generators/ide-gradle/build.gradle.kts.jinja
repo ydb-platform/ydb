@@ -4,26 +4,34 @@ subprojects {
     buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", "."))
 }
 
-{%  set mainClass = target.app_main_class -%}
+{%- macro OutDirs(runs, prefix, suffix) -%}
+{%-    if run.args|length and run.out_dir|length -%}
+{%-        for out_dir in run.out_dir -%}
+{#-            search all run arguments ended by /<out_dir> -#}
+{%-            set out_dirs = select_by_ends(run.args, "/" + out_dir) -%}
+{%-            if out_dirs|length %}
+{{ prefix }}{{ out_dirs|first }}{{ suffix }}
+{%-            endif -%}
+{%-        endfor -%}
+{%-    endif -%}
+{%- endmacro %}
+
+{%- set mainClass = target.app_main_class -%}
 {%- set publish = target.publish -%}
 {%- set with_kotlin = target.with_kotlin -%}
 {%- set kotlin_version = target.kotlin_version -%}
 {%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
-{%- set errorprone_plugin_version = "4.0.0" -%}
+
+{%- if not target.required_jdk -%}
+{%-     set has_required_jdk = false -%}
+{#-     If no required JDK, set default JDK for Kotlin parts -#}
+{%-     set required_jdk = '17' -%}
+{%- else -%}
+{%-     set has_required_jdk = true -%}
+{%-     set required_jdk = target.required_jdk -%}
+{%- endif %}
+
 plugins {
-{#- some plugins configuration -#}
-{%- for library in target.consumer if library.classpath -%}
-{#- error prone plugin configuration -#}
-{%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) and "contrib/java/com/google/errorprone/error_prone_annotations/" in library.jar -%}
-
-    id("net.ltgt.errorprone") version "{{ errorprone_plugin_version }}"
-
-{%-     endif -%}
-{%- endfor -%}
-{#- lombok configuration -#}
-{%- if "lombok.launch.AnnotationProcessorHider$AnnotationProcessor" in target.annotation_processors %}
-    id("io.freefair.lombok") version "8.6"
-{%- endif -%}
 {%- if mainClass %}
     `application`
 {%- else %}
@@ -47,16 +55,33 @@ plugins {
 {%-     if target.with_kotlinc_plugin_serialization|length %}
     kotlin("plugin.serialization") version "{{ kotlin_version }}"
 {%      endif -%}
+{%- endif -%}
+
+{#- errorprone plugin configuration -#}
+{%- if errorprone -%}
+{%-     set errorprone_plugin_version = "4.0.0" -%}
+{%-     if target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length %}
+    id("net.ltgt.errorprone") version "{{ errorprone_plugin_version }}"
+{%-     endif -%}
+{%- endif -%}
+
+{#- lombok plugin configuration -#}
+{#- TODO remove usings annotation_processors semantic -#}
+{%- if ("lombok.launch.AnnotationProcessorHider$AnnotationProcessor" in target.annotation_processors) or (target.use_annotation_processor|length and target.use_annotation_processor|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length) %}
+    id("io.freefair.lombok") version "8.6"
 {%- endif %}
 }
+
 {#- language level -#}
-{%- if target.required_jdk is defined and target.required_jdk|length %}
+{%- if has_required_jdk %}
+
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of("{{ target.required_jdk }}")
+        languageVersion = JavaLanguageVersion.of("{{ required_jdk }}")
     }
 }
 {%  endif -%}
+
 {%- if target.with_kotlinc_plugin_allopen|length -%}
 {%-     set allopen_annotations = [] -%}
 {%-     if target.with_kotlinc_plugin_allopen|select('eq', 'preset=spring')|length -%}
@@ -118,27 +143,28 @@ noArg {
 {%- if with_kotlin %}
 
 kotlin {
-    jvmToolchain({%- if target.required_jdk -%}{{ target.required_jdk }}{%- else -%}17{%- endif -%})
+    jvmToolchain({{ required_jdk }})
 }
 {%  endif -%}
+
 {%- if publish %}
 
 group = "{{ target.publish_group }}"
 version = {% if target.publish_version and target.publish_version != "no" -%}"{{ target.publish_version }}"{%- else -%}project.properties["version"]!!{%- endif %}
-{%  endif %}
+{% endif -%}
 
-{% if target.enable_preview %}
+{%- if target.enable_preview %}
+
 tasks.withType<JavaCompile> {
     options.compilerArgs.add("--enable-preview")
-
     options.compilerArgs.add("-Xlint:preview")
-    options.release.set({%- if target.required_jdk -%}{{ target.required_jdk }}{%- else -%}17{%- endif -%})
+    options.release.set({{ required_jdk }})
 }
-
 
 tasks.withType<JavaExec> {
      jvmArgs?.add("--enable-preview")
- }
+}
+
 tasks.withType<Test> {
     jvmArgs?.add("--enable-preview")
     environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"
@@ -146,21 +172,22 @@ tasks.withType<Test> {
 
 tasks.withType<Javadoc> {
     val javadocOptions = options as CoreJavadocOptions
-    javadocOptions.addStringOption("source", "{%- if target.required_jdk -%}{{ target.required_jdk }}{%- else -%}17{%- endif -%}")
+    javadocOptions.addStringOption("source", "{{ required_jdk }}")
     javadocOptions.addBooleanOption("-enable-preview", true)
 }
-{% endif %}
+{% endif -%}
 
 {#- javac flags -#}
-{%- if (target.javac.flags is defined) and (target.javac.flags|length) %}
+{%- if target.javac.flags|length -%}
+{%-     set javac_flags = target.javac.flags|reject('startsWith', '-Xep:') -%}
+{%-     if javac_flags|length %}
+
 tasks.withType<JavaCompile> {
-{%- for javac_flag in target.javac.flags %}
-{%-     if '-Xep:' in javac_flag %}
-{%      else %}
+{%-         for javac_flag in javac_flags %}
     options.compilerArgs.add("{{ javac_flag }}")
-{%-     endif %}
-{%- endfor %}
+{%-         endfor %}
 }
+{%-     endif -%}
 {%- endif %}
 
 val bucketUsername: String by project
@@ -202,7 +229,8 @@ configurations.testImplementation {
     isTransitive = false
 }
 
-{%  if has_test -%}
+{%- if has_test %}
+
 val testsJar by tasks.registering(Jar::class) {
     dependsOn(JavaPlugin.COMPILE_TEST_JAVA_TASK_NAME)
     archiveClassifier.set("tests")
@@ -217,27 +245,48 @@ tasks.test {
         events("passed", "skipped", "failed")
     }
 }
-
 {%  endif -%}
 
-{%- if target.jar_source_set is defined -%}
+{%- if target.jar_source_set is defined %}
+
 {%-     for source_set in target.jar_source_set -%}
-{%-         set srcdir_glob = split(source_set, ':') -%}
+{%-         set srcdir_glob = split(source_set, ':') %}
 sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
-{%          endfor -%}
+{%-     endfor -%}
 {%- endif -%}
 
 {%  for extra_target in extra_targets -%}
 {%-     if extra_target.jar_source_set is defined -%}
 {%-         for source_set in extra_target.jar_source_set -%}
-{%-             set srcdir_glob = split(source_set, ':') -%}
+{%-             set srcdir_glob = split(source_set, ':') %}
 sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
-{%              endfor -%}
+{%-         endfor -%}
 {%-     endif -%}
 {%- endfor -%}
 
 sourceSets {
-    val test by getting {
+{%- if target.runs|length %}
+    main {
+        {#-
+            Default by Gradle:
+
+            java.srcDir("src/main/java")
+            resources.srcDir("src/main/resources")
+
+        #}
+{%-     for run in target.runs -%}
+{{         OutDirs(run, '        java.srcDir("', '")') }}
+{%-     endfor %}
+    }
+{%- endif %}
+    test {
+        {#-
+            Default by Gradle:
+
+            java.srcDir("src/test/java")
+            resources.srcDir("src/test/resources")
+
+        #}
         java.srcDir("ut/java")
         resources.srcDir("ut/resources")
         java.srcDir("src/test-integration/java")
@@ -246,19 +295,24 @@ sourceSets {
         resources.srcDir("src/testFixtures/resources")
         java.srcDir("src/intTest/java")
         resources.srcDir("src/intTest/resources")
+{%- for extra_target in extra_targets -%}
+{%-     if extra_target|length -%}
+{%-         for run in extra_target.runs -%}
+{{              OutDirs(run, '        java.srcDir("', '")') }}
+{%-         endfor -%}
+{%-     endif -%}
+{%- endfor %}
     }
 }
 
 dependencies {
 {%- for library in target.consumer if library.classpath -%}
-{# error prone plugin configuration #}
-{%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) and "contrib/java/com/google/errorprone/error_prone_annotations" in library.jar -%}
-{%          set errorprone_version = library.jar -%}
-{%          set errorprone_parts = errorprone_version|replace("contrib/java/com/google/errorprone/error_prone_annotations/") -%}
-{%          set errorprone_parts = split(errorprone_parts, '/') -%}
-
+{%-     if errorprone -%}
+{%-         if library.prebuilt and (library.type != "contrib" or build_contribs) and ("contrib/java/com/google/errorprone/error_prone_annotations" in library.jar) -%}
+{%-             set errorprone_version = library.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
+{%-             set errorprone_parts = split(errorprone_version, '/', 2) %}
     errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
-
+{%-         endif -%}
 {%-     endif -%}
 
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
@@ -279,13 +333,17 @@ dependencies {
 {%-         endif -%}
 {%-         if library.excludes.consumer is defined %} {
 {%              for exclude in library.excludes.consumer if exclude.classpath -%}
-{%                  set classpath = exclude.classpath|replace('"','') -%}
-{%                  set classpath_parts = split(classpath, ':') -%}
+{%-                 set classpath = exclude.classpath|replace('"','') -%}
+{%-                 set classpath_parts = split(classpath, ':') -%}
         exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
 {%              endfor -%}
     }
 {%-         endif -%}
 {%-     endif -%}
+{%- endfor -%}
+
+{%- for annotation_processor in target.use_annotation_processor %}
+    annotationProcessor(files("$project_root/{{ annotation_processor}}"))
 {%- endfor -%}
 
 {%- for extra_target in extra_targets -%}
@@ -304,88 +362,81 @@ dependencies {
 {%-             endif -%}
 {%-             if library.excludes.consumer is defined %} {
 {%                  for exclude in library.excludes.consumer if exclude.classpath -%}
-{%                      set classpath = exclude.classpath|replace('"','') -%}
-{%                      set classpath_parts = split(classpath, ':') -%}
+{%-                     set classpath = exclude.classpath|replace('"','') -%}
+{%-                     set classpath_parts = split(classpath, ':') -%}
         exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
 {%                  endfor -%}
     }
 {%-             endif -%}
 {%-         endif -%}
 {%-     endfor -%}
+{%-     for annotation_processor in extra_target.use_annotation_processor %}
+    testAnnotationProcessor(files("$project_root/{{ annotation_processor}}"))
+{%-     endfor -%}
 {%- endfor %}
 }
 
-{% if hasJunit5Test -%}
+{%- if hasJunit5Test %}
+
 tasks.named<Test>("test") {
     useJUnitPlatform()
 }
-
 {%  endif -%}
 
 {#- run_java_program -#}
-{#- {% set runs = targets|selectattr("runs") -%} -#}
-{%- set runs = target.runs -%}
-{%- if runs -%}
-{%-     for run in runs -%}
+{%- if target.runs|length -%}
+{%-     for run in target.runs %}
 
 val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
-        group = "build"
-        description = "Code generation by run java program"
-
-        mainClass.set("{{ run.args[0] }}")
-{%         if run.classpath -%}
+    group = "build"
+    description = "Code generation by run java program"
+{%-        if run.classpath|length %}
 {%             for classpath in run.classpath -%}
-{%                 set real_classpath = classpath|replace('@', '') -%}
-{%                 set real_classpath = real_classpath|replace('.run.cp', '') -%}
-{%                 set real_classpath = real_classpath|replace('.cplst', '') -%}
-{%                 set real_classpath = real_classpath|replace(export_root, '')|replace(arcadia_root, '') -%}
-{%                 set real_gradle_classpath = real_classpath|replace('/', ':') %}
-        val classPath = "{{ real_gradle_classpath }}"
-        val classPathParts = classPath.split(":")
-        classPathParts[classPathParts.size - 2]
-        classpath = files("$project_root{{ real_classpath }}") + project(classPath.replace(":${classPathParts[classPathParts.size - 2]}.jar", "")).configurations.runtimeClasspath.get()
-{%             endfor -%}
-{%         else -%}
-        classpath = sourceSets.main.get().runtimeClasspath
+{%-                set rel_file_classpath = classpath|replace('@', '')|replace(export_root, '')|replace(arcadia_root, '') %}
+    val classpaths = "$project_root/" + File("$project_root{{ rel_file_classpath }}").readText().trim().replace(":", ":$project_root/")
+    classpath = files(classpaths.split(":"))
+{%-            endfor -%}
+{%         else %}
+    classpath = sourceSets.main.get().runtimeClasspath
+{%-        endif %}
+
+    mainClass.set("{{ run.args[0] }}")
+{%-        if run.args|length > 1 %}
+
+    args = listOf(
+{%-            for arg in run.args -%}
+{%-                if not loop.first %}
+        "{{ arg }}",
+{%-                endif -%}
+{%-            endfor %}
+    )
 {%         endif -%}
-{%         set args = run.args -%}
-{%         if args -%}
-        val argsList = mutableListOf(
-{%             for arg in args -%}
-            "{{ arg }}",
+
+{%-        if run.in_dir %}
+{%             for in_dir in run.in_dir -%}
+    inputs.files(fileTree("{{ in_dir }}"))
 {%             endfor -%}
-        )
-        argsList.removeAt(0)
-        args = argsList
-{%         endif -%}
-{%         if run.in_dir -%}
-{%             for dir in run.in_dir -%}
-        inputs.files(fileTree("{{ dir }}"))
+{%-        endif -%}
+{%-        if run.in %}
+{%             for in_file in run.in -%}
+    inputs.files("{{ in_file }}")
 {%             endfor -%}
-{%         endif -%}
-{%         if run.in -%}
-{%             for file in run.in -%}
-        inputs.files("{{ file }}")
-{%             endfor -%}
-{%         endif -%}
-{%         if run.out_dir -%}
-{%             for dir in run.out_dir -%}
-        outputs.dir("{{ dir }}")
-{%             endfor -%}
-{#-
+{%-        endif -%}
+
+{{         OutDirs(run, '    outputs.dir("', '")') }}
+{#
     Не использованы аттрибуты
     run-cwd="str"
     run-in_dirs_inputs="list"
     run-in_noparse="list"
-    run-out_dir="list"
     run-tool="list"
 -#}
-{%-        endif -%}
-    }
-tasks {
-    build {
-        dependsOn(runJav{{ loop.index }})
-    }
+}
+
+tasks.getByName("sourcesJar").dependsOn(runJav{{ loop.index }})
+
+tasks.compileJava.configure {
+    dependsOn(runJav{{ loop.index }})
 }
 {%     endfor -%}
 {% endif -%}
@@ -394,7 +445,8 @@ tasks {
 {% if publish -%}
 {% include 'publish.gradle.kts' ignore missing -%}
 {% endif -%}
-{# To disable redundant javadoc (it may fail the build) #}
+{#- To disable redundant javadoc (it may fail the build) #}
+
 tasks.withType<Javadoc>().configureEach {
     isEnabled = false
 }

@@ -11,6 +11,9 @@ class TTablesManager;
 namespace NKikimr::NOlap::NSyncChunksWithPortions1 {
 
 class TNormalizer: public TNormalizationController::INormalizerComponent {
+private:
+    using TBase = TNormalizationController::INormalizerComponent;
+
 public:
     static TString GetClassNameStatic() {
         return ::ToString(ENormalizerSequentialId::SyncPortionFromChunks);
@@ -31,7 +34,8 @@ public:
 
 public:
     TNormalizer(const TNormalizationController::TInitContext& info)
-        : DsGroupSelector(info.GetStorageInfo()) {
+        : TBase(info)
+        , DsGroupSelector(info.GetStorageInfo()) {
     }
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
@@ -40,4 +44,4 @@ public:
 private:
     NColumnShard::TBlobGroupSelector DsGroupSelector;
 };
-}   // namespace NKikimr::NOlap::NChunksActualization
+}   // namespace NKikimr::NOlap::NSyncChunksWithPortions1

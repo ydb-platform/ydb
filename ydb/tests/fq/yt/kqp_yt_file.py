@@ -2,9 +2,9 @@ import codecs
 
 import pytest
 
-from file_common import check_provider, get_sql_query
+from test_file_common import check_provider, get_sql_query
 from kqprun import KqpRun
-from utils import DATA_PATH, get_config, get_parameters_files, replace_vars
+from test_utils import DATA_PATH, get_config, get_parameters_files, replace_vars
 from yql_utils import KSV_ATTR, get_files, get_http_files, get_tables, is_xfail, yql_binary_path, yql_source_path
 
 EXCLUDED_SUITES = [
@@ -111,6 +111,9 @@ def validate_sql(sql_query):
     if 'library(' in sql_query.lower() or 'file(' in sql_query.lower() or 'filecontent(' in sql_query.lower():
         pytest.skip('Attaching files and libraries is not supported in KQP')
 
+    if 'Python' in sql_query or 'Javascript' in sql_query:
+        pytest.skip('ScriptUdf is not supported in KQP')
+
     # Unsupported pragmas
     if 'refselect' in sql_query.lower():
         pytest.skip('RefSelect mode isn\'t supported by provider: kikimr')
@@ -196,7 +199,7 @@ def run_file_kqp_no_cache(suite, case, cfg):
     if is_xfail(config):
         pytest.skip('skip fail tests')
 
-    kqprun = KqpRun(udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps'))
+    kqprun = KqpRun(udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'))
 
     return kqprun.yql_exec(program=sql_query, verbose=True, check_error=True, tables=in_tables)
 

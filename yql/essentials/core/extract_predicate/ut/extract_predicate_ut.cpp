@@ -10,6 +10,7 @@
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/ast/yql_ast_annotation.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/cbo/simple/cbo_simple.h>
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/ut_common/yql_ut_common.h>
@@ -154,7 +155,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
             auto ytGateway = CreateYtFileGateway(yqlNativeServices);
 
             TVector<TDataProviderInitializer> dataProvidersInit;
-            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway));
+            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway, MakeSimpleCBOOptimizerFactory(), {}));
             TProgramFactory factory(true, funcReg, 0ULL, dataProvidersInit, "ut");
 
             TProgramPtr program = factory.Create("-stdin-", Src);

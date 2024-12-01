@@ -23,6 +23,8 @@ PEERDIR(
     library/cpp/yson/node
     yql/essentials/core/facade
     yql/essentials/core/type_ann
+    ydb/library/yql/dq/opt
+    ydb/library/yql/providers/dq/helper
     ydb/library/yql/providers/dq/provider
     yql/essentials/providers/result/provider
     yql/essentials/parser/pg_wrapper

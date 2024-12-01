@@ -23,7 +23,7 @@ namespace builtins
     } else
       throw types::StopIteration();
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

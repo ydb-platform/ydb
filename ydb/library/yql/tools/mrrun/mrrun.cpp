@@ -12,6 +12,7 @@
 #include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 #include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 
 #include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
 
@@ -41,6 +42,7 @@
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/core/yql_library_compiler.h>
@@ -235,7 +237,7 @@ bool FillUsedUrls(
 
 NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    
+
     TPqGatewayServices pqServices(
         driver,
         nullptr,
@@ -657,7 +659,7 @@ int RunMain(int argc, const char* argv[])
         auto ytNativeGateway = CreateYtNativeGateway(services);
         gateways.emplace_back(ytNativeGateway);
         FillClusterMapping(clusters, gatewaysConfig.GetYt(), TString{YtProviderName});
-        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
     }
 
     if (gatewayTypes.contains(ClickHouseProviderName) && gatewaysConfig.HasClickHouse()) {

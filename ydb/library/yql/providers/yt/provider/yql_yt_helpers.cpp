@@ -4,14 +4,14 @@
 #include "yql_yt_op_hash.h"
 #include "yql_yt_optimize.h"
 
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
+#include <yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/type_ann/type_ann_core.h>
@@ -37,6 +37,7 @@
 namespace NYql {
 
 using namespace NNodes;
+using namespace NNodes::NDq;
 
 namespace {
 

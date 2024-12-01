@@ -9,7 +9,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-    requires CConvertToWorks<T, TErrorAttributes::TValue>
+    requires CConvertsTo<T, TErrorAttributes::TValue>
 T TErrorAttributes::Get(TStringBuf key) const
 {
     auto yson = GetYson(key);
@@ -21,7 +21,7 @@ T TErrorAttributes::Get(TStringBuf key) const
 }
 
 template <class T>
-    requires CConvertToWorks<T, TErrorAttributes::TValue>
+    requires CConvertsTo<T, TErrorAttributes::TValue>
 typename TOptionalTraits<T>::TOptional TErrorAttributes::Find(TStringBuf key) const
 {
     auto yson = FindYson(key);
@@ -36,8 +36,8 @@ typename TOptionalTraits<T>::TOptional TErrorAttributes::Find(TStringBuf key) co
 }
 
 template <class T>
-    requires CConvertToWorks<T, TErrorAttributes::TValue>
-T TErrorAttributes::GetAndRemove(const TString& key)
+    requires CConvertsTo<T, TErrorAttributes::TValue>
+T TErrorAttributes::GetAndRemove(const TKey& key)
 {
     auto result = Get<T>(key);
     Remove(key);
@@ -45,15 +45,15 @@ T TErrorAttributes::GetAndRemove(const TString& key)
 }
 
 template <class T>
-    requires CConvertToWorks<T, TErrorAttributes::TValue>
+    requires CConvertsTo<T, TErrorAttributes::TValue>
 T TErrorAttributes::Get(TStringBuf key, const T& defaultValue) const
 {
     return Find<T>(key).value_or(defaultValue);
 }
 
 template <class T>
-    requires CConvertToWorks<T, TErrorAttributes::TValue>
-T TErrorAttributes::GetAndRemove(const TString& key, const T& defaultValue)
+    requires CConvertsTo<T, TErrorAttributes::TValue>
+T TErrorAttributes::GetAndRemove(const TKey& key, const T& defaultValue)
 {
     auto result = Find<T>(key);
     if (result) {
@@ -65,8 +65,8 @@ T TErrorAttributes::GetAndRemove(const TString& key, const T& defaultValue)
 }
 
 template <class T>
-    requires CConvertToWorks<T, TErrorAttributes::TValue>
-typename TOptionalTraits<T>::TOptional TErrorAttributes::FindAndRemove(const TString& key)
+    requires CConvertsTo<T, TErrorAttributes::TValue>
+typename TOptionalTraits<T>::TOptional TErrorAttributes::FindAndRemove(const TKey& key)
 {
     auto result = Find<T>(key);
     if (result) {

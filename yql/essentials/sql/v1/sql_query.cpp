@@ -1674,6 +1674,50 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                                      context));
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore57: {
+            // alter_sequence_stmt: ALTER SEQUENCE (IF EXISTS)? object_ref alter_sequence_action (COMMA alter_sequence_action)*;
+            Ctx.BodyPart();
+            auto& node = core.GetAlt_sql_stmt_core57().GetRule_alter_sequence_stmt1();
+
+            Ctx.Token(node.GetToken1());
+            const TPosition pos = Ctx.Pos();
+
+            TString service = Ctx.Scoped->CurrService;
+            TDeferredAtom cluster = Ctx.Scoped->CurrCluster;
+            if (cluster.Empty()) {
+                Error() << "USE statement is missing - no default cluster is selected";
+                return false;
+            }
+            TObjectOperatorContext context(Ctx.Scoped);
+
+            if (node.GetRule_object_ref4().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
+
+            TSequenceParameters params;
+
+            if (node.HasBlock3()) { // IF EXISTS
+                params.MissingOk = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    IS_TOKEN(node.GetBlock3().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(node.GetBlock3().GetToken2().GetId(), EXISTS)
+                );
+            }
+
+            for (const auto& block : node.GetBlock5()) {
+                if (!AlterSequenceAction(block.GetRule_alter_sequence_action1(), params)) {
+                    return false;
+                }
+            }
+
+            AddStatementToBlocks(blocks, BuildAlterSequence(pos, service, cluster, id, params, Ctx.Scoped));
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);
@@ -2172,6 +2216,63 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
     case TRule_alter_table_alter_index_action::ALT_NOT_SET:
         AltNotImplemented("alter_table_alter_index_action", action);
         return false;
+    }
+
+    return true;
+}
+
+bool TSqlQuery::AlterSequenceAction(const TRule_alter_sequence_action& node, TSequenceParameters& params) {
+    switch (node.Alt_case()) {
+        case TRule_alter_sequence_action::kAltAlterSequenceAction1: {
+            if (params.StartValue) {
+                Ctx.Error(Ctx.Pos()) << "Start value defined more than once";
+                return false;
+            }
+            auto literalNumber = LiteralNumber(Ctx, node.GetAlt_alter_sequence_action1().GetRule_integer3());
+            if (literalNumber) {
+                params.StartValue = TDeferredAtom(literalNumber, Ctx);
+            } else {
+                return false;
+            }
+            break;
+        }
+        case TRule_alter_sequence_action::kAltAlterSequenceAction2: {
+            if (params.IsRestart) {
+                Ctx.Error(Ctx.Pos()) << "Restart value defined more than once";
+                return false;
+            }
+            auto literalNumber = LiteralNumber(Ctx, node.GetAlt_alter_sequence_action2().GetRule_integer3());
+            if (literalNumber) {
+                params.IsRestart = true;
+                params.RestartValue = TDeferredAtom(literalNumber, Ctx);
+            } else {
+                return false;
+            }
+            break;
+        }
+        case TRule_alter_sequence_action::kAltAlterSequenceAction3: {
+            if (params.IsRestart) {
+                Ctx.Error(Ctx.Pos()) << "Restart value defined more than once";
+                return false;
+            }
+            params.IsRestart = true;
+            break;
+        }
+        case TRule_alter_sequence_action::kAltAlterSequenceAction4: {
+            if (params.Increment) {
+                Ctx.Error(Ctx.Pos()) << "Increment defined more than once";
+                return false;
+            }
+            auto literalNumber = LiteralNumber(Ctx, node.GetAlt_alter_sequence_action4().GetRule_integer3());
+            if (literalNumber) {
+                params.Increment = TDeferredAtom(literalNumber, Ctx);
+            } else {
+                return false;
+            }
+            break;
+        }
+        case TRule_alter_sequence_action::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 
     return true;
@@ -2946,6 +3047,9 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             Ctx.CompactNamedExprs = true;
             Ctx.IncrementMonCounter("sql_pragma", "CompactNamedExprs");
         } else if (normalizedPragma == "disablecompactnamedexprs") {
+            Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
+                << "Deprecated pragma DisableCompactNamedExprs - it will be removed soon. "
+                   "Consider submitting bug report if CompactNamedExprs doesn't work for you";
             Ctx.CompactNamedExprs = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableCompactNamedExprs");
         } else if (normalizedPragma == "validateunusedexprs") {
@@ -2972,6 +3076,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableseqmode") {
             Ctx.SeqMode = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableSeqMode");
+        } else if (normalizedPragma == "emitunionmerge") {
+            Ctx.EmitUnionMerge = true;
+            Ctx.IncrementMonCounter("sql_pragma", "EmitUnionMerge");
+        } else if (normalizedPragma == "disableemitunionmerge") {
+            Ctx.EmitUnionMerge = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableEmitUnionMerge");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

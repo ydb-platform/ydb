@@ -20,7 +20,7 @@ namespace builtins
           std::to_string(v.size()) + " found");
     return (long)v.chars()[0];
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

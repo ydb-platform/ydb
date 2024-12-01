@@ -317,6 +317,17 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
     AFL_VERIFY(it != Tables.end());
     auto& table = it->second;
 
+    bool isTtlModified = false;
+    if (versionInfo.HasTtlSettings()) {
+        isTtlModified = true;
+        const auto& ttlSettings = versionInfo.GetTtlSettings();
+        if (ttlSettings.HasEnabled()) {
+            Ttl.SetPathTtl(pathId, TTtl::TDescription(ttlSettings.GetEnabled()));
+        } else {
+            Ttl.DropPathTtl(pathId);
+        }
+    }
+
     if (versionInfo.HasSchemaPresetId()) {
         AFL_VERIFY(!schema);
         Y_ABORT_UNLESS(SchemaPresetsIds.contains(versionInfo.GetSchemaPresetId()));
@@ -330,13 +341,7 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
         AddSchemaVersion(fakePreset.GetId(), version, *schema, db, manager);
     }
 
-    if (versionInfo.HasTtlSettings()) {
-        const auto& ttlSettings = versionInfo.GetTtlSettings();
-        if (ttlSettings.HasEnabled()) {
-            Ttl.SetPathTtl(pathId, TTtl::TDescription(ttlSettings.GetEnabled()));
-        } else {
-            Ttl.DropPathTtl(pathId);
-        }
+    if (isTtlModified) {
         if (PrimaryIndex && manager->IsReady()) {
             PrimaryIndex->OnTieringModified(manager, Ttl, pathId);
         }

@@ -59,6 +59,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpSlowLogNoticeThresholdMs);
     REGISTER_SETTING(*this, _KqpSlowLogTraceThresholdMs);
     REGISTER_SETTING(*this, _KqpYqlSyntaxVersion);
+    REGISTER_SETTING(*this, _KqpYqlAntlr4Parser);
     REGISTER_SETTING(*this, _KqpAllowUnsafeCommit);
     REGISTER_SETTING(*this, _KqpMaxComputeActors);
     REGISTER_SETTING(*this, _KqpEnableSpilling);
@@ -92,9 +93,10 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, EnableSpillingNodes)
         .Parser([](const TString& v) { return ParseEnableSpillingNodes(v); });
 
-    REGISTER_SETTING(*this, MaxDPccpDPTableSize);
+    REGISTER_SETTING(*this, MaxDPHypDPTableSize);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
+    REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
@@ -145,6 +147,10 @@ bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
 
 bool TKikimrSettings::HasOptUseFinalizeByKey() const {
     return GetFlagValue(OptUseFinalizeByKey.Get().GetOrElse(true)) != EOptionalFlag::Disabled;
+}
+
+bool TKikimrSettings::HasMaxSequentialReadsInFlight() const {
+    return !MaxSequentialReadsInFlight.Get().Empty();
 }
 
 EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {

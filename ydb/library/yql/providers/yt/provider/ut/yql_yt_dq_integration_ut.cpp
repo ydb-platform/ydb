@@ -1,5 +1,4 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_dq_integration.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -24,10 +23,8 @@ struct TTestSetup {
 Y_UNIT_TEST_SUITE(TSchedulerTest) {
     Y_UNIT_TEST(Ranges_table4_table5_test0) {
         TTestSetup setup;
-        TDqSettings settings;
-        settings.DataSizePerJob = 1000;
+        IDqIntegration::TPartitionSettings settings {.DataSizePerJob = 1000, .MaxPartitions = 4, .EnableComputeActor = {}};
         TVector<TString> partitions;
-        size_t maxTasks = 4;
         auto astStr = "(\n"
             "(let $4 (Void))\n"
             "(let $5 (YtMeta '('\"CanWrite\" '\"1\") '('\"DoesExist\" '\"1\") '('\"YqlCompatibleScheme\" '\"1\") '('\"InferredScheme\" '\"0\") '('\"IsDynamic\" '\"0\") '('\"Attrs\" '('('\"optimize_for\" '\"lookup\")))))\n"
@@ -49,7 +46,7 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
         TExprNode::TPtr exprRoot_;
         UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot_, exprCtx_, nullptr, nullptr));
         TString cluster;
-        const auto result = setup.State->DqIntegration_->Partition(settings, maxTasks, *exprRoot_, partitions, &cluster, exprCtx_, false);
+        const auto result = setup.State->DqIntegration_->Partition(*exprRoot_, partitions, &cluster, exprCtx_, settings);
         const auto expected = 428;
         UNIT_ASSERT_VALUES_EQUAL(result, expected);
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 3);
@@ -57,10 +54,8 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
 
     Y_UNIT_TEST(Ranges_table4_table7_test1) {
         TTestSetup setup;
-        TDqSettings settings;
-        settings.DataSizePerJob = 1000;
+        IDqIntegration::TPartitionSettings settings {.DataSizePerJob = 1000, .MaxPartitions = 2, .EnableComputeActor = {}};
         TVector<TString> partitions;
-        size_t maxTasks = 2;
         auto astStr = "(\n"
                 "(let $4 (Void))\n"
                 "(let $5 (YtMeta '('\"CanWrite\" '\"1\") '('\"DoesExist\" '\"1\") '('\"YqlCompatibleScheme\" '\"1\") '('\"InferredScheme\" '\"0\") '('\"IsDynamic\" '\"0\") '('\"Attrs\" '('('\"optimize_for\" '\"lookup\")))))\n"
@@ -89,7 +84,7 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
         TExprNode::TPtr exprRoot_;
         UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot_, exprCtx_, nullptr, nullptr));
         TString cluster;
-        const auto result = setup.State->DqIntegration_->Partition(settings, maxTasks, *exprRoot_, partitions, &cluster, exprCtx_, false);
+        const auto result = setup.State->DqIntegration_->Partition(*exprRoot_, partitions, &cluster, exprCtx_, settings);
         const auto expected = 642;
         UNIT_ASSERT_VALUES_EQUAL(result, expected);
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 2);
@@ -97,10 +92,8 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
 
     Y_UNIT_TEST(Ranges_table4_table7_test2) {
         TTestSetup setup;
-        TDqSettings settings;
-        settings.DataSizePerJob = 1000;
+        IDqIntegration::TPartitionSettings settings {.DataSizePerJob = 1000, .MaxPartitions = 10, .EnableComputeActor = {}};
         TVector<TString> partitions;
-        size_t maxTasks = 10;
         auto astStr = "(\n"
                 "(let $4 (Void))\n"
                 "(let $5 (YtMeta '('\"CanWrite\" '\"1\") '('\"DoesExist\" '\"1\") '('\"YqlCompatibleScheme\" '\"1\") '('\"InferredScheme\" '\"0\") '('\"IsDynamic\" '\"0\") '('\"Attrs\" '('('\"optimize_for\" '\"lookup\")))))\n"
@@ -129,7 +122,7 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
         TExprNode::TPtr exprRoot_;
         UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot_, exprCtx_, nullptr, nullptr));
         TString cluster;
-        const auto result = setup.State->DqIntegration_->Partition(settings, maxTasks, *exprRoot_, partitions, &cluster, exprCtx_, false);
+        const auto result = setup.State->DqIntegration_->Partition(*exprRoot_, partitions, &cluster, exprCtx_, settings);
         const auto expected = 214;
         UNIT_ASSERT_VALUES_EQUAL(result, expected);
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 6);

@@ -200,7 +200,7 @@ void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(cons
 TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
 
-    ui64 size = 0;
+    ui64 size = PredefinedSize.value_or(0);
     for (auto&& i : Packs) {
         ui32 sizeLocal = source->GetColumnsVolume(i.GetColumns().GetColumnIds(), i.GetMemType());
         if (source->GetStageData().GetUseFilter() && source->GetContext()->GetReadMetadata()->Limit && i.GetMemType() != EMemType::Blob) {
@@ -289,7 +289,8 @@ TConclusion<bool> TPortionAccessorFetchingStep::DoExecuteInplace(
 
 TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     if (Columns.GetColumnsCount()) {
-        source->SetSourceInMemory(source->GetColumnRawBytes(Columns.GetColumnIds()) < 1e+8);
+        source->SetSourceInMemory(
+            source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
         source->SetSourceInMemory(true);
     }

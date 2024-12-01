@@ -7,7 +7,9 @@
 
 #include <ydb/library/yql/providers/yt/common/yql_yt_settings.h>
 #include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_helper.h>
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/ast/yql_constraint.h>
@@ -89,7 +91,7 @@ struct TYtState : public TThrRefBase {
     bool IsHybridEnabled() const;
     bool IsHybridEnabledForCluster(const std::string_view& cluster) const;
     bool HybridTakesTooLong() const;
-    
+
     TYtState(TTypeAnnotationContext* types) {
         Types = types;
         Configuration = MakeIntrusive<TYtVersionedConfiguration>(*types);
@@ -119,7 +121,8 @@ struct TYtState : public TThrRefBase {
     THashMap<ui64, TWalkFoldersImpl> WalkFoldersState;
     ui32 PlanLimits = 10;
     i32 FlowDependsOnId = 0;
-
+    IOptimizerFactory::TPtr OptimizerFactory_;
+    IDqHelper::TPtr DqHelper;
 private:
     std::unordered_map<ui64, TYtVersionedConfiguration::TState> ConfigurationEvalStates_;
     std::unordered_map<ui64, ui32> EpochEvalStates_;
@@ -127,11 +130,13 @@ private:
 
 
 class TYtGatewayConfig;
-std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId, const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx);
+std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId,
+    const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+    const IOptimizerFactory::TPtr& optFactory, const IDqHelper::TPtr& helper);
 TIntrusivePtr<IDataProvider> CreateYtDataSource(TYtState::TPtr state);
 TIntrusivePtr<IDataProvider> CreateYtDataSink(TYtState::TPtr state);
 
-TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway, ui32 planLimits = 10);
+TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway, IOptimizerFactory::TPtr optFactory, IDqHelper::TPtr helper, ui32 planLimits = 10);
 
 const THashSet<TStringBuf>& YtDataSourceFunctions();
 const THashSet<TStringBuf>& YtDataSinkFunctions();

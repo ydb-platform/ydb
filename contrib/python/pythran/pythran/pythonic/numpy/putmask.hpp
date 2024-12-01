@@ -3,10 +3,10 @@
 
 #include "pythonic/include/numpy/putmask.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
-#include "pythonic/numpy/asarray.hpp"
 #include "pythonic/builtins/None.hpp"
+#include "pythonic/numpy/asarray.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -31,7 +31,7 @@ namespace numpy
   {
     throw std::runtime_error("putmask only partially implemented");
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

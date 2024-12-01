@@ -18,12 +18,10 @@ TEST_SRCS(
 )
 
 IF (SANITIZER_TYPE)
-    TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(ram:32 cpu:2)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

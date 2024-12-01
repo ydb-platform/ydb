@@ -209,6 +209,7 @@ public:
         , ModuleResolverState()
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
         , S3ActorsFactory(std::move(s3ActorsFactory))
+        , QueryCache(new TKqpQueryCache(TableServiceConfig.GetCompileQueryCacheSize(), TDuration::Seconds(TableServiceConfig.GetCompileQueryCacheTTLSec())))
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -276,7 +277,9 @@ public:
         }
 
         // Create compile service
-        CompileService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileService(TableServiceConfig, QueryServiceConfig,
+        CompileService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileService(
+            QueryCache,
+            TableServiceConfig, QueryServiceConfig,
             KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory), FederatedQuerySetup));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpCompileServiceID(SelfId().NodeId()), CompileService);
@@ -644,6 +647,10 @@ public:
         Send(ev->Sender, responseEv.Release(), 0, ev->Cookie);
     }
 
+    void Handle(TEvKqp::TEvProxyPingRequest::TPtr& ev) {
+        Send(ev->Sender, new TEvKqp::TEvProxyPingResponse());
+    }
+
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(EDelayedRequestType::QueryRequest), ActorContext())) {
             return;
@@ -919,7 +926,7 @@ public:
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
-        Send(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
+        Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
         if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest) {
             LocalSessions->DetachQueryText(info);
@@ -1346,6 +1353,7 @@ public:
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFunc(TEvKqp::TEvProxyPingRequest, Handle);
             hFunc(TEvKqp::TEvQueryRequest, Handle);
             hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
@@ -1496,7 +1504,7 @@ private:
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* sessionActor = CreateKqpSessionActor(SelfId(), ResourceManager_, CaFactory_, sessionId, KqpSettings, workerSettings,
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), QueryCache, ResourceManager_, CaFactory_, sessionId, KqpSettings, workerSettings,
             FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters,
             QueryServiceConfig, KqpTempTablesAgentActor);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
@@ -1901,6 +1909,8 @@ private:
     std::unique_ptr<TLocalSessionsRegistry> LocalSessions;
     std::shared_ptr<TKqpProxySharedResources> KqpProxySharedResources;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
+
+    TKqpQueryCachePtr QueryCache;
 
     bool ServerWorkerBalancerComplete = false;
     std::optional<TString> SelfDataCenterId;

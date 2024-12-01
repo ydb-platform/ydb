@@ -548,6 +548,24 @@ public:
     explicit TProtobufOutputStreamAdaptor(IOutputStream* stream);
 };
 
+class TProtobufZeroCopyOutputStream
+    : public ::google::protobuf::io::ZeroCopyOutputStream
+{
+public:
+    explicit TProtobufZeroCopyOutputStream(IZeroCopyOutput* stream);
+
+    bool Next(void** data, int* size) override;
+    void BackUp(int count) override;
+    int64_t ByteCount() const override;
+
+    void ThrowOnError() const;
+
+private:
+    IZeroCopyOutput* const Stream_;
+    std::exception_ptr Error_;
+    int64_t ByteCount_ = 0;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

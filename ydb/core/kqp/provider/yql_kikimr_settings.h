@@ -34,6 +34,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> _KqpSlowLogNoticeThresholdMs;
     NCommon::TConfSetting<ui32, false> _KqpSlowLogTraceThresholdMs;
     NCommon::TConfSetting<ui32, false> _KqpYqlSyntaxVersion;
+    NCommon::TConfSetting<bool, false> _KqpYqlAntlr4Parser;
     NCommon::TConfSetting<bool, false> _KqpAllowUnsafeCommit;
     NCommon::TConfSetting<ui32, false> _KqpMaxComputeActors;
     NCommon::TConfSetting<bool, false> _KqpEnableSpilling;
@@ -68,10 +69,11 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
 
-    NCommon::TConfSetting<ui32, false> MaxDPccpDPTableSize;
+    NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;
 
 
     NCommon::TConfSetting<ui32, false> MaxTasksPerStage;
+    NCommon::TConfSetting<ui32, false> MaxSequentialReadsInFlight;
 
     /* Runtime */
     NCommon::TConfSetting<bool, true> ScanQuery;
@@ -88,6 +90,7 @@ struct TKikimrSettings {
     bool HasOptEnableOlapPushdown() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
+    bool HasMaxSequentialReadsInFlight() const;
 
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetUseLlvm() const;

@@ -37,6 +37,8 @@ namespace NYql {
                     return "MsSQLServerGeneric";
                 case NYql::NConnector::NApi::ORACLE:
                     return "OracleGeneric";
+                case NYql::NConnector::NApi::LOGGING:
+                    return "LoggingGeneric";
                 default:
                     ythrow yexception() << "Data source kind is unknown or not specified";
             }
@@ -61,7 +63,7 @@ namespace NYql {
                 return Nothing();
             }
 
-            TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
@@ -104,8 +106,7 @@ namespace NYql {
                 return read;
             }
 
-            ui64 Partition(const TDqSettings&, size_t, const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&,
-                           bool) override {
+            ui64 Partition(const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
                 partitions.clear();
                 Generic::TRange range;
                 partitions.emplace_back();
@@ -220,6 +221,9 @@ namespace NYql {
                         case NConnector::NApi::ORACLE:
                             properties["SourceType"] = "Oracle";
                             break;
+                        case NConnector::NApi::LOGGING:
+                            properties["SourceType"] = "Logging";
+                            break;
                         case NConnector::NApi::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;
                         default:
@@ -239,7 +243,6 @@ namespace NYql {
                             properties["Protocol"] = "Http";
                             break;
                         case NConnector::NApi::PROTOCOL_UNSPECIFIED:
-                            break;
                         default:
                             properties["Protocol"] = NConnector::NApi::EProtocol_Name(dataSourceInstance.protocol());
                             break;

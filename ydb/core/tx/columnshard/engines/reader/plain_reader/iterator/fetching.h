@@ -138,6 +138,7 @@ public:
     TFetchingScriptCursor(const std::shared_ptr<TFetchingScript>& script, const ui32 index)
         : CurrentStepIdx(index)
         , Script(script) {
+        AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     }
 
     const TString& GetName() const {
@@ -162,6 +163,7 @@ private:
     std::shared_ptr<IDataSource> Source;
     TFetchingScriptCursor Cursor;
     bool FinishedFlag = false;
+    const NColumnShard::TCounterGuard CountersGuard;
 
 protected:
     virtual bool DoApply(IDataReader& owner) const override;
@@ -172,11 +174,7 @@ public:
         return "STEP_ACTION";
     }
 
-    TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId)
-        : TBase(ownerActorId)
-        , Source(source)
-        , Cursor(std::move(cursor)) {
-    }
+    TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId);
 };
 
 class TBuildFakeSpec: public IFetchingStep {
@@ -227,7 +225,7 @@ private:
     std::vector<TColumnsPack> Packs;
     THashMap<ui32, THashSet<EMemType>> Control;
     const EStageFeaturesIndexes StageIndex;
-    std::optional<ui64> PredefinedSize;
+    const std::optional<ui64> PredefinedSize;
 
 protected:
     class TFetchingStepAllocation: public NGroupedMemoryManager::IAllocation {
@@ -236,12 +234,14 @@ protected:
         std::weak_ptr<IDataSource> Source;
         TFetchingScriptCursor Step;
         NColumnShard::TCounterGuard TasksGuard;
+        const EStageFeaturesIndexes StageIndex;
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
 
     public:
-        TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step);
+        TFetchingStepAllocation(
+            const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step, const EStageFeaturesIndexes stageIndex);
     };
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
@@ -269,10 +269,10 @@ public:
         AddAllocation(columns, memType);
     }
 
-    TAllocateMemoryStep(const ui64 size, const EStageFeaturesIndexes stageIndex)
+    TAllocateMemoryStep(const ui64 memSize, const EStageFeaturesIndexes stageIndex)
         : TBase("ALLOCATE_MEMORY::" + ::ToString(stageIndex))
         , StageIndex(stageIndex)
-        , PredefinedSize(size) {
+        , PredefinedSize(memSize) {
     }
 };
 
@@ -450,8 +450,7 @@ public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TDetectInMem(const TColumnsSetIds& columns)
         : TBase("DETECT_IN_MEM")
-        , Columns(columns)
-    {
+        , Columns(columns) {
     }
 };
 

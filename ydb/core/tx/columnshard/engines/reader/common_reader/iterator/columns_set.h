@@ -6,7 +6,7 @@
 
 #include <util/string/join.h>
 
-namespace NKikimr::NOlap::NReader::NPlain {
+namespace NKikimr::NOlap::NReader::NCommon {
 
 enum class EMemType {
     Blob,
@@ -211,4 +211,4 @@ public:
     TColumnsSet operator-(const TColumnsSet& external) const;
 };
 
-}   // namespace NKikimr::NOlap::NReader::NPlain
+}   // namespace NKikimr::NOlap::NReader::NSimple

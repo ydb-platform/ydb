@@ -169,6 +169,7 @@ public:
         const ui64 lockNodeId,
         const bool inconsistentTx,
         const bool isOlap,
+        TVector<NScheme::TTypeInfo> keyColumnTypes,
         const NMiniKQL::TTypeEnvironment& typeEnv,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const IKqpTransactionManagerPtr& txManager,
@@ -183,6 +184,7 @@ public:
         , LockNodeId(lockNodeId)
         , InconsistentTx(inconsistentTx)
         , IsOlap(isOlap)
+        , KeyColumnTypes(std::move(keyColumnTypes))
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
         , Counters(counters)
@@ -209,7 +211,7 @@ public:
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-        ResolveTable();
+        Resolve();
         Become(&TKqpTableWriteActor::StateProcessing);
     }
 
@@ -350,13 +352,21 @@ public:
         return ResolveAttempts > 0;
     }
 
-    void RetryResolveTable() {
+    void RetryResolve() {
         if (!IsResolving()) {
-            ResolveTable();
+            Resolve();
         }
     }
 
-    void PlanResolveTable() {
+    void Resolve() {
+        if (IsOlap) {
+            ResolveTable();
+        } else {
+            ResolveShards();
+        }
+    }
+
+    void PlanResolve() {
         CA_LOG_D("Plan resolve with delay " << CalculateNextAttemptDelay(MessageSettings, ResolveAttempts));
         TlsActivationContext->Schedule(
             CalculateNextAttemptDelay(MessageSettings, ResolveAttempts),
@@ -364,7 +374,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvResolveRequestPlanned::TPtr&) {
-        ResolveTable();
+        Resolve();
     }
 
     void ResolveTable() {
@@ -399,14 +409,13 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        YQL_ENSURE(!KeyDescription || InconsistentTx);
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
 
         if (ev->Get()->Request->ErrorCount > 0) {
             CA_LOG_E(TStringBuilder() << "Failed to get table: "
                 << TableId << "'. Entry: " << resultSet[0].ToString());
-            PlanResolveTable();
+            PlanResolve();
             return;
         }
 
@@ -421,35 +430,23 @@ public:
             return;
         }
 
-        YQL_ENSURE(IsOlap == (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable));
+        YQL_ENSURE(IsOlap && (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable));
 
-        if (IsOlap) {
-            Prepare();
-        } else {
-            ResolveShards();
-        }
+        ResolveShards();
     }
 
     void ResolveShards() {
-        YQL_ENSURE(!KeyDescription || InconsistentTx);
+        YQL_ENSURE(!KeyColumnTypes.empty());
         CA_LOG_D("Resolve shards for TableId=" << TableId);
 
-        TVector<NScheme::TTypeInfo> keyColumnTypes;
-        for (const auto& [_, column] : SchemeEntry->Columns) {
-            if (column.KeyOrder >= 0) {
-                keyColumnTypes.resize(Max<size_t>(keyColumnTypes.size(), column.KeyOrder + 1));
-                keyColumnTypes[column.KeyOrder] = column.PType;
-            }
-        }
-
-        const TVector<TCell> minKey(keyColumnTypes.size());
+        const TVector<TCell> minKey(KeyColumnTypes.size());
         const TTableRange range(minKey, true, {}, false, false);
-        YQL_ENSURE(range.IsFullRange(keyColumnTypes.size()));
+        YQL_ENSURE(range.IsFullRange(KeyColumnTypes.size()));
         auto keyRange = MakeHolder<TKeyDesc>(
             TableId,
             range,
             TKeyDesc::ERowOperation::Update,
-            keyColumnTypes,
+            KeyColumnTypes,
             TVector<TKeyDesc::TColumnOp>{});
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
@@ -460,13 +457,12 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        YQL_ENSURE(!KeyDescription || InconsistentTx);
         auto* request = ev->Get()->Request.Get();
 
         if (request->ErrorCount > 0) {
             CA_LOG_E(TStringBuilder() << "Failed to get table: "
                 << TableId << "'");
-            PlanResolveTable();
+            PlanResolve();
             return;
         }
 
@@ -637,7 +633,7 @@ public:
                     << getIssues().ToOneLineString());
             if (InconsistentTx) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
-                RetryResolveTable();
+                RetryResolve();
             } else {
                 RuntimeError(
                     TStringBuilder() << "Scheme changed. Table `"
@@ -974,6 +970,7 @@ public:
     const ui64 LockNodeId;
     const bool InconsistentTx;
     const bool IsOlap;
+    const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     IKqpTableWriterCallbacks* Callbacks;
 
@@ -1036,6 +1033,14 @@ public:
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
 
+        TVector<NScheme::TTypeInfo> keyColumnTypes;
+        keyColumnTypes.reserve(Settings.GetKeyColumns().size());
+        for (const auto& column : Settings.GetKeyColumns()) {
+            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
+                column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+            keyColumnTypes.push_back(typeInfoMod.TypeInfo);
+        }
+
         WriteTableActor = new TKqpTableWriteActor(
             this,
             TableId,
@@ -1044,6 +1049,7 @@ public:
             Settings.GetLockNodeId(),
             Settings.GetInconsistentTx(),
             Settings.GetIsOlap(),
+            std::move(keyColumnTypes),
             TypeEnv,
             Alloc,
             nullptr,
@@ -1356,6 +1362,13 @@ public:
 
             auto& writeInfo = WriteInfos[settings.TableId];
             if (!writeInfo.WriteTableActor) {
+                TVector<NScheme::TTypeInfo> keyColumnTypes;
+                keyColumnTypes.reserve(settings.KeyColumns.size());
+                for (const auto& column : settings.KeyColumns) {
+                    auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
+                        column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+                    keyColumnTypes.push_back(typeInfoMod.TypeInfo);
+                }
                 writeInfo.WriteTableActor = new TKqpTableWriteActor(
                     this,
                     settings.TableId,
@@ -1364,6 +1377,7 @@ public:
                     LockNodeId,
                     InconsistentTx,
                     settings.IsOlap,
+                    std::move(keyColumnTypes),
                     TypeEnv,
                     Alloc,
                     TxManager,

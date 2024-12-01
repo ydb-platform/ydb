@@ -6,6 +6,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/columnshard/engines/scheme
 )
 
 GENERATE_ENUM_SERIALIZATION(columns_set.h)

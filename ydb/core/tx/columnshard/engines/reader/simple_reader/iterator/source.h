@@ -1,5 +1,4 @@
 #pragma once
-#include "columns_set.h"
 #include "context.h"
 #include "fetched_data.h"
 
@@ -10,6 +9,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -38,9 +38,7 @@ public:
     TPortionPage(const ui32 startIndex, const ui32 recordsCount, const ui64 memoryBytes)
         : StartIndex(startIndex)
         , RecordsCount(recordsCount)
-        , MemoryBytes(memoryBytes)
-    {
-
+        , MemoryBytes(memoryBytes) {
     }
 };
 
@@ -52,9 +50,7 @@ private:
 public:
     TReplaceKeyAdapter(const NArrow::TReplaceKey& rk, const bool reverse)
         : Reverse(reverse)
-        , Value(rk)
-    {
-
+        , Value(rk) {
     }
 
     std::partial_ordering Compare(const TReplaceKeyAdapter& item) const {
@@ -122,6 +118,7 @@ private:
 
     std::optional<TFetchingScriptCursor> ScriptCursor;
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
+
 protected:
     std::optional<bool> IsSourceInMemoryFlag;
 
@@ -271,11 +268,12 @@ public:
         AFL_VERIFY(StageData);
         TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
 
-        StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
         if (memoryLimit) {
             const auto accessor = StageData->GetPortionAccessor();
+            StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
             StageResult->SetPages(accessor.BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
         } else {
+            StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
             StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
         }
     }
@@ -335,6 +333,10 @@ public:
         Finalize(std::nullopt);
     }
 
+    bool HasStageData() const {
+        return !!StageData;
+    }
+
     const TFetchedData& GetStageData() const {
         AFL_VERIFY(StageData);
         return *StageData;
@@ -345,8 +347,7 @@ public:
         return *StageData;
     }
 
-    IDataSource(const ui32 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
-        const NArrow::TReplaceKey& start,
+    IDataSource(const ui32 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TReplaceKey& start,
         const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : SourceId(sourceId)

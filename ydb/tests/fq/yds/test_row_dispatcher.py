@@ -713,7 +713,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         expected = [Rf'''{c}''' for c in range(108, 116)]
         assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
-        
+
         kikimr.compute_plane.wait_completed_checkpoints(
             query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
         )
@@ -735,7 +735,7 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.wait_completed_checkpoints(
             query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
         )
-        
+
         node_index = 3
         logging.debug("Restart compute node {}".format(node_index))
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
@@ -749,7 +749,6 @@ class TestPqRowDispatcher(TestYdsBase):
 
         expected = [Rf'''{c}''' for c in range(124, 132)]
         assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
-
 
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)

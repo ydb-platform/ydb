@@ -31,8 +31,11 @@ protected:
     virtual ui64 DoCalcMemoryForUsage() const override {
         return 0;
     }
+    virtual NDataLocks::ELockCategory GetLockCategory() const override {
+        return NDataLocks::ELockCategory::Cleanup;
+    }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
-        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), PortionsToDrop);
+        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), PortionsToDrop, GetLockCategory());
     }
 
 public:

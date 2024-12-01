@@ -35,7 +35,10 @@ protected:
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
         return nullptr;
     }
-
+    virtual NDataLocks::ELockCategory GetLockCategory() const override {
+        AFL_VERIFY(false);
+        return NDataLocks::ELockCategory::MAX;
+    }
 public:
     THashMap<ui64, NArrow::NMerger::TIntervalPositions> PathToGranule;   // pathId -> positions (sorted by pk)
 public:

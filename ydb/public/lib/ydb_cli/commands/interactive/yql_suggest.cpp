@@ -6,6 +6,8 @@
 #include <contrib/libs/antlr4_cpp_runtime/src/BufferedTokenStream.h>
 #include <contrib/libs/antlr4-c3/src/CodeCompletionCore.hpp>
 
+#include <yql/essentials/sql/v1/format/sql_format.h>
+
 #include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
@@ -83,12 +85,41 @@ namespace NYdb {
             return TString(text.substr(LastWordIndex(text)));
         }
 
+        YQLSuggestionEngine::YQLSuggestionEngine()
+        {
+            auto keywords = NSQLFormat::GetKeywords();
+
+            TMap<TString, AntlrPipeline::TPtr> pipelines;
+            pipelines.emplace("cpp", MakeHolder<CppPipeline>(""));
+            pipelines.emplace("ansi", MakeHolder<AnsiPipeline>(""));
+
+            for (auto& [mode, pipeline] : pipelines) {
+                auto& vocabulary = pipeline->GetLexer().getVocabulary();
+                for (size_t type = 1; type <= vocabulary.getMaxTokenType(); ++type) {
+                    if (!keywords.contains(vocabulary.getSymbolicName(type))) {
+                        if (mode == "cpp") {
+                            CppIgnoredTokens.insert(type);
+                        } else if (mode == "ansi") {
+                            AnsiIgnoredTokens.insert(type);
+                        }
+                    }
+                }
+            }
+        }
+
         Completions YQLSuggestionEngine::Suggest(TStringBuf queryUtf8) {
             auto pipeline = SuitablePipeline(TString(queryUtf8));
             auto& lexer = pipeline->GetLexer();
             auto& tokens = pipeline->GetTokens();
             c3::CodeCompletionCore engine(&pipeline->GetParser());
 
+            if (IsAnsiQuery(TString(queryUtf8))) {
+                engine.ignoredTokens = AnsiIgnoredTokens;
+            } else {
+                engine.ignoredTokens = CppIgnoredTokens;
+            }
+
+            tokens.fill();
             size_t caretTokenIndex = (2 <= tokens.size()) ? tokens.size() - 2 : tokens.size() - 1;
             c3::CandidatesCollection candidates = engine.collectCandidates(caretTokenIndex);
 

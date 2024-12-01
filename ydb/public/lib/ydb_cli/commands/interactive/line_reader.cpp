@@ -1,5 +1,6 @@
 #include "line_reader.h"
 #include "yql_highlight.h"
+#include "yql_suggest.h"
 
 #include <util/generic/string.h>
 #include <util/system/file.h>
@@ -61,36 +62,8 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, Sugges
 {
     Rx.install_window_change_handler();
 
-    auto completion_callback = [this](const std::string & prefix, size_t) {
-        std::string lastToken;
-        for (i64 i = static_cast<i64>(prefix.size()) - 1; i >= 0; --i) {
-            if (std::isspace(prefix[i])) {
-                break;
-            }
-
-            lastToken.push_back(prefix[i]);
-        }
-
-        std::reverse(lastToken.begin(), lastToken.end());
-
-        replxx::Replxx::completions_t completions;
-        if (lastToken.empty()) {
-            return completions;
-        }
-
-        for (auto & Word : Suggestions.Words) {
-            if (Word.size() < lastToken.size()) {
-                continue;
-            }
-
-            if (Word.compare(0, lastToken.size(), lastToken) != 0) {
-                continue;
-            }
-
-            completions.push_back(Word);
-        }
-
-        return completions;
+    auto completion_callback = [](const std::string & prefix, size_t) {
+        return YQLSuggestionEngine().Suggest(prefix);
     };
 
     auto highlighter_callback = [](const auto& text, auto& colors) {
@@ -101,7 +74,7 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, Sugges
     Rx.set_highlighter_callback(highlighter_callback);
     Rx.enable_bracketed_paste();
     Rx.set_unique_history(true);
-    Rx.set_complete_on_empty(false);
+    Rx.set_complete_on_empty(true);
     Rx.set_word_break_characters(WordBreakCharacters.data());
     Rx.bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code); });
     Rx.bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code); });

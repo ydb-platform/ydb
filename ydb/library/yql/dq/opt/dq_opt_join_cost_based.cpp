@@ -277,7 +277,7 @@ private:
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
             ExprCtx.AddWarning(
                 YqlIssue(
-                    {}, TIssuesIds::DQ_OPTIMIZE_ERROR, 
+                    {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,
                     "Cost Based Optimizer could not be applied to this query: "
                     "Enumeration is too large, use PRAGMA MaxDPHypDPTableSize='4294967295' to disable the limitation"
                 )
@@ -367,7 +367,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     if (!DqCollectJoinRelationsWithStats(rels, typesCtx, equiJoin, providerCollect)){
         ctx.AddWarning(
-            YqlIssue({}, TIssuesIds::DQ_OPTIMIZE_ERROR, 
+            YqlIssue(ctx.GetPosition(equiJoin.Pos()), TIssuesIds::CBO_MISSING_TABLE_STATS,
             "Cost Based Optimizer could not be applied to this query: couldn't load statistics"
             )
         );

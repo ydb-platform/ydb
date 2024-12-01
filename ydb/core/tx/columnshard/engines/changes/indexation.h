@@ -36,8 +36,7 @@ protected:
         return nullptr;
     }
     virtual NDataLocks::ELockCategory GetLockCategory() const override {
-        AFL_VERIFY(false);
-        return NDataLocks::ELockCategory::MAX;
+        return NDataLocks::ELockCategory::Compaction;
     }
 public:
     THashMap<ui64, NArrow::NMerger::TIntervalPositions> PathToGranule;   // pathId -> positions (sorted by pk)

@@ -975,7 +975,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     THolder<TEvPQ::TEvGetFullDirectReadData> RequestCacheData(TTestActorRuntime* runtime, TEvPQ::TEvGetFullDirectReadData* request) {
         const auto& edgeId = runtime->AllocateEdgeActor();
         runtime->Send(NPQ::MakePQDReadCacheServiceActorId(), edgeId, request);
-        auto resp = runtime->GrabEdgeEvent<TEvPQ::TEvGetFullDirectReadData>();
+        auto resp = runtime->GrabEdgeEvent<TEvPQ::TEvGetFullDirectReadData>(TDuration::Seconds(10));
         UNIT_ASSERT(resp);
         return resp;
     }

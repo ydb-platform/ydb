@@ -14,7 +14,7 @@ class TestClickbench(LoadSuiteBase):
 
     @classmethod
     def do_setup_class(cls):
-        if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_CLICKBECNH', '0') == '1':
+        if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_CLICKBENCH', '0') == '1':
             return
 
         cls.check_tables_size(folder=None, tables={'clickbench/hits': 99997497})

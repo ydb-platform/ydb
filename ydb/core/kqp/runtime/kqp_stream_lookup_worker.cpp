@@ -780,6 +780,7 @@ public:
         TReadResultStats resultStats;
         bool sizeLimitExceeded = false;
         batch.clear();
+        ui64 rowsInBatch = 0;
 
         // we should process left rows that haven't matches on the right
         for (auto leftRowIt = PendingLeftRowsByKey.begin(); leftRowIt != PendingLeftRowsByKey.end();) {
@@ -817,13 +818,14 @@ public:
             for (; result.FirstUnprocessedRow < result.Rows.size(); ++result.FirstUnprocessedRow) {
                 auto& row = result.Rows[result.FirstUnprocessedRow];
 
-                if (resultStats.ResultBytesCount + row.Stats.ResultBytesCount > (ui64)freeSpace) {
+                if (rowsInBatch && (resultStats.ResultBytesCount + row.Stats.ResultBytesCount > (ui64)freeSpace)) {
                     sizeLimitExceeded = true;
                     break;
                 }
 
                 batch.emplace_back(std::move(row.Data));
                 resultStats.Add(row.Stats);
+                ++rowsInBatch;
             }
 
             if (result.FirstUnprocessedRow == result.Rows.size()) {

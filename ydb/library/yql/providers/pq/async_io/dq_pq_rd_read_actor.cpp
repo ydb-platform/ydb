@@ -802,6 +802,7 @@ TString TDqPqRdReadActor::GetInternalState() {
 }
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvProcessState::TPtr&) {
+    ProcessStateScheduled = false;
     Counters.ProcessState++;
     ProcessState();
 }

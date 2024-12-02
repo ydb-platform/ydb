@@ -70,7 +70,7 @@ struct TEvRowDispatcher {
         TEvStartSession() = default;
         TEvStartSession(
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
-            const TSet<ui64>& partitionIds,
+            const TSet<ui32>& partitionIds,
             const TString token,
             TMaybe<ui64> readOffset,
             ui64 startingMessageTimestampMs,

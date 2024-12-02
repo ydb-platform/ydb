@@ -115,7 +115,7 @@ public:
     void StopSession(NActors::TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         *event->Record.MutableSource() = source;
-        event->Record.SetPartitionId(PartitionId);
+       // event->Record.SetPartitionId(PartitionId);
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event.release()));
     }
 
@@ -181,7 +181,7 @@ public:
     NActors::TActorId ReadActorId1;
     NActors::TActorId ReadActorId2;
     NActors::TActorId ReadActorId3;
-    ui64 PartitionId = 0;
+    ui32 PartitionId = 0;
     NConfig::TRowDispatcherConfig Config;
 
     const TString Json1 = "{\"dt\":100,\"value\":\"value1\"}";

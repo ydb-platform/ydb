@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/core/fq/libs/common/util.h>
-#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <util/string/cast.h>
 
 namespace NYql {

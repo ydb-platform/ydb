@@ -6,90 +6,84 @@
 
 - Linux
 
-  Чтобы установить {{ ydb-short-name }} DSTool, выполните команду:
+    Чтобы установить {{ ydb-short-name }} DSTool:
 
-  ```bash
-  curl -sSL 'https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.sh' | bash
-  ```
+    1. Выполните команду:
 
-  Скрипт установит {{ ydb-short-name }} DSTool и добавит путь к исполняемому файлу в переменную окружения `PATH`.
+        ```bash
+        curl -sSL 'https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.sh' | bash
+        ```
 
-  {% note info %}
+        Скрипт установит {{ ydb-short-name }} DSTool и добавит путь к исполняемому файлу в переменную окружения `PATH`.
 
-  Скрипт дополнит переменную `PATH`, только если его запустить в командной оболочке bash или zsh. Если вы запустили скрипт в другой оболочке, добавьте путь до CLI в переменную `PATH` самостоятельно.
+        {% note info %}
 
-  {% endnote %}
+        Скрипт дополнит переменную `PATH`, только если его запустить в командной оболочке bash или zsh. Если вы запустили скрипт в другой оболочке, добавьте путь до CLI в переменную `PATH` самостоятельно.
 
-  Чтобы обновить переменные окружения, перезапустите командную оболочку.
+        {% endnote %}
+
+    1. Чтобы обновить переменные окружения, перезапустите командную оболочку.
+
+    1. Проверьте работу, выполнив команду вывода информации о кластере:
+
+       {% include  [test step](./_includes/test.md) %}
 
 - macOS
 
-  Чтобы установить {{ ydb-short-name }} DSTool, выполните команду:
+    Чтобы установить {{ ydb-short-name }} DSTool:
 
-  ```bash
-  curl -sSL 'https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.sh' | bash
-  ```
+    1. Выполните команду:
 
-  Скрипт установит {{ ydb-short-name }} DSTool и добавит путь до исполняемого файла в переменную окружения `PATH`.
+        ```bash
+        curl -sSL 'https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.sh' | bash
+        ```
 
-  Чтобы обновить переменные окружения, перезапустите командную оболочку.
+        Скрипт установит {{ ydb-short-name }} DSTool и добавит путь до исполняемого файла в переменную окружения `PATH`.
+
+    1. Чтобы обновить переменные окружения, перезапустите командную оболочку.
+
+    1. Проверьте работу, выполнив команду вывода информации о кластере:
+
+        {% include  [test step](./_includes/test.md) %}
 
 - Windows
 
-  {{ ydb-short-name }} DSTool можно установить с помощью:
+    Чтобы установить {{ ydb-short-name }} DSTool:
 
-  * PowerShell. Для этого выполните команду:
+    1. Выполните команду:
 
-    ```powershell
-    iex (New-Object System.Net.WebClient).DownloadString('https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.ps1')
-    ```
+        - **PowerShell**:
 
-    Укажите, нужно ли добавить путь к исполняемому файлу в переменную окружения `PATH`:
+            ```powershell
+            iex (New-Object System.Net.WebClient).DownloadString('https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.ps1')
+            ```
 
-    ```text
-    Add ydb-dstool installation dir to your PATH? [Y/n]
-    ```
+        - **CMD**:
 
-  * cmd. Для этого выполните команду:
+            ```cmd
+            @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.ps1'))"
+            ```
 
-    ```cmd
-    @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.ps1'))"
-    ```
+    1. Укажите, нужно ли добавить путь к исполняемому в переменную окружения `PATH`:
 
-    Укажите, нужно ли добавить путь к исполняемому в переменную окружения `PATH`:
+        ```text
+        Add ydb-dstool installation dir to your PATH? [Y/n]
+        ```
 
-    ```text
-    Add ydb-dstool installation dir to your PATH? [Y/n]
-    ```
+    1. Чтобы обновить переменные окружения, перезапустите командную оболочку.
 
-    Чтобы обновить переменные окружения, перезапустите командную оболочку.
+        {% note info %}
 
-  {% note info %}
+        {{ ydb-short-name }} DSTool использует символы Юникода в выводе некоторых команд. При некорректном отображении таких символов в консоли Windows, переключите кодировку на UTF-8:
 
-  {{ ydb-short-name }} DSTool использует символы Юникода в выводе некоторых команд. При некорректном отображении таких символов в консоли Windows, переключите кодировку на UTF-8:
+        ```cmd
+        chcp 65001
+        ```
 
-  ```cmd
-  chcp 65001
-  ```
+        {% endnote %}
 
-  {% endnote %}
+    1. Проверьте работу, выполнив команду вывода информации о кластере:
+
+        {% include  [test step](./_includes/test.md) %}
 
 {% endlist %}
-
-Проверьте работу, выполнив команду вывода информации о кластере:
-
-```bash
-ydb-dstool -e <bs_endpoint> cluster list
-```
-
-* `bs_endpoint` — URI интерфейса управления распределенным хранилищем кластера {{ ydb-short-name }}. Интерфейс доступен на любом узле кластера по протоколу HTTP на порте 8765 по умолчанию. Пример URI: `http://localhost:8765`.
-
-Результат:
-
-```text
-┌───────┬───────┬───────┬────────┬────────┬───────┬────────┐
-│ Hosts │ Nodes │ Pools │ Groups │ VDisks │ Boxes │ PDisks │
-├───────┼───────┼───────┼────────┼────────┼───────┼────────┤
-│ 8     │ 16    │ 1     │ 5      │ 40     │ 1     │ 32     │
-└───────┴───────┴───────┴────────┴────────┴───────┴────────┘
-```

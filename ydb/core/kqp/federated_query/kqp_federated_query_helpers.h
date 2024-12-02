@@ -10,7 +10,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
+#include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 
 namespace NKikimrConfig {
     class TQueryServiceConfig;

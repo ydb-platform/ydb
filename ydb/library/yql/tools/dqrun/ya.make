@@ -76,18 +76,18 @@ ENDIF()
         yql/essentials/core/url_lister
         yql/essentials/core/pg_ext
         ydb/library/yql/providers/yt/actors
-        ydb/library/yql/providers/yt/comp_nodes/dq
+        yt/yql/providers/yt/comp_nodes/dq
         ydb/library/yql/providers/yt/dq_task_preprocessor
-        ydb/library/yql/providers/yt/gateway/file
-        ydb/library/yql/providers/yt/gateway/native
-        ydb/library/yql/providers/yt/codec/codegen
-        ydb/library/yql/providers/yt/mkql_dq
-        ydb/library/yql/providers/yt/provider
-        ydb/library/yql/providers/yt/codec/codegen
-        ydb/library/yql/providers/yt/comp_nodes/llvm14
-        ydb/library/yql/providers/yt/lib/yt_download
-        ydb/library/yql/providers/yt/lib/yt_url_lister
-        ydb/library/yql/providers/yt/lib/config_clusters
+        yt/yql/providers/yt/gateway/file
+        yt/yql/providers/yt/gateway/native
+        yt/yql/providers/yt/codec/codegen
+        yt/yql/providers/yt/mkql_dq
+        yt/yql/providers/yt/provider
+        yt/yql/providers/yt/codec/codegen
+        yt/yql/providers/yt/comp_nodes/llvm14
+        yt/yql/providers/yt/lib/yt_download
+        yt/yql/providers/yt/lib/yt_url_lister
+        yt/yql/providers/yt/lib/config_clusters
         yql/essentials/parser/pg_wrapper
         yql/essentials/utils/log/proto
         yql/essentials/core/qplayer/storage/file

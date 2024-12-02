@@ -1,9 +1,0 @@
-syntax = "proto3";
-
-package NYql.NYt.NSource;
-
-message TLookupSource {
-    string Cluster = 1;
-    string Table = 2;
-    string RowSpec = 3;
-}

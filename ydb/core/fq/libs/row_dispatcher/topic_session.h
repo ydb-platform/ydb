@@ -1,7 +1,5 @@
 #pragma once
 
-#include "common.h"
-
 #include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
 #include <ydb/core/fq/libs/config/protos/common.pb.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
@@ -23,10 +21,10 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     const TString& database,
     const NConfig::TRowDispatcherConfig& config,
     NActors::TActorId rowDispatcherActorId,
+    NActors::TActorId compileServiceActorId,
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize);

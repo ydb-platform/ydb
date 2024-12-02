@@ -5816,17 +5816,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky until restart
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 22); // 20 data pages and 2 index pages
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky again
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky
     }
 
     Y_UNIT_TEST(TestNonSticky_BTreeIndex) {
@@ -5922,17 +5922,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky until restart
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 15); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky again
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky
     }
 
     Y_UNIT_TEST(TestNonStickyGroup_BTreeIndex) {
@@ -6030,17 +6030,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky until restart
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 5); // 1 groups[0], 1 historic[0], 3 index pages
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky again
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky
     }
 
     Y_UNIT_TEST(TestStickyAlt_BTreeIndex) {
@@ -6339,7 +6339,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         // after restart we have no pages in private cache
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
+        // after restart we have no pages in private cache except flat index
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_EnableLocalDBFlatIndex_False) { // uses b-tree index
@@ -6414,10 +6414,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        // after restart we have no pages in private cache
+        // after restart we have no pages in private cache except flat index
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 286);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_TurnOff) { // uses b-tree index at first
@@ -6454,11 +6454,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        // after restart we have no pages in private cache
+        // after restart we have no pages in private cache except flat index
         // but use only flat index
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 286);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_Generations) { // uses b-tree index

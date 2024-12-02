@@ -13,10 +13,8 @@ namespace NKikimr::NSharedCache {
         void AddStickyPage(TPageId pageId, TSharedPageRef page, ui64 pageSize) {
             Y_ABORT_UNLESS(page.IsUsed());
             auto inserted = StickyPages.emplace(pageId, std::move(page)).second;
-            if (Y_LIKELY(inserted)) {
+            if (inserted) {
                 StickySize += pageSize;
-            } else {
-                Y_DEBUG_ABORT("Sticky pages should be unique");
             }
         }
     
@@ -40,12 +38,6 @@ namespace NKikimr::NSharedCache {
 
         void DropPageCollection(TLogoBlobID pageCollectionId) {
             PageCollections.erase(pageCollectionId);
-        }
-
-        void AppendPageCollections(TPageCollectionStates&& other) {
-            for (auto& [pageCollectionId, state] : other.PageCollections) {
-                AddPageCollection(pageCollectionId, std::move(state));
-            }
         }
 
         explicit operator bool() const {
@@ -142,11 +134,6 @@ public:
     struct TInfo : public TThrRefBase {
         ui32 Total() const noexcept {
             return PageMap.size();
-        }
-
-        const TSharedData* Lookup(TPageId pageId) const noexcept {
-            auto* page = GetPage(pageId);
-            return page ? page->GetPinnedBody() : nullptr;
         }
 
         TPage* GetPage(TPageId pageId) const noexcept {

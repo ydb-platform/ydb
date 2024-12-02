@@ -170,6 +170,7 @@ public:
 
     TVector<TIntrusivePtr<TCache>> PageCollections;
     TIntrusivePtr<TCache> Pseudo;    /* Cache for NPage::TBlobs */
+    mutable NSharedCache::TPageCollectionStates PageCollectionStates;
 };
 
 class TTxStatusPartStore : public TTxStatusPart, public IBorrowBundle {

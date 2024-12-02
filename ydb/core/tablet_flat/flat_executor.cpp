@@ -208,7 +208,6 @@ void TExecutor::Broken() {
 void TExecutor::RecreatePageCollectionsCache() noexcept
 {
     PrivatePageCache = MakeHolder<TPrivatePageCache>();
-    PageCollectionStates = new TPageCollectionStates();
 
     Stats->PacksMetaBytes = 0;
 
@@ -635,7 +634,6 @@ void TExecutor::DropCachesOfBundle(const NTable::TPart &part) noexcept
 void TExecutor::DropSingleCache(const TLogoBlobID &label) noexcept
 {
     auto toActivate = PrivatePageCache->ForgetPageCollection(label);
-    PageCollectionStates->DropPageCollection(label);
     ActivateWaitingTransactions(toActivate);
     if (!PrivatePageCache->Info(label))
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvInvalidate(label));
@@ -666,6 +664,27 @@ void TExecutor::RequestInMemPagesForDatabase(bool pendingOnly) {
                 RequestInMemPagesForPartStore(tid, partView, stickyColumns);
         }
         pr.second.PendingCacheEnable = false;
+    }
+}
+
+void TExecutor::SaveInMemPages(NSharedCache::TEvResult *msg) {
+    const auto& scheme = Scheme();
+    for (auto& pr : scheme.Tables) {
+        const ui32 tid = pr.first;
+        auto subset = Database->Subset(tid, NTable::TEpoch::Max(), { } , { });
+        for (auto &partView : subset->Flatten) {
+            auto partStore = partView.As<NTable::TPartStore>();
+            for (size_t groupIndex : xrange(partView->GroupsCount)) {
+                // Note: page collection search optimization seems useless
+                auto pageCollection = partStore->PageCollections[groupIndex]->PageCollection;
+                if (pageCollection == msg->Origin) {
+                    for (auto& loaded : msg->Loaded) {
+                        auto pageSize = pageCollection->Page(loaded.PageId).Size;
+                        partStore->PageCollectionStates.AddStickyPage(pageCollection->Label(), loaded.PageId, loaded.Page, pageSize);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1349,15 +1368,8 @@ void TExecutor::RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartV
 
         if (stickyGroup) {
             auto req = partView.As<NTable::TPartStore>()->GetPages(groupIndex);
-
-            TPrivatePageCache::TInfo *info = PrivatePageCache->Info(req->PageCollection->Label());
-            Y_ABORT_UNLESS(info);
-            // TODO
-            // for (ui32 pageId : req->Pages)
-                // PrivatePageCache->MarkSticky(pageId, info);
-
             // TODO: only request missing pages
-            RequestFromSharedCache(req, NBlockIO::EPriority::Bkgr, EPageCollectionRequest::CacheSync);
+            RequestFromSharedCache(req, NBlockIO::EPriority::Bkgr, EPageCollectionRequest::CacheSticky);
         }
     }
 }
@@ -2677,9 +2689,9 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
             << ", category " << ev->Cookie;
     }
 
-    switch (EPageCollectionRequest(ev->Cookie)) {
+    switch (auto requestType = EPageCollectionRequest(ev->Cookie)) {
     case EPageCollectionRequest::Cache:
-    case EPageCollectionRequest::CacheSync:
+    case EPageCollectionRequest::CacheSticky:
         {
             TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->Origin->Label());
             if (!collectionInfo) // collection could be outdated
@@ -2697,6 +2709,9 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 return Broken();
             }
 
+            if (requestType == EPageCollectionRequest::CacheSticky) {
+                SaveInMemPages(msg);
+            }
             for (auto& loaded : msg->Loaded) {
                 TPrivatePageCache::TPage::TWaitQueuePtr transactionsToActivate = PrivatePageCache->ProvideBlock(std::move(loaded), collectionInfo);
                 ActivateWaitingTransactions(transactionsToActivate);
@@ -2756,6 +2771,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
         return;
 
     default:
+        Y_ABORT_S("Unexpected request " << ev->Cookie);
         break;
     }
 }
@@ -3293,8 +3309,6 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     if (results) {
         auto &gcDiscovered = commit->GcDelta.Created;
-
-        PageCollectionStates->AppendPageCollections(std::move(msg->PageCollectionStates));
 
         for (const auto &result : results) {
             const auto &newPart = result.Part;

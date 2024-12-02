@@ -55,10 +55,12 @@ namespace NTable {
 
                 if (auto* savedPage = SavedPages.FindPtr(pageId)) {
                     return savedPage;
-                } else if (auto* cached = Cache->Lookup(pageId)) {
+                } else if (auto* page = Cache->GetPage(pageId); page && page->GetPinnedBody()) {
+                    Y_ABORT_UNLESS(page->SharedBody);
+                    TryStickPage(pageId, page->SharedBody);
                     // Save page in case it's evicted on the next iteration
-                    SavedPages[pageId] = *cached;
-                    return cached;
+                    SavedPages[pageId] = *page->GetPinnedBody();
+                    return page->GetPinnedBody();
                 } else {
                     NeedPages.insert(pageId);
                     return nullptr;
@@ -85,13 +87,29 @@ namespace NTable {
             {
                 if (cookie == 0 && NeedPages.erase(loaded.PageId)) {
                     SavedPages[loaded.PageId] = NSharedCache::TPinnedPageRef(loaded.Page).GetData();
+                    TryStickPage(loaded.PageId, loaded.Page);
                     Cache->Fill(loaded.PageId, std::move(loaded.Page));
                 }
             }
 
+            NSharedCache::TPageCollectionStates&& ObtainPageCollectionStates() 
+            {
+                return std::move(PageCollectionStates);
+            }
+
         private:
+            void TryStickPage(TPageId pageId, NSharedCache::TSharedPageRef& page)
+            {
+                auto pageType = Cache->GetPageType(pageId);
+                if (NeedIn(pageType) || pageType == EPage::FlatIndex) {
+                    auto pageSize = Cache->GetPageSize(pageId);
+                    PageCollectionStates.AddStickyPage(Cache->PageCollection->Label(), pageId, page, pageSize);
+                }
+            }
+
             const TPart* Part = nullptr;
             TIntrusivePtr<TCache> Cache;
+            NSharedCache::TPageCollectionStates PageCollectionStates;
             THashMap<TPageId, TSharedData> SavedPages;
             THashSet<TPageId> NeedPages;
         };
@@ -168,6 +186,9 @@ namespace NTable {
             Y_ABORT_UNLESS(Stage == EStage::Result);
             Y_ABORT_UNLESS(PartView, "Result may only be grabbed once");
             Y_ABORT_UNLESS(PartView.Slices, "Missing slices in Result stage");
+            
+            PartView.As<TPartStore>()->PageCollectionStates = LoaderEnv->ObtainPageCollectionStates();
+
             return std::move(PartView);
         }
 

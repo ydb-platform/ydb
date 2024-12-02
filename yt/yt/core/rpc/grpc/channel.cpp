@@ -629,6 +629,8 @@ private:
 
             NRpc::NProto::TResponseHeader responseHeader;
             ToProto(responseHeader.mutable_request_id(), Request_->GetRequestId());
+            NYT::ToProto(responseHeader.mutable_service(), Request_->GetService());
+            NYT::ToProto(responseHeader.mutable_method(), Request_->GetMethod());
             if (Request_->Header().has_response_codec()) {
                 responseHeader.set_codec(Request_->Header().response_codec());
             }

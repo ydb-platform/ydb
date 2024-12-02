@@ -1,3 +1,4 @@
+* Fixed a bug in TPC-H tables schema where the `partsupp` table had incorrect list of key columns
 
 ## 2.16.0 ##
 

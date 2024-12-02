@@ -327,7 +327,6 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     AFL_VERIFY(dataLocksManager);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> changes = std::make_shared<TCleanupPortionsColumnEngineChanges>(StoragesManager);
-
     // Add all portions from dropped paths
     ui64 portionsCount = 0;
     ui64 chunksCount = 0;
@@ -341,7 +340,9 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
         if (!g) {
             continue;
         }
-
+        if (dataLocksManager->IsLocked(*g, NDataLocks::ELockCategory::Tables)) {
+            continue;
+        }
         for (auto& [portion, info] : g->GetPortions()) {
             if (info->CheckForCleanup()) {
                 continue;
@@ -360,6 +361,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
             changes->AddPortionToDrop(info);
             ++portionsFromDrop;
         }
+        changes->AddTableToDrop(pathId);
     }
 
     const TInstant snapshotInstant = snapshot.GetPlanInstant();

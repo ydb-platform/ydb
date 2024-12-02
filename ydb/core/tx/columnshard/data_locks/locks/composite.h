@@ -35,8 +35,8 @@ protected:
         return Locks.empty();
     }
 public:
-    TCompositeLock(
-        const TString& lockName, const std::vector<std::shared_ptr<ILock>>& locks, const ELockCategory category, const bool readOnly = false)
+    TCompositeLock(const TString& lockName, const std::vector<std::shared_ptr<ILock>>& locks,
+        const ELockCategory category = NDataLocks::ELockCategory::Any, const bool readOnly = false)
         : TBase(lockName, category, readOnly)
     {
         for (auto&& l : locks) {
@@ -47,8 +47,8 @@ public:
         }
     }
 
-    TCompositeLock(
-        const TString& lockName, std::initializer_list<std::shared_ptr<ILock>> locks, const ELockCategory category, const bool readOnly = false)
+    TCompositeLock(const TString& lockName, std::initializer_list<std::shared_ptr<ILock>> locks,
+        const ELockCategory category = NDataLocks::ELockCategory::Any, const bool readOnly = false)
         : TBase(lockName, category, readOnly)
     {
         for (auto&& l : locks) {

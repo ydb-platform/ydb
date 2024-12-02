@@ -22,21 +22,25 @@ enum class ELockCategory : ui32 {
     Sharing,
     Actualization,
     Tables,
+    Any,
     MAX
 };
 
 static const inline std::array<std::set<ELockCategory>, (ui32)ELockCategory::MAX> LockCategoriesInteraction = {
     //Compaction
-    std::set<ELockCategory>({ ELockCategory::Compaction, ELockCategory::Actualization, ELockCategory::Tables }),
+    std::set<ELockCategory>({ ELockCategory::Compaction, ELockCategory::Actualization, ELockCategory::Tables, ELockCategory::Any}),
     //Cleanup
-    std::set<ELockCategory>({ ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Tables }),
+    std::set<ELockCategory>({ ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Tables, ELockCategory::Any }),
     //Sharing
-    std::set<ELockCategory>({ ELockCategory::Sharing, ELockCategory::Cleanup, ELockCategory::Tables }),
+    std::set<ELockCategory>({ ELockCategory::Sharing, ELockCategory::Cleanup, ELockCategory::Tables, ELockCategory::Any }),
     //Actualization
-    std::set<ELockCategory>({ ELockCategory::Actualization, ELockCategory::Compaction, ELockCategory::Tables }),
+    std::set<ELockCategory>({ ELockCategory::Actualization, ELockCategory::Compaction, ELockCategory::Tables, ELockCategory::Any }),
     //Tables
-    std::set<ELockCategory>(
-        { ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Actualization, ELockCategory::Compaction, ELockCategory::Tables }),
+    std::set<ELockCategory>({ ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Actualization, ELockCategory::Compaction,
+        ELockCategory::Tables, ELockCategory::Any }),
+    //Any
+    std::set<ELockCategory>({ ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Actualization, ELockCategory::Compaction,
+        ELockCategory::Tables, ELockCategory::Any }),
 };
 
 class ILock {

@@ -42,8 +42,8 @@ protected:
         }
         if (actLock) {
             auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier() + "::REMOVE/MOVE", portions, GetLockCategory());
-            return std::make_shared<NDataLocks::TCompositeLock>(TypeString() + "::" + GetTaskIdentifier(),
-                std::vector<std::shared_ptr<NDataLocks::ILock>>({ actLock, selfLock }), GetLockCategory());
+            return std::make_shared<NDataLocks::TCompositeLock>(
+                TypeString() + "::" + GetTaskIdentifier(), std::vector<std::shared_ptr<NDataLocks::ILock>>({ actLock, selfLock }));
         } else {
             auto selfLock =
                 std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), portions, GetLockCategory());

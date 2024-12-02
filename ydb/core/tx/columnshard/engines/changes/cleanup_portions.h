@@ -8,6 +8,7 @@ private:
     using TBase = TColumnEngineChanges;
     THashMap<TString, std::vector<std::shared_ptr<TPortionInfo>>> StoragePortions;
     std::vector<TPortionInfo::TConstPtr> PortionsToDrop;
+    THashSet<ui64> TablesToDrop;
 
 protected:
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
@@ -35,13 +36,26 @@ protected:
         return NDataLocks::ELockCategory::Cleanup;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
-        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), PortionsToDrop, GetLockCategory());
+        auto portionsLock = std::make_shared<NDataLocks::TListPortionsLock>(
+            TypeString() + "::PORTIONS::" + GetTaskIdentifier(), PortionsToDrop, NDataLocks::ELockCategory::Cleanup);
+        if (TablesToDrop.size()) {
+            auto tablesLock = std::make_shared<NDataLocks::TListTablesLock>(
+                TypeString() + "::TABLES::" + GetTaskIdentifier(), TablesToDrop, NDataLocks::ELockCategory::Tables);
+            return std::shared_ptr<NDataLocks::TCompositeLock>(
+                new NDataLocks::TCompositeLock(TypeString() + "::COMPOSITE::" + GetTaskIdentifier(), { portionsLock, tablesLock }));
+        } else {
+            return portionsLock;
+        }
     }
 
 public:
     TCleanupPortionsColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
         : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS) {
 
+    }
+
+    void AddTableToDrop(const ui64 pathId) {
+        TablesToDrop.emplace(pathId);
     }
 
     const std::vector<TPortionInfo::TConstPtr>& GetPortionsToDrop() const {

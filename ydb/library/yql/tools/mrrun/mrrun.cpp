@@ -2,15 +2,15 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs/codecs.h>
 
-#include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
-#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
-#include <ydb/library/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
-#include <ydb/library/yql/providers/yt/lib/config_clusters/config_clusters.h>
-#include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
-#include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/lib/log/yt_logger.h>
+#include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <yt/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
+#include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
+#include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
+#include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 

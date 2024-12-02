@@ -170,8 +170,16 @@ public:
     TBase* operator->();
     const TBase* operator->() const;
 
+    void MergeWith(const TPolymorphicYsonStruct& other);
+
+    explicit operator bool() const;
+
 private:
     TIntrusivePtr<TBase> Storage_;
+    // TODO(arkady-e1ppa): This is a hotfix so that we don't have to bring
+    // "IsSet" logic for yson structs to 24.2. Write a "better" solution for trunk
+    // later.
+    INodePtr SerializedStorage_;
     TKey HeldType_;
 
     void PrepareInstance(INodePtr& node);

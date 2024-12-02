@@ -1,6 +1,6 @@
 
 #include <ydb/library/yql/providers/yt/actors/yql_yt_lookup_actor.h>
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 
 #include <yql/essentials/public/udf/udf_value.h>
 

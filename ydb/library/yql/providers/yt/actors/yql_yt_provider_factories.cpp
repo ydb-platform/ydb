@@ -1,6 +1,6 @@
 #include "yql_yt_provider_factories.h"
 #include "yql_yt_lookup_actor.h"
-#include <ydb/library/yql/providers/yt/proto/source.pb.h>
+#include <yt/yql/providers/yt/proto/source.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 

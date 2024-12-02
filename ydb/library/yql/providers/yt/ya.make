@@ -1,14 +1,4 @@
 RECURSE(
     actors
-    codec
-    common
-    comp_nodes
-    expr_nodes
-    gateway
-    job
-    lib
-    mkql_dq
-    opt
-    proto
-    provider
+    dq_task_preprocessor
 )

@@ -1,4 +1,4 @@
-#include <ydb/library/yql/providers/yt/job/yql_job_registry.h>
+#include <yt/yql/providers/yt/job/yql_job_registry.h>
 
 #include <yql/essentials/utils/backtrace/backtrace.h>
 

@@ -2349,6 +2349,7 @@ void TFixture::SplitPartition(const TString& topicName,
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_45, TFixture)
 {
+    // Writing to a topic in a transaction affects the `AvgWriteBytes` indicator
     CreateTopic("topic_A", TEST_CONSUMER, 2);
 
     auto session = CreateTableSession();
@@ -2376,6 +2377,8 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_45, TFixture)
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_46, TFixture)
 {
+    // The `split` operation of the topic partition affects the writing in the transaction.
+    // The transaction commit should fail with an error
     CreateTopic("topic_A", TEST_CONSUMER, 2, 10);
 
     auto session = CreateTableSession();
@@ -2395,6 +2398,38 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_46, TFixture)
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
 
     CommitTx(tx, EStatus::ABORTED);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_47, TFixture)
+{
+    // The `split` operation of the topic partition does not affect the reading in the transaction.
+    CreateTopic("topic_A", TEST_CONSUMER, 2, 10);
+
+    TString message(1'000, 'x');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, nullptr, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, nullptr, 0);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, nullptr, 1);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, nullptr, 1);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+
+    SplitPartition("topic_A", 1, "\xC0");
+
+    auto session = CreateTableSession();
+    auto tx = BeginTx(session);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+
+    CloseTopicReadSession("topic_A", TEST_CONSUMER);
+
+    messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx, 1);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+
+    CommitTx(tx, EStatus::SUCCESS);
 }
 
 }

@@ -90,14 +90,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-tx-sharding-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-tx-sharding-ut)
 
 set_yunittest_property(

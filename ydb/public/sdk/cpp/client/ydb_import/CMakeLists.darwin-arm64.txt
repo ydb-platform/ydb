@@ -36,6 +36,7 @@ target_link_libraries(cpp-client-ydb_import PUBLIC
 
 target_sources(cpp-client-ydb_import PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_import/import.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_import/out.cpp
 )
 
 

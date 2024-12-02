@@ -95,14 +95,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-tx-schemeshard-ut_serverless_reboots
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-tx-schemeshard-ut_serverless_reboots)
 
 set_yunittest_property(

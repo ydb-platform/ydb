@@ -141,14 +141,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-tablet_flat-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 resources(ydb-core-tablet_flat-ut
   ${PROJECT_BINARY_DIR}/ydb/core/tablet_flat/ut/6cf77686c9ddf4f7a8a150d2405a77e7.cpp
   INPUTS

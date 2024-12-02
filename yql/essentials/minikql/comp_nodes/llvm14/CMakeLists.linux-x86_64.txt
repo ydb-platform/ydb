@@ -44,6 +44,7 @@ target_link_libraries(minikql-comp_nodes-llvm14 PUBLIC
   Target-X86-AsmParser
   lib-Transforms-IPO
   libs-apache-arrow
+  contrib-libs-xxhash
   essentials-types-binary_json
   yql-essentials-minikql
   essentials-minikql-arrow

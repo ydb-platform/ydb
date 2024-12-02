@@ -88,14 +88,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-library-ycloud-impl-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-library-ycloud-impl-ut)
 
 set_yunittest_property(

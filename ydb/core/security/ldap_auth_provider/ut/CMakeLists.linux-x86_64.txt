@@ -93,14 +93,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-security-ldap_auth_provider-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-security-ldap_auth_provider-ut)
 
 set_yunittest_property(

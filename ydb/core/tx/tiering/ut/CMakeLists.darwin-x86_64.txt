@@ -93,14 +93,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-tx-tiering-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-tx-tiering-ut)
 
 set_yunittest_property(

@@ -82,14 +82,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-library-actors-helpers-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-library-actors-helpers-ut)
 
 set_yunittest_property(

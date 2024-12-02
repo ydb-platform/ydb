@@ -85,14 +85,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-backup-impl-ut_table_writer
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-backup-impl-ut_table_writer)
 
 set_yunittest_property(

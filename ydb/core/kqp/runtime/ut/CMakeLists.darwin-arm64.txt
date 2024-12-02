@@ -48,6 +48,7 @@ target_link_options(ydb-core-kqp-runtime-ut PRIVATE
 
 target_sources(ydb-core-kqp-runtime-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_scan_data_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_compute_scheduler_ut.cpp
 )
 
 
@@ -85,14 +86,6 @@ set_yunittest_property(
   ydb-core-kqp-runtime-ut
   PROPERTY
   ENVIRONMENT
-)
-
-set_yunittest_property(
-  TEST
-  ydb-core-kqp-runtime-ut
-  PROPERTY
-  TIMEOUT
-  180
 )
 
 vcs_info(ydb-core-kqp-runtime-ut)

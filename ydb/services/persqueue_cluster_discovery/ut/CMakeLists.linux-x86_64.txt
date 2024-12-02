@@ -93,14 +93,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-services-persqueue_cluster_discovery-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-services-persqueue_cluster_discovery-ut)
 
 set_yunittest_property(

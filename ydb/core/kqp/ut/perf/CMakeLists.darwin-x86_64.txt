@@ -88,14 +88,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-kqp-ut-perf
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-kqp-ut-perf)
 
 set_yunittest_property(

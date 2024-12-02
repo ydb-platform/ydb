@@ -84,14 +84,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-blobstorage-ut_blobstorage-ut_scrub
-  PROPERTY
-  TIMEOUT
-  3600
-)
-
 vcs_info(ydb-core-blobstorage-ut_blobstorage-ut_scrub)
 
 set_yunittest_property(

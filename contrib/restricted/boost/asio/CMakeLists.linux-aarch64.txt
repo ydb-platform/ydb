@@ -28,20 +28,12 @@ target_link_libraries(restricted-boost-asio INTERFACE
   contrib-libs-cxxsupp
   contrib-libs-openssl
   restricted-boost-align
-  restricted-boost-array
   restricted-boost-assert
-  restricted-boost-bind
-  restricted-boost-chrono
   restricted-boost-config
-  restricted-boost-core
+  restricted-boost-context
   restricted-boost-coroutine
   restricted-boost-date_time
-  restricted-boost-function
-  restricted-boost-regex
-  restricted-boost-smart_ptr
   restricted-boost-system
   restricted-boost-throw_exception
-  restricted-boost-type_traits
-  restricted-boost-utility
 )
 

@@ -59,6 +59,7 @@ target_link_libraries(dqrun PUBLIC
   providers-dq-local_gateway
   providers-dq-provider
   dq-provider-exec
+  providers-dq-helper
   providers-pq-async_io
   pq-gateway-dummy
   pq-gateway-native

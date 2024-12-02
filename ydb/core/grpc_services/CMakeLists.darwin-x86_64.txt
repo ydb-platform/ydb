@@ -142,6 +142,7 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_make_directory.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_modify_permissions.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_monitoring.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_ping.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_prepare_data_query.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_rate_limiter_api.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_read_columns.cpp

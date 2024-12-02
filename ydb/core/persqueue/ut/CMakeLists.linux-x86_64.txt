@@ -128,14 +128,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-persqueue-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 resources(ydb-core-persqueue-ut
   ${PROJECT_BINARY_DIR}/ydb/core/persqueue/ut/20fb34d39c23be7518eb4226481d815e.cpp
   INPUTS

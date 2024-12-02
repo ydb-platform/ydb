@@ -45,6 +45,7 @@ target_link_libraries(ydb-services-ydb PUBLIC
 
 target_sources(ydb-services-ydb PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_clickhouse_internal.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_debug.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_dummy.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_export.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_import.cpp

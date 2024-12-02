@@ -92,14 +92,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-sys_view-partition_stats-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-sys_view-partition_stats-ut)
 
 set_yunittest_property(

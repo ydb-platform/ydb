@@ -99,14 +99,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-persqueue-ut-ut_with_sdk
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-persqueue-ut-ut_with_sdk)
 
 set_yunittest_property(

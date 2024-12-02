@@ -98,14 +98,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-tx-datashard-ut_kqp_scan
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-tx-datashard-ut_kqp_scan)
 
 set_yunittest_property(

@@ -98,14 +98,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-library-yql-providers-yt-comp_nodes-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-library-yql-providers-yt-comp_nodes-ut)
 
 set_yunittest_property(

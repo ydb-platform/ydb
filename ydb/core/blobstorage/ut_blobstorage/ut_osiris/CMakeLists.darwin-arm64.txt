@@ -79,14 +79,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-blobstorage-ut_blobstorage-ut_osiris
-  PROPERTY
-  TIMEOUT
-  3600
-)
-
 vcs_info(ydb-core-blobstorage-ut_blobstorage-ut_osiris)
 
 set_yunittest_property(

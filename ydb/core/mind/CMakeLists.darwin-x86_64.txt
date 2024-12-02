@@ -56,6 +56,7 @@ target_sources(ydb-core-mind PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/labels_maintainer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/lease_holder.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/local.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/node_broker__graceful_shutdown.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/node_broker.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/node_broker__extend_lease.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/node_broker__init_scheme.cpp

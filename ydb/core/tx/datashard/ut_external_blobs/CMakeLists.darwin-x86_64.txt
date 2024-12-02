@@ -86,14 +86,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-tx-datashard-ut_external_blobs
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-tx-datashard-ut_external_blobs)
 
 set_yunittest_property(

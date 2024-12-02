@@ -12,6 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+
 add_subdirectory(sdk_core_access)
 add_subdirectory(ydb_discovery)
 add_subdirectory(command_base)
@@ -47,6 +54,7 @@ target_link_libraries(clicommands PUBLIC
   topic
   cpp-client-draft
   cpp-client-ydb_coordination
+  cpp-client-ydb_debug
   cpp-client-ydb_export
   cpp-client-ydb_import
   cpp-client-ydb_monitoring
@@ -57,6 +65,7 @@ target_link_libraries(clicommands PUBLIC
   cpp-client-ydb_table
   cpp-client-ydb_topic
   ydb_types-credentials-login
+  tools-enum_parser-enum_serialization_runtime
 )
 
 target_sources(clicommands PRIVATE
@@ -68,7 +77,9 @@ target_sources(clicommands PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/query_workload.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_admin.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_benchmark.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_debug.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_dynamic_config.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_ping.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_profile.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_root_common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_auth.cpp
@@ -87,3 +98,9 @@ target_sources(clicommands PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_yql.cpp
 )
 
+
+generate_enum_serilization(clicommands
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_ping.h
+  INCLUDE_HEADERS
+  ydb/public/lib/ydb_cli/commands/ydb_ping.h
+)

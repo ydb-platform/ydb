@@ -92,14 +92,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  library-yql-minikql-comp_nodes-packed_tuple-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(library-yql-minikql-comp_nodes-packed_tuple-ut)
 
 set_yunittest_property(

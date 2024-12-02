@@ -91,14 +91,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  schemeshard-ut_external_data_source_reboots
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(schemeshard-ut_external_data_source_reboots)
 
 set_yunittest_property(

@@ -95,14 +95,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-cms-ut_sentinel
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-cms-ut_sentinel)
 
 set_yunittest_property(

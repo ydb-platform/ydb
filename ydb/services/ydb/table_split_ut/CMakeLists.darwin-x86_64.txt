@@ -105,14 +105,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-services-ydb-table_split_ut
-  PROPERTY
-  TIMEOUT
-  300
-)
-
 vcs_info(ydb-services-ydb-table_split_ut)
 
 set_yunittest_property(

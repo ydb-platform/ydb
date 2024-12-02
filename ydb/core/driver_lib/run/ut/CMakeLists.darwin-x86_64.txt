@@ -85,14 +85,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-driver_lib-run-ut
-  PROPERTY
-  TIMEOUT
-  60
-)
-
 vcs_info(ydb-core-driver_lib-run-ut)
 
 set_yunittest_property(

@@ -95,14 +95,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-tx-scheme_board-ut_monitoring
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-tx-scheme_board-ut_monitoring)
 
 set_yunittest_property(

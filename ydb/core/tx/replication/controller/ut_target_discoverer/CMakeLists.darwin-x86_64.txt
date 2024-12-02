@@ -86,14 +86,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  replication-controller-ut_target_discoverer
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(replication-controller-ut_target_discoverer)
 
 set_yunittest_property(

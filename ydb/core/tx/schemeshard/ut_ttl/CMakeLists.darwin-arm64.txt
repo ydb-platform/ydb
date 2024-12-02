@@ -48,6 +48,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_ttl PRIVATE
 
 target_sources(ydb-core-tx-schemeshard-ut_ttl PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_ttl/ut_ttl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_ttl/ut_ttl_utility.cpp
 )
 
 
@@ -85,14 +86,6 @@ set_yunittest_property(
   ydb-core-tx-schemeshard-ut_ttl
   PROPERTY
   ENVIRONMENT
-)
-
-set_yunittest_property(
-  TEST
-  ydb-core-tx-schemeshard-ut_ttl
-  PROPERTY
-  TIMEOUT
-  600
 )
 
 vcs_info(ydb-core-tx-schemeshard-ut_ttl)

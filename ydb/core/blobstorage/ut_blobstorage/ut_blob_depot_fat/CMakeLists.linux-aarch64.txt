@@ -86,14 +86,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  blobstorage-ut_blobstorage-ut_blob_depot_fat
-  PROPERTY
-  TIMEOUT
-  3600
-)
-
 vcs_info(blobstorage-ut_blobstorage-ut_blob_depot_fat)
 
 set_yunittest_property(

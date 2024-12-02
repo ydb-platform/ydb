@@ -84,14 +84,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ut_group_reconfiguration
-  PROPERTY
-  TIMEOUT
-  3600
-)
-
 vcs_info(ut_group_reconfiguration)
 
 set_yunittest_property(

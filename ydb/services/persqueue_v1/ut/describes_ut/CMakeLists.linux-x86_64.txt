@@ -94,14 +94,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-services-persqueue_v1-ut-describes_ut
-  PROPERTY
-  TIMEOUT
-  300
-)
-
 vcs_info(ydb-services-persqueue_v1-ut-describes_ut)
 
 set_yunittest_property(

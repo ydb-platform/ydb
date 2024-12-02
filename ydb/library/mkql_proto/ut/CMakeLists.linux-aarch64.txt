@@ -93,14 +93,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-library-mkql_proto-ut
-  PROPERTY
-  TIMEOUT
-  150
-)
-
 vcs_info(ydb-library-mkql_proto-ut)
 
 set_yunittest_property(

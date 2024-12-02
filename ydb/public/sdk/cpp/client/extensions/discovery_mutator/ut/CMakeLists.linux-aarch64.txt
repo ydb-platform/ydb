@@ -84,14 +84,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  client-extensions-discovery_mutator-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(client-extensions-discovery_mutator-ut)
 
 set_yunittest_property(

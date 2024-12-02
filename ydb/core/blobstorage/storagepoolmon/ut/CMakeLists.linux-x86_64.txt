@@ -87,14 +87,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-blobstorage-storagepoolmon-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-blobstorage-storagepoolmon-ut)
 
 set_yunittest_property(

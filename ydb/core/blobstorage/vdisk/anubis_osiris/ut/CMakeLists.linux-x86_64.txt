@@ -88,14 +88,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-blobstorage-vdisk-anubis_osiris-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-blobstorage-vdisk-anubis_osiris-ut)
 
 set_yunittest_property(

@@ -97,14 +97,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  core-tx-schemeshard-ut_user_attributes_reboots
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(core-tx-schemeshard-ut_user_attributes_reboots)
 
 set_yunittest_property(

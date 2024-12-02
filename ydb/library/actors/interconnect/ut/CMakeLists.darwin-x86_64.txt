@@ -92,14 +92,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-library-actors-interconnect-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-library-actors-interconnect-ut)
 
 set_yunittest_property(

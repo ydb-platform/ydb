@@ -90,14 +90,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-services-ext_index-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-services-ext_index-ut)
 
 set_yunittest_property(

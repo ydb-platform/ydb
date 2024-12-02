@@ -34,6 +34,10 @@ target_link_libraries(ydb-core-persqueue-ut-slow PUBLIC
   library-cpp-svnversion
   persqueue-ut-common
   core-testlib-default
+  ydb_persqueue_core-ut-ut_utils
+  ydb_persqueue_public-ut-ut_utils
+  ydb_topic-ut-ut_utils
+  tx-schemeshard-ut_helpers
 )
 
 target_allocator(ydb-core-persqueue-ut-slow
@@ -49,6 +53,7 @@ target_link_options(ydb-core-persqueue-ut-slow PRIVATE
 )
 
 target_sources(ydb-core-persqueue-ut-slow PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/slow/autopartitioning_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/slow/pq_ut.cpp
 )
 
@@ -87,14 +92,6 @@ set_yunittest_property(
   ydb-core-persqueue-ut-slow
   PROPERTY
   ENVIRONMENT
-)
-
-set_yunittest_property(
-  TEST
-  ydb-core-persqueue-ut-slow
-  PROPERTY
-  TIMEOUT
-  600
 )
 
 vcs_info(ydb-core-persqueue-ut-slow)

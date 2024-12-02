@@ -49,8 +49,6 @@ target_link_libraries(yt-gateway-native PUBLIC
   providers-common-provider
   common-schema-expr
   providers-result-expr_nodes
-  providers-stat-expr_nodes
-  providers-stat-uploader
   providers-yt-codec
   providers-yt-common
   providers-yt-expr_nodes

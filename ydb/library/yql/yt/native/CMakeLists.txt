@@ -60,6 +60,7 @@ target_link_libraries(yql-yt-native PUBLIC
   yql-dq-opt
   dq-actors-yt
   providers-dq-global_worker_manager
+  providers-dq-helper
   providers-dq-provider
   dq-provider-exec
   providers-dq-service
@@ -138,6 +139,7 @@ target_link_libraries(yql-yt-native.global PUBLIC
   yql-dq-opt
   dq-actors-yt
   providers-dq-global_worker_manager
+  providers-dq-helper
   providers-dq-provider
   dq-provider-exec
   providers-dq-service

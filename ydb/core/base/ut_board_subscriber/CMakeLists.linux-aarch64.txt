@@ -94,14 +94,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-base-ut_board_subscriber
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-base-ut_board_subscriber)
 
 set_yunittest_property(

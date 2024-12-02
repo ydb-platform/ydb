@@ -82,14 +82,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-library-persqueue-topic_parser-ut
-  PROPERTY
-  TIMEOUT
-  30
-)
-
 vcs_info(ydb-library-persqueue-topic_parser-ut)
 
 set_yunittest_property(

@@ -86,14 +86,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  tx-replication-service-ut_json_change_record
-  PROPERTY
-  TIMEOUT
-  60
-)
-
 vcs_info(tx-replication-service-ut_json_change_record)
 
 set_yunittest_property(

@@ -87,14 +87,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  core-blobstorage-ut_blobstorage-ut_replication
-  PROPERTY
-  TIMEOUT
-  3600
-)
-
 vcs_info(core-blobstorage-ut_blobstorage-ut_replication)
 
 set_yunittest_property(

@@ -89,14 +89,6 @@ set_yunittest_property(
   "PQ_OFFSET_RANGES_MODE=1"
 )
 
-set_yunittest_property(
-  TEST
-  with_offset_ranges_mode_ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(with_offset_ranges_mode_ut)
 
 set_yunittest_property(

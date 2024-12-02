@@ -40,6 +40,8 @@ add_subdirectory(facade)
 add_subdirectory(extract_predicate)
 add_subdirectory(qplayer)
 add_subdirectory(user_data)
+add_subdirectory(dq_expr_nodes)
+add_subdirectory(dqs_expr_nodes)
 add_subdirectory(pg_ext)
 add_subdirectory(progress_merger)
 

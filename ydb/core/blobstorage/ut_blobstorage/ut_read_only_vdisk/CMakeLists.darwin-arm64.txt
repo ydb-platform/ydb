@@ -80,14 +80,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ut_blobstorage-ut_read_only_vdisk
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ut_blobstorage-ut_read_only_vdisk)
 
 set_yunittest_property(

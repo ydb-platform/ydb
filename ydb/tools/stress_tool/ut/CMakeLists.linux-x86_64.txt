@@ -90,14 +90,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-tools-stress_tool-ut
-  PROPERTY
-  TIMEOUT
-  3600
-)
-
 vcs_info(ydb-tools-stress_tool-ut)
 
 set_yunittest_property(

@@ -87,14 +87,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-statistics-service-ut-ut_aggregation
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-statistics-service-ut-ut_aggregation)
 
 set_yunittest_property(

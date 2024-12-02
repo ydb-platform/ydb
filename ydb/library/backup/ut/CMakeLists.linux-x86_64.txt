@@ -86,14 +86,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-library-backup-ut
-  PROPERTY
-  TIMEOUT
-  60
-)
-
 vcs_info(ydb-library-backup-ut)
 
 set_yunittest_property(

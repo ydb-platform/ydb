@@ -50,6 +50,7 @@ target_link_libraries(library-profiling-solomon PUBLIC
 )
 
 target_sources(library-profiling-solomon PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/config.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/cube.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/exporter.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/solomon/helpers.cpp

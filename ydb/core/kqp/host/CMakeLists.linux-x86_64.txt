@@ -36,6 +36,7 @@ target_link_libraries(core-kqp-host PUBLIC
   yql-essentials-core
   providers-common-codec
   yql-dq-opt
+  providers-dq-helper
   providers-common-http_gateway
   providers-common-udf_resolve
   essentials-providers-config

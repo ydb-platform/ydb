@@ -49,6 +49,7 @@ target_link_libraries(yqlrun PUBLIC
   providers-common-udf_resolve
   yql-dq-opt
   providers-dq-provider
+  providers-dq-helper
   yt-gateway-file
   yt-codec-codegen
   yt-comp_nodes-llvm14

@@ -98,14 +98,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-engine-ut
-  PROPERTY
-  TIMEOUT
-  150
-)
-
 vcs_info(ydb-core-engine-ut)
 
 set_yunittest_property(

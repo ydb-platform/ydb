@@ -36,6 +36,7 @@ target_link_libraries(minikql-comp_nodes-no_llvm PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
+  contrib-libs-xxhash
   essentials-types-binary_json
   yql-essentials-minikql
   essentials-minikql-arrow

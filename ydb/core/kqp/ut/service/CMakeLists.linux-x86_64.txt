@@ -102,14 +102,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-kqp-ut-service
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-core-kqp-ut-service)
 
 set_yunittest_property(

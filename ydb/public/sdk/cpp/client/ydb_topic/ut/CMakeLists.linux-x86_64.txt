@@ -110,14 +110,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-public-sdk-cpp-client-ydb_topic-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
 vcs_info(ydb-public-sdk-cpp-client-ydb_topic-ut)
 
 set_yunittest_property(

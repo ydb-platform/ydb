@@ -42,6 +42,8 @@ target_link_libraries(providers-yt-provider PUBLIC
   yql-essentials-utils
   essentials-utils-log
   yql-essentials-core
+  essentials-core-dq_expr_nodes
+  essentials-core-dqs_expr_nodes
   essentials-core-expr_nodes
   essentials-core-issue
   core-issue-protos
@@ -50,8 +52,6 @@ target_link_libraries(providers-yt-provider PUBLIC
   essentials-core-file_storage
   core-url_lister-interface
   essentials-core-dq_integration
-  yql-dq-opt
-  yql-dq-type_ann
   yql-essentials-minikql
   providers-common-codec
   providers-common-config
@@ -63,8 +63,6 @@ target_link_libraries(providers-yt-provider PUBLIC
   common-schema-expr
   providers-common-structured_token
   providers-common-transform
-  providers-dq-common
-  providers-dq-expr_nodes
   providers-result-expr_nodes
   providers-stat-expr_nodes
   providers-yt-common

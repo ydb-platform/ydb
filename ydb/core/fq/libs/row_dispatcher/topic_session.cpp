@@ -142,6 +142,7 @@ private:
         NFq::NRowDispatcherProto::TEvStartSession Settings;
         NActors::TActorId ReadActorId;
         std::unique_ptr<TJsonFilter> Filter;        // empty if no predicate
+        ui64 InFlightCompilationId = 0;
         TQueue<std::pair<ui64, TString>> Buffer;
         ui64 UnreadBytes = 0;
         bool DataArrivedSent = false;
@@ -259,6 +260,7 @@ private:
     void HandleNewEvents();
     TInstant GetMinStartingMessageTimestamp() const;
     void AddDataToClient(TClientsInfo& client, ui64 offset, const TString& json);
+    void StartClientSession(TClientsInfo& info);
 
     std::pair<NYql::NUdf::TUnboxedValuePod, i64> CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message);
 
@@ -366,11 +368,6 @@ void TTopicSession::PassAway() {
 
 void TTopicSession::SubscribeOnNextEvent() {
     if (!ReadSession || IsWaitingEvents) {
-        return;
-    }
-
-    if (!FiltersCompilation.InFlightCompilations.empty()) {
-        LOG_ROW_DISPATCHER_TRACE("In flight filters compilation: " << FiltersCompilation.InFlightCompilations.size() << ", skip yds event handling");
         return;
     }
 
@@ -556,11 +553,6 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 void TTopicSession::HandleNewEvents() {
     ui64 handledEventsSize = 0;
 
-    if (!FiltersCompilation.InFlightCompilations.empty()) {
-        LOG_ROW_DISPATCHER_TRACE("In flight filters compilation: " << FiltersCompilation.InFlightCompilations.size() << ", skip yds event handling");
-        return;
-    }
-
     for (ui64 i = 0; i < MaxHandledEventsCount; ++i) {
         if (!ReadSession) {
             return;
@@ -711,6 +703,9 @@ void TTopicSession::DoFiltering(ui64 rowsOffset, ui64 numberRows, const TVector<
     LOG_ROW_DISPATCHER_TRACE("SendToFiltering, first offset: " << offsets[rowsOffset] << ", last offset: " << lastOffset);
 
     for (auto& [actorId, info] : Clients) {
+        if (info.InFlightCompilationId) {                                           // filter compilation in flight
+            continue;
+        }
         if (info.NextMessageOffset && lastOffset < info.NextMessageOffset) {        // the batch has already been processed
             continue;
         }
@@ -798,6 +793,28 @@ bool HasJsonColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {
     return false;
 }
 
+void TTopicSession::StartClientSession(TClientsInfo& info) {
+    if (ReadSession) {
+        if (info.Settings.HasOffset() && info.Settings.GetOffset() <= LastMessageOffset) {
+            LOG_ROW_DISPATCHER_INFO("New client has less offset (" << info.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
+            Metrics.RestartSessionByOffsets->Inc();
+            ++RestartSessionByOffsets;
+            info.RestartSessionByOffsetsByQuery->Inc();
+            StopReadSession();
+        }
+    }
+
+    if (Parser) {
+        // Parse remains data before changing parsing schema
+        DoParsing(true);
+    }
+    UpdateParser();
+
+    if (!ReadSession) {
+        Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
+    }
+}
+
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_INFO("New client: read actor id " << ev->Sender.ToString() << ", predicate: " 
         << ev->Get()->Record.GetSource().GetPredicate() << ", offset: " << ev->Get()->Record.GetOffset());
@@ -810,10 +827,6 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto types = GetVector(ev->Get()->Record.GetSource().GetColumnTypes());
 
     try {
-        if (Parser) {
-            // Parse remains data before adding new client
-            DoParsing(true);
-        }
         auto queryGroup = Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
         auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(TopicPath));
         auto& clientInfo = Clients.emplace(
@@ -841,34 +854,23 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 {.EnabledLLVM = source.GetEnabledLLVM()}
             );
 
-            const ui64 eventId = FiltersCompilation.FreeId++;
-            Y_ENSURE(FiltersCompilation.InFlightCompilations.emplace(eventId, ev->Sender).second, "Got duplicated compilation event id");
-            LOG_ROW_DISPATCHER_TRACE("Send compile request with id " << eventId);
+            clientInfo.InFlightCompilationId = ++FiltersCompilation.FreeId;
+            Y_ENSURE(FiltersCompilation.InFlightCompilations.emplace(clientInfo.InFlightCompilationId, ev->Sender).second, "Got duplicated compilation event id");
+            LOG_ROW_DISPATCHER_TRACE("Send compile request with id " << clientInfo.InFlightCompilationId);
 
-            Send(CompileServiceActorId, clientInfo.Filter->GetCompileRequest().release(), 0, eventId);
+            Send(CompileServiceActorId, clientInfo.Filter->GetCompileRequest().release(), 0, clientInfo.InFlightCompilationId);
             Metrics.InFlightCompileRequests->Inc();
         } else {
             ClientsWithoutPredicate.insert(ev->Sender);
-        }
 
-        if (ReadSession) {
-            if (clientInfo.Settings.HasOffset() && (clientInfo.Settings.GetOffset() <= LastMessageOffset)) {
-                LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
-                Metrics.RestartSessionByOffsets->Inc();
-                ++RestartSessionByOffsets;
-                clientInfo.RestartSessionByOffsetsByQuery->Inc();
-                StopReadSession();
-            }
+            // In case of in flight compilation topic session will be checked after getting compile response
+            StartClientSession(clientInfo);
         }
     } catch (...) {
         FatalError("Adding new client failed, got unexpected exception: " + CurrentExceptionMessage(), nullptr, true, Nothing());
     }
     ConsumerName = ev->Get()->Record.GetSource().GetConsumerName();
-    UpdateParser();
     SendStatisticToRowDispatcher();
-    if (!ReadSession) { 
-        Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
-    }
 }
 
 void TTopicSession::AddDataToClient(TClientsInfo& info, ui64 offset, const TString& json) {
@@ -1117,9 +1119,17 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& e
         LOG_ROW_DISPATCHER_TRACE("Compile response ignored for id " << ev->Cookie << ", client with id " << clientId << " not found");
         return;
     }
-    if (const auto& filter = clientIt->second.Filter) {
-        filter->OnCompileResponse(std::move(ev));
+
+    auto& clientInfo = clientIt->second;
+    if (ev->Cookie != clientInfo.InFlightCompilationId) {
+        LOG_ROW_DISPATCHER_TRACE("Outdated compiler response ignored for id " << ev->Cookie << ", client with id " << clientId << " changed");
+        return;
     }
+
+    Y_ENSURE(clientInfo.Filter, "Unexpected completion response for client without filter");
+    clientInfo.Filter->OnCompileResponse(std::move(ev));
+    clientInfo.InFlightCompilationId = 0;
+    StartClientSession(clientInfo);
 }
 
 TString TTopicSession::GetAnyQueryIdByFieldName(const TString& fieldName) {

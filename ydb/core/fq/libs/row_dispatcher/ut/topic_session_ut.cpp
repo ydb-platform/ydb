@@ -15,6 +15,8 @@
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
+#include <yql/essentials/public/purecalc/common/interface.h>
+
 namespace {
 
 using namespace NKikimr;
@@ -23,6 +25,38 @@ using namespace NYql::NDq;
 
 const ui64 TimeoutBeforeStartSessionSec = 3;
 const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
+
+class TPurecalcCompileServiceMock : public NActors::TActor<TPurecalcCompileServiceMock> {
+    using TBase = NActors::TActor<TPurecalcCompileServiceMock>;
+
+public:
+    TPurecalcCompileServiceMock(TActorId owner)
+        : TBase(&TPurecalcCompileServiceMock::StateFunc)
+        , Owner(owner)
+        , ProgramFactory(NYql::NPureCalc::MakeProgramFactory())
+    {}
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle);
+    )
+
+    void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
+        IProgramHolder::TPtr programHolder = std::move(ev->Get()->ProgramHolder);
+
+        try {
+            programHolder->CreateProgram(ProgramFactory);
+        } catch (const NYql::NPureCalc::TCompileError& e) {
+            UNIT_ASSERT_C(false, "Failed to compile purecalc filter: sql: " << e.GetYql() << ", error: " << e.GetIssues());
+        }
+
+        Send(ev->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(std::move(programHolder)), 0, ev->Cookie);
+        Send(Owner, new NActors::TEvents::TEvPing());
+    }
+
+private:
+    const TActorId Owner;
+    const NYql::NPureCalc::IProgramFactoryPtr ProgramFactory;
+};
 
 class TFixture : public NUnitTest::TBaseFixture {
 public:
@@ -60,7 +94,8 @@ public:
             std::make_shared<NYql::TPqGatewayConfig>(),
             nullptr);
 
-        const auto compileServiceActorId = Runtime.Register(NRowDispatcher::CreatePurecalcCompileService());
+        CompileNotifier = Runtime.AllocateEdgeActor();
+        const auto compileServiceActorId = Runtime.Register(new TPurecalcCompileServiceMock(CompileNotifier));
 
         TopicSession = Runtime.Register(NewTopicSession(
             topicPath,
@@ -86,7 +121,7 @@ public:
     void TearDown(NUnitTest::TTestContext& /* context */) override {
     }
 
-    void StartSession(TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source, TMaybe<ui64> readOffset = Nothing()) {
+    void StartSession(TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source, TMaybe<ui64> readOffset = Nothing(), bool expectedError = false) {
         auto event = new NFq::TEvRowDispatcher::TEvStartSession(
             source,
             PartitionId,
@@ -95,6 +130,13 @@ public:
             0,         // StartingMessageTimestamp;
             "QueryId");
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event));
+
+        const auto& predicate = source.GetPredicate();
+        if (predicate && !expectedError) {
+            // Wait predicate compilation
+            const auto ping = Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(CompileNotifier);
+            UNIT_ASSERT_C(ping, "Compilation is not performed for predicate: " << predicate);
+        }
     }
 
     NYql::NPq::NProto::TDqPqTopicSource BuildSource(TString topic, bool emptyPredicate = false, const TString& consumer = DefaultPqConsumer) {
@@ -177,6 +219,7 @@ public:
     TActorSystemStub ActorSystemStub;
     NActors::TActorId TopicSession;
     NActors::TActorId RowDispatcherActorId;
+    NActors::TActorId CompileNotifier;
     NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr")));
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     NActors::TActorId ReadActorId1;
@@ -208,7 +251,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectStatisticToReadActor({ReadActorId1, ReadActorId2});
 
         auto source2 = BuildSource(topicName, false, "OtherConsumer");
-        StartSession(ReadActorId3, source2);
+        StartSession(ReadActorId3, source2, Nothing(), true);
         ExpectSessionError(ReadActorId3, "Use the same consumer");
 
         StopSession(ReadActorId1, source);
@@ -484,7 +527,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         auto source2 = BuildSource(topicName);
         source2.AddColumns("field1");
         source2.AddColumnTypes("[DataType; String]");
-        StartSession(ReadActorId2, source2);
+        StartSession(ReadActorId2, source2, Nothing(), true);
         ExpectSessionError(ReadActorId2, "Use the same column type in all queries via RD, current type for column `field1` is [OptionalType; [DataType; String]] (requested type is [DataType; String])");
      }
 }

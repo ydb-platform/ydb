@@ -324,16 +324,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TInstant ResponseTime;
     };
 
-
-    // struct ConsumerSessionKey {
-    //     TActorId ReadActorId;
-    //     ui32 PartitionId;
-
-
     THashMap<TActorId, THashMap<ui32, TAtomicSharedPtr<ConsumerInfo>>> Consumers;       // read_actor actor id / partition id
-
     TMap<ui64, TAtomicSharedPtr<ConsumerInfo>> ConsumersByEventQueueId;
-
     THashMap<TopicSessionKey, TopicSessionInfo, TopicSessionKeyHash> TopicSessions;
     TMap<TActorId, ReadActorInfo> ReadActorsInternalState;
 

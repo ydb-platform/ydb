@@ -4684,8 +4684,6 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
 
     DeletePartition(partitionId, ctx);
 
-    //UpdateAvgWriteBytes(event->BytesWrittenTotal, ctx.Now());
-
     writeInfo.Partitions.erase(partitionId.OriginalPartitionId);
     if (writeInfo.Partitions.empty()) {
         UnsubscribeWriteId(writeId, ctx);

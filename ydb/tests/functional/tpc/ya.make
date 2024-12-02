@@ -10,7 +10,6 @@ TEST_SRCS(
     test_tpch.py
 )
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 REQUIREMENTS(ram:16)

@@ -2,6 +2,8 @@
 
 * Enhanced parallelism of data restoring in `ydb tools restore`
 
+* Fixed a bug that `--upload-batch-bytes` when it is set to maximum returns `Too much data` in `ydb tools restore`
+
 ## 2.16.0 ##
 
 * Improved throughput of `ydb import file csv` command. It is now approximately x3 times faster

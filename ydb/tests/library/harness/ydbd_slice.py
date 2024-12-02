@@ -107,6 +107,7 @@ class YdbdSlice(KiKiMRClusterInterface):
         # TODO: use from config?
         return {
             node_id: KikimrExternalNode(
+                kikimr_configure_binary_path=self.__kikimr_configure_binary_path,
                 kikimr_path=self.__kikimr_path,
                 kikimr_next_path=None,
                 node_id=node_id,

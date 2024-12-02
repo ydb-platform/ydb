@@ -499,6 +499,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
             ui64 seqNo = std::max(info.SeqNo, it->second.SeqNo);
             SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, now));
         }
+        SourceIdCounter.Use(sourceId, now);
     }
     TxSourceIdForPostPersist.clear();
 
@@ -560,7 +561,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
 
-    if (SplitMergeEnabled(Config)) {
+    if (SplitMergeEnabled(Config) && !IsSupportive()) {
         SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
         auto needScaling = CheckScaleStatus(ctx);
         ChangeScaleStatusIfNeeded(needScaling);

@@ -1,0 +1,111 @@
+{
+    "NodeRootType": "TExprBase",
+    "NodeBuilderBase": "TNodeBuilderBase",
+    "ListBuilderBase": "TListBuilderBase",
+    "FreeArgCallableBase": "TFreeArgCallable",
+    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
+    "Nodes": [
+        {
+            "Name": "TStatDSource",
+            "Base": "TCallable",
+            "Definition": "Custom",
+            "Builder": {"Generate": "None"},
+            "Match": {"Type": "Callable", "Name": "DataSource"},
+            "Children": [
+                {"Index": 0, "Name": "Category", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TStatDSink",
+            "Base": "TCallable",
+            "Definition": "Custom",
+            "Builder": {"Generate": "None"},
+            "Match": {"Type": "Callable", "Name": "DataSink"},
+            "Children": [
+                {"Index": 0, "Name": "Category", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TStatRead",
+            "Base": "TFreeArgCallable",
+            "Match": {"Type": "Callable", "Name": "Read!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSource", "Type": "TStatDSource"}
+            ]
+        },
+        {
+            "Name": "TStatWrite",
+            "Base": "TFreeArgCallable",
+            "Match": {"Type": "Callable", "Name": "Write!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TStatDSink"}
+            ]
+        },
+        {
+            "Name": "TStatNamedSettingsBase",
+            "VarArgBase": "TCoNameValueTuple",
+            "Builder": {"Generate": "None"}
+        },
+        {
+            "Name": "TStatFields",
+            "Base": "TStatNamedSettingsBase",
+            "Match": {"Type": "Callable", "Name": "StatFields"}
+        },
+        {
+            "Name": "TStatMeta",
+            "Base": "TStatNamedSettingsBase",
+            "Match": {"Type": "Callable", "Name": "StatMeta"}
+        },
+        {
+            "Name": "TStatTable",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "StatTable"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Scale", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Cluster", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Fields", "Type": "TExprBase"},
+                {"Index": 4, "Name": "Meta", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TStatReadTableScheme",
+            "Base": "TFreeArgCallable",
+            "Match": {"Type": "Callable", "Name": "StatReadTableScheme!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSource", "Type": "TStatDSource"},
+                {"Index": 2, "Name": "Table", "Type": "TStatTable"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TStatWriteTable",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "StatWriteTable!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TStatDSink"},
+                {"Index": 2, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Table", "Type": "TStatTable"},
+                {"Index": 4, "Name": "ReplaceMask", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TStatPublish",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "StatPublish!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TStatDSink"},
+                {"Index": 2, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Table", "Type": "TStatTable"}
+            ]
+        }
+    ]
+}

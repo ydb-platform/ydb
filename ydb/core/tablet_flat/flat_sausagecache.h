@@ -9,11 +9,6 @@
 namespace NKikimr::NSharedCache {
 
     class TPageCollectionState : TMoveOnly {
-        // Note: storing sticky pages used refs guarantees that they won't be offload
-        // from Shared Cache
-        THashMap<TPageId, TSharedPageRef> StickyPages;
-        ui64 StickySize = 0;
-
     public:
         void AddStickyPage(TPageId pageId, TSharedPageRef page, ui64 pageSize) {
             Y_ABORT_UNLESS(page.IsUsed());
@@ -24,9 +19,42 @@ namespace NKikimr::NSharedCache {
                 Y_DEBUG_ABORT("Sticky pages should be unique");
             }
         }
+    
+    private:
+        // Note: storing sticky pages used refs guarantees that they won't be offload
+        // from Shared Cache
+        THashMap<TPageId, TSharedPageRef> StickyPages;
+        ui64 StickySize = 0;
     };
 
-    using TPageCollectionStates = THashMap<TLogoBlobID, TPageCollectionState>;
+    class TPageCollectionStates : TMoveOnly {
+    public:
+        void AddStickyPage(TLogoBlobID pageCollectionId, TPageId pageId, TSharedPageRef page, ui64 pageSize) {
+            PageCollections[pageCollectionId].AddStickyPage(pageId, std::move(page), pageSize);
+        }
+
+        void AddPageCollection(TLogoBlobID pageCollectionId, TPageCollectionState state) {
+            auto inserted = PageCollections.emplace(pageCollectionId, std::move(state)).second;
+            Y_ABORT_UNLESS(inserted);
+        }
+
+        void DropPageCollection(TLogoBlobID pageCollectionId) {
+            PageCollections.erase(pageCollectionId);
+        }
+
+        void AppendPageCollections(TPageCollectionStates&& other) {
+            for (auto& [pageCollectionId, state] : other.PageCollections) {
+                AddPageCollection(pageCollectionId, std::move(state));
+            }
+        }
+
+        explicit operator bool() const {
+            return !PageCollections.empty();
+        }
+
+    private:
+        THashMap<TLogoBlobID, TPageCollectionState> PageCollections;
+    };
 
 }
 

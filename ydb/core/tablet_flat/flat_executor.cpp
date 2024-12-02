@@ -635,7 +635,7 @@ void TExecutor::DropCachesOfBundle(const NTable::TPart &part) noexcept
 void TExecutor::DropSingleCache(const TLogoBlobID &label) noexcept
 {
     auto toActivate = PrivatePageCache->ForgetPageCollection(label);
-    PageCollectionStates->erase(label);
+    PageCollectionStates->DropPageCollection(label);
     ActivateWaitingTransactions(toActivate);
     if (!PrivatePageCache->Info(label))
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvInvalidate(label));
@@ -2668,7 +2668,8 @@ void TExecutor::Handle(TEvents::TEvFlushLog::TPtr &ev) {
 }
 
 void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
-    const bool failed = (ev->Get()->Status != NKikimrProto::OK);
+    NSharedCache::TEvResult *msg = ev->Get();
+    const bool failed = (msg->Status != NKikimrProto::OK);
 
     if (auto logl = Logger->Log(failed ? ELnLev::Info : ELnLev::Debug)) {
         logl
@@ -2680,8 +2681,6 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     case EPageCollectionRequest::Cache:
     case EPageCollectionRequest::CacheSync:
         {
-            auto *msg = ev->CastAsLocal<NSharedCache::TEvResult>();
-
             TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->Origin->Label());
             if (!collectionInfo) // collection could be outdated
                 return;
@@ -2707,8 +2706,6 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 
     case EPageCollectionRequest::PendingInit:
         {
-            auto *msg = ev->CastAsLocal<NSharedCache::TEvResult>();
-
             const auto *pageCollection = msg->Origin.Get();
             TPendingPartSwitch *foundSwitch = nullptr;
             TPendingPartSwitch::TNewBundle *foundBundle = nullptr;
@@ -3297,6 +3294,8 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     if (results) {
         auto &gcDiscovered = commit->GcDelta.Created;
 
+        PageCollectionStates->AppendPageCollections(std::move(msg->PageCollectionStates));
+
         for (const auto &result : results) {
             const auto &newPart = result.Part;
 
@@ -3463,8 +3462,8 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
 
-    const ui64 partSwitchCpuuS = ui64(1000000. * partSwitchCpuTimer.Passed());
-    Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_PARTSWITCH_CPUTIME].IncrementFor(partSwitchCpuuS);
+    const ui64 partSwitchCpuUs = ui64(1000000. * partSwitchCpuTimer.Passed());
+    Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_PARTSWITCH_CPUTIME].IncrementFor(partSwitchCpuUs);
 
     if (msg->YellowMoveChannels || msg->YellowStopChannels) {
         CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels));

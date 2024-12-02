@@ -425,7 +425,7 @@ Y_UNIT_TEST(S3FIFO) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 21, 3}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 21, 2}));
 
     RestartAndClearCache(env);
 
@@ -523,7 +523,7 @@ Y_UNIT_TEST(ClockPro) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 36, 3}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 20, 2}));
 
     RestartAndClearCache(env);
 
@@ -655,9 +655,9 @@ Y_UNIT_TEST(Compaction_BTreeIndex) {
 
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 97);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 98);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -670,9 +670,9 @@ Y_UNIT_TEST(Compaction_BTreeIndex) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19, 2}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 97);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 98);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(2_MB), static_cast<i64>(1_MB / 3));
@@ -702,9 +702,9 @@ Y_UNIT_TEST(Compaction_FlatIndex) {
 
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 81);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 83);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -717,9 +717,9 @@ Y_UNIT_TEST(Compaction_FlatIndex) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 81);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 83);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(2_MB), static_cast<i64>(1_MB / 3));

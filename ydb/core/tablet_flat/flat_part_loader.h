@@ -84,13 +84,8 @@ namespace NTable {
             void Save(ui32 cookie, NSharedCache::TEvResult::TLoaded&& loaded) noexcept
             {
                 if (cookie == 0 && NeedPages.erase(loaded.PageId)) {
-                    auto type = Cache->GetPageType(loaded.PageId);
                     SavedPages[loaded.PageId] = NSharedCache::TPinnedPageRef(loaded.Page).GetData();
-                    if (type != EPage::FlatIndex) {
-                        // hack: saving flat index to private cache will break sticky logic
-                        // keep it in shared cache only for now
-                        Cache->Fill(loaded.PageId, std::move(loaded.Page)); // TODO
-                    }
+                    Cache->Fill(loaded.PageId, std::move(loaded.Page));
                 }
             }
 

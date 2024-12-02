@@ -283,13 +283,6 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
 
     if (page->Empty()) {
         ToLoad.PushBack(page);
-
-        // Note: we mark flat index pages sticky before we load them
-        // TODO
-        // if (!page->Sticky && info->GetPageType(page->Id) == EPage::FlatIndex) {
-        //     MarkSticky(page->Id, info);
-        // }
-
         Stats.CurrentCacheMisses++;
     }
     return nullptr;

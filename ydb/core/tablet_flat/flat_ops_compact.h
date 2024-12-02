@@ -345,8 +345,7 @@ namespace NTabletFlatExecutor {
 
                     Send(MakeSharedPageCacheId(), saveCompactedPages.Release());
 
-                    auto inserted = prod->PageCollectionStates.emplace(cache->Id, std::move(pageCollectionState)).second;
-                    Y_ABORT_UNLESS(inserted);
+                    prod->PageCollectionStates.AddPageCollection(cache->Id, std::move(pageCollectionState));
                     pageCollections.push_back(std::move(cache));
                 }
 

@@ -1,4 +1,6 @@
-/* postgres can not *//* hybridfile can not YQL-17743 *//* syntax version 1 */
+/* postgres can not */
+/* hybridfile can not YQL-17743 */
+/* syntax version 1 */
 USE plato;
 
 $in = (

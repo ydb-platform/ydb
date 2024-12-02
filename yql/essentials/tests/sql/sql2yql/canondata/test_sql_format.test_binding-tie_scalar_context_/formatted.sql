@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $foo = ($x) -> {
     RETURN AsTuple($x, $x);
 };

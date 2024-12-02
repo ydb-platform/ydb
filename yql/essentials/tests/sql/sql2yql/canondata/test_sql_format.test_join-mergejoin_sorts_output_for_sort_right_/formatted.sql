@@ -8,7 +8,7 @@ $right = (
         AS a
     RIGHT JOIN Input2
         AS b
-    ON b.k2 = a.k1 AND a.v1 = b.v2
+    ON b.k2 == a.k1 AND a.v1 == b.v2
     SELECT
         b.k2 AS bk2,
         b.k2 AS bk2_extra,

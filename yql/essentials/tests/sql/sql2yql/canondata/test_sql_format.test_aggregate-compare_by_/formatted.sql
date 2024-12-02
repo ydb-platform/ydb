@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     min_by(sub, key) AS min,
     max_by(value, sub) AS max,

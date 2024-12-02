@@ -1,5 +1,6 @@
 USE plato;
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $udfScript = @@
 def MyFunc(list):
     return [(int(x.key) % 4, x) for x in list]

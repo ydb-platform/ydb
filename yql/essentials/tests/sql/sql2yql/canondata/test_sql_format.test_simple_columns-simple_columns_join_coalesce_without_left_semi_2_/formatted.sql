@@ -5,9 +5,9 @@ PRAGMA CoalesceJoinKeysOnQualifiedAll;
 
 SELECT
     a.*
-    WITHOUT
-        a.key,
-        a.value
+WITHOUT
+    a.key,
+    a.value
 FROM Input
     AS a
 LEFT SEMI JOIN Input
@@ -18,9 +18,9 @@ ORDER BY
 
 SELECT
     *
-    WITHOUT
-        a.key,
-        a.value
+WITHOUT
+    a.key,
+    a.value
 FROM Input
     AS a
 LEFT SEMI JOIN Input

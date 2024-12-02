@@ -9,8 +9,7 @@ EVALUATE PARALLEL FOR $i IN [1, 2, 1, 2, 1]
     END DO;
 COMMIT;
 
-INSERT INTO Output
-    WITH truncate
+INSERT INTO Output WITH truncate
 SELECT
     a
 FROM Output

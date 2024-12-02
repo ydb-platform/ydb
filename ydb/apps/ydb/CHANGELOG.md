@@ -1,4 +1,6 @@
 
+* Enhanced parallelism of data restoring in `ydb tools restore`
+
 ## 2.16.0 ##
 
 * Improved throughput of `ydb import file csv` command. It is now approximately x3 times faster

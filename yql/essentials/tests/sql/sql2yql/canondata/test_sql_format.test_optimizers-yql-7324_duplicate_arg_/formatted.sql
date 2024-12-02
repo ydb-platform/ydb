@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 $to_int = ($x) -> {
     RETURN CAST($x AS Int32)
@@ -12,7 +13,7 @@ $input = (
         $to_in_list(key) AS event_ids,
         $to_in_list(subkey) AS test_ids
     FROM Input
-    WHERE value = "aaa"
+    WHERE value == "aaa"
 );
 
 SELECT

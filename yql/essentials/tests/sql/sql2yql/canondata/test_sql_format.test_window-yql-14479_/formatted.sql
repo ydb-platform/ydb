@@ -1,4 +1,5 @@
-/* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 4 *//* ignore plan diff */
+/* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 4 */
+/* ignore plan diff */
 USE plato;
 
 SELECT

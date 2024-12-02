@@ -1,4 +1,6 @@
-/* postgres can not *//* syntax version 1 */-- YQL-1977
+/* postgres can not */
+/* syntax version 1 */
+-- YQL-1977
 USE plato;
 
 --insert into Output

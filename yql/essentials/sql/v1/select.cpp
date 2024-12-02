@@ -2800,7 +2800,11 @@ public:
     TNodePtr Build(TContext& ctx) override {
         TPtr res;
         if (QuantifierAll) {
-            res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+            if (ctx.EmitUnionMerge) {
+                res = ctx.PositionalUnionAll ? Y("UnionMergePositional") : Y("UnionMerge");
+            } else {
+                res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+            }
         } else {
             res = ctx.PositionalUnionAll ? Y("UnionPositional") : Y("Union");
         }
@@ -2848,8 +2852,8 @@ private:
 };
 
 TSourcePtr BuildUnion(
-    TPosition pos, 
-    TVector<TSourcePtr>&& sources, 
+    TPosition pos,
+    TVector<TSourcePtr>&& sources,
     bool quantifierAll,
     const TWriteSettings& settings
 ) {

@@ -1,4 +1,7 @@
-/* syntax version 1 *//* dq can not *//* dqfile can not *//* yt can not */
+/* syntax version 1 */
+/* dq can not */
+/* dqfile can not */
+/* yt can not */
 USE plato;
 PRAGMA AnsiOptionalAs;
 

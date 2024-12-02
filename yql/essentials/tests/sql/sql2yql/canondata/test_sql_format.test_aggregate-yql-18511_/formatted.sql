@@ -1,11 +1,11 @@
 /* yt can not */
 $round_period = ($day, $period) -> {
     RETURN CASE
-        WHEN $period = 'd'
+        WHEN $period == 'd'
             THEN $day
-        WHEN $period = 'w'
+        WHEN $period == 'w'
             THEN DateTime::MakeDate(DateTime::StartOfWeek($day))
-        WHEN $period = 'm'
+        WHEN $period == 'm'
             THEN DateTime::MakeDate(DateTime::StartOfMonth($day))
         ELSE $day
     END
@@ -56,7 +56,7 @@ SELECT
         ELSE NULL
     END AS period_type,
     user_cards_segm,
-    if(GROUPING(user_cards_segm) = 1, -300, user_cards_segm) AS __user_cards_segm__,
+    if(GROUPING(user_cards_segm) == 1, -300, user_cards_segm) AS __user_cards_segm__,
     GROUPING(user_cards_segm) AS grouping_user_cards_segm,
     COUNT(DISTINCT user_id) AS all_user_qty,
 FROM $data
@@ -66,9 +66,11 @@ GROUP BY
         -- day grouping
         (day),
         (day, user_cards_segm),
+
         -- -- week grouping
         (week),
         (week, user_cards_segm),
+
         -- -- month grouping
         (month),
         (month, user_cards_segm));

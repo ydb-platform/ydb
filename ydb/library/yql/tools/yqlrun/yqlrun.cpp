@@ -9,6 +9,7 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider_impl.h>
 #include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
@@ -702,7 +703,7 @@ int Main(int argc, const char *argv[])
         if (gatewayTypes.contains(YtProviderName) || res.Has("opt-collision")) {
             auto yqlNativeServices = NFile::TYtFileServices::Make(funcRegistry.Get(), tablesMapping, fileStorage, tmpDir, res.Has("keep-temp"), tablesDirMapping);
             auto ytNativeGateway = CreateYtFileGateway(yqlNativeServices, &emulateOutputForMultirun);
-            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory()));
+            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
         }
     }
 
@@ -985,7 +986,7 @@ int RunUI(int argc, const char* argv[])
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
         TVector<NPg::TExtensionDesc> extensions;
         PgExtensionsFromProto(config, extensions);
-        NPg::RegisterExtensions(extensions, false, 
+        NPg::RegisterExtensions(extensions, false,
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }

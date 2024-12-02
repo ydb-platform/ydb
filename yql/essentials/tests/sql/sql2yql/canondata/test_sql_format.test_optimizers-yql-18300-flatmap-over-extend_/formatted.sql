@@ -1,7 +1,6 @@
 USE plato;
 
-INSERT INTO @tmp
-    WITH truncate
+INSERT INTO @tmp WITH truncate
 SELECT
     "dummy" AS a,
     "1" AS b,

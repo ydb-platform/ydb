@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not */-- not supported on windows
+/* syntax version 1 */
+/* postgres can not */
+-- not supported on windows
 $input = (
     SELECT
         String::JoinFromList(AsList(key, subkey, value), ",") AS Data

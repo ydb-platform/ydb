@@ -538,6 +538,7 @@ message TMonitoringConfig {
     optional string MonitoringCertificateFile = 15;
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
+    optional string InactivityTimeout = 18 [default = "2m"];
 }
 
 message TRestartsCountConfig {

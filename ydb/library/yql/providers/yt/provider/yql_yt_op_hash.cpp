@@ -2,9 +2,10 @@
 #include "yql_yt_op_hash.h"
 #include "yql_yt_op_settings.h"
 
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/lib/hash/yql_hash_builder.h>
+
+#include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <yql/essentials/utils/yql_panic.h>
@@ -17,6 +18,7 @@
 namespace NYql {
 
 using namespace NNodes;
+using namespace NNodes::NDq;
 
 TYtNodeHashCalculator::TYtNodeHashCalculator(const TYtState::TPtr& state, const TString& cluster, const TYtSettings::TConstPtr& config)
     : TNodeHashCalculator(*state->Types, state->NodeHash, MakeSalt(config, cluster))
@@ -49,36 +51,34 @@ TYtNodeHashCalculator::TYtNodeHashCalculator(const TYtState::TPtr& state, const 
         return TString();
     };
 
-    Hashers[TDqStage::CallableName()] = [this] (const TExprNode& node, TArgIndex& argIndex, ui32 frameLevel) {
-        THashBuilder builder;
-        builder << node.Content();
-        for (size_t i = 0; i < node.ChildrenSize(); ++i) {
-            // skip _logical_id setting from hashing
-            if (i == TDqStageBase::idx_Settings) {
-                for (size_t j = 0; j < node.Child(i)->ChildrenSize(); ++j) {
-                    if((node.Child(i)->Child(j)->Type() == TExprNode::List)
-                        && node.Child(i)->Child(j)->ChildrenSize() > 0
-                        && (node.Child(i)->Child(j)->Child(0)->Content() = NDq::TDqStageSettings::LogicalIdSettingName)) {
-                        continue;
+    if (State->DqHelper) {
+        Hashers[TDqStage::CallableName()] = [this] (const TExprNode& node, TArgIndex& argIndex, ui32 frameLevel) {
+            THashBuilder builder;
+            builder << node.Content();
+            for (size_t i = 0; i < node.ChildrenSize(); ++i) {
+                if (i == TDqStageBase::idx_Settings) {
+                    // skip _logical_id setting from hashing
+                    const auto& settings = State->DqHelper->RemoveVariadicDqStageSettings(*node.Child(i));
+                    for (const auto& s: settings) {
+                        if (auto partHash = GetHashImpl(*s, argIndex, frameLevel)) {
+                            builder << partHash;
+                        }
+                        else {
+                            return TString();
+                        }
                     }
-                    if (auto partHash = GetHashImpl(*node.Child(i)->Child(j), argIndex, frameLevel)) {
+                } else {
+                    if (auto partHash = GetHashImpl(*node.Child(i), argIndex, frameLevel)) {
                         builder << partHash;
                     }
                     else {
                         return TString();
                     }
                 }
-            } else {
-                if (auto partHash = GetHashImpl(*node.Child(i), argIndex, frameLevel)) {
-                    builder << partHash;
-                }
-                else {
-                    return TString();
-                }
             }
-        }
-        return builder.Finish();
-    };
+            return builder.Finish();
+        };
+    }
 
     Hashers[TYtOutput::CallableName()] = [this] (const TExprNode& node, TArgIndex& argIndex, ui32 frameLevel) {
         return GetOutputHash(node, argIndex, frameLevel);

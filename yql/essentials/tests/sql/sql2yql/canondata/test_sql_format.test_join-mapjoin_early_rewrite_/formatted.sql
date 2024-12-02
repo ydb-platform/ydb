@@ -15,7 +15,7 @@ FROM Input
     AS a
 JOIN $subq
     AS b
-ON a.subkey = b.subkey_plus_one
+ON a.subkey == b.subkey_plus_one
 ORDER BY
     subkey,
     key;

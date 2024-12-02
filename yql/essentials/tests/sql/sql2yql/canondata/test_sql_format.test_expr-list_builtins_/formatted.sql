@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $list = AsList(3, 1, 2, 3);
 $other_list = AsList(4);
 $bool_list = AsList(TRUE, FALSE, TRUE);

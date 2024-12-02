@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $hum_gr_kv = ($grouping) -> {
     RETURN CASE $grouping
         WHEN 1

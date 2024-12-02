@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     EvaluateCode(FuncCode("Int32", AtomCode("1")));
 $inc = EvaluateCode(

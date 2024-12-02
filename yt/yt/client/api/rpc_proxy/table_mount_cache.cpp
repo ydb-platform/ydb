@@ -100,7 +100,7 @@ private:
 
                 tableInfo->Indices.reserve(rsp->indices_size());
                 for (const auto& protoIndexInfo : rsp->indices()) {
-                    TIndexInfo indexInfo{
+                    auto indexInfo = TIndexInfo{
                         .TableId = FromProto<NObjectClient::TObjectId>(protoIndexInfo.index_table_id()),
                         .Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind()),
                         .Predicate = YT_PROTO_OPTIONAL(protoIndexInfo, predicate),

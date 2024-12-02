@@ -1,4 +1,5 @@
-/* postgres can not *//* kikimr can not */
+/* postgres can not */
+/* kikimr can not */
 USE plato;
 PRAGMA DisableSimpleColumns;
 PRAGMA yt.MapJoinLimit = "1m";
@@ -16,4 +17,4 @@ FROM Input
     AS a
 LEFT JOIN @tmp
     AS b
-ON a.key = b.key;
+ON a.key == b.key;

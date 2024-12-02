@@ -10,6 +10,6 @@ SELECT
     h.ip6 AS ip6
 FROM Event
     AS e
-LEFT JOIN/*+ streamlookup() */ Host
+LEFT JOIN /*+ streamlookup() */ Host
     AS h
 ON (e.host == h.hostname);

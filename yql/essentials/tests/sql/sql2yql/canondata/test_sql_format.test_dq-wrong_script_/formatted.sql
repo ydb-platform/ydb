@@ -1,4 +1,5 @@
-/* custom error:Failed to cast arguments*//* dqfile can not */
+/* custom error:Failed to cast arguments*/
+/* dqfile can not */
 USE plato;
 $f = Python3::f(
     @@

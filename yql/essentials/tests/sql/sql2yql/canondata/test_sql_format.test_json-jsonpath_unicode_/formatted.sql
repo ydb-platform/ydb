@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not */-- Check access to members with unicode keys
+/* syntax version 1 */
+/* postgres can not */
+-- Check access to members with unicode keys
 $json = CAST(
     @@{
     "привет": 123

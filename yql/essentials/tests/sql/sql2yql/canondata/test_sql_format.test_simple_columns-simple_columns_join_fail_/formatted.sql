@@ -14,12 +14,11 @@ $data = (
 --INSERT INTO Output
 SELECT
     d.*,
-    Input.key AS kk
--- 'kk' is exist from d.kk
+    Input.key AS kk -- 'kk' is exist from d.kk
 FROM Input
 JOIN $data
     AS d
-ON Input.subkey = CAST(CAST(d.kk AS uint32) / 100 AS string)
+ON Input.subkey == CAST(CAST(d.kk AS uint32) / 100 AS string)
 ORDER BY
     key,
     val;

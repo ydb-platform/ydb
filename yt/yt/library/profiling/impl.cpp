@@ -6,7 +6,7 @@ namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IRegistryImplPtr Y_WEAK GetGlobalRegistry()
+Y_WEAK IRegistryPtr GetGlobalRegistry()
 {
     return nullptr;
 }

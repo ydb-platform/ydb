@@ -5,8 +5,8 @@ PRAGMA DisableCoalesceJoinKeysOnQualifiedAll;
 
 SELECT
     b.*
-    WITHOUT
-        b.x
+WITHOUT
+    b.x
 FROM (
     SELECT
         *
@@ -39,8 +39,8 @@ ON a.x == b.x AND a.y == b.y;
 
 SELECT
     *
-    WITHOUT
-        b.x
+WITHOUT
+    b.x
 FROM (
     SELECT
         *

@@ -14,4 +14,4 @@ FROM $in
     AS a
 INNER JOIN $in
     AS b
-ON a.key = b.key;
+ON a.key == b.key;

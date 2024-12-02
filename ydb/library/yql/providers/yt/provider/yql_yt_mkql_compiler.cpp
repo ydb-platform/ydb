@@ -6,14 +6,15 @@
 #include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
 #include <ydb/library/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+
+#include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
+#include <yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/defs.h>
-#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/context.h>
 
 #include <library/cpp/yson/node/node_io.h>
@@ -28,6 +29,7 @@ namespace NYql {
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
+using namespace NNodes::NDq;
 
 TRuntimeNode BuildTableContentCall(TStringBuf callName,
     TType* outItemType,
@@ -452,6 +454,10 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
     compiler.AddCallable(TYtTableContent::CallableName(),
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             TYtTableContent tableContent(&node);
+            if (node.GetConstraint<TEmptyConstraintNode>()) {
+                const auto itemType = NCommon::BuildType(node, GetSeqItemType(*node.GetTypeAnn()), ctx.ProgramBuilder);
+                return ctx.ProgramBuilder.NewEmptyList(itemType);
+            }
             TMaybe<ui64> itemsCount;
             TString name = ToString(TYtTableContent::CallableName());
             if (auto setting = NYql::GetSetting(tableContent.Settings().Ref(), EYtSettingType::ItemsCount)) {

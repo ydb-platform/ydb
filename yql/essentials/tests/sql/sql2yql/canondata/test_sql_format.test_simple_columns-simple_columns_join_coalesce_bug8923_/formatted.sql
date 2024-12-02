@@ -25,7 +25,7 @@ FROM $foo
     AS foo
 JOIN $bar
     AS bar
-ON CAST(foo.key AS Int32) = bar.key
+ON CAST(foo.key AS Int32) == bar.key
 JOIN $baz
     AS baz
-ON bar.key = baz.key;
+ON bar.key == baz.key;

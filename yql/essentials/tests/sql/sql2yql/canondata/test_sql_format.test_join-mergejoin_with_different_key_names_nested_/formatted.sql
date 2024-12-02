@@ -9,10 +9,10 @@ FROM Input
     AS a
 JOIN Input1
     AS b
-ON b.k1 = a.key
+ON b.k1 == a.key
 JOIN Input2
     AS c
-ON a.key = c.k2
+ON a.key == c.k2
 SELECT
     a.value AS avalue,
     b.v1,

@@ -20,4 +20,4 @@ $data_one_key = (
 SELECT
     *
 FROM Input2
-WHERE key = $data_one_key;
+WHERE key == $data_one_key;

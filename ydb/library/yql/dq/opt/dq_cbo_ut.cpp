@@ -33,12 +33,14 @@ Y_UNIT_TEST_SUITE(DQCBO) {
 
 Y_UNIT_TEST(Empty) {
     TBaseProviderContext pctx;
-    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000));
+    TExprContext dummyCtx;
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx));
 }
 
 Y_UNIT_TEST(JoinSearch2Rels) {
     TBaseProviderContext pctx;
-    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000));
+    TExprContext dummyCtx;
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx));
 
     auto rel1 = std::make_shared<TRelOptimizerNode>(
         "a",
@@ -80,7 +82,8 @@ Type: ManyManyJoin, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10, Sel:
 
 Y_UNIT_TEST(JoinSearch3Rels) {
     TBaseProviderContext pctx;
-    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000));
+    TExprContext dummyCtx;
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx));
 
     auto rel1 = std::make_shared<TRelOptimizerNode>("a",
         TOptimizerStatistics(BaseTable, 100000, 1, 0, 1000000));
@@ -243,7 +246,7 @@ Y_UNIT_TEST(DqOptimizeEquiJoinWithCostsNative) {
     TExprContext ctx;
     TBaseProviderContext pctx;
     std::function<IOptimizerNew*()> optFactory = [&]() {
-        return MakeNativeOptimizerNew(pctx, 100000);
+        return MakeNativeOptimizerNew(pctx, 100000, ctx);
     };
     _DqOptimizeEquiJoinWithCosts(optFactory, ctx);
 }

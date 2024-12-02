@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $t = AsList(
     AsStruct(1 AS key, 200 AS value),
     AsStruct(2 AS key, 100 AS value)

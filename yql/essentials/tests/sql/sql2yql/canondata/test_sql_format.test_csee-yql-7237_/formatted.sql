@@ -12,25 +12,16 @@ COMMIT;
 $manufacturer_name_fix = ($manufacturer) -> {
     $lowered_manufacturer = CAST(Unicode::ToLower(CAST(String::Strip($manufacturer) AS Utf8)) AS String);
     $in = AsList(
-        "oysters",
-        -- bullshit in naming
-        "qumo",
-        -- bullshit in naming
-        "texet",
-        -- bullshit in naming
-        "alcatel",
-        -- bullshit in naming
-        "dexp",
-        -- bullshit in naming
-        "haier",
-        -- bullshit in naming
-        "dexp",
-        -- bullshit in naming
-        "asus",
-        -- ASUSTek Computer Inc & ASUS both usable
-        "yota",
-        -- Yota Devices & Yota Devices Limited ...
-        "ark"-- "ark" & "ark electronic technology" & "ark_electronic_technology"
+        "oysters", -- bullshit in naming
+        "qumo", -- bullshit in naming
+        "texet", -- bullshit in naming
+        "alcatel", -- bullshit in naming
+        "dexp", -- bullshit in naming
+        "haier", -- bullshit in naming
+        "dexp", -- bullshit in naming
+        "asus", -- ASUSTek Computer Inc & ASUS both usable
+        "yota", -- Yota Devices & Yota Devices Limited ...
+        "ark" -- "ark" & "ark electronic technology" & "ark_electronic_technology"
     );
     $lambda = ($substring) -> {
         RETURN FIND($lowered_manufacturer, $substring) IS NULL;
@@ -63,8 +54,8 @@ $push_final_preprocessing = (
 SELECT
     COALESCE(fixed_manufacturer, "other") AS manufacturer,
     L.*
-    WITHOUT
-        L.manufacturer
+WITHOUT
+    L.manufacturer
 FROM $push_final_preprocessing
     AS L
 LEFT JOIN (
@@ -73,4 +64,4 @@ LEFT JOIN (
     FROM $manufacturers_whitelist
 )
     AS R
-ON (L.manufacturer = R.fixed_manufacturer);
+ON (L.manufacturer == R.fixed_manufacturer);

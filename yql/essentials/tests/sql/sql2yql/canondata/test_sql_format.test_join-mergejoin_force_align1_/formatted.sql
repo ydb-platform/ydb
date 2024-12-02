@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 PRAGMA yt.JoinMergeTablesLimit = "100";
 PRAGMA yt.JoinMergeForce;
@@ -33,7 +34,7 @@ FROM (
         AS a
     JOIN @t3
         AS c
-    ON a.k1 = c.k3
+    ON a.k1 == c.k3
 )
     AS ac
 JOIN (
@@ -43,7 +44,7 @@ JOIN (
         AS b
     JOIN @t4
         AS d
-    ON b.k2 = d.k4
+    ON b.k2 == d.k4
 )
     AS bd
-ON ac.k1 = bd.k2 AND ac.k3 = bd.k4;
+ON ac.k1 == bd.k2 AND ac.k3 == bd.k4;

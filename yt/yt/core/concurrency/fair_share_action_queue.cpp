@@ -30,7 +30,7 @@ public:
         const TString& threadName,
         const std::vector<TString>& queueNames,
         const THashMap<TString, std::vector<TString>>& bucketToQueues,
-        NProfiling::IRegistryImplPtr registry)
+        NProfiling::IRegistryPtr registry)
         : ShutdownCookie_(RegisterShutdownCallback(
             Format("FairShareActionQueue(%v)", threadName),
             BIND_NO_PROPAGATE(&TFairShareActionQueue::Shutdown, MakeWeak(this), /*graceful*/ false),
@@ -171,7 +171,7 @@ IFairShareActionQueuePtr CreateFairShareActionQueue(
     const TString& threadName,
     const std::vector<TString>& queueNames,
     const THashMap<TString, std::vector<TString>>& bucketToQueues,
-    NProfiling::IRegistryImplPtr registry)
+    NProfiling::IRegistryPtr registry)
 {
     return New<TFairShareActionQueue>(threadName, queueNames, bucketToQueues, std::move(registry));
 }

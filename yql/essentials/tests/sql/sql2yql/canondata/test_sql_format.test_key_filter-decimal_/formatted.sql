@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 $asIs = Python::asIs(
     Callable<(String) -> String>,
@@ -22,36 +23,32 @@ FROM (
     SELECT
         *
     FROM @decimal
-    WHERE value < Decimal("4.1", 15, 10) AND value > Decimal("10.5", 15, 10)
-    -- empty
+    WHERE value < Decimal("4.1", 15, 10) AND value > Decimal("10.5", 15, 10) -- empty
     UNION ALL
     SELECT
         *
     FROM @decimal
-    WHERE value > Decimal("inf", 15, 10)
-    -- empty
+    WHERE value > Decimal("inf", 15, 10) -- empty
     UNION ALL
     SELECT
         *
     FROM @decimal
-    WHERE value < Decimal("-inf", 15, 10)
-    -- empty
+    WHERE value < Decimal("-inf", 15, 10) -- empty
     UNION ALL
     SELECT
         *
     FROM @decimal
-    WHERE value = Decimal("nan", 15, 10)
-    -- empty
+    WHERE value == Decimal("nan", 15, 10) -- empty
     UNION ALL
     SELECT
         *
     FROM @decimal
-    WHERE value = Decimal("inf", 15, 10)
+    WHERE value == Decimal("inf", 15, 10)
     UNION ALL
     SELECT
         *
     FROM @decimal
-    WHERE value = Decimal("-inf", 15, 10)
+    WHERE value == Decimal("-inf", 15, 10)
     UNION ALL
     SELECT
         *
@@ -65,17 +62,17 @@ ORDER BY
 SELECT
     *
 FROM @decimal
-WHERE value = CAST("6.6" AS Decimal (15, 10));
+WHERE value == CAST("6.6" AS Decimal (15, 10));
 
 -- Safe key filter calc
 SELECT
     *
 FROM @decimal
-WHERE value = CAST($asIs("3.3") AS Decimal (15, 10));
+WHERE value == CAST($asIs("3.3") AS Decimal (15, 10));
 
 -- Unsafe key filter calc
 SELECT
     *
 FROM @decimal
-WHERE value = CAST($asIs("bad") AS Decimal (15, 10));
+WHERE value == CAST($asIs("bad") AS Decimal (15, 10));
 -- Unsafe key filter calc

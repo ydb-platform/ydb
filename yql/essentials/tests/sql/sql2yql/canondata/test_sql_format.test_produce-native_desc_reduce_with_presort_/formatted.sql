@@ -14,8 +14,7 @@ FROM (
     ON
         key,
         subkey
-    USING $udf(value)
---YtReduce
+    USING $udf(value) --YtReduce
 )
 ORDER BY
     key,
@@ -30,8 +29,7 @@ FROM (
         value DESC
     ON
         key
-    USING $udf(value)
---YtReduce
+    USING $udf(value) --YtReduce
 )
 ORDER BY
     key,
@@ -46,8 +44,7 @@ FROM (
     ON
         key,
         subkey
-    USING $udf(value)
---YtMapReduce
+    USING $udf(value) --YtMapReduce
 )
 ORDER BY
     key,
@@ -62,8 +59,7 @@ FROM (
     ON
         key,
         subkey
-    USING $udf(value)
---YtMapReduce
+    USING $udf(value) --YtMapReduce
 )
 ORDER BY
     key,

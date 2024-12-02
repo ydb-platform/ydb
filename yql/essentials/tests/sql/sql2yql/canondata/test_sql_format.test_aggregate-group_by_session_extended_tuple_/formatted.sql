@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $timeout = 60 * 30;
 $init = ($row) -> (AsTuple($row.unixtime, $row.unixtime, $row.video_content_id));
 $update = ($row, $state) -> {

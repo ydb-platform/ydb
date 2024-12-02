@@ -1,4 +1,6 @@
-/* postgres can not *//* syntax version 1 *//* yt can not */
+/* postgres can not */
+/* syntax version 1 */
+/* yt can not */
 $s = <|a: 1, b: 2u / 1u, c: Just(Just(1))|>;
 $js = Just($s);
 $es = Nothing(Struct<a: Int32, b: Uint32?, c: Int32??>?);

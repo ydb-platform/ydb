@@ -12,6 +12,7 @@
 
 #include <yt/yt/core/misc/lazy_ptr.h>
 
+#include <yt/yt/library/profiling/solomon/config.h>
 #include <yt/yt/library/profiling/solomon/exporter.h>
 
 #include <library/cpp/json/yson/json2yson.h>

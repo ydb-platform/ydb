@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     sum(CAST(subkey AS uint32)) AS s
 FROM plato.Input

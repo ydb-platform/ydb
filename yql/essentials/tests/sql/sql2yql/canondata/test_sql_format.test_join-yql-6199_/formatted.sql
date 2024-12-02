@@ -14,7 +14,7 @@ $j1 = (
         AS a2
     JOIN $i
         AS b
-    ON a2.key = b.key
+    ON a2.key == b.key
 );
 
 SELECT
@@ -23,7 +23,7 @@ FROM $j1
     AS a
 JOIN $i
     AS d
-ON a.k = d.key;
+ON a.k == d.key;
 
 $j2 = (
     SELECT
@@ -33,7 +33,7 @@ $j2 = (
         AS a
     JOIN $i
         AS b
-    ON a.key = b.key
+    ON a.key == b.key
 );
 
 SELECT
@@ -42,4 +42,4 @@ FROM $j2
     AS a
 JOIN $i
     AS d
-ON a.k = d.key;
+ON a.k == d.key;

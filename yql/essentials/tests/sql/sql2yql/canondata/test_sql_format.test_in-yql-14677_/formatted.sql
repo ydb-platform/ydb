@@ -10,6 +10,6 @@ $l1 =
 SELECT
     *
 FROM Input
-WHERE TRUE AND
-    value != "" AND
-    key IN $l1;
+WHERE TRUE
+    AND value != ""
+    AND key IN $l1;

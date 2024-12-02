@@ -16,10 +16,10 @@ $dict = (
 SELECT
     *
 FROM @input
-WHERE ui = 'touch' AND
-    reqid IN (
+WHERE ui == 'touch'
+    AND reqid IN (
         SELECT
             reqid
         FROM $dict
-    ) AND
-    236273 IN test_ids;
+    )
+    AND 236273 IN test_ids;

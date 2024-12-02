@@ -2,8 +2,8 @@ SELECT
     AsList(
         ListMap(
             AsList(3, 4), ($x) -> {
-                RETURN $x +
-                    Yql::Fold(
+                RETURN $x
+                    + Yql::Fold(
                         ListMap(
                             AsList(7, 8), ($y) -> {
                                 RETURN $x + Yql::Fold(
@@ -19,8 +19,8 @@ SELECT
                                 }
                             )
                         }
-                    ) +
-                    Yql::Fold(
+                    )
+                    + Yql::Fold(
                         AsList(9, 10), 1, ($c, $d) -> {
                             RETURN $c + $d + Yql::Fold(
                                 ListMap(

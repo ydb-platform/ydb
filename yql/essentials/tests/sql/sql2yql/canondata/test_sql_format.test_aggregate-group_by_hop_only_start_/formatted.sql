@@ -1,4 +1,7 @@
-/* syntax version 1 *//* postgres can not *//* ytfile can not *//* yt can not */
+/* syntax version 1 */
+/* postgres can not */
+/* ytfile can not */
+/* yt can not */
 PRAGMA dq.AnalyticsHopping = "true";
 
 SELECT

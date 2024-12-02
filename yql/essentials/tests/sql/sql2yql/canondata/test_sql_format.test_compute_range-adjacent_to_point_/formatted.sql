@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not *//* yt can not */
+/* syntax version 1 */
+/* postgres can not */
+/* yt can not */
 PRAGMA warning("disable", "4510");
 
 -- [10, 11) -> [10, 10]

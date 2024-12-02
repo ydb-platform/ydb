@@ -20,7 +20,7 @@ $join =
         WHERE subkey != "foo"
     )
         AS b
-    ON a.key = b.key AND a.subkey = b.subkey;
+    ON a.key == b.key AND a.subkey == b.subkey;
 
 SELECT
     key1,

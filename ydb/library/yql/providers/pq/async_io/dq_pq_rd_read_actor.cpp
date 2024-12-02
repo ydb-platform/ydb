@@ -825,7 +825,7 @@ void TDqPqRdReadActor::TrySendGetNextBatch(TSession& sessionInfo) {
 template <class TEventPtr>
 bool TDqPqRdReadActor::CheckSession(TSession& session, const TEventPtr& ev, ui64 partitionId) {
     if (ev->Cookie != session.Generation) {
-        SRC_LOG_W("Wrong message generation (" << typeid(TEventPtr).name()  << "), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << session.Generation << ", send TEvStopSession");
+        SRC_LOG_W("Wrong message generation (" << typeid(TEventPtr).name()  << "), sender " << ev->Sender << ", partition " << partitionId <<  " cookie " << ev->Cookie << ", session generation " << session.Generation << ", send TEvStopSession");
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         *event->Record.MutableSource() = SourceParams;
         event->Record.SetPartitionId(partitionId);

@@ -359,7 +359,7 @@ def deploy(arguments):
     if 'YDB_EXPERIMENTAL_PG' in os.environ:
         optionals['pg_compatible_expirement'] = True
 
-    if _is_env_option_enabled('YDB_KAFKA_API_ENABLED', "0"):
+    if _is_env_option_enabled('YDB_KAFKA_API_ENABLED'):
         kafka_api_port = int(os.environ.get("YDB_KAFKA_PROXY_PORT", "9092"))
         optionals['kafka_api_port'] = kafka_api_port
 
@@ -559,4 +559,4 @@ def _is_true_string(s):
 
 
 def _is_env_option_enabled(name):
-    return os.environ.get(name, "FALSE")
+    return _is_true_string(os.environ.get(name, "FALSE"))

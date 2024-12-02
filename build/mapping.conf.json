@@ -575,7 +575,9 @@
         "5731299437": "https://devtools-registry.s3.yandex.net/5731299437",
         "6048579718": "https://devtools-registry.s3.yandex.net/6048579718",
         "2980468199": "https://devtools-registry.s3.yandex.net/2980468199",
-        "5562224408": "https://devtools-registry.s3.yandex.net/5562224408"
+        "5562224408": "https://devtools-registry.s3.yandex.net/5562224408",
+        "7573694143": "https://devtools-registry.s3.yandex.net/7573694143",
+        "7573699373": "https://devtools-registry.s3.yandex.net/7573699373"
     },
     "resources_descriptions": {
         "6277415836": "Allure 2.29.0",
@@ -815,6 +817,8 @@
         "6489370295": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "6523690593": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "6523723140": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
+        "7573694143": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
+        "7573699373": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "5486731632": "devtools/ya/test/programs/test_tool/bin3/test_tool3 for linux",
         "5514350352": "devtools/ya/test/programs/test_tool/bin3/test_tool3 for linux",
         "5514360398": "devtools/ya/test/programs/test_tool/bin3/test_tool3 for linux",

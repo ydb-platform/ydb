@@ -6336,10 +6336,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        // after restart we have no pages in private cache
+        // after restart we have no pages in private cache except flat index
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        // after restart we have no pages in private cache except flat index
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 286);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_EnableLocalDBFlatIndex_False) { // uses b-tree index

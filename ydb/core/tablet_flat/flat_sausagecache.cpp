@@ -288,39 +288,6 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
     return nullptr;
 }
 
-TSharedPageRef TPrivatePageCache::LookupShared(TPageId pageId, TInfo *info) {
-    TPage *page = info->GetPage(pageId);
-    if (!page)
-        return { };
-
-    if (page->LoadState == TPage::LoadStateLoaded) {
-        if (page->SharedBody) {
-            Y_DEBUG_ABORT_UNLESS(page->SharedBody.IsUsed(), "Loaded page should have used body");
-            return page->SharedBody;
-        } else {
-            return TSharedPageRef::MakePrivate(page->PinnedBody);
-        }
-    }
-
-    if (page->LoadState == TPage::LoadStateNo) {
-        if (page->SharedBody) {
-            auto copy = page->SharedBody;
-            if (copy.Use()) {
-                return copy;
-            }
-
-            page->SharedBody.Drop();
-            Stats.TotalSharedBody -= page->Size;
-            if (Y_UNLIKELY(page->PinnedBody)) {
-                Stats.TotalExclusive += page->Size;
-            }
-        }
-    }
-
-    TryEraseIfUnnecessary(page);
-    return { };
-}
-
 void TPrivatePageCache::CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory) {
     if (pinned.empty()) {
         newPages += Stats.CurrentCacheHits;

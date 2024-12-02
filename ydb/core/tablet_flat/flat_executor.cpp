@@ -667,20 +667,19 @@ void TExecutor::RequestInMemPagesForDatabase(bool pendingOnly) {
     }
 }
 
-void TExecutor::SaveInMemPages(NSharedCache::TEvResult *msg) {
+void TExecutor::StickInMemPages(NSharedCache::TEvResult *msg) {
     const auto& scheme = Scheme();
     for (auto& pr : scheme.Tables) {
         const ui32 tid = pr.first;
         auto subset = Database->Subset(tid, NTable::TEpoch::Max(), { } , { });
         for (auto &partView : subset->Flatten) {
             auto partStore = partView.As<NTable::TPartStore>();
-            for (size_t groupIndex : xrange(partView->GroupsCount)) {
+            for (auto &pageCollection : partStore->PageCollections) {
                 // Note: page collection search optimization seems useless
-                auto pageCollection = partStore->PageCollections[groupIndex]->PageCollection;
-                if (pageCollection == msg->Origin) {
+                if (pageCollection->PageCollection == msg->Origin) {
                     for (auto& loaded : msg->Loaded) {
-                        auto pageSize = pageCollection->Page(loaded.PageId).Size;
-                        partStore->PageCollectionStates.AddStickyPage(pageCollection->Label(), loaded.PageId, loaded.Page, pageSize);
+                        auto pageSize = pageCollection->PageCollection->Page(loaded.PageId).Size;
+                        partStore->PageCollectionStates.AddStickyPage(pageCollection->Id, loaded.PageId, loaded.Page, pageSize);
                     }
                 }
             }
@@ -2710,7 +2709,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
             }
 
             if (requestType == EPageCollectionRequest::CacheSticky) {
-                SaveInMemPages(msg);
+                StickInMemPages(msg);
             }
             for (auto& loaded : msg->Loaded) {
                 TPrivatePageCache::TPage::TWaitQueuePtr transactionsToActivate = PrivatePageCache->ProvideBlock(std::move(loaded), collectionInfo);
@@ -2771,7 +2770,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
         return;
 
     default:
-        Y_ABORT_S("Unexpected request " << ev->Cookie);
+        Y_DEBUG_ABORT_S("Unexpected request " << ev->Cookie);
         break;
     }
 }

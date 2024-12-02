@@ -321,11 +321,11 @@ namespace NTabletFlatExecutor {
                 Results.clear(); /* shouldn't sent w/o fixation in bs */
             }
 
-            for (auto& result : Results) {
+            for (auto &result : Results) {
                 Y_ABORT_UNLESS(result.PageCollections, "Compaction produced a part without page collections");
                 TVector<TIntrusivePtr<NTable::TLoader::TCache>> pageCollections;
                 THashMap<TLogoBlobID, TVector<TStickyPage>> pageCollectionsStickyPages;
-                for (auto& pageCollection : result.PageCollections) {
+                for (auto &pageCollection : result.PageCollections) {
                     auto cache = MakeIntrusive<NTable::TLoader::TCache>(pageCollection.PageCollection);
                     auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
                     auto gcList = SharedCachePages->GCList;
@@ -413,8 +413,8 @@ namespace NTabletFlatExecutor {
                 }
             }
 
-            if (fail) { /* shouldn't sent w/o fixation in bs */
-                Y_ABORT_IF(prod->Results); 
+            if (fail) {
+                Y_ABORT_IF(prod->Results); /* shouldn't sent w/o fixation in bs */
             } else if (bool(prod->Results) != bool(WriteStats.Rows > 0)) {
                 Y_ABORT("Unexpected rows production result after compaction");
             } else if ((bool(prod->Results) || bool(prod->TxStatus)) != bool(Blobs > 0)) {

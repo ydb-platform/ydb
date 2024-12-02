@@ -14,6 +14,7 @@
 
 add_subdirectory(protos)
 add_subdirectory(events)
+add_subdirectory(purecalc_compilation)
 add_subdirectory(purecalc_no_pg_wrapper)
 
 add_library(fq-libs-row_dispatcher)
@@ -33,6 +34,7 @@ target_link_libraries(fq-libs-row_dispatcher PUBLIC
   libs-actors-logging
   libs-config-protos
   libs-row_dispatcher-events
+  libs-row_dispatcher-purecalc_compilation
   fq-libs-shared_resources
   fq-libs-ydb
   ydb-core-mon

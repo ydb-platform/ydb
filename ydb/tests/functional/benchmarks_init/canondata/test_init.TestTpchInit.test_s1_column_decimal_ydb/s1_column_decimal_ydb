@@ -2,7 +2,7 @@ Init tables ...
 --!syntax_v1
 
 CREATE TABLE `/Root/db/Root/db/tpch/s1/customer` (
-    c_acctbal Double NOT NULL,
+    c_acctbal Decimal(22,9) NOT NULL,
     c_address Utf8 NOT NULL,
     c_comment Utf8 NOT NULL,
     c_custkey Int64 NOT NULL,
@@ -21,20 +21,20 @@ WITH (
 CREATE TABLE `/Root/db/Root/db/tpch/s1/lineitem` (
     l_comment Utf8 NOT NULL,
     l_commitdate Date32 NOT NULL,
-    l_discount Double NOT NULL,
-    l_extendedprice Double NOT NULL,
+    l_discount Decimal(22,9) NOT NULL,
+    l_extendedprice Decimal(22,9) NOT NULL,
     l_linenumber Int32 NOT NULL,
     l_linestatus Utf8 NOT NULL,
     l_orderkey Int64 NOT NULL,
     l_partkey Int64 NOT NULL,
-    l_quantity Double NOT NULL,
+    l_quantity Decimal(22,9) NOT NULL,
     l_receiptdate Date32 NOT NULL,
     l_returnflag Utf8 NOT NULL,
     l_shipdate Date32 NOT NULL,
     l_shipinstruct Utf8 NOT NULL,
     l_shipmode Utf8 NOT NULL,
     l_suppkey Int64 NOT NULL,
-    l_tax Double NOT NULL,
+    l_tax Decimal(22,9) NOT NULL,
     PRIMARY KEY (l_orderkey, l_linenumber)
 )
 PARTITION BY HASH (l_orderkey, l_linenumber)
@@ -65,7 +65,7 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/orders` (
     o_orderpriority Utf8 NOT NULL,
     o_orderstatus Utf8 NOT NULL,
     o_shippriority Int32 NOT NULL,
-    o_totalprice Double NOT NULL,
+    o_totalprice Decimal(22,9) NOT NULL,
     PRIMARY KEY (o_orderkey)
 )
 PARTITION BY HASH (o_orderkey)
@@ -81,7 +81,7 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/part` (
     p_mfgr Utf8 NOT NULL,
     p_name Utf8 NOT NULL,
     p_partkey Int64 NOT NULL,
-    p_retailprice Double NOT NULL,
+    p_retailprice Decimal(22,9) NOT NULL,
     p_size Int32 NOT NULL,
     p_type Utf8 NOT NULL,
     PRIMARY KEY (p_partkey)
@@ -97,10 +97,10 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/partsupp` (
     ps_comment Utf8 NOT NULL,
     ps_partkey Int64 NOT NULL,
     ps_suppkey Int64 NOT NULL,
-    ps_supplycost Double NOT NULL,
-    PRIMARY KEY (ps_partkey)
+    ps_supplycost Decimal(22,9) NOT NULL,
+    PRIMARY KEY (ps_partkey, ps_suppkey)
 )
-PARTITION BY HASH (ps_partkey)
+PARTITION BY HASH (ps_partkey, ps_suppkey)
 WITH (
     STORE = COLUMN,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
@@ -119,7 +119,7 @@ WITH (
 );
 
 CREATE TABLE `/Root/db/Root/db/tpch/s1/supplier` (
-    s_acctbal Double NOT NULL,
+    s_acctbal Decimal(22,9) NOT NULL,
     s_address Utf8 NOT NULL,
     s_comment Utf8 NOT NULL,
     s_name Utf8 NOT NULL,

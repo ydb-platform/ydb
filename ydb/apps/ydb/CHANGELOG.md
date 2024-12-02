@@ -1,3 +1,4 @@
+* Fixed a bug in TPC-H tables schema where the `partsupp` table had incorrect list of key columns
 
 * Enhanced parallelism of data restoring in `ydb tools restore`
 

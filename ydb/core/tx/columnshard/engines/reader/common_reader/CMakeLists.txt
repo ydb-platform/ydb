@@ -12,35 +12,4 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(plain_reader)
-add_subdirectory(abstract)
-add_subdirectory(common_reader)
-add_subdirectory(simple_reader)
-add_subdirectory(sys_view)
-add_subdirectory(common)
-add_subdirectory(actor)
-add_subdirectory(transaction)
-
-add_library(columnshard-engines-reader INTERFACE)
-
-
-target_link_libraries(columnshard-engines-reader INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  ydb-core-protos
-  core-formats-arrow
-  columnshard-engines-predicate
-  columnshard-hooks-abstract
-  tx-columnshard-resources
-  core-tx-program
-  engines-reader-plain_reader
-  engines-reader-simple_reader
-  engines-reader-sys_view
-  engines-reader-abstract
-  engines-reader-common
-  engines-reader-actor
-  engines-reader-transaction
-  columnshard-engines-scheme
-)
-
+add_subdirectory(iterator)

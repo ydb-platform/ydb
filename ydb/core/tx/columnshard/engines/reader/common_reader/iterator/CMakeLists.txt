@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(plain_reader)
-add_subdirectory(abstract)
-add_subdirectory(common_reader)
-add_subdirectory(simple_reader)
-add_subdirectory(sys_view)
-add_subdirectory(common)
-add_subdirectory(actor)
-add_subdirectory(transaction)
-
-add_library(columnshard-engines-reader INTERFACE)
-
-
-target_link_libraries(columnshard-engines-reader INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  ydb-core-protos
-  core-formats-arrow
-  columnshard-engines-predicate
-  columnshard-hooks-abstract
-  tx-columnshard-resources
-  core-tx-program
-  engines-reader-plain_reader
-  engines-reader-simple_reader
-  engines-reader-sys_view
-  engines-reader-abstract
-  engines-reader-common
-  engines-reader-actor
-  engines-reader-transaction
-  columnshard-engines-scheme
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

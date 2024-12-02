@@ -668,6 +668,10 @@ std::tuple<ui64, ui64> TRuntimeFeatureFlags::BitsFromProto_slot4(const NKikimrCo
         bits |= flags.GetEnableAntlr4Parser() ? 805306368ULL : 268435456ULL;
         mask |= 805306368ULL;
     }
+    if (flags.HasEnableReleaseNodeNameOnGracefulShutdown()) {
+        bits |= flags.GetEnableReleaseNodeNameOnGracefulShutdown() ? 3221225472ULL : 1073741824ULL;
+        mask |= 3221225472ULL;
+    }
     return { bits, mask };
 }
 
@@ -772,7 +776,7 @@ void TRuntimeFeatureFlags::CopyRuntimeFrom(const NKikimrConfig::TFeatureFlags& f
     Update_slot1(slot1 & 18446744073709536255ULL, 18446744073709536255ULL);
     Update_slot2(slot2 & 18216849385675816959ULL, 18216849385675816959ULL);
     Update_slot3(slot3 & 18446744073457893375ULL, 18446744073457893375ULL);
-    Update_slot4(slot4 & 1073741823ULL, 1073741823ULL);
+    Update_slot4(slot4 & 4294967295ULL, 4294967295ULL);
 }
 
 TRuntimeFeatureFlags::operator NKikimrConfig::TFeatureFlags() const {
@@ -1210,6 +1214,9 @@ TRuntimeFeatureFlags::operator NKikimrConfig::TFeatureFlags() const {
     }
     if (slot4 & 268435456ULL) {
         flags.SetEnableAntlr4Parser(bool(slot4 & 536870912ULL));
+    }
+    if (slot4 & 1073741824ULL) {
+        flags.SetEnableReleaseNodeNameOnGracefulShutdown(bool(slot4 & 2147483648ULL));
     }
     return flags;
 }
@@ -3501,6 +3508,22 @@ void TRuntimeFeatureFlags::SetEnableAntlr4Parser(bool value) {
 
 void TRuntimeFeatureFlags::ClearEnableAntlr4Parser() {
     Update_slot4(0ULL, 805306368ULL);
+}
+
+bool TRuntimeFeatureFlags::HasEnableReleaseNodeNameOnGracefulShutdown() const {
+    return slot4_.load(std::memory_order_relaxed) & 1073741824ULL;
+}
+
+bool TRuntimeFeatureFlags::GetEnableReleaseNodeNameOnGracefulShutdown() const {
+    return slot4_.load(std::memory_order_relaxed) & 2147483648ULL;
+}
+
+void TRuntimeFeatureFlags::SetEnableReleaseNodeNameOnGracefulShutdown(bool value) {
+    Update_slot4(value ? 3221225472ULL : 1073741824ULL, 3221225472ULL);
+}
+
+void TRuntimeFeatureFlags::ClearEnableReleaseNodeNameOnGracefulShutdown() {
+    Update_slot4(0ULL, 3221225472ULL);
 }
 
 

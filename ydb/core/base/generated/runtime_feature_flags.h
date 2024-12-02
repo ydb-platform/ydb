@@ -894,6 +894,12 @@ public:
     void SetEnableAntlr4Parser(bool value);
     void ClearEnableAntlr4Parser();
 
+    // Feature flag EnableReleaseNodeNameOnGracefulShutdown
+    bool HasEnableReleaseNodeNameOnGracefulShutdown() const;
+    bool GetEnableReleaseNodeNameOnGracefulShutdown() const;
+    void SetEnableReleaseNodeNameOnGracefulShutdown(bool value);
+    void ClearEnableReleaseNodeNameOnGracefulShutdown();
+
 
 private:
     static std::tuple<ui64, ui64> BitsFromProto_slot0(const NKikimrConfig::TFeatureFlags& flags);

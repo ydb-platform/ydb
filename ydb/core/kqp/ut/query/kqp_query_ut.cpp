@@ -307,6 +307,64 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         check(delete_query, params, EStatus::SCHEME_ERROR);
     }
 
+    Y_UNIT_TEST_TWIN(SubQueryPreserveSort, ScalarChannels) {
+
+        NKikimrConfig::TAppConfig app;
+        if (ScalarChannels) {
+            app.MutableTableServiceConfig()->SetBlockChannelsMode(
+                NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR);
+        }
+
+        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/SubQueryPreserveSort` (
+                Key Int32 NOT NULL,
+                Fk21 Int32,
+                Fk22 String,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+
+        )").GetValueSync().IsSuccess());
+
+        UNIT_ASSERT(session.ExecuteDataQuery(R"(
+
+            REPLACE INTO `/Root/SubQueryPreserveSort` (Key, Fk21, Fk22, Value) VALUES
+                (1, 101, "One", "Value1"),
+                (2, 102, "Two", "Value1"),
+                (3, 103, "One", "Value2"),
+                (4, 104, "Two", "Value2"),
+                (5, 105, "One", "Value3"),
+                (6, 106, "Two", "Value3"),
+                (7, 107, "One", "Value4"),
+                (8, 108, "One", "Value5");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
+
+        auto query = Q_(R"(
+            $subquery = (SELECT Key FROM `/Root/SubQueryPreserveSort` WHERE Key >= 2 ORDER BY Key limit 5);
+            select Key from $subquery limit 10;
+        )");
+
+        auto txControl = TTxControl::BeginTx().CommitTx();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+        auto result = session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        Cerr << result.GetQueryPlan() << Endl;
+        Cerr << NYdb::TProtoAccessor::GetProto(*result.GetStats()).query_ast() << Endl;
+        CompareYson(R"(
+            [
+                [2];[3];[4];[5];[6]
+            ]
+        )", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(QueryTimeout) {
         NKikimrConfig::TAppConfig app;
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));

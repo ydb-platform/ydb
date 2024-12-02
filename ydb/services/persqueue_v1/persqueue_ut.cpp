@@ -883,7 +883,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, ui32 messageLimit) {
             // Get DirectReadResponse messages, send DirectReadAck messages.
 
-            while (currTotalMessages < messageLimit) {
+            auto endTime = TInstant::Now() + TDuration::Seconds(10);
+            while (currTotalMessages < messageLimit && endTime > TInstant::Now()) {
                 Cerr << "Wait for direct read id: " << nextReadId << ", currently have " << currTotalMessages << " messages" << Endl;
 
                 Ydb::Topic::StreamDirectReadMessage::FromServer resp;
@@ -1026,21 +1027,28 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         ui32 totalMsg = 0;
         ui64 nextReadId = 1;
         Sleep(TDuration::Seconds(3));
+        Cerr << ">>>>> 1" << Endl << Flush;
         setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 50);
+        Cerr << ">>>>> 2" << Endl << Flush;
         setup.DoRead(assignId, nextReadId, totalMsg, 42);
 
+        Cerr << ">>>>> 3" << Endl << Flush;
         Topic::StreamReadMessage::FromClient req;
         req.mutable_read_request()->set_bytes_size(40_MB);
         if (!setup.ControlStream->Write(req)) {
             ythrow yexception() << "write fail";
         }
-        setup.DoRead(assignId, nextReadId, totalMsg, 48);
+        Cerr << ">>>>> 4" << Endl << Flush;
+        setup.DoRead(assignId, nextReadId, totalMsg, 50);
 
+        Cerr << ">>>>> 5" << Endl << Flush;
         Sleep(TDuration::Seconds(1));
+        Cerr << ">>>>> 6" << Endl << Flush;
         auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.StagedReads.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.Reads.size(), 0);
+        Cerr << ">>>>> 7" << Endl << Flush;
     }
 
     Y_UNIT_TEST(DirectReadBadCases) {

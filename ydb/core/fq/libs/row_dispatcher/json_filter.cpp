@@ -271,53 +271,84 @@ struct NYql::NPureCalc::TOutputSpecTraits<TFilterOutputSpec> {
 
 namespace NFq {
 
-class TJsonFilter::TImpl {
+class TProgramHolder : public IProgramHolder {
 public:
-    TImpl(const TVector<TString>& columns,
-        const TVector<TString>& types,
-        const TString& whereFilter,
-        TCallback callback,
-        IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
-        const IPureCalcProgramFactory::TSettings& factorySettings)
-        : PureCalcProgramFactory(pureCalcProgramFactory)
-        , Sql(GenerateSql(whereFilter, factorySettings)) {
+    using TPtr = TIntrusivePtr<TProgramHolder>;
+
+public:
+    TProgramHolder(const TVector<TString>& columns, const TVector<TString>& types, const TString& sql, TCallback callback)
+        : Columns(columns)
+        , Types(types)
+        , Sql(sql)
+        , Callback(callback)
+    {
         Y_ENSURE(columns.size() == types.size(), "Number of columns and types should by equal");
+    }
 
-        // Shared factory may change during compilation, so it should be locked
-        auto guard = pureCalcProgramFactory->LockFactory();
+    NYql::NPureCalc::IConsumer<TInputType>& GetConsumer() {
+        Y_ENSURE(InputConsumer, "Program is not compiled");
+        return *InputConsumer;
+    }
 
-        // Program should be stateless because input values
-        // allocated on another allocator and should be released
-        LOG_ROW_DISPATCHER_DEBUG("Creating program...");
-        Program = pureCalcProgramFactory->GetFactory(factorySettings)->MakePushStreamProgram(
-            TFilterInputSpec(MakeInputSchema(columns, types)),
+public:
+    void CreateProgram(NYql::NPureCalc::IProgramFactoryPtr programFactory) override {
+        Program = programFactory->MakePushStreamProgram(
+            TFilterInputSpec(MakeInputSchema(Columns, Types)),
             TFilterOutputSpec(MakeOutputSchema()),
             Sql,
             NYql::NPureCalc::ETranslationMode::SQL
         );
-        InputConsumer = Program->Apply(MakeHolder<TFilterOutputConsumer>(callback));
-        LOG_ROW_DISPATCHER_DEBUG("Program created");
+        InputConsumer = Program->Apply(MakeHolder<TFilterOutputConsumer>(Callback));
     }
 
+private:
+    const TVector<TString> Columns;
+    const TVector<TString> Types;
+    const TString Sql;
+    const TCallback Callback;
+
+    THolder<NYql::NPureCalc::TPushStreamProgram<TFilterInputSpec, TFilterOutputSpec>> Program;
+    THolder<NYql::NPureCalc::IConsumer<TInputType>> InputConsumer;
+};
+
+class TJsonFilter::TImpl {
+public:
+    TImpl(const TVector<TString>& columns, const TVector<TString>& types, const TString& whereFilter, TCallback callback, const TPurecalcCompileSettings& purecalcSettings)
+        : PurecalcSettings(purecalcSettings)
+        , Sql(GenerateSql(whereFilter))
+        , ProgramHolder(MakeIntrusive<TProgramHolder>(columns, types, Sql, callback))
+    {}
+
     void Push(const TVector<ui64>& offsets, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 rowsOffset, ui64 numberRows) {
+        Y_ENSURE(ProgramHolder, "Program is not compiled");
         Y_ENSURE(values, "Expected non empty schema");
-        InputConsumer->OnObject({.Offsets = offsets, .Values = values, .RowsOffset = rowsOffset, .NumberRows = numberRows});
+        ProgramHolder->GetConsumer().OnObject({.Offsets = offsets, .Values = values, .RowsOffset = rowsOffset, .NumberRows = numberRows});
     }
 
     TString GetSql() const {
         return Sql;
     }
 
-    ~TImpl() {
-        auto guard = PureCalcProgramFactory->LockFactory();
-        InputConsumer.Reset();
-        Program.Reset();
+    std::unique_ptr<TEvRowDispatcher::TEvPurecalcCompileRequest> GetCompileRequest() {
+        Y_ENSURE(ProgramHolder, "Can not create compile request twice");
+        auto result = std::make_unique<TEvRowDispatcher::TEvPurecalcCompileRequest>(std::move(ProgramHolder), PurecalcSettings);
+        ProgramHolder = nullptr;
+        return result;
+    }
+
+    void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr ev) {
+        Y_ENSURE(!ProgramHolder, "Can not handle compile response twice");
+
+        auto result = static_cast<TProgramHolder*>(ev->Get()->ProgramHolder.Release());
+        Y_ENSURE(result, "Unexpected compile response");
+
+        ProgramHolder = TIntrusivePtr<TProgramHolder>(result);
     }
 
 private:
-    TString GenerateSql(const TString& whereFilter, const IPureCalcProgramFactory::TSettings& factorySettings) {
+    TString GenerateSql(const TString& whereFilter) {
         TStringStream str;
-        str << "PRAGMA config.flags(\"LLVM\", \"" << (factorySettings.EnabledLLVM ? "ON" : "OFF") << "\");\n";
+        str << "PRAGMA config.flags(\"LLVM\", \"" << (PurecalcSettings.EnabledLLVM ? "ON" : "OFF") << "\");\n";
         str << "$filtered = SELECT * FROM Input " << whereFilter << ";\n";
 
         str << "SELECT " << OffsetFieldName <<  ", Unwrap(Json::SerializeJson(Yson::From(RemoveMembers(TableRow(), [\"" << OffsetFieldName;
@@ -327,21 +358,14 @@ private:
     }
 
 private:
-    const IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
-    THolder<NYql::NPureCalc::TPushStreamProgram<TFilterInputSpec, TFilterOutputSpec>> Program;
-    THolder<NYql::NPureCalc::IConsumer<TInputType>> InputConsumer;
+    const TPurecalcCompileSettings PurecalcSettings;
     const TString Sql;
+    TProgramHolder::TPtr ProgramHolder;
 };
 
-TJsonFilter::TJsonFilter(
-    const TVector<TString>& columns,
-    const TVector<TString>& types,
-    const TString& whereFilter,
-    TCallback callback,
-    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
-    const IPureCalcProgramFactory::TSettings& factorySettings)
-    : Impl(std::make_unique<TJsonFilter::TImpl>(columns, types, whereFilter, callback, pureCalcProgramFactory, factorySettings)) { 
-}
+TJsonFilter::TJsonFilter(const TVector<TString>& columns, const TVector<TString>& types, const TString& whereFilter, TCallback callback, const TPurecalcCompileSettings& purecalcSettings)
+    : Impl(std::make_unique<TJsonFilter::TImpl>(columns, types, whereFilter, callback, purecalcSettings))
+{}
 
 TJsonFilter::~TJsonFilter() {
 }
@@ -354,14 +378,16 @@ TString TJsonFilter::GetSql() {
     return Impl->GetSql();
 }
 
-std::unique_ptr<TJsonFilter> NewJsonFilter(
-    const TVector<TString>& columns,
-    const TVector<TString>& types,
-    const TString& whereFilter,
-    TCallback callback,
-    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
-    const IPureCalcProgramFactory::TSettings& factorySettings) {
-    return std::unique_ptr<TJsonFilter>(new TJsonFilter(columns, types, whereFilter, callback, pureCalcProgramFactory, factorySettings));
+std::unique_ptr<TEvRowDispatcher::TEvPurecalcCompileRequest> TJsonFilter::GetCompileRequest() {
+    return Impl->GetCompileRequest();
+}
+
+void TJsonFilter::OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr ev) {
+    Impl->OnCompileResponse(std::move(ev));
+}
+
+std::unique_ptr<TJsonFilter> NewJsonFilter(const TVector<TString>& columns, const TVector<TString>& types, const TString& whereFilter, TCallback callback, const TPurecalcCompileSettings& purecalcSettings) {
+    return std::unique_ptr<TJsonFilter>(new TJsonFilter(columns, types, whereFilter, callback, purecalcSettings));
 }
 
 } // namespace NFq

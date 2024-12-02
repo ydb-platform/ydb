@@ -20,6 +20,8 @@ namespace NYdb::NTopic::NTests {
 
 const auto TEST_MESSAGE_GROUP_ID_1 = TEST_MESSAGE_GROUP_ID + "_1";
 const auto TEST_MESSAGE_GROUP_ID_2 = TEST_MESSAGE_GROUP_ID + "_2";
+const auto TEST_MESSAGE_GROUP_ID_3 = TEST_MESSAGE_GROUP_ID + "_3";
+const auto TEST_MESSAGE_GROUP_ID_4 = TEST_MESSAGE_GROUP_ID + "_4";
 
 Y_UNIT_TEST_SUITE(TxUsage) {
 
@@ -81,9 +83,16 @@ protected:
                      const TString& consumer = TEST_CONSUMER,
                      size_t partitionCount = 1,
                      std::optional<size_t> maxPartitionCount = std::nullopt);
-    void DescribeTopic(const TString& path);
+    TTopicDescription DescribeTopic(const TString& path);
 
-    void AddConsumer(const TString& topic, const TVector<TString>& consumers);
+    void AddConsumer(const TString& topicPath, const TVector<TString>& consumers);
+    void AlterAutoPartitioning(const TString& topicPath,
+                               ui64 minActivePartitions,
+                               ui64 maxActivePartitions,
+                               EAutoPartitioningStrategy strategy,
+                               TDuration stabilizationWindow,
+                               ui64 downUtilizationPercent,
+                               ui64 upUtilizationPercent);
 
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
@@ -428,7 +437,7 @@ void TFixture::CreateTopic(const TString& path,
     Setup->CreateTopic(path, consumer, partitionCount, maxPartitionCount);
 }
 
-void TFixture::AddConsumer(const TString& path,
+void TFixture::AddConsumer(const TString& topicPath,
                            const TVector<TString>& consumers)
 {
     NTopic::TTopicClient client(GetDriver());
@@ -438,13 +447,41 @@ void TFixture::AddConsumer(const TString& path,
         settings.BeginAddConsumer(consumer);
     }
 
-    auto result = client.AlterTopic(path, settings).GetValueSync();
+    auto result = client.AlterTopic(topicPath, settings).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void TFixture::DescribeTopic(const TString& path)
+void TFixture::AlterAutoPartitioning(const TString& topicPath,
+                                     ui64 minActivePartitions,
+                                     ui64 maxActivePartitions,
+                                     EAutoPartitioningStrategy strategy,
+                                     TDuration stabilizationWindow,
+                                     ui64 downUtilizationPercent,
+                                     ui64 upUtilizationPercent)
 {
-    Setup->DescribeTopic(path);
+    NTopic::TTopicClient client(GetDriver());
+    NTopic::TAlterTopicSettings settings;
+
+    settings
+        .BeginAlterPartitioningSettings()
+            .MinActivePartitions(minActivePartitions)
+            .MaxActivePartitions(maxActivePartitions)
+            .BeginAlterAutoPartitioningSettings()
+                .Strategy(strategy)
+                .StabilizationWindow(stabilizationWindow)
+                .DownUtilizationPercent(downUtilizationPercent)
+                .UpUtilizationPercent(upUtilizationPercent)
+            .EndAlterAutoPartitioningSettings()
+        .EndAlterTopicPartitioningSettings()
+        ;
+
+    auto result = client.AlterTopic(topicPath, settings).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+TTopicDescription TFixture::DescribeTopic(const TString& path)
+{
+    return Setup->DescribeTopic(path);
 }
 
 const TDriver& TFixture::GetDriver() const
@@ -2430,6 +2467,36 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_47, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
 
     CommitTx(tx, EStatus::SUCCESS);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_48, TFixture)
+{
+    // the commit of a transaction affects the split of the partition
+    CreateTopic("topic_A", TEST_CONSUMER, 2, 10);
+    AlterAutoPartitioning("topic_A", 2, 10, EAutoPartitioningStrategy::ScaleUp, TDuration::Seconds(2), 1, 2);
+
+    auto session = CreateTableSession();
+    auto tx = BeginTx(session);
+
+    TString message(1_MB, 'x');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_3, message, &tx, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_3, message, &tx, 0);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_4, message, &tx, 1);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_4, message, &tx, 1);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    Sleep(TDuration::Seconds(5));
+
+    auto topicDescription = DescribeTopic("topic_A");
+
+    UNIT_ASSERT_GT(topicDescription.GetTotalPartitionsCount(), 2);
 }
 
 }

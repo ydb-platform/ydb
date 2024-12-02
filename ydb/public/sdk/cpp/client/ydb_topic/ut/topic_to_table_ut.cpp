@@ -11,6 +11,8 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
+#include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
+
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -199,6 +201,10 @@ protected:
                             ui32 partitionId,
                             size_t minSize, size_t maxSize);
 
+    void SplitPartition(const TString& topicPath,
+                        ui32 partitionId,
+                        const TString& boundary);
+
 private:
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader, NTable::TTransaction& tx);
@@ -227,6 +233,8 @@ private:
 
     THashMap<std::pair<TString, TString>, TTopicWriteSessionContext> TopicWriteSessions;
     THashMap<TString, TTopicReadSessionPtr> TopicReadSessions;
+
+    ui64 SchemaTxId = 1000;
 };
 
 TFixture::TTableRecord::TTableRecord(const TString& key, const TString& value) :
@@ -239,6 +247,7 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
 {
     NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetEnableTopicServiceTx(true);
+    settings.SetEnableTopicSplitMerge(true);
     settings.SetEnablePQConfigTransactionsAtSchemeShard(true);
 
     Setup = std::make_unique<TTopicSdkTestSetup>(TEST_CASE_NAME, settings);
@@ -2327,6 +2336,17 @@ void TFixture::CheckAvgWriteBytes(const TString& topicPath,
 #undef UNIT_ASSERT_AVGWRITEBYTES
 }
 
+void TFixture::SplitPartition(const TString& topicName,
+                              ui32 partitionId,
+                              const TString& boundary)
+{
+    NKikimr::NPQ::NTest::SplitPartition(Setup->GetRuntime(),
+                                        ++SchemaTxId,
+                                        topicName,
+                                        partitionId,
+                                        boundary);
+}
+
 Y_UNIT_TEST_F(WriteToTopic_Demo_45, TFixture)
 {
     CreateTopic("topic_A", TEST_CONSUMER, 2);
@@ -2352,6 +2372,29 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_45, TFixture)
     maxSize = minSize + 200;
 
     CheckAvgWriteBytes("topic_A", 1, minSize, maxSize);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_46, TFixture)
+{
+    CreateTopic("topic_A", TEST_CONSUMER, 2, 10);
+
+    auto session = CreateTableSession();
+    auto tx = BeginTx(session);
+
+    TString message(1'000, 'x');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+
+    SplitPartition("topic_A", 1, "\xC0");
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
+
+    CommitTx(tx, EStatus::ABORTED);
 }
 
 }

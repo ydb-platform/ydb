@@ -28,6 +28,48 @@ namespace {
         return timestamp;
     }
 
+    void FillItemProgress(TSchemeShard* ss, const TImportInfo::TPtr importInfo, ui32 itemIdx,
+            Ydb::Import::ImportItemProgress& itemProgress) {
+
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        const auto& item = importInfo->Items.at(itemIdx);
+
+        const auto opId = TOperationId(item.WaitTxId, FirstSubTxId);
+        if (item.WaitTxId != InvalidTxId && ss->TxInFlight.contains(opId)) {
+            const auto& txState = ss->TxInFlight.at(opId);
+            if (txState.TxType != TTxState::TxBackup) {
+                return;
+            }
+
+            itemProgress.set_parts_total(txState.Shards.size());
+            itemProgress.set_parts_completed(txState.Shards.size() - txState.ShardsInProgress.size());
+            *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(txState.StartTime.Seconds());
+        } else {
+            const auto path = TPath::Resolve(ImportItemPathName(ss, importInfo, itemIdx), ss);
+            if (!path.IsResolved() || !ss->Tables.contains(path.Base()->PathId)) {
+                return;
+            }
+
+            auto table = ss->Tables.at(path.Base()->PathId);
+            auto it = table->BackupHistory.end();
+            if (item.WaitTxId != InvalidTxId) {
+                it = table->BackupHistory.find(item.WaitTxId);
+            } else if (table->BackupHistory.size() == 1) {
+                it = table->BackupHistory.begin();
+            }
+
+            if (it == table->BackupHistory.end()) {
+                return;
+            }
+
+            const auto& backupResult = it->second;
+            itemProgress.set_parts_total(backupResult.TotalShardCount);
+            itemProgress.set_parts_completed(backupResult.TotalShardCount);
+            *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(backupResult.StartDateTime);
+            *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(backupResult.CompletionDateTime);
+        }
+    }
+
     TImportInfo::EState GetMinState(TImportInfo::TPtr importInfo) {
         TImportInfo::EState state = TImportInfo::EState::Invalid;
 
@@ -67,7 +109,7 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_PREPARING);
             break;
         case TImportInfo::EState::Transferring:
-            // TODO(ilnaz): fill items progress
+            FillItemProgress(this, importInfo, itemIdx, *import.AddItemsProgress());
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA);
             break;
         case TImportInfo::EState::BuildIndexes:

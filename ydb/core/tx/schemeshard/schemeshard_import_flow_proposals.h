@@ -46,5 +46,8 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
     TTxId indexBuildId
 );
 
+TString ImportItemPathName(TSchemeShard* ss, const TImporttInfo::TPtr importInfo, ui32 itemIdx);
+TString ImportItemPathName(const TString& importPathName, ui32 itemIdx);
+
 } // NSchemeShard
 } // NKikimr

@@ -91,6 +91,18 @@ static struct aws_error_info s_errors[] = {
     AWS_DEFINE_ERROR_INFO_AUTH(
         AWS_AUTH_CREDENTIALS_PROVIDER_DELEGATE_FAILURE,
         "Valid credentials could not be sourced by the delegate provider"),
+    AWS_DEFINE_ERROR_INFO_AUTH(
+        AWS_AUTH_SSO_TOKEN_PROVIDER_SOURCE_FAILURE,
+        "Valid token could not be sourced by the sso token provider"),
+    AWS_DEFINE_ERROR_INFO_AUTH(
+        AWS_AUTH_SSO_TOKEN_INVALID,
+        "Token sourced by the sso token provider is invalid."),
+    AWS_DEFINE_ERROR_INFO_AUTH(
+        AWS_AUTH_SSO_TOKEN_EXPIRED,
+        "Token sourced by the sso token provider is expired."),
+    AWS_DEFINE_ERROR_INFO_AUTH(
+        AWS_AUTH_CREDENTIALS_PROVIDER_SSO_SOURCE_FAILURE,
+        "Valid credentials could not be sourced by the sso credentials provider"),
 
 };
 /* clang-format on */

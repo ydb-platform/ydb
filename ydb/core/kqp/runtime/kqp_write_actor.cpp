@@ -541,7 +541,7 @@ public:
             
             if (InconsistentTx) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
-                RetryResolveTable();
+                RetryResolve();
             } else {
                 RuntimeError(
                     TStringBuilder() << "Wrong shard state for table `"

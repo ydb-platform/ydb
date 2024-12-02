@@ -80,13 +80,15 @@ bool IsOperationStarted(TStatus operationStatus) {
     return operationStatus.IsSuccess() || operationStatus.GetStatus() == EStatus::STATUS_UNDEFINED;
 }
 
-ui32 CountDataFiles(const TFsPath& fsPath) {
+TVector<TFsPath> CollectDataFiles(const TFsPath& fsPath) {
+    TVector<TFsPath> dataFiles;
     ui32 dataFileId = 0;
     TFsPath dataFile = fsPath.Child(DataFileName(dataFileId));
     while (dataFile.Exists()) {
+        dataFiles.push_back(std::move(dataFile));
         dataFile = fsPath.Child(DataFileName(++dataFileId));
     }
-    return dataFileId;
+    return dataFiles;
 }
 
 TRestoreResult CombineResults(const TVector<TRestoreResult>& results) {
@@ -460,7 +462,10 @@ TRestoreResult TRestoreClient::CreateDataAccumulators(TVector<THolder<NPrivate::
 }
 
 TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const TTableDescription& desc) {
-    const ui32 dataFilesCount = CountDataFiles(fsPath);
+    // Threads can access memory owned by this vector through pointers during restore operation 
+    TVector<TFsPath> dataFiles = CollectDataFiles(fsPath);
+
+    const ui32 dataFilesCount = dataFiles.size();
     if (dataFilesCount == 0) {
         return Result<TRestoreResult>();
     }
@@ -485,7 +490,7 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
         ui32 dataFileIdEnd = dataFilesPerAccumulator * (i + 1) + std::min(i + 1, dataFilesPerAccumulatorRemainder);
         auto func = [&, i, dataFileIdStart, dataFileIdEnd, accumulator]() {
             for (size_t id = dataFileIdStart; id < dataFileIdEnd; ++id) {
-                TFsPath dataFile = fsPath.Child(DataFileName(id));
+                const TFsPath& dataFile = dataFiles[id];
 
                 LOG_D("Read data from " << dataFile.GetPath().Quote());
 

@@ -2,6 +2,8 @@
 
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 
+#include <library/cpp/streams/zstd/zstd.h>
+
 namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID) {
@@ -42,6 +44,17 @@ namespace NKikimr::NStorage {
         }
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
+
+        if (const auto& bsconfig = Cfg->BlobStorageConfig; bsconfig.HasAutoconfigSettings()) {
+            if (const auto& autoconfigSettings = bsconfig.GetAutoconfigSettings(); autoconfigSettings.HasInitialConfigYaml()) {
+                TStringStream ss;
+                {
+                    TZstdCompress zstd(&ss);
+                    zstd << autoconfigSettings.GetInitialConfigYaml();
+                }
+                config->SetStorageConfigCompressedYAML(ss.Str());
+            }
+        }
     }
 
     void TDistributedConfigKeeper::AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId,

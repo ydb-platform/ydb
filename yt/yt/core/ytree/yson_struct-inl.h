@@ -288,11 +288,14 @@ void Serialize(const T& value, NYson::IYsonConsumer* consumer)
 }
 
 template <CExternallySerializable T, CYsonStructSource TSource>
-void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults)
+void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults, std::optional<EUnrecognizedStrategy> strategy)
 {
     using TTraits = TGetExternalizedYsonStructTraits<T>;
     using TSerializer = typename TTraits::TExternalSerializer;
     auto serializer = TSerializer::template CreateWritable<T, TSerializer>(value, setDefaults);
+    if (strategy) {
+        serializer.SetUnrecognizedStrategy(*strategy);
+    }
     serializer.Load(std::move(source), postprocess, setDefaults);
 }
 

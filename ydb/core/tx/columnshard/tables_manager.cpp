@@ -105,13 +105,13 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     {
         TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableVersionsLoadTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Versions");
-        auto rowset = db.Table<Schema::TableVersionInfo>().Select();
+        auto rowset = db.Table<Schema::TableVersionInfo>().Reverse().Select();
         if (!rowset.IsReady()) {
             timer.AddLoadingFail();
             return false;
         }
 
-        THashMap<ui64, NOlap::TSnapshot> lastVersion;
+        THashSet<ui64> initializedPaths;
         while (!rowset.EndOfSet()) {
             const ui64 pathId = rowset.GetValue<Schema::TableVersionInfo::PathId>();
             Y_ABORT_UNLESS(Tables.contains(pathId));
@@ -124,18 +124,11 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "load_table_version")("path_id", pathId)("snapshot", version);
             Y_ABORT_UNLESS(schemaPresets.contains(versionInfo.GetSchemaPresetId()));
 
-            if (!table.IsDropped()) {
+            if (initializedPaths.insert(pathId).second && !table.IsDropped()) {
                 auto& ttlSettings = versionInfo.GetTtlSettings();
                 if (ttlSettings.HasEnabled()) {
-                    auto vIt = lastVersion.find(pathId);
-                    if (vIt == lastVersion.end()) {
-                        vIt = lastVersion.emplace(pathId, version).first;
-                    }
-                    if (vIt->second <= version) {
-                        TTtl::TDescription description(ttlSettings.GetEnabled());
-                        Ttl.SetPathTtl(pathId, std::move(description));
-                        vIt->second = version;
-                    }
+                    TTtl::TDescription description(ttlSettings.GetEnabled());
+                    Ttl.SetPathTtl(pathId, std::move(description));
                 }
             }
             table.AddVersion(version);

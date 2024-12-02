@@ -159,6 +159,54 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
     }
+
+    Y_UNIT_TEST(InitSettings) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->SetSkipSpecialCheckForEvict(true);
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        TLocalHelper localHelper(testHelper.GetKikimr());
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+
+        localHelper.CreateTestOlapTable();
+        {
+            const TString query = R"(ALTER TABLE `/Root/olapTable` SET TTL Interval("P0D") ON timestamp)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+        {
+            const TString query = R"(ALTER TABLE `/Root/olapTable` SET RESET TTL Interval("P0D") ON timestamp)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        for (ui64 i = 0; i < 100; ++i) {
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, i * 10000, 1000);
+        }
+
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+
+        {
+            auto selectQuery = TString(R"(
+                SELECT
+                    TierName, SUM(ColumnRawBytes) As RawBytes
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+                GROUP BY TierName
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "__DEFAULT");
+            UNIT_ASSERT_VALUES_EQUAL_C(GetUint64(rows[0].at("RawBytes")), columnRawBytes,
+                TStringBuilder() << "RawBytes changed after resetting tiering: before=" << columnRawBytes
+                                 << " after=" << GetUint64(rows[0].at("RawBytes")));
+        }
+    }
 }
 
 }   // namespace NKikimr::NKqp

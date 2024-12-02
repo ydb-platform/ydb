@@ -439,7 +439,7 @@ public:
     >;
 
 public:
-    explicit TTtlTierSettings(TDuration evictionDelay, const TAction& action);
+    explicit TTtlTierSettings(TDuration applyAfter, const TAction& action);
     explicit TTtlTierSettings(const Ydb::Table::TtlTier& tier);
     void SerializeTo(Ydb::Table::TtlTier& proto) const;
 

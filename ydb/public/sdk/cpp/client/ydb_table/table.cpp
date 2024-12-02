@@ -2927,8 +2927,8 @@ bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription&
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTtlTierSettings::TTtlTierSettings(TDuration evictionDelay, const TAction& action)
-    : ApplyAfter_(evictionDelay)
+TTtlTierSettings::TTtlTierSettings(TDuration applyAfter, const TAction& action)
+    : ApplyAfter_(applyAfter)
     , Action_(action)
 { }
 

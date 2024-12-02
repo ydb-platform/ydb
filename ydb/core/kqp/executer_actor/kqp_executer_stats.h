@@ -4,6 +4,7 @@
 #include <util/generic/vector.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
+#include <ydb/library/yql/dq/runtime/dq_tasks_counters.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -84,6 +85,74 @@ struct TTableStats {
     void Resize(ui32 taskCount);
 };
 
+struct TFilterStats {
+
+    TFilterStats() = default;
+
+    TFilterStats(ui32 taskCount) {
+        Resize(taskCount);
+    }
+
+    std::vector<ui64> Positive;
+    std::vector<ui64> Negative;
+
+    void Resize(ui32 taskCount);
+};
+
+struct TJoinInputStats {
+
+    TJoinInputStats() = default;
+
+    TJoinInputStats(ui32 taskCount) {
+        Resize(taskCount);
+    }
+
+    TFilterStats Bloom;
+    std::vector<ui64> BloomSkipped;
+
+    void Resize(ui32 taskCount);
+};
+
+struct TSpillingStats {
+
+    TSpillingStats() = default;
+
+    TSpillingStats(ui32 taskCount) {
+        Resize(taskCount);
+    }
+
+    std::vector<ui64> WriteBytes;
+    std::vector<ui64> WriteRows;
+    std::vector<ui64> ReadBytes;
+    std::vector<ui64> ReadRows;
+
+    void Resize(ui32 taskCount);
+};
+
+struct TOperatorStats {
+
+    TOperatorStats() = default;
+
+    TOperatorStats(ui32 taskCount) {
+        Resize(taskCount);
+    }
+
+    std::vector<ui64> Rows;
+    std::vector<ui64> Bytes;
+
+    NYql::NDq::TOperatorType OperatorType;
+
+    // join
+    TJoinInputStats Left;
+    TJoinInputStats Right;
+    TSpillingStats Spilling;
+    // filter
+    TFilterStats Filter;
+    // aggregation
+
+    void Resize(ui32 taskCount);
+};
+
 struct TStageExecutionStats {
 
     NYql::NDq::TStageId StageId;
@@ -121,6 +190,7 @@ struct TStageExecutionStats {
     std::map<TString, TAsyncBufferStats> Egress;
     std::map<ui32, TAsyncBufferStats> Input;
     std::map<ui32, TAsyncBufferStats> Output;
+    std::map<TString, TOperatorStats> Operators;
 
     TTimeSeriesStats MaxMemoryUsage;
     ui32 HistorySampleCount;
@@ -128,7 +198,10 @@ struct TStageExecutionStats {
     void Resize(ui32 taskCount);
     void SetHistorySampleCount(ui32 historySampleCount);
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStageStats& stageStats);
-    ui64 UpdateAsyncStats(i32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
+    ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
+    void UpdateFilterStats(ui32 index, TFilterStats& filterStats, const NYql::NDqProto::TDqFilterStats& filterStat);
+    void UpdateJoinInputStats(ui32 index, TJoinInputStats& joinInputStats, const NYql::NDqProto::TDqJoinInputStats& joinInputStat);
+    void UpdateSpillingStats(ui32 index, TSpillingStats& spillingStats, const NYql::NDqProto::TDqSpillingStats& spillingStat);
     ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage, ui64 durationUs);
 };
 
@@ -140,6 +213,7 @@ private:
     ui64 BaseTimeMs = 0;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
+    void ExportAggFilterStats(TFilterStats& data, NYql::NDqProto::TDqFilterStatsAggr& stats);
     void AdjustAsyncAggr(NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void AdjustAsyncBufferAggr(NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
     void AdjustDqStatsAggr(NYql::NDqProto::TDqStatsAggr& stats);

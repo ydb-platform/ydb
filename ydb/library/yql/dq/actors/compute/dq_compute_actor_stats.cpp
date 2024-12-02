@@ -88,6 +88,46 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
         }
     }
 
+    for (const auto& opStat : taskStats.OperatorStat) {
+        auto& op = *protoTask->MutableOperators()->Add();
+        op.SetOperatorId(opStat.OperatorId);
+        op.SetBytes(std::max<i64>(0, opStat.Bytes));
+        op.SetRows(std::max<i64>(0, opStat.Rows));
+        switch (opStat.OperatorType) {
+            case TOperatorType::Join: {
+                    auto& join = *op.MutableJoin();
+                    auto& left = *join.MutableLeft();
+                    left.SetBloomSkipped(std::max<i64>(0, opStat.Join.Left.BloomSkipped));
+                    auto& leftBloom = *left.MutableBloom();
+                    leftBloom.SetNegative(std::max<i64>(0, opStat.Join.Left.Bloom.Negative));
+                    leftBloom.SetPositive(std::max<i64>(0, opStat.Join.Left.Bloom.Positive));
+                    auto& right = *join.MutableRight();
+                    right.SetBloomSkipped(std::max<i64>(0, opStat.Join.Right.BloomSkipped));
+                    auto& rightBloom = *right.MutableBloom();
+                    rightBloom.SetNegative(std::max<i64>(0, opStat.Join.Right.Bloom.Negative));
+                    rightBloom.SetPositive(std::max<i64>(0, opStat.Join.Right.Bloom.Positive));
+                    auto& spilling = *join.MutableSpilling();
+                    spilling.SetWriteBytes(opStat.Join.Spilling.WriteBytes);
+                    spilling.SetWriteRows(opStat.Join.Spilling.WriteRows);
+                    spilling.SetReadBytes(opStat.Join.Spilling.ReadBytes);
+                    spilling.SetReadRows(opStat.Join.Spilling.ReadRows);
+                }
+                break;
+            case TOperatorType::Filter: {
+                    auto& filter = *op.MutableFilter();
+                    filter.SetNegative(std::max<i64>(0, opStat.Filter.Negative));
+                    filter.SetPositive(std::max<i64>(0, opStat.Filter.Positive));
+                }
+                break;
+            case TOperatorType::Aggregation: {
+                    op.MutableAggregation();
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
     TDqAsyncStats taskPushStats;
 
     for (auto& [srcStageId, inputChannels] : taskStats.InputChannels) {

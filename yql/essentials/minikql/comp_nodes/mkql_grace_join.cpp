@@ -1,3 +1,4 @@
+#include "mkql_counters.h"
 #include "mkql_grace_join.h"
 #include "mkql_grace_join_imp.h"
 
@@ -567,8 +568,8 @@ public:
         IComputationWideFlowNode* flowLeft, IComputationWideFlowNode* flowRight,
         EJoinKind joinKind,  EAnyJoinSettings anyJoinSettings, const std::vector<ui32>& leftKeyColumns, const std::vector<ui32>& rightKeyColumns,
         const std::vector<ui32>& leftRenames, const std::vector<ui32>& rightRenames,
-        const std::vector<TType*>& leftColumnsTypes, const std::vector<TType*>& rightColumnsTypes, const THolderFactory & holderFactory,
-        const bool isSelfJoin, bool isSpillingAllowed)
+        const std::vector<TType*>& leftColumnsTypes, const std::vector<TType*>& rightColumnsTypes, const TComputationContext& ctx,
+        const TString& OperatorLongId, const bool isSelfJoin, bool isSpillingAllowed)
     :  TBase(memInfo)
     ,   FlowLeft(flowLeft)
     ,   FlowRight(flowRight)
@@ -577,8 +578,8 @@ public:
     ,   RightKeyColumns(rightKeyColumns)
     ,   LeftRenames(leftRenames)
     ,   RightRenames(rightRenames)
-    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::RightSemi || joinKind == EJoinKind::RightOnly)))
-    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly)))
+    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, ctx.HolderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::RightSemi || joinKind == EJoinKind::RightOnly)))
+    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, ctx.HolderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly)))
     ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>())
     ,   JoinCompleted(std::make_unique<bool>(false))
     ,   PartialJoinCompleted(std::make_unique<bool>(false))
@@ -592,6 +593,10 @@ public:
         if (IsSelfJoin_) {
             LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
             RightPacker->BatchSize = std::numeric_limits<ui64>::max();
+        }
+        if (ctx.CountersProvider) {
+            CounterBytes = ctx.CountersProvider->GetCounter(OperatorLongId, Counter_Bytes, false);
+            CounterRows = ctx.CountersProvider->GetCounter(OperatorLongId, Counter_Rows, false);
         }
     }
 
@@ -770,6 +775,9 @@ private:
                 *valPtr = valsRight[RightRenames[2 * i]];
             }
         }
+
+        CounterBytes.Add((LeftRenames.size() + RightRenames.size()) * 8); // just UV size
+        CounterRows.Inc();
     }
 
     void LogMemoryUsage() const {
@@ -1003,6 +1011,8 @@ private:
     const bool IsSelfJoin_;
     const bool SelfJoinSameKeys_;
     const bool IsSpillingAllowed;
+    NYql::NUdf::TCounter CounterBytes;
+    NYql::NUdf::TCounter CounterRows;
 
     bool IsSpillingFinalized = false;
 
@@ -1032,7 +1042,9 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
             , OutputRepresentations(std::move(outputRepresentations))
             , IsSelfJoin_(isSelfJoin)
             , IsSpillingAllowed(isSpillingAllowed)
-        {}
+        {
+            OperatorLongId = TString(Operator_Join) + "100"; // grace join default "magic", to be replaced with externally assigned ID
+        }
 
         EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output)  const {
             if (state.IsInvalid()) {
@@ -1129,7 +1141,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
             state = ctx.HolderFactory.Create<TGraceJoinSpillingSupportState>(
                 FlowLeft, FlowRight, JoinKind, AnyJoinSettings_, LeftKeyColumns, RightKeyColumns,
                 LeftRenames, RightRenames, LeftColumnsTypes, RightColumnsTypes,
-                ctx.HolderFactory, IsSelfJoin_, IsSpillingAllowed);
+                ctx, OperatorLongId, IsSelfJoin_, IsSpillingAllowed);
         }
 
         IComputationWideFlowNode *const  FlowLeft;
@@ -1145,6 +1157,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         const std::vector<EValueRepresentation> OutputRepresentations;
         const bool IsSelfJoin_;
         const bool IsSpillingAllowed;
+        TString OperatorLongId;
 };
 
 }

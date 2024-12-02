@@ -165,6 +165,34 @@ void TTableStats::Resize(ui32 taskCount) {
     AffectedPartitions.resize(taskCount);
 }
 
+void TFilterStats::Resize(ui32 taskCount) {
+    Positive.resize(taskCount);
+    Negative.resize(taskCount);
+}
+
+void TJoinInputStats::Resize(ui32 taskCount) {
+    Bloom.Resize(taskCount);
+    BloomSkipped.resize(taskCount);
+}
+
+void TSpillingStats::Resize(ui32 taskCount) {
+    WriteBytes.resize(taskCount);
+    WriteRows.resize(taskCount);
+    ReadBytes.resize(taskCount);
+    ReadRows.resize(taskCount);
+}
+
+void TOperatorStats::Resize(ui32 taskCount) {
+    Rows.resize(taskCount);
+    Bytes.resize(taskCount);
+    // join
+    Left.Resize(taskCount);
+    Right.Resize(taskCount);
+    Spilling.Resize(taskCount);
+    // filter
+    Filter.Resize(taskCount);
+}
+
 void TStageExecutionStats::Resize(ui32 taskCount) {
     CpuTimeUs.Resize(taskCount);
     SourceCpuTimeUs.resize(taskCount);
@@ -196,6 +224,7 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
     for (auto& p : Input)   p.second.Resize(taskCount);
     for (auto& p : Output)  p.second.Resize(taskCount);
     for (auto& p : Egress)  p.second.Resize(taskCount);
+    for (auto& o : Operators) o.second.Resize(taskCount);
 
     MaxMemoryUsage.Resize(taskCount);
 }
@@ -261,7 +290,7 @@ void SetNonZero(ui64& target, ui64 source) {
     }
 }
 
-ui64 TStageExecutionStats::UpdateAsyncStats(i32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats) {
+ui64 TStageExecutionStats::UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats) {
     ui64 baseTimeMs = 0;
 
     aggrAsyncStats.Bytes.SetNonZero(index, asyncStats.GetBytes());
@@ -293,6 +322,23 @@ ui64 TStageExecutionStats::UpdateAsyncStats(i32 index, TAsyncStats& aggrAsyncSta
     }
 
     return baseTimeMs;
+}
+
+void TStageExecutionStats::UpdateFilterStats(ui32 index, TFilterStats& filterStats, const NYql::NDqProto::TDqFilterStats& filterStat) {
+    SetNonZero(filterStats.Positive[index], filterStat.GetPositive());
+    SetNonZero(filterStats.Negative[index], filterStat.GetNegative());
+}
+
+void TStageExecutionStats::UpdateJoinInputStats(ui32 index, TJoinInputStats& joinInputStats, const NYql::NDqProto::TDqJoinInputStats& joinInputStat) {
+    UpdateFilterStats(index, joinInputStats.Bloom, joinInputStat.GetBloom());
+    SetNonZero(joinInputStats.BloomSkipped[index], joinInputStat.GetBloomSkipped());
+}
+
+void TStageExecutionStats::UpdateSpillingStats(ui32 index, TSpillingStats& spillingStats, const NYql::NDqProto::TDqSpillingStats& spillingStat) {
+    SetNonZero(spillingStats.WriteBytes[index], spillingStat.GetWriteBytes());
+    SetNonZero(spillingStats.WriteRows[index], spillingStat.GetWriteRows());
+    SetNonZero(spillingStats.ReadBytes[index], spillingStat.GetReadBytes());
+    SetNonZero(spillingStats.ReadRows[index], spillingStat.GetReadRows());
 }
 
 ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage, ui64 durationUs) {
@@ -406,6 +452,37 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
         }
     }
 
+    for (auto& operatorStat : taskStats.GetOperators()) {
+        auto operatorId = operatorStat.GetOperatorId();
+        if (operatorId) {
+            auto [it, inserted] = Operators.try_emplace(operatorId, taskCount);
+            auto& operatorStats = it->second;
+            SetNonZero(operatorStats.Rows[index], operatorStat.GetRows());
+            SetNonZero(operatorStats.Bytes[index], operatorStat.GetBytes());
+            switch (operatorStat.GetTypeCase()) {
+                case NYql::NDqProto::TDqOperatorStats::kJoin: {
+                    operatorStats.OperatorType = NYql::NDq::Join;
+                    auto& joinStat = operatorStat.GetJoin();
+                    UpdateJoinInputStats(index, operatorStats.Left, joinStat.GetLeft());
+                    UpdateJoinInputStats(index, operatorStats.Right, joinStat.GetRight());
+                    UpdateSpillingStats(index, operatorStats.Spilling, joinStat.GetSpilling());
+                    break;
+                }
+                case NYql::NDqProto::TDqOperatorStats::kFilter: {
+                    operatorStats.OperatorType = NYql::NDq::Filter;
+                    UpdateFilterStats(index, operatorStats.Filter, operatorStat.GetFilter());
+                    break;
+                }
+                case NYql::NDqProto::TDqOperatorStats::kAggregation:
+                    operatorStats.OperatorType = NYql::NDq::Aggregation;
+                    break;
+                default:
+                    operatorStats.OperatorType = NYql::NDq::Unknown;
+                    break;
+            }
+        }
+    }
+
     MaxMemoryUsage.SetNonZero(index, maxMemoryUsage);
 
     return baseTimeMs;
@@ -436,21 +513,6 @@ void UpdateAggr(NDqProto::TDqStatsAggr* aggr, ui64 value) noexcept {
         aggr->SetCnt(aggr->GetCnt() + 1);
     }
 }
-
-struct TAsyncGroupStat {
-    ui64 Bytes = 0;
-    ui64 DecompressedBytes = 0;
-    ui64 Rows = 0;
-    ui64 Chunks = 0;
-    ui64 Splits = 0;
-    ui64 FirstMessageMs = 0;
-    ui64 PauseMessageMs = 0;
-    ui64 ResumeMessageMs = 0;
-    ui64 LastMessageMs = 0;
-    ui64 WaitTimeUs = 0;
-    ui64 WaitPeriods = 0;
-    ui64 Count = 0;
-};
 
 ui64 UpdateAsyncAggr(NDqProto::TDqAsyncStatsAggr& asyncAggr, const NDqProto::TDqAsyncBufferStats& asyncStat) noexcept {
     ui64 baseTimeMs = 0;
@@ -493,6 +555,16 @@ ui64 UpdateAsyncAggr(NDqProto::TDqAsyncStatsAggr& asyncAggr, const NDqProto::TDq
     }
 
     return baseTimeMs;
+}
+
+void UpdateFilterAggr(NDqProto::TDqFilterStatsAggr& filterStats, const NDqProto::TDqFilterStats& filterStat) {
+    UpdateAggr(filterStats.MutablePositive(), filterStat.GetPositive());
+    UpdateAggr(filterStats.MutableNegative(), filterStat.GetNegative());
+}
+
+void UpdateJoinInputAggr(NDqProto::TDqJoinInputStatsAggr& inputStats, const NDqProto::TDqJoinInputStats& inputStat) {
+    UpdateFilterAggr(*inputStats.MutableBloom(), inputStat.GetBloom());
+    UpdateAggr(inputStats.MutableBloomSkipped(), inputStat.GetBloomSkipped());
 }
 
 NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDq::TStageId& stageId,
@@ -641,6 +713,38 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
         BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableEgress())[sinksStat.GetEgressName()].MutablePush(),   sinksStat.GetPush()));
         BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableEgress())[sinksStat.GetEgressName()].MutablePop(),    sinksStat.GetPop()));
         BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableEgress())[sinksStat.GetEgressName()].MutableEgress(), sinksStat.GetEgress()));
+    }
+    for (auto& operatorStat : task.GetOperators()) {
+        auto& operatorStats = (*stageStats->MutableOperator())[operatorStat.GetOperatorId()];
+        UpdateAggr(operatorStats.MutableBytes(), operatorStat.GetBytes());
+        UpdateAggr(operatorStats.MutableRows(), operatorStat.GetRows());
+
+        switch (operatorStat.GetTypeCase()) {
+            case NYql::NDqProto::TDqOperatorStats::kJoin: {
+                auto& joinStats = *operatorStats.MutableJoin();
+                auto& joinStat = operatorStat.GetJoin();
+                UpdateJoinInputAggr(*joinStats.MutableLeft(), joinStat.GetLeft());
+                UpdateJoinInputAggr(*joinStats.MutableRight(), joinStat.GetRight());
+                auto& spillingStats = *joinStats.MutableSpilling();
+                auto& spillingStat = joinStat.GetSpilling();
+                UpdateAggr(spillingStats.MutableWriteBytes(), spillingStat.GetWriteBytes());
+                UpdateAggr(spillingStats.MutableWriteRows(), spillingStat.GetWriteRows());
+                UpdateAggr(spillingStats.MutableReadBytes(), spillingStat.GetReadBytes());
+                UpdateAggr(spillingStats.MutableReadRows(), spillingStat.GetReadRows());
+                break;
+            }
+            case NYql::NDqProto::TDqOperatorStats::kFilter: {
+                UpdateFilterAggr(*operatorStats.MutableFilter(), operatorStat.GetFilter());
+                break;
+            }
+            case NYql::NDqProto::TDqOperatorStats::kAggregation: {
+                operatorStats.MutableAggregation();
+                break;
+            }
+            default:
+                break;
+        }
+
     }
 }
 
@@ -983,6 +1087,11 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
     ExportAggAsyncStats(data.Egress, *stats.MutableEgress());
 }
 
+void TQueryExecutionStats::ExportAggFilterStats(TFilterStats& data, NYql::NDqProto::TDqFilterStatsAggr& stats) {
+    ExportAggStats(data.Negative, *stats.MutableNegative());
+    ExportAggStats(data.Positive, *stats.MutablePositive());
+}
+
 void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) {
 
     THashMap<ui32, NDqProto::TDqStageStats*> protoStages;
@@ -1046,6 +1155,23 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         }
         for (auto& p2 : p.second.Egress) {
             ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableEgress())[p2.first]);
+        }
+        for (auto& p2 : p.second.Operators) {
+            auto& operatorStat = (*stageStats.MutableOperator())[p2.first];
+            ExportAggStats(p2.second.Bytes, *operatorStat.MutableBytes());
+            ExportAggStats(p2.second.Rows, *operatorStat.MutableRows());
+            auto& joinStat = *operatorStat.MutableJoin();
+            auto& leftStat = *joinStat.MutableLeft();
+            ExportAggFilterStats(p2.second.Left.Bloom, *leftStat.MutableBloom());
+            ExportAggStats(p2.second.Left.BloomSkipped, *leftStat.MutableBloomSkipped());
+            auto& rightStat = *joinStat.MutableRight();
+            ExportAggFilterStats(p2.second.Right.Bloom, *rightStat.MutableBloom());
+            ExportAggStats(p2.second.Right.BloomSkipped, *rightStat.MutableBloomSkipped());
+            auto& spillingStat = *joinStat.MutableSpilling();
+            ExportAggStats(p2.second.Spilling.WriteBytes, *spillingStat.MutableWriteBytes());
+            ExportAggStats(p2.second.Spilling.WriteRows, *spillingStat.MutableWriteRows());
+            ExportAggStats(p2.second.Spilling.ReadBytes, *spillingStat.MutableReadBytes());
+            ExportAggStats(p2.second.Spilling.ReadRows, *spillingStat.MutableReadRows());
         }
     }
 }

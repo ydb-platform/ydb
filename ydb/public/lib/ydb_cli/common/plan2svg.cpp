@@ -405,6 +405,31 @@ void TPlan::ResolveCteRefs() {
     }
 }
 
+void LoadJoinUnput(TStringBuilder& builder, const TString Name, const NJson::TJsonValue& node) {
+    ui64 skipped = 0;
+    ui64 positive = 0;
+    ui64 negative = 0;
+    if (auto* skippedSumNode = node.GetValueByPath("BloomSkipped.Sum")) {
+        skipped = skippedSumNode->GetIntegerSafe();
+    }
+    if (auto* positiveSumNode = node.GetValueByPath("BloomPositive.Sum")) {
+        positive = positiveSumNode->GetIntegerSafe();
+    }
+    if (auto* negativeSumNode = node.GetValueByPath("BloomNegative.Sum")) {
+        negative = negativeSumNode->GetIntegerSafe();
+    }
+    auto total = skipped + positive + negative;
+    builder
+        << ", " << Name
+        << ": \u2211" << FormatIntegerValue(total);
+    if (positive || negative) {
+    builder
+        << " ?" << FormatIntegerValue(skipped)
+        << " +" << FormatIntegerValue(positive)
+        << " -" << FormatIntegerValue(negative);
+    }
+}
+
 void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, ui32 parentPlanNodeId) {
 
     if (auto* planNodeIdNode = node.GetValueByPath("PlanNodeId")) {
@@ -736,6 +761,43 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         }
 
         inputNode = stage->StatsNode->GetValueByPath("Input");
+
+        if (auto* operatorNode = stage->StatsNode->GetValueByPath("Operator")) {
+            TStringBuilder builder;
+            bool first = true;
+            for (const auto& subNode : operatorNode->GetArray()) {
+                TString id = "UNKNOWN_ID";
+                if (auto* idNode = subNode.GetValueByPath("Id")) {
+                    id = idNode->GetStringSafe();
+                }
+                if (first) {
+                    first = false;
+                } else {
+                    builder << "; ";
+                }
+                builder << id;
+                ui64 rows = 0;
+                ui64 bytes = 0;
+                if (auto* rowsSumNode = subNode.GetValueByPath("Rows.Sum")) {
+                    rows = rowsSumNode->GetIntegerSafe();
+                    builder << ", Rows: \u2211" << FormatIntegerValue(rows);
+                }
+                if (auto* bytesSumNode = subNode.GetValueByPath("Bytes.Sum")) {
+                    bytes = bytesSumNode->GetIntegerSafe();
+                    builder << ", Bytes: \u2211" << FormatBytes(bytes);
+                }
+                if (rows && bytes) {
+                    builder << ", Width: " << FormatBytes(bytes / rows);
+                }
+                if (auto* leftNode = subNode.GetValueByPath("Join.Left")) {
+                    LoadJoinUnput(builder, "Left", *leftNode);
+                }
+                if (auto* rightNode = subNode.GetValueByPath("Join.Right")) {
+                    LoadJoinUnput(builder, "Right", *rightNode);
+                }
+            }
+            stage->OperatorInfo = builder;
+        }
     }
 
     if (auto* subNode = node.GetValueByPath("Plans")) {
@@ -1140,6 +1202,11 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
                 << "' width='" << INDENT_X << "' height='" << s->IndentY - y
                 << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         }
+
+        if (s->OperatorInfo) {
+        background
+            << "<g><title>" << s->OperatorInfo << "</title>" << Endl;
+        }
         background
             << "<circle cx='" << s->IndentX + INTERNAL_WIDTH / 2
             << "' cy='" << s->OffsetY + s->Height / 2 + offsetY
@@ -1149,6 +1216,10 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             << "px' fill='" << Config.Palette.StageText << "' x='" << s->IndentX + INTERNAL_WIDTH / 2
             << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2
             << "'>" << ToString(s->PhysicalStageId) << "</text>" << Endl;
+        if (s->OperatorInfo) {
+        background
+            << "</g>" << Endl;
+        }
 
         {
             ui32 y0 = s->OffsetY + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 + offsetY;

@@ -1,4 +1,5 @@
 #include "dq_tasks_runner.h"
+#include "dq_tasks_counters.h"
 
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
@@ -303,7 +304,7 @@ public:
 
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
-            AllocatedHolder->ProgramParsed.StatsRegistry.Get());
+            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr);
 
         if (!SecureParamsProvider) {
             SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
@@ -740,6 +741,11 @@ public:
                     Stats->MkqlStats.emplace_back(TMkqlStat{key, value});
                 });
             }
+
+            Stats->OperatorStat.clear();
+            for (auto& [_, opStat] : CountersProvider.OperatorStat) {
+                Stats->OperatorStat.push_back(opStat);
+            }
         }
 
         if (Y_LIKELY(CollectBasic())) {
@@ -952,6 +958,8 @@ private:
     TDqTaskRunnerSettings Settings;
     TLogFunc LogFunc;
     std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
+    TDqTaskCountersProvider CountersProvider;
+
     struct TInputTransformInfo {
         NUdf::TUnboxedValue TransformInput;
         IDqAsyncInputBuffer::TPtr TransformOutput;

@@ -1,3 +1,4 @@
+#include "mkql_counters.h"
 #include "mkql_wide_combine.h"
 #include "mkql_rh_hash.h"
 
@@ -331,6 +332,10 @@ public:
         }
     }
 
+    void IncRows() {
+        CounterRows_.Inc();
+    }
+
     NUdf::TUnboxedValuePod* Extract() {
         if (!ExtractIt) {
             ExtractIt.emplace(Storage, RowSize(), States.GetSize());
@@ -350,6 +355,7 @@ public:
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
     i64 StoredDataSize = 0;
+    NYql::NUdf::TCounter CounterRows_;
 
 private:
     std::optional<TStorageIterator> ExtractIt;
@@ -427,6 +433,10 @@ public:
         BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
         Tongue = InMemoryProcessingState.Tongue;
         Throat = InMemoryProcessingState.Throat;
+        if (ctx.CountersProvider) {
+            TString id = TString(Operator_Aggregation) + "300";
+            CounterRows_ = ctx.CountersProvider->GetCounter(id, Counter_Rows, false);
+        }
     }
 
     EUpdateResult Update() {
@@ -888,6 +898,10 @@ public:
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
 
+    void IncRows() {
+        CounterRows_.Inc();
+    }
+
 private:
     bool StateWantsToSpill = false;
     bool IsEverythingExtracted = false;
@@ -917,6 +931,7 @@ private:
     const bool AllowSpilling;
 
     TComputationContext& Ctx;
+    NYql::NUdf::TCounter CounterRows_;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1040,6 +1055,7 @@ public:
 
             if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
                 Nodes.FinishItem(ctx, values, output);
+                ptr->IncRows();
                 return EFetchResult::One;
             }
         }
@@ -1375,6 +1391,11 @@ private:
             ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes))
         );
 #endif
+        if (ctx.CountersProvider) {
+            const auto ptr = static_cast<TState*>(state.AsBoxed().Get());
+            TString id = TString(Operator_Aggregation) + "300";
+            ptr->CounterRows_ = ctx.CountersProvider->GetCounter(id, Counter_Rows, false);
+        }
     }
 
     void RegisterDependencies() const final {
@@ -1480,6 +1501,7 @@ public:
                     case TSpillingSupportState::EUpdateResult::Extract:
                         if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
                             Nodes.FinishItem(ctx, values, output);
+                            ptr->IncRows();
                             return EFetchResult::One;
                         }
                         continue;

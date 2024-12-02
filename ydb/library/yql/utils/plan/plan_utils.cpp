@@ -36,7 +36,17 @@ TString ToStr(const TCoPgConst& data) {
 
 
 TString ToStr(const TCoLambda& lambda) {
-    return PrettyExprStr(lambda.Body());
+    if (lambda.Raw()->ChildrenSize() == 2) {
+        return PrettyExprStr(lambda.Body());
+    } else {
+        TVector<TString> bodies;
+        for (size_t i = 1; i < lambda.Raw()->ChildrenSize(); i++) {
+            if (auto str = PrettyExprStr(TExprBase(lambda.Raw()->ChildPtr(i)))) {
+                bodies.push_back(std::move(str));
+            }
+        } 
+        return TStringBuilder() << "(" << JoinStrings(std::move(bodies), ",") << ")";
+    }
 }
 
 TString ToStr(const TCoAsStruct& asStruct) {
@@ -64,6 +74,17 @@ TString ToStr(const TCoAsList& asList) {
     return TStringBuilder() << "[" << JoinStrings(std::move(args), ",") << "]";
 }
 
+TString ToStr(const TCoList& list) {
+    TVector<TString> args;
+    for (const auto& arg : list.Args()) {
+        if (auto str = PrettyExprStr(TExprBase(arg))) {
+            args.push_back(std::move(str));
+        }
+    }
+
+    return TStringBuilder() << "[" << JoinStrings(std::move(args), ",") << "]";
+}
+
 TString ToStr(const TCoMember& member) {
     auto structName = PrettyExprStr(member.Struct());
     auto memberName = PrettyExprStr(member.Name());
@@ -73,6 +94,10 @@ TString ToStr(const TCoMember& member) {
     }
 
     return {};
+}
+
+TString ToStr(const TCoNth& nth) {
+    return TStringBuilder() << '#' << PrettyExprStr(nth.Index());
 }
 
 TString ToStr(const TCoIfPresent& ifPresent) {
@@ -214,6 +239,8 @@ TString PrettyExprStr(const TExprBase& expr) {
         return ToStr(asStruct.Cast());
     } else if (auto asList = expr.Maybe<TCoAsList>()) {
         return ToStr(asList.Cast());
+    } else if (auto list = expr.Maybe<TCoList>()) {
+        return ToStr(list.Cast());
     } else if (auto member = expr.Maybe<TCoMember>()) {
         return ToStr(member.Cast());
     } else if (auto ifPresent = expr.Maybe<TCoIfPresent>()) {
@@ -234,6 +261,19 @@ TString PrettyExprStr(const TExprBase& expr) {
     } else if (expr.Maybe<TCoParameter>() || expr.Maybe<TCoJust>() || expr.Maybe<TCoSafeCast>()
             || expr.Maybe<TCoCoalesce>() || expr.Maybe<TCoConvert>()) {
         return PrettyExprStr(TExprBase(expr.Ref().Child(0)));
+    } else if (auto nth = expr.Maybe<TCoNth>()) {
+        return ToStr(nth.Cast());
+    // } else if (auto arg = expr.Maybe<TCoArgument>()) {
+    //     return ""; // not argument deduction yet, so just skip them
+    } else if (expr.Raw()->IsList()) {
+        TVector<TString> items;
+        for (const auto& item : expr.Raw()->ChildrenList()) {
+            if (auto str = PrettyExprStr(TExprBase(item))) {
+                items.push_back(std::move(str));
+            }
+        }
+
+        return TStringBuilder() << "[" << JoinStrings(std::move(items), ",") << "]";
     } else {
         return TString(expr.Ref().Content());
     }

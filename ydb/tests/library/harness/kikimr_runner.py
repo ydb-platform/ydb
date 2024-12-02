@@ -12,7 +12,6 @@ import yatest
 
 from ydb.tests.library.common.wait_for import wait_for
 from . import daemon
-from . import param_constants
 from . import kikimr_config
 from . import kikimr_node_interface
 from . import kikimr_cluster_interface

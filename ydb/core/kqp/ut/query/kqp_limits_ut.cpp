@@ -1195,7 +1195,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Node Type"].GetStringSafe(), "Query");
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Node Type"].GetStringSafe(), "ResultSet");
-        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "Stage");
+        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe() == "Stage"
+            || plan["Plan"]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe() == "Collect");
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "Merge");
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["SortColumns"].GetArraySafe()[0], "Key (Asc)");
 

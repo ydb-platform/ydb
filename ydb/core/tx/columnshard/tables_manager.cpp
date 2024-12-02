@@ -131,7 +131,6 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                     vIt = lastVersion.emplace(pathId, version).first;
                 }
                 if (vIt->second <= version) {
-                    TTtl::TDescription description(ttlSettings.GetEnabled());
                     if (ttlSettings.HasEnabled()) {
                         TTtl::TDescription description(ttlSettings.GetEnabled());
                         Ttl.SetPathTtl(pathId, std::move(description));

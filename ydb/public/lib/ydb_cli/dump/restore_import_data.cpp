@@ -912,7 +912,7 @@ public:
     }
 
     bool Push(NPrivate::TBatch&& data) override {
-        if (data.size() >= TRestoreSettings::MaxBytesPerRequest) {
+        if (data.size() > TRestoreSettings::MaxBytesPerRequest) {
             LOG_E("Too much data: " << data.GetLocation());
             return false;
         }

@@ -1597,7 +1597,7 @@ protected:
                 }
             }
 
-            if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead()) {
+            if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() || (!isOlapScan && readSettings.Sorted)) {
                 for (auto&& pair : nodeShards) {
                     auto& shardsInfo = pair.second;
                     for (auto&& shardInfo : shardsInfo) {

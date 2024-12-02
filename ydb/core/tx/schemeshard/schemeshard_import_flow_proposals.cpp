@@ -227,8 +227,8 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
 }
 
 TString ImportItemPathName(TSchemeShard* ss, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
-    const TPath importPath = TPath::Init(importInfo->ImportPathId, ss);
-    return ImportItemPathName(ImportPath.PathString(), itemIdx);
+    const TPath importPath = TPath::Init(importInfo->DomainPathId, ss);
+    return ImportItemPathName(importPath.PathString(), itemIdx);
 }
 
 TString ImportItemPathName(const TString& importPathName, ui32 itemIdx) {

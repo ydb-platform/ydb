@@ -28,7 +28,7 @@ void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr)
     SourceGroupGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
         GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", SourceIdx);
-    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
+//    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
     TFetchingScriptCursor cursor(FetchingPlan, 0);
     auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), Context->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
@@ -230,6 +230,7 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSour
 
     std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>();
     request->AddPortion(Portion);
+    request->SetColumnIds(GetContext()->GetAllUsageColumns()->GetColumnIds());
     request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(step, sourcePtr));
     GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
     return true;

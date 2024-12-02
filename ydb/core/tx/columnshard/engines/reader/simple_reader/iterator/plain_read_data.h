@@ -1,11 +1,11 @@
 #pragma once
-#include "columns_set.h"
-#include "source.h"
 #include "scanner.h"
+#include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/queue.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -16,6 +16,7 @@ private:
     std::shared_ptr<TSpecialReadContext> SpecialReadContext;
     std::vector<std::shared_ptr<TPartialReadResult>> PartialResults;
     ui32 ReadyResultsCount = 0;
+
 protected:
     virtual TConclusionStatus DoStart() override {
         return Scanner->Start();
@@ -42,6 +43,7 @@ protected:
     virtual bool DoIsFinished() const override {
         return (Scanner->IsFinished() && PartialResults.empty());
     }
+
 public:
     const TReadMetadata::TConstPtr& GetReadMetadata() const {
         return SpecialReadContext->GetReadMetadata();
@@ -75,4 +77,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader::NSimple

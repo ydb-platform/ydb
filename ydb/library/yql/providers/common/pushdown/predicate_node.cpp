@@ -30,6 +30,16 @@ bool TPredicateNode::IsValid() const {
     return res && ExprNode.IsValid();
 }
 
+bool TPredicateNode::IsEmpty() const {
+    if (!ExprNode || !IsValid()) {
+        return true;
+    }
+    if (const auto maybeBool = ExprNode.Maybe<NNodes::TCoBool>()) {
+        return TStringBuf(maybeBool.Cast().Literal()) == "true"sv;
+    }
+    return false;
+}
+
 void TPredicateNode::SetPredicates(const std::vector<TPredicateNode>& predicates, TExprContext& ctx, TPositionHandle pos, EBoolOp op) {
     auto predicatesSize = predicates.size();
     if (predicatesSize == 0) {

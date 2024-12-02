@@ -87,7 +87,7 @@ public:
     void StartSession(TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source, TMaybe<ui64> readOffset = Nothing()) {
         auto event = new NFq::TEvRowDispatcher::TEvStartSession(
             source,
-            PartitionId,
+            {PartitionId},
             "Token",
             readOffset, // readOffset,
             0,         // StartingMessageTimestamp;

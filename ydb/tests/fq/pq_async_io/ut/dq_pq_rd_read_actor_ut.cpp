@@ -116,7 +116,7 @@ struct TFixture : public TPqIoTestFixture {
     void MockAck(NActors::TActorId rowDispatcherId, ui64 generation = 1, ui64 partitionId = PartitionId1) {
         CaSetup->Execute([&](TFakeActor& actor) {
             NFq::NRowDispatcherProto::TEvStartSession proto;
-            proto.SetPartitionId(partitionId);
+            proto.AddPartitionId(partitionId);
             auto event = new NFq::TEvRowDispatcher::TEvStartSessionAck(proto);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
@@ -124,7 +124,7 @@ struct TFixture : public TPqIoTestFixture {
 
     void MockHeartbeat(NActors::TActorId rowDispatcherId, ui64 generation = 1) {
         CaSetup->Execute([&](TFakeActor& actor) {
-            auto event = new NFq::TEvRowDispatcher::TEvHeartbeat(PartitionId1);
+            auto event = new NFq::TEvRowDispatcher::TEvHeartbeat();
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }
@@ -157,7 +157,6 @@ struct TFixture : public TPqIoTestFixture {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvSessionError();
             event->Record.SetMessage("A problem has been detected and session has been shut down to prevent damage your life");
-            event->Record.SetPartitionId(PartitionId1);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RowDispatcher1, event, 0, 1));
         });
     }

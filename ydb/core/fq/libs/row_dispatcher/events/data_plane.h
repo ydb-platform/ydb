@@ -3,10 +3,11 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/core/fq/libs/events/event_subspace.h>
-
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
+
+#include <util/generic/set.h>
 
 namespace NFq {
 
@@ -69,13 +70,15 @@ struct TEvRowDispatcher {
         TEvStartSession() = default;
         TEvStartSession(
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
-            ui64 partitionId,
+            const TSet<ui64>& partitionIds,
             const TString token,
             TMaybe<ui64> readOffset,
             ui64 startingMessageTimestampMs,
             const TString& queryId) {
             *Record.MutableSource() = sourceParams;
-            Record.SetPartitionId(partitionId);
+            for (auto partitionId : partitionIds) {
+                Record.AddPartitionId(partitionId);
+            }
             Record.SetToken(token);
             if (readOffset) {
                 Record.SetOffset(*readOffset);
@@ -136,9 +139,6 @@ struct TEvRowDispatcher {
 
     struct TEvHeartbeat : public NActors::TEventPB<TEvHeartbeat, NFq::NRowDispatcherProto::TEvHeartbeat, EEv::EvHeartbeat> {
         TEvHeartbeat() = default;
-        TEvHeartbeat(ui32 partitionId) {
-            Record.SetPartitionId(partitionId);
-        }
     };
 
     struct TEvGetInternalStateRequest : public NActors::TEventPB<TEvGetInternalStateRequest,

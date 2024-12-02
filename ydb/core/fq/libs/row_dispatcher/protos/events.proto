@@ -23,7 +23,7 @@ message TEvGetAddressResponse {
 
 message TEvStartSession {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
-    uint32 PartitionId = 2;
+    repeated uint32 PartitionId = 2;
     string Token = 3;
     optional uint64 Offset = 4;
     uint64 StartingMessageTimestampMs = 5;
@@ -48,7 +48,6 @@ message TEvNewDataArrived {
 
 message TEvStopSession {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
-    uint32 PartitionId = 2;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
@@ -73,7 +72,6 @@ message TEvStatistics {
 
 message TEvSessionError {
     string Message = 1;
-    uint32 PartitionId = 2;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

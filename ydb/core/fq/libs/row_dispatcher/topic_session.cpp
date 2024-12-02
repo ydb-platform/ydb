@@ -858,8 +858,7 @@ void TTopicSession::AddDataToClient(TClientsInfo& info, ui64 offset, const TStri
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvStopSession from " << ev->Sender << " topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
-        " partitionId " << ev->Get()->Record.GetPartitionId() << " clients count " << Clients.size());
+    LOG_ROW_DISPATCHER_DEBUG("TEvStopSession from " << ev->Sender << " topicPath " << ev->Get()->Record.GetSource().GetTopicPath() << " clients count " << Clients.size());
 
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
@@ -966,7 +965,6 @@ void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJs
 void TTopicSession::SendSessionError(NActors::TActorId readActorId, const TString& message) {
     auto event = std::make_unique<TEvRowDispatcher::TEvSessionError>();
     event->Record.SetMessage(message);
-    event->Record.SetPartitionId(PartitionId);
     event->ReadActorId = readActorId;
     Send(RowDispatcherActorId, event.release());
 }

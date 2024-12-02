@@ -123,7 +123,7 @@ public:
     void MockAddSession(const NYql::NPq::NProto::TDqPqTopicSource& source, ui64 partitionId, TActorId readActorId, ui64 generation = 1) {
         auto event = new NFq::TEvRowDispatcher::TEvStartSession(
             source,
-            partitionId,          // partitionId
+            {partitionId},          // partitionId
             "Token",
             Nothing(),  // readOffset,
             0,          // StartingMessageTimestamp;
@@ -134,7 +134,7 @@ public:
     void MockStopSession(const NYql::NPq::NProto::TDqPqTopicSource& source, ui64 partitionId, TActorId readActorId) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         event->Record.MutableSource()->CopyFrom(source);
-        event->Record.SetPartitionId(partitionId);
+        //event->Record.SetPartitionId(partitionId);
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
     }
 

@@ -252,9 +252,9 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::StartDistributedConfigKeeper() {
-        auto *appData = AppData();
-        const bool isSelfStatic = !appData->DynamicNameserviceConfig || SelfId().NodeId() <= appData->DynamicNameserviceConfig->MaxStaticNodeId;
-        DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg, StorageConfig, isSelfStatic));
+        // auto *appData = AppData();
+        // const bool isSelfStatic = !appData->DynamicNameserviceConfig || SelfId().NodeId() <= appData->DynamicNameserviceConfig->MaxStaticNodeId;
+        // DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg, StorageConfig, isSelfStatic));
     }
 
     void TNodeWarden::ForwardToDistributedConfigKeeper(STATEFN_SIG) {

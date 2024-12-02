@@ -1103,9 +1103,6 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& e
     const auto clientId = requestIt->second;
     FiltersCompilation.InFlightCompilations.erase(requestIt);
     Metrics.InFlightCompileRequests->Dec();
-    if (FiltersCompilation.InFlightCompilations.empty()) {
-        SubscribeOnNextEvent();
-    }
 
     if (!ev->Get()->ProgramHolder) {
         TString message = TStringBuilder() << "Filed to compile purecalc program, error: " << ev->Get()->Error;

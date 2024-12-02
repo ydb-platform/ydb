@@ -9,8 +9,8 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/ydb/library/yql/providers/yt/lib/schema
-    contrib/ydb/library/yql/providers/yt/common
+    yt/yql/providers/yt/lib/schema
+    yt/yql/providers/yt/common
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/minikql
     yql/essentials/public/udf

@@ -5,6 +5,7 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/common.h>
 #include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
+#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -23,8 +24,7 @@ class TFixture : public NUnitTest::TBaseFixture {
 
 public:
     TFixture()
-        : PureCalcProgramFactory(CreatePureCalcProgramFactory())
-        , Runtime(true)
+        : Runtime(true)
         , Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false)
     {
         Alloc.Ref().UseRefLocking = true;
@@ -43,6 +43,9 @@ public:
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
+        Runtime.SetDispatchTimeout(TDuration::Seconds(5));
+
+        CompileServiceActorId = Runtime.Register(NRowDispatcher::CreatePurecalcCompileService());
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
@@ -67,8 +70,15 @@ public:
             types,
             whereFilter,
             callback,
-            PureCalcProgramFactory,
             {.EnabledLLVM = false});
+
+        const auto edgeActor = Runtime.AllocateEdgeActor();
+        Runtime.Send(CompileServiceActorId, edgeActor, Filter->GetCompileRequest().release());
+        auto response = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvPurecalcCompileResponse>(edgeActor, TDuration::Seconds(5));
+
+        UNIT_ASSERT_C(response, "Failed to get compile response");
+        UNIT_ASSERT_C(response->Get()->ProgramHolder, "Failed to compile program, error: " << response->Get()->Error);
+        Filter->OnCompileResponse(std::move(response));
     }
 
     void Push(const TVector<ui64>& offsets, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values) {
@@ -107,9 +117,9 @@ public:
         });
     }
 
-    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
     TActorSystemStub ActorSystemStub;
+    TActorId CompileServiceActorId;
     std::unique_ptr<NFq::TJsonFilter> Filter;
 
     NKikimr::NMiniKQL::TScopedAlloc Alloc;

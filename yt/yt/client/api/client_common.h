@@ -140,12 +140,17 @@ struct TSelectRowsOptionsBase
     : public TTabletReadOptions
     , public TSuppressableAccessTrackingOptions
 {
+    //! Expected schemas for tables in a query (used for replica fallback in replicated tables).
+    using TExpectedTableSchemas = THashMap<NYPath::TYPath, NTableClient::TTableSchemaPtr>;
+    TExpectedTableSchemas ExpectedTableSchemas;
+    //! Add |$timestamp:columnName| to result if read_mode is latest_timestamp.
+    NTableClient::TVersionedReadOptions VersionedReadOptions;
     //! Limits range expanding.
     ui64 RangeExpansionLimit = 200'000;
     //! Limits parallel subqueries by row count.
     i64 MinRowCountPerSubquery = 100'000;
     //! Path in Cypress with UDFs.
-    std::optional<TString> UdfRegistryPath;
+    std::optional<NYPath::TYPath> UdfRegistryPath;
     //! Limits maximum parallel subqueries.
     int MaxSubqueries = std::numeric_limits<int>::max();
     //! Query language syntax version.
@@ -181,11 +186,6 @@ struct TSelectRowsOptions
     NYson::TYsonString PlaceholderValues;
     //! Native or WebAssembly execution backend.
     std::optional<EExecutionBackend> ExecutionBackend;
-    //! Expected schemas for tables in a query (used for replica fallback in replicated tables).
-    using TExpectedTableSchemas = THashMap<NYPath::TYPath, NTableClient::TTableSchemaPtr>;
-    TExpectedTableSchemas ExpectedTableSchemas;
-    //! Add |$timestamp:columnName| to result if read_mode is latest_timestamp.
-    NTableClient::TVersionedReadOptions VersionedReadOptions;
     //! Explicitly allow or forbid the usage of row cache.
     std::optional<bool> UseLookupCache;
     //! Allow queries without any condition on key columns.

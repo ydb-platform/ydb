@@ -134,14 +134,14 @@ DEFINE_REFCOUNTED_TYPE(ITestableReconfigurableThroughputThrottler)
 //! Constructs a throttler from #config.
 IReconfigurableThroughputThrottlerPtr CreateReconfigurableThroughputThrottler(
     TThroughputThrottlerConfigPtr config,
-    const NLogging::TLogger& logger = NLogging::TLogger(),
+    const NLogging::TLogger& logger = {},
     const NProfiling::TProfiler& profiler = {});
 
 //! Constructs a throttler from #config and initializes logger and profiler.
 IReconfigurableThroughputThrottlerPtr CreateNamedReconfigurableThroughputThrottler(
     TThroughputThrottlerConfigPtr config,
     const TString& name,
-    NLogging::TLogger logger = NLogging::TLogger(),
+    NLogging::TLogger logger = {},
     NProfiling::TProfiler profiler = {});
 
 //! Returns a throttler that imposes no throughput limit.

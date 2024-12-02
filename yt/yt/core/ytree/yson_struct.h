@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/yson/public.h>
 
+#include <yt/yt/core/misc/bitmap.h>
+
 #include <yt/yt/library/syncmap/map.h>
 
 #include <library/cpp/yt/misc/enum.h>
@@ -123,6 +125,7 @@ private:
     friend class TYsonStructMeta;
 
     friend class TYsonStruct;
+    friend class TYsonStructLiteWithFieldTracking;
 
     IYsonStructMeta* Meta_ = nullptr;
 
@@ -131,6 +134,8 @@ private:
     std::optional<EUnrecognizedStrategy> InstanceUnrecognizedStrategy_;
 
     bool CachedDynamicCastAllowed_ = false;
+
+    virtual TCompactBitmap* GetSetFieldsBitmap() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -141,6 +146,13 @@ class TYsonStruct
 {
 public:
     void InitializeRefCounted();
+
+    bool IsSet(const TString& key) const;
+
+private:
+    TCompactBitmap SetFields_;
+
+    virtual TCompactBitmap* GetSetFieldsBitmap() override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -162,7 +174,32 @@ protected:
 class TYsonStructLite
     : public virtual TYsonStructFinalClassHolder
     , public TYsonStructBase
-{ };
+{
+private:
+    virtual TCompactBitmap* GetSetFieldsBitmap() override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TYsonStructLiteWithFieldTracking
+    : public TYsonStructLite
+{
+public:
+    TYsonStructLiteWithFieldTracking() = default;
+
+    TYsonStructLiteWithFieldTracking(const TYsonStructLiteWithFieldTracking& other);
+    TYsonStructLiteWithFieldTracking& operator=(const TYsonStructLiteWithFieldTracking& other);
+
+    TYsonStructLiteWithFieldTracking(TYsonStructLiteWithFieldTracking&& other) = default;
+    TYsonStructLiteWithFieldTracking& operator=(TYsonStructLiteWithFieldTracking&& other) = default;
+
+    bool IsSet(const TString& key) const;
+
+private:
+    TCompactBitmap SetFields_;
+
+    virtual TCompactBitmap* GetSetFieldsBitmap() override;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

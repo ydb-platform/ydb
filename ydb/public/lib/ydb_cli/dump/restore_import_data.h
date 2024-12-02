@@ -18,7 +18,7 @@ NPrivate::IDataWriter* CreateImportDataWriter(
     const NTable::TTableDescription& desc,
     NImport::TImportClient& importClient,
     NTable::TTableClient& tableClient,
-    NPrivate::IDataAccumulator* accumulator,
+    const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators,
     const TRestoreSettings& settings,
     const std::shared_ptr<TLog>& log);
 

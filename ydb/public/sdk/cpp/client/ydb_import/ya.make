@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     import.cpp
+    out.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(import.h)

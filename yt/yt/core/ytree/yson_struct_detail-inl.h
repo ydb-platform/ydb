@@ -730,9 +730,13 @@ TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(const TYsonSt
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TValue>
-TYsonStructParameter<TValue>::TYsonStructParameter(TString key, std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor)
+TYsonStructParameter<TValue>::TYsonStructParameter(
+    TString key,
+    std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor,
+    int fieldIndex)
     : Key_(std::move(key))
     , FieldAccessor_(std::move(fieldAccessor))
+    , FieldIndex_(fieldIndex)
 { }
 
 template <class TValue>
@@ -750,6 +754,10 @@ void TYsonStructParameter<TValue>::Load(
             std::move(node),
             options.Path,
             options.RecursiveUnrecognizedRecursively);
+
+        if (auto* bitmap = self->GetSetFieldsBitmap()) {
+            bitmap->Set(FieldIndex_);
+        }
     } else if (!Optional_) {
         THROW_ERROR_EXCEPTION("Missing required parameter %v",
             options.Path);
@@ -771,6 +779,10 @@ void TYsonStructParameter<TValue>::Load(
             cursor,
             options.Path,
             options.RecursiveUnrecognizedRecursively);
+
+        if (auto* bitmap = self->GetSetFieldsBitmap()) {
+            bitmap->Set(FieldIndex_);
+        }
     } else if (!Optional_) {
         THROW_ERROR_EXCEPTION("Missing required parameter %v",
             options.Path);
@@ -794,6 +806,10 @@ void TYsonStructParameter<TValue>::SafeLoad(
                 options.Path,
                 /*recursivelyUnrecognizedStrategy*/ std::nullopt);
             validate();
+
+            if (auto* bitmap = self->GetSetFieldsBitmap()) {
+                bitmap->Set(FieldIndex_);
+            }
         } catch (const std::exception ex) {
             FieldAccessor_->GetValue(self) = oldValue;
             throw;
@@ -970,6 +986,12 @@ template <class TValue>
 bool TYsonStructParameter<TValue>::CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const
 {
     return NPrivate::CompareValues(FieldAccessor_->GetValue(lhsSelf), FieldAccessor_->GetValue(rhsSelf));
+}
+
+template <class TValue>
+int TYsonStructParameter<TValue>::GetFieldIndex() const
+{
+    return FieldIndex_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

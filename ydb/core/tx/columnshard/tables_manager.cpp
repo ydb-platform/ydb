@@ -105,13 +105,13 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     {
         TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableVersionsLoadTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Versions");
-        auto rowset = db.Table<Schema::TableVersionInfo>().Reverse().Select();
+        auto rowset = db.Table<Schema::TableVersionInfo>().Select();
         if (!rowset.IsReady()) {
             timer.AddLoadingFail();
             return false;
         }
 
-        THashSet<ui64> initializedPaths;
+        THashMap<ui64, NOlap::TSnapshot> lastVersion;
         while (!rowset.EndOfSet()) {
             const ui64 pathId = rowset.GetValue<Schema::TableVersionInfo::PathId>();
             Y_ABORT_UNLESS(Tables.contains(pathId));
@@ -124,11 +124,21 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "load_table_version")("path_id", pathId)("snapshot", version);
             Y_ABORT_UNLESS(schemaPresets.contains(versionInfo.GetSchemaPresetId()));
 
-            if (initializedPaths.insert(pathId).second && !table.IsDropped()) {
+            if (!table.IsDropped()) {
                 auto& ttlSettings = versionInfo.GetTtlSettings();
-                if (ttlSettings.HasEnabled()) {
+                auto vIt = lastVersion.find(pathId);
+                if (vIt == lastVersion.end()) {
+                    vIt = lastVersion.emplace(pathId, version).first;
+                }
+                if (vIt->second <= version) {
                     TTtl::TDescription description(ttlSettings.GetEnabled());
-                    Ttl.SetPathTtl(pathId, std::move(description));
+                    if (ttlSettings.HasEnabled()) {
+                        TTtl::TDescription description(ttlSettings.GetEnabled());
+                        Ttl.SetPathTtl(pathId, std::move(description));
+                    } else {
+                        Ttl.DropPathTtl(pathId);
+                    }
+                    vIt->second = version;
                 }
             }
             table.AddVersion(version);

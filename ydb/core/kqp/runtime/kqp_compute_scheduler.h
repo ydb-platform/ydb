@@ -64,7 +64,7 @@ public:
     
     void SetCapacity(ui64 cores);
 
-    void UpdateGroupShare(TString name, double share, TMonotonic now);
+    void UpdateGroupShare(TString name, double share, TMonotonic now, std::optional<double> resourceWeight);
     void UpdatePerQueryShare(TString name, double share, TMonotonic now);
 
     ui64 MakePerQueryGroup(TMonotonic now, double share, TString baseGroup);

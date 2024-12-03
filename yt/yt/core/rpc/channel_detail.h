@@ -93,13 +93,19 @@ public:
 
     TDuration ProfileComplete();
 
-private:
-    struct TPerformanceCounters;
+    struct TMethodPerformanceCounters;
+    static const TMethodPerformanceCounters* FindPerformanceCounters(std::string service, std::string method);
+    static const TMethodPerformanceCounters* GetPerformanceCounters(std::string service, std::string method);
+    static void ProfileReplyWithoutContext(
+        const TSharedRefArray& responseMessage,
+        const TMethodPerformanceCounters* counters,
+        bool recognized);
 
-    const TPerformanceCounters* const MethodCounters_;
+private:
+    const TMethodPerformanceCounters* const MethodCounters_;
+
     NProfiling::TWallTimer Timer_;
 
-    static const TPerformanceCounters* GetPerformanceCounters(std::string service, std::string method);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "convert_to_cpo.h"
+#include "error_attribute.h"
 #include "mergeable_dictionary.h"
 
 #include <library/cpp/yt/misc/optional.h>
@@ -20,34 +21,34 @@ namespace NYT {
 class TErrorAttributes
 {
 public:
-    using TKey = TString;
-    using TValue = NYson::TYsonString;
+    using TKey = TErrorAttribute::TKey;
+    using TValue = TErrorAttribute::TValue;
     using TKeyValuePair = std::pair<TKey, TValue>;
 
     //! Returns the list of all keys in the dictionary.
-    std::vector<TString> ListKeys() const;
+    std::vector<TKey> ListKeys() const;
 
     //! Returns the list of all key-value pairs in the dictionary.
     std::vector<TKeyValuePair> ListPairs() const;
 
     //! Returns the value of the attribute (null indicates that the attribute is not found).
-    NYson::TYsonString FindYson(TStringBuf key) const;
+    TValue FindYson(TStringBuf key) const;
 
     //! Sets the value of the attribute.
-    void SetYson(const TString& key, const NYson::TYsonString& value);
+    void SetYson(const TKey& key, const TValue& value);
 
     //! Removes the attribute.
     //! Returns |true| if the attribute was removed or |false| if there is no attribute with this key.
-    bool Remove(const TString& key);
+    bool Remove(const TKey& key);
 
     //! Removes all attributes.
     void Clear();
 
     //! Returns the value of the attribute (throws an exception if the attribute is not found).
-    NYson::TYsonString GetYson(TStringBuf key) const;
+    TValue GetYson(TStringBuf key) const;
 
     //! Same as #GetYson but removes the value.
-    NYson::TYsonString GetYsonAndRemove(const TString& key);
+    TValue GetYsonAndRemove(const TKey& key);
 
     //! Returns |true| iff the given key is present.
     bool Contains(TStringBuf key) const;
@@ -58,35 +59,35 @@ public:
     //! Finds the attribute and deserializes its value.
     //! Throws if no such value is found.
     template <class T>
-        requires CConvertToWorks<T, TValue>
+        requires CConvertsTo<T, TValue>
     T Get(TStringBuf key) const;
 
     //! Same as #Get but removes the value.
     template <class T>
-        requires CConvertToWorks<T, TValue>
-    T GetAndRemove(const TString& key);
+        requires CConvertsTo<T, TValue>
+    T GetAndRemove(const TKey& key);
 
     //! Finds the attribute and deserializes its value.
     //! Uses default value if no such attribute is found.
     template <class T>
-        requires CConvertToWorks<T, TValue>
+        requires CConvertsTo<T, TValue>
     T Get(TStringBuf key, const T& defaultValue) const;
 
     //! Same as #Get but removes the value if it exists.
     template <class T>
-        requires CConvertToWorks<T, TValue>
-    T GetAndRemove(const TString& key, const T& defaultValue);
+        requires CConvertsTo<T, TValue>
+    T GetAndRemove(const TKey& key, const T& defaultValue);
 
     //! Finds the attribute and deserializes its value.
     //! Returns null if no such attribute is found.
     template <class T>
-        requires CConvertToWorks<T, TValue>
+        requires CConvertsTo<T, TValue>
     typename TOptionalTraits<T>::TOptional Find(TStringBuf key) const;
 
     //! Same as #Find but removes the value if it exists.
     template <class T>
-        requires CConvertToWorks<T, TValue>
-    typename TOptionalTraits<T>::TOptional FindAndRemove(const TString& key);
+        requires CConvertsTo<T, TValue>
+    typename TOptionalTraits<T>::TOptional FindAndRemove(const TKey& key);
 
     template <CMergeableDictionary TDictionary>
     void MergeFrom(const TDictionary& dict);

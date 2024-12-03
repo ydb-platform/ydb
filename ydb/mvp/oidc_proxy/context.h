@@ -10,8 +10,7 @@ using THttpIncomingRequestPtr = TIntrusivePtr<THttpIncomingRequest>;
 
 }
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 class TContext {
 public:
@@ -45,5 +44,4 @@ private:
     TString GenerateCookie(const TString& key) const;
 };
 
-} // NOIDC
-} // NMVP
+} // NMVP::NOIDC

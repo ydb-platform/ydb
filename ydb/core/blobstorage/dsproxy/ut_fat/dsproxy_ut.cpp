@@ -3071,7 +3071,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 230:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, nullptr);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
                 }
@@ -3080,7 +3080,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 240:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, "");
                 }
@@ -3089,7 +3089,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 250:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, NODATA, 0, "");
                 }
@@ -3098,7 +3098,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 260:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
                 }
@@ -3107,7 +3107,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 270:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, "");
                 }
@@ -3117,7 +3117,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
             case 280:
             {
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, NODATA, 0, "");
                 }

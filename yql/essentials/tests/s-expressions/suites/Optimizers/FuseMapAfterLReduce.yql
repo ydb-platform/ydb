@@ -25,24 +25,24 @@
             (return select)
           )))
           (let core (LMap inputRowsList (lambda '(x) (block '(
-            (let inputType (CallableArgumentType (TypeOf (ScriptUdf 'Python '"f" (CallableType '() '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"pass" (DataType 'Int32)) '('"skey" (DataType 'Uint32))))) '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"skey" (DataType 'Uint32))))) '((DataType 'Int32))) (String '@@
+            (let inputType (CallableArgumentType (TypeOf (ScriptUdf 'Python3 '"f" (CallableType '() '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"pass" (DataType 'Int32)) '('"skey" (DataType 'Uint32))))) '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"skey" (DataType 'Uint32))))) '((DataType 'Int32))) (String '@@
 def f(input,x):
    for i in list(input):
       d = i.__dict__
       d["pass"] = x
       yield d
-      
+
 def f2(a,b,c):
    return {"a":a,"b":b,"c":c}
 @@))) '0))
             (let inputRowsList (MatchType inputType 'List (lambda '(y) (ForwardList x)) (lambda '(y) "x")))
-            (return (Apply (ScriptUdf 'Python '"f" (CallableType '() '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"pass" (DataType 'Int32)) '('"skey" (DataType 'Uint32))))) '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"skey" (DataType 'Uint32))))) '((DataType 'Int32))) (String '@@
+            (return (Apply (ScriptUdf 'Python3 '"f" (CallableType '() '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"pass" (DataType 'Int32)) '('"skey" (DataType 'Uint32))))) '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"skey" (DataType 'Uint32))))) '((DataType 'Int32))) (String '@@
 def f(input,x):
    for i in list(input):
       d = i.__dict__
       d["pass"] = x
       yield d
-      
+
 def f2(a,b,c):
    return {"a":a,"b":b,"c":c}
 @@)) inputRowsList (Int32 '"1")))
@@ -52,13 +52,13 @@ def f2(a,b,c):
         (return select)
       )))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (Apply (ScriptUdf 'Python '"f2" (CallableType '() '((StructType '('"a" (DataType 'Uint32)) '('"b" (DataType 'Uint64)) '('"c" (DataType 'Int32)))) '((DataType 'Uint32) 'skey) '((DataType 'Uint64) 'cnt) '((DataType 'Int32) 'pass)) (String '@@
+        (let res (Apply (ScriptUdf 'Python3 '"f2" (CallableType '() '((StructType '('"a" (DataType 'Uint32)) '('"b" (DataType 'Uint64)) '('"c" (DataType 'Int32)))) '((DataType 'Uint32) 'skey) '((DataType 'Uint64) 'cnt) '((DataType 'Int32) 'pass)) (String '@@
 def f(input,x):
    for i in list(input):
       d = i.__dict__
       d["pass"] = x
       yield d
-      
+
 def f2(a,b,c):
    return {"a":a,"b":b,"c":c}
 @@)) (Member row '"skey") (Member row '"cnt") (Member row '"pass")))

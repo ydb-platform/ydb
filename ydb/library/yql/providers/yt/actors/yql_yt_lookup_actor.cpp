@@ -1,10 +1,10 @@
 #include "yql_yt_lookup_actor.h"
 
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_text_yson.h>
-#include <ydb/library/yql/providers/yt/codec/yt_codec.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_file_input_state.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_file_list.h>
-#include <ydb/library/yql/providers/yt/common/yql_names.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_text_yson.h>
+#include <yt/yql/providers/yt/codec/yt_codec.h>
+#include <yt/yql/providers/yt/comp_nodes/yql_mkql_file_input_state.h>
+#include <yt/yql/providers/yt/comp_nodes/yql_mkql_file_list.h>
+#include <yt/yql/providers/yt/common/yql_names.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>

@@ -2,9 +2,9 @@
 #include "yql_opt_rewrite_io.h"
 #include "yql_opt_proposed_by_data.h"
 
-#include <contrib/ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/ast/yql_ast_annotation.h>
 #include <yql/essentials/ast/yql_expr.h>

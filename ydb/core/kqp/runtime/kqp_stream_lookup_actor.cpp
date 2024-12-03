@@ -400,6 +400,7 @@ private:
             }
         }
 
+        auto guard = BindAllocator();
         StreamLookupWorker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
             read.ShardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
         });
@@ -413,11 +414,15 @@ private:
         auto shardIt = ReadsPerShard.find(tabletId);
         YQL_ENSURE(shardIt != ReadsPerShard.end());
 
+        TVector<TReadState*> toRetry;
         for (auto* read : shardIt->second.Reads) {
             if (read->State == EReadState::Running) {
                 Counters->IteratorDeliveryProblems->Inc();
-                RetryTableRead(*read);
+                toRetry.push_back(read);
             }
+        }
+        for (auto* read : toRetry) {
+            RetryTableRead(*read);
         }
     }
 
@@ -586,7 +591,6 @@ private:
         LookupActorStateSpan = NWilson::TSpan(TWilsonKqp::LookupActorShardsResolve, LookupActorSpan.GetTraceId(),
             "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(StreamLookupWorker->GetTableId(), {}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 
         SchemeCacheRequestTimeoutTimer = CreateLongTimer(TlsActivationContext->AsActorContext(), SchemeCacheRequestTimeout,

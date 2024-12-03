@@ -90,6 +90,8 @@ struct IYsonStructParameter
     virtual void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
 
     virtual bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const = 0;
+
+    virtual int GetFieldIndex() const = 0;
 };
 
 DECLARE_REFCOUNTED_STRUCT(IYsonStructParameter)
@@ -252,7 +254,8 @@ public:
 
     TYsonStructParameter(
         TString key,
-        std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor);
+        std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor,
+        int fieldIndex);
 
     void Load(
         TYsonStructBase* self,
@@ -283,6 +286,8 @@ public:
 
     bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const override;
 
+    virtual int GetFieldIndex() const override;
+
     // Mark as optional. Field will be default-initialized if `init` is true, initialization is skipped otherwise.
     TYsonStructParameter& Optional(bool init = true);
     // Set default value. It will be copied during instance initialization.
@@ -312,6 +317,12 @@ public:
     TYsonStructParameter& Alias(const TString& name);
     // Set field to T() (or suitable analogue) before deserializations.
     TYsonStructParameter& ResetOnLoad();
+    // Uses given unrecognized strategy in |Load| if there was no strategy supplied.
+    TYsonStructParameter& DefaultUnrecognizedStrategy(EUnrecognizedStrategy strategy);
+    // Forces given parameter to ignore unrecognized strategy even if it set to
+    // some recursive version. Combination with |DefaultUnrecognizedStrategy| enables
+    // behavior which ensures selected default strategy for all fields below.
+    TYsonStructParameter& EnforceDefaultUnrecognizedStrategy();
 
     // Register constructor with parameters as initializer of default value for ref-counted class.
     template <class... TArgs>
@@ -328,6 +339,9 @@ private:
     bool TriviallyInitializedIntrusivePtr_ = false;
     bool Optional_ = false;
     bool ResetOnLoad_ = false;
+    std::optional<EUnrecognizedStrategy> DefaultUnrecognizedStrategy_;
+    bool EnforceDefaultUnrecognizedStrategy_ = false;
+    const int FieldIndex_ = -1;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

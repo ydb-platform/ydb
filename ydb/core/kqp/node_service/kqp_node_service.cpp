@@ -203,12 +203,17 @@ private:
 
         if (SchedulerOptions.Scheduler->Disabled(schedulerGroup)) {
             auto share = msg.GetPoolMaxCpuShare();
-            if (share <= 0 && msg.HasQueryCpuShare()) {
+            if (share <= 0 && (msg.HasQueryCpuShare() || msg.HasResourceWeight())) {
                 share = 1.0;
             }
+            std::optional<double> resourceWeight;
+            if (msg.GetResourceWeight() >= 0) {
+                resourceWeight = msg.GetResourceWeight();
+            }
+
             if (share > 0) {
-                Scheduler->UpdateGroupShare(schedulerGroup, share, schedulerNow);
-                Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabaseId(), schedulerGroup));
+                Scheduler->UpdateGroupShare(schedulerGroup, share, schedulerNow, resourceWeight);
+                Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
             } else {
                 schedulerGroup = "";
             }

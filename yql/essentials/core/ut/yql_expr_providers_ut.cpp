@@ -7,9 +7,9 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/facade/yql_facade.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <contrib/ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <library/cpp/testing/unittest/registar.h>

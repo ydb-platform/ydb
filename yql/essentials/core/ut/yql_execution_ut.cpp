@@ -15,9 +15,9 @@
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
 
 #include <yql/essentials/core/facade/yql_facade.h>
-#include <contrib/ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -59,7 +59,7 @@ namespace NYql {
             auto ytGateway = CreateYtFileGateway(yqlNativeServices);
 
             TVector<TDataProviderInitializer> dataProvidersInit;
-            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway, MakeSimpleCBOOptimizerFactory()));
+            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway, MakeSimpleCBOOptimizerFactory(), {}));
             TProgramFactory factory(true, funcReg, 0ULL, dataProvidersInit, "ut");
 
             TProgramPtr program = factory.Create("-stdin-", Src);

@@ -1092,7 +1092,10 @@ private:
             // We prepare a lot of partitions and distribute them between these tasks
             // Constraint of 1 task per partition is NOT valid anymore
             auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
-            dqIntegration->Partition(NYql::TDqSettings(), maxTasksPerStage, source.Ref(), partitionParams, &clusterName, ctx, false);
+            IDqIntegration::TPartitionSettings pSettings;
+            pSettings.MaxPartitions = maxTasksPerStage;
+            pSettings.CanFallback = false;
+            dqIntegration->Partition(source.Ref(), partitionParams, &clusterName, ctx, pSettings);
             externalSource.SetTaskParamKey(TString(dataSourceCategory));
             for (const TString& partitionParam : partitionParams) {
                 externalSource.AddPartitionedTaskParams(partitionParam);
@@ -1109,6 +1112,32 @@ private:
             YQL_ENSURE(!settings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings for its dq source node");
             YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings type for its dq source node");
         }
+    }
+
+    THashMap<TStringBuf, ui32> CreateColumnToOrder(
+            const TVector<TStringBuf>& columns,
+            const TKikimrTableMetadataPtr& tableMeta,
+            bool keysFirst) {
+        THashSet<TStringBuf> usedColumns;
+        for (const auto& columnName : columns) {
+            usedColumns.insert(columnName);
+        }
+
+        THashMap<TStringBuf, ui32> columnToOrder;
+        ui32 number = 0;
+        if (keysFirst) {
+            for (const auto& columnName : tableMeta->KeyColumnNames) {
+                YQL_ENSURE(usedColumns.contains(columnName));
+                columnToOrder[columnName] = number++;
+            }
+        }
+        for (const auto& columnName : tableMeta->ColumnOrder) {
+            if (usedColumns.contains(columnName) && !columnToOrder.contains(columnName)) {
+                columnToOrder[columnName] = number++;
+            }
+        }
+
+        return columnToOrder;
     }
 
     void FillKqpSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, const TDqPhyStage& stage) {
@@ -1160,6 +1189,14 @@ private:
 
                 auto columnProto = settingsProto.AddColumns();
                 fillColumnProto(columnName, columnMeta, columnProto);
+            }
+
+            const auto columnToOrder = CreateColumnToOrder(
+                columns,
+                tableMeta,
+                settings.TableType().Cast().StringValue() == "oltp");
+            for (const auto& columnName : columns) {
+                settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
             }
 
             if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
@@ -1346,6 +1383,7 @@ private:
             YQL_ENSURE(streamLookup.LookupStrategy().Maybe<TCoAtom>());
             TString lookupStrategy = streamLookup.LookupStrategy().Maybe<TCoAtom>().Cast().StringValue();
             streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(lookupStrategy));
+            streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingLookupJoinEnabled());
 
             switch (streamLookupProto.GetLookupStrategy()) {
                 case NKqpProto::EStreamLookupStrategy::LOOKUP: {

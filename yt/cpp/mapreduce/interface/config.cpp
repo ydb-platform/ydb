@@ -194,6 +194,7 @@ void TConfig::Reset()
     ApiVersion = GetEnv("YT_VERSION", "v3");
     LogLevel = GetEnv("YT_LOG_LEVEL", "error");
     LogPath = GetEnv("YT_LOG_PATH");
+    LogUseCore = GetBool("YT_LOG_USE_CORE", false);
 
     ContentEncoding = GetEncoding("YT_CONTENT_ENCODING");
     AcceptEncoding = GetEncoding("YT_ACCEPT_ENCODING");

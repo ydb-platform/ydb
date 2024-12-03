@@ -683,3 +683,11 @@ ids {
   code: CORE_TOP_UNSUPPORTED_BLOCK_CALLABLES
   severity: S_INFO
 }
+ids {
+  code: CBO_ENUM_LIMIT_REACHED
+  severity: S_WARNING
+}
+ids {
+  code: CBO_MISSING_TABLE_STATS
+  severity: S_WARNING
+}

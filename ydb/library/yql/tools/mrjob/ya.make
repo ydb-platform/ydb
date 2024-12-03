@@ -19,9 +19,9 @@ PEERDIR(
     yql/essentials/utils/backtrace
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
-    ydb/library/yql/providers/yt/job
-    ydb/library/yql/providers/yt/codec/codegen
-    ydb/library/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/job
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/llvm14
     yql/essentials/minikql/computation/llvm14
     yql/essentials/minikql/invoke_builtins/llvm14
     yql/essentials/minikql/comp_nodes/llvm14

@@ -51,7 +51,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.unique2 == 11 Or item.unique1 == 0 And item.stringu1 < \"B\""
+                                                "Predicate": "item.unique2 == 11 OR item.unique1 == 0 AND item.stringu1 < \"B\""
                                             }
                                         ],
                                         "PlanNodeId": 2,

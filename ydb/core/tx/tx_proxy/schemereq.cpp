@@ -6,7 +6,9 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
@@ -377,6 +379,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:
             return *modifyScheme.MutableBackupBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection:
+            return *modifyScheme.MutableBackupIncrementalBackupCollection()->MutableName();
         }
     }
 
@@ -756,6 +761,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;
             auto collectionPath = SplitPath(pbModifyScheme.GetBackupBackupCollection().GetName());
+            std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequiredAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection: {
+            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            toResolve.Path = workingDir;
+            auto collectionPath = SplitPath(pbModifyScheme.GetBackupIncrementalBackupCollection().GetName());
             std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
             toResolve.RequiredAccess = NACLib::EAccessRights::GenericWrite;
             ResolveForACL.push_back(toResolve);

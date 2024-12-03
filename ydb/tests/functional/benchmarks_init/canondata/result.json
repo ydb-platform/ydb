@@ -1,0 +1,65 @@
+{
+    "test_generator.TestTpcdsGenerator.test_s1": {
+        "uri": "file://test_generator.TestTpcdsGenerator.test_s1/s1.hash"
+    },
+    "test_generator.TestTpcdsGenerator.test_s1_parts": {
+        "uri": "file://test_generator.TestTpcdsGenerator.test_s1_parts/s1.hash"
+    },
+    "test_generator.TestTpcdsGenerator.test_s1_state": {
+        "uri": "file://test_generator.TestTpcdsGenerator.test_s1_state/s1.hash"
+    },
+    "test_generator.TestTpcdsGenerator.test_s1_state_and_parts": {
+        "uri": "file://test_generator.TestTpcdsGenerator.test_s1_state_and_parts/s1.hash"
+    },
+    "test_generator.TestTpchGenerator.test_s1": {
+        "uri": "file://test_generator.TestTpchGenerator.test_s1/s1.hash"
+    },
+    "test_generator.TestTpchGenerator.test_s1_parts": {
+        "uri": "file://test_generator.TestTpchGenerator.test_s1_parts/s1.hash"
+    },
+    "test_generator.TestTpchGenerator.test_s1_state": {
+        "uri": "file://test_generator.TestTpchGenerator.test_s1_state/s1.hash"
+    },
+    "test_generator.TestTpchGenerator.test_s1_state_and_parts": {
+        "uri": "file://test_generator.TestTpchGenerator.test_s1_state_and_parts/s1.hash"
+    },
+    "test_init.TestClickbenchInit.test_s1_column": {
+        "uri": "file://test_init.TestClickbenchInit.test_s1_column/s1_column"
+    },
+    "test_init.TestClickbenchInit.test_s1_row": {
+        "uri": "file://test_init.TestClickbenchInit.test_s1_row/s1_row"
+    },
+    "test_init.TestClickbenchInit.test_s1_s3": {
+        "uri": "file://test_init.TestClickbenchInit.test_s1_s3/s1_s3"
+    },
+    "test_init.TestTpcdsInit.test_s1_column": {
+        "uri": "file://test_init.TestTpcdsInit.test_s1_column/s1_column"
+    },
+    "test_init.TestTpcdsInit.test_s1_column_decimal": {
+        "uri": "file://test_init.TestTpcdsInit.test_s1_column_decimal/s1_column_decimal"
+    },
+    "test_init.TestTpcdsInit.test_s1_column_decimal_ydb": {
+        "uri": "file://test_init.TestTpcdsInit.test_s1_column_decimal_ydb/s1_column_decimal_ydb"
+    },
+    "test_init.TestTpcdsInit.test_s1_row": {
+        "uri": "file://test_init.TestTpcdsInit.test_s1_row/s1_row"
+    },
+    "test_init.TestTpcdsInit.test_s1_s3": {
+        "uri": "file://test_init.TestTpcdsInit.test_s1_s3/s1_s3"
+    },
+    "test_init.TestTpchInit.test_s1_column": {
+        "uri": "file://test_init.TestTpchInit.test_s1_column/s1_column"
+    },
+    "test_init.TestTpchInit.test_s1_column_decimal": {
+        "uri": "file://test_init.TestTpchInit.test_s1_column_decimal/s1_column_decimal"
+    },
+    "test_init.TestTpchInit.test_s1_column_decimal_ydb": {
+        "uri": "file://test_init.TestTpchInit.test_s1_column_decimal_ydb/s1_column_decimal_ydb"
+    },
+    "test_init.TestTpchInit.test_s1_row": {
+        "uri": "file://test_init.TestTpchInit.test_s1_row/s1_row"
+    },
+    "test_init.TestTpchInit.test_s1_s3": {
+        "uri": "file://test_init.TestTpchInit.test_s1_s3/s1_s3"
+    }
+}

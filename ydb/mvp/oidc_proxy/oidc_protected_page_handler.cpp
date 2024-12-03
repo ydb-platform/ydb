@@ -2,8 +2,7 @@
 #include "oidc_protected_page_nebius.h"
 #include "oidc_protected_page_yandex.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 TProtectedPageHandler::TProtectedPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings)
     : TBase(&TProtectedPageHandler::StateWork)
@@ -11,16 +10,15 @@ TProtectedPageHandler::TProtectedPageHandler(const NActors::TActorId& httpProxyI
     , Settings(settings)
 {}
 
-void TProtectedPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
+void TProtectedPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
     switch (Settings.AccessServiceType) {
         case NMvp::yandex_v2:
-            ctx.Register(new THandlerSessionServiceCheckYandex(event->Sender, event->Get()->Request, HttpProxyId, Settings));
+            Register(new THandlerSessionServiceCheckYandex(event->Sender, event->Get()->Request, HttpProxyId, Settings));
             break;
         case NMvp::nebius_v1:
-            ctx.Register(new THandlerSessionServiceCheckNebius(event->Sender, event->Get()->Request, HttpProxyId, Settings));
+            Register(new THandlerSessionServiceCheckNebius(event->Sender, event->Get()->Request, HttpProxyId, Settings));
             break;
     }
 }
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

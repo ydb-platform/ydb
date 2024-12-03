@@ -1,3 +1,4 @@
+/* custom error:Unexpected '!' while parsing node*/
 USE plato;
 
 -- bad yson

@@ -18,7 +18,6 @@
   # - pcap/pcap.h
   # - sasl/sasl.h
   # - sasl/saslutil.h
-  # - uuid/uuid.h
   # - zconf.h
 
   - Availability.h
@@ -174,6 +173,7 @@
   - timeconv.h
   - tzfile.h
   - util.h
+  - uuid/uuid.h
   - vis.h
   - xpc/xpc.h
 

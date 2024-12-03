@@ -1,3 +1,4 @@
+/* custom error:Uncompatible member foo types: Int32 and String*/
 USE plato;
 
 INSERT INTO Output

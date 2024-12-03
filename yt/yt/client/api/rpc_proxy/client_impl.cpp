@@ -1486,6 +1486,15 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
     }
+    if (options.FromTime) {
+        req->set_from_time(NYT::ToProto(*options.FromTime));
+    }
+    if (options.ToTime) {
+        req->set_to_time(NYT::ToProto(*options.ToTime));
+    }
+    if (options.ContinuationToken) {
+        req->set_continuation_token(*options.ContinuationToken);
+    }
 
     req->set_sort_field(static_cast<NProto::EJobSortField>(options.SortField));
     req->set_sort_order(static_cast<NProto::EJobSortDirection>(options.SortOrder));
@@ -2444,8 +2453,8 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
         return TGetQueryTrackerInfoResult{
-            .QueryTrackerStage = rsp->query_tracker_stage(),
-            .ClusterName = rsp->cluster_name(),
+            .QueryTrackerStage = FromProto<TString>(rsp->query_tracker_stage()),
+            .ClusterName = FromProto<TString>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
         };

@@ -24,6 +24,8 @@ PEERDIR(
     yql/essentials/sql
     yql/essentials/core
     yql/essentials/providers/common/codec
+    ydb/library/yql/dq/opt
+    ydb/library/yql/providers/dq/helper
     ydb/library/yql/providers/common/http_gateway
     yql/essentials/providers/common/udf_resolve
     yql/essentials/providers/config

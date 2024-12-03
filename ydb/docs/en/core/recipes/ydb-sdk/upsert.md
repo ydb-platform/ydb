@@ -1,7 +1,5 @@
 # Inserting data
 
-{% include [work in progress message](_includes/addition.md) %}
-
 Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for batch insert:
 
 {% list tabs %}

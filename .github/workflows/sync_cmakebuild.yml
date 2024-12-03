@@ -23,7 +23,7 @@ jobs:
           echo "No new commits on the main branch to merge, exiting"
           exit 0
         fi
-        git clone -b main --shallow-exclude cmakebuild https://$TOKEN@github.com/$REPO.git ydb
+        git clone -b main https://$TOKEN@github.com/$REPO.git ydb
         git config --global user.email "alex@ydb.tech"
         git config --global user.name "Alexander Smirnov"
         cd ydb
@@ -40,11 +40,7 @@ jobs:
           echo "Merge did not bring any changes, exiting"
           exit
         fi
-        # Generate ydb/core/base/generate with python codegen under ya
-        ./ya make ydb/core/base/generated/
-        ydb/core/base/generated/codegen/codegen ydb/core/base/generated/runtime_feature_flags.h.in ydb/core/base/generated/runtime_feature_flags.h
-        ydb/core/base/generated/codegen/codegen ydb/core/base/generated/runtime_feature_flags.cpp.in ydb/core/base/generated/runtime_feature_flags.cpp
-        # Generate cmakelists using pregenerated ydb/core/base/generated/runtime_feature_flags.*
+        # Generate cmakelists
         ./generate_cmake -k
         echo ${mainsha} > ydb/ci/cmakegen.txt
         git add .

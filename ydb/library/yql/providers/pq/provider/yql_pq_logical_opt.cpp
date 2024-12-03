@@ -34,7 +34,8 @@ namespace {
                 // Operator features
                 EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
                 EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
-                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | DivisionExpressions |
+                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | DivisionExpressions | EFlag::CastExpression |
+                EFlag::ToBytesFromStringExpressions | EFlag::FlatMapOverOptionals |
 
                 // Split features
                 EFlag::SplitOrOperator
@@ -267,19 +268,14 @@ public:
             return node;
         }
 
-        auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
-        if (!newFilterLambda) {
-            return node;
-        }
-
-        auto predicate = newFilterLambda.Cast();
-        if (NYql::IsEmptyFilterPredicate(predicate)) {
+        NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
+        if (predicate.IsEmpty()) {
             return node;
         }
 
         TStringBuilder err;
         NYql::NConnector::NApi::TPredicate predicateProto;
-        if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
+        if (!NYql::SerializeFilterPredicate(predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
             ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
             return node;
         }

@@ -98,7 +98,9 @@ END()
 RECURSE(
     cbo
     credentials
+    dq_expr_nodes
     dq_integration
+    dqs_expr_nodes
     file_storage
     issue
     minsketch

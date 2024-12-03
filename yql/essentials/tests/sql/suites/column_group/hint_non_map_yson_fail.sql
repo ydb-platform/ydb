@@ -1,3 +1,4 @@
+/* custom error:Expected Yson map, got: list_node*/
 USE plato;
 
 -- bad yson

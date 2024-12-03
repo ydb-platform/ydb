@@ -46,6 +46,7 @@ struct TPoolSettings : public TSettingsBase {
     TPercent DatabaseLoadCpuThreshold = -1;  // -1 = disabled
     TPercent TotalCpuLimitPercentPerNode = -1;  // -1 = disabled
     TPercent QueryCpuLimitPercentPerNode = -1; // -1 = disabled;
+    double ResourceWeight = -1;
 };
 
 }  // namespace NKikimr::NResourcePool

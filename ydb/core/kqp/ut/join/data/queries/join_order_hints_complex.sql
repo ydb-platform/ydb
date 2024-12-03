@@ -12,6 +12,7 @@ PRAGMA ydb.OptimizerHints =
     Rows(T U # 10e8)
     Rows(V # 1)
     JoinOrder( (R S) (T U) )
+    JoinType(T U Broadcast)
 ';
 
 SELECT * FROM 

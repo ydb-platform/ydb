@@ -3,6 +3,7 @@ RECURSE(
     audit
     autoconfig
     backup
+    benchmarks_init
     blobstorage
     canonical
     clickbench

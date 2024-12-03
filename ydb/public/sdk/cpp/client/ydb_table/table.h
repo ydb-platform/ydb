@@ -30,9 +30,12 @@ class KMeansTreeSettings;
 class PartitioningSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
+class TtlTier;
 class TableIndex;
 class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
+class DateTypeColumnModeSettingsV1;
+class ValueSinceUnixEpochModeSettingsV1;
 
 } // namespace Table
 } // namespace Ydb
@@ -421,17 +424,46 @@ struct TPartitionStats {
     ui32 LeaderNodeId = 0;
 };
 
+struct TTtlDeleteAction {};
+
+struct TTtlEvictToExternalStorageAction {
+    TString StorageName;
+};
+
+class TTtlTierSettings {
+public:
+    using TAction = std::variant<
+        std::monostate,
+        TTtlDeleteAction,
+        TTtlEvictToExternalStorageAction
+    >;
+
+public:
+    explicit TTtlTierSettings(TDuration applyAfter, const TAction& action);
+    explicit TTtlTierSettings(const Ydb::Table::TtlTier& tier);
+    void SerializeTo(Ydb::Table::TtlTier& proto) const;
+
+    TDuration GetApplyAfter() const;
+    const TAction& GetAction() const;
+
+private:
+    TDuration ApplyAfter_;
+    TAction Action_;
+};
+
 class TDateTypeColumnModeSettings {
 public:
-    explicit TDateTypeColumnModeSettings(const TString& columnName, const TDuration& expireAfter);
+    explicit TDateTypeColumnModeSettings(const TString& columnName, const TDuration& deprecatedExpireAfter = TDuration::Max());
     void SerializeTo(Ydb::Table::DateTypeColumnModeSettings& proto) const;
+    void SerializeTo(Ydb::Table::DateTypeColumnModeSettingsV1& proto) const;
 
     const TString& GetColumnName() const;
+    // Deprecated. Use TTtlSettings::GetExpireAfter()
     const TDuration& GetExpireAfter() const;
 
 private:
     TString ColumnName_;
-    TDuration ExpireAfter_;
+    TDuration DeprecatedExpireAfter_;
 };
 
 class TValueSinceUnixEpochModeSettings {
@@ -446,11 +478,13 @@ public:
     };
 
 public:
-    explicit TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter);
+    explicit TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const TDuration& deprecatedExpireAfter = TDuration::Max());
     void SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettings& proto) const;
+    void SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettingsV1& proto) const;
 
     const TString& GetColumnName() const;
     EUnit GetColumnUnit() const;
+    // Deprecated. Use TTtlSettings::GetExpireAfter()
     const TDuration& GetExpireAfter() const;
 
     static void Out(IOutputStream& o, EUnit unit);
@@ -460,11 +494,17 @@ public:
 private:
     TString ColumnName_;
     EUnit ColumnUnit_;
-    TDuration ExpireAfter_;
+    TDuration DeprecatedExpireAfter_;
 };
 
 //! Represents ttl settings
 class TTtlSettings {
+private:
+    using TMode = std::variant<
+        TDateTypeColumnModeSettings,
+        TValueSinceUnixEpochModeSettings
+    >;
+
 public:
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
@@ -473,25 +513,35 @@ public:
         ValueSinceUnixEpoch = 1,
     };
 
+    explicit TTtlSettings(const TString& columnName, const TVector<TTtlTierSettings>& tiers);
     explicit TTtlSettings(const TString& columnName, const TDuration& expireAfter);
-    explicit TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds);
     const TDateTypeColumnModeSettings& GetDateTypeColumn() const;
+    // Deprecated. Use FromProto()
+    explicit TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds);
 
+    explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TVector<TTtlTierSettings>& tiers);
     explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter);
-    explicit TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds);
     const TValueSinceUnixEpochModeSettings& GetValueSinceUnixEpoch() const;
+    // Deprecated. Use FromProto()
+    explicit TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds);
 
+    static std::optional<TTtlSettings> FromProto(const Ydb::Table::TtlSettings& proto);
     void SerializeTo(Ydb::Table::TtlSettings& proto) const;
     EMode GetMode() const;
 
     TTtlSettings& SetRunInterval(const TDuration& value);
     const TDuration& GetRunInterval() const;
 
+    const TVector<TTtlTierSettings>& GetTiers() const;
+    std::optional<TDuration> GetExpireAfter() const;
+
 private:
-    std::variant<
-        TDateTypeColumnModeSettings,
-        TValueSinceUnixEpochModeSettings
-    > Mode_;
+    explicit TTtlSettings(TMode mode, const TVector<TTtlTierSettings>& tiers, ui32 runIntervalSeconds);
+    static std::optional<TDuration> GetExpireAfterFrom(const TVector<TTtlTierSettings>& tiers);
+
+private:
+    TMode Mode_;
+    TVector<TTtlTierSettings> Tiers_;
     TDuration RunInterval_ = TDuration::Zero();
 };
 
@@ -756,6 +806,7 @@ public:
 
     TColumnFamilyBuilder& SetData(const TString& media);
     TColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression);
+    TColumnFamilyBuilder& SetKeepInMemory(bool enabled);
 
     TColumnFamilyDescription Build() const;
 
@@ -815,6 +866,11 @@ public:
 
     TTableColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TTableColumnFamilyBuilder& SetKeepInMemory(bool enabled) {
+        Builder_.SetKeepInMemory(enabled);
         return *this;
     }
 
@@ -1433,6 +1489,11 @@ public:
 
     TAlterColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TAlterColumnFamilyBuilder& SetKeepInMemory(bool enabled) {
+        Builder_.SetKeepInMemory(enabled);
         return *this;
     }
 

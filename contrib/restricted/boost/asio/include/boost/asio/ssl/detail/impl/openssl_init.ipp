@@ -3,7 +3,7 @@
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
 // Copyright (c) 2005 Voipster / Indrek dot Juhani at voipster dot com
-// Copyright (c) 2005-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2005-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -135,7 +135,7 @@ private:
 
   // Mutexes to be used in locking callbacks.
   std::vector<boost::asio::detail::shared_ptr<
-        boost::asio::detail::mutex> > mutexes_;
+        boost::asio::detail::mutex>> mutexes_;
 #endif // (OPENSSL_VERSION_NUMBER < 0x10100000L)
 
 #if !defined(SSL_OP_NO_COMPRESSION) \

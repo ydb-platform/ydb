@@ -2616,6 +2616,28 @@ public:
             }, "Executing BACKUP");
         }
 
+        if (auto maybeBackupIncremental = TMaybeNode<TKiBackupIncremental>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto backupIncremental = maybeBackupIncremental.Cast();
+
+            TBackupSettings settings;
+            settings.Name = TString(backupIncremental.BackupCollection());
+
+            auto cluster = TString(backupIncremental.DataSink().Cluster());
+            auto future = Gateway->BackupIncremental(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing BACKUP INCREMENTAL");
+        }
+
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
             << "(Kikimr DataSink) Failed to execute node: " << input->Content()));
         return SyncError();

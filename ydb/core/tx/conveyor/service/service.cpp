@@ -13,7 +13,7 @@ TDistributor::TDistributor(const TConfig& config, const TString& conveyorName, T
 
 void TDistributor::Bootstrap() {
     const ui32 workersCount = Config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads());
-    AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString());
+    AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString())("actor_id", SelfId());
     for (ui32 i = 0; i < workersCount; ++i) {
         const double usage = Config.GetWorkerCPUUsage(i);
         Workers.emplace_back(Register(new TWorker(ConveyorName, usage, SelfId())));
@@ -46,10 +46,10 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
-    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "add_task")("sender", ev->Sender);
     Counters.IncomingRate->Inc();
 
     const TString taskClass = ev->Get()->GetTask()->GetTaskClassIdentifier();
+    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "add_task")("sender", ev->Sender)("task", taskClass);
     auto itSignal = Signals.find(taskClass);
     if (itSignal == Signals.end()) {
         itSignal = Signals.emplace(taskClass, std::make_shared<TTaskSignals>("Conveyor/" + ConveyorName, taskClass)).first;

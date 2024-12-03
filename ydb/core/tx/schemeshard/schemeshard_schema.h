@@ -1022,9 +1022,11 @@ struct Schema : NIceDb::Schema {
         struct AlterVersion :   Column<3, NScheme::NTypeIds::Uint64> {};
         struct IndexType :      Column<4, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexType; static constexpr Type Default = NKikimrSchemeOp::EIndexTypeInvalid; };
         struct State :          Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexState; static constexpr Type Default = NKikimrSchemeOp::EIndexStateInvalid; };
+        // One of the SpecializedIndexDescription protobufs serialized as a string.
+        struct Description :    Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, IndexType, State>;
+        using TColumns = TableColumns<PathId, AlterVersion, IndexType, State, Description>;
     };
 
     struct MigratedTableIndex : Table<67> {
@@ -1043,9 +1045,11 @@ struct Schema : NIceDb::Schema {
         struct AlterVersion :   Column<3, NScheme::NTypeIds::Uint64> {};
         struct IndexType :      Column<4, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexType; static constexpr Type Default = NKikimrSchemeOp::EIndexTypeInvalid; };
         struct State :          Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexState; static constexpr Type Default = NKikimrSchemeOp::EIndexStateInvalid; };
+        // One of the SpecializedIndexDescription protobufs serialized as a string.
+        struct Description :    Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, IndexType, State>;
+        using TColumns = TableColumns<PathId, AlterVersion, IndexType, State, Description>;
     };
 
     struct TableIndexKeys : Table<40> {
@@ -1326,7 +1330,7 @@ struct Schema : NIceDb::Schema {
         struct AlterMainTableTxDone : Column<33, NScheme::NTypeIds::Bool> {};
 
         // Serialized as string NKikimrSchemeOp::TIndexCreationConfig protobuf.
-        struct CreationConfig : Column<34, NScheme::NTypeIds::String> { using Type = TString; };
+        struct CreationConfig : Column<34, NScheme::NTypeIds::String> {};
 
         struct ReadRowsBilled : Column<35, NScheme::NTypeIds::Uint64> {};
         struct ReadBytesBilled : Column<36, NScheme::NTypeIds::Uint64> {};
@@ -1440,7 +1444,7 @@ struct Schema : NIceDb::Schema {
         struct LocalShardIdx : Column<3, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
 
         struct Range : Column<4, NScheme::NTypeIds::String> { using Type = NKikimrTx::TKeyRange; };
-        struct LastKeyAck : Column<5, NScheme::NTypeIds::String> { using Type = TString; };
+        struct LastKeyAck : Column<5, NScheme::NTypeIds::String> {};
 
         struct Status : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrIndexBuilder::EBuildStatus; };
         struct Message : Column<7, NScheme::NTypeIds::Utf8> {};

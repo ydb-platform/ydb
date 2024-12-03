@@ -1,3 +1,4 @@
+/* custom error:Column group "g1" refers to unknown column "l"*/
 USE plato;
 
 -- unknown column

@@ -349,8 +349,8 @@ def deploy(arguments):
     if 'YDB_EXPERIMENTAL_PG' in os.environ:
         optionals['pg_compatible_expirement'] = True
 
-    if _is_env_option_enabled('YDB_KAFKA_API_ENABLED'):
-        kafka_api_port = int(os.environ.get("YDB_KAFKA_PROXY_PORT", "9092"))
+    kafka_api_port = int(os.environ.get("YDB_KAFKA_PROXY_PORT", "0"))
+    if kafka_api_port != 0:
         optionals['kafka_api_port'] = kafka_api_port
 
     configuration = KikimrConfigGenerator(
@@ -546,12 +546,3 @@ def start_recipe(args):
 def stop_recipe(args):
     arguments = produce_arguments(args)
     cleanup(arguments)
-
-
-def _is_true_string(s):
-    s = s.upper()
-    return s in ['1', 'TRUE', 'YES', 'ON']
-
-
-def _is_env_option_enabled(name):
-    return _is_true_string(os.environ.get(name, "FALSE"))

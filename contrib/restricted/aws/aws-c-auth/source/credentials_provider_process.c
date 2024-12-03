@@ -56,8 +56,8 @@ static int s_get_credentials_from_process(
         .expiration_required = false,
     };
 
-    credentials =
-        aws_parse_credentials_from_json_document(provider->allocator, aws_string_c_str(result.std_out), &parse_options);
+    credentials = aws_parse_credentials_from_json_document(
+        provider->allocator, aws_byte_cursor_from_string(result.std_out), &parse_options);
     if (!credentials) {
         AWS_LOGF_INFO(
             AWS_LS_AUTH_CREDENTIALS_PROVIDER,

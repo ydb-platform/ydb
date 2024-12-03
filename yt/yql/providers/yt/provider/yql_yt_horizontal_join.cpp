@@ -999,7 +999,7 @@ bool THorizontalJoinOptimizer::MakeJoinedMap(TPositionHandle pos, TExprContext& 
             else if (nextNewOutIndex < outRemap.size()) {
                 TVector<TExprBase> tupleTypes;
                 for (auto out: joinedMapOuts) {
-                    auto itemType = out.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+                    auto itemType = TYqlRowSpecInfo(out.RowSpec()).GetExtendedType(ctx);
                     tupleTypes.push_back(TExprBase(ExpandType(pos, *itemType, ctx)));
                 }
                 TExprBase varType = Build<TCoVariantType>(ctx, pos)

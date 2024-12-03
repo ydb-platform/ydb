@@ -4021,6 +4021,30 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        const auto permissions = R"(
+            actions {
+              change_owner: "eve"
+            }
+            actions {
+              grant {
+                subject: "alice"
+                permission_names: "ydb.generic.read"
+              }
+            }
+            actions {
+              grant {
+                subject: "alice"
+                permission_names: "ydb.generic.write"
+              }
+            }
+            actions {
+              grant {
+                subject: "bob"
+                permission_names: "ydb.generic.read"
+              }
+            }
+        )";
+
         const auto data = GenerateTestData(R"(
             columns {
               name: "key"
@@ -4052,7 +4076,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", port), userSID);
         env.TestWaitNotification(runtime, txId);
 
-        const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto desc = TestGetImport(runtime, txId, "/MyRoot");
         const auto& entry = desc.GetResponse().GetEntry();
         UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
 

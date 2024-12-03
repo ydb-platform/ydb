@@ -76,6 +76,10 @@ void TReplicationSettings::TStaticCredentials::Serialize(NKikimrReplication::TSt
     }
 }
 
+void TReplicationSettings::TStrongConsistency::Serialize(NKikimrReplication::TReplicationConfig_TStrongConsistency& proto) const {
+    proto.SetCommitIntervalMilliSeconds(CommitInterval.MilliSeconds());
+}
+
 TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString& path, TCreateDirFunc createDir) {
     auto partsHolder = std::make_shared<TVector<TString>>(NKikimr::SplitPath(path));
     auto& parts = *partsHolder;

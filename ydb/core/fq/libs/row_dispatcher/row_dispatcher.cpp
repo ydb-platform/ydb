@@ -10,7 +10,6 @@
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/public/purecalc/common/interface.h>
 
-#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/mon/mon.h>
@@ -261,6 +260,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TRowDispatcherMetrics Metrics;
     NYql::IPqGateway::TPtr PqGateway;
+    NActors::TMon* Monitoring;
     TNodesTracker NodesTracker;
     TAggregatedStats AggrStats; 
 
@@ -329,7 +329,8 @@ public:
         const TString& tenant,
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        const NYql::IPqGateway::TPtr& pqGateway);
+        const NYql::IPqGateway::TPtr& pqGateway,
+        NActors::TMon* monitoring = nullptr);
 
     void Bootstrap();
 
@@ -401,7 +402,8 @@ TRowDispatcher::TRowDispatcher(
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    const NYql::IPqGateway::TPtr& pqGateway,
+    NActors::TMon* monitoring)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , PureCalcProgramFactory(CreatePureCalcProgramFactory())
@@ -412,7 +414,9 @@ TRowDispatcher::TRowDispatcher(
     , ActorFactory(actorFactory)
     , Counters(counters)
     , Metrics(counters)
-    , PqGateway(pqGateway) {
+    , PqGateway(pqGateway)
+    , Monitoring(monitoring)
+{
 }
 
 void TRowDispatcher::Bootstrap() {
@@ -425,11 +429,9 @@ void TRowDispatcher::Bootstrap() {
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
     Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
-
-    NActors::TMon* mon = NKikimr::AppData()->Mon;
-    if (mon) {
-        ::NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(actorsMonPage, "row_dispatcher", "Row Dispatcher", false,
+    if (Monitoring) {
+        ::NMonitoring::TIndexMonPage* actorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
+        Monitoring->RegisterActorPage(actorsMonPage, "row_dispatcher", "Row Dispatcher", false,
             TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
     }
     NodesTracker.Init(SelfId());
@@ -964,7 +966,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    const NYql::IPqGateway::TPtr& pqGateway,
+    NActors::TMon* monitoring)
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
@@ -974,7 +977,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         tenant,
         actorFactory,
         counters,
-        pqGateway));
+        pqGateway,
+        monitoring));
 }
 
 } // namespace NFq

@@ -63,10 +63,10 @@ namespace NActors {
         ui64 DecreasingThreadsByStarvedState = 0;
         ui64 DecreasingThreadsByHoggishState = 0;
         ui64 DecreasingThreadsByExchange = 0;
-        i64 MaxCpuUs = 0;
-        i64 MinCpuUs = 0;
-        i64 MaxElapsedUs = 0;
-        i64 MinElapsedUs = 0;
+        i64 MaxConsumedCpuUs = 0;
+        i64 MinConsumedCpuUs = 0;
+        i64 MaxBookedCpuUs = 0;
+        i64 MinBookedCpuUs = 0;
         double SpinningTimeUs = 0;
         double SpinThresholdUs = 0;
         i16 WrongWakenedThreadCount = 0;

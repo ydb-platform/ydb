@@ -37,8 +37,8 @@ namespace NActors {
                 poolsWithSharedThreads.push_back(cfg.PoolId);
             }
         }
-        Shared.reset(CreateSharedExecutorPool(Config.Shared, ExecutorPoolCount, poolsWithSharedThreads));
-        auto sharedPool = static_cast<ISharedExecutorPool*>(Shared.get());
+        Shared.reset(new TSharedExecutorPool(Config.Shared, ExecutorPoolCount, poolsWithSharedThreads));
+        auto sharedPool = static_cast<TSharedExecutorPool*>(Shared.get());
 
         ui64 ts = GetCycleCountFast();
         Harmonizer.reset(MakeHarmonizer(ts));
@@ -135,9 +135,11 @@ namespace NActors {
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
             if (cfg.PoolId == poolId) {
                 if (cfg.HasSharedThread) {
-                    auto *sharedPool = Shared.get();
+                    auto *sharedPool = static_cast<TSharedExecutorPool*>(Shared.get());
                     auto *pool = new TBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
-                    pool->AddSharedThread(sharedPool->GetSharedThread(poolId));
+                    if (pool) {
+                        pool->AddSharedThread(sharedPool->GetSharedThread(poolId));
+                    }
                     return pool;
                 } else {
                     return new TBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());

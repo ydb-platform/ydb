@@ -34,8 +34,8 @@ class TVersionedIndex {
 
 public:
     bool IsEqualTo(const TVersionedIndex& vIndex) {
-        return LastSchemaVersion != vIndex.LastSchemaVersion || SnapshotByVersion.size() != vIndex.SnapshotByVersion.size() ||
-               ShardingInfo.size() != vIndex.ShardingInfo.size() || SchemeVersionForActualization != vIndex.SchemeVersionForActualization;
+        return LastSchemaVersion == vIndex.LastSchemaVersion && SnapshotByVersion.size() == vIndex.SnapshotByVersion.size() &&
+               ShardingInfo.size() == vIndex.ShardingInfo.size() && SchemeVersionForActualization == vIndex.SchemeVersionForActualization;
     }
 
     ISnapshotSchema::TPtr GetLastCriticalSchema() const {

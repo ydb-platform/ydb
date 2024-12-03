@@ -21,6 +21,7 @@ PEERDIR(
     yt/yt/library/profiling/tcmalloc
     yt/yt/library/profiling/perf
     yt/yt/library/ytprof
+    yt/yt/library/tcmalloc
     yt/yt/library/tracing/jaeger
     library/cpp/yt/mlock
     library/cpp/yt/stockpile

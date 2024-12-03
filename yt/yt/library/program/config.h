@@ -27,70 +27,11 @@
 
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
+#include <yt/yt/library/tcmalloc/config.h>
+
 #include <library/cpp/yt/stockpile/stockpile.h>
 
 namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-class THeapSizeLimitConfig
-    : public virtual NYTree::TYsonStruct
-{
-public:
-    //! Limit program memory in terms of container memory.
-    // If program heap size exceeds the limit tcmalloc is instructed to release memory to the kernel.
-    std::optional<double> ContainerMemoryRatio;
-
-    //! Similar to #ContainerMemoryRatio, but is set in terms of absolute difference from
-    //! the container memory limit.
-    //! For example, if ContainerMemoryLimit=200Gb and ContainerMemoryMargin=1Gb
-    // then tcmalloc limit will be 199Gb.
-    std::optional<double> ContainerMemoryMargin;
-
-    //! If true tcmalloc crashes when system allocates more memory than #ContainerMemoryRatio/#ContainerMemoryMargin.
-    bool Hard;
-
-    bool DumpMemoryProfileOnViolation;
-    TDuration DumpMemoryProfileTimeout;
-    TString DumpMemoryProfilePath;
-
-    REGISTER_YSON_STRUCT(THeapSizeLimitConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(THeapSizeLimitConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TTCMallocConfig
-    : public virtual NYTree::TYsonStruct
-{
-public:
-    i64 BackgroundReleaseRate;
-    int MaxPerCpuCacheSize;
-
-    //! Threshold in bytes
-    i64 AggressiveReleaseThreshold;
-
-    //! Threshold in fractions of total memory of the container
-    std::optional<double> AggressiveReleaseThresholdRatio;
-
-    i64 AggressiveReleaseSize;
-    TDuration AggressiveReleasePeriod;
-
-    //! Approximately 1/#GuardedSamplingRate of all allocations of
-    //! size <= 256 KiB will be under GWP-ASAN.
-    std::optional<i64> GuardedSamplingRate;
-
-    THeapSizeLimitConfigPtr HeapSizeLimit;
-
-    REGISTER_YSON_STRUCT(TTCMallocConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TTCMallocConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -164,7 +105,7 @@ public:
     NLogging::TLogManagerConfigPtr Logging;
     NTracing::TJaegerTracerConfigPtr Jaeger;
     NTracing::TTracingTransportConfigPtr TracingTransport;
-    TTCMallocConfigPtr TCMalloc;
+    NTCMalloc::TTCMallocConfigPtr TCMalloc;
     TStockpileConfigPtr Stockpile;
     bool EnableRefCountedTrackerProfiling;
     bool EnableResourceTracker;
@@ -194,7 +135,7 @@ public:
     NLogging::TLogManagerDynamicConfigPtr Logging;
     NTracing::TJaegerTracerDynamicConfigPtr Jaeger;
     NTracing::TTracingTransportConfigPtr TracingTransport;
-    TTCMallocConfigPtr TCMalloc;
+    NTCMalloc::TTCMallocConfigPtr TCMalloc;
     TStockpileDynamicConfigPtr Stockpile;
     NYson::TProtobufInteropDynamicConfigPtr ProtobufInterop;
 

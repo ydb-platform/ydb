@@ -1,6 +1,7 @@
 #include "schemeshard_import.h"
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_import_flow_proposals.h"
 
 #include <util/generic/xrange.h>
 
@@ -109,7 +110,9 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_PREPARING);
             break;
         case TImportInfo::EState::Transferring:
-            FillItemProgress(this, importInfo, itemIdx, *import.AddItemsProgress());
+            for (ui32 itemIdx : xrange(importInfo->Items.size())) {
+                FillItemProgress(this, importInfo, itemIdx, *import.AddItemsProgress());
+            }
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA);
             break;
         case TImportInfo::EState::BuildIndexes:

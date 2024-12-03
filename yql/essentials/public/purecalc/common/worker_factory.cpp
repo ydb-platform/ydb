@@ -130,7 +130,7 @@ template <typename TBase>
 TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     TStringBuf query,
     ETranslationMode mode,
-    IModuleResolver::TPtr moduleResolver,
+    IModuleResolver::TPtr factoryModuleResolver,
     ui16 syntaxVersion,
     const THashMap<TString, TString>& modules,
     const TInputSpecBase& inputSpec,
@@ -145,6 +145,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
     TTypeAnnotationContextPtr typeContext;
 
+    IModuleResolver::TPtr moduleResolver = factoryModuleResolver ? factoryModuleResolver->CreateMutableChild() : nullptr;
     typeContext = MakeIntrusive<TTypeAnnotationContext>();
     typeContext->RandomProvider = CreateDefaultRandomProvider();
     typeContext->TimeProvider = DeterministicTimeProviderSeed_ ?

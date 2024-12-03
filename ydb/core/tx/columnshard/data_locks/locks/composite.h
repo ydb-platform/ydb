@@ -8,23 +8,24 @@ private:
     using TBase = ILock;
     std::vector<std::shared_ptr<ILock>> Locks;
 protected:
-    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks) const override {
+    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion, const ELockCategory category, const THashSet<TString>& excludedLocks) const override {
         for (auto&& i : Locks) {
             if (excludedLocks.contains(i->GetLockName())) {
                 continue;
             }
-            if (auto lockName = i->IsLocked(portion)) {
+            if (auto lockName = i->IsLocked(portion, category)) {
                 return lockName;
             }
         }
         return {};
     }
-    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks) const override {
+    virtual std::optional<TString> DoIsLocked(
+        const TGranuleMeta& granule, const ELockCategory category, const THashSet<TString>& excludedLocks) const override {
         for (auto&& i : Locks) {
             if (excludedLocks.contains(i->GetLockName())) {
                 continue;
             }
-            if (auto lockName = i->IsLocked(granule)) {
+            if (auto lockName = i->IsLocked(granule, category)) {
                 return lockName;
             }
         }
@@ -34,8 +35,9 @@ protected:
         return Locks.empty();
     }
 public:
-    TCompositeLock(const TString& lockName, const std::vector<std::shared_ptr<ILock>>& locks, const bool readOnly = false)
-        : TBase(lockName, readOnly)
+    TCompositeLock(const TString& lockName, const std::vector<std::shared_ptr<ILock>>& locks,
+        const ELockCategory category = NDataLocks::ELockCategory::Any, const bool readOnly = false)
+        : TBase(lockName, category, readOnly)
     {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {
@@ -45,8 +47,9 @@ public:
         }
     }
 
-    TCompositeLock(const TString& lockName, std::initializer_list<std::shared_ptr<ILock>> locks, const bool readOnly = false)
-        : TBase(lockName, readOnly)
+    TCompositeLock(const TString& lockName, std::initializer_list<std::shared_ptr<ILock>> locks,
+        const ELockCategory category = NDataLocks::ELockCategory::Any, const bool readOnly = false)
+        : TBase(lockName, category, readOnly)
     {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {

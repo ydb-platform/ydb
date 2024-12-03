@@ -9,8 +9,6 @@
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/shutdown.h>
 
-#include <yt/yt/core/ytalloc/bindings.h>
-
 #include <yt/yt/core/yson/writer.h>
 #include <yt/yt/core/yson/null_consumer.h>
 
@@ -20,9 +18,8 @@
 
 #include <yt/yt/library/profiling/tcmalloc/profiler.h>
 
-#include <library/cpp/ytalloc/api/ytalloc.h>
-
 #include <library/cpp/yt/mlock/mlock.h>
+
 #include <library/cpp/yt/stockpile/stockpile.h>
 
 #include <library/cpp/yt/system/exit.h>
@@ -337,11 +334,6 @@ void ConfigureAllocator(const TAllocatorOptions& options)
     NYT::MlockFileMappings();
 
 #ifdef _linux_
-    NYTAlloc::EnableYTLogging();
-    NYTAlloc::EnableYTProfiling();
-    NYTAlloc::InitializeLibunwindInterop();
-    NYTAlloc::SetEnableEagerMemoryRelease(options.YTAllocEagerMemoryRelease);
-
     if (tcmalloc::MallocExtension::NeedsProcessBackgroundActions()) {
         std::thread backgroundThread([] {
             TThread::SetCurrentThreadName("TCAllocBack");

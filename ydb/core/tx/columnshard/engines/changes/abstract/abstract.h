@@ -217,6 +217,7 @@ private:
 
 protected:
     std::optional<TDataAccessorsResult> FetchedDataAccessors;
+    virtual NDataLocks::ELockCategory GetLockCategory() const = 0;
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
     virtual void DoOnAfterCompile() {}

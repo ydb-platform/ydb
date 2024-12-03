@@ -51,7 +51,7 @@ std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
         "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
     result->SetCheckPoints(std::move(positions));
     for (auto&& i : result->GetSwitchedPortions()) {
-        AFL_VERIFY(!locksManager->IsLocked(i));
+        AFL_VERIFY(!locksManager->IsLocked(i, NDataLocks::ELockCategory::Compaction));
     }
     return result;
 }

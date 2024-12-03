@@ -32,10 +32,10 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         const TString& /*database*/,
         const NConfig::TRowDispatcherConfig& /*config*/,
         NActors::TActorId /*rowDispatcherActorId*/,
+        NActors::TActorId /*compileServiceActorId*/,
         ui32 /*partitionId*/,
         NYdb::TDriver /*driver*/,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/,
-        IPureCalcProgramFactory::TPtr /*pureCalcProgramFactory*/,
         const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
         const NYql::IPqGateway::TPtr& /*pqGateway*/,
         ui64 /*maxBufferSize*/) const override {

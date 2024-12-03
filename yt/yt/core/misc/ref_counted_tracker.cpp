@@ -6,8 +6,6 @@
 
 #include <library/cpp/yt/string/format.h>
 
-#include <library/cpp/yt/memory/memory_tag.h>
-
 #include <library/cpp/yt/misc/tls.h>
 
 #include <algorithm>
@@ -402,8 +400,6 @@ void TRefCountedTracker::FreeSpaceSlow(TRefCountedTypeCookie cookie, size_t spac
 
 TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedTypeCookie cookie)
 {
-    TMemoryTagGuard memoryTagGuard(NullMemoryTag);
-
     struct TReclaimer
     {
         ~TReclaimer()
@@ -460,8 +456,6 @@ TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedType
 
 TRefCountedTracker::TGlobalSlot* TRefCountedTracker::GetGlobalSlot(TRefCountedTypeCookie cookie)
 {
-    TMemoryTagGuard memoryTagGuard(NullMemoryTag);
-
     VERIFY_SPINLOCK_AFFINITY(SpinLock_);
     auto index = cookie.Underlying();
     if (index >= std::ssize(GlobalSlots_)) {

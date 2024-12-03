@@ -319,14 +319,19 @@ void LoadFromSource(
     }
 }
 
-// CYsonStructExtension
-template <CYsonStructSource TSource, CYsonStructFieldFor<TSource> TExtension>
+// CYsonStructField
+// NB(arkady-e1ppa): We check for alias presence in the body so that
+// partially modelled concept does not result in call to Deserialize
+// (which is the default implementation) but hard CE.
+template <CYsonStructSource TSource, CYsonStructLoadableFieldFor<TSource> TExtension>
 void LoadFromSource(
     TExtension& parameter,
     TSource source,
     const NYPath::TYPath& path,
     std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
 {
+    static_assert(CYsonStructFieldFor<TExtension, TSource>, "You must add alias TImplementsYsonStructField");
+
     try {
         parameter.Load(
             std::move(source),

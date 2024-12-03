@@ -232,6 +232,23 @@ E.g. for cases you want to test retrying mechanisms
         # this will actually perform a request
         resp = loop.run_until_complete(session.get('http://backend/api'))
 
+**also you can passthrough all requests except specified by mocking object**
+
+.. code:: python
+
+    import asyncio
+    import aiohttp
+    from aioresponses import aioresponses
+
+    @aioresponses(passthrough_unmatched=True)
+    def test_passthrough_unmatched(m, test_client):
+        url = 'https://httpbin.org/get'
+        m.get(url, status=200)
+        session = aiohttp.ClientSession()
+        # this will actually perform a request
+        resp = loop.run_until_complete(session.get('http://backend/api'))
+        # this will not perform a request and resp2.status will return 200
+        resp2 = loop.run_until_complete(session.get(url))
 
 **aioresponses allows to throw an exception**
 

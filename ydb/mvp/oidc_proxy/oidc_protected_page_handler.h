@@ -1,12 +1,12 @@
 #pragma once
 
+#include "oidc_settings.h"
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include "oidc_settings.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 class TProtectedPageHandler : public NActors::TActor<TProtectedPageHandler> {
     using TBase = NActors::TActor<TProtectedPageHandler>;
@@ -16,14 +16,14 @@ class TProtectedPageHandler : public NActors::TActor<TProtectedPageHandler> {
 
 public:
     TProtectedPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings);
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx);
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event);
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

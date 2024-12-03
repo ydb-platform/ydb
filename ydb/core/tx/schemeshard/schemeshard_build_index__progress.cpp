@@ -65,11 +65,11 @@ static std::tuple<ui32, ui32, ui32> ComputeKMeansBoundaries(const NSchemeShard::
     const auto& kmeans = buildInfo.KMeans;
     Y_ASSERT(kmeans.K != 0);
     Y_ASSERT((kmeans.K & (kmeans.K - 1)) == 0);
-    const auto count = TIndexBuildInfo::TKMeans::BinPow(kmeans.K, kmeans.Level + 1);
+    const auto count = TIndexBuildInfo::TKMeans::BinPow(kmeans.K, kmeans.Level);
     ui32 step = 1;
     auto parts = count;
     auto shards = tableInfo.GetShard2PartitionIdx().size();
-    if (buildInfo.KMeans.Level + 1 == buildInfo.KMeans.Levels || shards <= 1) {
+    if (!buildInfo.KMeans.NeedsAnotherLevel() || shards <= 1) {
         shards = 1;
         parts = 1;
     }
@@ -94,7 +94,7 @@ protected:
 
     TActorId ResponseActorId;
     ui64 BuildIndexId = 0;
-    TIndexBuildInfo::TSampleK::TRows Init;
+    TIndexBuildInfo::TSample::TRows Init;
 
     std::shared_ptr<NTxProxy::TUploadTypes> Types;
     std::shared_ptr<NTxProxy::TUploadRows> Rows;
@@ -111,7 +111,7 @@ public:
                    const TIndexBuildInfo::TLimits& limits,
                    const TActorId& responseActorId,
                    ui64 buildIndexId,
-                   TIndexBuildInfo::TSampleK::TRows init,
+                   TIndexBuildInfo::TSample::TRows init,
                    ui32 child)
         : TargetTable(std::move(targetTable))
         , ResponseActorId(responseActorId)
@@ -337,7 +337,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
-    const char* suffix = buildInfo.KMeans.Level % 2 == 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
+    const char* suffix = buildInfo.KMeans.Level % 2 != 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
     op = CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}, suffix);
 
     const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo);
@@ -523,7 +523,7 @@ private:
         auto ev = MakeHolder<TEvDataShard::TEvSampleKRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        if (buildInfo.KMeans.Level == 0) {
+        if (buildInfo.KMeans.Parent == 0) {
             PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());
         } else {
             auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
@@ -554,7 +554,7 @@ private:
         ev->Record.SetId(ui64(BuildId));
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
-        if (buildInfo.KMeans.Level == 0) {
+        if (buildInfo.KMeans.Parent == 0) {
             PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());
         } else {
             PathIdFromPathId(path.Dive(buildInfo.KMeans.ReadFrom())->PathId, ev->Record.MutablePathId());
@@ -592,7 +592,7 @@ private:
         ev->Record.SetId(ui64(BuildId));
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
-        if (buildInfo.KMeans.Level == 0) {
+        if (buildInfo.KMeans.Parent == 0) {
             PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());
         } else {
             PathIdFromPathId(path.Dive(buildInfo.KMeans.ReadFrom())->PathId, ev->Record.MutablePathId());
@@ -607,7 +607,11 @@ private:
         ev->Record.SetDoneRounds(0);
         ev->Record.SetNeedsRounds(3); // TODO(mbkkt) should be configurable
 
-        ev->Record.SetParent(buildInfo.KMeans.Parent);
+        if (buildInfo.KMeans.NeedsAnotherParent()) {
+            ev->Record.SetParent(buildInfo.KMeans.Parent);
+        } else {
+            ev->Record.SetParent(0);
+        }
         ev->Record.SetChild(buildInfo.KMeans.ChildBegin);
 
         ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
@@ -709,60 +713,83 @@ private:
         return buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty();
     }
 
+    void AddShard(TIndexBuildInfo& buildInfo, const TShardIdx& idx, const TIndexBuildInfo::TShardStatus& status) {
+        switch (status.Status) {
+            case NKikimrIndexBuilder::EBuildStatus::INVALID:
+            case NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
+            case NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
+            case NKikimrIndexBuilder::EBuildStatus::ABORTED:
+                buildInfo.ToUploadShards.emplace_back(idx);
+                break;
+            case NKikimrIndexBuilder::EBuildStatus::DONE:
+                buildInfo.DoneShards.emplace_back(idx);
+                break;
+            case NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
+            case NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
+                Y_ABORT("Unreachable");
+        }
+    }
+
+    void AddAllShards(TIndexBuildInfo& buildInfo) {
+        for (const auto& [idx, status] : buildInfo.Shards) {
+            AddShard(buildInfo, idx, status);
+        }
+    }
+
     bool FillTable(TIndexBuildInfo& buildInfo) {
         if (buildInfo.DoneShards.empty() && buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty()) {
-            for (const auto& [idx, status] : buildInfo.Shards) {
-                switch (status.Status) {
-                    case NKikimrIndexBuilder::EBuildStatus::INVALID:
-                    case NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
-                    case NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
-                    case NKikimrIndexBuilder::EBuildStatus::ABORTED:
-                        buildInfo.ToUploadShards.emplace_back(idx);
-                        break;
-                    case NKikimrIndexBuilder::EBuildStatus::DONE:
-                        buildInfo.DoneShards.emplace_back(idx);
-                        break;
-                    case NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
-                    case NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
-                        Y_ABORT("Unreachable");
-                }
-            }
+            AddAllShards(buildInfo);
         }
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildIndexRequest(shardIdx, buildInfo); }) &&
                buildInfo.DoneShards.size() == buildInfo.Shards.size();
     }
 
-    void ComputeKMeansState(TIndexBuildInfo& buildInfo) {
-        if (!buildInfo.DoneShards.empty() || !buildInfo.InProgressShards.empty() || !buildInfo.ToUploadShards.empty()) {
-            return;
+    bool InitSingleKMeans(TIndexBuildInfo& buildInfo) {
+        if (!buildInfo.DoneShards.empty() || !buildInfo.InProgressShards.empty() || !buildInfo.ToUploadShards.empty()
+            || buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Local) {
+            return false;
         }
         std::array<NScheme::TTypeInfo, 1> typeInfos{NScheme::NTypeIds::Uint32};
-        auto range = ParentRange(buildInfo);
-        for (const auto& [idx, status] : buildInfo.Shards) {
-            if (buildInfo.KMeans.Parent != 0
-                && Intersect(typeInfos, range.ToTableRange(), status.Range.ToTableRange()).IsEmptyRange(typeInfos)) {
-                continue;
+        auto range = ParentRange(buildInfo.KMeans.Parent);
+        auto addRestricted = [&] (const auto& idx) {
+            const auto& status = buildInfo.Shards.at(idx);
+            if (!Intersect(typeInfos, range.ToTableRange(), status.Range.ToTableRange()).IsEmptyRange(typeInfos)) {
+                AddShard(buildInfo, idx, status);
             }
-            switch (status.Status) {
-                case NKikimrIndexBuilder::EBuildStatus::INVALID:
-                    buildInfo.ToUploadShards.emplace_back(idx);
-                    break;
-                case NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
-                case NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
-                case NKikimrIndexBuilder::EBuildStatus::ABORTED:
-                    buildInfo.ToUploadShards.emplace_back(idx);
-                    break;
-                case NKikimrIndexBuilder::EBuildStatus::DONE:
-                    buildInfo.DoneShards.emplace_back(idx);
-                    break;
-                case NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
-                case NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
-                    Y_ABORT("Unreachable");
+        };
+        if (buildInfo.KMeans.Parent == 0) {
+            AddAllShards(buildInfo);
+        } else {
+            auto it = buildInfo.Cluster2Shards.lower_bound(buildInfo.KMeans.Parent);
+            Y_ASSERT(it != buildInfo.Cluster2Shards.end());
+            if (it->second.Local == InvalidShardIdx) {
+                for (const auto& idx : it->second.Global) {
+                    addRestricted(idx);
+                }
             }
         }
-        if (buildInfo.DoneShards.empty() && buildInfo.ToUploadShards.size() == 1) {
+        if (buildInfo.DoneShards.size() + buildInfo.ToUploadShards.size() <= 1) {
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Local;
         }
+        return true;
+    }
+
+    bool InitMultiKMeans(TIndexBuildInfo& buildInfo) {
+        if (buildInfo.Cluster2Shards.empty()) {
+            return false;
+        }
+        for (const auto& [to, state] : buildInfo.Cluster2Shards) {
+            if (const auto& [from, local, global] = state; local != InvalidShardIdx) {
+                if (const auto* status = buildInfo.Shards.FindPtr(local)) {
+                    AddShard(buildInfo, local, *status);
+                }
+            }
+        }
+        buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Local;
+        buildInfo.Cluster2Shards.clear();
+        Y_ASSERT(buildInfo.InProgressShards.empty());
+        Y_ASSERT(buildInfo.DoneShards.empty());
+        return !buildInfo.ToUploadShards.empty();
     }
 
     bool SendKMeansSample(TIndexBuildInfo& buildInfo) {
@@ -798,10 +825,9 @@ private:
         return true;
     }
 
-    bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        ComputeKMeansState(buildInfo);
-        if (!SendVectorIndex(buildInfo)) {
-            return false;
+    void ClearDoneShards(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        if (buildInfo.DoneShards.empty()) {
+            return;
         }
         NIceDb::TNiceDb db{txc.DB};
         for (const auto& idx : buildInfo.DoneShards) {
@@ -810,35 +836,66 @@ private:
         }
         buildInfo.DoneShards.clear();
         Self->PersistBuildIndexProcessed(db, buildInfo);
+    }
+
+    bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        if (InitSingleKMeans(buildInfo)) {
+            LOG_D("FillIndex::SingleKMeans::Start " << buildInfo.KMeansTreeToDebugStr());
+        }
+        if (!SendVectorIndex(buildInfo)) {
+            return false;
+        }
         // TODO(mbkkt) persist buildInfo.KMeans changes
+
+        LOG_D("FillIndex::SendVectorIndex::Done " << buildInfo.KMeansTreeToDebugStr());
         if (!buildInfo.Sample.Rows.empty()) {
             if (!buildInfo.Sample.Sent) {
+                LOG_D("FillIndex::SendSample::Start " << buildInfo.KMeansTreeToDebugStr());
                 SendUploadSampleKRequest(buildInfo);
                 return false;
             }
+            LOG_D("FillIndex::SendSample::Done " << buildInfo.KMeansTreeToDebugStr());
+        }
+
+        LOG_D("FillIndex::ClearDoneShards " << buildInfo.KMeansTreeToDebugStr());
+        ClearDoneShards(txc, buildInfo);
+
+        if (!buildInfo.Sample.Rows.empty()) {
             if (buildInfo.KMeans.NextState()) {
+                LOG_D("FillIndex::NextState::Start " << buildInfo.KMeansTreeToDebugStr());
                 Progress(BuildId);
                 return false;
             }
             buildInfo.Sample.Clear();
+            LOG_D("FillIndex::NextState::Done " << buildInfo.KMeansTreeToDebugStr());
         }
 
         if (buildInfo.KMeans.NextParent()) {
+            LOG_D("FillIndex::NextParent::Start " << buildInfo.KMeansTreeToDebugStr());
             Progress(BuildId);
             return false;
         }
+
+        if (InitMultiKMeans(buildInfo)) {
+            LOG_D("FillIndex::MultiKMeans::Start " << buildInfo.KMeansTreeToDebugStr());
+            Progress(BuildId);
+            return false;
+        }
+
         if (buildInfo.KMeans.NextLevel()) {
+            LOG_D("FillIndex::NextLevel::Start " << buildInfo.KMeansTreeToDebugStr());
             ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
             Progress(BuildId);
             return false;
         }
+        LOG_D("FillIndex::Done " << buildInfo.KMeansTreeToDebugStr());
         return true;
     }
 
     bool FillIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        // About Level == 0, for now build index impl tables don't need snapshot,
+        // About Parent == 0, for now build index impl tables don't need snapshot,
         // because they're used only by build index
-        if (buildInfo.KMeans.Level == 0 && !buildInfo.SnapshotTxId) {
+        if (buildInfo.KMeans.Parent == 0 && !buildInfo.SnapshotTxId) {
             Y_ABORT_UNLESS(!buildInfo.SnapshotStep);
             Y_ABORT_UNLESS(Self->TablesWithSnapshots.contains(buildInfo.TablePathId));
             Y_ABORT_UNLESS(Self->TablesWithSnapshots.at(buildInfo.TablePathId) == buildInfo.InitiateTxId);
@@ -849,6 +906,7 @@ private:
             Y_ABORT_UNLESS(buildInfo.SnapshotStep);
         }
         if (buildInfo.Shards.empty()) {
+            LOG_D("FillIndex::InitiateShards " << buildInfo.KMeansTreeToDebugStr());
             NIceDb::TNiceDb db(txc.DB);
             InitiateShards(db, buildInfo);
         }
@@ -917,8 +975,7 @@ public:
             } else if (!buildInfo.InitiateTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.InitiateTxId)));
             } else {
-                if (buildInfo.IsBuildVectorIndex()) {
-                    Y_ASSERT(buildInfo.KMeans.NeedsAnotherLevel());
+                if (buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.NeedsAnotherLevel()) {
                     ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
                 } else {
                     ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
@@ -1087,12 +1144,12 @@ public:
         return TSerializedTableRange(TSerializedCellVec::Serialize(cells), "", true, false);
     }
 
-    static TSerializedTableRange ParentRange(const TIndexBuildInfo& buildInfo) {
-        if (buildInfo.KMeans.Parent == 0) {
+    static TSerializedTableRange ParentRange(ui32 parent) {
+        if (parent == 0) {
             return {};  // empty
         }
-        auto from = TCell::Make(buildInfo.KMeans.Parent - 1);
-        auto to = TCell::Make(buildInfo.KMeans.Parent);
+        auto from = TCell::Make(parent - 1);
+        auto to = TCell::Make(parent);
         return TSerializedTableRange{{&from, 1}, false, {&to, 1}, true};
     }
 
@@ -1103,7 +1160,7 @@ public:
         Y_ASSERT(buildInfo.DoneShards.empty());
 
         TTableInfo::TPtr table;
-        if (buildInfo.KMeans.Level == 0) {
+        if (buildInfo.KMeans.Parent == 0) {
             table = Self->Tables.at(buildInfo.TablePathId);
         } else {
             auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
@@ -1111,11 +1168,15 @@ public:
         }
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         TSerializedTableRange shardRange = InfiniteRange(tableColumns.Keys.size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, TStringBuilder() << "From: " << shardRange.From.GetCells().size() << "To: " << shardRange.To.GetCells().size());
 
+        buildInfo.Cluster2Shards.clear();
         for (const auto& x: table->GetPartitions()) {
             Y_ABORT_UNLESS(Self->ShardInfos.contains(x.ShardIdx));
             TSerializedCellVec bound{x.EndOfRange};
             shardRange.To = bound;
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, TStringBuilder() << "From: " << shardRange.From.GetCells().size() << "To: " << shardRange.To.GetCells().size());
+            buildInfo.AddParent(shardRange, x.ShardIdx);
             auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), ""});
             Y_ASSERT(emplaced);
             shardRange.From = std::move(bound);

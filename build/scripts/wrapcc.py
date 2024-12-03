@@ -1,27 +1,31 @@
 import argparse
-import subprocess
-import sys, os
+import os
+import sys
 
 
-WRAPCC_ARGS_END='--wrapcc-end'
+WRAPCC_ARGS_END = '--wrapcc-end'
 
-def fix(source_file: str, source_root: str):
+
+def fix(source_file: str, source_root: str, build_root: str) -> list[str]:
     flags = []
     return flags
 
+
 def parse_args():
-    delimer = -1
+    delimiter = -1
     if WRAPCC_ARGS_END in sys.argv:
-        delimer = sys.argv.index(WRAPCC_ARGS_END)
-    assert delimer != -1, f"This wrapper should be called with {WRAPCC_ARGS_END} argument."
+        delimiter = sys.argv.index(WRAPCC_ARGS_END)
+    assert delimiter != -1, f"This wrapper should be called with {WRAPCC_ARGS_END} argument."
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-file', required=True)
     parser.add_argument('--source-root', required=True)
-    cc_cmd = sys.argv[delimer+1:]
-    return parser.parse_args(sys.argv[1:delimer]), cc_cmd
+    parser.add_argument('--build-root', required=True)
+    cc_cmd = sys.argv[delimiter + 1:]
+    return parser.parse_args(sys.argv[1:delimiter]), cc_cmd
+
 
 if __name__ == '__main__':
     args, cc_cmd = parse_args()
-    cmd = cc_cmd + fix(args.source_file, args.source_root)
+    cmd = cc_cmd + fix(args.source_file, args.source_root, args.build_root)
     os.execv(cmd[0], cmd)

@@ -12,6 +12,14 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+get_built_tool_path(
+  TOOL_codegen_bin
+  TOOL_codegen_dependency
+  ydb/core/base/generated/codegen
+  codegen
+)
+
+add_subdirectory(codegen)
 add_subdirectory(ut)
 
 add_library(core-base-generated)
@@ -24,7 +32,39 @@ target_link_libraries(core-base-generated PUBLIC
 )
 
 target_sources(core-base-generated PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/base/generated/runtime_feature_flags.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/base/generated/runtime_feature_flags.h
+  ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.h
+  ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.h
 )
 
+
+add_custom_command(
+  OUTPUT
+  ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.h
+  DEPENDS
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/generated/runtime_feature_flags.h.in
+  ${TOOL_codegen_bin}
+  COMMAND
+  ${TOOL_codegen_bin}
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/generated/runtime_feature_flags.h.in
+  ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.h
+)
+
+add_custom_command(
+  OUTPUT
+  ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.cpp
+  DEPENDS
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/generated/runtime_feature_flags.cpp.in
+  ${TOOL_codegen_bin}
+  COMMAND
+  ${TOOL_codegen_bin}
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/generated/runtime_feature_flags.cpp.in
+  ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.cpp
+)
+
+
+if(NOT CMAKE_CROSSCOMPILING)
+  add_dependencies(core-base-generated
+    codegen
+  )
+endif()

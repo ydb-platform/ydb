@@ -23,6 +23,10 @@ target_link_libraries(cpp-yt-stockpile PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-yt-misc
+  cpp-yt-threading
+  cpp-yt-logging
+  cpp-yt-memory
 )
 
 target_sources(cpp-yt-stockpile PRIVATE

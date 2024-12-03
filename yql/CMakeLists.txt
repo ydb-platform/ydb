@@ -13,3 +13,4 @@
 # changes in this file.
 
 add_subdirectory(essentials)
+add_subdirectory(providers)

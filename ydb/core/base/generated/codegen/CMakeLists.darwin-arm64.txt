@@ -12,21 +12,21 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_executable(codegen)
+add_executable(ydb-core-base-generated-codegen)
 
 
-target_link_libraries(codegen PUBLIC
+target_link_libraries(ydb-core-base-generated-codegen PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-jinja2cpp
   ydb-core-protos
 )
 
-target_allocator(codegen
+target_allocator(ydb-core-base-generated-codegen
   system_allocator
 )
 
-target_link_options(codegen PRIVATE
+target_link_options(ydb-core-base-generated-codegen PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
@@ -34,9 +34,9 @@ target_link_options(codegen PRIVATE
   CoreFoundation
 )
 
-target_sources(codegen PRIVATE
+target_sources(ydb-core-base-generated-codegen PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/generated/codegen/main.cpp
 )
 
 
-vcs_info(codegen)
+vcs_info(ydb-core-base-generated-codegen)

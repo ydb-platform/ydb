@@ -13,10 +13,10 @@
 # changes in this file.
 
 get_built_tool_path(
-  TOOL_codegen_bin
-  TOOL_codegen_dependency
+  TOOL_ydb-core-base-generated-codegen_bin
+  TOOL_ydb-core-base-generated-codegen_dependency
   ydb/core/base/generated/codegen
-  codegen
+  ydb-core-base-generated-codegen
 )
 
 add_subdirectory(codegen)
@@ -44,9 +44,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.h
   DEPENDS
   ${PROJECT_SOURCE_DIR}/ydb/core/base/generated/runtime_feature_flags.h.in
-  ${TOOL_codegen_bin}
+  ${TOOL_ydb-core-base-generated-codegen_bin}
   COMMAND
-  ${TOOL_codegen_bin}
+  ${TOOL_ydb-core-base-generated-codegen_bin}
   ${PROJECT_SOURCE_DIR}/ydb/core/base/generated/runtime_feature_flags.h.in
   ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.h
 )
@@ -56,9 +56,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.cpp
   DEPENDS
   ${PROJECT_SOURCE_DIR}/ydb/core/base/generated/runtime_feature_flags.cpp.in
-  ${TOOL_codegen_bin}
+  ${TOOL_ydb-core-base-generated-codegen_bin}
   COMMAND
-  ${TOOL_codegen_bin}
+  ${TOOL_ydb-core-base-generated-codegen_bin}
   ${PROJECT_SOURCE_DIR}/ydb/core/base/generated/runtime_feature_flags.cpp.in
   ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.cpp
 )
@@ -66,6 +66,6 @@ add_custom_command(
 
 if(NOT CMAKE_CROSSCOMPILING)
   add_dependencies(core-base-generated
-    codegen
+    ydb-core-base-generated-codegen
   )
 endif()

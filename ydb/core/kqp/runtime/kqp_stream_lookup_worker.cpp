@@ -593,8 +593,8 @@ public:
             auto [joinKey, leftData] = UnprocessedRows.front();
 
             if (PendingLeftRowsByKey.contains(joinKey)) {
-                // TODO: skip key duplicate
-                break;
+                UnprocessedRows.pop_front();
+                continue;
             }
 
             auto hasNulls = [](const TOwnedCellVec& cellVec) {

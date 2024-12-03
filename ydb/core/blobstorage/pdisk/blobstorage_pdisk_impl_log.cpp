@@ -66,8 +66,8 @@ bool TPDisk::InitCommonLogger() {
     ui64 sectorIdx = (InitialLogPosition.OffsetInChunk + Format.SectorSize - 1) / Format.SectorSize;
 
     TLogChunkInfo *info = &*std::find_if(LogChunks.begin(), LogChunks.end(), [=](const TLogChunkInfo& i) {
-            return i.ChunkIdx == chunkIdx;
-        });
+        return i.ChunkIdx == chunkIdx;
+    });
 
     if (sectorIdx >= UsableSectorsPerLogChunk() && InitialTailBuffer) {
         InitialTailBuffer->Release(PCtx->ActorSystem);
@@ -84,7 +84,7 @@ bool TPDisk::InitCommonLogger() {
         }
         CommonLogger->SwitchToNewChunk(TReqId(TReqId::InitCommonLoggerSwitchToNewChunk, 0), nullptr);
 
-        // Log chunk can be collected as soon as noone needs it
+        // Log chunk can be collected as soon as no one needs it
         ChunkState[chunkIdx].CommitState = TChunkState::DATA_COMMITTED;
     }
     bool isOk = LogNonceJump(InitialPreviousNonce);
@@ -570,14 +570,19 @@ void TPDisk::ProcessLogReadQueue() {
             ui32 endLogChunkIdx;
             ui64 endLogSectorIdx;
 
-            TOwnerData::TLogEndPosition &logEndPos = ownerData.LogEndPosition;
-            if (logEndPos.ChunkIdx == 0 && logEndPos.SectorIdx == 0) {
-                TFirstUncommitted firstUncommitted = CommonLogger->FirstUncommitted.load();
-                endLogChunkIdx = firstUncommitted.ChunkIdx;
-                endLogSectorIdx = firstUncommitted.SectorIdx;
+            if (Cfg->ReadOnly) {
+                endLogChunkIdx = LastInitialChunkIdx;
+                endLogSectorIdx = LastInitialSectorIdx;
             } else {
-                endLogChunkIdx = logEndPos.ChunkIdx;
-                endLogSectorIdx = logEndPos.SectorIdx;
+                TOwnerData::TLogEndPosition &logEndPos = ownerData.LogEndPosition;
+                if (logEndPos.ChunkIdx == 0 && logEndPos.SectorIdx == 0) {
+                    TFirstUncommitted firstUncommitted = CommonLogger->FirstUncommitted.load();
+                    endLogChunkIdx = firstUncommitted.ChunkIdx;
+                    endLogSectorIdx = firstUncommitted.SectorIdx;
+                } else {
+                    endLogChunkIdx = logEndPos.ChunkIdx;
+                    endLogSectorIdx = logEndPos.SectorIdx;
+                }
             }
 
             ownerData.LogReader = new TLogReader(false,
@@ -1405,6 +1410,10 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                             "Error while parsing common log at booting state"));
                 return;
             }
+
+            LastInitialChunkIdx = evReadLogResult.LastGoodChunkIdx;
+            LastInitialSectorIdx = evReadLogResult.LastGoodSectorIdx;
+
             // Initialize metadata.
             InitFormattedMetadata();
             // Prepare the FreeChunks list
@@ -1501,13 +1510,17 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             InitSysLogger();
 
             InitPhase = EInitPhase::Initialized;
-            if (!InitCommonLogger()) {
-                // TODO: report red zone
-                *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::CommonLoggerInitError;
-                *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
-                *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorCommonLoggerInit;
-                PCtx->ActorSystem->Send(pDiskActor, new TEvLogInitResult(false, "Error in common logger init"));
-                return;
+
+            if (!Cfg->ReadOnly) {
+                // We don't need logger in ReadOnly mode.
+                if (!InitCommonLogger()) {
+                    // TODO: report red zone
+                    *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::CommonLoggerInitError;
+                    *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
+                    *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorCommonLoggerInit;
+                    PCtx->ActorSystem->Send(pDiskActor, new TEvLogInitResult(false, "Error in common logger init"));
+                    return;
+                }
             }
 
             // Now it's ok to write both logs and data.
@@ -1515,9 +1528,13 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             *Mon.PDiskBriefState = TPDiskMon::TPDisk::OK;
             *Mon.PDiskDetailedState = TPDiskMon::TPDisk::EverythingIsOk;
 
-            auto completion = MakeHolder<TCompletionEventSender>(this, pDiskActor, new TEvLogInitResult(true, "OK"));
-            ReleaseUnusedLogChunks(completion.Get());
-            WriteSysLogRestorePoint(completion.Release(), TReqId(TReqId::AfterInitCommonLoggerSysLog, 0), {});
+            if (Cfg->ReadOnly) {
+                PCtx->ActorSystem->Send(pDiskActor, new TEvLogInitResult(true, "OK"));
+            } else {
+                auto completion = MakeHolder<TCompletionEventSender>(this, pDiskActor, new TEvLogInitResult(true, "OK"));
+                ReleaseUnusedLogChunks(completion.Get());
+                WriteSysLogRestorePoint(completion.Release(), TReqId(TReqId::AfterInitCommonLoggerSysLog, 0), {});
+            }
 
             // Start reading metadata.
             ReadFormattedMetadataIfNeeded();

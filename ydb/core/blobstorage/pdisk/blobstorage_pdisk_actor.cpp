@@ -413,13 +413,21 @@ public:
                     auto [actor, actorSystem, pDiskActor, metadata] = *params;
                     delete params;
 
+                    TPDiskConfig *cfg = actor->Cfg.Get();
+
+                    if (cfg->ReadOnly) {
+                        TString readOnlyError = "PDisk is in read-only mode";
+                        STLOGX(*actorSystem, PRI_ERROR, BS_PDISK, BSP01, "Formatting error", (What, readOnlyError));
+                        actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
+                        return nullptr;
+                    }
+
                     NPDisk::TKey chunkKey;
                     NPDisk::TKey logKey;
                     NPDisk::TKey sysLogKey;
                     SafeEntropyPoolRead(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
                     SafeEntropyPoolRead(&logKey, sizeof(NKikimr::NPDisk::TKey));
                     SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
-                    TPDiskConfig *cfg = actor->Cfg.Get();
 
                     try {
                         try {

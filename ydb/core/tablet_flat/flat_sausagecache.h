@@ -32,8 +32,6 @@ public:
         ui64 TotalSharedBody = 0; // total number of bytes currently referenced from shared cache
         ui64 TotalPinnedBody = 0; // total number of bytes currently pinned in memory
         ui64 TotalExclusive = 0; // total number of bytes exclusive to this cache (not from shared cache)
-        // TODO
-        ui64 TotalSticky = 0; // total number of bytes marked as sticky (never unloaded from memory)
         ui64 PinnedSetSize = 0; // number of bytes pinned by transactions (even those not currently loaded)
         ui64 PinnedLoadSize = 0; // number of bytes pinned by transactions (which are currently being loaded)
         size_t CurrentCacheHits = 0; // = Touches.Size()
@@ -124,9 +122,10 @@ public:
             return page;
         }
 
+        // Note: this method is only called during a page collection creation
         void Fill(TPageId pageId, TSharedPageRef page, bool sticky) noexcept {
             if (sticky) {
-                StickyPages.emplace(pageId, page);
+                AddSticky(pageId, page);
             }
             EnsurePage(pageId)->Fill(std::move(page));
         }
@@ -134,10 +133,15 @@ public:
         void AddSticky(TPageId pageId, TSharedPageRef page) noexcept {
             Y_ABORT_UNLESS(page.IsUsed());
             StickyPages.emplace(pageId, page);
+            StickyPagesSize += TPinnedPageRef(page)->size();
         }
 
         bool IsSticky(TPageId pageId) const noexcept {
             return StickyPages.contains(pageId);
+        }
+
+        ui64 GetStickySize() const noexcept {
+            return StickyPagesSize;
         }
 
         const TLogoBlobID Id;
@@ -151,11 +155,13 @@ public:
     private:
         // storing sticky pages used refs guarantees that they won't be offload from Shared Cache
         THashMap<TPageId, TSharedPageRef> StickyPages;
+        ui64 StickyPagesSize = 0;
     };
 
 public:
+    TIntrusivePtr<TInfo> GetPageCollection(TLogoBlobID id) const;
     void RegisterPageCollection(TIntrusivePtr<TInfo> info);
-    TPage::TWaitQueuePtr ForgetPageCollection(TLogoBlobID id);
+    TPage::TWaitQueuePtr ForgetPageCollection(TIntrusivePtr<TInfo> info);
 
     void LockPageCollection(TLogoBlobID id);
     // Return true for page collections removed after unlock.

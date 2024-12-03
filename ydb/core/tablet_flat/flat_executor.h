@@ -465,6 +465,8 @@ class TExecutor
     size_t ReadyPartSwitches = 0;
 
     ui64 UsedTabletMemory = 0;
+    ui64 StickyPagesMemory = 0;
+    ui64 TransactionPagesMemory = 0;
 
     TActorContext OwnerCtx() const;
 

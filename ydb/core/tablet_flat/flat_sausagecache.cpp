@@ -37,6 +37,12 @@ TPrivatePageCache::TInfo::TInfo(const TInfo &info)
     }
 }
 
+TIntrusivePtr<TPrivatePageCache::TInfo> TPrivatePageCache::GetPageCollection(TLogoBlobID id) const {
+    auto it = PageCollections.find(id);
+    Y_ABORT_UNLESS(it != PageCollections.end(), "trying to get unknown page collection. logic flaw?");
+    return it->second;
+}
+
 void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
     auto itpair = PageCollections.insert(decltype(PageCollections)::value_type(info->Id, info));
     Y_ABORT_UNLESS(itpair.second, "double registration of page collection is forbidden. logic flaw?");
@@ -58,11 +64,8 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
     ++info->Users;
 }
 
-TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(TLogoBlobID id) {
+TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(TIntrusivePtr<TInfo> info) {
     // todo: amortize destruction cost (how?)
-    auto it = PageCollections.find(id);
-    Y_ABORT_UNLESS(it != PageCollections.end(), "trying to forget unknown page collection. logic flaw?");
-    TIntrusivePtr<TInfo> info = it->second;
 
     TPage::TWaitQueuePtr ret;
     for (const auto& kv : info->PageMap) {
@@ -89,7 +92,7 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(
         }
     }
 
-    UnlockPageCollection(id);
+    UnlockPageCollection(info->Id);
 
     return ret;
 }

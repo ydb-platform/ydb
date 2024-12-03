@@ -208,6 +208,7 @@ void TExecutor::Broken() {
 void TExecutor::RecreatePageCollectionsCache() noexcept
 {
     PrivatePageCache = MakeHolder<TPrivatePageCache>();
+    StickyPagesMemory = 0;
 
     Stats->PacksMetaBytes = 0;
 
@@ -611,6 +612,10 @@ void TExecutor::AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &in
 {
     PrivatePageCache->RegisterPageCollection(info);
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection, SelfId()));
+
+    StickyPagesMemory += info->GetStickySize();
+
+    Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY] = StickyPagesMemory;
 }
 
 void TExecutor::DropCachesOfBundle(const NTable::TPart &part) noexcept
@@ -633,13 +638,20 @@ void TExecutor::DropCachesOfBundle(const NTable::TPart &part) noexcept
 
 void TExecutor::DropSingleCache(const TLogoBlobID &label) noexcept
 {
-    auto toActivate = PrivatePageCache->ForgetPageCollection(label);
+    auto pageCollection = PrivatePageCache->GetPageCollection(label);
+
+    ui64 stickySize = pageCollection->GetStickySize();
+    Y_ABORT_UNLESS(StickyPagesMemory >= stickySize);
+    StickyPagesMemory -= stickySize;
+
+    auto toActivate = PrivatePageCache->ForgetPageCollection(pageCollection);
     ActivateWaitingTransactions(toActivate);
     if (!PrivatePageCache->Info(label))
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvInvalidate(label));
 
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
+    Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY] = StickyPagesMemory;
 }
 
 void TExecutor::TranslateCacheTouchesToSharedCache() {
@@ -677,9 +689,11 @@ void TExecutor::StickInMemPages(NSharedCache::TEvResult *msg) {
             for (auto &pageCollection : partStore->PageCollections) {
                 // Note: page collection search optimization seems useless
                 if (pageCollection->PageCollection == msg->Origin) {
+                    ui64 stickySizeBefore = pageCollection->GetStickySize();
                     for (auto& loaded : msg->Loaded) {
                         pageCollection->AddSticky(loaded.PageId, loaded.Page);
                     }
+                    StickyPagesMemory += pageCollection->GetStickySize() - stickySizeBefore;
                 }
             }
         }
@@ -1806,6 +1820,9 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
 }
 
 void TExecutor::UnpinTransactionPages(TSeat &seat) {
+    Y_ABORT_UNLESS(TransactionPagesMemory >= seat.MemoryTouched);
+    TransactionPagesMemory -= seat.MemoryTouched;
+
     size_t unpinnedPages = 0;
     PrivatePageCache->UnpinPages(seat.Pinned, unpinnedPages);
     seat.Pinned.clear();
@@ -1813,6 +1830,7 @@ void TExecutor::UnpinTransactionPages(TSeat &seat) {
 
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
+    Counters->Simple()[TExecutorCounters::CACHE_TOTAL_USED] = TransactionPagesMemory;
 }
 
 void TExecutor::ReleaseTxData(TSeat &seat, ui64 requested, const TActorContext &ctx)
@@ -1844,12 +1862,14 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     ui64 prevTouched = seat->MemoryTouched;
 
     PrivatePageCache->PinTouches(seat->Pinned, touchedPages, newPinnedPages, seat->MemoryTouched);
+    TransactionPagesMemory += seat->MemoryTouched - prevTouched;
 
     ui32 newTouchedPages = newPinnedPages;
     ui64 newTouchedBytes = seat->MemoryTouched - prevTouched;
     prevTouched = seat->MemoryTouched;
 
     PrivatePageCache->PinToLoad(seat->Pinned, newPinnedPages, seat->MemoryTouched);
+    TransactionPagesMemory += seat->MemoryTouched - prevTouched;
 
     if (seat->AttachedMemory)
         Memory->AttachMemory(*seat);
@@ -1992,6 +2012,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
 
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
+    Counters->Simple()[TExecutorCounters::CACHE_TOTAL_USED] = TransactionPagesMemory;
 }
 
 void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &env,
@@ -3505,13 +3526,11 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
 void TExecutor::UpdateUsedTabletMemory() {
     // Estimate memory usage for internal executor structures:
-    UsedTabletMemory = 50 << 10; // 50kb
+    UsedTabletMemory = 50_KB;
 
-    // Count the number of bytes kept in private cache (can't be offloaded right now):
-    if (PrivatePageCache) {
-        UsedTabletMemory += PrivatePageCache->GetStats().TotalPinnedBody;
-        UsedTabletMemory += PrivatePageCache->GetStats().PinnedLoadSize;
-    }
+    // Count the number of bytes that can't be offloaded right now:
+    UsedTabletMemory += StickyPagesMemory;
+    UsedTabletMemory += TransactionPagesMemory;
 
     // Estimate memory used by internal database structures:
     auto &counters = Database->Counters();
@@ -3604,8 +3623,9 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_SHARED_BODY].Set(stats.TotalSharedBody);
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_PINNED_BODY].Set(stats.TotalPinnedBody);
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_EXCLUSIVE].Set(stats.TotalExclusive);
-                Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY].Set(stats.TotalSticky);
             }
+            Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY].Set(StickyPagesMemory);
+            Counters->Simple()[TExecutorCounters::CACHE_TOTAL_USED].Set(TransactionPagesMemory);
 
             const auto &memory = Memory->Stats();
 
@@ -4123,7 +4143,8 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
             DIV_CLASS("row") {str << "Total bytes in shared cache: " << PrivatePageCache->GetStats().TotalSharedBody; }
             DIV_CLASS("row") {str << "Total bytes in local cache: " << PrivatePageCache->GetStats().TotalPinnedBody; }
             DIV_CLASS("row") {str << "Total bytes exclusive to local cache: " << PrivatePageCache->GetStats().TotalExclusive; }
-            DIV_CLASS("row") {str << "Total bytes marked as sticky: " << PrivatePageCache->GetStats().TotalSticky; }
+            DIV_CLASS("row") {str << "Total bytes marked as sticky: " << StickyPagesMemory; }
+            DIV_CLASS("row") {str << "Total bytes currently in use: " << TransactionPagesMemory; }
 
             if (GcLogic) {
                 TAG(TH3) {str << "Gc logic:";}

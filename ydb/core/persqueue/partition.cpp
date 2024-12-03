@@ -1128,6 +1128,14 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
     if (!tx.Predicate.GetOrElse(true)) {
         return EProcessResult::Continue;
     }
+
+    if (!CanWrite()) {
+        tx.Predicate = false;
+        tx.Message = TStringBuilder() << "Partition " << Partition << " is inactive. Writing is not possible";
+        tx.WriteInfoApplied = true;
+        return EProcessResult::Continue;
+    }
+
     auto& srcIdInfo = tx.WriteInfo->SrcIdInfo;
 
     EProcessResult ret = EProcessResult::Continue;
@@ -1963,6 +1971,8 @@ void TPartition::RunPersist() {
             // Messages written
             MsgsWrittenTotal.Inc(writeInfo->MessagesWrittenTotal);
             MsgsWrittenGrpc.Inc(writeInfo->MessagesWrittenTotal);
+
+            WriteNewSizeFromSupportivePartitions += writeInfo->BytesWrittenTotal;
         }
         WriteInfosApplied.clear();
         //Done with counters.

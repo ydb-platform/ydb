@@ -581,6 +581,7 @@ private:
 protected:
     virtual void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override {
         if (!!resourcesGuard) {
+            AFL_VERIFY(!TxEvent->IndexChanges->ResourcesGuard);
             TxEvent->IndexChanges->ResourcesGuard = resourcesGuard;
         } else {
             AFL_VERIFY(TxEvent->IndexChanges->HasMetadataResourcesGuard());

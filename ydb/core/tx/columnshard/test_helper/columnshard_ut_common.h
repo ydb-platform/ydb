@@ -118,20 +118,14 @@ struct TTestSchema {
     };
 
     struct TTableSpecials : public TStorageTier {
-    private:
-        bool NeedTestStatisticsFlag = true;
     public:
         std::vector<TStorageTier> Tiers;
         bool WaitEmptyAfter = false;
 
         TTableSpecials() noexcept = default;
 
-        bool NeedTestStatistics() const {
-            return NeedTestStatisticsFlag;
-        }
-
-        void SetNeedTestStatistics(const bool value) {
-            NeedTestStatisticsFlag = value;
+        bool NeedTestStatistics(const std::vector<NArrow::NTest::TTestColumn>& pk) const {
+            return GetTtlColumn() != pk.front().GetName();
         }
 
         bool HasTiers() const {
@@ -160,6 +154,13 @@ struct TTestSchema {
             }
             result << ";TTL=" << TStorageTier::DebugString();
             return result;
+        }
+
+        TString GetTtlColumn() const {
+            for (const auto& tier : Tiers) {
+                UNIT_ASSERT_VALUES_EQUAL(tier.TtlColumn, TtlColumn);
+            }
+            return TtlColumn;
         }
     };
     using TTestColumn = NArrow::NTest::TTestColumn;

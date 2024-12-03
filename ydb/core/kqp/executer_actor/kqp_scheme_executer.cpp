@@ -99,15 +99,24 @@ public:
         auto& record = ev->Record;
 
         record.SetDatabaseName(Database);
-        record.SetUserToken(NACLib::TSystemUsers::Tmp().GetSerializedToken());
+        record.SetUserToken(NACLib::TSystemUsers::Tmp().SerializeAsString());
         record.SetPeerName(ClientAddress);
 
         auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(GetTmpDirPath(Database));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
         modifyScheme->SetAllowCreateInTempDir(false);
+        modifyScheme->SetInternal(true);
+
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(GetSessionDirName());
+
+        auto* modifyAcl = modifyScheme->MutableModifyACL();
+        modifyAcl->SetName(GetSessionDirName());
+        modifyAcl->SetNewOwner(NACLib::TSystemUsers::Tmp().GetUserSID());
+
+        NACLib::TDiffACL diffAcl;
+        modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
@@ -137,9 +146,17 @@ public:
         modifyScheme->SetWorkingDir(GetSessionDirsBasePath(Database));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
         modifyScheme->SetAllowCreateInTempDir(false);
+
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(SessionId);
         ActorIdToProto(KqpTempTablesAgentActor, modifyScheme->MutableTempDirOwnerActorId());
+
+        auto* modifyAcl = modifyScheme->MutableModifyACL();
+        modifyAcl->SetName(SessionId);
+        modifyAcl->SetNewOwner(UserToken->GetUserSID());
+
+        NACLib::TDiffACL diffAcl;
+        modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
@@ -560,6 +577,7 @@ public:
                 << "Error creating temporary directory: "
                 << result->Get()->Result.Issues().ToString(true));
         }
+        
         CreateSessionDirectory();
     }
 

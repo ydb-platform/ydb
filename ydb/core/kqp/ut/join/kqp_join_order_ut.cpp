@@ -369,7 +369,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto session = db.GetSession().GetValueSync().GetSession();
 
         CreateSampleTable(session, useColumnStore);
-        sleep(5);
 
         /* join with parameters */
         {

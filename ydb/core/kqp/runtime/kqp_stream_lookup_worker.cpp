@@ -350,6 +350,7 @@ public:
         TReadResultStats resultStats;
         bool sizeLimitExceeded = false;
         batch.clear();
+        ui64 rowsInBatch = 0;
 
         while (!ReadResults.empty() && !sizeLimitExceeded) {
             auto& result = ReadResults.front();
@@ -376,20 +377,26 @@ public:
                     }
                 }
 
-                if (rowSize > freeSpace - (i64)resultStats.ResultBytesCount) {
+                storageRowSize = std::max(storageRowSize, (i64)8);
+
+                if (rowsInBatch && storageRowSize > freeSpace - (i64)resultStats.ResultBytesCount) {
                     row.DeleteUnreferenced();
                     sizeLimitExceeded = true;
                     break;
                 }
 
                 batch.push_back(std::move(row));
-
-                storageRowSize = std::max(storageRowSize, (i64)8);
+                ++rowsInBatch;
 
                 resultStats.ReadRowsCount += 1;
                 resultStats.ReadBytesCount += storageRowSize;
                 resultStats.ResultRowsCount += 1;
                 resultStats.ResultBytesCount += storageRowSize;
+
+                if (freeSpace < 0) {
+                    sizeLimitExceeded = true;
+                    break;
+                }
             }
 
             if (result.UnprocessedResultRow == result.ReadResult->Get()->GetRowsCount()) {
@@ -815,10 +822,10 @@ public:
             }
 
             auto& result = resultIt->second;
-            for (; result.FirstUnprocessedRow < result.Rows.size(); ++result.FirstUnprocessedRow) {
+            while (result.FirstUnprocessedRow < result.Rows.size()) {
                 auto& row = result.Rows[result.FirstUnprocessedRow];
 
-                if (rowsInBatch && (resultStats.ResultBytesCount + row.Stats.ResultBytesCount > (ui64)freeSpace)) {
+                if (rowsInBatch && ((i64)row.Stats.ResultBytesCount > freeSpace - (i64)resultStats.ResultBytesCount)) {
                     sizeLimitExceeded = true;
                     break;
                 }
@@ -826,6 +833,10 @@ public:
                 batch.emplace_back(std::move(row.Data));
                 resultStats.Add(row.Stats);
                 ++rowsInBatch;
+                ++result.FirstUnprocessedRow;
+                if (freeSpace < 0) {
+                    break;
+                }
             }
 
             if (result.FirstUnprocessedRow == result.Rows.size()) {

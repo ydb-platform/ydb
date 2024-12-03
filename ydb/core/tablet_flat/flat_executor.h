@@ -281,7 +281,7 @@ struct TPendingPartSwitch {
 enum class EPageCollectionRequest : ui64 {
     Undefined = 0,
     Cache = 1,
-    CacheSticky,
+    InMemPages,
     PendingInit,
     BootLogic,
 };

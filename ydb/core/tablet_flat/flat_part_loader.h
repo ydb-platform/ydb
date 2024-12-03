@@ -55,11 +55,10 @@ namespace NTable {
 
                 if (auto* savedPage = SavedPages.FindPtr(pageId)) {
                     return savedPage;
-                } else if (auto* page = Cache->GetPage(pageId); page && page->GetPinnedBody()) {
-                    Y_ABORT_UNLESS(page->SharedBody);
+                } else if (auto* cached = Cache->Lookup(pageId)) {
                     // Save page in case it's evicted on the next iteration
-                    SavedPages[pageId] = *page->GetPinnedBody();
-                    return page->GetPinnedBody();
+                    SavedPages[pageId] = *cached;
+                    return cached;
                 } else {
                     NeedPages.insert(pageId);
                     return nullptr;

@@ -684,6 +684,7 @@ void TExecutor::StickInMemPages(NSharedCache::TEvResult *msg) {
             }
         }
     }
+    // Note: the next call of ProvideBlock will also fill pages bodies
 }
 
 TExecutorCaches TExecutor::CleanupState() {
@@ -1367,7 +1368,7 @@ void TExecutor::RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartV
         if (stickyGroup) {
             auto req = partView.As<NTable::TPartStore>()->GetPages(groupIndex);
             // TODO: only request missing pages
-            RequestFromSharedCache(req, NBlockIO::EPriority::Bkgr, EPageCollectionRequest::CacheSticky);
+            RequestFromSharedCache(req, NBlockIO::EPriority::Bkgr, EPageCollectionRequest::InMemPages);
         }
     }
 }
@@ -2689,7 +2690,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 
     switch (auto requestType = EPageCollectionRequest(ev->Cookie)) {
     case EPageCollectionRequest::Cache:
-    case EPageCollectionRequest::CacheSticky:
+    case EPageCollectionRequest::InMemPages:
         {
             TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->Origin->Label());
             if (!collectionInfo) // collection could be outdated
@@ -2707,7 +2708,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 return Broken();
             }
 
-            if (requestType == EPageCollectionRequest::CacheSticky) {
+            if (requestType == EPageCollectionRequest::InMemPages) {
                 StickInMemPages(msg);
             }
             for (auto& loaded : msg->Loaded) {

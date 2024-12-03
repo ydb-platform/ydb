@@ -1,7 +1,6 @@
 #include "context.h"
 #include "source.h"
 
-#include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {

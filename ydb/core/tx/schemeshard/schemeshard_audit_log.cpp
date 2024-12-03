@@ -174,7 +174,7 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
             entry << ", add access: " << i;
         }
         for (const auto& i : logEntry.ACLRemove) {
-            entry << ", add access: " << i;
+            entry << ", remove access: " << i;
         }
 
         LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  entry);

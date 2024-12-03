@@ -229,6 +229,8 @@ public:
                         sharedReading = FromString<bool>(Value(setting));
                     } else if (name == ReconnectPeriod) {
                         srcDesc.SetReconnectPeriod(TString(Value(setting)));
+                    } else if (name == ReadGroup) {
+                        srcDesc.SetReadGroup(TString(Value(setting)));
                     } else if (name == Format) {
                         format = TString(Value(setting));
                     } else if (name == UseSslSetting) {
@@ -348,7 +350,7 @@ public:
         Add(props, SharedReading, ToString(clusterConfiguration->SharedReading), pos, ctx);
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
-
+        Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
 
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);

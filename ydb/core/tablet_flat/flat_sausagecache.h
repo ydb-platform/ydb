@@ -6,50 +6,6 @@
 #include <ydb/core/util/cache_cache.h>
 #include <ydb/core/util/page_map.h>
 
-namespace NKikimr::NSharedCache {
-
-    class TPageCollectionState : TMoveOnly {
-    public:
-        void AddStickyPage(TPageId pageId, TSharedPageRef page, ui64 pageSize) {
-            Y_ABORT_UNLESS(page.IsUsed());
-            auto inserted = StickyPages.emplace(pageId, std::move(page)).second;
-            if (inserted) {
-                StickySize += pageSize;
-            }
-        }
-    
-    private:
-        // Note: storing sticky pages used refs guarantees that they won't be offload
-        // from Shared Cache
-        THashMap<TPageId, TSharedPageRef> StickyPages;
-        ui64 StickySize = 0;
-    };
-
-    class TPageCollectionStates : TMoveOnly {
-    public:
-        void AddStickyPage(TLogoBlobID pageCollectionId, TPageId pageId, TSharedPageRef page, ui64 pageSize) {
-            PageCollections[pageCollectionId].AddStickyPage(pageId, std::move(page), pageSize);
-        }
-
-        void AddPageCollection(TLogoBlobID pageCollectionId, TPageCollectionState state) {
-            auto inserted = PageCollections.emplace(pageCollectionId, std::move(state)).second;
-            Y_ABORT_UNLESS(inserted);
-        }
-
-        void DropPageCollection(TLogoBlobID pageCollectionId) {
-            PageCollections.erase(pageCollectionId);
-        }
-
-        explicit operator bool() const {
-            return !PageCollections.empty();
-        }
-
-    private:
-        THashMap<TLogoBlobID, TPageCollectionState> PageCollections;
-    };
-
-}
-
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
@@ -156,8 +112,16 @@ public:
             return page;
         }
 
-        void Fill(TPageId pageId, TSharedPageRef page) noexcept {
+        void Fill(TPageId pageId, TSharedPageRef page, bool sticky) noexcept {
+            if (sticky) {
+                StickyPages.emplace(pageId, page);
+            }
             EnsurePage(pageId)->Fill(std::move(page));
+        }
+
+        void AddSticky(TPageId pageId, TSharedPageRef page) noexcept {
+            Y_ABORT_UNLESS(page.IsUsed());
+            StickyPages.emplace(pageId, page);
         }
 
         const TLogoBlobID Id;
@@ -167,6 +131,10 @@ public:
 
         explicit TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pack);
         TInfo(const TInfo &info);
+
+    private:
+        // storing sticky pages used refs guarantees that they won't be offload from Shared Cache
+        THashMap<TPageId, TSharedPageRef> StickyPages;
     };
 
 public:

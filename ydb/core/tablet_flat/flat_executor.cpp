@@ -678,8 +678,7 @@ void TExecutor::StickInMemPages(NSharedCache::TEvResult *msg) {
                 // Note: page collection search optimization seems useless
                 if (pageCollection->PageCollection == msg->Origin) {
                     for (auto& loaded : msg->Loaded) {
-                        auto pageSize = pageCollection->PageCollection->Page(loaded.PageId).Size;
-                        partStore->PageCollectionStates.AddStickyPage(pageCollection->Id, loaded.PageId, loaded.Page, pageSize);
+                        pageCollection->AddSticky(loaded.PageId, loaded.Page);
                     }
                 }
             }

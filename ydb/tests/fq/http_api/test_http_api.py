@@ -9,8 +9,8 @@ import re
 import yaml
 from yaml.loader import SafeLoader
 
-import library.python.retry as retry
 import time
+import library.python.retry as retry
 
 from test_base import TestBase
 from ydb.core.fq.libs.http_api_client.http_client import YQHttpClientConfig, YQHttpClient, YQHttpClientException
@@ -20,11 +20,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 @retry.retry(retry.RetryConf().upto(10))
 def wait_for_query_status(client, query_id, statuses):
-    while True:
-        status = client.get_query_status(query_id)
-        if status in statuses:
-            return status
-        time.sleep(1)
+    status = client.get_query_status(query_id)
     if status not in statuses:
         raise Exception(f"Status {status} is not in {statuses}")
     return status
@@ -81,7 +77,9 @@ class TestHttpApi(TestBase):
             assert len(query_id) == 20
 
             status = client.get_query_status(query_id)
-            assert status in ["FAILED", "RUNNING", "COMPLETED"]
+            assert status in ["FAILED", "STARTING", "RUNNING", "COMPLETED"]
+            print("Starting")
+            time.sleep(100)
 
             wait_for_query_status(client, query_id, ["COMPLETED"])
             query_json = client.get_query(query_id)

@@ -2,6 +2,7 @@
 
 #include "grpc_request_context_wrapper.h"
 
+#include <thread>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
@@ -285,7 +286,6 @@ public:
     }
 
     virtual void Bootstrap_wrapper(const TActorContext& ctx) {
-        std::cerr << "Call base\n";
         auto grpcRequest = std::make_unique<TGrpcProtoRequestType>();
         if (Parse(*grpcRequest)) {
             TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = new TGrpcRequestContextWrapper(RequestContext, std::move(grpcRequest), &SendReply);
@@ -412,7 +412,6 @@ public:
     {}
 
     void Bootstrap_wrapper(const TActorContext& ctx) override {
-        std::cerr << "Call derived\n";
 
         auto describeRequest = std::make_unique<FederatedQuery::DescribeQueryRequest>();
         if (!Parse(*describeRequest)) {
@@ -420,15 +419,15 @@ public:
             return;
         }
 
+        TProtoStringType qid =  describeRequest->Getquery_id();
+
         TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = new TGrpcRequestContextWrapper(
-            RequestContext,
+            std::move(RequestContext),
             std::move(describeRequest),
-            [&, this, query_id = describeRequest->Getquery_id()](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
-            requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Debug response-1"); return;
+            [query_id = std::move(qid), actorSystem = TActivationContext::ActorSystem()](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
+        
             Y_ABORT_UNLESS(resp);
-            requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Debug response-2"); return;
             Y_ABORT_UNLESS(resp->GetArena());
-            requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Debug response-3"); return;
 
             auto* typedResponse = static_cast<FederatedQuery::DescribeQueryResponse*>(resp);
             if (!typedResponse->operation().result().template Is<FederatedQuery::DescribeQueryResult>()) {                                   
@@ -436,22 +435,15 @@ public:
                 auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());     
                 FqConvert(typedResponse->operation(), *httpResult);                                             
                 FqPackToJson(json, *httpResult, jsonSettings);                                                  
-                requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());
-                this->Die(ctx);       
+                requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());     
                 return;                                                                                         
             }
-
-            requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Debug response1"); return;
 
             FederatedQuery::DescribeQueryResult* describeResult = google::protobuf::Arena::CreateMessage<FederatedQuery::DescribeQueryResult>(resp->GetArena());
             if(!typedResponse->operation().result().UnpackTo(describeResult)) {
                 requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Error in response unpack");
-                this->Die(ctx);
                 return;
             }
-
-            requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Debug response2"); return;
-
 
             // modify
             auto modifyRequest = std::unique_ptr<FederatedQuery::ModifyQueryRequest>(google::protobuf::Arena::CreateMessage<FederatedQuery::ModifyQueryRequest>(resp->GetArena()));
@@ -465,23 +457,19 @@ public:
             modifyRequest->set_previous_revision(describeResult->Getquery().meta().Getlast_job_query_revision());
             modifyRequest->set_idempotency_key(requestContext.GetIdempotencyKey());
 
-            requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Debug response3"); return;
-
             TIntrusivePtr<TGrpcRequestContextWrapper> requestContextModify = new TGrpcRequestContextWrapper(
-                this->RequestContext,
+                requestContext, // new request context?
                 std::move(modifyRequest),
                 TGrpcCallWrapper<FederatedQuery::ModifyQueryRequest, int, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>::SendReply
             );
 
-            requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Debug response4"); return;
-
             // new event -> new EventFactory
-            EventFactory = &NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall;
-            ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContextModify).release());
-            this->Die(ctx);
+            auto factory = &NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall;
+            actorSystem->Send(NGRpcService::CreateGRpcRequestProxyId(), factory(requestContextModify).release());
         });
 
         ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContext).release());
+        // this->Die(ctx);
     }
 };
 

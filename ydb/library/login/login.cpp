@@ -548,7 +548,7 @@ void TLoginProvider::TImpl::GenerateKeyPair(TString& publicKey, TString& private
 TString TLoginProvider::TImpl::GenerateHash(const TString& password) {
     char salt[SALT_SIZE];
     char hash[HASH_SIZE];
-    // RAND_bytes(reinterpret_cast<unsigned char*>(salt), SALT_SIZE);
+    RAND_bytes(reinterpret_cast<unsigned char*>(salt), SALT_SIZE);
     ArgonHasher->Hash(
         reinterpret_cast<const ui8*>(password.data()),
         password.size(),

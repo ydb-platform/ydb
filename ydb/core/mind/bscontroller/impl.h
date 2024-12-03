@@ -1522,6 +1522,11 @@ private:
     bool DonorMode = false;
     TDuration ScrubPeriodicity;
     NKikimrBlobStorage::TStorageConfig StorageConfig;
+    TActorId ConsolePipe;
+    TString YamlConfig;
+    ui32 ConfigVersion = 0;
+    NKikimr::TBackoffTimer CommitConfigBackoffTimer{1, 1000};
+    bool isOngoingCommit = false;
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
@@ -1780,6 +1785,11 @@ private:
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
     void ProcessPostQuery(const NActorsProto::TRemoteHttpInfo& query, TActorId sender);
+
+    void StartConsoleConnectionService();
+    void MakeCommitToConsole();
+    void Handle(TEvBlobStorage::TEvControllerProposeConfigResponse::TPtr ev);
+    void Handle(TEvBlobStorage::TEvControllerCommitConfigResponse::TPtr ev);
 
     void RenderResourceValues(IOutputStream& out, const TResourceRawValues& current);
     void RenderHeader(IOutputStream& out);
@@ -2139,6 +2149,9 @@ public:
             cFunc(TEvPrivate::EvProcessIncomingEvent, ProcessIncomingEvent);
             hFunc(TEvNodeWardenStorageConfig, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerProposeConfigResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerCommitConfigResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerRetryCommitConfig, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -2166,6 +2179,7 @@ public:
         SignalTabletActive(TActivationContext::AsActorContext());
         Loaded = true;
         ApplyStorageConfig();
+        StartConsoleConnectionService();
 
         for (const auto& [id, info] : GroupMap) {
             if (info->VirtualGroupState) {
@@ -2401,6 +2415,11 @@ public:
     void EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo);
     void SendToWarden(TNodeId nodeId, std::unique_ptr<IEventBase> ev, ui64 cookie);
     void SendInReply(const IEventHandle& query, std::unique_ptr<IEventBase> ev);
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // CONSOLE CONNECTION SERVICE
+
+    void SendToConsole(TNodeId nodeId, std::unique_ptr<IEventBase> ev, ui64 cookie);
 
     using TVSlotFinder = std::function<void(TVSlotId, const std::function<void(const TVSlotInfo&)>&)>;
 

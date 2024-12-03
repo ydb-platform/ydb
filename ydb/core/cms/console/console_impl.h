@@ -5,6 +5,7 @@
 #include "tx_processor.h"
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -74,6 +75,11 @@ private:
     void Handle(TEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx);
 
+    void Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvBlobStorage::TEvControllerCommitConfigRequest::TPtr &ev, const TActorContext &ctx);
+
+    void SendInReply(const IEventHandle& query, std::unique_ptr<IEventBase> ev);
+
     STFUNC(StateInit)
     {
         StateInitImpl(ev, SelfId());
@@ -121,6 +127,8 @@ private:
             FFunc(TEvConsole::EvReplaceConfigSubscriptionsRequest, ForwardToConfigsManager);
             HFuncTraced(TEvConsole::TEvSetConfigRequest, Handle);
             FFunc(TEvConsole::EvToggleConfigValidatorRequest, ForwardToConfigsManager);
+            FFunc(TEvBlobStorage::TEvControllerProposeConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvBlobStorage::TEvControllerCommitConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvUpdateTenantPoolConfig, ForwardToTenantsManager);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
@@ -178,6 +186,11 @@ private:
     TTenantsManager* TenantsManager;
 
     TActorId NetClassifierUpdaterId;
+
+    // For handshake with BSController/distconf
+    TActorId currentSenderId;
+    TActorId currentInterconnectSession;
+    TActorId currentPipeServerId;
 };
 
 } // namespace NKikimr::NConsole

@@ -157,6 +157,8 @@ private:
     void Handle(TEvConsole::TEvDropConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvPrivate::TEvStateLoaded::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvCleanupSubscriptions::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvBlobStorage::TEvControllerCommitConfigRequest::TPtr &ev, const TActorContext &ctx);
 
     static bool CheckRights(const TString& userToken);
 
@@ -217,6 +219,7 @@ private:
             HFuncTraced(TEvInterconnect::TEvNodesInfo, Handle);
             HFuncTraced(TEvPrivate::TEvCleanupSubscriptions, Handle);
             HFuncTraced(TEvPrivate::TEvStateLoaded, Handle);
+            HFuncTraced(TEvBlobStorage::TEvControllerProposeConfigRequest, Handle);
             FFunc(TEvConsole::EvConfigSubscriptionRequest, ForwardToConfigsProvider);
             FFunc(TEvConsole::EvConfigSubscriptionCanceled, ForwardToConfigsProvider);
             CFunc(TEvPrivate::EvCleanupLog, CleanupLog);

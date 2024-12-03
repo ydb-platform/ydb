@@ -848,6 +848,13 @@ struct TEvBlobStorage {
         EvControllerNodeReport                      = 0x1003180d,
         EvControllerScrubStartQuantum               = 0x1003180e,
         EvControllerUpdateSystemViews               = 0x10031815,
+        EvControllerProposeConfigRequest            = 0x10031821,
+        EvControllerProposeConfigResponse           = 0x10031822,
+        EvControllerCommitConfigRequest             = 0x10031823,
+        EvControllerCommitConfigResponse            = 0x10031824,
+        EvControllerValidateConfigRequest           = 0x10031825,
+        EvControllerValidateConfigResponse          = 0x10031826,
+        EvControllerRetryCommitConfig               = 0x10031827,
 
         // proxy - node controller interface
         EvConfigureProxy = EvPut + 13 * 512,
@@ -887,6 +894,7 @@ struct TEvBlobStorage {
         EvVMockCtlRequest,
         EvVMockCtlResponse,
         EvDelayedMessageWrapper,
+        EvReplaceConfigRequest,
 
         // incremental huge blob keeper
         EvIncrHugeInit = EvPut + 17 * 512,
@@ -2413,6 +2421,14 @@ struct TEvBlobStorage {
     struct TEvControllerGroupDecommittedResponse;
     struct TEvControllerGroupMetricsExchange;
     struct TEvPutVDiskToReadOnly;
+    struct TEvControllerProposeConfigRequest;
+    struct TEvControllerProposeConfigResponse;
+    struct TEvControllerCommitConfigRequest;
+    struct TEvControllerCommitConfigResponse;
+    struct TEvControllerRetryCommitConfig;
+    struct TEvControllerValidateConfigRequest;
+
+    struct TEvReplaceConfigRequest;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

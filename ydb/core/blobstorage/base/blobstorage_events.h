@@ -254,6 +254,94 @@ namespace NKikimr {
         }
     };
 
+    struct TEvBlobStorage::TEvControllerProposeConfigRequest : TEventPB<TEvBlobStorage::TEvControllerProposeConfigRequest,
+        NKikimrBlobStorage::TEvControllerProposeConfigRequest, TEvBlobStorage::EvControllerProposeConfig> {
+        TEvControllerProposeConfigRequest()
+        {}
+
+        TEvControllerProposeConfigRequest(const TString& configHash, const TString& configVersion) {
+            Record.SetConfigHash(configHash);
+            Record.SetConfigVersion(configVersion);
+        }
+        
+        TString ToString() const override {
+            TStringStream str;
+            str << "{TEvControllerProposeConfigRequest Record# " << Record.DebugString();
+            str << "}";
+            return str.Str();
+        }
+    };
+
+    struct TEvBlobStorage::TEvControllerProposeConfigResponse : TEventPB<TEvBlobStorage::TEvControllerProposeConfigResponse,
+        NKikimrBlobStorage::TEvControllerProposeConfigResponse, TEvBlobStorage::EvControllerProposeConfigResponse> {
+        TEvControllerProposeConfigResponse() = default;
+    };
+
+    struct TEvBlobStorage::TEvControllerCommitConfigRequest : TEventPB<TEvBlobStorage::TEvControllerCommitConfigRequest,
+        NKikimrBlobStorage::TEvControllerCommitConfigRequest, TEvBlobStorage::EvControllerCommitConfig> {
+        TEvControllerCommitConfigRequest() = default;
+
+        TEvControllerCommitConfigRequest(const TString& yamlConfig) {
+            Record.SetYAML(yamlConfig);
+        }
+
+        TString ToString() const override {
+            TStringStream str;
+            str << "{TEvControllerCommitConfigRequest Record# " << Record.DebugString();
+            str << "}";
+            return str.Str();
+        }
+    };
+
+    struct TEvBlobStorage::TEvControllerCommitConfigResponse : TEventPB<TEvBlobStorage::TEvControllerCommitConfigResponse,
+        NKikimrBlobStorage::TEvControllerCommitConfigResponse, TEvBlobStorage::EvControllerCommitConfigResponse> {
+        TEvControllerCommitConfigResponse() = default;
+    };
+
+    struct TEvBlobStorage::TEvControllerRetryCommitConfig : TEventPB<TEvBlobStorage::TEvControllerRetryCommitConfig,
+        NKikimrBlobStorage::TEvControllerRetryCommitConfig, TEvBlobStorage::EvRetryCommitConfig> {
+        TEvControllerRetryCommitConfig() = default;
+
+        TString ToString() const override {
+            TStringStream str;
+            str << "{TEvControllerRetryCommitConfig Record # " << Record.DebugString();
+            str << "}";
+            return str.Str();
+        }
+    };
+
+    struct TEvBlobStorage::TEvControllerValidateConfigRequest : TEventPB<TEvBlobStorage::TEvControllerValidateConfigRequest,
+        NKikimrBlobStorage::TEvControllerValidateConfigRequest, TEvBlobStorage::EvControllerValidateConfig> {
+        TEvControllerValidateConfigRequest() = default;
+
+        TEvControllerValidateConfigRequest(const TString& yamlConfig) {
+            Record.SetYAML(yamlConfig);
+        }
+
+        TString ToString() const override {
+            TStringStream str;
+            str << "{TEvControllerValidateConfigRequest Record# " << Record.DebugString();
+            str << "}";
+            return str.Str();
+        }
+    };
+
+    struct TEvBlobStorage::TEvReplaceConfigRequest : TEventPB<TEvBlobStorage::TEvReplaceConfigRequest,
+        NKikimrBlobStorage::TEvReplaceConfigRequest, TEvBlobStorage::EvControllerReplaceConfig> {
+        TEvReplaceConfigRequest() = default;
+
+        TEvReplaceConfigRequest(const TString& yamlConfig) {
+            Record.SetYAML(yamlConfig);
+        }
+
+        TString ToString() const override {
+            TStringStream str;
+            str << "{TEvReplaceConfigRequest Record# " << Record.DebugString();
+            str << "}";
+            return str.Str();
+        }
+    };
+
     struct TEvBlobStorage::TEvControllerUpdateGroupStat : TEventPB<
         TEvBlobStorage::TEvControllerUpdateGroupStat,
         NKikimrBlobStorage::TEvControllerUpdateGroupStat,

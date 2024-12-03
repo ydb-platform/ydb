@@ -140,6 +140,10 @@ message TResponseHeader
 {
     optional NYT.NProto.TGuid request_id = 1;
 
+    // May be blank.
+    optional string service = 7;
+    optional string method = 8;
+
     // If omitted then OK is assumed.
     optional NYT.NProto.TError error = 2;
 

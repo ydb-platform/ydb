@@ -15,8 +15,6 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-SUBSCRIBER(g:cpp-contrib)
-
 ADDINCL(
     contrib/libs/clang14-rt/lib
 )

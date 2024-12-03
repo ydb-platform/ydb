@@ -1,7 +1,5 @@
 LIBRARY()
 
-SUBSCRIBER(g:devtools-contrib)
-
 NO_UTIL()
 
 PEERDIR(

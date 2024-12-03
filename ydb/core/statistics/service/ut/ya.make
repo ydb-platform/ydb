@@ -2,12 +2,12 @@ UNITTEST_FOR(ydb/core/statistics/service)
 
 FORK_SUBTESTS()
 
+SPLIT_FACTOR(60)
+
 IF (WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -22,11 +22,12 @@ PEERDIR(
 
 SRCS(
     ut_basic_statistics.cpp
-    ut_service.cpp
+    ut_column_statistics.cpp
+    ut_http_request.cpp
 )
 
 END()
 
 RECURSE_FOR_TESTS(
-    ut_http
+    ut_aggregation
 )

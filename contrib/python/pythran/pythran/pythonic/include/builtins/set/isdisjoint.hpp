@@ -18,7 +18,7 @@ namespace builtins
     bool isdisjoint(types::empty_set const &calling_set, U const &arg_set);
 
     DEFINE_FUNCTOR(pythonic::builtins::set, isdisjoint);
-  }
-}
+  } // namespace set
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

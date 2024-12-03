@@ -12,8 +12,8 @@ from six.moves.urllib.parse import urlparse
 
 import yatest
 
-from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.daemon import Daemon
@@ -39,6 +39,15 @@ class EmptyArguments(object):
         self.dont_use_log_files = False
         self.enabled_feature_flags = []
         self.enabled_grpc_services = []
+
+
+def _get_build_path(path):
+    try:
+        result = yatest.common.build_path(path)
+    except (AttributeError, yatest.common.NoRuntimeFormed):
+        result = path
+
+    return result
 
 
 def ensure_path_exists(path):
@@ -350,6 +359,10 @@ def deploy(arguments):
     if 'YDB_EXPERIMENTAL_PG' in os.environ:
         optionals['pg_compatible_expirement'] = True
 
+    if _is_env_option_enabled('YDB_KAFKA_API_ENABLED'):
+        kafka_api_port = int(os.environ.get("YDB_KAFKA_PROXY_PORT", "9092"))
+        optionals['kafka_api_port'] = kafka_api_port
+
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),
         binary_paths=[arguments.ydb_binary_path] if arguments.ydb_binary_path else None,
@@ -358,9 +371,8 @@ def deploy(arguments):
         domain_name='local',
         pq_client_service_types=pq_client_service_types(arguments),
         enable_pqcd=enable_pqcd(arguments),
-        load_udfs=True,
         suppress_version_check=arguments.suppress_version_check,
-        udfs_path=arguments.ydb_udfs_dir,
+        udfs_path=arguments.ydb_udfs_dir or _get_build_path("yql/udfs"),
         additional_log_configs=additional_log_configs,
         port_allocator=port_allocator,
         use_in_memory_pdisks=use_in_memory_pdisks_flag(arguments.ydb_working_dir),
@@ -375,7 +387,7 @@ def deploy(arguments):
         **optionals
     )
 
-    cluster = kikimr_cluster_factory(configuration)
+    cluster = KiKiMR(configuration)
     cluster.start()
 
     info = {'nodes': {}}
@@ -539,3 +551,12 @@ def start_recipe(args):
 def stop_recipe(args):
     arguments = produce_arguments(args)
     cleanup(arguments)
+
+
+def _is_true_string(s):
+    s = s.upper()
+    return s in ['1', 'TRUE', 'YES', 'ON']
+
+
+def _is_env_option_enabled(name):
+    return _is_true_string(os.environ.get(name, "FALSE"))

@@ -1,7 +1,7 @@
 name: Prewarm-debug
 on:
   schedule:
-    - cron: "0 */2 * * *"  # At minute 0 past every 2nd hour
+    - cron: "0 * * * *"  # At minute 0
   workflow_dispatch:
 jobs:
   build_and_test:

@@ -28,7 +28,7 @@ namespace builtins
       bool operator<(xrange_iterator const &other) const;
       long operator-(xrange_iterator const &other) const;
     };
-  }
+  } // namespace
 
   struct xrange {
     using value_type = long;
@@ -51,7 +51,7 @@ namespace builtins
   };
 
   DEFINE_FUNCTOR(pythonic::builtins, xrange);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

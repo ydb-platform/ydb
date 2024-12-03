@@ -1,7 +1,6 @@
 PY3TEST()
 
 FORK_TEST_FILES()
-TIMEOUT(600)
 
 
 # copy from https://docs.yandex-team.ru/devtools/test/environment#docker-compose

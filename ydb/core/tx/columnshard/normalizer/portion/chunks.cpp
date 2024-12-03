@@ -2,6 +2,7 @@
 #include "normalizer.h"
 
 #include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
@@ -97,7 +98,7 @@ public:
 };
 
 void TChunksNormalizer::TChunkInfo::InitSchema(const NColumnShard::TTablesManager& tm) {
-    Schema = tm.GetPrimaryIndexSafe().GetVersionedIndex().GetSchema(NOlap::TSnapshot(Key.GetPlanStep(), Key.GetTxId()));
+    Schema = tm.GetPrimaryIndexSafe().GetVersionedIndex().GetSchemaVerified(NOlap::TSnapshot(Key.GetPlanStep(), Key.GetTxId()));
 }
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(
@@ -139,7 +140,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(
         return tasks;
     }
 
-    TTablesManager tablesManager(controller.GetStoragesManager(), 0);
+    TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr), 0);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TChunksNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");

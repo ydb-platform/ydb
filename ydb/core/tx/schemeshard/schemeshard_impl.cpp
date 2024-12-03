@@ -11,6 +11,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/statistics/events.h>
@@ -18,8 +19,8 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <util/random/random.h>
 #include <util/system/byteorder.h>
 #include <util/system/unaligned_mem.h>
@@ -488,13 +489,13 @@ bool TSchemeShard::ApplyStorageConfig(
         const TStoragePools &storagePools,
         const NKikimrSchemeOp::TStorageConfig &storageConfig,
         TChannelsBindings &channelsBinding,
-        THashMap<TString, ui32> &reverseBinding,
+        THashMap<TString, TVector<ui32>> &reverseBinding,
         TStorageRoom &room, TString &errorMsg)
 {
     if (channelsBinding && !reverseBinding) {
         // Build a hash map from storage pool name to an existing channel number
         for (ui32 channel = 1; channel < channelsBinding.size(); ++channel) {
-            reverseBinding.emplace(channelsBinding[channel].GetStoragePoolName(), channel);
+            reverseBinding[channelsBinding[channel].GetStoragePoolName()].emplace_back(channel);
         }
     }
 
@@ -517,16 +518,18 @@ bool TSchemeShard::ApplyStorageConfig(
         return pools.cend();
     };
 
-    auto allocateChannel = [&] (const TString& poolName) -> ui32 {
+    auto allocateChannel = [&] (const TString& poolName, bool reuseExisting = true) -> ui32 {
         auto it = reverseBinding.find(poolName);
         if (it != reverseBinding.end()) {
-            return it->second;
+            if (reuseExisting) {
+                return it->second[0];
+            }
         }
 
         ui32 channel = channelsBinding.size();
         channelsBinding.emplace_back();
         channelsBinding.back().SetStoragePoolName(poolName);
-        reverseBinding[poolName] = channel;
+        reverseBinding[poolName].emplace_back(channel);
         return channel;
     };
 
@@ -572,13 +575,18 @@ bool TSchemeShard::ApplyStorageConfig(
         auto externalPool = resolve(storagePools, storageConfig.GetExternal());
         LOCAL_CHECK(externalPool != storagePools.end(), "definition of externalPool storage present but unable determine pool for it");
 
-        ui32 channel = allocateChannel(externalPool->GetName());
-        room.AssignChannel(NKikimrStorageSettings::TChannelPurpose::External, channel);
+        ui32 externalChannelsCount = storageConfig.HasExternalChannelsCount() ? storageConfig.GetExternalChannelsCount() : 1;
+        externalChannelsCount = Max<ui32>(externalChannelsCount, 1);
+        LOCAL_CHECK(externalChannelsCount < Max<ui8>(), "more than 255 external channels requested");
+        for (ui32 i = 0; i < externalChannelsCount; ++i) {
+            // In case if we have 1 external channel, leave old behavior untouched and reuse channel by pool's name
+            ui32 channel = allocateChannel(externalPool->GetName(), externalChannelsCount == 1 ? true : false);
+            room.AssignChannel(NKikimrStorageSettings::TChannelPurpose::External, channel);
+        }
     }
 
 #undef LOCAL_CHECK
 
-    return true;
     return true;
 }
 
@@ -645,7 +653,7 @@ bool TSchemeShard::GetBindingsRooms(
         return false; //it is a new interface, no indulgences
     }
 
-    THashMap<TString, ui32> reverseBinding;
+    THashMap<TString, TVector<ui32>> reverseBinding;
 
     if (!ApplyStorageConfig(
             storagePools,
@@ -661,9 +669,22 @@ bool TSchemeShard::GetBindingsRooms(
     // N.B. channel 0 is used for syslog and cannot be used for anything else
     // Here we use channel 0 as a marker for unassigned (default) channel
     ui32 primaryData = rooms[0].GetChannel(NKikimrStorageSettings::TChannelPurpose::Data, 0);
-    ui32 primaryExternal = rooms[0].GetChannel(NKikimrStorageSettings::TChannelPurpose::External, 0);
+    TSet<ui32> primaryExternals = rooms[0].GetExternalChannels(0);
 
-    THashMap<ui64, ui32> roomByChannels;
+    struct ChannelsKey {
+        TSet<ui32> External;
+        ui32 Data;
+
+        bool operator==(const ChannelsKey& other) const {
+            return External == other.External && Data == other.Data;
+        }
+    };
+    auto keyHasher = [](const ChannelsKey& k) -> size_t {
+        return k.Data + std::accumulate(k.External.begin(), k.External.end(), 0);
+    };
+
+    THashMap<ChannelsKey, ui32, decltype(keyHasher)> roomByChannels;
+
     for (const auto& family : partitionConfig.GetColumnFamilies()) {
         if (family.GetId() == 0) {
             continue; // already handled
@@ -685,12 +706,13 @@ bool TSchemeShard::GetBindingsRooms(
         }
 
         ui32 dataChannel = newRoom.GetChannel(NKikimrStorageSettings::TChannelPurpose::Data, primaryData);
-        ui32 externalChannel = newRoom.GetChannel(NKikimrStorageSettings::TChannelPurpose::External, primaryExternal);
-        if (dataChannel == primaryData && externalChannel == primaryExternal) {
+        TSet<ui32> externalChannels = newRoom.GetExternalChannels(0);
+        if (dataChannel == primaryData && externalChannels == primaryExternals) {
             continue; // will use the default room
         }
 
-        ui64 cookie = (ui64(externalChannel) << 32) | dataChannel;
+        ChannelsKey cookie = { externalChannels, dataChannel };
+
         auto it = roomByChannels.find(cookie);
         if (it != roomByChannels.end()) {
             familyRooms[family.GetId()] = it->second;
@@ -701,8 +723,10 @@ bool TSchemeShard::GetBindingsRooms(
         if (dataChannel != 0) {
             room.AssignChannel(NKikimrStorageSettings::TChannelPurpose::Data, dataChannel);
         }
-        if (externalChannel != 0) {
-            room.AssignChannel(NKikimrStorageSettings::TChannelPurpose::External, externalChannel);
+        for (ui32 externalChannel : externalChannels) {
+            if (externalChannel != 0) {
+                room.AssignChannel(NKikimrStorageSettings::TChannelPurpose::External, externalChannel);
+            }
         }
         roomByChannels[cookie] = room.GetId();
         familyRooms[family.GetId()] = room.GetId();
@@ -1603,6 +1627,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
         Y_UNREACHABLE();
     case TTxState::TxMoveTable:
     case TTxState::TxMoveTableIndex:
+    case TTxState::TxMoveSequence:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxRestoreIncrementalBackupAtTable:
         return TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
@@ -1671,7 +1696,8 @@ void TSchemeShard::PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId)
     db.Table<Schema::TableIndex>().Key(element->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(alterData->AlterVersion),
                 NIceDb::TUpdate<Schema::TableIndex::IndexType>(alterData->Type),
-                NIceDb::TUpdate<Schema::TableIndex::State>(alterData->State));
+                NIceDb::TUpdate<Schema::TableIndex::State>(alterData->State),
+                NIceDb::TUpdate<Schema::TableIndex::Description>(alterData->SerializeDescription()));
 
     db.Table<Schema::TableIndexAlterData>().Key(element->PathId.LocalPathId).Delete();
 
@@ -1706,7 +1732,8 @@ void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId
     db.Table<Schema::TableIndexAlterData>().Key(elem->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::TableIndexAlterData::AlterVersion>(alterData->AlterVersion),
                 NIceDb::TUpdate<Schema::TableIndexAlterData::IndexType>(alterData->Type),
-                NIceDb::TUpdate<Schema::TableIndexAlterData::State>(alterData->State));
+                NIceDb::TUpdate<Schema::TableIndexAlterData::State>(alterData->State),
+                NIceDb::TUpdate<Schema::TableIndexAlterData::Description>(alterData->SerializeDescription()));
 
     for (ui32 keyIdx = 0; keyIdx < alterData->IndexKeys.size(); ++keyIdx) {
         db.Table<Schema::TableIndexKeysAlterData>().Key(elem->PathId.LocalPathId, keyIdx).Update(
@@ -3626,6 +3653,22 @@ void TSchemeShard::PersistSequence(NIceDb::TNiceDb& db, TPathId pathId, const TS
         NIceDb::TUpdate<Schema::Sequences::Sharding>(serializedSharding));
 }
 
+void TSchemeShard::PersistSequence(NIceDb::TNiceDb& db, TPathId pathId)
+{
+    Y_ABORT_UNLESS(PathsById.contains(pathId));
+    TPathElement::TPtr elem = PathsById.at(pathId);
+
+    Y_ABORT_UNLESS(Sequences.contains(pathId));
+    TSequenceInfo::TPtr sequenceInfo = Sequences.at(pathId);
+
+    Y_ABORT_UNLESS(elem->IsSequence());
+
+    Y_ABORT_UNLESS(sequenceInfo);
+
+    PersistSequence(db, pathId, *sequenceInfo);
+
+}
+
 void TSchemeShard::PersistSequenceRemove(NIceDb::TNiceDb& db, TPathId pathId)
 {
     Y_ABORT_UNLESS(IsLocalId(pathId));
@@ -3658,6 +3701,22 @@ void TSchemeShard::PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId, con
         NIceDb::TUpdate<Schema::SequencesAlters::AlterVersion>(sequenceInfo.AlterVersion),
         NIceDb::TUpdate<Schema::SequencesAlters::Description>(serializedDescription),
         NIceDb::TUpdate<Schema::SequencesAlters::Sharding>(serializedSharding));
+}
+
+void TSchemeShard::PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId)
+{
+    Y_ABORT_UNLESS(PathsById.contains(pathId));
+    TPathElement::TPtr elem = PathsById.at(pathId);
+
+    Y_ABORT_UNLESS(Sequences.contains(pathId));
+    TSequenceInfo::TPtr sequenceInfo = Sequences.at(pathId);
+
+    Y_ABORT_UNLESS(elem->IsSequence());
+
+    TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
+    Y_ABORT_UNLESS(alterData);
+
+    PersistSequenceAlter(db, pathId, *alterData);
 }
 
 void TSchemeShard::PersistSequenceAlterRemove(NIceDb::TNiceDb& db, TPathId pathId)
@@ -4758,6 +4817,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvIndexBuildingMakeABill, Handle);
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         // } // NIndexBuilder
 
@@ -4794,7 +4854,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
 
-        HFuncTraced(TEvPersQueue::TEvProposeTransactionAttachResult, Handle);
+        HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, Handle);
 
         HFuncTraced(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         HFuncTraced(TEvPrivate::TEvSendBaseStatsToSA, Handle);
@@ -5388,12 +5448,12 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TAct
     Execute(CreateTxOperationProgress(TOperationId(txId, ev->Get()->TxPartId)), ctx);
 }
 
-void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx)
+void TSchemeShard::Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx)
 {
     const auto txId = TTxId(ev->Get()->Record.GetTxId());
     if (!Operations.contains(txId)) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Got TEvPersQueue::TEvProposeTransactionAttachResult"
+                   "Got TEvDataShard::TEvProposeTransactionAttachResult"
                    << " for unknown txId: " << txId
                    << " message: " << ev->Get()->Record.ShortDebugString());
         return;
@@ -5403,7 +5463,7 @@ void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr&
     TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
     if (partId == InvalidSubTxId) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Got TEvPersQueue::TEvProposeTransactionAttachResult but partId is unknown"
+                   "Got TEvDataShard::TEvProposeTransactionAttachResult but partId is unknown"
                        << ", for txId: " << txId
                        << ", tabletId: " << tabletId
                        << ", at schemeshard: " << TabletID());
@@ -7381,7 +7441,7 @@ void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
         StatisticsAggregatorId = TTabletId(entry.DomainInfo->Params.GetStatisticsAggregator());
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, StatisticsAggregatorId=" << StatisticsAggregatorId
-            << ", at schemeshard: " << TabletID()); 
+            << ", at schemeshard: " << TabletID());
         ConnectToSA();
     }
 }
@@ -7390,13 +7450,16 @@ void TSchemeShard::Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr&, const TActorC
     TDuration delta = SendBaseStatsToSA();
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
         "Schedule next SendBaseStatsToSA in " << delta
-        << ", at schemeshard: " << TabletID());    
+        << ", at schemeshard: " << TabletID());
     ctx.Schedule(delta, new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
 void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
     ResolveSA();
-    ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvSendBaseStatsToSA());
+    // since columnshard statistics is now sent once in a minute,
+    // we expect that in most cases we will gather full stats
+    // before sending them to StatisticsAggregator
+    ctx.Schedule(TDuration::Seconds(120), new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
 void TSchemeShard::ResolveSA() {
@@ -7417,7 +7480,7 @@ void TSchemeShard::ResolveSA() {
         StatisticsAggregatorId = subDomainInfo->GetTenantStatisticsAggregatorID();
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "ResolveSA(), StatisticsAggregatorId=" << StatisticsAggregatorId
-            << ", at schemeshard: " << TabletID());         
+            << ", at schemeshard: " << TabletID());
         ConnectToSA();
     }
 }
@@ -7425,11 +7488,11 @@ void TSchemeShard::ResolveSA() {
 void TSchemeShard::ConnectToSA() {
     if (!EnableStatistics)
         return;
-    
+
     if (!StatisticsAggregatorId) {
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "ConnectToSA(), no StatisticsAggregatorId"
-            << ", at schemeshard: " << TabletID());        
+            << ", at schemeshard: " << TabletID());
         return;
     }
     auto policy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -7470,30 +7533,56 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
     }
 
     int count = 0;
+    bool areAllStatsFull = true;
 
     NKikimrStat::TSchemeShardStats record;
     for (const auto& [pathId, tableInfo] : Tables) {
-        const auto& aggregated = tableInfo->GetStats().Aggregated;
+        const auto& stats = tableInfo->GetStats();
+        const auto& aggregated = stats.Aggregated;
+        bool areStatsFull = stats.AreStatsFull();
+
         auto* entry = record.AddEntries();
         auto* entryPathId = entry->MutablePathId();
         entryPathId->SetOwnerId(pathId.OwnerId);
         entryPathId->SetLocalId(pathId.LocalPathId);
-        entry->SetRowCount(aggregated.RowCount);
-        entry->SetBytesSize(aggregated.DataSize);
+        entry->SetRowCount(areStatsFull ? aggregated.RowCount : 0);
+        entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(false);
+        entry->SetAreStatsFull(areStatsFull);
+        areAllStatsFull = areAllStatsFull && areStatsFull;
+
         ++count;
     }
+
     auto columnTablesPathIds = ColumnTables.GetAllPathIds();
     for (const auto& pathId : columnTablesPathIds) {
         const auto& tableInfo = ColumnTables.GetVerified(pathId);
-        const auto& aggregated = tableInfo->Stats.Aggregated;
+        const auto& stats = tableInfo->GetStats();
+        const TTableAggregatedStats* aggregatedStats = nullptr;
+
+        // stats are stored differently for standalone and non-standalone column tables
+        if (tableInfo->IsStandalone()) {
+            aggregatedStats = &stats;
+        } else {
+            auto it = stats.TableStats.find(pathId);
+            if (it == stats.TableStats.end()) {
+                continue;
+            }
+            aggregatedStats = &it->second;
+        }
+        const auto& aggregated = aggregatedStats->Aggregated;
+        bool areStatsFull = aggregatedStats->AreStatsFull();
+
         auto* entry = record.AddEntries();
         auto* entryPathId = entry->MutablePathId();
         entryPathId->SetOwnerId(pathId.OwnerId);
         entryPathId->SetLocalId(pathId.LocalPathId);
-        entry->SetRowCount(aggregated.RowCount);
-        entry->SetBytesSize(aggregated.DataSize);
+        entry->SetRowCount(areStatsFull ? aggregated.RowCount : 0);
+        entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(true);
+        entry->SetAreStatsFull(areStatsFull);
+        areAllStatsFull = areAllStatsFull && areStatsFull;
+
         ++count;
     }
 
@@ -7504,8 +7593,9 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         return TDuration::Seconds(30);
     }
 
+    record.SetAreAllStatsFull(areAllStatsFull);
+
     TString stats;
-    stats.clear();
     Y_PROTOBUF_SUPPRESS_NODISCARD record.SerializeToString(&stats);
 
     auto event = std::make_unique<NStat::TEvStatistics::TEvSchemeShardStats>();
@@ -7519,8 +7609,8 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         << ", path count: " << count
         << ", at schemeshard: " << TabletID());
 
-    return TDuration::Seconds(SendStatsIntervalMinSeconds 
-        + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds));   
+    return TDuration::Seconds(SendStatsIntervalMinSeconds
+        + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds));
 }
 
 } // namespace NSchemeShard

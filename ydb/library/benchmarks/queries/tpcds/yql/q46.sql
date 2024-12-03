@@ -23,11 +23,11 @@ select  c_last_name
     and store_sales.ss_store_sk = store.s_store_sk
     and store_sales.ss_hdemo_sk = household_demographics.hd_demo_sk
     and store_sales.ss_addr_sk = customer_address.ca_address_sk
-    and (household_demographics.hd_dep_count = 0 or
-         household_demographics.hd_vehicle_count= 1)
+    and (household_demographics.hd_dep_count = 4 or
+         household_demographics.hd_vehicle_count= 3)
     and date_dim.d_dow in (6,0)
-    and date_dim.d_year in (2000,2000+1,2000+2)
-    and store.s_city in ('Five Forks','Oakland','Fairview','Winchester','Farmington')
+    and date_dim.d_year in (1999,1999+1,1999+2)
+    and store.s_city in ('Fairview','Fairview','Fairview','Midway','Fairview')
     group by store_sales.ss_ticket_number,store_sales.ss_customer_sk,store_sales.ss_addr_sk,customer_address.ca_city) dn 
     cross join {{customer}} as customer
     cross join {{customer_address}} current_addr

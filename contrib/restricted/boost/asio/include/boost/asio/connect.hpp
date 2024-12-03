@@ -2,7 +2,7 @@
 // connect.hpp
 // ~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -28,6 +28,10 @@ namespace asio {
 
 namespace detail
 {
+  struct default_connect_condition;
+  template <typename, typename> class initiate_async_range_connect;
+  template <typename, typename> class initiate_async_iterator_connect;
+
   char (&has_iterator_helper(...))[2];
 
   template <typename T>
@@ -91,8 +95,7 @@ struct is_endpoint_sequence
 template <typename Protocol, typename Executor, typename EndpointSequence>
 typename Protocol::endpoint connect(basic_socket<Protocol, Executor>& s,
     const EndpointSequence& endpoints,
-    typename constraint<is_endpoint_sequence<
-        EndpointSequence>::value>::type = 0);
+    constraint_t<is_endpoint_sequence<EndpointSequence>::value> = 0);
 
 /// Establishes a socket connection by trying each endpoint in a sequence.
 /**
@@ -127,8 +130,7 @@ typename Protocol::endpoint connect(basic_socket<Protocol, Executor>& s,
 template <typename Protocol, typename Executor, typename EndpointSequence>
 typename Protocol::endpoint connect(basic_socket<Protocol, Executor>& s,
     const EndpointSequence& endpoints, boost::system::error_code& ec,
-    typename constraint<is_endpoint_sequence<
-        EndpointSequence>::value>::type = 0);
+    constraint_t<is_endpoint_sequence<EndpointSequence>::value> = 0);
 
 #if !defined(BOOST_ASIO_NO_DEPRECATED)
 /// (Deprecated: Use range overload.) Establishes a socket connection by trying
@@ -157,7 +159,7 @@ typename Protocol::endpoint connect(basic_socket<Protocol, Executor>& s,
  */
 template <typename Protocol, typename Executor, typename Iterator>
 Iterator connect(basic_socket<Protocol, Executor>& s, Iterator begin,
-    typename constraint<!is_endpoint_sequence<Iterator>::value>::type = 0);
+    constraint_t<!is_endpoint_sequence<Iterator>::value> = 0);
 
 /// (Deprecated: Use range overload.) Establishes a socket connection by trying
 /// each endpoint in a sequence.
@@ -186,7 +188,7 @@ Iterator connect(basic_socket<Protocol, Executor>& s, Iterator begin,
 template <typename Protocol, typename Executor, typename Iterator>
 Iterator connect(basic_socket<Protocol, Executor>& s,
     Iterator begin, boost::system::error_code& ec,
-    typename constraint<!is_endpoint_sequence<Iterator>::value>::type = 0);
+    constraint_t<!is_endpoint_sequence<Iterator>::value> = 0);
 #endif // !defined(BOOST_ASIO_NO_DEPRECATED)
 
 /// Establishes a socket connection by trying each endpoint in a sequence.
@@ -312,8 +314,7 @@ template <typename Protocol, typename Executor,
     typename EndpointSequence, typename ConnectCondition>
 typename Protocol::endpoint connect(basic_socket<Protocol, Executor>& s,
     const EndpointSequence& endpoints, ConnectCondition connect_condition,
-    typename constraint<is_endpoint_sequence<
-        EndpointSequence>::value>::type = 0);
+    constraint_t<is_endpoint_sequence<EndpointSequence>::value> = 0);
 
 /// Establishes a socket connection by trying each endpoint in a sequence.
 /**
@@ -380,8 +381,7 @@ template <typename Protocol, typename Executor,
 typename Protocol::endpoint connect(basic_socket<Protocol, Executor>& s,
     const EndpointSequence& endpoints, ConnectCondition connect_condition,
     boost::system::error_code& ec,
-    typename constraint<is_endpoint_sequence<
-        EndpointSequence>::value>::type = 0);
+    constraint_t<is_endpoint_sequence<EndpointSequence>::value> = 0);
 
 #if !defined(BOOST_ASIO_NO_DEPRECATED)
 /// (Deprecated: Use range overload.) Establishes a socket connection by trying
@@ -423,7 +423,7 @@ template <typename Protocol, typename Executor,
     typename Iterator, typename ConnectCondition>
 Iterator connect(basic_socket<Protocol, Executor>& s,
     Iterator begin, ConnectCondition connect_condition,
-    typename constraint<!is_endpoint_sequence<Iterator>::value>::type = 0);
+    constraint_t<!is_endpoint_sequence<Iterator>::value> = 0);
 
 /// (Deprecated: Use range overload.) Establishes a socket connection by trying
 /// each endpoint in a sequence.
@@ -464,7 +464,7 @@ template <typename Protocol, typename Executor,
     typename Iterator, typename ConnectCondition>
 Iterator connect(basic_socket<Protocol, Executor>& s, Iterator begin,
     ConnectCondition connect_condition, boost::system::error_code& ec,
-    typename constraint<!is_endpoint_sequence<Iterator>::value>::type = 0);
+    constraint_t<!is_endpoint_sequence<Iterator>::value> = 0);
 #endif // !defined(BOOST_ASIO_NO_DEPRECATED)
 
 /// Establishes a socket connection by trying each endpoint in a sequence.
@@ -611,16 +611,19 @@ Iterator connect(basic_socket<Protocol, Executor>& s,
  * This function attempts to connect a socket to one of a sequence of
  * endpoints. It does this by repeated calls to the socket's @c async_connect
  * member function, once for each endpoint in the sequence, until a connection
- * is successfully established.
+ * is successfully established. It is an initiating function for an @ref
+ * asynchronous_operation, and always returns immediately.
  *
  * @param s The socket to be connected. If the socket is already open, it will
  * be closed.
  *
  * @param endpoints A sequence of endpoints.
  *
- * @param handler The handler to be called when the connect operation
- * completes. Copies will be made of the handler as required. The function
- * signature of the handler must be:
+ * @param token The @ref completion_token that will be used to produce a
+ * completion handler, which will be called when the connect completes.
+ * Potential completion tokens include @ref use_future, @ref use_awaitable,
+ * @ref yield_context, or a function object with the correct completion
+ * signature. The function signature of the completion handler must be:
  * @code void handler(
  *   // Result of operation. if the sequence is empty, set to
  *   // boost::asio::error::not_found. Otherwise, contains the
@@ -632,9 +635,12 @@ Iterator connect(basic_socket<Protocol, Executor>& s,
  *   const typename Protocol::endpoint& endpoint
  * ); @endcode
  * Regardless of whether the asynchronous operation completes immediately or
- * not, the handler will not be invoked from within this function. On
- * immediate completion, invocation of the handler will be performed in a
+ * not, the completion handler will not be invoked from within this function.
+ * On immediate completion, invocation of the handler will be performed in a
  * manner equivalent to using boost::asio::post().
+ *
+ * @par Completion Signature
+ * @code void(boost::system::error_code, typename Protocol::endpoint) @endcode
  *
  * @par Example
  * @code tcp::resolver r(my_context);
@@ -678,16 +684,17 @@ Iterator connect(basic_socket<Protocol, Executor>& s,
  */
 template <typename Protocol, typename Executor, typename EndpointSequence,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      typename Protocol::endpoint)) RangeConnectHandler
-        BOOST_ASIO_DEFAULT_COMPLETION_TOKEN_TYPE(Executor)>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(RangeConnectHandler,
-    void (boost::system::error_code, typename Protocol::endpoint))
-async_connect(basic_socket<Protocol, Executor>& s,
+      typename Protocol::endpoint)) RangeConnectToken
+        = default_completion_token_t<Executor>>
+auto async_connect(basic_socket<Protocol, Executor>& s,
     const EndpointSequence& endpoints,
-    BOOST_ASIO_MOVE_ARG(RangeConnectHandler) handler
-      BOOST_ASIO_DEFAULT_COMPLETION_TOKEN(Executor),
-    typename constraint<is_endpoint_sequence<
-        EndpointSequence>::value>::type = 0);
+    RangeConnectToken&& token = default_completion_token_t<Executor>(),
+    constraint_t<is_endpoint_sequence<EndpointSequence>::value> = 0)
+  -> decltype(
+    async_initiate<RangeConnectToken,
+      void (boost::system::error_code, typename Protocol::endpoint)>(
+        declval<detail::initiate_async_range_connect<Protocol, Executor>>(),
+        token, endpoints, declval<detail::default_connect_condition>()));
 
 #if !defined(BOOST_ASIO_NO_DEPRECATED)
 /// (Deprecated: Use range overload.) Asynchronously establishes a socket
@@ -696,16 +703,19 @@ async_connect(basic_socket<Protocol, Executor>& s,
  * This function attempts to connect a socket to one of a sequence of
  * endpoints. It does this by repeated calls to the socket's @c async_connect
  * member function, once for each endpoint in the sequence, until a connection
- * is successfully established.
+ * is successfully established. It is an initiating function for an @ref
+ * asynchronous_operation, and always returns immediately.
  *
  * @param s The socket to be connected. If the socket is already open, it will
  * be closed.
  *
  * @param begin An iterator pointing to the start of a sequence of endpoints.
  *
- * @param handler The handler to be called when the connect operation
- * completes. Copies will be made of the handler as required. The function
- * signature of the handler must be:
+ * @param token The @ref completion_token that will be used to produce a
+ * completion handler, which will be called when the connect completes.
+ * Potential completion tokens include @ref use_future, @ref use_awaitable,
+ * @ref yield_context, or a function object with the correct completion
+ * signature. The function signature of the completion handler must be:
  * @code void handler(
  *   // Result of operation. if the sequence is empty, set to
  *   // boost::asio::error::not_found. Otherwise, contains the
@@ -717,9 +727,12 @@ async_connect(basic_socket<Protocol, Executor>& s,
  *   Iterator iterator
  * ); @endcode
  * Regardless of whether the asynchronous operation completes immediately or
- * not, the handler will not be invoked from within this function. On
- * immediate completion, invocation of the handler will be performed in a
+ * not, the completion handler will not be invoked from within this function.
+ * On immediate completion, invocation of the handler will be performed in a
  * manner equivalent to using boost::asio::post().
+ *
+ * @par Completion Signature
+ * @code void(boost::system::error_code, Iterator) @endcode
  *
  * @note This overload assumes that a default constructed object of type @c
  * Iterator represents the end of the sequence. This is a valid assumption for
@@ -737,14 +750,16 @@ async_connect(basic_socket<Protocol, Executor>& s,
  */
 template <typename Protocol, typename Executor, typename Iterator,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      Iterator)) IteratorConnectHandler
-        BOOST_ASIO_DEFAULT_COMPLETION_TOKEN_TYPE(Executor)>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(IteratorConnectHandler,
-    void (boost::system::error_code, Iterator))
-async_connect(basic_socket<Protocol, Executor>& s, Iterator begin,
-    BOOST_ASIO_MOVE_ARG(IteratorConnectHandler) handler
-      BOOST_ASIO_DEFAULT_COMPLETION_TOKEN(Executor),
-    typename constraint<!is_endpoint_sequence<Iterator>::value>::type = 0);
+      Iterator)) IteratorConnectToken = default_completion_token_t<Executor>>
+auto async_connect(basic_socket<Protocol, Executor>& s, Iterator begin,
+    IteratorConnectToken&& token = default_completion_token_t<Executor>(),
+    constraint_t<!is_endpoint_sequence<Iterator>::value> = 0)
+  -> decltype(
+    async_initiate<IteratorConnectToken,
+      void (boost::system::error_code, Iterator)>(
+        declval<detail::initiate_async_iterator_connect<Protocol, Executor>>(),
+        token, begin, Iterator(),
+        declval<detail::default_connect_condition>()));
 #endif // !defined(BOOST_ASIO_NO_DEPRECATED)
 
 /// Asynchronously establishes a socket connection by trying each endpoint in a
@@ -753,7 +768,8 @@ async_connect(basic_socket<Protocol, Executor>& s, Iterator begin,
  * This function attempts to connect a socket to one of a sequence of
  * endpoints. It does this by repeated calls to the socket's @c async_connect
  * member function, once for each endpoint in the sequence, until a connection
- * is successfully established.
+ * is successfully established. It is an initiating function for an @ref
+ * asynchronous_operation, and always returns immediately.
  *
  * @param s The socket to be connected. If the socket is already open, it will
  * be closed.
@@ -762,9 +778,11 @@ async_connect(basic_socket<Protocol, Executor>& s, Iterator begin,
  *
  * @param end An iterator pointing to the end of a sequence of endpoints.
  *
- * @param handler The handler to be called when the connect operation
- * completes. Copies will be made of the handler as required. The function
- * signature of the handler must be:
+ * @param token The @ref completion_token that will be used to produce a
+ * completion handler, which will be called when the connect completes.
+ * Potential completion tokens include @ref use_future, @ref use_awaitable,
+ * @ref yield_context, or a function object with the correct completion
+ * signature. The function signature of the completion handler must be:
  * @code void handler(
  *   // Result of operation. if the sequence is empty, set to
  *   // boost::asio::error::not_found. Otherwise, contains the
@@ -776,9 +794,12 @@ async_connect(basic_socket<Protocol, Executor>& s, Iterator begin,
  *   Iterator iterator
  * ); @endcode
  * Regardless of whether the asynchronous operation completes immediately or
- * not, the handler will not be invoked from within this function. On
- * immediate completion, invocation of the handler will be performed in a
+ * not, the completion handler will not be invoked from within this function.
+ * On immediate completion, invocation of the handler will be performed in a
  * manner equivalent to using boost::asio::post().
+ *
+ * @par Completion Signature
+ * @code void(boost::system::error_code, Iterator) @endcode
  *
  * @par Example
  * @code std::vector<tcp::endpoint> endpoints = ...;
@@ -808,13 +829,15 @@ async_connect(basic_socket<Protocol, Executor>& s, Iterator begin,
  */
 template <typename Protocol, typename Executor, typename Iterator,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      Iterator)) IteratorConnectHandler
-        BOOST_ASIO_DEFAULT_COMPLETION_TOKEN_TYPE(Executor)>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(IteratorConnectHandler,
-    void (boost::system::error_code, Iterator))
-async_connect(basic_socket<Protocol, Executor>& s, Iterator begin, Iterator end,
-    BOOST_ASIO_MOVE_ARG(IteratorConnectHandler) handler
-      BOOST_ASIO_DEFAULT_COMPLETION_TOKEN(Executor));
+      Iterator)) IteratorConnectToken = default_completion_token_t<Executor>>
+auto async_connect(
+    basic_socket<Protocol, Executor>& s, Iterator begin, Iterator end,
+    IteratorConnectToken&& token = default_completion_token_t<Executor>())
+  -> decltype(
+    async_initiate<IteratorConnectToken,
+      void (boost::system::error_code, Iterator)>(
+        declval<detail::initiate_async_iterator_connect<Protocol, Executor>>(),
+        token, begin, end, declval<detail::default_connect_condition>()));
 
 /// Asynchronously establishes a socket connection by trying each endpoint in a
 /// sequence.
@@ -822,7 +845,8 @@ async_connect(basic_socket<Protocol, Executor>& s, Iterator begin, Iterator end,
  * This function attempts to connect a socket to one of a sequence of
  * endpoints. It does this by repeated calls to the socket's @c async_connect
  * member function, once for each endpoint in the sequence, until a connection
- * is successfully established.
+ * is successfully established. It is an initiating function for an @ref
+ * asynchronous_operation, and always returns immediately.
  *
  * @param s The socket to be connected. If the socket is already open, it will
  * be closed.
@@ -840,9 +864,11 @@ async_connect(basic_socket<Protocol, Executor>& s, Iterator begin, Iterator end,
  * The function object should return true if the next endpoint should be tried,
  * and false if it should be skipped.
  *
- * @param handler The handler to be called when the connect operation
- * completes. Copies will be made of the handler as required. The function
- * signature of the handler must be:
+ * @param token The @ref completion_token that will be used to produce a
+ * completion handler, which will be called when the connect completes.
+ * Potential completion tokens include @ref use_future, @ref use_awaitable,
+ * @ref yield_context, or a function object with the correct completion
+ * signature. The function signature of the completion handler must be:
  * @code void handler(
  *   // Result of operation. if the sequence is empty, set to
  *   // boost::asio::error::not_found. Otherwise, contains the
@@ -854,9 +880,12 @@ async_connect(basic_socket<Protocol, Executor>& s, Iterator begin, Iterator end,
  *   Iterator iterator
  * ); @endcode
  * Regardless of whether the asynchronous operation completes immediately or
- * not, the handler will not be invoked from within this function. On
- * immediate completion, invocation of the handler will be performed in a
+ * not, the completion handler will not be invoked from within this function.
+ * On immediate completion, invocation of the handler will be performed in a
  * manner equivalent to using boost::asio::post().
+ *
+ * @par Completion Signature
+ * @code void(boost::system::error_code, typename Protocol::endpoint) @endcode
  *
  * @par Example
  * The following connect condition function object can be used to output
@@ -924,16 +953,17 @@ async_connect(basic_socket<Protocol, Executor>& s, Iterator begin, Iterator end,
 template <typename Protocol, typename Executor,
     typename EndpointSequence, typename ConnectCondition,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      typename Protocol::endpoint)) RangeConnectHandler
-        BOOST_ASIO_DEFAULT_COMPLETION_TOKEN_TYPE(Executor)>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(RangeConnectHandler,
-    void (boost::system::error_code, typename Protocol::endpoint))
-async_connect(basic_socket<Protocol, Executor>& s,
+      typename Protocol::endpoint)) RangeConnectToken
+        = default_completion_token_t<Executor>>
+auto async_connect(basic_socket<Protocol, Executor>& s,
     const EndpointSequence& endpoints, ConnectCondition connect_condition,
-    BOOST_ASIO_MOVE_ARG(RangeConnectHandler) handler
-      BOOST_ASIO_DEFAULT_COMPLETION_TOKEN(Executor),
-    typename constraint<is_endpoint_sequence<
-        EndpointSequence>::value>::type = 0);
+    RangeConnectToken&& token = default_completion_token_t<Executor>(),
+    constraint_t<is_endpoint_sequence<EndpointSequence>::value> = 0)
+  -> decltype(
+    async_initiate<RangeConnectToken,
+      void (boost::system::error_code, typename Protocol::endpoint)>(
+        declval<detail::initiate_async_range_connect<Protocol, Executor>>(),
+        token, endpoints, connect_condition));
 
 #if !defined(BOOST_ASIO_NO_DEPRECATED)
 /// (Deprecated: Use range overload.) Asynchronously establishes a socket
@@ -942,7 +972,8 @@ async_connect(basic_socket<Protocol, Executor>& s,
  * This function attempts to connect a socket to one of a sequence of
  * endpoints. It does this by repeated calls to the socket's @c async_connect
  * member function, once for each endpoint in the sequence, until a connection
- * is successfully established.
+ * is successfully established. It is an initiating function for an @ref
+ * asynchronous_operation, and always returns immediately.
  *
  * @param s The socket to be connected. If the socket is already open, it will
  * be closed.
@@ -960,9 +991,11 @@ async_connect(basic_socket<Protocol, Executor>& s,
  * The function object should return true if the next endpoint should be tried,
  * and false if it should be skipped.
  *
- * @param handler The handler to be called when the connect operation
- * completes. Copies will be made of the handler as required. The function
- * signature of the handler must be:
+ * @param token The @ref completion_token that will be used to produce a
+ * completion handler, which will be called when the connect completes.
+ * Potential completion tokens include @ref use_future, @ref use_awaitable,
+ * @ref yield_context, or a function object with the correct completion
+ * signature. The function signature of the completion handler must be:
  * @code void handler(
  *   // Result of operation. if the sequence is empty, set to
  *   // boost::asio::error::not_found. Otherwise, contains the
@@ -974,9 +1007,12 @@ async_connect(basic_socket<Protocol, Executor>& s,
  *   Iterator iterator
  * ); @endcode
  * Regardless of whether the asynchronous operation completes immediately or
- * not, the handler will not be invoked from within this function. On
- * immediate completion, invocation of the handler will be performed in a
+ * not, the completion handler will not be invoked from within this function.
+ * On immediate completion, invocation of the handler will be performed in a
  * manner equivalent to using boost::asio::post().
+ *
+ * @par Completion Signature
+ * @code void(boost::system::error_code, Iterator) @endcode
  *
  * @note This overload assumes that a default constructed object of type @c
  * Iterator represents the end of the sequence. This is a valid assumption for
@@ -995,15 +1031,16 @@ async_connect(basic_socket<Protocol, Executor>& s,
 template <typename Protocol, typename Executor,
     typename Iterator, typename ConnectCondition,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      Iterator)) IteratorConnectHandler
-        BOOST_ASIO_DEFAULT_COMPLETION_TOKEN_TYPE(Executor)>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(IteratorConnectHandler,
-    void (boost::system::error_code, Iterator))
-async_connect(basic_socket<Protocol, Executor>& s, Iterator begin,
-    ConnectCondition connect_condition,
-    BOOST_ASIO_MOVE_ARG(IteratorConnectHandler) handler
-      BOOST_ASIO_DEFAULT_COMPLETION_TOKEN(Executor),
-    typename constraint<!is_endpoint_sequence<Iterator>::value>::type = 0);
+      Iterator)) IteratorConnectToken = default_completion_token_t<Executor>>
+auto async_connect(basic_socket<Protocol, Executor>& s,
+    Iterator begin, ConnectCondition connect_condition,
+    IteratorConnectToken&& token = default_completion_token_t<Executor>(),
+    constraint_t<!is_endpoint_sequence<Iterator>::value> = 0)
+  -> decltype(
+    async_initiate<IteratorConnectToken,
+      void (boost::system::error_code, Iterator)>(
+        declval<detail::initiate_async_iterator_connect<Protocol, Executor>>(),
+        token, begin, Iterator(), connect_condition));
 #endif // !defined(BOOST_ASIO_NO_DEPRECATED)
 
 /// Asynchronously establishes a socket connection by trying each endpoint in a
@@ -1012,7 +1049,8 @@ async_connect(basic_socket<Protocol, Executor>& s, Iterator begin,
  * This function attempts to connect a socket to one of a sequence of
  * endpoints. It does this by repeated calls to the socket's @c async_connect
  * member function, once for each endpoint in the sequence, until a connection
- * is successfully established.
+ * is successfully established. It is an initiating function for an @ref
+ * asynchronous_operation, and always returns immediately.
  *
  * @param s The socket to be connected. If the socket is already open, it will
  * be closed.
@@ -1032,9 +1070,11 @@ async_connect(basic_socket<Protocol, Executor>& s, Iterator begin,
  * The function object should return true if the next endpoint should be tried,
  * and false if it should be skipped.
  *
- * @param handler The handler to be called when the connect operation
- * completes. Copies will be made of the handler as required. The function
- * signature of the handler must be:
+ * @param token The @ref completion_token that will be used to produce a
+ * completion handler, which will be called when the connect completes.
+ * Potential completion tokens include @ref use_future, @ref use_awaitable,
+ * @ref yield_context, or a function object with the correct completion
+ * signature. The function signature of the completion handler must be:
  * @code void handler(
  *   // Result of operation. if the sequence is empty, set to
  *   // boost::asio::error::not_found. Otherwise, contains the
@@ -1046,9 +1086,12 @@ async_connect(basic_socket<Protocol, Executor>& s, Iterator begin,
  *   Iterator iterator
  * ); @endcode
  * Regardless of whether the asynchronous operation completes immediately or
- * not, the handler will not be invoked from within this function. On
- * immediate completion, invocation of the handler will be performed in a
+ * not, the completion handler will not be invoked from within this function.
+ * On immediate completion, invocation of the handler will be performed in a
  * manner equivalent to using boost::asio::post().
+ *
+ * @par Completion Signature
+ * @code void(boost::system::error_code, Iterator) @endcode
  *
  * @par Example
  * The following connect condition function object can be used to output
@@ -1117,14 +1160,15 @@ async_connect(basic_socket<Protocol, Executor>& s, Iterator begin,
 template <typename Protocol, typename Executor,
     typename Iterator, typename ConnectCondition,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      Iterator)) IteratorConnectHandler
-        BOOST_ASIO_DEFAULT_COMPLETION_TOKEN_TYPE(Executor)>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(IteratorConnectHandler,
-    void (boost::system::error_code, Iterator))
-async_connect(basic_socket<Protocol, Executor>& s, Iterator begin,
-    Iterator end, ConnectCondition connect_condition,
-    BOOST_ASIO_MOVE_ARG(IteratorConnectHandler) handler
-      BOOST_ASIO_DEFAULT_COMPLETION_TOKEN(Executor));
+      Iterator)) IteratorConnectToken = default_completion_token_t<Executor>>
+auto async_connect(basic_socket<Protocol, Executor>& s,
+    Iterator begin, Iterator end, ConnectCondition connect_condition,
+    IteratorConnectToken&& token = default_completion_token_t<Executor>())
+  -> decltype(
+    async_initiate<IteratorConnectToken,
+      void (boost::system::error_code, Iterator)>(
+        declval<detail::initiate_async_iterator_connect<Protocol, Executor>>(),
+        token, begin, end, connect_condition));
 
 /*@}*/
 

@@ -1,7 +1,5 @@
 GTEST(unittester-library-auth_tvm)
 
-ALLOCATOR(YT)
-
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(

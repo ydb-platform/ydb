@@ -1,9 +1,10 @@
 #include "validation.h"
 
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <util/string/builder.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 extern "C" {
-#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
 }
 
 namespace NKikimr::NSchemeShard::NValidation {
@@ -53,6 +54,36 @@ bool TTTLValidator::ValidateUnit(const NScheme::TTypeInfo columnType, NKikimrSch
         default:
             errStr = "Unsupported column type";
             return false;
+    }
+    return true;
+}
+
+bool TTTLValidator::ValidateTiers(const NKikimrSchemeOp::TTTLSettings::TEnabled ttlSettings, TString& errStr) {
+    for (ui64 i = 0; i < ttlSettings.TiersSize(); ++i) {
+        const auto& tier = ttlSettings.GetTiers(i);
+        if (!tier.HasApplyAfterSeconds()) {
+            errStr = TStringBuilder() << "Tier " << i << ": missing ApplyAfterSeconds";
+            return false;
+        }
+        if (i != 0 && tier.GetApplyAfterSeconds() <= ttlSettings.GetTiers(i - 1).GetApplyAfterSeconds()) {
+            errStr = TStringBuilder() << "Tiers in the sequence must have increasing ApplyAfterSeconds: "
+                                      << ttlSettings.GetTiers(i - 1).GetApplyAfterSeconds() << " (tier " << i - 1
+                                      << ") >= " << tier.GetApplyAfterSeconds() << " (tier " << i << ")";
+            return false;
+        }
+        switch (tier.GetActionCase()) {
+            case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
+                if (i + 1 != ttlSettings.TiersSize()) {
+                    errStr = TStringBuilder() << "Tier " << i << ": only the last tier in TTL settings can have Delete action";
+                    return false;
+                }
+                break;
+            case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
+                break;
+            case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
+                errStr = TStringBuilder() << "Tier " << i << ": missing Action";
+                return false;
+        }
     }
     return true;
 }

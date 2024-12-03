@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from hamcrest import assert_that, greater_than_or_equal_to
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common import types
 from ydb.tests.library.common.wait_for import wait_for
@@ -12,7 +12,7 @@ class TestSafeDiskBreak(object):
 
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(erasure=types.Erasure.BLOCK_4_2, nodes=9, use_in_memory_pdisks=True))
         cls.cluster.start()
 

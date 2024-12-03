@@ -13,49 +13,22 @@ TTpchWorkloadGenerator::TTpchWorkloadGenerator(const TTpchWorkloadParams& params
     , Params(params)
 {}
 
-TString TTpchWorkloadGenerator::DoGetDDLQueries() const {
-    auto schema = NResource::Find("tpch_schema.sql");
-    TString floatType;
+TString TTpchWorkloadGenerator::GetTablesYaml() const {
+    return NResource::Find("tpch_schema.yaml");
+}
+
+TWorkloadGeneratorBase::TSpecialDataTypes TTpchWorkloadGenerator::GetSpecialDataTypes() const {
     switch (Params.GetFloatMode()) {
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
-        floatType = "Double";
-        break;
+        return {{"float_type", "Double"}};
     case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
-        floatType = "Decimal(12,2)";
-        break;
+        return {{"float_type", "Decimal(12,2)"}};
     case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
-        floatType = "Decimal(" + ::ToString(NKikimr::NScheme::DECIMAL_PRECISION)
-                     + "," + ::ToString(NKikimr::NScheme::DECIMAL_SCALE) + ")";
-        break;
-    }
-    SubstGlobal(schema, "{float_type}", floatType);
-    return schema;
-}
-
-void TTpchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    TTpcBaseWorkloadParams::ConfigureOpts(opts, commandType, workloadType);
-    switch (commandType) {
-    case TWorkloadParams::ECommandType::Run:
-        opts.AddLongOption('c', "check-canonical", "Use deterministic queries and check results with canonical ones.")
-            .NoArgument().StoreTrue(&CheckCanonical);
-        break;
-    default:
-        break;
+        return {{"float_type", "Decimal(" + ::ToString(NKikimr::NScheme::DECIMAL_PRECISION)
+                     + "," + ::ToString(NKikimr::NScheme::DECIMAL_SCALE) + ")"}};
     }
 }
 
-TVector<TString> TTpchWorkloadGenerator::GetTablesList() const {
-    return {
-        "customer",
-        "lineitem",
-        "nation",
-        "orders",
-        "part",
-        "partsupp",
-        "region",
-        "supplier"
-    };
-}
 
 THolder<IWorkloadQueryGenerator> TTpchWorkloadParams::CreateGenerator() const {
     return MakeHolder<TTpchWorkloadGenerator>(*this);

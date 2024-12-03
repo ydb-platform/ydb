@@ -187,6 +187,17 @@ public:
 
 class TGranuleMeta;
 
+class TDataAccessorsInitializationContext {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TVersionedIndex>, VersionedIndex);
+
+public:
+    TDataAccessorsInitializationContext(const std::shared_ptr<TVersionedIndex>& versionedIndex)
+        : VersionedIndex(versionedIndex) {
+        AFL_VERIFY(VersionedIndex);
+    }
+};
+
 class TColumnEngineChanges {
 public:
     enum class EStage: ui32 {
@@ -205,6 +216,8 @@ private:
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
 
 protected:
+    std::optional<TDataAccessorsResult> FetchedDataAccessors;
+    virtual NDataLocks::ELockCategory GetLockCategory() const = 0;
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
     virtual void DoOnAfterCompile() {}
@@ -214,7 +227,7 @@ protected:
     virtual bool NeedConstruction() const {
         return true;
     }
-    virtual void DoStart(NColumnShard::TColumnShard& self) = 0;
+    virtual void DoStart(NColumnShard::TColumnShard& context) = 0;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept = 0;
     virtual void OnAbortEmergency() {
     }
@@ -229,7 +242,35 @@ protected:
         return DoBuildDataLock();
     }
 
+    std::shared_ptr<TDataAccessorsRequest> PortionsToAccess = std::make_shared<TDataAccessorsRequest>();
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) = 0;
+
 public:
+    std::shared_ptr<TDataAccessorsRequest> ExtractDataAccessorsRequest() const {
+        AFL_VERIFY(!!PortionsToAccess);
+        return std::move(PortionsToAccess);
+    }
+
+    const TPortionDataAccessor& GetPortionDataAccessor(const ui64 portionId) const {
+        AFL_VERIFY(FetchedDataAccessors);
+        return FetchedDataAccessors->GetPortionAccessorVerified(portionId);
+    }
+
+    std::vector<TPortionDataAccessor> GetPortionDataAccessors(const std::vector<TPortionInfo::TConstPtr>& portions) const {
+        AFL_VERIFY(FetchedDataAccessors);
+        std::vector<TPortionDataAccessor> result;
+        for (auto&& i : portions) {
+            result.emplace_back(GetPortionDataAccessor(i->GetPortionId()));
+        }
+        return result;
+    }
+
+    void SetFetchedDataAccessors(TDataAccessorsResult&& result, const TDataAccessorsInitializationContext& context) {
+        AFL_VERIFY(!FetchedDataAccessors);
+        FetchedDataAccessors = std::move(result);
+        OnDataAccessorsInitialized(context);
+    }
+
     class IMemoryPredictor {
     public:
         virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) = 0;

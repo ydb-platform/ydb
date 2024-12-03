@@ -1,12 +1,12 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/ast
-    ydb/library/yql/core
-    ydb/library/yql/core/type_ann
+    yql/essentials/ast
+    yql/essentials/core
+    yql/essentials/core/type_ann
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/proto
-    ydb/library/yql/providers/common/provider
+    yql/essentials/providers/common/provider
 )
 
 SRCS(

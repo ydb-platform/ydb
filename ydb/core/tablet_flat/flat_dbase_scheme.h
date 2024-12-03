@@ -38,31 +38,13 @@ public:
 
         }
 
-        bool IsTheSame(const TRoom &room) const noexcept
-        {
-            return
-                Main == room.Main
-                && Blobs == room.Blobs
-                && Outer == room.Outer;
-        }
-
         ui8 Main = DefaultChannel;      /* Primary channel for page collection  */
-        ui8 Blobs = DefaultChannel;     /* Channel for external blobs   */
+        TVector<ui8> Blobs = {DefaultChannel};     /* Channels for external blobs   */
         ui8 Outer = DefaultChannel;     /* Channel for outer values pack*/
     };
 
     struct TFamily /* group of columns configuration */ {
         using ECodec = NPage::ECodec;
-
-        bool IsTheSame(const TFamily &other) const noexcept
-        {
-            return
-                Room == other.Room
-                && Cache == other.Cache
-                && Codec == other.Codec
-                && Small == other.Small
-                && Large == other.Large;
-        }
 
         ui32 Room = DefaultRoom;
         ECache Cache = ECache::None;    /* How to cache data pages      */
@@ -103,6 +85,9 @@ public:
         bool EraseCacheEnabled = false;
         ui32 EraseCacheMinRows = 0; // 0 means use default
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
+
+        // When true this table has an in-memory caching enabled that has not been processed yet
+        mutable bool PendingCacheEnable = false;
     };
 
     struct TRedo {
@@ -185,7 +170,6 @@ public:
         return Executor.DefaultCompactionStrategy;
     }
 
-
     THashMap<ui32, TTableInfo> Tables;
     THashMap<TString, ui32> TableNames;
     TExecutorInfo Executor;
@@ -247,7 +231,7 @@ public:
     TAlter& AddColumnToKey(ui32 table, ui32 column);
     TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec);
     TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large);
-    TAlter& SetRoom(ui32 table, ui32 room, ui32 main, ui32 blobs, ui32 outer);
+    TAlter& SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer);
     TAlter& SetRedo(ui32 annex);
     TAlter& SetExecutorCacheSize(ui64 cacheSize);
     TAlter& SetExecutorFastLogPolicy(bool allow);

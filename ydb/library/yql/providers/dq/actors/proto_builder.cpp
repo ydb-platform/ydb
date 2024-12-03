@@ -1,12 +1,12 @@
 #include "proto_builder.h"
 
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
 

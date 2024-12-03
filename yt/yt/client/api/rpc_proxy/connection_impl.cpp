@@ -291,9 +291,9 @@ IChannelPtr TConnection::CreateChannel(bool sticky)
     return CreateRoamingChannel(std::move(provider));
 }
 
-IChannelPtr TConnection::CreateChannelByAddress(const TString& address)
+IChannelPtr TConnection::CreateChannelByAddress(const std::string& address)
 {
-    return CachingChannelFactory_->CreateChannel(address.ConstRef());
+    return CachingChannelFactory_->CreateChannel(address);
 }
 
 TClusterTag TConnection::GetClusterTag() const
@@ -356,10 +356,16 @@ void TConnection::ClearMetadataCaches()
 void TConnection::Terminate()
 {
     YT_LOG_DEBUG("Terminating connection");
+    Terminated_ = true;
     ChannelPool_->Terminate(TError("Connection terminated"));
     if (Config_->EnableProxyDiscovery) {
         YT_UNUSED_FUTURE(UpdateProxyListExecutor_->Stop());
     }
+}
+
+bool TConnection::IsTerminated() const
+{
+    return Terminated_;
 }
 
 const TConnectionConfigPtr& TConnection::GetConfig()

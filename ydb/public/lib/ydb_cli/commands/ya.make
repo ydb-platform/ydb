@@ -9,7 +9,9 @@ SRCS(
     query_workload.cpp
     ydb_admin.cpp
     ydb_benchmark.cpp
+    ydb_debug.cpp
     ydb_dynamic_config.cpp
+    ydb_ping.cpp
     ydb_profile.cpp
     ydb_root_common.cpp
     ydb_service_auth.cpp
@@ -51,6 +53,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/topic
     ydb/public/sdk/cpp/client/draft
     ydb/public/sdk/cpp/client/ydb_coordination
+    ydb/public/sdk/cpp/client/ydb_debug
     ydb/public/sdk/cpp/client/ydb_export
     ydb/public/sdk/cpp/client/ydb_import
     ydb/public/sdk/cpp/client/ydb_monitoring
@@ -62,6 +65,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/public/sdk/cpp/client/ydb_types/credentials/login
 )
+
+GENERATE_ENUM_SERIALIZATION(ydb_ping.h)
 
 END()
 

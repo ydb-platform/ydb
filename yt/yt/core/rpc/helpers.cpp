@@ -514,12 +514,21 @@ void SetCurrentAuthenticationIdentity(const IClientRequestPtr& request)
     SetAuthenticationIdentity(request, GetCurrentAuthenticationIdentity());
 }
 
-std::vector<std::string> AddressesFromEndpointSet(const NServiceDiscovery::TEndpointSet& endpointSet)
+std::vector<std::string> AddressesFromEndpointSet(
+    const NServiceDiscovery::TEndpointSet& endpointSet,
+    bool useIPv4,
+    bool useIPv6)
 {
     std::vector<std::string> addresses;
     addresses.reserve(endpointSet.Endpoints.size());
     for (const auto& endpoint : endpointSet.Endpoints) {
-        addresses.push_back(NNet::BuildServiceAddress(endpoint.Fqdn, endpoint.Port));
+        if (useIPv6 && !endpoint.IP6Address.empty()) {
+            addresses.push_back(NNet::FormatNetworkAddress(endpoint.IP6Address, endpoint.Port));
+        } else if (useIPv4 && !endpoint.IP4Address.empty()) {
+            addresses.push_back(NNet::FormatNetworkAddress(endpoint.IP4Address, endpoint.Port));
+        } else {
+            addresses.push_back(NNet::BuildServiceAddress(endpoint.Fqdn, endpoint.Port));
+        }
     }
     return addresses;
 }
@@ -590,8 +599,18 @@ std::vector<TSharedRef> CompressAttachments(
     if (codecId == NCompression::ECodec::None) {
         return attachments.ToVector();
     }
-    return NConcurrency::WaitFor(AsyncCompressAttachments(attachments, codecId))
-        .ValueOrThrow();
+
+    auto* codec = NCompression::GetCodec(codecId);
+    std::vector<TSharedRef> result;
+    result.reserve(std::ssize(attachments));
+    std::transform(
+        attachments.begin(),
+        attachments.end(),
+        std::back_inserter(result),
+        [=] (const TSharedRef& attachment) {
+            return codec->Compress(attachment);
+        });
+    return result;
 }
 
 std::vector<TSharedRef> DecompressAttachments(
@@ -601,8 +620,18 @@ std::vector<TSharedRef> DecompressAttachments(
     if (codecId == NCompression::ECodec::None) {
         return attachments.ToVector();
     }
-    return NConcurrency::WaitFor(AsyncDecompressAttachments(attachments, codecId))
-        .ValueOrThrow();
+
+    auto* codec = NCompression::GetCodec(codecId);
+    std::vector<TSharedRef> result;
+    result.reserve(std::ssize(attachments));
+    std::transform(
+        attachments.begin(),
+        attachments.end(),
+        std::back_inserter(result),
+        [=] (const TSharedRef& compressedAttachment) {
+            return codec->Decompress(compressedAttachment);
+        });
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

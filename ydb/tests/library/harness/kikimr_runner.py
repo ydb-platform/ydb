@@ -12,7 +12,6 @@ import yatest
 
 from ydb.tests.library.common.wait_for import wait_for
 from . import daemon
-from . import param_constants
 from . import kikimr_config
 from . import kikimr_node_interface
 from . import kikimr_cluster_interface
@@ -25,13 +24,16 @@ logger = logging.getLogger(__name__)
 
 
 def get_unique_path_for_current_test(output_path, sub_folder):
-    # TODO: remove yatest dependency from harness
+    # TODO: remove current function, don't rely on test environment, use explicit paths
+    # we can't remove it now, because it is used in Arcadia
+    import yatest.common
+    import os
     try:
-        test_name = yatest.common.context.test_name
-    except (AttributeError, yatest.common.NoRuntimeFormed):
+        test_name = yatest.common.context.test_name or ""
+    except Exception:
         test_name = ""
-    test_name = test_name.replace(':', '_')
 
+    test_name = test_name.replace(':', '_')
     return os.path.join(output_path, test_name, sub_folder)
 
 
@@ -43,14 +45,6 @@ def ensure_path_exists(path):
     return path
 
 
-def join(a, b):
-    if a is None:
-        a = ''
-    if b is None:
-        b = ''
-    return os.path.join(a, b)
-
-
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def __init__(self, node_id, config_path, port_allocator, cluster_name, configurator,
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
@@ -59,7 +53,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_id
         self.data_center = data_center
-        self.__cwd = None
         self.__config_path = config_path
         self.__cluster_name = cluster_name
         self.__configurator = configurator
@@ -80,9 +73,23 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__role = role
         self.__node_broker_port = node_broker_port
 
+        self.__working_dir = ensure_path_exists(
+            os.path.join(
+                self.__configurator.working_dir,
+                self.__cluster_name,
+                "{}_{}".format(
+                    self.__role,
+                    self.node_id
+                )
+            )
+        )
+
         if configurator.use_log_files:
-            self.__log_file = tempfile.NamedTemporaryFile(dir=self.cwd, prefix="logfile_", suffix=".log", delete=False)
-            kwargs = {}
+            self.__log_file = tempfile.NamedTemporaryFile(dir=self.__working_dir, prefix="logfile_", suffix=".log", delete=False)
+            kwargs = {
+                "stdout_file": os.path.join(self.__working_dir, "stdout"),
+                "stderr_file": os.path.join(self.__working_dir, "stderr")
+                }
         else:
             self.__log_file = None
             kwargs = {
@@ -90,23 +97,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "stderr_file": "/dev/stderr"
                 }
 
-        daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240, **kwargs)
+        daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs)
 
     @property
     def cwd(self):
-        if self.__cwd is None:
-            self.__cwd = ensure_path_exists(
-                get_unique_path_for_current_test(
-                    self.__configurator.output_path,
-                    join(
-                        self.__cluster_name, "{}_{}".format(
-                            self.__role,
-                            self.node_id
-                        )
-                    )
-                )
-            )
-        return self.__cwd
+        return self.__working_dir
 
     @property
     def binary_path(self):
@@ -171,7 +166,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         command.extend(
             [
-                "--yaml-config=%s" % join(self.__config_path, "config.yaml"),
+                "--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"),
                 "--grpc-port=%s" % self.grpc_port,
                 "--mon-port=%d" % self.mon_port,
                 "--ic-port=%d" % self.ic_port,
@@ -232,7 +227,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
 
 class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
-    def __init__(self, configurator=None, cluster_name=''):
+    def __init__(self, configurator=None, cluster_name='cluster'):
         super(KiKiMR, self).__init__()
 
         self.__tmpdir = tempfile.mkdtemp(prefix="kikimr_" + cluster_name + "_")
@@ -243,11 +238,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._nodes = {}
         self._slots = {}
         self.__server = 'localhost'
-        self.__client = None
-        self.__kv_client = None
-        self.__scheme_client = None
         self.__storage_pool_id_allocator = itertools.count(1)
-        self.__config_path = None
+        self.__config_path = ensure_path_exists(
+            os.path.join(self.__configurator.working_dir, self.__cluster_name, "kikimr_configs")
+        )
         self._slot_index_allocator = itertools.count(1)
         self._node_index_allocator = itertools.count(1)
         self.default_channel_bindings = None
@@ -313,9 +307,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             return
 
         self.__initialy_prepared = True
-        self.__client = None
-        self.__kv_client = None
-        self.__scheme_client = None
         self.__instantiate_udfs_dir()
         self.__write_configs()
         for _ in self.__configurator.all_node_ids():
@@ -463,15 +454,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     @property
     def config_path(self):
-        if self.__config_path is None:
-            self.__config_path = ensure_path_exists(
-                get_unique_path_for_current_test(
-                    self.__configurator.output_path,
-                    join(
-                        self.__cluster_name, "kikimr_configs"
-                    )
-                )
-            )
         return self.__config_path
 
     def __write_configs(self):
@@ -581,9 +563,27 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
+    kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'
+    kikimr_configure_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr_configure'
+    kikimr_configuration_deploy_path = '/Berkanavt/kikimr/cfg'
+    kikimr_cluster_yaml_deploy_path = '/Berkanavt/kikimr/cfg/cluster.yaml'
+
     def __init__(
-            self, node_id, host, port, mon_port, ic_port, mbus_port, configurator=None, slot_id=None):
-        super(KikimrExternalNode, self).__init__(host)
+            self,
+            kikimr_configure_binary_path,
+            kikimr_path,
+            kikimr_next_path,
+            node_id,
+            host,
+            ssh_username,
+            port,
+            mon_port,
+            ic_port,
+            mbus_port,
+            configurator=None,
+            slot_id=None,
+            ):
+        super(KikimrExternalNode, self).__init__(host=host, ssh_username=ssh_username)
         self.__node_id = node_id
         self.__host = host
         self.__port = port
@@ -600,15 +600,21 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
 
         self._can_update = None
         self.current_version_idx = 0
+        self.__kikimr_configure_binary_path = kikimr_configure_binary_path
         self.versions = [
-            param_constants.kikimr_last_version_deploy_path,
-            param_constants.kikimr_next_version_deploy_path,
+            self.kikimr_binary_deploy_path + "_last",
+            self.kikimr_binary_deploy_path + "_next",
+        ]
+
+        self.local_drivers_path = [
+            kikimr_path,
+            kikimr_next_path,
         ]
 
     @property
     def can_update(self):
         if self._can_update is None:
-            choices = self.ssh_command('ls %s*' % param_constants.kikimr_binary_deploy_path, raise_on_error=True)
+            choices = self.ssh_command('ls %s*' % self.kikimr_binary_deploy_path, raise_on_error=True)
             choices = choices.split()
             choices = [path.decode("utf-8", errors="replace") for path in choices]
             self.logger.error("Current available choices are: %s" % choices)
@@ -649,7 +655,7 @@ mon={mon}""".format(
             return self.ssh_command("sudo service kikimr stop")
         return self.ssh_command(
             [
-                "sudo", "systemctl", "start", "kikimr-multi@{}".format(self.__slot_id),
+                "sudo", "systemctl", "stop", "kikimr-multi@{}".format(self.__slot_id),
             ]
         )
 
@@ -704,13 +710,19 @@ mon={mon}""".format(
         return "/Berkanavt/{}/logs".format(folder)
 
     def update_binary_links(self):
-        self.ssh_command("sudo rm -rf %s" % param_constants.kikimr_binary_deploy_path)
+        self.ssh_command("sudo rm -rf %s" % self.kikimr_binary_deploy_path)
         self.ssh_command(
             "sudo cp -l %s %s" % (
                 self.versions[self.current_version_idx],
-                param_constants.kikimr_binary_deploy_path,
+                self.kikimr_binary_deploy_path,
             )
         )
+
+    def __generate_configs_cmd(self, configs_type="", deploy_path=None):
+        deploy_path = self.kikimr_configuration_deploy_path if deploy_path is None else deploy_path
+        return "sudo {} cfg {} {} {} --enable-cores {}".format(
+            self.kikimr_configure_binary_deploy_path,
+            self.kikimr_cluster_yaml_deploy_path, self.kikimr_binary_deploy_path, deploy_path, configs_type)
 
     def switch_version(self):
         if not self.can_update:
@@ -722,10 +734,9 @@ mon={mon}""".format(
 
     def prepare_artifacts(self, cluster_yml):
         self.copy_file_or_dir(
-            param_constants.kikimr_configure_binary_path(), param_constants.kikimr_configure_binary_deploy_path)
-        local_drivers_path = (param_constants.kikimr_driver_path(), param_constants.next_version_kikimr_driver_path())
+            self.__kikimr_configure_binary_path, self.kikimr_configure_binary_deploy_path)
 
-        for version, local_driver in zip(self.versions, local_drivers_path):
+        for version, local_driver in zip(self.versions, self.local_drivers_path):
             self.ssh_command("sudo rm -rf %s" % version)
             if local_driver is not None:
                 self.copy_file_or_dir(
@@ -733,11 +744,11 @@ mon={mon}""".format(
                 self.ssh_command("sudo /sbin/setcap 'CAP_SYS_RAWIO,CAP_SYS_NICE=ep' %s" % version)
 
         self.update_binary_links()
-        self.ssh_command("sudo mkdir -p %s" % param_constants.kikimr_configuration_deploy_path)
-        self.copy_file_or_dir(cluster_yml, param_constants.kikimr_cluster_yaml_deploy_path)
-        self.ssh_command(param_constants.generate_configs_cmd())
+        self.ssh_command("sudo mkdir -p %s" % self.kikimr_configuration_deploy_path)
+        self.copy_file_or_dir(cluster_yml, self.kikimr_cluster_yaml_deploy_path)
+        self.ssh_command(self.__generate_configs_cmd())
         self.ssh_command(
-            param_constants.generate_configs_cmd(
+            self.__generate_configs_cmd(
                 "--dynamic"
             )
         )

@@ -1,0 +1,28 @@
+diff -Naur ngtcp2-1.7.0/crypto/quictls/quictls.c ngtcp2-1.7.0_/crypto/quictls/quictls.c
+--- ngtcp2-1.7.0/crypto/quictls/quictls.c	2024-08-24 08:46:22.370068166 +0300
++++ ngtcp2-1.7.0_/crypto/quictls/quictls.c	2024-09-04 21:39:15.679675360 +0300
+@@ -37,10 +37,10 @@
+ #include <openssl/rand.h>
+ 
+ #if OPENSSL_VERSION_NUMBER >= 0x30000000L
+-#  include <openssl/core_names.h>
++# error #include <openssl/core_names.h>
+ #endif /* OPENSSL_VERSION_NUMBER >= 0x30000000L */
+ 
+-#include "shared.h"
++#include "ngtcp2_crypto_shared.h"
+ 
+ #if OPENSSL_VERSION_NUMBER >= 0x30000000L
+ static int crypto_initialized;
+diff -Naur ngtcp2-1.7.0/crypto/shared.c ngtcp2-1.7.0_/crypto/shared.c
+--- ngtcp2-1.7.0/crypto/shared.c	2024-08-24 08:46:22.370068166 +0300
++++ ngtcp2-1.7.0_/crypto/shared.c	2024-09-04 21:39:30.427538339 +0300
+@@ -22,7 +22,7 @@
+  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+  */
+-#include "shared.h"
++#include "ngtcp2_crypto_shared.h"
+ 
+ #ifdef WIN32
+ #  include <winsock2.h>

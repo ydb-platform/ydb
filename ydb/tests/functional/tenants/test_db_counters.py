@@ -12,7 +12,7 @@ from hamcrest import assert_that, equal_to, greater_than, not_none
 from ydb.core.protos import config_pb2
 from ydb.tests.library.common.msgbus_types import MessageBusStatus
 from ydb.tests.library.common.protobuf_ss import AlterTableRequest
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.ydb_fixtures import ydb_database_ctx
@@ -38,7 +38,7 @@ def get_db_counters(mon_port, service):
 class BaseDbCounters(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(
                 additional_log_configs={
                     'SYSTEM_VIEWS': LogLevels.DEBUG
@@ -134,6 +134,29 @@ class TestKqpCounters(BaseDbCounters):
         self.check_db_counters(sensors_to_check, 'kqp')
 
 
+def get_default_feature_flag_value(feature_flag_camel_case) -> bool:
+    return getattr(config_pb2.TAppConfig().FeatureFlags, feature_flag_camel_case)
+
+
+@pytest.fixture(
+    scope="module",
+    params=[True, False],
+    ids=["enable_separate_quotas", "disable_separate_quotas"],
+)
+def ydb_cluster_configuration(request):
+    extra_feature_flags = []
+    if request.param:
+        extra_feature_flags.append("enable_separate_disk_space_quotas")
+    else:
+        # Note: in case the assert is failing remove the parametrization by this feature flag completely.
+        # Unfortunately, it is not possible to disable a feature flag using the extra_feature_flags parameter.
+        # So we must make sure that the default value for the particular feature flag is false, or
+        # the test would not exhibit the behavior we would like it to.
+        assert not get_default_feature_flag_value("EnableSeparateDiskSpaceQuotas")
+
+    return dict(extra_feature_flags=extra_feature_flags)
+
+
 @pytest.fixture(scope="function")
 def ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name):
     database = os.path.join(ydb_root, ydb_safe_test_name)
@@ -223,7 +246,7 @@ def describe(client, path):
     return client.describe(path, token="")
 
 
-def check_disk_quota_exceedance(client, database, retries, sleep_duration):
+def check_disk_quota_exceedance(client, database, retries=10, sleep_duration=5):
     for attempt in range(retries):
         path_description = describe(client, database)
         domain_description = path_description.PathDescription.DomainDescription
@@ -241,7 +264,18 @@ def check_disk_quota_exceedance(client, database, retries, sleep_duration):
     assert False, "database did not move into DiskQuotaExceeded state"
 
 
-def check_counters(mon_port, sensors_to_check, retries, sleep_duration):
+def wait_for_stats(client, table, retries=10, sleep_duration=5):
+    for attempt in range(retries):
+        usage = describe(client, table).PathDescription.TableStats.StoragePools.PoolsUsage
+        if len(usage) > 0:
+            return usage
+        time.sleep(sleep_duration)
+
+    assert False, "haven't received non-null table stats in the alloted time"
+
+
+# Note: the default total sleep time is 300 seconds, because 200 seconds can sometimes be not enough
+def check_counters(mon_port, sensors_to_check, retries=60, sleep_duration=5):
     for attempt in range(retries + 1):
         counters = get_db_counters(mon_port, "ydb")
         correct_sensors = 0
@@ -271,7 +305,7 @@ def check_counters(mon_port, sensors_to_check, retries, sleep_duration):
 
 
 class TestStorageCounters:
-    def test_storage_counters(self, ydb_cluster, ydb_database, ydb_client_session):
+    def test_storage_counters(self, ydb_cluster_configuration, ydb_cluster, ydb_database, ydb_client_session):
         database_path = ydb_database
         node = ydb_cluster.nodes[1]
 
@@ -309,8 +343,7 @@ class TestStorageCounters:
         slot_mon_port = ydb_cluster.slots[1].mon_port
         # Note 1: limit_bytes is equal to the database's SOFT quota
         # Note 2: .hdd counter aggregates quotas across all storage pool kinds with prefix "hdd", i.e. "hdd" and "hdd1"
-        # Note 3: 200 seconds can sometimes be not enough
-        check_counters(slot_mon_port, {"resources.storage.limit_bytes.hdd": 11}, retries=60, sleep_duration=5)
+        check_counters(slot_mon_port, {"resources.storage.limit_bytes.hdd": 11})
 
         pool = ydb_client_session(database_path)
         with pool.checkout() as session:
@@ -326,16 +359,11 @@ class TestStorageCounters:
             assert_that(new_partition_config.CompactionPolicy.InMemForceSizeToSnapshot, equal_to(1))
 
             insert_data(session, table)
-            check_disk_quota_exceedance(client, database_path, retries=10, sleep_duration=5)
+            if "enable_separate_disk_space_quotas" in ydb_cluster_configuration["extra_feature_flags"]:
+                check_disk_quota_exceedance(client, database_path)
 
-            set_feature_flags = ydb_cluster.config.yaml_config["feature_flags"]
-            default_feature_flags = config_pb2.TAppConfig().FeatureFlags
-            btree_index_feature_flag = (
-                set_feature_flags["enable_local_dbbtree_index"]
-                if "enable_local_dbbtree_index" in set_feature_flags
-                else default_feature_flags.EnableLocalDBBtreeIndex
-            )
-            usage = describe(client, table).PathDescription.TableStats.StoragePools.PoolsUsage
+            btree_index_feature_flag = get_default_feature_flag_value("EnableLocalDBBtreeIndex")
+            usage = wait_for_stats(client, table)
             assert len(usage) == 2
             assert json_format.MessageToDict(usage[0], preserving_proto_field_name=True) == {
                 "PoolKind": "hdd",
@@ -360,8 +388,6 @@ class TestStorageCounters:
                     "resources.storage.table.used_bytes.ssd": 0,
                     "resources.storage.table.used_bytes.hdd": used_bytes_by_tables,
                 },
-                retries=60,
-                sleep_duration=5,
             )
 
             drop_table(session, table)
@@ -376,6 +402,4 @@ class TestStorageCounters:
                     "resources.storage.table.used_bytes.ssd": 0,
                     "resources.storage.table.used_bytes.hdd": 0,
                 },
-                retries=60,
-                sleep_duration=5,
             )

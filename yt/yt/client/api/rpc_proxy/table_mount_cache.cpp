@@ -100,7 +100,7 @@ private:
 
                 tableInfo->Indices.reserve(rsp->indices_size());
                 for (const auto& protoIndexInfo : rsp->indices()) {
-                    TIndexInfo indexInfo{
+                    auto indexInfo = TIndexInfo{
                         .TableId = FromProto<NObjectClient::TObjectId>(protoIndexInfo.index_table_id()),
                         .Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind()),
                         .Predicate = YT_PROTO_OPTIONAL(protoIndexInfo, predicate),
@@ -117,7 +117,11 @@ private:
                     tableInfo->UpperCapBound = MaxKey();
                 } else {
                     tableInfo->LowerCapBound = MakeUnversionedOwningRow(static_cast<int>(0));
-                    tableInfo->UpperCapBound = MakeUnversionedOwningRow(static_cast<int>(tableInfo->Tablets.size()));
+
+                    auto tabletCount = tableInfo->IsChaosReplicated()
+                        ? rsp->tablet_count()
+                        : static_cast<int>(tableInfo->Tablets.size());
+                    tableInfo->UpperCapBound = MakeUnversionedOwningRow(tabletCount);
                 }
 
                 YT_LOG_DEBUG("Table mount info received (Path: %v, TableId: %v, TabletCount: %v, Dynamic: %v)",

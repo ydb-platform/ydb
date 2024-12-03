@@ -11,23 +11,40 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TInvokerWrapper
+namespace NDetail {
+
+template <bool VirtualizeBase>
+struct TMaybeVirtualInvokerBase
+    : public IInvoker
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct TMaybeVirtualInvokerBase<true>
     : public virtual IInvoker
+{ };
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <bool VirtualizeBase>
+class TInvokerWrapper
+    : public NDetail::TMaybeVirtualInvokerBase<VirtualizeBase>
 {
 public:
-    void Invoke(TClosure callback) override;
-
     void Invoke(TMutableRange<TClosure> callbacks) override;
 
     NThreading::TThreadId GetThreadId() const override;
     bool CheckAffinity(const IInvokerPtr& invoker) const override;
     bool IsSerialized() const override;
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) override;
+    void RegisterWaitTimeObserver(IInvoker::TWaitTimeObserver waitTimeObserver) override;
 
 protected:
-    explicit TInvokerWrapper(IInvokerPtr underlyingInvoker);
+    const IInvokerPtr UnderlyingInvoker_;
 
-    IInvokerPtr UnderlyingInvoker_;
+    explicit TInvokerWrapper(IInvokerPtr underlyingInvoker);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -41,7 +58,7 @@ public:
     *  #invokerFamily defines a family of invokers, e.g. "serialized" or "prioriized" and appears in sensor's name.
     *  #tagSet defines a particular instance of the invoker and appears in sensor's tags.
     */
-    TInvokerProfileWrapper(NProfiling::IRegistryImplPtr registry, const TString& invokerFamily, const NProfiling::TTagSet& tagSet);
+    TInvokerProfileWrapper(NProfiling::IRegistryPtr registry, const TString& invokerFamily, const NProfiling::TTagSet& tagSet);
 
 protected:
     TClosure WrapCallback(TClosure callback);

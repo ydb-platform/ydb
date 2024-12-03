@@ -369,8 +369,8 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
                     outFStream << queryN << ": " << Endl;
                     PrintResult(res, outFStream);
                 }
-                const auto resHash = res.GetQueryResult().CalcHash();
-                if ((!prevResult || *prevResult != resHash) && !res.GetQueryResult().IsExpected(qInfo.ExpectedResult)) {
+                const auto resHash = res.CalcHash();
+                if ((!prevResult || *prevResult != resHash) && !res.IsExpected(qInfo.ExpectedResult)) {
                     outFStream << queryN << ":" << Endl <<
                         "Query text:" << Endl <<
                         query << Endl << Endl <<
@@ -460,10 +460,15 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
 }
 
 void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out) const {
-    TResultSetPrinter printer(EDataFormat::Pretty, []() { return false; }, out, 120);
-    for(const auto& r: res.GetRawResults()) {
-        printer.Print(r);
-        printer.Reset();
+    TResultSetPrinter printer(TResultSetPrinter::TSettings()
+        .SetOutput(&out)
+        .SetFormat(EDataFormat::Pretty).SetMaxWidth(120)
+    );
+    for (const auto& [i, rr]: res.GetRawResults()) {
+        for(const auto& r: rr) {
+            printer.Print(r);
+            printer.Reset();
+        }
     }
     out << Endl << Endl;
 }

@@ -23,7 +23,7 @@ jobs:
           echo "No new commits on the main branch to merge, exiting"
           exit 0
         fi
-        git clone -b main --shallow-exclude cmakebuild https://$TOKEN@github.com/$REPO.git ydb
+        git clone -b main https://$TOKEN@github.com/$REPO.git ydb
         git config --global user.email "alex@ydb.tech"
         git config --global user.name "Alexander Smirnov"
         cd ydb

@@ -11,7 +11,7 @@ PEERDIR(
     ydb/library/grpc/client
     library/cpp/threading/atomic
     library/cpp/threading/future
-    ydb/library/yql/providers/common/structured_token
+    yql/essentials/providers/common/structured_token
     ydb/library/yql/providers/common/token_accessor/grpc
     ydb/public/sdk/cpp/client/ydb_types/credentials
 )

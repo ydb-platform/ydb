@@ -225,7 +225,7 @@ namespace numpy
   _argminmax_head(T &&out, E const &expr, std::integral_constant<size_t, N>)
   {
     static_assert(N > 1, "specialization ok");
-    types::ndarray<typename E::dtype, types::array<long, N - 1>> val{
+    types::ndarray<typename E::dtype, types::array_tuple<long, N - 1>> val{
         sutils::getshape(out), Op::limit()};
     long i = 0;
     for (auto &&elt : expr) {
@@ -258,7 +258,7 @@ namespace numpy
   }
 
   template <class Op, class E>
-  types::ndarray<long, types::array<long, E::value - 1>>
+  types::ndarray<long, types::array_tuple<long, E::value - 1>>
   argminmax(E const &array, long axis)
   {
     if (axis < 0)
@@ -266,11 +266,11 @@ namespace numpy
     if (axis < 0 || size_t(axis) >= E::value)
       throw types::ValueError("axis out of bounds");
     auto shape = sutils::getshape(array);
-    types::array<long, E::value - 1> shp;
+    types::array_tuple<long, E::value - 1> shp;
     auto next = std::copy(shape.begin(), shape.begin() + axis, shp.begin());
     std::copy(shape.begin() + axis + 1, shape.end(), next);
-    types::ndarray<long, types::array<long, E::value - 1>> out{shp,
-                                                               builtins::None};
+    types::ndarray<long, types::array_tuple<long, E::value - 1>> out{
+        shp, builtins::None};
     _argminmax_pick_axis<Op, E::value>(axis, out, array,
                                        utils::make_index_sequence<E::value>());
     return out;

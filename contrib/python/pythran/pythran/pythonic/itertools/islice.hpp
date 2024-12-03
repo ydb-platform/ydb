@@ -1,10 +1,10 @@
 #ifndef PYTHONIC_ITERTOOLS_ISLICE_HPP
 #define PYTHONIC_ITERTOOLS_ISLICE_HPP
 
-#include "pythonic/include/itertools/islice.hpp"
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/itertools/common.hpp"
 #include "pythonic/builtins/range.hpp"
+#include "pythonic/include/itertools/islice.hpp"
+#include "pythonic/itertools/common.hpp"
+#include "pythonic/utils/functor.hpp"
 #include <iterator>
 
 PYTHONIC_NS_BEGIN
@@ -50,29 +50,29 @@ namespace itertools
   }
 
   template <typename Iterable>
-  bool islice_iterator<Iterable>::
-  operator==(islice_iterator<Iterable> const &other) const
+  bool islice_iterator<Iterable>::operator==(
+      islice_iterator<Iterable> const &other) const
   {
     return (state == other.state);
   }
 
   template <typename Iterable>
-  bool islice_iterator<Iterable>::
-  operator!=(islice_iterator<Iterable> const &other) const
+  bool islice_iterator<Iterable>::operator!=(
+      islice_iterator<Iterable> const &other) const
   {
     return state != other.state;
   }
 
   template <typename Iterable>
-  bool islice_iterator<Iterable>::
-  operator<(islice_iterator<Iterable> const &other) const
+  bool islice_iterator<Iterable>::operator<(
+      islice_iterator<Iterable> const &other) const
   {
     return state != other.state;
   }
 
   template <typename Iterable>
-  int islice_iterator<Iterable>::
-  operator-(islice_iterator<Iterable> const &other) const
+  int islice_iterator<Iterable>::operator-(
+      islice_iterator<Iterable> const &other) const
   {
     return state - other.state;
   }
@@ -122,7 +122,7 @@ namespace itertools
   {
     return {iterable, builtins::range(0, stop, 1)};
   }
-}
+} // namespace itertools
 PYTHONIC_NS_END
 
 #endif

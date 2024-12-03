@@ -1,6 +1,19 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_utils.h"  // for TransactionTemplate
 #include "schemeshard_path.h"
+
+#include <ydb/core/base/hive.h>
+#include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/tx/sequenceshard/public/events.h>
+#include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/blob_depot/events.h>
+#include <ydb/core/blockstore/core/blockstore.h>
+#include <ydb/core/filestore/core/filestore.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -57,8 +70,8 @@ TString ISubOperationState::DebugReply(const TEvPtr& ev) {
 }
 
 
-#define DefineDebugReply(TEvType, ...) \
-    template TString ISubOperationState::DebugReply(const TEvType::TPtr& ev);
+#define DefineDebugReply(NS, TEvType, ...) \
+    template TString ISubOperationState::DebugReply(const ::NKikimr::NS::TEvType ## __HandlePtr& ev);
 
     SCHEMESHARD_INCOMING_EVENTS(DefineDebugReply)
 #undef DefineDebugReply
@@ -70,15 +83,15 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
         << ", ev# " << ev;
 }
 
-#define DefaultHandleReply(TEvType, ...) \
-    bool ISubOperationState::HandleReply(TEvType::TPtr& ev, TOperationContext& context) { \
+#define DefaultHandleReply(NS, TEvType, ...) \
+    bool ISubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
         const auto msg = LogMessage(DebugReply(ev), context, false);                      \
         LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, msg);               \
         Y_FAIL_S(msg);                                                                    \
     } \
     \
-    bool TSubOperationState::HandleReply(TEvType::TPtr& ev, TOperationContext& context) { \
-        const bool ignore = MsgToIgnore.contains(TEvType::EventType);                     \
+    bool TSubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
+        const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType);                     \
         const auto msg = LogMessage(DebugReply(ev), context, ignore);                     \
         if (ignore) {                                                                     \
             LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, msg);           \
@@ -88,7 +101,7 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
         Y_FAIL_S(msg);                                                                    \
     } \
     \
-    bool TSubOperation::HandleReply(TEvType::TPtr& ev, TOperationContext& context) { \
+    bool TSubOperation::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
         return Progress(context, &ISubOperationState::HandleReply, ev);     \
     }
 
@@ -152,7 +165,7 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
         }
 
         for (auto& [implName, implPathId] : child.Base()->GetChildren()) {
-            Y_ABORT_UNLESS(NTableIndex::IsImplTable(implName) 
+            Y_ABORT_UNLESS(NTableIndex::IsImplTable(implName)
                         || implName == "streamImpl"
                 , "unexpected name %s", implName.c_str());
 

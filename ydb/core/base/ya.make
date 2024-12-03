@@ -100,7 +100,7 @@ PEERDIR(
     ydb/library/pretty_types_print/protobuf
     ydb/library/ydb_issue
     ydb/public/api/protos/out
-    ydb/library/yql/minikql
+    yql/essentials/minikql
     library/cpp/deprecated/atomic
 )
 

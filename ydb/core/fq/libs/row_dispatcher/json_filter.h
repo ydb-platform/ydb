@@ -1,6 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+
+#include <yql/essentials/public/udf/udf_value.h>
 
 namespace NFq {
 
@@ -13,12 +15,16 @@ public:
         const TVector<TString>& columns,
         const TVector<TString>& types,
         const TString& whereFilter,
-        TCallback callback);
+        TCallback callback,
+        const TPurecalcCompileSettings& purecalcSettings);
 
     ~TJsonFilter();
 
-    void Push(const TVector<ui64>& offsets, const TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*>& values);
+    void Push(const TVector<ui64>& offsets, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 rowsOffset, ui64 numberRows);
     TString GetSql();
+
+    std::unique_ptr<TEvRowDispatcher::TEvPurecalcCompileRequest> GetCompileRequest();  // Should be called exactly once
+    void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr ev);
 
 private:
     class TImpl;
@@ -29,6 +35,7 @@ std::unique_ptr<TJsonFilter> NewJsonFilter(
     const TVector<TString>& columns,
     const TVector<TString>& types,
     const TString& whereFilter,
-    TJsonFilter::TCallback callback);
+    TJsonFilter::TCallback callback,
+    const TPurecalcCompileSettings& purecalcSettings);
 
 } // namespace NFq

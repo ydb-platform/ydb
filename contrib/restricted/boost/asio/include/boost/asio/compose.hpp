@@ -2,7 +2,7 @@
 // compose.hpp
 // ~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -16,15 +16,197 @@
 #endif // defined(_MSC_VER) && (_MSC_VER >= 1200)
 
 #include <boost/asio/detail/config.hpp>
+#include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
+#include <boost/asio/detail/base_from_cancellation_state.hpp>
+#include <boost/asio/detail/composed_work.hpp>
+#include <boost/asio/detail/handler_cont_helpers.hpp>
+#include <boost/asio/detail/type_traits.hpp>
 
 #include <boost/asio/detail/push_options.hpp>
 
 namespace boost {
 namespace asio {
+namespace detail {
 
-#if defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES) \
-  || defined(GENERATING_DOCUMENTATION)
+template <typename Impl, typename Work, typename Handler, typename Signature>
+class composed_op;
+
+template <typename Impl, typename Work, typename Handler,
+    typename R, typename... Args>
+class composed_op<Impl, Work, Handler, R(Args...)>
+  : public base_from_cancellation_state<Handler>
+{
+public:
+  template <typename I, typename W, typename H>
+  composed_op(I&& impl,
+      W&& work,
+      H&& handler)
+    : base_from_cancellation_state<Handler>(
+        handler, enable_terminal_cancellation()),
+      impl_(static_cast<I&&>(impl)),
+      work_(static_cast<W&&>(work)),
+      handler_(static_cast<H&&>(handler)),
+      invocations_(0)
+  {
+  }
+
+  composed_op(composed_op&& other)
+    : base_from_cancellation_state<Handler>(
+        static_cast<base_from_cancellation_state<Handler>&&>(other)),
+      impl_(static_cast<Impl&&>(other.impl_)),
+      work_(static_cast<Work&&>(other.work_)),
+      handler_(static_cast<Handler&&>(other.handler_)),
+      invocations_(other.invocations_)
+  {
+  }
+
+  typedef typename composed_work_guard<
+    typename Work::head_type>::executor_type io_executor_type;
+
+  io_executor_type get_io_executor() const noexcept
+  {
+    return work_.head_.get_executor();
+  }
+
+  typedef associated_executor_t<Handler, io_executor_type> executor_type;
+
+  executor_type get_executor() const noexcept
+  {
+    return (get_associated_executor)(handler_, work_.head_.get_executor());
+  }
+
+  typedef associated_allocator_t<Handler, std::allocator<void>> allocator_type;
+
+  allocator_type get_allocator() const noexcept
+  {
+    return (get_associated_allocator)(handler_, std::allocator<void>());
+  }
+
+  template<typename... T>
+  void operator()(T&&... t)
+  {
+    if (invocations_ < ~0u)
+      ++invocations_;
+    this->get_cancellation_state().slot().clear();
+    impl_(*this, static_cast<T&&>(t)...);
+  }
+
+  void complete(Args... args)
+  {
+    this->work_.reset();
+    static_cast<Handler&&>(this->handler_)(static_cast<Args&&>(args)...);
+  }
+
+  void reset_cancellation_state()
+  {
+    base_from_cancellation_state<Handler>::reset_cancellation_state(handler_);
+  }
+
+  template <typename Filter>
+  void reset_cancellation_state(Filter&& filter)
+  {
+    base_from_cancellation_state<Handler>::reset_cancellation_state(handler_,
+        static_cast<Filter&&>(filter));
+  }
+
+  template <typename InFilter, typename OutFilter>
+  void reset_cancellation_state(InFilter&& in_filter,
+      OutFilter&& out_filter)
+  {
+    base_from_cancellation_state<Handler>::reset_cancellation_state(handler_,
+        static_cast<InFilter&&>(in_filter),
+        static_cast<OutFilter&&>(out_filter));
+  }
+
+  cancellation_type_t cancelled() const noexcept
+  {
+    return base_from_cancellation_state<Handler>::cancelled();
+  }
+
+//private:
+  Impl impl_;
+  Work work_;
+  Handler handler_;
+  unsigned invocations_;
+};
+
+template <typename Impl, typename Work, typename Handler, typename Signature>
+inline bool asio_handler_is_continuation(
+    composed_op<Impl, Work, Handler, Signature>* this_handler)
+{
+  return this_handler->invocations_ > 1 ? true
+    : boost_asio_handler_cont_helpers::is_continuation(
+        this_handler->handler_);
+}
+
+template <typename Signature, typename Executors>
+class initiate_composed_op
+{
+public:
+  typedef typename composed_io_executors<Executors>::head_type executor_type;
+
+  template <typename T>
+  explicit initiate_composed_op(int, T&& executors)
+    : executors_(static_cast<T&&>(executors))
+  {
+  }
+
+  executor_type get_executor() const noexcept
+  {
+    return executors_.head_;
+  }
+
+  template <typename Handler, typename Impl>
+  void operator()(Handler&& handler,
+      Impl&& impl) const
+  {
+    composed_op<decay_t<Impl>, composed_work<Executors>,
+      decay_t<Handler>, Signature>(
+        static_cast<Impl&&>(impl),
+        composed_work<Executors>(executors_),
+        static_cast<Handler&&>(handler))();
+  }
+
+private:
+  composed_io_executors<Executors> executors_;
+};
+
+template <typename Signature, typename Executors>
+inline initiate_composed_op<Signature, Executors> make_initiate_composed_op(
+    composed_io_executors<Executors>&& executors)
+{
+  return initiate_composed_op<Signature, Executors>(0,
+      static_cast<composed_io_executors<Executors>&&>(executors));
+}
+
+} // namespace detail
+
+#if !defined(GENERATING_DOCUMENTATION)
+
+template <template <typename, typename> class Associator,
+    typename Impl, typename Work, typename Handler,
+    typename Signature, typename DefaultCandidate>
+struct associator<Associator,
+    detail::composed_op<Impl, Work, Handler, Signature>,
+    DefaultCandidate>
+  : Associator<Handler, DefaultCandidate>
+{
+  static typename Associator<Handler, DefaultCandidate>::type get(
+      const detail::composed_op<Impl, Work, Handler, Signature>& h) noexcept
+  {
+    return Associator<Handler, DefaultCandidate>::get(h.handler_);
+  }
+
+  static auto get(const detail::composed_op<Impl, Work, Handler, Signature>& h,
+      const DefaultCandidate& c) noexcept
+    -> decltype(Associator<Handler, DefaultCandidate>::get(h.handler_, c))
+  {
+    return Associator<Handler, DefaultCandidate>::get(h.handler_, c);
+  }
+};
+
+#endif // !defined(GENERATING_DOCUMENTATION)
 
 /// Launch an asynchronous operation with a stateful implementation.
 /**
@@ -38,11 +220,18 @@ namespace asio {
  * handler. The remaining arguments are any arguments that originate from the
  * completion handlers of any asynchronous operations performed by the
  * implementation.
-
+ *
  * @param token The completion token.
  *
  * @param io_objects_or_executors Zero or more I/O objects or I/O executors for
  * which outstanding work must be maintained.
+ *
+ * @par Per-Operation Cancellation
+ * By default, terminal per-operation cancellation is enabled for
+ * composed operations that are implemented using @c async_compose. To
+ * disable cancellation for the composed operation, or to alter its
+ * supported cancellation types, call the @c self object's @c
+ * reset_cancellation_state function.
  *
  * @par Example:
  *
@@ -88,9 +277,11 @@ namespace asio {
  * auto async_echo(tcp::socket& socket,
  *     boost::asio::mutable_buffer buffer,
  *     CompletionToken&& token) ->
- *   typename boost::asio::async_result<
- *     typename std::decay<CompletionToken>::type,
- *       void(boost::system::error_code, std::size_t)>::return_type
+ *   decltype(
+ *     boost::asio::async_compose<CompletionToken,
+ *       void(boost::system::error_code, std::size_t)>(
+ *         std::declval<async_echo_implementation>(),
+ *         token, socket))
  * {
  *   return boost::asio::async_compose<CompletionToken,
  *     void(boost::system::error_code, std::size_t)>(
@@ -101,38 +292,30 @@ namespace asio {
  */
 template <typename CompletionToken, typename Signature,
     typename Implementation, typename... IoObjectsOrExecutors>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(CompletionToken, Signature)
-async_compose(BOOST_ASIO_MOVE_ARG(Implementation) implementation,
-    BOOST_ASIO_NONDEDUCED_MOVE_ARG(CompletionToken) token,
-    BOOST_ASIO_MOVE_ARG(IoObjectsOrExecutors)... io_objects_or_executors);
-
-#else // defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
-      //   || defined(GENERATING_DOCUMENTATION)
-
-template <typename CompletionToken, typename Signature, typename Implementation>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(CompletionToken, Signature)
-async_compose(BOOST_ASIO_MOVE_ARG(Implementation) implementation,
-    BOOST_ASIO_NONDEDUCED_MOVE_ARG(CompletionToken) token);
-
-#define BOOST_ASIO_PRIVATE_ASYNC_COMPOSE_DEF(n) \
-  template <typename CompletionToken, typename Signature, \
-      typename Implementation, BOOST_ASIO_VARIADIC_TPARAMS(n)> \
-  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(CompletionToken, Signature) \
-  async_compose(BOOST_ASIO_MOVE_ARG(Implementation) implementation, \
-      BOOST_ASIO_NONDEDUCED_MOVE_ARG(CompletionToken) token, \
-      BOOST_ASIO_VARIADIC_MOVE_PARAMS(n));
-  /**/
-  BOOST_ASIO_VARIADIC_GENERATE(BOOST_ASIO_PRIVATE_ASYNC_COMPOSE_DEF)
-#undef BOOST_ASIO_PRIVATE_ASYNC_COMPOSE_DEF
-
-#endif // defined(BOOST_ASIO_HAS_VARIADIC_TEMPLATES)
-       //   || defined(GENERATING_DOCUMENTATION)
+auto async_compose(Implementation&& implementation,
+    type_identity_t<CompletionToken>& token,
+    IoObjectsOrExecutors&&... io_objects_or_executors)
+  -> decltype(
+    async_initiate<CompletionToken, Signature>(
+      detail::make_initiate_composed_op<Signature>(
+        detail::make_composed_io_executors(
+          detail::get_composed_io_executor(
+            static_cast<IoObjectsOrExecutors&&>(
+              io_objects_or_executors))...)),
+      token, static_cast<Implementation&&>(implementation)))
+{
+  return async_initiate<CompletionToken, Signature>(
+      detail::make_initiate_composed_op<Signature>(
+        detail::make_composed_io_executors(
+          detail::get_composed_io_executor(
+            static_cast<IoObjectsOrExecutors&&>(
+              io_objects_or_executors))...)),
+      token, static_cast<Implementation&&>(implementation));
+}
 
 } // namespace asio
 } // namespace boost
 
 #include <boost/asio/detail/pop_options.hpp>
-
-#include <boost/asio/impl/compose.hpp>
 
 #endif // BOOST_ASIO_COMPOSE_HPP

@@ -2,47 +2,50 @@
 
 #include <ydb/library/yql/tools/yqlrun/http/yql_server.h>
 
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider_impl.h>
-#include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 
-#include <ydb/library/yql/sql/v1/format/sql_format.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider_impl.h>
+#include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
+
+#include <yql/essentials/sql/v1/format/sql_format.h>
 
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
-#include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_utils.h>
-#include <ydb/library/yql/protos/yql_mount.pb.h>
-#include <ydb/library/yql/protos/pg_ext.pb.h>
-#include <ydb/library/yql/core/yql_library_compiler.h>
-#include <ydb/library/yql/core/facade/yql_facade.h>
-#include <ydb/library/yql/core/pg_ext/yql_pg_ext.h>
-#include <ydb/library/yql/core/file_storage/file_storage.h>
-#include <ydb/library/yql/core/file_storage/http_download/http_download.h>
-#include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/log/tls_backend.h>
-#include <ydb/library/yql/public/udf/udf_validate.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
-#include <ydb/library/yql/public/result_format/yql_result_format_response.h>
-#include <ydb/library/yql/public/result_format/yql_result_format_type.h>
-#include <ydb/library/yql/public/result_format/yql_result_format_data.h>
+#include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_utils.h>
+#include <yql/essentials/protos/yql_mount.pb.h>
+#include <yql/essentials/protos/pg_ext.pb.h>
+#include <yql/essentials/core/yql_library_compiler.h>
+#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/core/pg_ext/yql_pg_ext.h>
+#include <yql/essentials/core/file_storage/file_storage.h>
+#include <yql/essentials/core/file_storage/http_download/http_download.h>
+#include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/log/tls_backend.h>
+#include <yql/essentials/public/udf/udf_validate.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
+#include <yql/essentials/public/result_format/yql_result_format_response.h>
+#include <yql/essentials/public/result_format/yql_result_format_type.h>
+#include <yql/essentials/public/result_format/yql_result_format_data.h>
 
 #include <ydb/core/util/pb.h>
 
@@ -700,7 +703,7 @@ int Main(int argc, const char *argv[])
         if (gatewayTypes.contains(YtProviderName) || res.Has("opt-collision")) {
             auto yqlNativeServices = NFile::TYtFileServices::Make(funcRegistry.Get(), tablesMapping, fileStorage, tmpDir, res.Has("keep-temp"), tablesDirMapping);
             auto ytNativeGateway = CreateYtFileGateway(yqlNativeServices, &emulateOutputForMultirun);
-            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
         }
     }
 
@@ -983,7 +986,7 @@ int RunUI(int argc, const char* argv[])
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
         TVector<NPg::TExtensionDesc> extensions;
         PgExtensionsFromProto(config, extensions);
-        NPg::RegisterExtensions(extensions, false, 
+        NPg::RegisterExtensions(extensions, false,
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }

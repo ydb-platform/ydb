@@ -1,4 +1,5 @@
 import "ydb/library/formats/arrow/protos/ssa.proto";
+import "ydb/core/tx/columnshard/common/protos/blob_range.proto";
 
 package NKikimrTxColumnShard;
 
@@ -25,6 +26,7 @@ message TIndexPortionMeta {
     optional uint32 ColumnBlobBytes = 14;
     optional uint32 IndexBlobBytes = 15;
     optional uint64 IndexRawBytes = 16;
+    repeated string BlobIds = 17;
 }
 
 message TIndexColumnMeta {
@@ -33,4 +35,15 @@ message TIndexColumnMeta {
     optional NKikimrSSA.TProgram.TConstant MinValue = 3;
     optional NKikimrSSA.TProgram.TConstant MaxValue = 4;
     optional TIndexPortionMeta PortionMeta = 5[deprecated = true]; // First PK column could contain portion info
+}
+
+message TColumnChunkInfo {
+    optional uint32 SSColumnId = 1;
+    optional uint32 ChunkIdx = 2;
+    optional TIndexColumnMeta ChunkMetadata = 3;
+    optional NKikimrColumnShardProto.TBlobRangeLink16 BlobRangeLink = 4;
+}
+
+message TIndexPortionAccessor {
+    repeated TColumnChunkInfo Chunks = 1;
 }

@@ -1,7 +1,6 @@
 #include "helpers.h"
 #include "config.h"
 #include "private.h"
-#include "stockpile.h"
 
 #include <yt/yt/core/ytalloc/bindings.h>
 
@@ -39,6 +38,8 @@
 #include <yt/yt/core/threading/spin_wait_slow_path_logger.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+
+#include <library/cpp/yt/stockpile/stockpile.h>
 
 #include <util/string/split.h>
 #include <util/system/thread.h>
@@ -123,12 +124,7 @@ private:
 
     i64 GetAnonymousMemoryLimit() const
     {
-        auto resourceTracker = NProfiling::GetResourceTracker();
-        if (!resourceTracker) {
-            return 0;
-        }
-
-        return resourceTracker->GetAnonymousMemoryLimit();
+        return NProfiling::TResourceTracker::GetAnonymousMemoryLimit();
     }
 
     TAllocatorMemoryLimit ProposeHeapMemoryLimit(i64 totalMemory, const TTCMallocConfigPtr& config) const
@@ -244,16 +240,16 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
 
     ConfigureTCMalloc(config->TCMalloc);
 
-    TStockpileManager::Get()->Reconfigure(*config->Stockpile);
+    TStockpileManager::Reconfigure(*config->Stockpile);
 
     if (config->EnableRefCountedTrackerProfiling) {
         EnableRefCountedTrackerProfiling();
     }
 
     if (config->EnableResourceTracker) {
-        NProfiling::EnableResourceTracker();
+        NProfiling::TResourceTracker::Enable();
         if (config->ResourceTrackerVCpuFactor.has_value()) {
-            NProfiling::SetVCpuFactor(config->ResourceTrackerVCpuFactor.value());
+            NProfiling::TResourceTracker::SetVCpuFactor(config->ResourceTrackerVCpuFactor.value());
         }
     }
 
@@ -307,7 +303,7 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
     }
 
     if (dynamicConfig->Stockpile) {
-        TStockpileManager::Get()->Reconfigure(*config->Stockpile->ApplyDynamic(dynamicConfig->Stockpile));
+        TStockpileManager::Reconfigure(*config->Stockpile->ApplyDynamic(dynamicConfig->Stockpile));
     }
 
     NYson::SetProtobufInteropConfig(config->ProtobufInterop->ApplyDynamic(dynamicConfig->ProtobufInterop));

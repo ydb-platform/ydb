@@ -22,7 +22,7 @@ class TColumnRecord;
 }
 
 namespace NKikimr::NOlap {
-class TColumnChunkLoadContext;
+class TColumnChunkLoadContextV1;
 struct TIndexInfo;
 class TColumnRecord;
 
@@ -59,7 +59,7 @@ public:
         }
     };
 
-    TChunkMeta(const TColumnChunkLoadContext& context);
+    TChunkMeta(const TColumnChunkLoadContextV1& context);
 
     TChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column);
 };
@@ -121,6 +121,14 @@ public:
         return BlobRange;
     }
 
+    NKikimrTxColumnShard::TColumnChunkInfo SerializeToDBProto() const {
+        NKikimrTxColumnShard::TColumnChunkInfo result;
+        result.SetSSColumnId(GetEntityId());
+        result.SetChunkIdx(GetChunkIdx());
+        *result.MutableChunkMetadata() = Meta.SerializeToProto();
+        *result.MutableBlobRangeLink() = BlobRange.SerializeToProto();
+        return result;
+    }
     NKikimrColumnShardDataSharingProto::TColumnRecord SerializeToProto() const;
     static TConclusion<TColumnRecord> BuildFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto) {
         TColumnRecord result;
@@ -160,7 +168,7 @@ public:
     }
 
     TColumnRecord(const TChunkAddress& address, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column);
-    TColumnRecord(const TBlobRangeLink16::TLinkId blobLinkId, const TColumnChunkLoadContext& loadContext);
+    TColumnRecord(const TColumnChunkLoadContextV1& loadContext);
 
     friend IOutputStream& operator<<(IOutputStream& out, const TColumnRecord& rec) {
         out << '{';

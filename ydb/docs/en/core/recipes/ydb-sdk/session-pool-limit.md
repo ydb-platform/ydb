@@ -1,7 +1,5 @@
 # Setting the session pool size
 
-{% include [work in progress message](_includes/addition.md) %}
-
 {{ ydb-short-name }} creates an [actor](../../concepts/glossary.md#actor) for each session. Consequently, the session pool size of a client affects resource consumption (RAM, CPU) on the server side of {{ ydb-short-name }}.
 
 For example, if 1000 clients of the same database have 1000 sessions each, then 1000000 [actors](../../concepts/glossary.md#actor) are created on the server side, consuming a significant amount of memory and CPU. If you do not limit the number of sessions on the client side, this may result in a slow cluster that is at risk of failure.

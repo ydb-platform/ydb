@@ -212,6 +212,7 @@ public:
                 case ENOSYS:    return EIoResult::FunctionNotImplemented;
                 case EILSEQ:    return EIoResult::InvalidSequence;
                 case ENODATA:   return EIoResult::NoData;
+                case EREMOTEIO:   return EIoResult::RemoteIOError;
                 default: Y_FAIL_S(PDiskInfo << " unexpected error in " << info << ", error# " << -ret
                                  << " strerror# " << strerror(-ret));
             }
@@ -546,7 +547,7 @@ public:
         tOp->IsReadOp = true;
         tOp->DataPtr = destination;
         tOp->DataSize = size;
-        tOp->DataOffset = offset; 
+        tOp->DataOffset = offset;
     }
 
     void PreparePWrite(IAsyncIoOperation *op, const void *source, size_t size, size_t offset) override {

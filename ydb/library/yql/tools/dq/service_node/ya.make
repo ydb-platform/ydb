@@ -4,24 +4,24 @@ IF (NOT OS_WINDOWS)
     PEERDIR(
         library/cpp/getopt
         yt/cpp/mapreduce/client
-        ydb/library/yql/sql/pg
-        ydb/library/yql/parser/pg_wrapper
-        ydb/library/yql/public/udf/service/exception_policy
-        ydb/library/yql/utils/failure_injector
-        ydb/library/yql/utils/log
-        ydb/library/yql/utils/log/proto
+        yql/essentials/sql/pg
+        yql/essentials/parser/pg_wrapper
+        yql/essentials/public/udf/service/exception_policy
+        yql/essentials/utils/failure_injector
+        yql/essentials/utils/log
+        yql/essentials/utils/log/proto
         ydb/library/yql/providers/dq/provider
         ydb/library/yql/providers/dq/worker_manager/interface
-        ydb/library/yql/minikql/invoke_builtins/llvm14
-        ydb/library/yql/utils/backtrace
+        yql/essentials/minikql/invoke_builtins/llvm14
+        yql/essentials/utils/backtrace
         ydb/library/yql/providers/dq/service
         ydb/library/yql/providers/dq/metrics
         ydb/library/yql/providers/dq/stats_collector
         ydb/library/yql/providers/yt/dq_task_preprocessor
         ydb/library/yql/providers/dq/global_worker_manager
         ydb/library/yql/providers/dq/actors/yt
-        ydb/library/yql/providers/yt/comp_nodes/llvm14
-        ydb/library/yql/providers/yt/codec/codegen
+        yt/yql/providers/yt/comp_nodes/llvm14
+        yt/yql/providers/yt/codec/codegen
         yt/yt/client
     )
 

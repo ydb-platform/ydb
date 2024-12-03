@@ -45,14 +45,33 @@ struct TTetsEnv {
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 };
 
+std::vector<ui64> GetOutputValue(const TStringBuf& html, const TStringBuf& param) {
+    TStringBuilder str;
+    str << "<tr><td>" << param << "</td><td>";
+    std::vector<ui64> result;
+    TStringBuf::size_type pos = 0;
+    do {
+        pos = html.find(str, pos);
+        if (TStringBuf::npos != pos) {
+            const auto from = pos + str.length();
+            const auto to = html.find("</td></tr>", from);
+            if (TStringBuf::npos != to) {
+                result.emplace_back(FromString<ui64>(html.substr(from, to - from)));
+                pos = to + 10U;
+            }
+        }
+    } while (TStringBuf::npos != pos);
+    UNIT_ASSERT(!result.empty());
+    return result;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(GroupWriteTest) {
-
     Y_UNIT_TEST(Simple) {
         TTetsEnv env;
 
-        const TString conf(R"(DurationSeconds: 3
+        const TString conf(R"(DurationSeconds: 30
             Tablets: {
                 Tablets: { TabletId: 1 Channel: 0 GroupId: )" + ToString(env.GroupInfo->GroupID) + R"( Generation: 1 }
                 WriteSizes: { Weight: 1.0 Min: 1000000 Max: 4000000 }
@@ -64,6 +83,117 @@ Y_UNIT_TEST_SUITE(GroupWriteTest) {
         );
 
         const auto html = env.RunSingleLoadTest(conf);
-        UNIT_ASSERT(html.Contains("<tr><td>BadPutResults</td><td>0</td></tr>"));
+        UNIT_ASSERT(GetOutputValue(html, "OkPutResults").front() >= 300U);
+        UNIT_ASSERT(GetOutputValue(html, "BadPutResults").front() == 0U);
+        UNIT_ASSERT(GetOutputValue(html, "TotalBytesWritten").front() >= 300000000U);
+        UNIT_ASSERT(GetOutputValue(html, "TotalBytesRead").front() == 0U);
+    }
+
+    Y_UNIT_TEST(ByTableName) {
+        TTetsEnv env;
+
+        const TString conf(R"(DurationSeconds: 30
+            Tablets: {
+                Tablets: { TabletName: "NewTable" Channel: 0 GroupId: )" + ToString(env.GroupInfo->GroupID) + R"( Generation: 1 }
+                WriteSizes: { Weight: 1.0 Min: 2000000 Max: 2000000 }
+                WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 100000 MaxUs: 100000 } }
+                MaxInFlightWriteRequests: 10
+                FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 1000000 MaxUs: 1000000 } }
+                PutHandleClass: TabletLog
+            })"
+        );
+
+        const auto html = env.RunSingleLoadTest(conf);
+        UNIT_ASSERT(GetOutputValue(html, "OkPutResults").front() >= 300U);
+        UNIT_ASSERT(GetOutputValue(html, "BadPutResults").front() == 0U);
+        UNIT_ASSERT(GetOutputValue(html, "TotalBytesWritten").front() >= 600000000U);
+        UNIT_ASSERT(GetOutputValue(html, "TotalBytesRead").front() == 0U);
+    }
+
+    Y_UNIT_TEST(WithRead) {
+        TTetsEnv env;
+
+        const TString conf(R"(DurationSeconds: 10
+            Tablets: {
+                Tablets: { TabletId: 3 Channel: 0 GroupId: )" + ToString(env.GroupInfo->GroupID) + R"( Generation: 1 }
+                WriteSizes: { Weight: 1.0 Min: 1000000 Max: 3000000 }
+                WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 100000 MaxUs: 100000 } }
+                MaxInFlightWriteRequests: 1
+                FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 1000000 MaxUs: 1000000 } }
+                ReadSizes: { Weight: 1.0 Min: 1000000 Max: 2000000 }
+                ReadIntervals: { Weight: 1.0 Uniform: { MinUs: 100000 MaxUs: 100000 } }
+                MaxInFlightReadRequests: 1
+                PutHandleClass: UserData
+            })"
+        );
+
+        const auto html = env.RunSingleLoadTest(conf);
+        UNIT_ASSERT(GetOutputValue(html, "OkPutResults").front() >= 100U);
+        UNIT_ASSERT(GetOutputValue(html, "BadPutResults").front() == 0U);
+        const auto totalWritten = GetOutputValue(html, "TotalBytesWritten").front();
+        const auto totalRead = GetOutputValue(html, "TotalBytesRead").front();
+        UNIT_ASSERT(totalWritten >= 100000000U);
+        UNIT_ASSERT(totalWritten <= 300000000U);
+        UNIT_ASSERT(totalRead >= 100000000U);
+        UNIT_ASSERT(totalRead <= 200000000U);
+    }
+
+    Y_UNIT_TEST(TwoTables) {
+        TTetsEnv env;
+
+        const TString conf(R"(DurationSeconds: 20
+            Tablets: {
+                Tablets: { TabletName: "TableOne" Channel: 0 GroupId: )" + ToString(env.GroupInfo->GroupID) + R"( Generation: 1 }
+                WriteSizes: { Weight: 1.0 Min: 2000000 Max: 3000000 }
+                WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 100000 MaxUs: 100000 } }
+                MaxInFlightWriteRequests: 10
+                FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 1000000 MaxUs: 1000000 } }
+                PutHandleClass: TabletLog
+            }
+            Tablets: {
+                Tablets: { TabletName: "TableTwo" Channel: 0 GroupId: )" + ToString(env.GroupInfo->GroupID) + R"( Generation: 1 }
+                WriteSizes: { Weight: 1.0 Min: 100000 Max: 200000 }
+                WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 100000 MaxUs: 100000 } }
+                MaxInFlightWriteRequests: 10
+                FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 1000000 MaxUs: 1000000 } }
+                PutHandleClass: TabletLog
+            }
+        )");
+
+        const auto html = env.RunSingleLoadTest(conf);
+        const auto okResults = GetOutputValue(html, "OkPutResults");
+        const auto badResults = GetOutputValue(html, "BadPutResults");
+        const auto totalWritten = GetOutputValue(html, "TotalBytesWritten");
+        const auto totalRead = GetOutputValue(html, "TotalBytesRead");
+        UNIT_ASSERT(okResults.front() >= 200U);
+        UNIT_ASSERT(okResults.back() >= 200U);
+        UNIT_ASSERT(badResults.front() + badResults.back() == 0U);
+        UNIT_ASSERT(totalWritten.front() >= 400000000U);
+        UNIT_ASSERT(totalWritten.front() <= 600000000U);
+        UNIT_ASSERT(totalWritten.back() >= 20000000U);
+        UNIT_ASSERT(totalWritten.back() <= 40000000U);
+    }
+
+    Y_UNIT_TEST(WriteHardRateDispatcher) {
+        TTetsEnv env;
+
+        const TString conf(R"(DurationSeconds: 10
+            Tablets: {
+                Tablets: { TabletId: 5 Channel: 0 GroupId: )" + ToString(env.GroupInfo->GroupID) + R"( Generation: 1 }
+                WriteSizes: { Weight: 1.0 Min: 1000000 Max: 4000000 }
+                WriteHardRateDispatcher: {
+                    RequestsPerSecondAtStart: 1
+                    RequestsPerSecondOnFinish: 1000
+                }
+                MaxInFlightWriteRequests: 5
+                FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 1000000 MaxUs: 1000000 } }
+                PutHandleClass: TabletLog
+            })"
+        );
+
+        const auto html = env.RunSingleLoadTest(conf);
+        UNIT_ASSERT(GetOutputValue(html, "OkPutResults").front() >= 4990U);
+        UNIT_ASSERT(GetOutputValue(html, "OkPutResults").front() <= 5010U);
+        UNIT_ASSERT(GetOutputValue(html, "BadPutResults").front() == 0U);
     }
 }

@@ -31,6 +31,7 @@ from clickhouse_connect.driver.transform import NativeTransform
 
 logger = logging.getLogger(__name__)
 columns_only_re = re.compile(r'LIMIT 0\s*$', re.IGNORECASE)
+ex_header = 'X-ClickHouse-Exception-Code'
 
 
 # pylint: disable=too-many-instance-attributes
@@ -346,7 +347,7 @@ class HttpClient(Client):
         params.update(self._validate_settings(settings or {}))
 
         method = 'POST' if payload or fields else 'GET'
-        response = self._raw_request(payload, params, headers, method, fields=fields)
+        response = self._raw_request(payload, params, headers, method, fields=fields, server_wait=False)
         if response.data:
             try:
                 result = response.data.decode()[:-1].split('\t')
@@ -369,10 +370,14 @@ class HttpClient(Client):
             finally:
                 response.close()
 
-            err_str = f'HTTPDriver for {self.url} returned response code {response.status})'
+            err_str = f'HTTPDriver for {self.url} returned response code {response.status}'
+            err_code = response.headers.get(ex_header)
+            if err_code:
+                err_str = f'HTTPDriver for {self.url} received ClickHouse error code {err_code}'
             if err_content:
                 err_msg = common.format_error(err_content.decode(errors='backslashreplace'))
-                err_str = f'{err_str}\n {err_msg}'
+                if err_msg.startswith('Code'):
+                    err_str = f'{err_str}\n {err_msg}'
         else:
             err_str = 'The ClickHouse server returned an error.'
 
@@ -444,7 +449,7 @@ class HttpClient(Client):
             finally:
                 if query_session:
                     self._active_session = None  # Make sure we always clear this
-            if 200 <= response.status < 300:
+            if 200 <= response.status < 300 and not response.headers.get(ex_header):
                 return response
             if response.status in (429, 503, 504):
                 if attempts > retries:
@@ -477,7 +482,7 @@ class HttpClient(Client):
         See BaseClient doc_string for this method
         """
         body, params, fields = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
-        return self._raw_request(body, params, fields=fields, stream=True)
+        return self._raw_request(body, params, fields=fields, stream=True, server_wait=False)
 
     def _prep_raw_query(self, query: str,
                         parameters: Optional[Union[Sequence, Dict[str, Any]]],

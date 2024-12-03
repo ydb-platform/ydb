@@ -786,11 +786,6 @@ class YMake(object):
         else:
             print('@import "${CONF_ROOT}/conf/coverage_selective_instrumentation.conf"')
 
-        if presets:
-            print('# Variables set from command line by -D options')
-            for key in sorted(presets):
-                emit(key, opts().presets[key])
-
     @staticmethod
     def _print_conf_content(path):
         with open(path, 'r') as fin:
@@ -801,6 +796,13 @@ class YMake(object):
 
     def print_settings(self):
         pass
+
+    def print_epilogue(self):
+        presets = opts().presets
+        if presets:
+            print('# Variables set from command line by -D options')
+            for key in sorted(presets):
+                emit(key, opts().presets[key])
 
 
 class System(object):
@@ -1468,15 +1470,7 @@ class GnuCompiler(Compiler):
             '-Wall',
             '-Wextra',
         ]
-        self.cxx_warnings = [
-            # Issue a warning if certain overload is hidden due to inheritance
-            '-Woverloaded-virtual',
-        ]
-
-        # Disable some warnings which will fail compilation at the time
-        self.c_warnings += [
-            '-Wno-parentheses',
-        ]
+        self.cxx_warnings = []
 
         self.c_defines = ['${hide:CPP_FAKEID}']
         if self.target.is_android:
@@ -1537,13 +1531,16 @@ class GnuCompiler(Compiler):
             self.sfdl_flags.append('-Qunused-arguments')
 
             self.c_warnings += [
+                '-Wno-parentheses',
                 '-Wno-implicit-const-int-float-conversion',
-                # For nvcc to accept the above.
+                # For nvcc to accept the above
                 '-Wno-unknown-warning-option',
             ]
 
             self.cxx_warnings += [
                 '-Wimport-preprocessor-directive-pedantic',
+                # Issue a warning if certain overload is hidden due to inheritance
+                '-Woverloaded-virtual',
                 '-Wno-ambiguous-reversed-operator',
                 '-Wno-defaulted-function-deleted',
                 '-Wno-deprecated-anon-enum-enum-conversion',
@@ -1551,7 +1548,6 @@ class GnuCompiler(Compiler):
                 '-Wno-deprecated-enum-float-conversion',
                 '-Wno-deprecated-volatile',
                 '-Wno-pessimizing-move',
-                '-Wno-return-std-move',
                 '-Wno-undefined-var-template',
             ]
 
@@ -1640,6 +1636,7 @@ class Linker(object):
     BFD = 'bfd'
     LLD = 'lld'
     GOLD = 'gold'
+    MOLD = 'mold'
 
     def __init__(self, tc, build):
         """
@@ -1651,6 +1648,9 @@ class Linker(object):
         self.type = self._get_default_linker_type()
 
     def _get_default_linker_type(self):
+        if (self.build.host.is_linux or self.build.host.is_macos) and is_positive('USE_MOLD_LINKER'):
+            return Linker.MOLD
+
         if not self.tc.is_from_arcadia or is_positive('EXPORT_CMAKE'):
             # External (e.g. system) toolchain: disable linker selection logic
             return None
@@ -2067,21 +2067,26 @@ class MSVCCompiler(MSVC, Compiler):
                 '-fms-compatibility-version=19.21',
                 # for msvc compatibility
                 # https://clang.llvm.org/docs/UsersManual.html#microsoft-extensions
-                '-fdelayed-template-parsing',
+                # '-fdelayed-template-parsing',
+                '-Wno-deprecated-this-capture',
+                '-Wno-c++11-narrowing-const-reference',
+                '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
+                '-Wno-invalid-offsetof',
             ]
             if target.is_x86:
                 flags.append('-m32')
             elif target.is_x86_64:
                 flags.append('-m64')
 
-            c_warnings.extend((
-                '-Wno-format',
+            c_warnings += [
                 '-Wno-parentheses',
+                # For nvcc to accept the above
                 '-Wno-unknown-warning-option',
-            ))
+            ]
 
             cxx_warnings += [
                 '-Wimport-preprocessor-directive-pedantic',
+                # Issue a warning if certain overload is hidden due to inheritance
                 '-Woverloaded-virtual',
                 '-Wno-ambiguous-reversed-operator',
                 '-Wno-defaulted-function-deleted',
@@ -2464,7 +2469,7 @@ class Cuda(object):
 
     def auto_cuda_version(self):
         if self.use_arcadia_cuda.value:
-            return '12.2'
+            return '12.6'
 
         if not self.have_cuda.value:
             return None
@@ -2641,6 +2646,7 @@ def main():
     build.print_build()
 
     custom_conf.print_epilogue()
+    ymake.print_epilogue()
 
 
 if __name__ == '__main__':

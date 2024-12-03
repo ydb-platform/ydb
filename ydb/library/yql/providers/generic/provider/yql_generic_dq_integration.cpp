@@ -3,16 +3,16 @@
 #include "yql_generic_mkql_compiler.h"
 #include "yql_generic_predicate_pushdown.h"
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/proto/range.pb.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 
 namespace NYql {
@@ -37,6 +37,8 @@ namespace NYql {
                     return "MsSQLServerGeneric";
                 case NYql::NConnector::NApi::ORACLE:
                     return "OracleGeneric";
+                case NYql::NConnector::NApi::LOGGING:
+                    return "LoggingGeneric";
                 default:
                     ythrow yexception() << "Data source kind is unknown or not specified";
             }
@@ -61,7 +63,7 @@ namespace NYql {
                 return Nothing();
             }
 
-            TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
@@ -104,8 +106,7 @@ namespace NYql {
                 return read;
             }
 
-            ui64 Partition(const TDqSettings&, size_t, const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&,
-                           bool) override {
+            ui64 Partition(const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
                 partitions.clear();
                 Generic::TRange range;
                 partitions.emplace_back();
@@ -220,6 +221,9 @@ namespace NYql {
                         case NConnector::NApi::ORACLE:
                             properties["SourceType"] = "Oracle";
                             break;
+                        case NConnector::NApi::LOGGING:
+                            properties["SourceType"] = "Logging";
+                            break;
                         case NConnector::NApi::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;
                         default:
@@ -239,7 +243,6 @@ namespace NYql {
                             properties["Protocol"] = "Http";
                             break;
                         case NConnector::NApi::PROTOCOL_UNSPECIFIED:
-                            break;
                         default:
                             properties["Protocol"] = NConnector::NApi::EProtocol_Name(dataSourceInstance.protocol());
                             break;

@@ -1,5 +1,6 @@
 #include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
+#include <ydb/core/base/counters.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -571,6 +572,9 @@ public:
     }
 };
 
+THolder<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
+    return MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(env->GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
+};
 
 /**
  * Test scan going in parallel with compactions.
@@ -6136,7 +6140,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_GE(failedAttempts, 20); // old parts aren't sticky before restart
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // parts become sticky soon after it's enabled
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
@@ -6170,7 +6174,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_GE(failedAttempts, 20); // old parts aren't sticky before restart
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // parts become sticky soon after it's enabled
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
@@ -6229,7 +6233,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         auto &appData = env->GetAppData();
         UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.HasEnableLocalDBBtreeIndex(), false);
         UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.HasEnableLocalDBFlatIndex(), false);
-        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        auto counters = GetSharedPageCounters(env);
         int readRows = 0, failedAttempts = 0;
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -6267,7 +6271,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
 
         auto &appData = env->GetAppData();
         appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
-        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        auto counters = GetSharedPageCounters(env);
         int readRows = 0, failedAttempts = 0;
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -6306,7 +6310,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         auto &appData = env->GetAppData();
         
         appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
-        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        auto counters = GetSharedPageCounters(env);
         int readRows = 0, failedAttempts = 0;
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -6345,7 +6349,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         auto &appData = env->GetAppData();
         appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
         appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
-        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        auto counters = GetSharedPageCounters(env);
         int readRows = 0, failedAttempts = 0;
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -6384,7 +6388,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         auto &appData = env->GetAppData();
         appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
         appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
-        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        auto counters = GetSharedPageCounters(env);
         int readRows = 0, failedAttempts = 0;
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -6423,7 +6427,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         auto &appData = env->GetAppData();
         appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
         appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
-        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        auto counters = GetSharedPageCounters(env);
         int readRows = 0, failedAttempts = 0;
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -6463,7 +6467,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
 
         auto &appData = env->GetAppData();
         appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
-        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        auto counters = GetSharedPageCounters(env);
         int readRows = 0, failedAttempts = 0;
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));

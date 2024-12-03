@@ -15,7 +15,6 @@ class TColumnShard;
 class TTxBlobsWritingFinished: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
 private:
     using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
-    const NKikimrProto::EReplyStatus PutBlobResult;
     std::vector<TInsertedPortions> Packs;
     const std::shared_ptr<NOlap::IBlobsWritingAction> WritingActions;
     std::optional<NOlap::TSnapshot> CommitSnapshot;
@@ -43,12 +42,52 @@ private:
 public:
     TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus,
         const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, std::vector<TInsertedPortions>&& packs,
-        const std::vector<TFailedWrite>& fails);
+        const std::vector<TNoDataWrite>& noDataWrites);
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
     TTxType GetTxType() const override {
-        return TXTYPE_WRITE;
+        return TXTYPE_WRITE_PORTIONS_FINISHED;
+    }
+};
+
+class TTxBlobsWritingFailed: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
+private:
+    using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
+    const NKikimrProto::EReplyStatus PutBlobResult;
+    std::vector<TInsertedPortions> Packs;
+
+    class TReplyInfo {
+    private:
+        std::unique_ptr<NActors::IEventBase> Event;
+        TActorId DestinationForReply;
+        const ui64 Cookie;
+
+    public:
+        TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply, const ui64 cookie)
+            : Event(std::move(ev))
+            , DestinationForReply(destinationForReply)
+            , Cookie(cookie) {
+        }
+
+        void DoSendReply(const TActorContext& ctx) {
+            ctx.Send(DestinationForReply, Event.release(), 0, Cookie);
+        }
+    };
+
+    std::vector<TReplyInfo> Results;
+
+public:
+    TTxBlobsWritingFailed(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus, std::vector<TInsertedPortions>&& packs)
+        : TBase(self)
+        , PutBlobResult(writeStatus)
+        , Packs(std::move(packs)) {
+    }
+
+    virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
+    virtual void DoComplete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override {
+        return TXTYPE_WRITE_PORTIONS_FAILED;
     }
 };
 

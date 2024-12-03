@@ -1,15 +1,11 @@
 #include <ydb/core/statistics/ut_common/ut_common.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
-
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-
-#include <thread>
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr {
 namespace NStat {
@@ -20,15 +16,7 @@ using namespace NYdb::NScheme;
 
 namespace {
 
-void CreateTable(TTestEnv& env, const TString& databaseName, const TString& tableName, size_t rowCount) {
-    ExecuteYqlScript(env, Sprintf(R"(
-        CREATE TABLE `Root/%s/%s` (
-            Key Uint64,
-            Value Uint64,
-            PRIMARY KEY (Key)
-        );
-    )", databaseName.c_str(), tableName.c_str()));
-
+void FillTable(TTestEnv& env, const TString& databaseName, const TString& tableName, size_t rowCount) {
     TStringBuilder replace;
     replace << Sprintf("REPLACE INTO `Root/%s/%s` (Key, Value) VALUES ",
         databaseName.c_str(), tableName.c_str());
@@ -40,6 +28,29 @@ void CreateTable(TTestEnv& env, const TString& databaseName, const TString& tabl
     }
     replace << ";";
     ExecuteYqlScript(env, replace);
+}
+
+void CreateTable(TTestEnv& env, const TString& databaseName, const TString& tableName, size_t rowCount) {
+    ExecuteYqlScript(env, Sprintf(R"(
+        CREATE TABLE `Root/%s/%s` (
+            Key Uint64,
+            Value Uint64,
+            PRIMARY KEY (Key)
+        );
+    )", databaseName.c_str(), tableName.c_str()));
+    FillTable(env, databaseName, tableName, rowCount);
+}
+
+void CreateTableWithGlobalIndex(TTestEnv& env, const TString& databaseName, const TString& tableName, size_t rowCount) {
+    ExecuteYqlScript(env, Sprintf(R"(
+        CREATE TABLE `Root/%s/%s` (
+            Key Uint64,
+            Value Uint64,
+            INDEX ValueIndex GLOBAL ON ( Value ),
+            PRIMARY KEY (Key)
+        );
+    )", databaseName.c_str(), tableName.c_str()));
+    FillTable(env, databaseName, tableName, rowCount);
 }
 
 void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId, size_t expectedRowCount) {
@@ -75,10 +86,32 @@ void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId
     }
 }
 
+ui64 GetRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId) {
+    auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(nodeIndex));
+    NStat::TRequest req;
+    req.PathId = pathId;
+
+    auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
+    evGet->StatType = NStat::EStatType::SIMPLE;
+    evGet->StatRequests.push_back(req);
+
+    auto sender = runtime.AllocateEdgeActor(nodeIndex);
+    runtime.Send(statServiceId, sender, evGet.release(), nodeIndex, true);
+    auto evResult = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
+
+    UNIT_ASSERT(evResult);
+    UNIT_ASSERT(evResult->Get());
+    UNIT_ASSERT(evResult->Get()->StatResponses.size() == 1);
+
+    auto rsp = evResult->Get()->StatResponses[0];
+    auto stat = rsp.Simple;
+
+    return stat.RowCount;
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(BasicStatistics) {
-
     Y_UNIT_TEST(Simple) {
         TTestEnv env(1, 1);
 
@@ -183,6 +216,81 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         ValidateRowCount(runtime, 1, pathId2, 6);
     }
 
+    void TestNotFullStatistics(TTestEnv& env, size_t expectedRowCount) {
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
+
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> block(runtime);
+        runtime.WaitFor("TEvPeriodicTableStats", [&]{ return block.size() >= 3; });
+        block.Unblock(3);
+
+        bool firstStatsToSA = false;
+        auto statsObserver1 = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto&){
+            firstStatsToSA = true;
+        });
+        runtime.WaitFor("TEvSchemeShardStats 1", [&]{ return firstStatsToSA; });
+
+        UNIT_ASSERT(GetRowCount(runtime, 1, pathId) == 0);
+
+        block.Unblock();
+        block.Stop();
+
+        bool secondStatsToSA = false;
+        auto statsObserver2 = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto&){
+            secondStatsToSA = true;
+        });
+        runtime.WaitFor("TEvSchemeShardStats 2", [&]{ return secondStatsToSA; });
+
+        bool propagate = false;
+        auto propagateObserver = runtime.AddObserver<TEvStatistics::TEvPropagateStatistics>([&](auto&){
+            propagate = true;
+        });
+        runtime.WaitFor("TEvPropagateStatistics", [&]{ return propagate; });
+
+        UNIT_ASSERT(GetRowCount(runtime, 1, pathId) == expectedRowCount);
+    }
+
+    Y_UNIT_TEST(NotFullStatisticsDatashard) {
+        TTestEnv env(1, 1);
+
+        CreateDatabase(env, "Database");
+        CreateUniformTable(env, "Database", "Table");
+
+        TestNotFullStatistics(env, 4);
+    }
+
+    Y_UNIT_TEST(NotFullStatisticsColumnshard) {
+        TTestEnv env(1, 1);
+
+        CreateDatabase(env, "Database");
+        CreateColumnStoreTable(env, "Database", "Table", 4);
+
+        TestNotFullStatistics(env, 1000);
+    }
+
+    Y_UNIT_TEST(SimpleGlobalIndex) {
+        TTestEnv env(1, 1);
+
+        CreateDatabase(env, "Database");
+        CreateTableWithGlobalIndex(env, "Database", "Table", 5);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table/ValueIndex/indexImplTable");
+        ValidateRowCount(runtime, 1, pathId, 5);
+    }
+
+    Y_UNIT_TEST(ServerlessGlobalIndex) {
+        TTestEnv env(1, 1);
+
+        CreateDatabase(env, "Shared", 1, true);
+        CreateServerlessDatabase(env, "Serverless", "/Root/Shared");
+        CreateTableWithGlobalIndex(env, "Serverless", "Table", 5);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto pathId = ResolvePathId(runtime, "/Root/Serverless/Table/ValueIndex/indexImplTable");
+        ValidateRowCount(runtime, 1, pathId, 5);
+    }
 }
 
 } // NSysView

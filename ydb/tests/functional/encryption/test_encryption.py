@@ -8,7 +8,7 @@ import yatest.common
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.msgbus_types import EDriveStatus
 
@@ -73,7 +73,7 @@ class Workload:
 class TestEncryption(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             configurator=KikimrConfigGenerator(
                 use_in_memory_pdisks=True,
                 dynamic_pdisks=[{'user_kind': 0}],

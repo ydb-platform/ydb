@@ -155,7 +155,7 @@ public:
     static TObject Create(
         const TString& /*poolName*/,
         std::vector<TString> /*bucketNames*/,
-        IRegistryImplPtr /*registry*/)
+        IRegistryPtr /*registry*/)
     {
         return {};
     }
@@ -206,7 +206,7 @@ public:
     static TObject Create(
         const TString& poolName,
         std::vector<TString> bucketNames,
-        IRegistryImplPtr registry)
+        IRegistryPtr registry)
     {
         return New<TFairShareInvokerPoolProfiler>(poolName, std::move(bucketNames), std::move(registry));
     }
@@ -241,7 +241,7 @@ private:
     TFairShareInvokerPoolProfiler(
         const TString& poolName,
         std::vector<TString> bucketNames,
-        IRegistryImplPtr registry)
+        IRegistryPtr registry)
     {
         Counters_.reserve(std::ssize(bucketNames));
         BucketProfilerTags_.reserve(std::ssize(bucketNames));
@@ -252,7 +252,7 @@ private:
         }
     }
 
-    TCountersPtr CreateCounters(const TTagSet& tagSet, const IRegistryImplPtr& registry) {
+    TCountersPtr CreateCounters(const TTagSet& tagSet, const IRegistryPtr& registry) {
         auto profiler = TProfiler(registry, "/fair_share_invoker_pool").WithTags(tagSet).WithHot();
 
         auto counters = std::make_unique<TCounters>();
@@ -324,7 +324,7 @@ public:
         TDuration actionTimeRelevancyHalflife,
         const TString& poolName = "",
         std::vector<TString> bucketNames = {},
-        IRegistryImplPtr registry = nullptr)
+        IRegistryPtr registry = nullptr)
         : UnderlyingInvoker_(std::move(underlyingInvoker))
         , Queue_(callbackQueueFactory(invokerCount))
         , Profiler_(TPoolProfiler::Create(poolName, std::move(bucketNames), std::move(registry)))
@@ -533,7 +533,7 @@ private:
     };
 
     class TInvoker
-        : public TInvokerWrapper
+        : public TInvokerWrapper<false>
     {
     public:
         TInvoker(IInvokerPtr underlyingInvoker_, int index, TWeakPtr<TFairShareInvokerPool> parent)
@@ -546,6 +546,15 @@ private:
         {
             if (auto strongParent = Parent_.Lock()) {
                 strongParent->Enqueue(std::move(callback), Index_);
+            }
+        }
+
+        void Invoke(TMutableRange<TClosure> callbacks) override
+        {
+            if (auto strongParent = Parent_.Lock()) {
+                for (auto& callback : callbacks) {
+                    strongParent->Enqueue(std::move(callback), Index_);
+                }
             }
         }
 
@@ -630,7 +639,7 @@ TDiagnosableInvokerPoolPtr CreateProfiledFairShareInvokerPool(
     TDuration actionTimeRelevancyHalflife,
     const TString& poolName,
     std::vector<TString> bucketNames,
-    IRegistryImplPtr registry)
+    IRegistryPtr registry)
 {
     YT_VERIFY(0 < std::ssize(bucketNames) && std::ssize(bucketNames) < 100);
 

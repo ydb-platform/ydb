@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/append.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/numpy/asarray.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -24,7 +24,7 @@ namespace numpy
     types::ndarray<
         typename __combined<T, typename types::dtype_of<F>::type>::type,
         types::pshape<long>>
-    out(types::pshape<long>(nsize), builtins::None);
+        out(types::pshape<long>(nsize), builtins::None);
     auto out_back = std::copy(nto.fbegin(), nto.fend(), out.fbegin());
     std::copy(ndata.fbegin(), ndata.fend(), out_back);
     return out;
@@ -41,7 +41,7 @@ namespace numpy
     types::ndarray<
         typename __combined<T, typename types::dtype_of<F>::type>::type,
         types::pshape<long>>
-    out(types::pshape<long>(nsize), builtins::None);
+        out(types::pshape<long>(nsize), builtins::None);
     auto out_back = std::copy(nto.fbegin(), nto.fend(), out.fbegin());
     *out_back = data;
     return out;
@@ -55,7 +55,7 @@ namespace numpy
   {
     return append(numpy::functor::asarray{}(to), data);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

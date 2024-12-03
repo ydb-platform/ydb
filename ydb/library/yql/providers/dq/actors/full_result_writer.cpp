@@ -5,11 +5,12 @@
 #include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
+#include <yql/essentials/core/issue/yql_issue.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -30,7 +31,7 @@ struct TFullResultWriterWriteRequestOOB {
     NDq::TDqSerializedBatch PullSerializedBatch() {
         NDq::TDqSerializedBatch result;
         result.Proto = std::move(*Data.MutableData());
-        result.Payload = std::move(Payload);
+        result.Payload = MakeChunkedBuffer(std::move(Payload));
         return result;
     }
 };

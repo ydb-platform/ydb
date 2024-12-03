@@ -319,14 +319,19 @@ void LoadFromSource(
     }
 }
 
-// CYsonStructExtension
-template <CYsonStructSource TSource, CYsonStructFieldFor<TSource> TExtension>
+// CYsonStructField
+// NB(arkady-e1ppa): We check for alias presence in the body so that
+// partially modelled concept does not result in call to Deserialize
+// (which is the default implementation) but hard CE.
+template <CYsonStructSource TSource, CYsonStructLoadableFieldFor<TSource> TExtension>
 void LoadFromSource(
     TExtension& parameter,
     TSource source,
     const NYPath::TYPath& path,
     std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
 {
+    static_assert(CYsonStructFieldFor<TExtension, TSource>, "You must add alias TImplementsYsonStructField");
+
     try {
         parameter.Load(
             std::move(source),
@@ -593,6 +598,29 @@ inline void ResetOnLoad(TMap& parameter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Any T.
+template <class T>
+bool CompareValue(const T& lhs, const T& rhs);
+
+// TIntrusivePtr.
+template <class T>
+bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs);
+
+// std::optional.
+template <class T>
+bool CompareValues(const std::optional<T>& lhs, const std::optional<T>& rhs);
+
+// std::vector.
+template <CStdVector T>
+bool CompareValues(const T& lhs, const T& rhs);
+
+// any map.
+template <CAnyMap T>
+bool CompareValues(const T& lhs, const T& rhs);
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Any T.
 template <class T>
 bool CompareValues(const T& lhs, const T& rhs)
 {
@@ -603,6 +631,7 @@ bool CompareValues(const T& lhs, const T& rhs)
     }
 }
 
+// TIntrusivePtr.
 template <class T>
 bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
 {
@@ -611,10 +640,68 @@ bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
             return rhs == lhs;
         }
 
-        return *lhs == *rhs;
+        return CompareValues(*lhs, *rhs);
     } else {
         return false;
     }
+}
+
+// std::optional.
+template <class T>
+bool CompareValues(const std::optional<T>& lhs, const std::optional<T>& rhs)
+{
+    if (lhs.has_value() != rhs.has_value()) {
+        return false;
+    }
+
+    if (!lhs.has_value()) {
+        return true;
+    }
+
+    return CompareValues(*lhs, *rhs);
+}
+
+// std::vector.
+template <CStdVector T>
+bool CompareValues(const T& lhs, const T& rhs)
+{
+    if (std::ssize(lhs) != std::ssize(rhs)) {
+        return false;
+    }
+
+    for (int idx = 0; idx < std::ssize(lhs); ++idx) {
+        if (!CompareValues(lhs[idx], rhs[idx])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// any map.
+template <CAnyMap T>
+bool CompareValues(const T& lhs, const T& rhs)
+{
+    if (std::ssize(lhs) != std::ssize(rhs)) {
+        return false;
+    }
+
+    for (const auto& [key, value] : lhs) {
+        auto rhsIt = rhs.find(key);
+        if (rhsIt == std::end(rhs)) {
+            return false;
+        }
+
+        if (!CompareValues(key, rhsIt->first)) {
+            return false;
+        }
+
+        if (!CompareValues(value, rhsIt->second)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 } // namespace NPrivate
@@ -648,9 +735,13 @@ TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(const TYsonSt
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TValue>
-TYsonStructParameter<TValue>::TYsonStructParameter(TString key, std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor)
+TYsonStructParameter<TValue>::TYsonStructParameter(
+    TString key,
+    std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor,
+    int fieldIndex)
     : Key_(std::move(key))
     , FieldAccessor_(std::move(fieldAccessor))
+    , FieldIndex_(fieldIndex)
 { }
 
 template <class TValue>
@@ -668,6 +759,10 @@ void TYsonStructParameter<TValue>::Load(
             std::move(node),
             options.Path,
             options.RecursiveUnrecognizedRecursively);
+
+        if (auto* bitmap = self->GetSetFieldsBitmap()) {
+            bitmap->Set(FieldIndex_);
+        }
     } else if (!Optional_) {
         THROW_ERROR_EXCEPTION("Missing required parameter %v",
             options.Path);
@@ -689,6 +784,10 @@ void TYsonStructParameter<TValue>::Load(
             cursor,
             options.Path,
             options.RecursiveUnrecognizedRecursively);
+
+        if (auto* bitmap = self->GetSetFieldsBitmap()) {
+            bitmap->Set(FieldIndex_);
+        }
     } else if (!Optional_) {
         THROW_ERROR_EXCEPTION("Missing required parameter %v",
             options.Path);
@@ -712,6 +811,10 @@ void TYsonStructParameter<TValue>::SafeLoad(
                 options.Path,
                 /*recursivelyUnrecognizedStrategy*/ std::nullopt);
             validate();
+
+            if (auto* bitmap = self->GetSetFieldsBitmap()) {
+                bitmap->Set(FieldIndex_);
+            }
         } catch (const std::exception ex) {
             FieldAccessor_->GetValue(self) = oldValue;
             throw;
@@ -888,6 +991,12 @@ template <class TValue>
 bool TYsonStructParameter<TValue>::CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const
 {
     return NPrivate::CompareValues(FieldAccessor_->GetValue(lhsSelf), FieldAccessor_->GetValue(rhsSelf));
+}
+
+template <class TValue>
+int TYsonStructParameter<TValue>::GetFieldIndex() const
+{
+    return FieldIndex_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

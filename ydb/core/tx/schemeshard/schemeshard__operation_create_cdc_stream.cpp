@@ -2,6 +2,9 @@
 
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 
@@ -712,6 +715,19 @@ static void FillModifySchemaForCdc(
     }
 }
 
+void DoCreateStreamImpl(
+        TVector<ISubOperation::TPtr>& result,
+        const NKikimrSchemeOp::TCreateCdcStream& op,
+        const TOperationId& opId,
+        const TPath& tablePath,
+        const bool acceptExisted,
+        const bool initialScan)
+{
+    auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
+    FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
+    result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
+}
+
 void DoCreateStream(
         TVector<ISubOperation::TPtr>& result,
         const NKikimrSchemeOp::TCreateCdcStream& op,
@@ -721,11 +737,8 @@ void DoCreateStream(
         const bool acceptExisted,
         const bool initialScan)
 {
-    {
-        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
-        FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
-        result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
-    }
+    DoCreateStreamImpl(result, op, opId, tablePath, acceptExisted, initialScan);
+
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
         FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);

@@ -20,8 +20,6 @@
 
 #include <library/cpp/yt/global/variable.h>
 
-#include <library/cpp/yt/memory/memory_tag.h>
-
 #include <library/cpp/yt/memory/function_view.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
@@ -179,13 +177,6 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-
-Y_FORCE_INLINE TMemoryTag SwapMemoryTag(TMemoryTag tag)
-{
-    auto result = GetCurrentMemoryTag();
-    SetCurrentMemoryTag(tag);
-    return result;
-}
 
 Y_FORCE_INLINE TFiberId SwapCurrentFiberId(TFiberId fiberId)
 {
@@ -621,7 +612,17 @@ public:
     void SetFuture(TFuture<void> awaitable)
     {
         auto guard = Guard(Lock_);
-        Future_ = std::move(awaitable);
+        if (!IsCanceled()) {
+            Future_ = std::move(awaitable);
+            return;
+        }
+
+        guard.Release();
+
+        ErrorSet_.Wait();
+
+        YT_ASSERT(!CancelationError_.IsOK());
+        awaitable.Cancel(CancelationError_);
     }
 
     void ResetFuture()
@@ -644,6 +645,8 @@ public:
             future = std::move(Future_);
         }
 
+        ErrorSet_.NotifyAll();
+
         if (future) {
             YT_LOG_DEBUG("Sending cancelation to fiber, propagating to the awaited future (TargetFiberId: %x)",
                 FiberId_);
@@ -652,12 +655,6 @@ public:
             YT_LOG_DEBUG("Sending cancelation to fiber (TargetFiberId: %x)",
                 FiberId_);
         }
-    }
-
-    TError GetCancelationError() const
-    {
-        auto guard = Guard(Lock_);
-        return CancelationError_;
     }
 
     void Run(const TError& error)
@@ -680,6 +677,7 @@ private:
     const TFiberId FiberId_;
 
     std::atomic<bool> Canceled_ = false;
+    NThreading::TEvent ErrorSet_;
     NThreading::TSpinLock Lock_;
     TError CancelationError_;
     TFuture<void> Future_;
@@ -811,7 +809,6 @@ protected:
     void OnSwitch()
     {
         FiberId_ = SwapCurrentFiberId(FiberId_);
-        MemoryTag_ = SwapMemoryTag(MemoryTag_);
         Fls_ = SwapCurrentFls(Fls_);
         MinLogLevel_ = SwapMinLogLevel(MinLogLevel_);
     }
@@ -819,13 +816,11 @@ protected:
     ~TBaseSwitchHandler()
     {
         YT_VERIFY(FiberId_ == InvalidFiberId);
-        YT_VERIFY(MemoryTag_ == NullMemoryTag);
         YT_VERIFY(!Fls_);
         YT_VERIFY(MinLogLevel_ == ELogLevel::Minimum);
     }
 
 private:
-    TMemoryTag MemoryTag_ = NullMemoryTag;
     TFls* Fls_ = nullptr;
     TFiberId FiberId_ = InvalidFiberId;
     ELogLevel MinLogLevel_ = ELogLevel::Minimum;
@@ -983,9 +978,13 @@ Y_NO_INLINE void RunInFiberContext(TFiber* fiber, TClosure callback)
 {
     TFiberSwitchHandler switchHandler(fiber);
     TNullPropagatingStorageGuard nullPropagatingStorageGuard;
+
+    auto cleanup = Finally([&callback] {
+        // To ensure callback is destroyed before switchHandler.
+        callback.Reset();
+    });
+
     callback();
-    // To ensure callback is destroyed before switchHandler.
-    callback.Reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1136,7 +1135,6 @@ TFiberCanceler GetCurrentFiberCanceler()
     }
 
     if (!switchHandler->Canceler()) {
-        TMemoryTagGuard guard(NullMemoryTag);
         switchHandler->Canceler() = New<NDetail::TCanceler>(GetCurrentFiberId());
     }
 
@@ -1150,8 +1148,6 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
     YT_VERIFY(!IsContextSwitchForbidden());
     YT_VERIFY(future);
     YT_ASSERT(invoker);
-
-    TMemoryTagGuard memoryTagGuard(NullMemoryTag);
 
     auto* currentFiber = NDetail::TryGetCurrentFiber();
     if (!currentFiber) {
@@ -1169,10 +1165,6 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
     GetCurrentFiberCanceler();
 
     const auto& canceler = NDetail::GetFiberSwitchHandler()->Canceler();
-    if (canceler->IsCanceled()) {
-        future.Cancel(canceler->GetCancelationError());
-    }
-
     canceler->SetFuture(future);
     auto finally = Finally([&] {
         canceler->ResetFuture();

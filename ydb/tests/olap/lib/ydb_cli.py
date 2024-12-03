@@ -7,7 +7,6 @@ import re
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import StrEnum
-from time import time
 from types import TracebackType
 
 
@@ -20,7 +19,7 @@ class WorkloadType(StrEnum):
 class YdbCliHelper:
     @staticmethod
     def get_cli_command() -> list[str]:
-        cli = get_external_param('ydb-cli', 'git')
+        cli = get_external_param('ydb-cli', 'main')
         if cli == 'git':
             return [yatest.common.work_path('ydb')]
         elif cli == 'main':
@@ -152,13 +151,12 @@ class YdbCliHelper:
                     self.result.query_out = r.read()
 
         @staticmethod
-        def _get_nodes_info() -> dict[str, dict[str, int]]:
-            nodes, _ = YdbCluster.get_cluster_nodes()
+        def _get_nodes_info() -> dict[str, dict[str, Any]]:
             return {
-                n['SystemState']['Host']: {
-                    'start_time': int(int(n['SystemState'].get('StartTime', time() * 1000)) / 1000)
+                n.host: {
+                    'start_time': n.start_time
                 }
-                for n in nodes
+                for n in YdbCluster.get_cluster_nodes(db_only=True)
             }
 
         def _check_nodes(self):
@@ -213,7 +211,7 @@ class YdbCliHelper:
 
         def process(self) -> YdbCliHelper.WorkloadRunResult:
             try:
-                wait_error = YdbCluster.wait_ydb_alive(300, self.db_path)
+                wait_error = YdbCluster.wait_ydb_alive(20 * 60, self.db_path)
                 if wait_error is not None:
                     self.result.error_message = wait_error
                 else:

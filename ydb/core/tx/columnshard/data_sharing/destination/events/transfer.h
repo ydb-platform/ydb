@@ -4,17 +4,14 @@
 #include <ydb/core/tx/columnshard/data_sharing/protos/events.pb.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 
 #include <ydb/library/actors/core/event_pb.h>
-
-namespace NKikimr::NOlap {
-class TVersionedIndex;
-}
-
 namespace NKikimr::NOlap::NDataSharing {
 class TSharedBlobsManager;
 class TTaskForTablet;
-}   // namespace NKikimr::NOlap::NDataSharing
+} // namespace NKikimr::NOlap::NDataSharing
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
@@ -25,13 +22,15 @@ private:
 
     TPathIdData() = default;
 
-    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPathIdData& proto, const TIndexInfo& indexInfo) {
+    TConclusionStatus DeserializeFromProto(
+        const NKikimrColumnShardDataSharingProto::TPathIdData& proto, const TVersionedIndex& versionedIndex, const IBlobGroupSelector& groupSelector) {
         if (!proto.HasPathId()) {
             return TConclusionStatus::Fail("no path id in proto");
         }
         PathId = proto.GetPathId();
         for (auto&& portionProto : proto.GetPortions()) {
-            TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(portionProto, indexInfo);
+            const auto schema = versionedIndex.GetSchemaVerified(portionProto.GetSchemaVersion());
+            TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(portionProto, schema->GetIndexInfo(), groupSelector);
             if (!portion) {
                 return portion.GetError();
             }
@@ -69,9 +68,10 @@ public:
         }
     };
 
-    static TConclusion<TPathIdData> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPathIdData& proto, const TIndexInfo& indexInfo) {
+    static TConclusion<TPathIdData> BuildFromProto(
+        const NKikimrColumnShardDataSharingProto::TPathIdData& proto, const TVersionedIndex& versionedIndex, const IBlobGroupSelector& groupSelector) {
         TPathIdData result;
-        auto resultParsing = result.DeserializeFromProto(proto, indexInfo);
+        auto resultParsing = result.DeserializeFromProto(proto, versionedIndex, groupSelector);
         if (!resultParsing) {
             return resultParsing;
         } else {
@@ -85,12 +85,16 @@ struct TEvSendDataFromSource: public NActors::TEventPB<TEvSendDataFromSource, NK
     TEvSendDataFromSource() = default;
 
     TEvSendDataFromSource(
-        const TString& sessionId, const ui32 packIdx, const TTabletId sourceTabletId, const THashMap<ui64, TPathIdData>& pathIdData) {
+        const TString& sessionId, const ui32 packIdx, const TTabletId sourceTabletId, const THashMap<ui64, TPathIdData>& pathIdData, TArrayRef<const NOlap::TSchemaPresetVersionInfo> schemas) {
         Record.SetSessionId(sessionId);
         Record.SetPackIdx(packIdx);
         Record.SetSourceTabletId((ui64)sourceTabletId);
         for (auto&& i : pathIdData) {
             i.second.SerializeToProto(*Record.AddPathIdData());
+        }
+
+        for (auto&& i : schemas) {
+            *Record.AddSchemeHistory() = i.GetProto();
         }
     }
 };
@@ -105,4 +109,4 @@ struct TEvFinishedFromSource: public NActors::TEventPB<TEvFinishedFromSource, NK
     }
 };
 
-}   // namespace NKikimr::NOlap::NDataSharing::NEvents
+} // namespace NKikimr::NOlap::NDataSharing::NEvents

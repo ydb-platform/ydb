@@ -126,7 +126,7 @@ DEFINE_ENUM(EClientCallStage,
 );
 
 class TChannel
-    : public IChannel
+    : public NYT::NRpc::NGrpc::IGrpcChannel
 {
 public:
     explicit TChannel(TChannelConfigPtr config)
@@ -219,6 +219,11 @@ public:
     const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
     {
         return MemoryUsageTracker_;
+    }
+
+    grpc_connectivity_state CheckConnectivityState(bool tryToConnect) override
+    {
+        return grpc_channel_check_connectivity_state(Channel_.Unwrap(), tryToConnect);
     }
 
 private:
@@ -624,6 +629,8 @@ private:
 
             NRpc::NProto::TResponseHeader responseHeader;
             ToProto(responseHeader.mutable_request_id(), Request_->GetRequestId());
+            NYT::ToProto(responseHeader.mutable_service(), Request_->GetService());
+            NYT::ToProto(responseHeader.mutable_method(), Request_->GetMethod());
             if (Request_->Header().has_response_codec()) {
                 responseHeader.set_codec(Request_->Header().response_codec());
             }
@@ -736,7 +743,7 @@ public:
 
 } // namespace
 
-IChannelPtr CreateGrpcChannel(TChannelConfigPtr config)
+IGrpcChannelPtr CreateGrpcChannel(TChannelConfigPtr config)
 {
     return New<TChannel>(std::move(config));
 }

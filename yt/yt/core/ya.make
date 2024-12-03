@@ -14,6 +14,7 @@ NO_LTO()
 SRCS(
     actions/cancelation_token.cpp
     actions/cancelable_context.cpp
+    actions/codicil_guarded_invoker.cpp
     actions/current_invoker.cpp
     actions/future.cpp
     actions/invoker_detail.cpp
@@ -118,6 +119,7 @@ SRCS(
     misc/blob_output.cpp
     misc/bloom_filter.cpp
     misc/checksum.cpp
+    misc/codicil.cpp
     misc/config.cpp
     misc/coro_pipe.cpp
     misc/crash_handler.cpp
@@ -202,7 +204,7 @@ SRCS(
     rpc/message_format.cpp
     rpc/null_channel.cpp
     rpc/peer_discovery.cpp
-    rpc/per_user_request_queue_provider.cpp
+    rpc/per_key_request_queue_provider.cpp
     rpc/protocol_version.cpp
     rpc/public.cpp
     rpc/request_queue_provider.cpp
@@ -388,7 +390,7 @@ RECURSE(
     test_framework
 )
 
-IF (NOT OPENSOURCE)
+IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         benchmarks
         bus/benchmarks

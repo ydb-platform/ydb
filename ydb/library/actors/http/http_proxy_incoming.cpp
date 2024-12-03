@@ -20,7 +20,6 @@ public:
     TDeque<THttpIncomingRequestPtr> RecycledRequests;
 
     THPTimer InactivityTimer;
-    static constexpr TDuration InactivityTimeout = TDuration::Minutes(2);
     TEvPollerReady* InactivityEvent = nullptr;
 
     TPollerToken::TPtr PollerToken;
@@ -71,7 +70,7 @@ public:
 protected:
     void Bootstrap(const TActorContext& ctx) {
         InactivityTimer.Reset();
-        ctx.Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
+        ctx.Schedule(Endpoint->InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
         LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") incoming connection opened");
         OnAccept(ctx);
     }
@@ -177,11 +176,11 @@ protected:
         }
         if (event->Get() == InactivityEvent) {
             const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
-            if (passed >= InactivityTimeout) {
+            if (passed >= Endpoint->InactivityTimeout) {
                 LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed by inactivity timeout");
                 return Die(ctx); // timeout
             } else {
-                ctx.Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
+                ctx.Schedule(Endpoint->InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
             }
         }
         if (event->Get()->Write) {

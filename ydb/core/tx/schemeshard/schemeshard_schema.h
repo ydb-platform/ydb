@@ -377,7 +377,7 @@ struct Schema : NIceDb::Schema {
         struct FullCompactionTs : Column<31, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
         struct MemDataSize : Column<32, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
 
-        // PartCount, PartOwners & ShardState are volatile data
+        // PartCount, PartOwners, ShardState, HasSchemaChanges are volatile data
 
         // Represented by NKikimrTableStats::TStoragePoolsStats.
         struct StoragePoolsStats : Column<33, NScheme::NTypeIds::String> { using Type = TString; };
@@ -1022,9 +1022,11 @@ struct Schema : NIceDb::Schema {
         struct AlterVersion :   Column<3, NScheme::NTypeIds::Uint64> {};
         struct IndexType :      Column<4, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexType; static constexpr Type Default = NKikimrSchemeOp::EIndexTypeInvalid; };
         struct State :          Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexState; static constexpr Type Default = NKikimrSchemeOp::EIndexStateInvalid; };
+        // One of the SpecializedIndexDescription protobufs serialized as a string.
+        struct Description :    Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, IndexType, State>;
+        using TColumns = TableColumns<PathId, AlterVersion, IndexType, State, Description>;
     };
 
     struct MigratedTableIndex : Table<67> {
@@ -1043,9 +1045,11 @@ struct Schema : NIceDb::Schema {
         struct AlterVersion :   Column<3, NScheme::NTypeIds::Uint64> {};
         struct IndexType :      Column<4, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexType; static constexpr Type Default = NKikimrSchemeOp::EIndexTypeInvalid; };
         struct State :          Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexState; static constexpr Type Default = NKikimrSchemeOp::EIndexStateInvalid; };
+        // One of the SpecializedIndexDescription protobufs serialized as a string.
+        struct Description :    Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, IndexType, State>;
+        using TColumns = TableColumns<PathId, AlterVersion, IndexType, State, Description>;
     };
 
     struct TableIndexKeys : Table<40> {
@@ -1316,8 +1320,8 @@ struct Schema : NIceDb::Schema {
 
         struct MaxRetries : Column<27, NScheme::NTypeIds::Uint32> {};
 
-        struct RowsBilled : Column<28, NScheme::NTypeIds::Uint64> {};
-        struct BytesBilled : Column<29, NScheme::NTypeIds::Uint64> {};
+        struct /*Upload*/ RowsBilled : Column<28, NScheme::NTypeIds::Uint64> {};
+        struct /*Upload*/ BytesBilled : Column<29, NScheme::NTypeIds::Uint64> {};
 
         struct BuildKind : Column<30, NScheme::NTypeIds::Uint32> {};
 
@@ -1326,7 +1330,16 @@ struct Schema : NIceDb::Schema {
         struct AlterMainTableTxDone : Column<33, NScheme::NTypeIds::Bool> {};
 
         // Serialized as string NKikimrSchemeOp::TIndexCreationConfig protobuf.
-        struct CreationConfig : Column<34, NScheme::NTypeIds::String> { using Type = TString; };
+        struct CreationConfig : Column<34, NScheme::NTypeIds::String> {};
+
+        struct ReadRowsBilled : Column<35, NScheme::NTypeIds::Uint64> {};
+        struct ReadBytesBilled : Column<36, NScheme::NTypeIds::Uint64> {};
+
+        struct UploadRowsProcessed : Column<37, NScheme::NTypeIds::Uint64> {};
+        struct UploadBytesProcessed : Column<38, NScheme::NTypeIds::Uint64> {};
+
+        struct ReadRowsProcessed : Column<39, NScheme::NTypeIds::Uint64> {};
+        struct ReadBytesProcessed : Column<40, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1363,7 +1376,13 @@ struct Schema : NIceDb::Schema {
             AlterMainTableTxId,
             AlterMainTableTxStatus,
             AlterMainTableTxDone,
-            CreationConfig
+            CreationConfig,
+            ReadRowsBilled,
+            ReadBytesBilled,
+            UploadRowsProcessed,
+            UploadBytesProcessed,
+            ReadRowsProcessed,
+            ReadBytesProcessed
         >;
     };
 
@@ -1425,14 +1444,17 @@ struct Schema : NIceDb::Schema {
         struct LocalShardIdx : Column<3, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
 
         struct Range : Column<4, NScheme::NTypeIds::String> { using Type = NKikimrTx::TKeyRange; };
-        struct LastKeyAck : Column<5, NScheme::NTypeIds::String> { using Type = TString; };
+        struct LastKeyAck : Column<5, NScheme::NTypeIds::String> {};
 
         struct Status : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrIndexBuilder::EBuildStatus; };
         struct Message : Column<7, NScheme::NTypeIds::Utf8> {};
         struct UploadStatus : Column<8, NScheme::NTypeIds::Uint32> { using Type = Ydb::StatusIds::StatusCode; };
 
-        struct RowsProcessed : Column<9, NScheme::NTypeIds::Uint64> {};
-        struct BytesProcessed : Column<10, NScheme::NTypeIds::Uint64> {};
+        struct /*Upload*/ RowsProcessed : Column<9, NScheme::NTypeIds::Uint64> {};
+        struct /*Upload*/ BytesProcessed : Column<10, NScheme::NTypeIds::Uint64> {};
+
+        struct ReadRowsProcessed : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct ReadBytesProcessed : Column<12, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Id, OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
@@ -1445,7 +1467,9 @@ struct Schema : NIceDb::Schema {
             Message,
             UploadStatus,
             RowsProcessed,
-            BytesProcessed
+            BytesProcessed,
+            ReadRowsProcessed,
+            ReadBytesProcessed
         >;
     };
 

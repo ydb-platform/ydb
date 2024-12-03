@@ -35,6 +35,17 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+TString MakeIncompletePath(const TString& path)
+{
+    return NYT::Format("%v_incomplete", path);
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 void CollectAndDumpMemoryProfile(const TString& memoryProfilePath, tcmalloc::ProfileType profileType)
 {
     auto profile = NYTProf::ReadHeapProfile(profileType);
@@ -45,18 +56,26 @@ void CollectAndDumpMemoryProfile(const TString& memoryProfilePath, tcmalloc::Pro
         },
     });
 
-    TFileOutput output(memoryProfilePath);
+    auto incompletePath = NYT::MakeIncompletePath(memoryProfilePath);
+
+    TFileOutput output(incompletePath);
     NYTProf::WriteProfile(&output, profile);
     output.Finish();
+    NFs::Rename(incompletePath, memoryProfilePath);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
 void MemoryProfileTimeoutHandler(int /*signal*/)
 {
-    WriteToStderr("*** Process hung during dumping heap profile ***\n");
-    AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
+    AbortProcessDramatically(
+        EProcessExitCode::GenericError,
+        "Process hung while dumping heap profile");
 }
+
+} // namespace
 
 void SetupMemoryProfileTimeout(int timeout)
 {
@@ -167,22 +186,33 @@ private:
         auto childPid = fork();
 
         if (childPid == 0) {
+            NFs::MakeDirectoryRecursive(Options_.HeapDumpDirectory);
             SetupMemoryProfileTimeout(Options_.Timeout.Seconds());
             CollectAndDumpMemoryProfile(profilePaths->HeapProfilePath, tcmalloc::ProfileType::kHeap);
             CollectAndDumpMemoryProfile(profilePaths->PeakProfilePath, tcmalloc::ProfileType::kPeakHeap);
             DumpProfilePaths(profilePaths, profilePathsFile);
 
             Cerr << "TTCMallocLimitHandler: Heap profiles are written" << Endl;
-            AbortProcess(ToUnderlying(EProcessExitCode::OK));
+            AbortProcessSilently(EProcessExitCode::OK);
         }
 
         if (childPid < 0) {
             Cerr << "TTCMallocLimitHandler: Fork failed: " << LastSystemErrorText() << Endl;
-            AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
+            AbortProcessSilently(EProcessExitCode::GenericError);
         }
 
         ExecWaitForChild(childPid);
-        AbortProcess(ToUnderlying(EProcessExitCode::OK));
+        AbortProcessSilently(EProcessExitCode::OK);
+    }
+
+    auto MakeSuffixFormatter(const TString& timestamp) const
+    {
+        return NYT::MakeFormatterWrapper([this, &timestamp] (TStringBuilderBase* builder) {
+            if (Options_.FilenameSuffix) {
+                builder->AppendFormat("%v_", *Options_.FilenameSuffix);
+            }
+            FormatValue(builder, timestamp, "v");
+        });
     }
 
     TString GetHeapDumpPath(const TString& timestamp) const
@@ -190,7 +220,7 @@ private:
         return Format(
             "%v/heap_%v.pb.gz",
             Options_.HeapDumpDirectory,
-            timestamp);
+            MakeSuffixFormatter(timestamp));
     }
 
     TString GetPeakDumpPath(const TString& timestamp) const
@@ -198,7 +228,7 @@ private:
         return Format(
             "%v/peak_%v.pb.gz",
             Options_.HeapDumpDirectory,
-            timestamp);
+            MakeSuffixFormatter(timestamp));
     }
 
     TString GetProfilePaths(const TString& timestamp) const
@@ -206,7 +236,7 @@ private:
         return Format(
             "%v/oom_profile_paths_%v.yson",
             Options_.HeapDumpDirectory,
-            timestamp);
+            MakeSuffixFormatter(timestamp));
     }
 
     void ExecWaitForChild(int pid)

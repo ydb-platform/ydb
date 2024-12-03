@@ -58,7 +58,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Process");
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Process");
 
 static constexpr pid_t InvalidProcessId = -1;
 
@@ -657,7 +657,7 @@ private:
                 YT_VERIFY(Pipe_);
                 ssize_t size = HandleEintr(::write, Pipe_->GetWriteFD(), &data, sizeof(data));
                 YT_VERIFY(size == sizeof(data));
-                AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
+                AbortProcessSilently(EProcessExitCode::GenericError);
             }
         }
         YT_ABORT();
@@ -803,6 +803,8 @@ void TSimpleProcess::DoSpawn()
         PollPeriod_);
 
     AsyncWaitExecutor_->Start();
+
+    YT_LOG_INFO("Process spawned (Pid: %v)", ProcessId_);
 #else
     THROW_ERROR_EXCEPTION("Unsupported platform");
 #endif

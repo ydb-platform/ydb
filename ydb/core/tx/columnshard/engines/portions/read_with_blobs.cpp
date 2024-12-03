@@ -18,7 +18,9 @@ void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataC
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlobs::RestoreBatch(
     const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns) const {
     THashMap<TChunkAddress, TString> blobs;
-    for (auto&& i : PortionInfo.GetRecords()) {
+    NActors::TLogContextGuard gLogging =
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("portion_id", PortionInfo.GetPortionInfo().GetPortionId());
+    for (auto&& i : PortionInfo.GetRecordsVerified()) {
         blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
         Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
     }
@@ -114,10 +116,10 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         }
     }
 
-    TPortionInfoConstructor constructor(source.PortionInfo.GetPortionInfo(), false, true);
-    constructor.SetMinSnapshotDeprecated(to->GetSnapshot());
-    constructor.SetSchemaVersion(to->GetVersion());
-    constructor.MutableMeta().ResetTierName(targetTier);
+    TPortionAccessorConstructor constructor = TPortionAccessorConstructor::BuildForRewriteBlobs(source.PortionInfo.GetPortionInfo());
+    constructor.MutablePortionConstructor().SetMinSnapshotDeprecated(to->GetSnapshot());
+    constructor.MutablePortionConstructor().SetSchemaVersion(to->GetVersion());
+    constructor.MutablePortionConstructor().MutableMeta().ResetTierName(targetTier);
 
     TIndexInfo::TSecondaryData secondaryData;
     secondaryData.MutableExternalData() = entityChunksNew;

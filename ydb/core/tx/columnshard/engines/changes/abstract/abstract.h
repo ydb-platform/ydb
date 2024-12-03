@@ -267,6 +267,7 @@ public:
 
     void SetFetchedDataAccessors(TDataAccessorsResult&& result, const TDataAccessorsInitializationContext& context) {
         AFL_VERIFY(!FetchedDataAccessors);
+        AFL_VERIFY(FetchedDataAccessors->HasResourcesGuard());
         FetchedDataAccessors = std::move(result);
         OnDataAccessorsInitialized(context);
     }
@@ -342,6 +343,9 @@ public:
         return Blobs.GetTotalBlobsSize();
     }
 
+    bool HasMetadataResourcesGuard() const {
+        return FetchedDataAccessors && FetchedDataAccessors->HasResourcesGuard();
+    }
 };
 
 }

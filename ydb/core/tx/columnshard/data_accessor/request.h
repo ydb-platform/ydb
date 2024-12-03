@@ -63,9 +63,14 @@ public:
         return ErrorsByPathId.size();
     }
 
-    void SetResourcesGuard(std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>&& guard) {
+    void SetResourcesGuard(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
         AFL_VERIFY(!ResourcesGuard);
-        ResourcesGuard = std::move(guard);
+        AFL_VERIFY(guard);
+        ResourcesGuard = guard;
+    }
+
+    bool HasResourcesGuard() const {
+        return !!ResourcesGuard;
     }
 };
 
@@ -77,6 +82,9 @@ private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) = 0;
 
     void OnRequestsFinished(TDataAccessorsResult&& result) {
+        if (DataAccessorsResources) {
+            result.SetResourcesGuard(std::move(DataAccessorsResources));
+        }
         DoOnRequestsFinished(std::move(result));
     }
 
@@ -102,11 +110,6 @@ public:
         AFL_VERIFY(!DataAccessorsResources);
         AFL_VERIFY(guard);
         DataAccessorsResources = guard;
-    }
-
-    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& ExtractResourcesGuard() {
-        AFL_VERIFY(DataAccessorsResources);
-        return std::move(DataAccessorsResources);
     }
 
     virtual ~IDataAccessorRequestsSubscriber() = default;

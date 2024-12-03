@@ -7,6 +7,8 @@
 
 #include <aws/common/common.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 enum aws_cpu_feature_name {
     AWS_CPU_FEATURE_CLMUL,
     AWS_CPU_FEATURE_SSE_4_1,
@@ -25,5 +27,6 @@ AWS_EXTERN_C_BEGIN
 AWS_COMMON_API bool aws_cpu_has_feature(enum aws_cpu_feature_name feature_name);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_CPUID_H */

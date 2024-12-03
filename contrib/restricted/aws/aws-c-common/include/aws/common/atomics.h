@@ -8,6 +8,8 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 /**
  * struct aws_atomic_var represents an atomic variable - a value which can hold an integer or pointer
  * that can be manipulated atomically. struct aws_atomic_vars should normally only be manipulated
@@ -323,5 +325,6 @@ void aws_atomic_thread_fence(enum aws_memory_order order);
 #endif /* AWS_NO_STATIC_IMPL */
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif

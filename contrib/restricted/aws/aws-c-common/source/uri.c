@@ -114,7 +114,8 @@ int aws_uri_init_from_builder_options(
             buffer_size += 1;
             for (size_t i = 0; i < query_len; ++i) {
                 struct aws_uri_param *uri_param_ptr = NULL;
-                aws_array_list_get_at_ptr(options->query_params, (void **)&uri_param_ptr, i);
+                int result = aws_array_list_get_at_ptr(options->query_params, (void **)&uri_param_ptr, i);
+                AWS_FATAL_ASSERT(result == AWS_OP_SUCCESS);
                 /* 2 == 1 for '&' and 1 for '='. who cares if we over-allocate a little?  */
                 buffer_size += uri_param_ptr->key.len + uri_param_ptr->value.len + 2;
             }

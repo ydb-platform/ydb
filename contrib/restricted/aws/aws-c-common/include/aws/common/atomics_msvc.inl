@@ -10,7 +10,11 @@
 #include <aws/common/atomics.h>
 #include <aws/common/common.h>
 
+/* This file generates level 4 compiler warnings in Visual Studio 2017 and older */
+#pragma warning(push, 3)
 #include <intrin.h>
+#pragma warning(pop)
+
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -140,7 +144,7 @@ static inline void aws_atomic_priv_barrier_after(enum aws_memory_order order, en
  */
 AWS_STATIC_IMPL
 void aws_atomic_init_int(volatile struct aws_atomic_var *var, size_t n) {
-    AWS_ATOMIC_VAR_INTVAL(var) = n;
+    AWS_ATOMIC_VAR_INTVAL(var) = (aws_atomic_impl_int_t)n;
 }
 
 /**
@@ -158,7 +162,7 @@ void aws_atomic_init_ptr(volatile struct aws_atomic_var *var, void *p) {
 AWS_STATIC_IMPL
 size_t aws_atomic_load_int_explicit(volatile const struct aws_atomic_var *var, enum aws_memory_order memory_order) {
     aws_atomic_priv_barrier_before(memory_order, aws_atomic_priv_load);
-    size_t result = AWS_ATOMIC_VAR_INTVAL(var);
+    size_t result = (size_t)AWS_ATOMIC_VAR_INTVAL(var);
     aws_atomic_priv_barrier_after(memory_order, aws_atomic_priv_load);
     return result;
 }
@@ -181,10 +185,10 @@ AWS_STATIC_IMPL
 void aws_atomic_store_int_explicit(volatile struct aws_atomic_var *var, size_t n, enum aws_memory_order memory_order) {
     if (memory_order != aws_memory_order_seq_cst) {
         aws_atomic_priv_barrier_before(memory_order, aws_atomic_priv_store);
-        AWS_ATOMIC_VAR_INTVAL(var) = n;
+        AWS_ATOMIC_VAR_INTVAL(var) = (aws_atomic_impl_int_t)n;
         aws_atomic_priv_barrier_after(memory_order, aws_atomic_priv_store);
     } else {
-        AWS_INTERLOCKED_INT(Exchange)(&AWS_ATOMIC_VAR_INTVAL(var), n);
+        AWS_INTERLOCKED_INT(Exchange)(&AWS_ATOMIC_VAR_INTVAL(var), (aws_atomic_impl_int_t)n);
     }
 }
 
@@ -213,7 +217,7 @@ size_t aws_atomic_exchange_int_explicit(
     size_t n,
     enum aws_memory_order memory_order) {
     aws_atomic_priv_check_order(memory_order);
-    return AWS_INTERLOCKED_INT(Exchange)(&AWS_ATOMIC_VAR_INTVAL(var), n);
+    return (size_t)AWS_INTERLOCKED_INT(Exchange)(&AWS_ATOMIC_VAR_INTVAL(var), (aws_atomic_impl_int_t)n);
 }
 
 /**
@@ -244,7 +248,8 @@ bool aws_atomic_compare_exchange_int_explicit(
     aws_atomic_priv_check_order(order_success);
     aws_atomic_priv_check_order(order_failure);
 
-    size_t oldval = AWS_INTERLOCKED_INT(CompareExchange)(&AWS_ATOMIC_VAR_INTVAL(var), desired, *expected);
+    size_t oldval = (size_t)AWS_INTERLOCKED_INT(CompareExchange)(
+        &AWS_ATOMIC_VAR_INTVAL(var), (aws_atomic_impl_int_t)desired, (aws_atomic_impl_int_t)*expected);
     bool successful = oldval == *expected;
     *expected = oldval;
 
@@ -280,7 +285,7 @@ AWS_STATIC_IMPL
 size_t aws_atomic_fetch_add_explicit(volatile struct aws_atomic_var *var, size_t n, enum aws_memory_order order) {
     aws_atomic_priv_check_order(order);
 
-    return AWS_INTERLOCKED_INT(ExchangeAdd)(&AWS_ATOMIC_VAR_INTVAL(var), n);
+    return (size_t)AWS_INTERLOCKED_INT(ExchangeAdd)(&AWS_ATOMIC_VAR_INTVAL(var), (aws_atomic_impl_int_t)n);
 }
 
 /**
@@ -290,7 +295,7 @@ AWS_STATIC_IMPL
 size_t aws_atomic_fetch_sub_explicit(volatile struct aws_atomic_var *var, size_t n, enum aws_memory_order order) {
     aws_atomic_priv_check_order(order);
 
-    return AWS_INTERLOCKED_INT(ExchangeAdd)(&AWS_ATOMIC_VAR_INTVAL(var), -(aws_atomic_impl_int_t)n);
+    return (size_t)AWS_INTERLOCKED_INT(ExchangeAdd)(&AWS_ATOMIC_VAR_INTVAL(var), -(aws_atomic_impl_int_t)n);
 }
 
 /**
@@ -300,7 +305,7 @@ AWS_STATIC_IMPL
 size_t aws_atomic_fetch_or_explicit(volatile struct aws_atomic_var *var, size_t n, enum aws_memory_order order) {
     aws_atomic_priv_check_order(order);
 
-    return AWS_INTERLOCKED_INT(Or)(&AWS_ATOMIC_VAR_INTVAL(var), n);
+    return (size_t)AWS_INTERLOCKED_INT(Or)(&AWS_ATOMIC_VAR_INTVAL(var), (aws_atomic_impl_int_t)n);
 }
 
 /**
@@ -310,7 +315,7 @@ AWS_STATIC_IMPL
 size_t aws_atomic_fetch_and_explicit(volatile struct aws_atomic_var *var, size_t n, enum aws_memory_order order) {
     aws_atomic_priv_check_order(order);
 
-    return AWS_INTERLOCKED_INT(And)(&AWS_ATOMIC_VAR_INTVAL(var), n);
+    return (size_t)AWS_INTERLOCKED_INT(And)(&AWS_ATOMIC_VAR_INTVAL(var), (aws_atomic_impl_int_t)n);
 }
 
 /**
@@ -320,7 +325,7 @@ AWS_STATIC_IMPL
 size_t aws_atomic_fetch_xor_explicit(volatile struct aws_atomic_var *var, size_t n, enum aws_memory_order order) {
     aws_atomic_priv_check_order(order);
 
-    return AWS_INTERLOCKED_INT(Xor)(&AWS_ATOMIC_VAR_INTVAL(var), n);
+    return (size_t)AWS_INTERLOCKED_INT(Xor)(&AWS_ATOMIC_VAR_INTVAL(var), (aws_atomic_impl_int_t)n);
 }
 
 /**

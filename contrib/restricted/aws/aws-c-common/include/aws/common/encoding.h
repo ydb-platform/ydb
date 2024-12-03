@@ -12,6 +12,7 @@
 
 #include <memory.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
 AWS_EXTERN_C_BEGIN
 
 /*
@@ -228,5 +229,6 @@ AWS_COMMON_API int aws_utf8_decoder_finalize(struct aws_utf8_decoder *decoder);
 #endif /* AWS_NO_STATIC_IMPL */
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_ENCODING_H */

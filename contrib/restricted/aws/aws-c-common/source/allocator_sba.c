@@ -6,6 +6,7 @@
 #include <aws/common/allocator.h>
 #include <aws/common/array_list.h>
 #include <aws/common/assert.h>
+#include <aws/common/macros.h>
 #include <aws/common/mutex.h>
 
 /*
@@ -405,7 +406,7 @@ static void *s_sba_alloc(struct small_block_allocator *sba, size_t size) {
     return aws_mem_acquire(sba->allocator, size);
 }
 
-static void s_sba_free(struct small_block_allocator *sba, void *addr) {
+AWS_SUPPRESS_ASAN AWS_SUPPRESS_TSAN static void s_sba_free(struct small_block_allocator *sba, void *addr) {
     if (!addr) {
         return;
     }

@@ -8,6 +8,7 @@
 
 #include <time.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
 AWS_EXTERN_C_BEGIN
 
 /**
@@ -26,5 +27,6 @@ AWS_COMMON_API void aws_localtime(time_t time, struct tm *t);
 AWS_COMMON_API void aws_gmtime(time_t time, struct tm *t);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_TIME_H */

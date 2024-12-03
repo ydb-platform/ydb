@@ -26,6 +26,7 @@ PEERDIR(
     yql/essentials/minikql/dom
     yql/essentials/public/udf
     ydb/public/api/protos
+    ydb/core/tx/schemeshard/olap/column_family
 )
 
 YQL_LAST_ABI_VERSION()

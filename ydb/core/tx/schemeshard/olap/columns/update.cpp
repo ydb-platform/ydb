@@ -196,10 +196,15 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
     }
 }
 
-bool TOlapColumnBase::ApplySerializerFromColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
-    if (GetColumnFamilyId().has_value()) {
-        SetSerializer(columnFamilies.GetByIdVerified(GetColumnFamilyId().value())->GetSerializerContainer());
-    } else {
+void TOlapColumnBase::ApplyColumnFamily(const TOlapColumnFamily& columnFamily) {
+    ColumnFamilyId = columnFamily.GetId();
+    SetSerializer(columnFamily.GetSerializerContainer());
+    auto conclusion = columnFamily.GetAccessorConstructor()->BuildConstructor();
+    SetAccessorConstructor(conclusion.GetResult());
+}
+
+bool TOlapColumnBase::ApplyColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
+    if (!GetColumnFamilyId().has_value()) {
         TString familyName = "default";
         const TOlapColumnFamily* columnFamily = columnFamilies.GetByName(familyName);
 
@@ -210,8 +215,16 @@ bool TOlapColumnBase::ApplySerializerFromColumnFamily(const TOlapColumnFamiliesD
         }
 
         ColumnFamilyId = columnFamily->GetId();
-        SetSerializer(columnFamilies.GetByIdVerified(columnFamily->GetId())->GetSerializerContainer());
     }
+    Y_VERIFY(ColumnFamilyId.has_value());
+    const TOlapColumnFamily* columnFamily = columnFamilies.GetByIdVerified(ColumnFamilyId.value());
+    SetSerializer(columnFamily->GetSerializerContainer());
+    auto conclusion = columnFamily->GetAccessorConstructor()->BuildConstructor();
+    if (conclusion.IsFail()) {
+        errors.AddError(conclusion.GetErrorMessage());
+        return false;
+    }
+    SetAccessorConstructor(conclusion.GetResult());
     return true;
 }
 
@@ -250,7 +263,7 @@ bool TOlapColumnBase::ApplyDiff(
     if (diffColumn.GetSerializer()) {
         Serializer = diffColumn.GetSerializer();
     } else {
-        if (!columnFamilies.GetColumnFamilies().empty() && !ApplySerializerFromColumnFamily(columnFamilies, errors)) {
+        if (!columnFamilies.GetColumnFamilies().empty() && !ApplyColumnFamily(columnFamilies, errors)) {
             return false;
         }
     }

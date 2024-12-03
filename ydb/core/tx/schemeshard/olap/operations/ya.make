@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/mind/hive
     ydb/services/bg_tasks
     ydb/core/tx/schemeshard/olap/operations/alter
+    ydb/core/tx/schemeshard/olap/column_family
 )
 
 YQL_LAST_ABI_VERSION()

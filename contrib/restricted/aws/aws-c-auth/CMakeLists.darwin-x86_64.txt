@@ -70,6 +70,7 @@ target_sources(restricted-aws-aws-c-auth PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_imds.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_process.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_profile.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_sso.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_static.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_sts.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/credentials_provider_sts_web_identity.c
@@ -84,5 +85,8 @@ target_sources(restricted-aws-aws-c-auth PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signing_config.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/signing_result.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/sigv4_http_request.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/sso_token_utils.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/token_provider_sso_profile.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-auth/source/token_provider_sso_session.c
 )
 

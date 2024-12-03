@@ -329,6 +329,7 @@ public:
 
     virtual std::vector<TCSMetadataRequest> CollectMetadataRequests() const = 0;
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
+    virtual const std::shared_ptr<TVersionedIndex>& GetVersionedIndexReadonlyCopy() = 0;
     virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const = 0;
     virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const;
 

@@ -17774,16 +17774,23 @@
     ],
     "test_sql2yql.test[stream_lookup_join-lookup_join]": [
         {
-            "checksum": "cafb9f686b3f2fca7a4160d3f4d9f2ef",
-            "size": 2287,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql2yql.test_stream_lookup_join-lookup_join_/sql.yql"
+            "checksum": "24d18f8168bba9c2314a26b09bb16d35",
+            "size": 2302,
+            "uri": "https://{canondata_backend}/1781765/2d42e2eef9599338dc4a3893c2f2b2d1e63b5e93/resource.tar.gz#test_sql2yql.test_stream_lookup_join-lookup_join_/sql.yql"
         }
     ],
     "test_sql2yql.test[stream_lookup_join-lookup_join_narrow]": [
         {
-            "checksum": "f375a7f174b86bffd959a947ab5e4216",
-            "size": 2288,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql2yql.test_stream_lookup_join-lookup_join_narrow_/sql.yql"
+            "checksum": "f2226336626a085d6e5e7a2e458f8454",
+            "size": 2303,
+            "uri": "https://{canondata_backend}/1781765/2d42e2eef9599338dc4a3893c2f2b2d1e63b5e93/resource.tar.gz#test_sql2yql.test_stream_lookup_join-lookup_join_narrow_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[stream_lookup_join-lookup_join_with_parameters]": [
+        {
+            "checksum": "b667d324cf1c83573d9479d375af51ba",
+            "size": 2347,
+            "uri": "https://{canondata_backend}/1781765/2d42e2eef9599338dc4a3893c2f2b2d1e63b5e93/resource.tar.gz#test_sql2yql.test_stream_lookup_join-lookup_join_with_parameters_/sql.yql"
         }
     ],
     "test_sql2yql.test[table_range-concat_empty_sorted_with_key_diff]": [
@@ -30325,6 +30332,11 @@
     "test_sql_format.test[stream_lookup_join-lookup_join_narrow]": [
         {
             "uri": "file://test_sql_format.test_stream_lookup_join-lookup_join_narrow_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[stream_lookup_join-lookup_join_with_parameters]": [
+        {
+            "uri": "file://test_sql_format.test_stream_lookup_join-lookup_join_with_parameters_/formatted.sql"
         }
     ],
     "test_sql_format.test[table_range-concat_empty_sorted_with_key_diff]": [

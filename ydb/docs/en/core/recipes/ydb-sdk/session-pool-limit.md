@@ -1,7 +1,5 @@
 # Setting the session pool size
 
-{% include [work in progress message](_includes/addition.md) %}
-
 The client's session pool size affects resource consumption (RAM, CPU) on the server side of {{ ydb-short-name }}. Simple math: if `1000` clients of the same DB have `1000` sessions each, `1000000` actors (workers, session performers) are created on the server side. If you don't limit the number of sessions on the client, this may result in a slow cluster that is close to a failure.
 
 By default, the {{ ydb-short-name }} SDK has a limit of `50` sessions when using native drivers. There is no limit for third-party libraries, such as Go database/sql.

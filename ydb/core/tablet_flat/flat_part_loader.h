@@ -84,19 +84,14 @@ namespace NTable {
             void Save(ui32 cookie, NSharedCache::TEvResult::TLoaded&& loaded) noexcept
             {
                 if (cookie == 0 && NeedPages.erase(loaded.PageId)) {
+                    auto pageType = Cache->GetPageType(loaded.PageId);
+                    bool sticky = NeedIn(pageType) || pageType == EPage::FlatIndex;
                     SavedPages[loaded.PageId] = NSharedCache::TPinnedPageRef(loaded.Page).GetData();
-                    bool sticky = IsStickyPage(loaded.PageId);
                     Cache->Fill(loaded.PageId, std::move(loaded.Page), sticky);
                 }
             }
 
         private:
-            bool IsStickyPage(TPageId pageId)
-            {
-                auto pageType = Cache->GetPageType(pageId);
-                return NeedIn(pageType) || pageType == EPage::FlatIndex;
-            }
-
             const TPart* Part = nullptr;
             TIntrusivePtr<TCache> Cache;
             THashMap<TPageId, TSharedData> SavedPages;

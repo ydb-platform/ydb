@@ -1202,7 +1202,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
 
         resp.Clear();
         UNIT_ASSERT(setup.DirectStream->Read(&resp));
-        //UNIT_ASSERT_C(resp.status() == Ydb::StatusIds::SESSION_EXPIRED, resp.status());
+
         Cerr << "Check caching service data empty\n";
         cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 0);

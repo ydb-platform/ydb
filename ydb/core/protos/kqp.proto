@@ -734,6 +734,7 @@ message TKqpTableSinkSettings {
     optional NActorsProto.TActorId BufferActorId = 10;
     optional int64 Priority = 11;
     optional bool IsOlap = 12;
+    repeated uint32 WriteIndexes = 13;
 }
 
 message TKqpStreamLookupSettings {

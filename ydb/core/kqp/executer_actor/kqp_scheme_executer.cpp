@@ -8,6 +8,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 
 namespace NKikimr::NKqp {
@@ -42,6 +43,7 @@ class TKqpSchemeExecuter : public TActorBootstrapped<TKqpSchemeExecuter> {
         enum EEv {
             EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvMakeTempDirResult,
+            EvMakeSessionDirResult,
         };
 
         struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
@@ -49,6 +51,10 @@ class TKqpSchemeExecuter : public TActorBootstrapped<TKqpSchemeExecuter> {
         };
 
         struct TEvMakeTempDirResult : public TEventLocal<TEvMakeTempDirResult, EEv::EvMakeTempDirResult> {
+            IKqpGateway::TGenericResult Result;
+        };
+
+        struct TEvMakeSessionDirResult : public TEventLocal<TEvMakeSessionDirResult, EEv::EvMakeSessionDirResult> {
             IKqpGateway::TGenericResult Result;
         };
     };
@@ -93,6 +99,35 @@ public:
         auto& record = ev->Record;
 
         record.SetDatabaseName(Database);
+        record.SetUserToken(NACLib::TSystemUsers::Tmp().GetSerializedToken());
+        record.SetPeerName(ClientAddress);
+
+        auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme->SetWorkingDir(GetTmpDirPath(Database));
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
+        modifyScheme->SetAllowCreateInTempDir(false);
+        auto* makeDir = modifyScheme->MutableMkDir();
+        makeDir->SetName(GetSessionDirName());
+
+        auto promise = NewPromise<IKqpGateway::TGenericResult>();
+        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
+        RegisterWithSameMailbox(requestHandler);
+
+        auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+        auto selfId = SelfId();
+        promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
+            auto ev = MakeHolder<TEvPrivate::TEvMakeTempDirResult>();
+            ev->Result = future.GetValue();
+            actorSystem->Send(selfId, ev.Release());
+        });
+        Become(&TKqpSchemeExecuter::ExecuteState);
+    }
+
+    void CreateSessionDirectory() {
+        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto& record = ev->Record;
+
+        record.SetDatabaseName(Database);
         if (UserToken) {
             record.SetUserToken(UserToken->GetSerializedToken());
         }
@@ -113,11 +148,10 @@ public:
         auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
         auto selfId = SelfId();
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
-            auto ev = MakeHolder<TEvPrivate::TEvMakeTempDirResult>();
+            auto ev = MakeHolder<TEvPrivate::TEvMakeSessionDirResult>();
             ev->Result = future.GetValue();
             actorSystem->Send(selfId, ev.Release());
         });
-        Become(&TKqpSchemeExecuter::ExecuteState);
     }
 
     void MakeSchemeOperationRequest() {
@@ -489,6 +523,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvPrivate::TEvResult, HandleExecute);
                 hFunc(TEvPrivate::TEvMakeTempDirResult, Handle);
+                hFunc(TEvPrivate::TEvMakeSessionDirResult, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -522,7 +557,16 @@ public:
     void Handle(TEvPrivate::TEvMakeTempDirResult::TPtr& result) {
         if (!result->Get()->Result.Success()) {
             InternalError(TStringBuilder()
-                << "Error creating temporary directory for session " << SessionId
+                << "Error creating temporary directory: "
+                << result->Get()->Result.Issues().ToString(true));
+        }
+        CreateSessionDirectory();
+    }
+
+    void Handle(TEvPrivate::TEvMakeSessionDirResult::TPtr& result) {
+        if (!result->Get()->Result.Success()) {
+            InternalError(TStringBuilder()
+                << "Error creating directory for session " << SessionId
                 << ": " << result->Get()->Result.Issues().ToString(true));
         }
         MakeSchemeOperationRequest();

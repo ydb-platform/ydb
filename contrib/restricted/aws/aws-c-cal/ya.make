@@ -32,6 +32,12 @@ CFLAGS(
     -DHAVE_SYSCONF
 )
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DAWS_CAL_EXPORTS
+    )
+ENDIF()
+
 SRCS(
     source/cal.c
     source/der.c
@@ -63,6 +69,14 @@ ELSEIF (OS_LINUX)
         source/unix/opensslcrypto_ecc.c
         source/unix/opensslcrypto_hash.c
         source/unix/opensslcrypto_hmac.c
+    )
+ELSEIF (OS_WINDOWS)
+    SRCS(
+        source/windows/bcrypt_aes.c
+        source/windows/bcrypt_ecc.c
+        source/windows/bcrypt_hash.c
+        source/windows/bcrypt_hmac.c
+        source/windows/bcrypt_platform_init.c
     )
 ENDIF()
 

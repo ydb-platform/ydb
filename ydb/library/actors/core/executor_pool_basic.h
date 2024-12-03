@@ -7,8 +7,8 @@
 #include "executor_pool_basic_feature_flags.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
+#include "harmonizer.h"
 #include <memory>
-#include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <ydb/library/actors/actor_type/indexes.h>
 #include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
@@ -278,11 +278,8 @@ namespace NActors {
         void CalcSpinPerThread(ui64 wakingUpConsumption);
         void ClearWaitingStats() const;
 
-        TSharedExecutorThreadCtx* ReleaseSharedThread() override;
-        void AddSharedThread(TSharedExecutorThreadCtx* thread) override;
-        bool IsSharedThreadEnabled() const override {
-            return true;
-        }
+        TSharedExecutorThreadCtx* ReleaseSharedThread();
+        void AddSharedThread(TSharedExecutorThreadCtx* thread);
 
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);

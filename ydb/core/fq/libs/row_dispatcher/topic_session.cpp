@@ -119,9 +119,11 @@ private:
         void Clear() {
             Bytes = 0;
             Events = 0;
+            ParseAndFilterLatency = TDuration::Zero();
         }
         ui64 Bytes = 0;
         ui64 Events = 0;
+        TDuration ParseAndFilterLatency;
     };
 
     struct TClientsInfo {
@@ -689,13 +691,17 @@ void TTopicSession::DoParsing(bool force) {
     IsStartParsingScheduled = false;
     LOG_ROW_DISPATCHER_TRACE("SendToParsing, first offset: " << Parser->GetOffsets().front() << ", number values in buffer " << Parser->GetOffsets().size());
 
+    TInstant startParseAndFilter = TInstant::Now();
     try {
-        Parser->Parse();
+        Parser->Parse(); // this call processes parse and filter steps
     } catch (const NFq::TJsonParserError& e) {
         FatalError(e.what(), nullptr, true, e.GetField());
     } catch (const std::exception& e) {
         FatalError(e.what(), nullptr, true, Nothing());
     }
+    auto parseAndFilterLatency = TInstant::Now() - startParseAndFilter;
+    SessionStats.ParseAndFilterLatency = Max(SessionStats.ParseAndFilterLatency, parseAndFilterLatency);
+    ClientsStats.ParseAndFilterLatency = Max(ClientsStats.ParseAndFilterLatency, parseAndFilterLatency);
 }
 
 void TTopicSession::DoFiltering(ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues) {
@@ -1036,31 +1042,33 @@ void TTopicSession::HandleException(const std::exception& e) {
 }
 
 void TTopicSession::SendStatisticToRowDispatcher() {
-    TopicSessionStatistic stat;
-    stat.Common.UnreadBytes = UnreadBytes;
-    stat.Common.RestartSessionByOffsets = RestartSessionByOffsets;
-    stat.Common.ReadBytes = SessionStats.Bytes;
-    stat.Common.ReadEvents = SessionStats.Events;
-    stat.Common.LastReadedOffset = LastMessageOffset;
+    TopicSessionStatistic sessionStatistic;
+    auto& commonStatistic = sessionStatistic.Common;
+    commonStatistic.UnreadBytes = UnreadBytes;
+    commonStatistic.RestartSessionByOffsets = RestartSessionByOffsets;
+    commonStatistic.ReadBytes = SessionStats.Bytes;
+    commonStatistic.ReadEvents = SessionStats.Events;
+    commonStatistic.ParseAndFilterLatency = SessionStats.ParseAndFilterLatency;
+    commonStatistic.LastReadedOffset = LastMessageOffset;
     SessionStats.Clear();
 
-    stat.SessionKey = TopicSessionParams{ReadGroup, Endpoint, Database, TopicPath, PartitionId};
-    stat.Clients.reserve(Clients.size());
+    sessionStatistic.SessionKey = TopicSessionParams{ReadGroup, Endpoint, Database, TopicPath, PartitionId};
+    sessionStatistic.Clients.reserve(Clients.size());
     for (auto& [readActorId, info] : Clients) {
-        TopicSessionClientStatistic client;
-        client.PartitionId = PartitionId;
-        client.ReadActorId = readActorId;
-        client.UnreadRows = info.Buffer.size();
-        client.UnreadBytes = info.UnreadBytes;
-        client.Offset = info.NextMessageOffset.GetOrElse(0);
-        client.ReadBytes = info.Stat.Bytes;
-        client.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.GetOrElse(0);
-        client.ReadLagMessages = info.NextMessageOffset.GetOrElse(0) - LastMessageOffset - 1;
-        client.InitialOffset = info.InitialOffset;
+        TopicSessionClientStatistic clientStatistic;
+        clientStatistic.PartitionId = PartitionId;
+        clientStatistic.ReadActorId = readActorId;
+        clientStatistic.UnreadRows = info.Buffer.size();
+        clientStatistic.UnreadBytes = info.UnreadBytes;
+        clientStatistic.Offset = info.NextMessageOffset.GetOrElse(0);
+        clientStatistic.ReadBytes = info.Stat.Bytes;
+        clientStatistic.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.GetOrElse(0);
+        clientStatistic.ReadLagMessages = info.NextMessageOffset.GetOrElse(0) - LastMessageOffset - 1;
+        clientStatistic.InitialOffset = info.InitialOffset;
         info.Stat.Clear();
-        stat.Clients.emplace_back(std::move(client));
+        sessionStatistic.Clients.emplace_back(std::move(clientStatistic));
     }
-    auto event = std::make_unique<TEvRowDispatcher::TEvSessionStatistic>(stat);
+    auto event = std::make_unique<TEvRowDispatcher::TEvSessionStatistic>(sessionStatistic);
     Send(RowDispatcherActorId, event.release());
 }
 

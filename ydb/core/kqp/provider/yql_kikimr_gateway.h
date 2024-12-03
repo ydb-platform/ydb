@@ -44,6 +44,7 @@ namespace NKikimr {
 namespace NKikimrReplication {
     class TOAuthToken;
     class TStaticCredentials;
+    class TReplicationConfig_TStrongConsistency;
 }
 
 namespace NYql {
@@ -792,11 +793,21 @@ struct TReplicationSettings {
         void Serialize(NKikimrReplication::TStaticCredentials& proto) const;
     };
 
+    struct TWeakConsistency {};
+
+    struct TStrongConsistency {
+        TDuration CommitInterval;
+
+        void Serialize(NKikimrReplication::TReplicationConfig_TStrongConsistency& proto) const;
+    };
+
     TMaybe<TString> ConnectionString;
     TMaybe<TString> Endpoint;
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
+    TMaybe<TWeakConsistency> WeakConsistency;
+    TMaybe<TStrongConsistency> StrongConsistency;
     TMaybe<TStateDone> StateDone;
 
     TOAuthToken& EnsureOAuthToken() {
@@ -813,6 +824,22 @@ struct TReplicationSettings {
         }
 
         return *StaticCredentials;
+    }
+
+    TWeakConsistency& EnsureWeakConsistency() {
+        if (!WeakConsistency) {
+            WeakConsistency = TWeakConsistency();
+        }
+
+        return *WeakConsistency;
+    }
+
+    TStrongConsistency& EnsureStrongConsistency() {
+        if (!StrongConsistency) {
+            StrongConsistency = TStrongConsistency();
+        }
+
+        return *StrongConsistency;
     }
 
     using EFailoverMode = TStateDone::EFailoverMode;

@@ -795,7 +795,7 @@ TYPED_TEST(TNotGrpcTest, RequestQueueSizeLimit)
     Cerr << Format("End of the RequestQueueSizeLimit test (Id: %v)", testId) << '\n';
 }
 
-TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)
+TYPED_TEST(TNotGrpcTest, RequestMemoryPressureException)
 {
     auto memoryUsageTracker = this->GetMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
@@ -810,7 +810,7 @@ TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)
     auto result = WaitFor(req->Invoke().AsVoid());
 
     // Limit of memory is 32 MB.
-    EXPECT_EQ(NRpc::EErrorCode::MemoryPressure, req->Invoke().Get().GetCode());
+    EXPECT_EQ(NRpc::EErrorCode::RequestMemoryPressure, req->Invoke().Get().GetCode());
 }
 
 TYPED_TEST(TNotGrpcTest, MemoryTracking)

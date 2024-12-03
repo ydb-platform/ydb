@@ -14,16 +14,15 @@ namespace NActors {
     struct TExecutorThreadStats;
     class TExecutorPoolJail;
     class ISchedulerCookie;
-    struct TSharedExecutorThreadCtx;
 
     struct TCpuConsumption {
-        double CpuUs = 0;
-        double ElapsedUs = 0;
+        double ConsumedUs = 0;
+        double BookedUs = 0;
         ui64 NotEnoughCpuExecutions = 0;
 
         void Add(const TCpuConsumption& other) {
-            CpuUs += other.CpuUs;
-            ElapsedUs += other.ElapsedUs;
+            ConsumedUs += other.ConsumedUs;
+            BookedUs += other.BookedUs;
             NotEnoughCpuExecutions += other.NotEnoughCpuExecutions;
         }
     };
@@ -175,16 +174,6 @@ namespace NActors {
 
         virtual i16 GetMaxFullThreadCount() const {
             return 1;
-        }
-
-        virtual TSharedExecutorThreadCtx* ReleaseSharedThread() {
-            return nullptr;
-        }
-        virtual void AddSharedThread(TSharedExecutorThreadCtx*) {
-        }
-
-        virtual bool IsSharedThreadEnabled() const {
-            return false;
         }
 
         virtual TCpuConsumption GetThreadCpuConsumption(i16 threadIdx) {

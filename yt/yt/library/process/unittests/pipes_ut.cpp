@@ -350,9 +350,9 @@ TEST_F(TNamedPipeReadWriteTest, CapacityDontDiscardSurplus)
     EXPECT_TRUE(writeFuture.Get().IsOK());
 }
 
-#ifdef _linux_
+#if defined(_linux_) && defined(F_SET_PIPE_WAKE_WRITER)
 
-TEST_F(TNamedPipeReadWriteTest, SyncWriteJustWorks)
+TEST_F(TNamedPipeReadWriteTest, DeliveryFencedWriteJustWorks)
 {
     SetUpWithDeliveryFence();
 
@@ -372,22 +372,6 @@ TEST_F(TNamedPipeReadWriteTest, SyncWriteJustWorks)
 
     // Future is set only after the entire buffer is read.
     EXPECT_TRUE(writeFuture.Get().IsOK());
-}
-
-#else
-
-TEST_F(TNamedPipeReadWriteTest, SyncWriteUnsupportedPlatform)
-{
-    SetUpWithDeliveryFence();
-
-    TString text("aabbb");
-    auto writeBuffer = TSharedRef::FromString(text);
-    auto writeFuture = Writer->Write(writeBuffer);
-
-    // Future is set with error because platform is not supported
-    auto error = writeFuture.Get();
-    EXPECT_FALSE(error.IsOK());
-    EXPECT_TRUE(error.GetMessage().Contains("Delivery fenced write failed: FIONDREAD is not supported on your platform"));
 }
 
 #endif

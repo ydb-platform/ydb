@@ -611,15 +611,37 @@ class LintConfigs:
     def cpp_configs(cls, unit, flat_args, spec_args):
         custom_config = spec_args.get('CUSTOM_CONFIG')
         if custom_config:
+            # TODO delete CUSTOM_CONFIG, it's used only by arc
             config = custom_config[0]
             assert_file_exists(unit, config)
-        else:
-            # file with default configs
-            config = spec_args.get('CONFIGS')[0]
-            assert_file_exists(unit, config)
-            name = spec_args['NAME'][0]
-            config = get_linter_configs(unit, config)[name]
-            assert_file_exists(unit, config)
+            return {cls.KEY: serialize_list([config])}
+        linter_name = spec_args['NAME'][0]
+        if config_type := spec_args.get('CONFIG_TYPE'):
+            config_type = config_type[0]
+            if config_type not in consts.LINTER_CONFIG_TYPES[linter_name]:
+                message = "Unknown CPP linter config type: {}. Allowed types: {}".format(
+                    config_type, ', '.join(consts.LINTER_CONFIG_TYPES[linter_name])
+                )
+                ymake.report_configure_error(message)
+                raise DartValueError()
+            if common_configs_dir := unit.get('MODULE_COMMON_CONFIGS_DIR'):
+                config = os.path.join(common_configs_dir, config_type)
+                path = unit.resolve(config)
+                if os.path.exists(path):
+                    config = _common.strip_roots(config)
+                    return {cls.KEY: serialize_list([config])}
+                message = "File not found: {}".format(path)
+                ymake.report_configure_error(message)
+                raise DartValueError()
+            else:
+                message = "Config type specifier is only allowed with autoincludes"
+                ymake.report_configure_error(message)
+                raise DartValueError()
+        # default config
+        config = spec_args.get('CONFIGS')[0]
+        assert_file_exists(unit, config)
+        config = get_linter_configs(unit, config)[linter_name]
+        assert_file_exists(unit, config)
         return {cls.KEY: serialize_list([config])}
 
 

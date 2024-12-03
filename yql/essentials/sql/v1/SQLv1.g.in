@@ -893,7 +893,7 @@ create_replication_stmt: CREATE ASYNC REPLICATION object_ref
 
 replication_target: object_ref AS object_ref;
 replication_settings: replication_settings_entry (COMMA replication_settings_entry)*;
-replication_settings_entry: an_id EQUALS STRING_VALUE;
+replication_settings_entry: an_id EQUALS expr;
 
 alter_replication_stmt: ALTER ASYNC REPLICATION object_ref alter_replication_action (COMMA alter_replication_action)*;
 alter_replication_action:

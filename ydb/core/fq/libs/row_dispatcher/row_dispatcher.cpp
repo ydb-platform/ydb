@@ -642,7 +642,8 @@ TString TRowDispatcher::GetInternalState() {
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
             str << " / " << LeftPad(actorId, 32)
                 << " data rate " << toHumanDR(sessionInfo.AggrReadBytes.Sum) << " unread bytes " << toHuman(sessionInfo.Stat.UnreadBytes)
-                << " offset " << LeftPad(sessionInfo.Stat.LastReadedOffset, 12) << " restarts by offsets " << sessionInfo.Stat.RestartSessionByOffsets << "\n";
+                << " offset " << LeftPad(sessionInfo.Stat.LastReadedOffset, 12) << " restarts by offsets " << sessionInfo.Stat.RestartSessionByOffsets
+                << " parse and filter lantecy " << sessionInfo.Stat.ParseAndFilterLatency << "\n";
             ui64 maxInitialOffset = 0;
             ui64 minInitialOffset = std::numeric_limits<ui64>::max();
 

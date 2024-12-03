@@ -1,4 +1,4 @@
-PROGRAM()
+PROGRAM(ydb-core-base-generated-codegen)
 
 SRCS(main.cpp)
 

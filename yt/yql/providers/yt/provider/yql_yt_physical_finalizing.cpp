@@ -1026,10 +1026,12 @@ private:
         bool changedOutSort = false;
         TVector<TYtOutTable> outTables;
         TExprNode::TListType filterColumns(op.Output().Size());
+        TTypeAnnotationNode::TListType varItemTypes(op.Output().Size());
         for (size_t i = 0; i < op.Output().Size(); ++i) {
             auto out = op.Output().Item(i);
+            auto rowSpec = TYtTableBaseInfo::GetRowSpec(out);
+            varItemTypes[i] = rowSpec->GetExtendedType(ctx);
             if (unorderedOuts.Test(i)) {
-                auto rowSpec = TYtTableBaseInfo::GetRowSpec(out);
                 YQL_ENSURE(rowSpec);
                 if (rowSpec->IsSorted()) {
                     if (rowSpec->HasAuxColumns()) {
@@ -1038,6 +1040,7 @@ private:
                             columns.emplace_back(item->GetName());
                         }
                         filterColumns[i] = ToAtomList(columns, node.Pos(), ctx);
+                        varItemTypes[i] = rowSpec->GetType();
                     }
                     rowSpec->ClearSortness(ctx);
                     outTables.push_back(TYtOutTable(ctx.ChangeChild(out.Ref(), TYtOutTable::idx_RowSpec, rowSpec->ToExprNode(ctx, out.Pos()).Ptr())));
@@ -1156,7 +1159,7 @@ private:
                         .Build()
                         .Done().Ptr();
                 } else {
-                    auto varType = ExpandType(lambda->Pos(), *GetSeqItemType(node.Child(lambdaIdx)->GetTypeAnn()), ctx);
+                    auto varType = ExpandType(lambda->Pos(), *ctx.MakeType<TVariantExprType>(ctx.MakeType<TTupleExprType>(varItemTypes)), ctx);
                     TVector<TExprBase> visitArgs;
                     for (size_t i = 0; i < op.Output().Size(); ++i) {
                         visitArgs.push_back(Build<TCoAtom>(ctx, lambda->Pos()).Value(ToString(i)).Done());

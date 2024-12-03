@@ -1039,7 +1039,7 @@ static void s_process_credentials_resource(const struct aws_byte_buf *resource, 
     };
 
     credentials = aws_parse_credentials_from_json_document(
-        wrapped_user_data->allocator, (const char *)json_data.buffer, &parse_options);
+        wrapped_user_data->allocator, aws_byte_cursor_from_buf(&json_data), &parse_options);
 
 on_finish:
     wrapped_user_data->callback(credentials, error_code, wrapped_user_data->user_data);

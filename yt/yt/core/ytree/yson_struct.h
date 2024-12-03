@@ -393,7 +393,7 @@ void Deserialize(TYsonStructBase& value, NYson::TYsonPullParserCursor* cursor);
 template <CExternallySerializable T>
 void Serialize(const T& value, NYson::IYsonConsumer* consumer);
 template <CExternallySerializable T, CYsonStructSource TSource>
-void Deserialize(T& value, TSource source, bool postprocess = true, bool setDefaults = true);
+void Deserialize(T& value, TSource source, bool postprocess = true, bool setDefaults = true, std::optional<EUnrecognizedStrategy> strategy = {});
 
 template <class T>
 TIntrusivePtr<T> UpdateYsonStruct(

@@ -839,6 +839,18 @@ struct TEvBlobStorage {
         EvControllerGroupDecommittedNotify          = 0x1003161e,
         EvControllerGroupDecommittedResponse        = 0x1003161f,
         EvControllerGroupMetricsExchange            = 0x10031620,
+        EvControllerProposeConfigRequest            = 0x10031821,
+        EvControllerProposeConfigResponse           = 0x10031822,
+        EvControllerConsoleCommitRequest            = 0x10031823,
+        EvControllerConsoleCommitResponse           = 0x10031824,
+        EvControllerValidateConfigRequest           = 0x10031825,
+        EvControllerValidateConfigResponse          = 0x10031826,
+        EvControllerRetryConsoleCommit               = 0x10031827,
+        EvControllerValidationTimeout               = 0x10031829,
+        EvControllerReplaceConfigRequest            = 0x1003182b,
+        EvControllerReplaceConfigResponse           = 0x1003182c,
+        EvControllerCommitConfigRequest             = 0x1003182d,
+        EvControllerCommitConfigResponse            = 0x1003182e,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -2413,6 +2425,18 @@ struct TEvBlobStorage {
     struct TEvControllerGroupDecommittedResponse;
     struct TEvControllerGroupMetricsExchange;
     struct TEvPutVDiskToReadOnly;
+    struct TEvControllerProposeConfigRequest;
+    struct TEvControllerProposeConfigResponse;
+    struct TEvControllerConsoleCommitRequest;
+    struct TEvControllerConsoleCommitResponse;
+    struct TEvControllerRetryConsoleCommit;
+    struct TEvControllerValidateConfigRequest;
+    struct TEvControllerValidateConfigResponse;
+    struct TEvControllerValidationTimeout;
+    struct TEvControllerReplaceConfigRequest;
+    struct TEvControllerReplaceConfigResponse;
+    struct TEvControllerCommitConfigRequest;
+    struct TEvControllerCommitConfigResponse;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

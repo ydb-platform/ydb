@@ -36,3 +36,15 @@ message FetchStorageConfigResponse {
 message FetchStorageConfigResult {
     string yaml_config = 1;
 }
+
+message ReplaceConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string yaml_config = 2;
+}
+
+message ReplaceConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ReplaceConfigResult {
+}

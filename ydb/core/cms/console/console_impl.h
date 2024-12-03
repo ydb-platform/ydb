@@ -5,6 +5,7 @@
 #include "tx_processor.h"
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -26,8 +27,8 @@ using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTabletExecutedFlat;
 using ::NMonitoring::TDynamicCounterPtr;
 
-class TConfigsManager;
 class TTenantsManager;
+class TConfigsManager;
 
 class TConsole : public TActor<TConsole>
                , public TTabletExecutedFlat
@@ -49,6 +50,8 @@ private:
     class TTxInitScheme;
     class TTxLoadState;
     class TTxSetConfig;
+
+    friend class TConfigsManager;
 
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
@@ -73,6 +76,9 @@ private:
     void ForwardToTenantsManager(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx);
+
+    void Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::TPtr &ev, const TActorContext &ctx);
 
     STFUNC(StateInit)
     {
@@ -121,6 +127,9 @@ private:
             FFunc(TEvConsole::EvReplaceConfigSubscriptionsRequest, ForwardToConfigsManager);
             HFuncTraced(TEvConsole::TEvSetConfigRequest, Handle);
             FFunc(TEvConsole::EvToggleConfigValidatorRequest, ForwardToConfigsManager);
+            FFunc(TEvBlobStorage::EvControllerProposeConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvBlobStorage::EvControllerConsoleCommitRequest, ForwardToConfigsManager);
+            FFunc(TEvBlobStorage::EvControllerValidateConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvUpdateTenantPoolConfig, ForwardToTenantsManager);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
@@ -178,6 +187,11 @@ private:
     TTenantsManager* TenantsManager;
 
     TActorId NetClassifierUpdaterId;
+
+    // For handshake with BSController/distconf
+    TActorId CurrentSenderId;
+    TActorId CurrentInterconnectSession;
+    TActorId CurrentPipeServerId;
 };
 
 } // namespace NKikimr::NConsole

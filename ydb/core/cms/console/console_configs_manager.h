@@ -12,6 +12,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/util/config_index.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <ydb/library/actors/core/hfunc.h>
@@ -27,7 +28,19 @@ class TConsole;
 
 class TConfigsManager : public TActorBootstrapped<TConfigsManager> {
 private:
+
     using TBase = TActorBootstrapped<TConfigsManager>;
+
+    struct TValidateConfigResult {
+        std::optional<TString> ErrorReason;
+        bool Modify = false;
+        TString UpdatedConfig;
+        ui32 Version;
+        TString Cluster;
+        bool HasForbiddenUnknown = false;
+        TMap<TString, std::pair<TString, TString>> DeprecatedFields;
+        TMap<TString, std::pair<TString, TString>> UnknownFields;
+    };
 
 public:
     struct TEvPrivate {
@@ -54,6 +67,9 @@ public:
     bool CheckConfig(const NKikimrConsole::TConfigsConfig &config,
                      Ydb::StatusIds::StatusCode &code,
                      TString &error);
+    TValidateConfigResult ValidateYamlConfig(const TString& config, bool force = false, bool allowUnknownFields = false);
+
+    void SendInReply(const TActorId& sender, const TActorId& icSession, std::unique_ptr<IEventBase> ev);
 
     void ApplyPendingConfigModifications(const TActorContext &ctx,
                                          TAutoPtr<IEventHandle> ev = nullptr);
@@ -157,6 +173,9 @@ private:
     void Handle(TEvConsole::TEvDropConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvPrivate::TEvStateLoaded::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvCleanupSubscriptions::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvBlobStorage::TEvControllerValidateConfigRequest::TPtr &ev, const TActorContext &ctx);
 
     static bool CheckRights(const TString& userToken);
 
@@ -217,6 +236,9 @@ private:
             HFuncTraced(TEvInterconnect::TEvNodesInfo, Handle);
             HFuncTraced(TEvPrivate::TEvCleanupSubscriptions, Handle);
             HFuncTraced(TEvPrivate::TEvStateLoaded, Handle);
+            HFuncTraced(TEvBlobStorage::TEvControllerProposeConfigRequest, Handle);
+            HFuncTraced(TEvBlobStorage::TEvControllerConsoleCommitRequest, Handle);
+            HFuncTraced(TEvBlobStorage::TEvControllerValidateConfigRequest, Handle);
             FFunc(TEvConsole::EvConfigSubscriptionRequest, ForwardToConfigsProvider);
             FFunc(TEvConsole::EvConfigSubscriptionCanceled, ForwardToConfigsProvider);
             CFunc(TEvPrivate::EvCleanupLog, CleanupLog);

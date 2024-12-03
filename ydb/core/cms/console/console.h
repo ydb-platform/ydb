@@ -44,6 +44,7 @@ namespace TEvConsole {
         EvConfigSubscriptionNotification,
         EvUpdateTenantPoolConfig,
         EvGetLogTailRequest,
+        EvCloseSession,
         //
         EvSetYamlConfigRequest,
         EvAddVolatileConfigRequest,
@@ -411,6 +412,11 @@ namespace TEvConsole {
     struct TEvGetLogTailRequest : public TEventPB<TEvGetLogTailRequest, NKikimrConsole::TGetLogTailRequest, EvGetLogTailRequest> {};
 
     struct TEvGetLogTailResponse : public TEventPB<TEvGetLogTailResponse, NKikimrConsole::TGetLogTailResponse, EvGetLogTailResponse> {};
+
+    //////////////////////////////////////////////////
+    // HANDSHAKE
+    //////////////////////////////////////////////////
+    struct TEvCloseSession : public TEventPB<TEvCloseSession, NKikimrConsole::TCloseSession, EvCloseSession> {};
 };
 
 IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info);

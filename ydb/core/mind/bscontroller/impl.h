@@ -9,6 +9,7 @@
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
+#include "console_interaction.h"
 
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
     return o << NKikimr::TErasureType::ErasureSpeciesName(p);
@@ -59,6 +60,7 @@ public:
     class TTxNodeReport;
     class TTxUpdateSeenOperational;
     class TTxConfigCmd;
+    class TTxCommitConfig;
     class TTxProposeGroupKey;
     class TTxRegisterNode;
     class TTxGetGroup;
@@ -1522,6 +1524,11 @@ private:
     bool DonorMode = false;
     TDuration ScrubPeriodicity;
     NKikimrBlobStorage::TStorageConfig StorageConfig;
+    TString YamlConfig;
+    ui32 ConfigVersion = 0;
+    bool IsOngoingCommit = false;
+    std::unique_ptr<TConsoleInteraction> ConsoleInteraction;
+
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
@@ -1546,6 +1553,8 @@ private:
     std::unordered_set<TVSlotId, THash<TVSlotId>> NotReadyVSlotIds;
 
     friend class TConfigState;
+
+    friend class TConsoleInteraction;
 
     class TNodeWardenUpdateNotifier;
 
@@ -1780,6 +1789,11 @@ private:
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
     void ProcessPostQuery(const NActorsProto::TRemoteHttpInfo& query, TActorId sender);
+
+    void StartConsoleInteraction();
+    void MakeCommitToConsole();
+    void Handle(TEvBlobStorage::TEvControllerCommitConfigRequest::TPtr &ev);
+    void Handle(TEvBlobStorage::TEvControllerCommitConfigResponse::TPtr &ev);
 
     void RenderResourceValues(IOutputStream& out, const TResourceRawValues& current);
     void RenderHeader(IOutputStream& out);
@@ -2139,6 +2153,11 @@ public:
             cFunc(TEvPrivate::EvProcessIncomingEvent, ProcessIncomingEvent);
             hFunc(TEvNodeWardenStorageConfig, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerProposeConfigResponse, ConsoleInteraction->Handle);
+            hFunc(TEvBlobStorage::TEvControllerConsoleCommitResponse, ConsoleInteraction->Handle);
+            hFunc(TEvBlobStorage::TEvControllerRetryConsoleCommit, ConsoleInteraction->Handle);
+            hFunc(TEvBlobStorage::TEvControllerValidationTimeout, ConsoleInteraction->Handle);
+            hFunc(TEvBlobStorage::TEvControllerReplaceConfigResponse, ConsoleInteraction->Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -2166,6 +2185,7 @@ public:
         SignalTabletActive(TActivationContext::AsActorContext());
         Loaded = true;
         ApplyStorageConfig();
+        StartConsoleInteraction();
 
         for (const auto& [id, info] : GroupMap) {
             if (info->VirtualGroupState) {
@@ -2401,6 +2421,17 @@ public:
     void EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo);
     void SendToWarden(TNodeId nodeId, std::unique_ptr<IEventBase> ev, ui64 cookie);
     void SendInReply(const IEventHandle& query, std::unique_ptr<IEventBase> ev);
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // CONSOLE INTERACTION
+
+    void SendToConsole(TNodeId nodeId, std::unique_ptr<IEventBase> ev, ui64 cookie);
+    void Handle(TEvBlobStorage::TEvControllerReplaceConfigResponse::TPtr& ev);
+    void Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr& ev);
+    void Handle(TEvBlobStorage::TEvControllerValidationTimeout::TPtr& ev);
+    void Handle(TEvBlobStorage::TEvControllerProposeConfigResponse::TPtr& ev);
+    void Handle(TEvBlobStorage::TEvControllerConsoleCommitResponse::TPtr& ev);
+    void Handle(TEvBlobStorage::TEvControllerRetryConsoleCommit::TPtr& ev);
 
     using TVSlotFinder = std::function<void(TVSlotId, const std::function<void(const TVSlotInfo&)>&)>;
 

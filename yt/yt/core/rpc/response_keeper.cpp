@@ -380,7 +380,7 @@ bool ValidateHeaderAndParseRememberOption(const TSharedRefArray& responseMessage
 {
     NProto::TResponseHeader header;
     YT_VERIFY(TryParseResponseHeader(responseMessage, &header));
-    return header.error().code() != ToUnderlying(EErrorCode::Unavailable);
+    return header.error().code() != ToUnderlying(NRpc::EErrorCode::Unavailable);
 }
 
 void ValidateRetry(TMutationId mutationId, bool isRetry)

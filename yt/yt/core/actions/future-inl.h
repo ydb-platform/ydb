@@ -44,7 +44,7 @@ namespace NDetail {
 
 inline TError WrapIntoCancelationError(const TError& error)
 {
-    return TError(EErrorCode::Canceled, "Operation canceled")
+    return TError(NYT::EErrorCode::Canceled, "Operation canceled")
         << error;
 }
 
@@ -62,7 +62,7 @@ inline TError TryExtractCancelationError()
         return TError(tokenError.GetCode(), "Promise abandoned") << tokenError;
     }
 
-    return TError(EErrorCode::Canceled, "Promise abandoned");
+    return TError(NYT::EErrorCode::Canceled, "Promise abandoned");
 }
 
 template <class T>

@@ -200,7 +200,7 @@ const TTableSchemaPtr& TValueConsumerBase::GetSchema() const
 
 void TValueConsumerBase::ThrowConversionException(const TUnversionedValue& value, EValueType columnType, const TError& ex)
 {
-    THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation, "Error while performing type conversion")
+    THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation, "Error while performing type conversion")
         << ex
         << TErrorAttribute("column", GetNameTable()->GetName(value.Id))
         << TErrorAttribute("value_type", value.Type)

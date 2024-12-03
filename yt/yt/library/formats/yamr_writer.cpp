@@ -202,7 +202,7 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForYamr(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& exc) {
-        THROW_ERROR_EXCEPTION(EErrorCode::InvalidFormat, "Failed to parse config for YAMR format") << exc;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for YAMR format") << exc;
     }
 }
 

@@ -241,11 +241,10 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForYamredDsv(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(EErrorCode::InvalidFormat, "Failed to parse config for YAMRed DSV format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for YAMRed DSV format") << ex;
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NFormats
-

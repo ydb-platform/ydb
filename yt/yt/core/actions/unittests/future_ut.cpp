@@ -1116,7 +1116,7 @@ TEST_F(TFutureTest, AllSetWithTimeoutWorks)
     EXPECT_TRUE(resultOrError.Value()[0].IsOK());
 
     EXPECT_TRUE(p2.IsSet());
-    EXPECT_EQ(resultOrError.Value()[1].GetCode(), EErrorCode::Timeout);
+    EXPECT_EQ(resultOrError.Value()[1].GetCode(), NYT::EErrorCode::Timeout);
 
     EXPECT_TRUE(p3.IsSet());
     EXPECT_FALSE(resultOrError.Value()[2].IsOK());
@@ -1535,7 +1535,7 @@ TEST_F(TFutureTest, AbandonTryGet)
     auto promise = NewPromise<void>();
     auto future = promise.ToFuture();
     promise.Reset();
-    EXPECT_EQ(EErrorCode::Canceled, future.TryGet()->GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, future.TryGet()->GetCode());
 }
 
 TEST_F(TFutureTest, AbandonGet)
@@ -1543,7 +1543,7 @@ TEST_F(TFutureTest, AbandonGet)
     auto promise = NewPromise<void>();
     auto future = promise.ToFuture();
     promise.Reset();
-    EXPECT_EQ(EErrorCode::Canceled, future.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, future.Get().GetCode());
 }
 
 TEST_F(TFutureTest, AbandonSubscribe)
@@ -1666,7 +1666,7 @@ TEST_F(TFutureTest, AbandonBeforeGet)
     auto promise = NewPromise<void>();
     auto future = promise.ToFuture();
     promise.Reset();
-    EXPECT_EQ(future.Get().GetCode(), EErrorCode::Canceled);
+    EXPECT_EQ(future.Get().GetCode(), NYT::EErrorCode::Canceled);
 }
 
 TEST_F(TFutureTest, AbandonDuringGet)
@@ -1677,7 +1677,7 @@ TEST_F(TFutureTest, AbandonDuringGet)
         Sleep(TDuration::MilliSeconds(100));
         promise.Reset();
     });
-    EXPECT_EQ(future.Get().GetCode(), EErrorCode::Canceled);
+    EXPECT_EQ(future.Get().GetCode(), NYT::EErrorCode::Canceled);
     thread.join();
 }
 
@@ -1715,12 +1715,12 @@ TEST_F(TFutureTest, AsyncViaCanceledInvoker1)
     auto context = New<TCancelableContext>();
     auto invoker = context->CreateInvoker(queue->GetInvoker());
 
-    context->Cancel(TError(EErrorCode::Canceled, "From cancelable context!"));
+    context->Cancel(TError(NYT::EErrorCode::Canceled, "From cancelable context!"));
 
     auto error = WaitFor(BIND([] {}).AsyncVia(invoker).Run());
 
     EXPECT_FALSE(error.IsOK());
-    EXPECT_EQ(error.GetCode(), EErrorCode::Canceled);
+    EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Canceled);
     EXPECT_TRUE(NYT::ToString(error).Contains("From cancelable context!"))
         << NYT::ToString(error);
 }
@@ -1743,13 +1743,13 @@ TEST_F(TFutureTest, AsyncViaCanceledInvoker2)
 
     WaitFor(taskReady.ToFuture()).ThrowOnError();
 
-    context->Cancel(TError(EErrorCode::Canceled, "From cancelable context!"));
+    context->Cancel(TError(NYT::EErrorCode::Canceled, "From cancelable context!"));
     promise.Set();
 
     auto error = WaitFor(future);
 
     EXPECT_FALSE(error.IsOK());
-    EXPECT_EQ(error.GetCode(), EErrorCode::Canceled);
+    EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Canceled);
     EXPECT_TRUE(NYT::ToString(error).Contains("From cancelable context!"))
         << NYT::ToString(error);
 }
@@ -1767,10 +1767,10 @@ TEST_F(TFutureTest, YT_12720)
 
     WaitFor(taskStarted.ToFuture()).ThrowOnError();
 
-    future.Cancel(NYT::TError(EErrorCode::Canceled, "Fiber canceled in .Reset() of TFiberGuard"));
+    future.Cancel(NYT::TError(NYT::EErrorCode::Canceled, "Fiber canceled in .Reset() of TFiberGuard"));
     auto error = WaitFor(future);
     EXPECT_FALSE(error.IsOK());
-    EXPECT_EQ(error.GetCode(), EErrorCode::Canceled);
+    EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Canceled);
     EXPECT_TRUE(NYT::ToString(error).Contains("Fiber canceled in .Reset() of TFiberGuard"))
         << NYT::ToString(error);
 }
@@ -1794,10 +1794,10 @@ TEST_F(TFutureTest, DiscardInApply)
 
     Sleep(std::chrono::seconds(1));
 
-    canceled.Cancel(TError(EErrorCode::Canceled, "Canceled!"));
+    canceled.Cancel(TError(NYT::EErrorCode::Canceled, "Canceled!"));
 
     auto error = WaitFor(future);
-    EXPECT_EQ(error.GetCode(), EErrorCode::Canceled);
+    EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Canceled);
     EXPECT_TRUE(NYT::ToString(error).Contains("Canceled!"))
         << NYT::ToString(error);
 }

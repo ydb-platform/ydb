@@ -339,7 +339,7 @@ public:
         if (callCount.fetch_add(1) % 2) {
             context->Reply();
         } else {
-            context->Reply(TError(EErrorCode::TransportError, "Flaky call iteration"));
+            context->Reply(TError(NRpc::EErrorCode::TransportError, "Flaky call iteration"));
         }
     }
 

@@ -4,10 +4,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void RunStockpileThread(TStockpileOptions /*options*/, std::atomic<bool>* /*shouldProceed*/)
-{ }
-
-void RunDetachedStockpileThreads(TStockpileOptions /*options*/)
+void TStockpileManager::Reconfigure(TStockpileOptions /*options*/)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

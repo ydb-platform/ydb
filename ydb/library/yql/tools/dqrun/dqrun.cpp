@@ -1,17 +1,18 @@
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
-#include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
+#include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/providers/yt/actors/yql_yt_provider_factories.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
-#include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
-#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
-#include <ydb/library/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
-#include <ydb/library/yql/providers/yt/lib/config_clusters/config_clusters.h>
+#include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <yt/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
+#include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
 #include <ydb/library/yql/providers/dq/local_gateway/yql_dq_gateway_local.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 
 #include <yql/essentials/utils/log/proto/logger_config.pb.h>
 #include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
@@ -23,6 +24,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
@@ -296,7 +298,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
     NYql::NConnector::IClient::TPtr genericClient,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-    size_t HTTPmaxTimeSeconds, 
+    size_t HTTPmaxTimeSeconds,
     size_t maxRetriesCount,
     IPqGateway::TPtr pqGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
@@ -963,7 +965,7 @@ int RunMain(int argc, const char* argv[])
         factories.push_back(GetYtFileFactory(ytFileServices));
         clusters["plato"] = YtProviderName;
         auto ytNativeGateway = CreateYtFileGateway(ytFileServices, &emulateOutputForMultirun);
-        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
     } else if (gatewaysConfig.HasYt()) {
         TYtNativeServices ytServices;
         ytServices.FunctionRegistry = funcRegistry.Get();
@@ -974,14 +976,14 @@ int RunMain(int argc, const char* argv[])
         for (auto& cluster: gatewaysConfig.GetYt().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{YtProviderName});
         }
-        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
     }
 
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
 
     if (tokenAccessorEndpoint) {
         TVector<TString> ss = StringSplitter(tokenAccessorEndpoint).SplitByString("://");
-        YQL_ENSURE(ss.size() == 2, "Invalid tokenAccessorEndpoint: " << tokenAccessorEndpoint); 
+        YQL_ENSURE(ss.size() == 2, "Invalid tokenAccessorEndpoint: " << tokenAccessorEndpoint);
 
         credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(ss[1], ss[0] == "grpcs", "");
     }

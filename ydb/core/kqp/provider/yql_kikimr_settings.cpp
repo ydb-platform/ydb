@@ -93,7 +93,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, EnableSpillingNodes)
         .Parser([](const TString& v) { return ParseEnableSpillingNodes(v); });
 
-    REGISTER_SETTING(*this, MaxDPccpDPTableSize);
+    REGISTER_SETTING(*this, MaxDPHypDPTableSize);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
     REGISTER_SETTING(*this, MaxSequentialReadsInFlight);

@@ -182,7 +182,8 @@ template <class TBase, class TValue>
 TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::BaseClassParameter(const TString& key, TValue(TBase::*field))
 {
     static_assert(std::derived_from<TStruct, TBase>);
-    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TYsonFieldAccessor<TBase, TValue>>(field));
+    int fieldIndex = ssize(Meta_->GetParameterMap());
+    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TYsonFieldAccessor<TBase, TValue>>(field), fieldIndex);
     Meta_->RegisterParameter(key, parameter);
     return *parameter;
 }
@@ -191,7 +192,8 @@ template <class TStruct>
 template <class TValue>
 TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ParameterWithUniversalAccessor(const TString& key, std::function<TValue&(TStruct*)> accessor)
 {
-    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TUniversalYsonParameterAccessor<TStruct, TValue>>(std::move(accessor)));
+    int fieldIndex = ssize(Meta_->GetParameterMap());
+    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TUniversalYsonParameterAccessor<TStruct, TValue>>(std::move(accessor)), fieldIndex);
     Meta_->RegisterParameter(key, parameter);
     return *parameter;
 }
@@ -246,6 +248,19 @@ void TYsonStructRegistrar<TStruct>::ExternalPostprocessor(TExternalPostprocessor
     Meta_->RegisterPostprocessor([postprocessor = std::move(postprocessor)] (TYsonStructBase* target) {
         postprocessor(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(target)->That_);
     });
+}
+
+template <class TStruct>
+template <class TBase, class TValue>
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalBaseClassParameter(const TString& key, TValue(TBase::*field))
+{
+    static_assert(std::derived_from<TStruct, TExternalizedYsonStruct>);
+    static_assert(std::derived_from<typename TStruct::TExternal, TBase>);
+    auto universalAccessor = [field] (TStruct* serializer) -> auto& {
+        return serializer->That_->*field;
+    };
+
+    return ParameterWithUniversalAccessor<TValue>(key, universalAccessor);
 }
 
 template <class TStruct>

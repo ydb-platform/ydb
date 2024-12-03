@@ -1,0 +1,184 @@
+====================COPYRIGHT====================
+   Copyright (C) 1994-1996, 1999-2002, 2004-2017, 2020-2021 Free
+Software Foundation, Inc.
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2018 nghttp3 contributors
+ * Copyright (c) 2017 ngtcp2 contributors
+ * Copyright (c) 2017 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2019 nghttp3 contributors
+ * Copyright (c) 2013 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2019 nghttp3 contributors
+ * Copyright (c) 2015 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2019 nghttp3 contributors
+ * Copyright (c) 2016 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2019 nghttp3 contributors
+ * Copyright (c) 2016 ngtcp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2019 nghttp3 contributors
+ * Copyright (c) 2017 ngtcp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2019 nghttp3 contributors
+ * Copyright (c) 2017 ngtcp2 contributors
+ * Copyright (c) 2012 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2019 nghttp3 contributors
+ * Copyright (c) 2017 ngtcp2 contributors
+ * Copyright (c) 2014 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2019 nghttp3 contributors
+ * Copyright (c) 2018 ngtcp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2022 nghttp3 contributors
+ * Copyright (c) 2022 ngtcp2 contributors
+
+
+====================COPYRIGHT====================
+/* Copyright (c) 2008-2010 Bjoern Hoehrmann <bjoern@hoehrmann.de>
+ * See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
+
+
+====================COPYRIGHT====================
+Copyright (c) 2019 nghttp3 contributors
+
+
+====================COPYRIGHT====================
+Copyright (c) 2023 sfparse contributors
+
+
+====================FSFAP====================
+   Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.  This file is offered as-is,
+without warranty of any kind.
+
+
+====================File: AUTHORS====================
+Alexis La Goutte
+Amir Livneh
+Bruno S Marques
+Bryan Call
+Cheng Zhao
+Daniel Bevenius
+Daniel Stenberg
+Deel
+Dimitris Apostolou
+Don
+Don Olmstead
+Force Charlie
+James M Snell
+Javier Blazquez
+Li Xinwei
+Marek Ludha
+Nishant Nori
+Ondřej Koláček
+Peter Wu
+Tal Regev
+Tatsuhiro Tsujikawa
+Tim Gates
+Toni Uhlig
+Valère Plantevin
+Viktor Szakats
+Your Name
+lhuang04
+
+
+====================MIT====================
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use, copy,
+ * modify, merge, publish, distribute, sublicense, and/or sell copies
+ * of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+
+
+====================MIT====================
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+====================MIT====================
+License
+-------
+
+The MIT License
+
+
+====================MIT====================
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+====================MIT====================
+The MIT License

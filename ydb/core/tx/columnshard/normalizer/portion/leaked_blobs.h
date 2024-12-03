@@ -45,5 +45,6 @@ private:
     THashMap<ui64, TPortionInfoConstructor> Portions;
     THashMap<ui64, std::vector<TColumnChunkLoadContextV1>> Records;
     THashMap<ui64, std::vector<TIndexChunkLoadContext>> Indexes;
+    THashSet<TUnifiedBlobId> BlobsToDelete;
 };
 }   // namespace NKikimr::NOlap

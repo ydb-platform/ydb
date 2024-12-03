@@ -59,20 +59,20 @@ public:
         return 0;
     }
 
-    ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
+    ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         if (auto maybePqRead = TMaybeNode<TPqReadTopic>(&node)) {
-            return PartitionTopicRead(maybePqRead.Cast().Topic(), maxPartitions, partitions);
+            return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions);
         }
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
-            auto settings = maybeDqSource.Cast().Settings();
-            if (auto topicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {
-                return PartitionTopicRead(topicSource.Cast().Topic(), maxPartitions, partitions);
+            auto srcSettings = maybeDqSource.Cast().Settings();
+            if (auto topicSource = TMaybeNode<TDqPqTopicSource>(srcSettings.Raw())) {
+                return PartitionTopicRead(topicSource.Cast().Topic(), settings.MaxPartitions, partitions);
             }
         }
         return 0;
     }
 
-    TExprNode::TPtr WrapRead(const TDqSettings& dqSettings, const TExprNode::TPtr& read, TExprContext& ctx) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
         if (const auto& maybePqReadTopic = TMaybeNode<TPqReadTopic>(read)) {
             const auto& pqReadTopic = maybePqReadTopic.Cast();
             YQL_ENSURE(pqReadTopic.Ref().GetTypeAnn(), "No type annotation for node " << pqReadTopic.Ref().Content());
@@ -127,7 +127,7 @@ public:
 
             const auto& typeItems = pqReadTopic.Topic().RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
             const auto pos = read->Pos();
- 
+
             TExprNode::TListType colNames;
             colNames.reserve(typeItems.size());
             std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colNames),
@@ -146,7 +146,7 @@ public:
                     .World(pqReadTopic.World())
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columnNames))
-                    .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), format, ctx))
+                    .Settings(BuildTopicReadSettings(clusterName, wrSettings, read->Pos(), format, ctx))
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
@@ -229,6 +229,8 @@ public:
                         sharedReading = FromString<bool>(Value(setting));
                     } else if (name == ReconnectPeriod) {
                         srcDesc.SetReconnectPeriod(TString(Value(setting)));
+                    } else if (name == ReadGroup) {
+                        srcDesc.SetReadGroup(TString(Value(setting)));
                     } else if (name == Format) {
                         format = TString(Value(setting));
                     } else if (name == UseSslSetting) {
@@ -325,7 +327,7 @@ public:
 
     NNodes::TCoNameValueTupleList BuildTopicReadSettings(
         const TString& cluster,
-        const TDqSettings& dqSettings,
+        const IDqIntegration::TWrapReadSettings& wrSettings,
         TPositionHandle pos,
         std::string_view format,
         TExprContext& ctx) const
@@ -348,8 +350,8 @@ public:
         Add(props, SharedReading, ToString(clusterConfiguration->SharedReading), pos, ctx);
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
+        Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
 
-        
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);
         }
@@ -358,23 +360,21 @@ public:
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
         }
 
-        if (dqSettings.WatermarksMode.Get().GetOrElse("") == "default") {
+        if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
             Add(props, WatermarksEnableSetting, ToString(true), pos, ctx);
 
-            const auto granularity = TDuration::MilliSeconds(dqSettings
+            const auto granularity = TDuration::MilliSeconds(wrSettings
                 .WatermarksGranularityMs
-                .Get()
                 .GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs));
             Add(props, WatermarksGranularityUsSetting, ToString(granularity.MicroSeconds()), pos, ctx);
 
-            const auto lateArrivalDelay = TDuration::MilliSeconds(dqSettings
+            const auto lateArrivalDelay = TDuration::MilliSeconds(wrSettings
                 .WatermarksLateArrivalDelayMs
-                .Get()
                 .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
             Add(props, WatermarksLateArrivalDelayUsSetting, ToString(lateArrivalDelay.MicroSeconds()), pos, ctx);
         }
 
-        if (dqSettings.WatermarksEnableIdlePartitions.Get().GetOrElse(false)) {
+        if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(false)) {
             Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
         }
 

@@ -73,8 +73,8 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
 }
 
 void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())(
-        "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen));
+//    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())(
+//        "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen));
     auto g = Stats->MakeGuard("bootstrap");
     ScanActorId = ctx.SelfID;
 
@@ -255,15 +255,16 @@ bool TColumnShardScan::ProduceResults() noexcept {
             "batch_columns", JoinSeq(",", batch->schema()->field_names()));
     }
     if (CurrentLastReadKey) {
-        NArrow::NMerger::TSortableBatchPosition pNew(
-            result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
-        NArrow::NMerger::TSortableBatchPosition pOld(
-            CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
-        AFL_VERIFY(pOld < pNew)("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
+        NArrow::NMerger::TSortableBatchPosition pNew(result.GetScanCursor()->GetPKCursor(), 0,
+            result.GetScanCursor()->GetPKCursor()->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
+        NArrow::NMerger::TSortableBatchPosition pOld(CurrentLastReadKey->GetPKCursor(), 0,
+            CurrentLastReadKey->GetPKCursor()->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
+        AFL_VERIFY(!(pNew < pOld))("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
     }
-    CurrentLastReadKey = result.GetLastReadKey();
+    CurrentLastReadKey = result.GetScanCursor();
 
-    Result->LastKey = ConvertLastKey(result.GetLastReadKey());
+    Result->LastKey = ConvertLastKey(result.GetScanCursor()->GetPKCursor());
+    Result->LastCursorProto = result.GetScanCursor()->SerializeToProto();
     SendResult(false, false);
     ScanIterator->OnSentDataFromInterval(result.GetNotFinishedIntervalIdx());
     ACFL_DEBUG("stage", "finished")("iterator", ScanIterator->DebugString());
@@ -303,8 +304,9 @@ void TColumnShardScan::ContinueProcessing() {
             }
         }
     }
-    AFL_VERIFY(!ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting())("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)(
-                                        "gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString());
+    AFL_VERIFY(!ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting())("scan_actor_id", ScanActorId)("tx_id", TxId)(
+                                                            "scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)("debug",
+                                                            ScanIterator->DebugString())("counters", ScanCountersPool.DebugString());
 }
 
 void TColumnShardScan::MakeResult(size_t reserveRows /*= 0*/) {

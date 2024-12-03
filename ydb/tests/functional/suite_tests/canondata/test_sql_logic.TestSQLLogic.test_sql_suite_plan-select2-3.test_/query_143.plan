@@ -48,7 +48,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.a > item.b Or item.a != 0"
+                                                "Predicate": "item.a > item.b OR item.a != 0"
                                             }
                                         ],
                                         "PlanNodeId": 2,

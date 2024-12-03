@@ -1,5 +1,4 @@
-/* postgres can not */
-/* syntax version 1 */
+/* custom error:Argument with name age was already used for positional argument #2*/
 use plato;
 $udfScript = @@
 def AppendInfo(a_name, a_age = None, a_region = None):

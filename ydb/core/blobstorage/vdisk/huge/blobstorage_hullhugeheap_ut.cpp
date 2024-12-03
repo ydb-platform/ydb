@@ -11,33 +11,6 @@ namespace NKikimr {
 
     using namespace NHuge;
 
-    Y_UNIT_TEST_SUITE(TBlobStorageHullHugeDefs) {
-
-        Y_UNIT_TEST(FreeRes1) {
-            TMask mask;
-            mask.Set(0, 8);
-            mask.Reset(1);
-            TFreeRes res = {15, mask, 8, false};
-
-            STR << "TFreeRes# " << res.ToString() << "\n";
-            UNIT_ASSERT_EQUAL(res.ToString(), "{ChunkIdx: 15 Mask# 10111111}");
-
-            TMask constMask = TChain::BuildConstMask("", 8);
-            TFreeRes constRes = {0, constMask, 8, false};
-            STR << "constMask# " << constRes.ToString() << "\n";
-            UNIT_ASSERT_EQUAL(constRes.ToString(), "{ChunkIdx: 0 Mask# 11111111}");
-
-            res.Mask.Reset(0);
-            STR << "first non zero bit: " << res.Mask.FirstNonZeroBit() << "\n";
-            UNIT_ASSERT_EQUAL(res.Mask.FirstNonZeroBit(), 2);
-
-            res.Mask.Set(1);
-            res.Mask.Set(0);
-            UNIT_ASSERT_EQUAL(res.Mask, constRes.Mask);
-        }
-    }
-
-
     Y_UNIT_TEST_SUITE(TBlobStorageHullHugeChain) {
 
         /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -177,8 +150,7 @@ namespace NKikimr {
             chain.Save(&serialized);
 
             TStringInput str(serialized.Str());
-            bool comp = true;
-            TChain chain2 = TChain::Load(&str, "vdisk", 1 /*appendBlockSize*/, slotsInChunk, {&chain, &chain + 1}, &comp);
+            TChain chain2 = TChain::Load(&str, "vdisk", 1 /*appendBlockSize*/, slotsInChunk);
         }
 
         Y_UNIT_TEST(AllocFreeAllocTest) {
@@ -391,7 +363,7 @@ namespace NKikimr {
         Y_UNIT_TEST(BorderValues) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
-            ui32 minHugeBlobInBytes = appendBlockSize;
+            ui32 minHugeBlobInBytes = appendBlockSize + 1;
             ui32 maxBlobInBytes = MaxVDiskBlobSize;
             ui32 overhead = 8u;
             ui32 freeChunksReservation = 1;

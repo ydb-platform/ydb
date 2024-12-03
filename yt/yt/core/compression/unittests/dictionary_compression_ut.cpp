@@ -65,13 +65,30 @@ protected:
 
     TCompressionContext CreateCompressionContext() const
     {
-        auto digestedCompressionDictionary = GetDictionaryCompressionCodec()->CreateDigestedCompressionDictionary(
-            GetCompressionDictionary().Value(),
+        auto dictionary = GetCompressionDictionary().Value();
+
+        auto dictionarySize = GetDictionaryCompressionCodec()->EstimateDigestedCompressionDictionarySize(
+            dictionary.Size(),
+            GetDictionaryCompressionCodec()->GetDefaultCompressionLevel());
+        auto storage = TSharedMutableRef::Allocate(
+            dictionarySize,
+            { .InitializeStorage = false });
+
+        auto digestedCompressionDictionary = GetDictionaryCompressionCodec()->ConstructDigestedCompressionDictionary(
+            dictionary,
+            storage,
             GetDictionaryCompressionCodec()->GetDefaultCompressionLevel());
         auto compressor = GetDictionaryCompressionCodec()->CreateDictionaryCompressor(digestedCompressionDictionary);
 
-        auto digestedDecompressionDictionary = GetDictionaryCompressionCodec()->CreateDigestedDecompressionDictionary(
-            GetCompressionDictionary().Value());
+        dictionarySize = GetDictionaryCompressionCodec()->EstimateDigestedDecompressionDictionarySize(
+            dictionary.Size());
+        storage = TSharedMutableRef::Allocate(
+            dictionarySize,
+            { .InitializeStorage = false });
+
+        auto digestedDecompressionDictionary = GetDictionaryCompressionCodec()->ConstructDigestedDecompressionDictionary(
+            dictionary,
+            storage);
         auto decompressor = GetDictionaryCompressionCodec()->CreateDictionaryDecompressor(digestedDecompressionDictionary);
 
         // NB: We do not need to store digested dictionaries as they must be referenced within (de)compressor.

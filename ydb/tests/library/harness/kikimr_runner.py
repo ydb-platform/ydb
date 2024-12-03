@@ -12,7 +12,6 @@ import yatest
 
 from ydb.tests.library.common.wait_for import wait_for
 from . import daemon
-from . import param_constants
 from . import kikimr_config
 from . import kikimr_node_interface
 from . import kikimr_cluster_interface
@@ -571,6 +570,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
 
     def __init__(
             self,
+            kikimr_configure_binary_path,
             kikimr_path,
             kikimr_next_path,
             node_id,
@@ -600,6 +600,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
 
         self._can_update = None
         self.current_version_idx = 0
+        self.__kikimr_configure_binary_path = kikimr_configure_binary_path
         self.versions = [
             self.kikimr_binary_deploy_path + "_last",
             self.kikimr_binary_deploy_path + "_next",
@@ -733,7 +734,7 @@ mon={mon}""".format(
 
     def prepare_artifacts(self, cluster_yml):
         self.copy_file_or_dir(
-            param_constants.kikimr_configure_binary_path(), self.kikimr_configure_binary_deploy_path)
+            self.__kikimr_configure_binary_path, self.kikimr_configure_binary_deploy_path)
 
         for version, local_driver in zip(self.versions, self.local_drivers_path):
             self.ssh_command("sudo rm -rf %s" % version)

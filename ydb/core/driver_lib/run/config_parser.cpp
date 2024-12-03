@@ -367,6 +367,7 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringAddress(RunOpts.MonitoringAddress);
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringThreads(RunOpts.MonitoringThreads);
     Config.AppConfig.MutableMonitoringConfig()->SetMaxRequestsPerSecond(RunOpts.MonitoringMaxRequestsPerSecond);
+    Config.AppConfig.MutableMonitoringConfig()->SetInactivityTimeout(ToString(RunOpts.MonitoringInactivityTimeout.Seconds()));
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCertificate(TUnbufferedFileInput(RunOpts.MonitoringCertificateFile).ReadAll());
     Config.AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RunOpts.RestartsCountFile);
 }

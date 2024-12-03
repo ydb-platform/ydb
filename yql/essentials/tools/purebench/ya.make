@@ -21,11 +21,13 @@ PEERDIR(
     yql/essentials/utils/log
     yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy
-    library/cpp/skiff
     library/cpp/yson
-    contrib/ydb/library/yql/public/purecalc/io_specs/mkql
-    contrib/ydb/library/yql/public/purecalc/io_specs/arrow
-    contrib/ydb/library/yql/public/purecalc
+    yql/essentials/public/purecalc/io_specs/arrow
+    yql/essentials/public/purecalc
+    yql/essentials/minikql
+    yql/essentials/minikql/computation
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/schema/mkql
 )
 
 YQL_LAST_ABI_VERSION()

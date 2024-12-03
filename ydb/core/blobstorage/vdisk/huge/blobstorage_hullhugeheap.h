@@ -91,20 +91,25 @@ namespace NKikimr {
         // It manages all slots of some fixed size.
         ////////////////////////////////////////////////////////////////////////////
         class TChain {
+            struct TFreeSpaceItem {
+                TMask FreeSlots;
+                ui32 NumFreeSlots = 0;
+            };
+
             using TChunkID = ui32;
-            using TFreeSpace = TMap<TChunkID, TMask>;
+            using TFreeSpace = TMap<TChunkID, TFreeSpaceItem>;
 
             static constexpr ui32 MaxNumberOfSlots = 32768; // it's not a good idea to have more slots than this
-            /*const*/ TString VDiskLogPrefix;
-            /*const*/ TMask ConstMask; // mask of 'all slots are free'
+            TString VDiskLogPrefix;
+            TMask ConstMask; // mask of 'all slots are free'
             TFreeSpace FreeSpace;
             TFreeSpace LockedChunks;
             ui32 AllocatedSlots = 0;
             ui32 FreeSlotsInFreeSpace = 0;
 
         public:
-            /*const*/ ui32 SlotsInChunk;
-            /*const*/ ui32 SlotSize;
+            ui32 SlotsInChunk;
+            ui32 SlotSize; // may be adjusted during deserialization
 
         public:
             static TMask BuildConstMask(const TString &prefix, ui32 slotsInChunk);
@@ -146,8 +151,7 @@ namespace NKikimr {
             void RenderHtmlForUsage(IOutputStream &str) const;
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
 
-            static TChain Load(IInputStream *s, TString vdiskLogPrefix, ui32 appendBlockSize, ui32 blocksInChunk,
-                std::span<TChain> chains, bool *compatible);
+            static TChain Load(IInputStream *s, TString vdiskLogPrefix, ui32 appendBlockSize, ui32 blocksInChunk);
 
             template<typename T>
             void ForEachFreeSpaceChunk(T&& callback) const {
@@ -155,15 +159,17 @@ namespace NKikimr {
                 const auto freeEnd = FreeSpace.end();
                 auto lockedIt = LockedChunks.begin();
                 const auto lockedEnd = LockedChunks.end();
-                while (freeIt != freeEnd || lockedIt != lockedEnd) {
-                    if (lockedIt == lockedEnd || freeIt->first < lockedIt->first) {
-                        std::invoke(callback, *freeIt++);
-                    } else if (freeIt == freeEnd || lockedIt->first < freeIt->first) {
-                        std::invoke(callback, *lockedIt++);
+                while (freeIt != freeEnd && lockedIt != lockedEnd) {
+                    if (freeIt->first < lockedIt->first) {
+                        callback(*freeIt++);
+                    } else if (lockedIt->first < freeIt->first) {
+                        callback(*lockedIt++);
                     } else {
                         Y_ABORT("intersecting sets of keys for FreeSpace and LockedChunks");
                     }
                 }
+                std::for_each(freeIt, freeEnd, callback);
+                std::for_each(lockedIt, lockedEnd, callback);
             }
         };
 
@@ -200,17 +206,16 @@ namespace NKikimr {
             void BuildChains();
             void BuildSearchTable();
             inline ui32 SizeToBlocks(ui32 size) const;
-            inline ui32 GetEndBlocks() const;
 
             const TString VDiskLogPrefix;
             const ui32 ChunkSize;
             const ui32 AppendBlockSize;
             const ui32 MinHugeBlobInBytes;
             const ui32 MilestoneBlobInBytes;
-            const ui32 MaxBlobInBytes;
             const ui32 Overhead;
             const ui32 MinHugeBlobInBlocks;
-            THashSet<ui32> DeserializedSlotSizes; // a set of SlotSize values of recovered stream
+            const ui32 MaxHugeBlobInBlocks;
+            TDynBitMap DeserializedChains; // a bit mask of chains that were deserialized from the origin stream
             std::vector<TChain> Chains;
             std::vector<ui16> SearchTable; // (NumFullBlocks - 1) -> Chain index
         };

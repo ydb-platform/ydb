@@ -6,7 +6,7 @@
 
 namespace NFq {
 
-NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name, bool useBearerForYdb, const TString& authToken, const TString& accountSignature, const FederatedQuery::DataStreams& ds);
+NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name, bool useBearerForYdb, const TString& authToken, const TString& accountSignature, const FederatedQuery::DataStreams& ds, const TString& readGroup);
 
 NYql::TS3ClusterConfig CreateS3ClusterConfig(const TString& name, const TString& authToken, const TString& objectStorageEndpoint, const TString& accountSignature, const FederatedQuery::ObjectStorageConnection& s3);
 

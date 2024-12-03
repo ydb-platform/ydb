@@ -1,7 +1,5 @@
 # Bulk upsert of data
 
-{% include [work in progress message](_includes/addition.md) %}
-
 {{ ydb-short-name }} supports bulk upsert of many records without atomicity guarantees. The upsert process is split into multiple independent parallel transactions, each covering a single partition. For that reason, this approach is more effective than using YQL. If successful, the `BulkUpsert` method guarantees inserting all the data transmitted by the query.
 
 Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for bulk upsert:

@@ -328,6 +328,7 @@ message TPqClusterConfig {
     repeated TAttr Settings = 100;
     optional bool SharedReading = 101;
     optional string ReconnectPeriod = 102; // disabled by default, example of a parameter: 5m
+    optional string ReadGroup = 103;
 }
 
 message TPqGatewayConfig {

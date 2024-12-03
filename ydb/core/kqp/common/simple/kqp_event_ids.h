@@ -48,6 +48,8 @@ struct TKqpEvents {
         EvDelayedRequestError,
         EvBufferWrite,
         EvBufferWriteResult,
+        EvProxyPingRequest,
+        EvProxyPingResponse,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);

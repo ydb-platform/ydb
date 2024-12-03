@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -526,6 +527,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateColumnStore().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateColumnStore()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateOlapStore>(id, tx);

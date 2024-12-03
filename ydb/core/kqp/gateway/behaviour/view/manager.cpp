@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr::NKqp {

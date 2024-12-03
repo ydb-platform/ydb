@@ -65,7 +65,7 @@ bool TProducerCounters::IsEmpty() const
 ////////////////////////////////////////////////////////////////////////////////
 
 TCounterWriter::TCounterWriter(
-    IRegistryImplPtr registry,
+    IRegistryPtr registry,
     TProducerCountersPtr counters,
     i64 iteration)
     : Registry_(std::move(registry))
@@ -150,7 +150,7 @@ struct TOwningProducer
 };
 
 void DoCollectBatch(
-    const IRegistryImplPtr& profiler,
+    const IRegistryPtr& profiler,
     std::vector<TOwningProducer>&& batchArg,
     const TEventTimer& collectDuration)
 {
@@ -186,7 +186,7 @@ void DoCollectBatch(
 
 TFuture<void> CollectBatchAsync(
     const IInvokerPtr& invoker,
-    const IRegistryImplPtr& profiler,
+    const IRegistryPtr& profiler,
     std::vector<TOwningProducer>&& batch,
     const TEventTimer& collectDuration)
 {
@@ -200,7 +200,7 @@ void TProducerSet::AddProducer(TProducerStatePtr state)
     Producers_.insert(std::move(state));
 }
 
-void TProducerSet::Collect(IRegistryImplPtr profiler, IInvokerPtr invoker)
+void TProducerSet::Collect(IRegistryPtr profiler, IInvokerPtr invoker)
 {
     std::vector<TFuture<void>> offloadFutures;
     std::deque<TProducerStatePtr> toRemove;

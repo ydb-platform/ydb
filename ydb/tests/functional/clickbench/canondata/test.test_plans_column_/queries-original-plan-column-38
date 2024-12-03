@@ -97,7 +97,8 @@
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "IsRefresh == 0 And IsLink != 0 And IsDownload == 0"
+                                                                                        "Predicate": "IsRefresh == 0 AND IsLink != 0 AND IsDownload == 0",
+                                                                                        "Pushdown": "True"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],

@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -395,6 +396,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateRtmrVolume().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateRtmrVolume()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewRTMR(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateRTMR>(id, tx);

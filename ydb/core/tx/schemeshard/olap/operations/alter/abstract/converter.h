@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
 
@@ -24,6 +25,9 @@ private:
                 }
                 if (enabled.HasColumnUnit()) {
                     alterEnabled->SetColumnUnit(enabled.GetColumnUnit());
+                }
+                for (const auto& tier : enabled.GetTiers()) {
+                    alterEnabled->AddTiers()->CopyFrom(tier);
                 }
             } else if (tableTtl.HasDisabled()) {
                 alterTtl->MutableDisabled();

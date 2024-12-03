@@ -283,4 +283,11 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(response3.ExternalAuth.empty());
         }
     }
+
+    Y_UNIT_TEST(SanitizeJwtToken) {
+        UNIT_ASSERT_VALUES_EQUAL(TLoginProvider::SanitizeJwtToken("123.456"), "123.**");
+        UNIT_ASSERT_VALUES_EQUAL(TLoginProvider::SanitizeJwtToken("123.456.789"), "123.456.**");
+        UNIT_ASSERT_VALUES_EQUAL(TLoginProvider::SanitizeJwtToken("token_without_dot"), "");
+        UNIT_ASSERT_VALUES_EQUAL(TLoginProvider::SanitizeJwtToken("token_without_signature."), "");
+    }
 }

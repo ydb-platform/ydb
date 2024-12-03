@@ -36,10 +36,12 @@ PEERDIR(
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/udf_resolve
+    ydb/library/yql/dq/opt
     ydb/library/yql/providers/dq/provider
-    ydb/library/yql/providers/yt/gateway/file
-    ydb/library/yql/providers/yt/codec/codegen
-    ydb/library/yql/providers/yt/comp_nodes/llvm14
+    ydb/library/yql/providers/dq/helper
+    yt/yql/providers/yt/gateway/file
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/llvm14
     yql/essentials/core/url_preprocessing
     ydb/library/yql/tools/yqlrun/http
     yql/essentials/parser/pg_wrapper

@@ -1,8 +1,8 @@
 #include <ydb/library/yql/providers/dq/actors/execution_helpers.h>
 #include <ydb/library/yql/providers/dq/runtime/task_command_executor.h>
 
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
-#include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 

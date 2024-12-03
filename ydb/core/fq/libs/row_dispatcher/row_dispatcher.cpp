@@ -688,11 +688,9 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(ev->Get()->Record.GetSource().GetTopicPath()));
     topicGroup->GetCounter("StartSession", true)->Inc();
 
-    LOG_ROW_DISPATCHER_WARN("TEvStartSession 1");
     NodesTracker.AddNode(ev->Sender.NodeId());
     auto it = Consumers.find(ev->Sender);
     if (it != Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("TEvStartSession 2");
         if (ev->Cookie <= it->second->Generation) {
             LOG_ROW_DISPATCHER_WARN("Consumer already exists, ignore StartSession");
             return;
@@ -702,7 +700,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             << ev->Get()->Record.GetSource().GetTopicPath() << " cookie " << ev->Cookie);
         DeleteConsumer(ev->Sender);
     }
-    LOG_ROW_DISPATCHER_WARN("TEvStartSession 3");
     const auto& source = ev->Get()->Record.GetSource();
 
     auto consumerInfo = MakeAtomicShared<ConsumerInfo>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record,
@@ -739,23 +736,19 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 PqGateway,
                 MaxSessionBufferSizeBytes
                 );
-            LOG_ROW_DISPATCHER_DEBUG("Create new session 6");
             SessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
             sessionInfo.Consumers[ev->Sender] = consumerInfo;
-            LOG_ROW_DISPATCHER_DEBUG("Create new session 1");
         } else {
-            LOG_ROW_DISPATCHER_DEBUG("Create new session 2");
             auto sessionIt = topicSessionInfo.Sessions.begin();
             SessionInfo& sessionInfo = sessionIt->second;
             sessionInfo.Consumers[ev->Sender] = consumerInfo;
             sessionActorId = sessionIt->first;
         }
-        LOG_ROW_DISPATCHER_DEBUG("Create new session 1");
         consumerInfo->Partitions[partitionId].TopicSessionId = sessionActorId;
 
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStartSession>();
-        *event->Record.CopyFrom(ev->Get()->Record);
-        Send(new IEventHandle(ev->Sender, sessionActorId, event.release(), 0));
+        event->Record.CopyFrom(ev->Get()->Record);
+        Send(new IEventHandle(sessionActorId, ev->Sender, event.release(), 0));
     }
     consumerInfo->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvStartSessionAck(consumerInfo->Proto), consumerInfo->Generation);
     Metrics.ClientsCount->Set(Consumers.size());
@@ -828,7 +821,6 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
     for (auto& [partitionId, partition] : consumer->Partitions) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         *event->Record.MutableSource() = consumer->SourceParams;
-        //event->Record.SetPartitionId(partitionId);
         Send(new IEventHandle(partition.TopicSessionId, consumer->ReadActorId, event.release(), 0));
     
         TopicSessionKey topicKey{

@@ -21,7 +21,6 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
 
     NActors::TActorId PopActorId() {
         UNIT_ASSERT(!ActorIds.empty());
-        Cerr << " PopActorId 777 " << Endl;
         auto result = ActorIds.front();
         ActorIds.pop();
         return result;
@@ -40,10 +39,8 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
         const NYql::IPqGateway::TPtr& /*pqGateway*/,
         ui64 /*maxBufferSize*/) const override {
-        Cerr << " RegisterTopicSession 776 " << Endl;
         auto actorId  = Runtime.AllocateEdgeActor();
         ActorIds.push(actorId);
-        Cerr << " RegisterTopicSession 777 " << Endl;
         return actorId;
     }
 
@@ -178,10 +175,9 @@ public:
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
-    void ExpectStopSession(NActors::TActorId actorId, ui64 partitionId) {
+    void ExpectStopSession(NActors::TActorId actorId) {
         auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStopSession>(actorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        //UNIT_ASSERT(eventHolder->Get()->Record.GetPartitionId() == partitionId);
     }
 
     void ExpectGetNextBatch(NActors::TActorId topicSessionId, ui64 partitionId) {
@@ -256,7 +252,7 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ProcessData(ReadActorId1, PartitionId0, topicSessionId);
 
         MockStopSession(Source1, PartitionId0, ReadActorId1);
-        ExpectStopSession(topicSessionId, PartitionId0);
+        ExpectStopSession(topicSessionId);
     }
 
     Y_UNIT_TEST_F(TwoClientOneSession, TFixture) {
@@ -317,24 +313,18 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
 
     Y_UNIT_TEST_F(TwoClients4Sessions, TFixture) {
 
-        MockAddSession(Source1, {PartitionId0}, ReadActorId1);
+        MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId1);
         auto topicSession1 = ExpectRegisterTopicSession();
-        ExpectStartSessionAck(ReadActorId1);
-        ExpectStartSession(topicSession1);
-
-        MockAddSession(Source1, {PartitionId1}, ReadActorId1);
         auto topicSession2 = ExpectRegisterTopicSession();
         ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(topicSession1);
         ExpectStartSession(topicSession2);
 
-        MockAddSession(Source2, {PartitionId0}, ReadActorId2);
+        MockAddSession(Source2, {PartitionId0, PartitionId1}, ReadActorId2);
         auto topicSession3 = ExpectRegisterTopicSession();
-        ExpectStartSessionAck(ReadActorId2);
-        ExpectStartSession(topicSession3);
-
-        MockAddSession(Source2, {PartitionId1}, ReadActorId2);
         auto topicSession4 = ExpectRegisterTopicSession();
         ExpectStartSessionAck(ReadActorId2);
+        ExpectStartSession(topicSession3);
         ExpectStartSession(topicSession4);
 
         ProcessData(ReadActorId1, PartitionId0, topicSession1);
@@ -350,13 +340,13 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ProcessData(ReadActorId2, PartitionId1, topicSession4);
 
         MockStopSession(Source1, PartitionId1, ReadActorId1);
-        ExpectStopSession(topicSession2, PartitionId1);
+        ExpectStopSession(topicSession2);
         
         MockStopSession(Source2, PartitionId0, ReadActorId2);
-        ExpectStopSession(topicSession3, PartitionId0);
+        ExpectStopSession(topicSession3);
 
         MockStopSession(Source2, PartitionId1, ReadActorId2);
-        ExpectStopSession(topicSession4, PartitionId1);
+        ExpectStopSession(topicSession4);
 
         // Ignore data after StopSession
         MockMessageBatch(PartitionId1, topicSession4, ReadActorId2, 1);
@@ -379,25 +369,29 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
 
     Y_UNIT_TEST_F(HandleTEvUndelivered, TFixture) {
         MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId1, 1);
-        // auto topicSession1 = ExpectRegisterTopicSession();
-        // auto topicSession2 = ExpectRegisterTopicSession();
-        // ExpectStartSessionAck(ReadActorId1, 1);
-        // ExpectStartSession(topicSession1);
-        // ExpectStartSession(topicSession2);
+        auto topicSession1 = ExpectRegisterTopicSession();
+        auto topicSession2 = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1, 1);
+        ExpectStartSession(topicSession1);
+        ExpectStartSession(topicSession2);
 
-        // MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId2, 2);
-        // auto topicSession2 = ExpectRegisterTopicSession();
-        // ExpectStartSessionAck(ReadActorId2, 2);
-        // ExpectStartSession(topicSession2);
+        MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId2, 1);
+        ExpectStartSessionAck(ReadActorId2, 1);
+        ExpectStartSession(topicSession1);
+        ExpectStartSession(topicSession2);
 
-        // ProcessData(ReadActorId1, PartitionId0, topicSession1, 1);
-        // ProcessData(ReadActorId1, PartitionId1, topicSession2, 2);
+        ProcessData(ReadActorId1, PartitionId0, topicSession1, 1);
+        ProcessData(ReadActorId1, PartitionId1, topicSession2, 1);
+        ProcessData(ReadActorId2, PartitionId0, topicSession1, 1);
+        ProcessData(ReadActorId2, PartitionId1, topicSession2, 1);
 
-        // MockUndelivered(ReadActorId1, 2);
-        // ExpectStopSession(topicSession2, PartitionId1);
+        MockUndelivered(ReadActorId1, 1);
+        ExpectStopSession(topicSession1);
+        ExpectStopSession(topicSession2);
 
-        // MockUndelivered(ReadActorId1, 1);
-        // ExpectStopSession(topicSession1, PartitionId0);
+        MockUndelivered(ReadActorId2, 1);
+        ExpectStopSession(topicSession1);
+        ExpectStopSession(topicSession2);
     }
 }
 

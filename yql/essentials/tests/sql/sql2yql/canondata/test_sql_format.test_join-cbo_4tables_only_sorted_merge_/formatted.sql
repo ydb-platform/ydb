@@ -1,4 +1,6 @@
 USE plato;
+PRAGMA warning("disable", "8001");
+-- CBO_MISSING_TABLE_STATS
 PRAGMA CostBasedOptimizer = "native";
 PRAGMA yt.MapJoinLimit = "1000";
 PRAGMA yt.LookupJoinLimit = "1000";

@@ -60,25 +60,6 @@ void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TErrorAttribute
-{
-    template <class T>
-    TErrorAttribute(const TString& key, const T& value)
-        : Key(key)
-        , Value(NYson::ConvertToYsonString(value))
-    { }
-
-    TErrorAttribute(const TString& key, const NYson::TYsonString& value)
-        : Key(key)
-        , Value(value)
-    { }
-
-    TString Key;
-    NYson::TYsonString Value;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 template <class TValue>
 concept CErrorNestable = requires (TError& error, TValue&& operand)
 {

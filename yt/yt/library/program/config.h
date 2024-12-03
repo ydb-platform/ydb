@@ -25,8 +25,6 @@
 
 #include <yt/yt/library/process/io_dispatcher.h>
 
-#include <yt/yt/library/profiling/solomon/exporter.h>
-
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
 #include <library/cpp/yt/stockpile/stockpile.h>
@@ -163,7 +161,6 @@ public:
     NRpc::TDispatcherConfigPtr RpcDispatcher;
     NRpc::NGrpc::TDispatcherConfigPtr GrpcDispatcher;
     NServiceDiscovery::NYP::TServiceDiscoveryConfigPtr YPServiceDiscovery;
-    NProfiling::TSolomonExporterConfigPtr SolomonExporter;
     NLogging::TLogManagerConfigPtr Logging;
     NTracing::TJaegerTracerConfigPtr Jaeger;
     NTracing::TTracingTransportConfigPtr TracingTransport;

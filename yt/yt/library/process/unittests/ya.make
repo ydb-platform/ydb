@@ -2,8 +2,6 @@ GTEST(unittester-library-process)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-ALLOCATOR(YT)
-
 SRCS(
     pipes_ut.cpp
     process_ut.cpp

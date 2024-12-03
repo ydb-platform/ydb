@@ -533,6 +533,7 @@ private:
 
         *Out_ << tcmalloc::MallocExtension::GetStats() << Endl;
 
+#ifndef _win_
         if (auto childPid = fork(); childPid == 0) {
             kill(getppid(), SIGSTOP);
 
@@ -555,6 +556,7 @@ private:
         }
 
         // TODO: probably should wait for child, but we're going to OOM anyway.
+#endif
     }
 };
 

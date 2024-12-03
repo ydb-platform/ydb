@@ -10,7 +10,6 @@ SRCS(
     program_config_mixin.cpp
     program_pdeathsig_mixin.cpp
     program_setsid_mixin.cpp
-    stockpile.cpp
 )
 
 PEERDIR(

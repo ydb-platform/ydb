@@ -3,7 +3,7 @@ LIBRARY()
 INCLUDE(../ya.make.inc)
 
 PEERDIR(
-    contrib/ydb/library/yql/providers/yt/codec/codegen/no_llvm
+    yt/yql/providers/yt/codec/codegen/no_llvm
     yql/essentials/providers/config
     yql/essentials/minikql/computation/no_llvm
     yql/essentials/minikql/invoke_builtins/no_llvm

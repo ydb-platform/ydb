@@ -27,6 +27,7 @@ namespace NKikimr::NPQ {
 
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 static const ui32 MAX_INLINE_SIZE = 1000;
+static const TDuration SubDomainQuotaWaitDurationMs = TDuration::Seconds(60);
 
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
 
@@ -498,6 +499,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
             ui64 seqNo = std::max(info.SeqNo, it->second.SeqNo);
             SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, now));
         }
+        SourceIdCounter.Use(sourceId, now);
     }
     TxSourceIdForPostPersist.clear();
 
@@ -527,20 +529,23 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     UpdateAfterWriteCounters(true);
 
     //All ok
-    for (auto& avg : AvgWriteBytes) {
-        avg.Update(WriteNewSize, now);
-    }
+    UpdateAvgWriteBytes(WriteNewSize, now);
+    UpdateAvgWriteBytes(WriteNewSizeFromSupportivePartitions, now);
+
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(WriteNewSize, now);
+        avg.Update(WriteNewSizeFromSupportivePartitions, now);
     }
 
-    PQ_LOG_D("TPartition::HandleWriteResponse writeNewSize# " << WriteNewSize);
+    PQ_LOG_D("TPartition::HandleWriteResponse " <<
+             "writeNewSize# " << WriteNewSize <<
+             " WriteNewSizeFromSupportivePartitions# " << WriteNewSizeFromSupportivePartitions);
 
     if (SupportivePartitionTimeLag) {
         SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
     }
 
-    auto writeNewSizeFull = WriteNewSizeFull;
+    auto writeNewSizeFull = WriteNewSizeFull + WriteNewSizeFromSupportivePartitions;
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
@@ -550,12 +555,13 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
+    WriteNewSizeFromSupportivePartitions = 0;
     UpdateWriteBufferIsFullState(now);
 
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
 
-    if (SplitMergeEnabled(Config)) {
+    if (SplitMergeEnabled(Config) && !IsSupportive()) {
         SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
         auto needScaling = CheckScaleStatus(ctx);
         ChangeScaleStatusIfNeeded(needScaling);
@@ -571,6 +577,13 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     ProcessHasDataRequests(ctx);
 
     ProcessTimestampsForNewData(prevEndOffset, ctx);
+}
+
+void TPartition::UpdateAvgWriteBytes(ui64 size, const TInstant& now)
+{
+    for (auto& avg : AvgWriteBytes) {
+        avg.Update(size, now);
+    }
 }
 
 NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
@@ -1483,8 +1496,12 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 
 void TPartition::SetDeadlinesForWrites(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::SetDeadlinesForWrites.");
-    if (AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs() > 0 && QuotaDeadline == TInstant::Zero()) {
-        QuotaDeadline = ctx.Now() + TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs());
+    auto quotaWaitDurationMs = TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs());
+    if (SubDomainOutOfSpace) {
+        quotaWaitDurationMs = quotaWaitDurationMs ? std::min(quotaWaitDurationMs, SubDomainQuotaWaitDurationMs) : SubDomainQuotaWaitDurationMs;
+    }
+    if (quotaWaitDurationMs > TDuration::Zero() && QuotaDeadline == TInstant::Zero()) {
+        QuotaDeadline = ctx.Now() + quotaWaitDurationMs;
 
         ctx.Schedule(QuotaDeadline, new TEvPQ::TEvQuotaDeadlineCheck());
     }
@@ -1513,7 +1530,7 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& 
 {
     TMessageQueue newRequests;
     for (auto& w : requests) {
-        if (!w.IsWrite() || w.GetWrite().Msg.IgnoreQuotaDeadline) {
+        if (!w.IsWrite() || (w.GetWrite().Msg.IgnoreQuotaDeadline && !SubDomainOutOfSpace)) {
             newRequests.emplace_back(std::move(w));
             continue;
         }
@@ -1529,7 +1546,8 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& 
             WriteInflightSize -= msg.Data.size();
         }
 
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::OVERLOAD, "quota exceeded");
+        TString errorMsg = SubDomainOutOfSpace ? "database size exceeded" : "quota exceeded";
+        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::OVERLOAD, errorMsg);
     }
     requests = std::move(newRequests);
 }

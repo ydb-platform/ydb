@@ -32,9 +32,9 @@ def avg_result(avg):
 
 @@))
 
-(let avgCreate (ScriptUdf 'Python 'avg_create (CallableType '() '(rt)) udfScript))
-(let avgAdd (ScriptUdf 'Python 'avg_add (CallableType '() '(rt) '(rt) '(ui32)) udfScript))
-(let avgResult (ScriptUdf 'Python 'avg_result (CallableType '() '(dbl) '(rt)) udfScript))
+(let avgCreate (ScriptUdf 'Python3 'avg_create (CallableType '() '(rt)) udfScript))
+(let avgAdd (ScriptUdf 'Python3 'avg_add (CallableType '() '(rt) '(rt) '(ui32)) udfScript))
+(let avgResult (ScriptUdf 'Python3 'avg_result (CallableType '() '(dbl) '(rt)) udfScript))
 
 # data
 (let x (Uint32 '10))

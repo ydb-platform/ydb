@@ -182,12 +182,20 @@ T ConstructYTreeConvertibleObject()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
+} // namespace NYT::NYTree
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NYT::NConvertToImpl {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
 double ConvertYsonStringBaseToDouble(const NYson::TYsonStringBuf& yson)
 {
+    using namespace NYT::NYTree;
+
     NYson::TTokenizer tokenizer(yson.AsStringBuf());
     const auto& token = SkipAttributes(&tokenizer);
     switch (token.GetType()) {
@@ -204,8 +212,12 @@ double ConvertYsonStringBaseToDouble(const NYson::TYsonStringBuf& yson)
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 TString ConvertYsonStringBaseToString(const NYson::TYsonStringBuf& yson)
 {
+    using namespace NYT::NYTree;
+
     NYson::TTokenizer tokenizer(yson.AsStringBuf());
     const auto& token = SkipAttributes(&tokenizer);
     switch (token.GetType()) {
@@ -218,15 +230,7 @@ TString ConvertYsonStringBaseToString(const NYson::TYsonStringBuf& yson)
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace NYT::NYTree
-
-namespace NYT::NConvertToImpl {
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -314,25 +318,25 @@ IMPLEMENT_CHECKED_INTEGRAL_CONVERT_TO(ui8)
 template <>
 inline double TagInvoke(TTagInvokeTag<ConvertTo<double>>, const NYson::TYsonString& str)
 {
-    return NYTree::ConvertYsonStringBaseToDouble(str);
+    return ConvertYsonStringBaseToDouble(str);
 }
 
 template <>
 inline double TagInvoke(TTagInvokeTag<ConvertTo<double>>, const NYson::TYsonStringBuf& str)
 {
-    return NYTree::ConvertYsonStringBaseToDouble(str);
+    return ConvertYsonStringBaseToDouble(str);
 }
 
 template <>
 inline TString TagInvoke(TTagInvokeTag<ConvertTo<TString>>, const NYson::TYsonString& str)
 {
-    return NYTree::ConvertYsonStringBaseToString(str);
+    return ConvertYsonStringBaseToString(str);
 }
 
 template <>
 inline TString TagInvoke(TTagInvokeTag<ConvertTo<TString>>, const NYson::TYsonStringBuf& str)
 {
-    return NYTree::ConvertYsonStringBaseToString(str);
+    return ConvertYsonStringBaseToString(str);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

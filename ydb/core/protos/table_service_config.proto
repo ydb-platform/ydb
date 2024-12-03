@@ -273,7 +273,7 @@ message TTableServiceConfig {
         ONLY_POINTS = 2; // Accepts iff point prefix len > 0
         MAX_USED_PREFIX = 3;
     }
-    optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = DISABLED];
+    optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = MAX_USED_PREFIX];
 
     optional bool EnableColumnsWithDefault = 51 [default = true];
 

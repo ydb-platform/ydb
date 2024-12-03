@@ -55,6 +55,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
     NCommon::TConfSetting<TString, false> OverridePlanner;
     NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
+    NCommon::TConfSetting<bool, false> EnableOrderPreservingLookupJoin;
 
     NCommon::TConfSetting<TString, false> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, false> OptimizerHints;
@@ -69,7 +70,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
 
-    NCommon::TConfSetting<ui32, false> MaxDPccpDPTableSize;
+    NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;
 
 
     NCommon::TConfSetting<ui32, false> MaxTasksPerStage;
@@ -91,7 +92,7 @@ struct TKikimrSettings {
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
     bool HasMaxSequentialReadsInFlight() const;
-
+    bool OrderPreservingLookupJoinEnabled() const;
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetUseLlvm() const;
     NDq::EHashJoinMode GetHashJoinMode() const;

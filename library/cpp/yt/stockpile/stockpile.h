@@ -39,9 +39,13 @@ struct TStockpileOptions
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void RunStockpileThread(TStockpileOptions options, std::atomic<bool>* shouldProceed);
-
-void RunDetachedStockpileThreads(TStockpileOptions options);
+class TStockpileManager
+{
+public:
+    //! Configures the background stockpile threads.
+    //! Safe to call multiple times.
+    static void Reconfigure(TStockpileOptions options);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

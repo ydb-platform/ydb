@@ -24,7 +24,7 @@ bool TTieringProcessContext::AddPortion(
     if (!UsedPortions.emplace(info->GetAddress()).second) {
         return true;
     }
-    if (DataLocksManager->IsLocked(*info)) {
+    if (DataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Actualization)) {
         return true;
     }
 

@@ -19,14 +19,18 @@ class WorkloadType(StrEnum):
 class YdbCliHelper:
     @staticmethod
     def get_cli_command() -> list[str]:
+        args = [
+            '-e', YdbCluster.ydb_endpoint,
+            '-d', f'/{YdbCluster.ydb_database}'
+        ]
         cli = get_external_param('ydb-cli', 'main')
         if cli == 'git':
-            return [yatest.common.work_path('ydb')]
+            return [yatest.common.work_path('ydb')] + args
         elif cli == 'main':
             path = os.path.join(yatest.common.context.project_path, '../../../apps/ydb/ydb')
-            return [yatest.common.binary_path(path)]
+            return [yatest.common.binary_path(path)] + args
         else:
-            return [cli]
+            return [cli] + args
 
     class QueryPlan:
         def __init__(self, plan: dict | None = None, table: str | None = None, ast: str | None = None, svg: str | None = None) -> None:
@@ -179,8 +183,6 @@ class YdbCliHelper:
 
         def _get_cmd(self) -> list[str]:
             cmd = YdbCliHelper.get_cli_command() + [
-                '-e', YdbCluster.ydb_endpoint,
-                '-d', f'/{YdbCluster.ydb_database}',
                 'workload', str(self.workload_type), '--path', self.db_path, 'run',
                 '--json', self._json_path,
                 '--output', self._query_output_path,

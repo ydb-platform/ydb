@@ -169,7 +169,7 @@ void TPrivatePageCache::Unpin(TPage *page, TPrivatePageCachePinPad *pad) {
     }
 }
 
-std::pair<ui32, ui64> TPrivatePageCache::Request(TVector<ui32> &pages, TPrivatePageCacheWaitPad *waitPad, TInfo *info) {
+std::pair<ui32, ui64> TPrivatePageCache::Request(TVector<TPageId> &pages, TPrivatePageCacheWaitPad *waitPad, TInfo *info) {
     ui32 blocksToRequest = 0;
     ui64 bytesToRequest = 0;
 
@@ -274,9 +274,9 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
         if (page->Empty()) {
             Touches.PushBack(page);
             Stats.CurrentCacheHits++;
-            // if (!page->Sticky) { // TODO
+            if (!page->IsSticky()) {
                 Stats.CurrentCacheHitSize += page->Size;
-            // }
+            }
         }
         return &page->PinnedBody;
     }
@@ -304,13 +304,13 @@ void TPrivatePageCache::CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newM
 
         // Note: it seems useless to count sticky pages in tx usage
         // also we want to read index from Env
-        // if (!page.Sticky) { TODO
+        if (!page.IsSticky()) {
             if (isPinned) {
                 pinnedMemory += page.Size;
             } else {
                 newMemory += page.Size;
             }
-        // }
+        }
     }
 }
 
@@ -323,9 +323,9 @@ void TPrivatePageCache::PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pi
             pinnedPages++;
             // Note: it seems useless to count sticky pages in tx usage
             // also we want to read index from Env
-            // if (!page.Sticky) { TODO
+            if (!page.IsSticky()) {
                 pinnedMemory += page.Size;
-            // }
+            }
         }
         touchedPages++;
     }
@@ -340,9 +340,9 @@ void TPrivatePageCache::PinToLoad(TPinned &pinned, ui32 &pinnedPages, ui64 &pinn
             pinnedPages++;
             // Note: it seems useless to count sticky pages in tx usage
             // also we want to read index from Env
-            // if (!page.Sticky) { TODO
+            if (!page.IsSticky()) {
                 pinnedMemory += page.Size;
-            // }
+            }
         }
     }
 }
@@ -362,9 +362,8 @@ void TPrivatePageCache::UnpinPages(TPinned &pinned, size_t &unpinnedPages) {
     }
 }
 
-// todo: do we really need that grouping by page collection?
-THashMap<TPrivatePageCache::TInfo*, TVector<ui32>> TPrivatePageCache::GetToLoad() const {
-    THashMap<TPrivatePageCache::TInfo*, TVector<ui32>> result;
+THashMap<TPrivatePageCache::TInfo*, TVector<TPageId>> TPrivatePageCache::GetToLoad() const {
+    THashMap<TPrivatePageCache::TInfo*, TVector<TPageId>> result;
     for (auto &page : ToLoad) {
         result[page.Info].push_back(page.Id);
     }

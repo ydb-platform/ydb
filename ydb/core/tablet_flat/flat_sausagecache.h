@@ -21,7 +21,7 @@ struct TPrivatePageCacheWaitPad : public TExplicitSimpleCounter {
 
 class TPrivatePageCache {
     using TPageId = NTable::NPage::TPageId;
-    using TPinned = THashMap<TLogoBlobID, THashMap<ui32, TIntrusivePtr<TPrivatePageCachePinPad>>>;
+    using TPinned = THashMap<TLogoBlobID, THashMap<TPageId, TIntrusivePtr<TPrivatePageCachePinPad>>>;
     using EPage = NTable::NPage::EPage;
 
 public:
@@ -74,6 +74,13 @@ public:
                 !PinPad &&
                 !WaitQueue &&
                 !SharedBody);
+        }
+
+        bool IsSticky() const noexcept {
+            // Note: because this method doesn't use TPage flags
+            // it may be called from multiple threads later
+            // also it doesn't affect offloading, only touched memory counting
+            return Info->IsSticky(Id);
         }
 
         void Fill(TSharedPageRef shared) {
@@ -129,6 +136,10 @@ public:
             StickyPages.emplace(pageId, page);
         }
 
+        bool IsSticky(TPageId pageId) const noexcept {
+            return StickyPages.contains(pageId);
+        }
+
         const TLogoBlobID Id;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TPageMap<THolder<TPage>> PageMap;
@@ -156,13 +167,13 @@ public:
 
     std::pair<ui32, ui64> Request(TVector<ui32> &pages, TPrivatePageCacheWaitPad *waitPad, TInfo *info); // blocks to load, bytes to load
 
-    const TSharedData* Lookup(ui32 page, TInfo *collection);
+    const TSharedData* Lookup(TPageId pageId, TInfo *collection);
 
     void CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory);
     void PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pinnedPages, ui64 &pinnedMemory);
     void PinToLoad(TPinned &pinned, ui32 &pinnedPages, ui64 &pinnedMemory);
     void UnpinPages(TPinned &pinned, size_t &unpinnedPages);
-    THashMap<TPrivatePageCache::TInfo*, TVector<ui32>> GetToLoad() const;
+    THashMap<TPrivatePageCache::TInfo*, TVector<TPageId>> GetToLoad() const;
     void ResetTouchesAndToLoad(bool verifyEmpty);
 
     void DropSharedBody(TInfo *collectionInfo, TPageId pageId);

@@ -1,7 +1,5 @@
 # Authentication using environment variables
 
-{% include [work in progress message](_includes/addition.md) %}
-
 When using this method, the authentication mode and its parameters are defined by the environment that an application is run in, [as described here](../../reference/ydb-sdk/auth.md#env).
 
 By setting one of the following environment variables, you can control the authentication method:
@@ -145,10 +143,6 @@ Below are examples of the code for authentication using environment variables in
 
     asyncio.run(ydb_init())
   ```
-
-- C#
-
-  {% include [work in progress message](_includes/addition.md) %}
 
 - PHP
 

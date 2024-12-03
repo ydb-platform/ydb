@@ -4,8 +4,6 @@ To run your queries, first you need to specify the [transaction execution mode](
 
 Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to create an object for the *transaction execution mode*.
 
-{% include [work in progress message](_includes/addition.md) %}
-
 ## Serializable {#serializable}
 
 {% list tabs group=lang %}
@@ -123,10 +121,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
    }
    ```
 
-- PHP
-
-  {% include [is not implemented](_includes/wip.md) %}
-
 {% endlist %}
 
 ## Stale Read-Only {#stale-read-only}
@@ -171,10 +165,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
    }
    ```
 
-- PHP
-
-  {% include [is not implemented](_includes/wip.md) %}
-
 {% endlist %}
 
 ## Snapshot Read-Only {#snapshot-read-only}
@@ -218,9 +208,5 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
      }
    }
    ```
-
-- PHP
-
-  {% include [is not implemented](_includes/wip.md) %}
 
 {% endlist %}

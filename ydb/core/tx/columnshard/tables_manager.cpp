@@ -126,16 +126,18 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
             if (!table.IsDropped()) {
                 auto& ttlSettings = versionInfo.GetTtlSettings();
-                if (ttlSettings.HasEnabled()) {
-                    auto vIt = lastVersion.find(pathId);
-                    if (vIt == lastVersion.end()) {
-                        vIt = lastVersion.emplace(pathId, version).first;
-                    }
-                    if (vIt->second <= version) {
+                auto vIt = lastVersion.find(pathId);
+                if (vIt == lastVersion.end()) {
+                    vIt = lastVersion.emplace(pathId, version).first;
+                }
+                if (vIt->second <= version) {
+                    if (ttlSettings.HasEnabled()) {
                         TTtl::TDescription description(ttlSettings.GetEnabled());
                         Ttl.SetPathTtl(pathId, std::move(description));
-                        vIt->second = version;
+                    } else {
+                        Ttl.DropPathTtl(pathId);
                     }
+                    vIt->second = version;
                 }
             }
             table.AddVersion(version);

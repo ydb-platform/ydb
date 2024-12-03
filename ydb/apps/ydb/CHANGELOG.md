@@ -1,3 +1,4 @@
+* Truncate query results output in benchmarks
 
 ## 2.17.0 ##
 

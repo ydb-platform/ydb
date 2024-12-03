@@ -469,7 +469,7 @@ public:
         });
 
         ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContext).release());
-        // this->Die(ctx);
+        this->Die(ctx);
     }
 };
 

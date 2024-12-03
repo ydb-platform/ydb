@@ -1277,6 +1277,7 @@ private:
             YQL_ENSURE(streamLookup.LookupStrategy().Maybe<TCoAtom>());
             TString lookupStrategy = streamLookup.LookupStrategy().Maybe<TCoAtom>().Cast().StringValue();
             streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(lookupStrategy));
+            streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingLookupJoinEnabled());
 
             switch (streamLookupProto.GetLookupStrategy()) {
                 case NKqpProto::EStreamLookupStrategy::LOOKUP: {

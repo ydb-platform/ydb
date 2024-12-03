@@ -400,6 +400,7 @@ private:
             }
         }
 
+        auto guard = BindAllocator();
         StreamLookupWorker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
             read.ShardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
         });

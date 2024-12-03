@@ -74,10 +74,14 @@ struct TFixture : public TPqIoTestFixture {
         return eventHolder;
     }
 
-    void ExpectStartSession(ui64 expectedOffset, NActors::TActorId rowDispatcherId, ui64 expectedGeneration = 1) {
+    void ExpectStartSession(const TMap<ui32, ui64>& expectedOffsets, NActors::TActorId rowDispatcherId, ui64 expectedGeneration = 1) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->Record.GetOffset() == expectedOffset);
+        TMap<ui32, ui64> offsets;
+        for (auto p : eventHolder->Get()->Record.GetOffset()) {
+            offsets[p.GetPartitionId()] = p.GetOffset();
+        }
+        UNIT_ASSERT(offsets == expectedOffsets);
         UNIT_ASSERT(eventHolder->Cookie == expectedGeneration);
     }
 
@@ -227,7 +231,7 @@ struct TFixture : public TPqIoTestFixture {
         auto req = ExpectCoordinatorRequest(Coordinator1Id);
 
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req->Cookie);
-        ExpectStartSession(0, RowDispatcher1);
+        ExpectStartSession({}, RowDispatcher1);
         MockAck(RowDispatcher1);
     }
 
@@ -259,7 +263,7 @@ struct TFixture : public TPqIoTestFixture {
 };
 
 Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
-    Y_UNIT_TEST_F(TestReadFromTopic, TFixture) {
+    Y_UNIT_TEST_F(TestReadFromTopic2, TFixture) {
         StartSession(Source1);
         ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
     }
@@ -324,7 +328,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
             auto req = f.ExpectCoordinatorRequest(f.Coordinator1Id);
 
             f.MockCoordinatorResult({{f.RowDispatcher1, PartitionId1}}, req->Cookie);
-            f.ExpectStartSession(2, f.RowDispatcher1);
+            f.ExpectStartSession({{PartitionId1, 2}}, f.RowDispatcher1);
             f.MockAck(f.RowDispatcher1);
 
             f.ProcessSomeJsons(2, {f.Json3}, f.RowDispatcher1);  // offsets: 2
@@ -343,7 +347,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
             auto req = f.ExpectCoordinatorRequest(f.Coordinator1Id);
 
             f.MockCoordinatorResult({{f.RowDispatcher1, PartitionId1}}, req->Cookie);
-            f.ExpectStartSession(3, f.RowDispatcher1);
+            f.ExpectStartSession({{PartitionId1, 3}}, f.RowDispatcher1);
             f.MockAck(f.RowDispatcher1);
 
             f.ProcessSomeJsons(3, {f.Json4}, f.RowDispatcher1);  // offsets: 3
@@ -357,21 +361,31 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
 
         // change active Coordinator 
         MockCoordinatorChanged(Coordinator2Id);
-        ExpectStopSession(RowDispatcher1);
-
-        auto result = SourceReadDataUntil<TString>(UVParser, 1);
-        AssertDataWithWatermarks(result, {Json3}, {});
+        // continue use old sessions
+        MockMessageBatch(3, {Json4}, RowDispatcher1);
 
         auto req = ExpectCoordinatorRequest(Coordinator2Id);
-        MockCoordinatorResult({{RowDispatcher2, PartitionId1}}, req->Cookie);
 
-        ExpectStartSession(3, RowDispatcher2, 2);
+        auto result = SourceReadDataUntil<TString>(UVParser, 2);
+        AssertDataWithWatermarks(result, {Json3, Json4}, {});
+
+        MockCoordinatorResult({{RowDispatcher2, PartitionId1}}, req->Cookie);       // change distribution
+        ExpectStopSession(RowDispatcher1);
+
+        ExpectStartSession({{PartitionId1, 4}}, RowDispatcher2, 2);
         MockAck(RowDispatcher2, 2);
 
-        ProcessSomeJsons(3, {Json4}, RowDispatcher2, UVParser, 2);
+        ProcessSomeJsons(4, {Json1}, RowDispatcher2, UVParser, 2);
 
         MockHeartbeat(RowDispatcher1, 1);       // old generation
         ExpectStopSession(RowDispatcher1);
+
+        // change active Coordinator 
+        MockCoordinatorChanged(Coordinator1Id);
+        req = ExpectCoordinatorRequest(Coordinator1Id);
+        MockCoordinatorResult({{RowDispatcher2, PartitionId1}}, req->Cookie);       // distribution is not changed
+
+        ProcessSomeJsons(5, {Json2}, RowDispatcher2, UVParser, 2);
     }
 
     Y_UNIT_TEST_F(Backpressure, TFixture) {
@@ -398,7 +412,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         AssertDataWithWatermarks(result, {Json1}, {});
     }
 
-    Y_UNIT_TEST_F(RowDispatcherIsRestarted, TFixture) {
+    Y_UNIT_TEST_F(RowDispatcherIsRestarted2, TFixture) {
         StartSession(Source1);
         ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
         MockDisconnected();
@@ -407,7 +421,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
 
         auto req = ExpectCoordinatorRequest(Coordinator1Id);
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req->Cookie);
-        ExpectStartSession(2, RowDispatcher1, 2);
+        ExpectStartSession({{PartitionId1, 2}}, RowDispatcher1, 2);
         MockAck(RowDispatcher1, 2);
 
         ProcessSomeJsons(2, {Json3}, RowDispatcher1, UVParser, 2);
@@ -420,8 +434,8 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockCoordinatorChanged(Coordinator1Id);
         auto req = ExpectCoordinatorRequest(Coordinator1Id);
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}, {RowDispatcher2, PartitionId2}}, req->Cookie);
-        ExpectStartSession(0, RowDispatcher1, 1);
-        ExpectStartSession(0, RowDispatcher2, 2);
+        ExpectStartSession({}, RowDispatcher1, 1);
+        ExpectStartSession({}, RowDispatcher2, 2);
         MockAck(RowDispatcher1, 1, PartitionId1);
         MockAck(RowDispatcher2, 2, PartitionId2);
         
@@ -435,12 +449,12 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockUndelivered(RowDispatcher2, 2);
 
         // session1 is still working
-        ProcessSomeJsons(2, {Json4}, RowDispatcher1, UVParser, 1, PartitionId1, false);
-        
+        ProcessSomeJsons(2, {Json4}, RowDispatcher1, UVParser, 1, PartitionId1, false); 
+
         // Reinit session to RowDispatcher2
         auto req2 = ExpectCoordinatorRequest(Coordinator1Id);
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}, {RowDispatcher2, PartitionId2}}, req2->Cookie);
-        ExpectStartSession(10, RowDispatcher2, 3);
+        ExpectStartSession({{PartitionId2, 10}}, RowDispatcher2, 3);
         MockAck(RowDispatcher2, 3, PartitionId2);
 
         ProcessSomeJsons(3, {Json4}, RowDispatcher1, UVParser, 1, PartitionId1, false);
@@ -471,10 +485,11 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockCoordinatorChanged(Coordinator2Id);
         auto req = ExpectCoordinatorRequest(Coordinator2Id);
         MockUndelivered(RowDispatcher1);
+        auto req2 = ExpectCoordinatorRequest(Coordinator2Id);
 
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req->Cookie);
-        MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req->Cookie);
-        ExpectStartSession(2, RowDispatcher1, 2);
+        MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req2->Cookie);
+        ExpectStartSession({{PartitionId1, 2}}, RowDispatcher1, 2);
         MockAck(RowDispatcher1);
     }
 }

@@ -689,11 +689,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     topicGroup->GetCounter("StartSession", true)->Inc();
 
     NodesTracker.AddNode(ev->Sender.NodeId());
-    TMaybe<ui64> readOffset;
-    if (ev->Get()->Record.HasOffset()) {
-        readOffset = ev->Get()->Record.GetOffset();
-    }
-
     auto it = Consumers.find(ev->Sender);
     if (it != Consumers.end()) {
         if (ev->Cookie <= it->second->Generation) {
@@ -726,7 +721,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         Y_ENSURE(topicSessionInfo.Sessions.size() <= 1);
 
         if (topicSessionInfo.Sessions.empty()) {
-            LOG_ROW_DISPATCHER_DEBUG("Create new session, offset " << readOffset);
+            LOG_ROW_DISPATCHER_DEBUG("Create new session");
             sessionActorId = ActorFactory->RegisterTopicSession(
                 source.GetTopicPath(),
                 source.GetEndpoint(),

@@ -8,6 +8,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 
 #include <util/generic/set.h>
+#include <util/generic/map.h>
 
 namespace NFq {
 
@@ -72,7 +73,7 @@ struct TEvRowDispatcher {
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
             const TSet<ui32>& partitionIds,
             const TString token,
-            TMaybe<ui64> readOffset,
+            TMap<ui32, ui64> readOffsets,
             ui64 startingMessageTimestampMs,
             const TString& queryId) {
             *Record.MutableSource() = sourceParams;
@@ -80,8 +81,10 @@ struct TEvRowDispatcher {
                 Record.AddPartitionId(partitionId);
             }
             Record.SetToken(token);
-            if (readOffset) {
-                Record.SetOffset(*readOffset);
+            for (const auto& [partitionId, offset] : readOffsets) {
+                auto* partitionOffset = Record.AddOffset();
+                partitionOffset->SetPartitionId(partitionId);
+                partitionOffset->SetOffset(offset);
             }
             Record.SetStartingMessageTimestampMs(startingMessageTimestampMs);
             Record.SetQueryId(queryId);

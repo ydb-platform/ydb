@@ -123,15 +123,16 @@ private:
     struct TClientsInfo {
         TClientsInfo(
             const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev,
-            NMonitoring::TDynamicCounterPtr& counters)
+            NMonitoring::TDynamicCounterPtr& counters,
+            TMaybe<ui64> offset)
             : Settings(ev->Get()->Record)
             , ReadActorId(ev->Sender)
             , FilteredDataRate(counters->GetCounter("FilteredDataRate", true))
             , RestartSessionByOffsetsByQuery(counters->GetCounter("RestartSessionByOffsetsByQuery", true))
         {
-            if (Settings.HasOffset()) {
-                NextMessageOffset = Settings.GetOffset();
-                InitialOffset = Settings.GetOffset();
+            if (offset) {
+                NextMessageOffset = *offset;
+                InitialOffset = *offset;
             }
             Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
         }
@@ -271,6 +272,7 @@ private:
     void UpdateFieldsIds(TClientsInfo& clientInfo);
     bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     TString GetAnyQueryIdByFieldName(const TString& fieldName);
+    TMaybe<ui64> GetOffset(const NFq::NRowDispatcherProto::TEvStartSession& settings);
 
 private:
 
@@ -776,8 +778,9 @@ bool HasJsonColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
+    auto offset = GetOffset(ev->Get()->Record);
     LOG_ROW_DISPATCHER_INFO("New client: read actor id " << ev->Sender.ToString() << ", predicate: " 
-        << ev->Get()->Record.GetSource().GetPredicate() << ", offset: " << ev->Get()->Record.GetOffset());
+        << ev->Get()->Record.GetSource().GetPredicate() << ", offset: " << offset);
 
     if (!CheckNewClient(ev)) {
         return;
@@ -796,7 +799,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         auto& clientInfo = Clients.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(ev->Sender), 
-            std::forward_as_tuple(ev, topicGroup)).first->second;
+            std::forward_as_tuple(ev, topicGroup, GetOffset(ev->Get()->Record))).first->second;
         UpdateFieldsIds(clientInfo);
 
         const auto& source = clientInfo.Settings.GetSource();
@@ -823,8 +826,8 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         }
 
         if (ReadSession) {
-            if (clientInfo.Settings.HasOffset() && (clientInfo.Settings.GetOffset() <= LastMessageOffset)) {
-                LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
+            if (offset && (offset <= LastMessageOffset)) {
+                LOG_ROW_DISPATCHER_INFO("New client has less offset (" << offset << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
                 Metrics.RestartSessionByOffsets->Inc();
                 ++RestartSessionByOffsets;
                 clientInfo.RestartSessionByOffsetsByQuery->Inc();
@@ -1073,6 +1076,16 @@ TString TTopicSession::GetAnyQueryIdByFieldName(const TString& fieldName) {
         }
     }
     return "Unknown";
+}
+
+TMaybe<ui64> TTopicSession::GetOffset(const NFq::NRowDispatcherProto::TEvStartSession& settings) {
+    for (auto p: settings.GetOffset()) {
+        if (p.GetPartitionId() != PartitionId) {
+            continue;
+        }
+        return p.GetOffset();
+    }
+    return Nothing();
 }
 
 } // namespace

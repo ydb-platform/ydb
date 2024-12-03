@@ -21,11 +21,16 @@ message TEvGetAddressResponse {
     repeated TEvPartitionAddress Partitions = 1;
 }
 
+message TPartitionOffset {
+    uint32 PartitionId = 1;
+    uint64 Offset = 2;
+}
+
 message TEvStartSession {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
     repeated uint32 PartitionId = 2;
     string Token = 3;
-    optional uint64 Offset = 4;
+    repeated TPartitionOffset Offset = 4;
     uint64 StartingMessageTimestampMs = 5;
     string QueryId = 6;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;

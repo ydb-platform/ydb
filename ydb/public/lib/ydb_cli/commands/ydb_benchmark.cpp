@@ -367,7 +367,7 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
                 ++successIteration;
                 if (successIteration == 1) {
                     outFStream << queryN << ": " << Endl;
-                    PrintResult(res, outFStream);
+                    PrintResult(res, outFStream, qInfo.ExpectedResult);
                 }
                 const auto resHash = res.CalcHash();
                 if ((!prevResult || *prevResult != resHash) && !res.IsExpected(qInfo.ExpectedResult)) {
@@ -376,7 +376,7 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
                         query << Endl << Endl <<
                         "UNEXPECTED DIFF: " << Endl
                           << "RESULT: " << Endl;
-                    PrintResult(res, outFStream);
+                    PrintResult(res, outFStream, qInfo.ExpectedResult);
                     outFStream << Endl
                             << "EXPECTATION: " << Endl << qInfo.ExpectedResult << Endl;
                     prevResult = resHash;
@@ -459,9 +459,10 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
     return !someFailQueries;
 }
 
-void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out) const {
+void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const {
     TResultSetPrinter printer(TResultSetPrinter::TSettings()
         .SetOutput(&out)
+        .SetMaxRowsCount(std::max(StringSplitter(expected.c_str()).Split('\n').Count(), (size_t)100))
         .SetFormat(EDataFormat::Pretty).SetMaxWidth(120)
     );
     for (const auto& [i, rr]: res.GetRawResults()) {

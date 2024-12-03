@@ -85,11 +85,15 @@ public:
     }
 
     void StartSession(TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source, TMaybe<ui64> readOffset = Nothing()) {
+        TMap<ui32, ui64> readOffsets;
+        if (readOffset) {
+            readOffsets[PartitionId] = *readOffset;
+        }
         auto event = new NFq::TEvRowDispatcher::TEvStartSession(
             source,
             {PartitionId},
             "Token",
-            readOffset, // readOffset,
+            readOffsets,
             0,         // StartingMessageTimestamp;
             "QueryId");
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event));

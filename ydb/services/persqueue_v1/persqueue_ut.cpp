@@ -1027,28 +1027,21 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         ui32 totalMsg = 0;
         ui64 nextReadId = 1;
         Sleep(TDuration::Seconds(3));
-        Cerr << ">>>>> 1" << Endl << Flush;
         setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 50);
-        Cerr << ">>>>> 2" << Endl << Flush;
         setup.DoRead(assignId, nextReadId, totalMsg, 42);
 
-        Cerr << ">>>>> 3" << Endl << Flush;
         Topic::StreamReadMessage::FromClient req;
         req.mutable_read_request()->set_bytes_size(40_MB);
         if (!setup.ControlStream->Write(req)) {
             ythrow yexception() << "write fail";
         }
-        Cerr << ">>>>> 4" << Endl << Flush;
         setup.DoRead(assignId, nextReadId, totalMsg, 50);
 
-        Cerr << ">>>>> 5" << Endl << Flush;
         Sleep(TDuration::Seconds(1));
-        Cerr << ">>>>> 6" << Endl << Flush;
         auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.StagedReads.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.Reads.size(), 0);
-        Cerr << ">>>>> 7" << Endl << Flush;
     }
 
     Y_UNIT_TEST(DirectReadBadCases) {
@@ -1194,8 +1187,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         UNIT_ASSERT_VALUES_EQUAL(pair.first, 0);
         auto assignId = pair.second;
         setup.SendReadSessionAssign(assignId);
-        // auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
-        // UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
         setup.DoWrite(pqClient->GetDriver(), "acc/topic2", 10_MB, 1);
         Ydb::Topic::StreamDirectReadMessage::FromServer resp;
         Cerr << "Request initial read data\n";
@@ -2561,9 +2552,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         for (ui32 i = 0; i < 32; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
 
-        Cerr << ">>>>> 1" << Endl << Flush;
         auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 23);
-        Cerr << ">>>>> 2" << Endl << Flush;
         auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
         UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 3);
@@ -2573,9 +2562,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         for (ui32 i = 0; i < 8; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value);
 
-        Cerr << ">>>>> 3" << Endl << Flush;
         info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 23);
-        Cerr << ">>>>> 4" << Endl << Flush;
         info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 22);
 
         ui32 fromDisk = info0.BlobsFromDisk + info16.BlobsFromDisk;
@@ -2636,11 +2623,8 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             server.AnnoyingClient->WriteToPQ({secondTopic, 0, "source1", i}, mb);
         }
 
-        Cerr << ">>>>> 1" << Endl << Flush;
         auto info1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 1, "user1"}, 7);
-        Cerr << ">>>>> 2" << Endl << Flush;
         auto info2 = server.AnnoyingClient->ReadFromPQ({secondTopic, 0, 0, 1, "user1"}, 7);
-        Cerr << ">>>>> 3" << Endl << Flush;
 
         UNIT_ASSERT_VALUES_EQUAL(info1.BlobsFromCache, 1);
         UNIT_ASSERT_VALUES_EQUAL(info2.BlobsFromCache, 1);

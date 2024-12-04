@@ -553,7 +553,7 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TString& dbPath, const T
     for (const auto& changefeed : desc.GetChangefeedDescriptions()) {
         if (FindPtr(actualDesc->GetChangefeedDescriptions(), changefeed)) {
             continue;
-
+        }
         LOG_D("Restore changefeed " << changefeed.GetName().Quote() << " on " << dbPath.Quote());
 
         TOperation::TOperationId buildChangefeedId;

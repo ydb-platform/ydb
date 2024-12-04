@@ -24,7 +24,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableImmediateWritingOnBulkUpsert(true);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableWritePortionsOnInsert(true);
         TLocalHelper(kikimr).CreateTestOlapTable();
         Tests::NCommon::TLoggerInit(kikimr)

@@ -240,6 +240,7 @@ namespace NKikimr::NStorage {
         std::optional<NKikimrBlobStorage::TStorageConfig> CurrentProposedStorageConfig;
         std::shared_ptr<TScepter> Scepter;
         TString ErrorReason;
+        std::optional<TString> CurrentSelfAssemblyUUID;
 
         // subscribed IC sessions
         struct TSessionSubscription {
@@ -331,11 +332,14 @@ namespace NKikimr::NStorage {
         void ProcessGather(TEvGather *res);
         bool HasQuorum() const;
         void ProcessCollectConfigs(TEvGather::TCollectConfigs *res);
+
+        using TProcessCollectConfigsResult = std::variant<std::monostate, TString, NKikimrBlobStorage::TStorageConfig>;
+        TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res, const TString *selfAssemblyUUID);
         std::optional<TString> ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 
         struct TExConfigError : yexception {};
 
-        bool GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config);
+        void GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
 
         void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId, ui32 groupGeneration,
             TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,

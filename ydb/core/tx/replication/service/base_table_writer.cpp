@@ -411,6 +411,8 @@ class TLocalTableWriter
         CreateSenders(NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
 
         if (!Initialized) {
+            LOG_D("Send handshake"
+                << ": worker# " << Worker);
             Send(Worker, new TEvWorker::TEvHandshake());
             Initialized = true;
         }

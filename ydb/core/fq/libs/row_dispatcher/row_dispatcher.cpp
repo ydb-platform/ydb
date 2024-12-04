@@ -662,7 +662,7 @@ TString TRowDispatcher::GetInternalState() {
     }
     str << "TopicSessions:\n";
     for (auto& [key, sessionsInfo] : TopicSessions) {
-        str << "  " << key.TopicPath  << " / " << key.ReadGroup << " / " << key.PartitionId;
+        str << "  " << key.TopicPath  << " / " << key.PartitionId  << " / " << key.ReadGroup;
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
             str << " / " << LeftPad(actorId, 32)
                 << " data rate " << toHumanDR(sessionInfo.AggrReadBytes.Sum) << " unread bytes " << toHuman(sessionInfo.Stat.UnreadBytes)

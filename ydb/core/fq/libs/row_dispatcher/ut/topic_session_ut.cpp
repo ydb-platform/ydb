@@ -15,7 +15,7 @@
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
-#include <yql/essentials/public/purecalc/common/interface.h>
+#include <ydb/library/yql/public/purecalc/common/interface.h>
 
 namespace {
 

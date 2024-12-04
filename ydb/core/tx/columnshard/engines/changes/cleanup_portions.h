@@ -3,7 +3,8 @@
 
 namespace NKikimr::NOlap {
 
-class TCleanupPortionsColumnEngineChanges: public TColumnEngineChanges {
+class TCleanupPortionsColumnEngineChanges: public TColumnEngineChanges,
+                                           public NColumnShard::TMonitoringObjectsCounter<TCleanupPortionsColumnEngineChanges> {
 private:
     using TBase = TColumnEngineChanges;
     THashMap<TString, std::vector<std::shared_ptr<TPortionInfo>>> StoragePortions;

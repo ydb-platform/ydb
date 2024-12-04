@@ -329,11 +329,6 @@ class TTableDescription::TImpl {
             TtlSettings_ = std::move(*ttlSettings);
         }
 
-        // tiering
-        if (proto.tiering().size()) {
-            Tiering_ = proto.tiering();
-        }
-
         if (proto.store_type()) {
             StoreType_ = (proto.store_type() == Ydb::Table::STORE_TYPE_COLUMN) ? EStoreType::Column : EStoreType::Row;
         }
@@ -556,10 +551,6 @@ public:
         return TtlSettings_;
     }
 
-    const TMaybe<TString>& GetTiering() const {
-        return Tiering_;
-    }
-
     EStoreType GetStoreType() const {
         return StoreType_;
     }
@@ -640,7 +631,6 @@ private:
     TVector<TIndexDescription> Indexes_;
     TVector<TChangefeedDescription> Changefeeds_;
     TMaybe<TTtlSettings> TtlSettings_;
-    TMaybe<TString> Tiering_;
     TString Owner_;
     TVector<NScheme::TPermissions> Permissions_;
     TVector<NScheme::TPermissions> EffectivePermissions_;
@@ -707,7 +697,7 @@ TMaybe<TTtlSettings> TTableDescription::GetTtlSettings() const {
 }
 
 TMaybe<TString> TTableDescription::GetTiering() const {
-    return Impl_->GetTiering();
+    return Nothing();
 }
 
 EStoreType TTableDescription::GetStoreType() const {
@@ -920,10 +910,6 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
     if (const auto& ttl = Impl_->GetTtlSettings()) {
         ttl->SerializeTo(*request.mutable_ttl_settings());
-    }
-
-    if (const auto& tiering = Impl_->GetTiering()) {
-        request.set_tiering(*tiering);
     }
 
     if (Impl_->GetStoreType() == EStoreType::Column) {

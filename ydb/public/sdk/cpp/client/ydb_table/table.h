@@ -596,6 +596,7 @@ public:
     TVector<TIndexDescription> GetIndexDescriptions() const;
     TVector<TChangefeedDescription> GetChangefeedDescriptions() const;
     TMaybe<TTtlSettings> GetTtlSettings() const;
+    // Deprecated. Use GetTtlSettings() instead
     TMaybe<TString> GetTiering() const;
     EStoreType GetStoreType() const;
 

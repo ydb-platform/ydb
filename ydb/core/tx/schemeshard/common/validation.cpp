@@ -37,22 +37,22 @@ bool TTTLValidator::ValidateUnit(const NScheme::TTypeId columnType, NKikimrSchem
     return true;
 }
 
-bool TTTLValidator::ValidateTiers(const NKikimrSchemeOp::TTTLSettings::TEnabled ttlSettings, TString& errStr) {
-    for (ui64 i = 0; i < ttlSettings.TiersSize(); ++i) {
-        const auto& tier = ttlSettings.GetTiers(i);
+bool TTTLValidator::ValidateTiers(const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTTLSettings_TTier>& tiers, TString& errStr) {
+    for (i64 i = 0; i < tiers.size(); ++i) {
+        const auto& tier = tiers[i];
         if (!tier.HasApplyAfterSeconds()) {
             errStr = TStringBuilder() << "Tier " << i << ": missing ApplyAfterSeconds";
             return false;
         }
-        if (i != 0 && tier.GetApplyAfterSeconds() <= ttlSettings.GetTiers(i - 1).GetApplyAfterSeconds()) {
+        if (i != 0 && tier.GetApplyAfterSeconds() <= tiers[i - 1].GetApplyAfterSeconds()) {
             errStr = TStringBuilder() << "Tiers in the sequence must have increasing ApplyAfterSeconds: "
-                                      << ttlSettings.GetTiers(i - 1).GetApplyAfterSeconds() << " (tier " << i - 1
+                                      << tiers[i - 1].GetApplyAfterSeconds() << " (tier " << i - 1
                                       << ") >= " << tier.GetApplyAfterSeconds() << " (tier " << i << ")";
             return false;
         }
         switch (tier.GetActionCase()) {
             case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
-                if (i + 1 != ttlSettings.TiersSize()) {
+                if (i + 1 != tiers.size()) {
                     errStr = TStringBuilder() << "Tier " << i << ": only the last tier in TTL settings can have Delete action";
                     return false;
                 }

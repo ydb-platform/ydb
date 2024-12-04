@@ -135,7 +135,6 @@ private:
                 return false;
             }
         }
-        tableDesc->MutableTtlSettings()->SetUseTiering(req.tiering());
 
         return true;
     }

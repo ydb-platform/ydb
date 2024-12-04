@@ -14,7 +14,7 @@ brew install spin gcc
 
 Поиск ошибок в инварианте
 ```
-spin -a queue_slow.pml && gcc -o pan pan.c
+spin -a queue_slow.pml && gcc -O2 -w -o pan pan.c
 ./pan -a -I -m<max search depth> -N <name of invariant>
 ```
 
@@ -32,7 +32,7 @@ ltl no_overflow {
 
 Поиск циклов
 ```
-spin -a queue_slow.pml -DWITH_BLOCKING && gcc -o pan pan.c -DNP
+spin -a queue_slow.pml -DWITH_BLOCKING && gcc -O2 -w -o pan pan.c -DNP
 ./pan -l -I -m<max search depth>
 ```
 

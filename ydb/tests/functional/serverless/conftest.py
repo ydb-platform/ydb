@@ -117,6 +117,14 @@ def ydb_disk_quoted_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, ydb_safe
     with ydb_serverless_db_ctx(ydb_cluster, database_name, ydb_hostel_db, disk_quotas=disk_quotas):
         yield database_name
 
+@pytest.fixture(scope='function')
+def ydb_disk_small_quoted_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, ydb_safe_test_name):
+    database_name = os.path.join(ydb_root, "quoted_serverless", ydb_safe_test_name)
+    disk_quotas = {'hard': 6 * 1024 * 1024, 'soft': 3 * 1024 * 1024}
+
+    with ydb_serverless_db_ctx(ydb_cluster, database_name, ydb_hostel_db, disk_quotas=disk_quotas):
+        yield database_name
+
 
 @contextlib.contextmanager
 def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db, timeout_seconds=100):

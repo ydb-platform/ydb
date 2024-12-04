@@ -84,13 +84,10 @@ namespace NTable {
             void Save(ui32 cookie, NSharedCache::TEvResult::TLoaded&& loaded) noexcept
             {
                 if (cookie == 0 && NeedPages.erase(loaded.PageId)) {
-                    auto type = Cache->GetPageType(loaded.PageId);
+                    auto pageType = Cache->GetPageType(loaded.PageId);
+                    bool sticky = NeedIn(pageType) || pageType == EPage::FlatIndex;
                     SavedPages[loaded.PageId] = NSharedCache::TPinnedPageRef(loaded.Page).GetData();
-                    if (type != EPage::FlatIndex) {
-                        // hack: saving flat index to private cache will break sticky logic
-                        // keep it in shared cache only for now
-                        Cache->Fill(loaded.PageId, std::move(loaded.Page), NeedIn(type));
-                    }
+                    Cache->Fill(loaded.PageId, std::move(loaded.Page), sticky);
                 }
             }
 
@@ -173,6 +170,7 @@ namespace NTable {
             Y_ABORT_UNLESS(Stage == EStage::Result);
             Y_ABORT_UNLESS(PartView, "Result may only be grabbed once");
             Y_ABORT_UNLESS(PartView.Slices, "Missing slices in Result stage");
+            
             return std::move(PartView);
         }
 

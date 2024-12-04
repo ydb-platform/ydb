@@ -6,8 +6,6 @@
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
-#include <yt/yt/core/ytalloc/config.h>
-
 #include <yt/yt/core/net/config.h>
 
 #include <yt/yt/core/rpc/config.h>
@@ -94,7 +92,6 @@ class TSingletonsConfig
 {
 public:
     TDuration SpinWaitSlowPathLoggingThreshold;
-    NYTAlloc::TYTAllocConfigPtr YTAlloc;
     THashMap<TString, int> FiberStackPoolSizes;
     NNet::TAddressResolverConfigPtr AddressResolver;
     NBus::TTcpDispatcherConfigPtr TcpDispatcher;
@@ -128,7 +125,6 @@ class TSingletonsDynamicConfig
 public:
     std::optional<TDuration> SpinWaitSlowPathLoggingThreshold;
     ui64 MaxIdleFibers;
-    NYTAlloc::TYTAllocConfigPtr YTAlloc;
     NBus::TTcpDispatcherDynamicConfigPtr TcpDispatcher;
     NPipes::TIODispatcherConfigPtr IODispatcher;
     NRpc::TDispatcherDynamicConfigPtr RpcDispatcher;
@@ -145,22 +141,6 @@ public:
 };
 
 DEFINE_REFCOUNTED_TYPE(TSingletonsDynamicConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TDiagnosticDumpConfig
-    : public virtual NYTree::TYsonStruct
-{
-public:
-    std::optional<TDuration> YTAllocDumpPeriod;
-    std::optional<TDuration> RefCountedTrackerDumpPeriod;
-
-    REGISTER_YSON_STRUCT(TDiagnosticDumpConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TDiagnosticDumpConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

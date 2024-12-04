@@ -73,8 +73,6 @@ void TSingletonsConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("spin_wait_slow_path_logging_threshold", &TThis::SpinWaitSlowPathLoggingThreshold)
         .Default(TDuration::MicroSeconds(100));
-    registrar.Parameter("yt_alloc", &TThis::YTAlloc)
-        .DefaultNew();
     registrar.Parameter("fiber_stack_pool_sizes", &TThis::FiberStackPoolSizes)
         .Default({});
     registrar.Parameter("address_resolver", &TThis::AddressResolver)
@@ -126,8 +124,6 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("max_idle_fibers", &TThis::MaxIdleFibers)
         .Default(NConcurrency::DefaultMaxIdleFibers);
-    registrar.Parameter("yt_alloc", &TThis::YTAlloc)
-        .Optional();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)
         .DefaultNew();
     registrar.Parameter("io_dispatcher", &TThis::IODispatcher)
@@ -146,16 +142,6 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("protobuf_interop", &TThis::ProtobufInterop)
         .DefaultNew();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TDiagnosticDumpConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("yt_alloc_dump_period", &TThis::YTAllocDumpPeriod)
-        .Default();
-    registrar.Parameter("ref_counted_tracker_dump_period", &TThis::RefCountedTrackerDumpPeriod)
-        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -2,8 +2,6 @@
 #include "config.h"
 #include "private.h"
 
-#include <yt/yt/core/ytalloc/bindings.h>
-
 #include <yt/yt/core/misc/lazy_ptr.h>
 #include <yt/yt/core/misc/ref_counted_tracker.h>
 #include <yt/yt/core/misc/ref_counted_tracker_profiler.h>
@@ -56,10 +54,6 @@ using namespace NTCMalloc;
 void ConfigureSingletons(const TSingletonsConfigPtr& config)
 {
     SetSpinWaitSlowPathLoggingThreshold(config->SpinWaitSlowPathLoggingThreshold);
-
-    if (!NYTAlloc::ConfigureFromEnv()) {
-        NYTAlloc::Configure(config->YTAlloc);
-    }
 
     for (const auto& [kind, size] : config->FiberStackPoolSizes) {
         NConcurrency::SetFiberStackPoolSize(ParseEnum<NConcurrency::EExecutionStackKind>(kind), size);
@@ -118,10 +112,6 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
 
     NConcurrency::UpdateMaxIdleFibers(dynamicConfig->MaxIdleFibers);
 
-    if (!NYTAlloc::IsConfiguredFromEnv()) {
-        NYTAlloc::Configure(dynamicConfig->YTAlloc ? dynamicConfig->YTAlloc : config->YTAlloc);
-    }
-
     if (!NLogging::TLogManager::Get()->IsConfiguredFromEnv()) {
         NLogging::TLogManager::Get()->Configure(
             config->Logging->ApplyDynamic(dynamicConfig->Logging),
@@ -154,47 +144,6 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
     }
 
     NYson::SetProtobufInteropConfig(config->ProtobufInterop->ApplyDynamic(dynamicConfig->ProtobufInterop));
-}
-
-template <class TConfig>
-void StartDiagnosticDumpImpl(const TConfig& config)
-{
-    static NLogging::TLogger Logger("DiagDump");
-
-    auto logDumpString = [&] (TStringBuf banner, const TString& str) {
-        for (const auto& line : StringSplitter(str).Split('\n')) {
-            YT_LOG_DEBUG("%v %v", banner, line.Token());
-        }
-    };
-
-    if (config->YTAllocDumpPeriod) {
-        static const TLazyIntrusivePtr<TPeriodicExecutor> Executor(BIND([&] {
-            return New<TPeriodicExecutor>(
-                NRpc::TDispatcher::Get()->GetHeavyInvoker(),
-                BIND([&] {
-                    logDumpString("YTAlloc", NYTAlloc::FormatAllocationCounters());
-                }));
-        }));
-        Executor->SetPeriod(config->YTAllocDumpPeriod);
-        Executor->Start();
-    }
-
-    if (config->RefCountedTrackerDumpPeriod) {
-        static const TLazyIntrusivePtr<TPeriodicExecutor> Executor(BIND([&] {
-            return New<TPeriodicExecutor>(
-                NRpc::TDispatcher::Get()->GetHeavyInvoker(),
-                BIND([&] {
-                    logDumpString("RCT", TRefCountedTracker::Get()->GetDebugInfo());
-                }));
-        }));
-        Executor->SetPeriod(config->RefCountedTrackerDumpPeriod);
-        Executor->Start();
-    }
-}
-
-void StartDiagnosticDump(const TDiagnosticDumpConfigPtr& config)
-{
-    StartDiagnosticDumpImpl(config);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

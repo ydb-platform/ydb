@@ -28,6 +28,7 @@ SRCS(
     ydb_monitoring_ut.cpp
     ydb_query_ut.cpp
     ydb_ldap_login_ut.cpp
+    ydb_login_ut.cpp
     ydb_object_storage_ut.cpp
 )
 

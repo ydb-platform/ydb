@@ -39,7 +39,15 @@ DEFINE ACTION $hello_world($sub, $name, $suffix?) AS
         "Hello, " || $name || "!"
     FROM $sub();
 END DEFINE;
-DO EMPTY_ACTION();
-DO $hello_world($sub1, NULL);
-DO $hello_world($sub1, NULL, "John");
-DO $hello_world($sub1, NULL, "Earth");
+DO
+    EMPTY_ACTION()
+;
+DO
+    $hello_world($sub1, NULL)
+;
+DO
+    $hello_world($sub1, NULL, "John")
+;
+DO
+    $hello_world($sub1, NULL, "Earth")
+;

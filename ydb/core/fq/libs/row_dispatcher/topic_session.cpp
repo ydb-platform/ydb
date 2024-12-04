@@ -803,8 +803,10 @@ bool HasJsonColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {
 
 void TTopicSession::StartClientSession(TClientsInfo& info) {
     if (ReadSession) {
-        if (info.Settings.HasOffset() && info.Settings.GetOffset() <= LastMessageOffset) {
-            LOG_ROW_DISPATCHER_INFO("New client has less offset (" << info.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
+        auto offset = GetOffset(info.Settings);
+
+        if (offset && (offset <= LastMessageOffset)) {
+            LOG_ROW_DISPATCHER_INFO("New client has less offset (" << offset << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
             Metrics.RestartSessionByOffsets->Inc();
             ++RestartSessionByOffsets;
             info.RestartSessionByOffsetsByQuery->Inc();

@@ -731,6 +731,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 source.GetDatabase(),
                 Config,
                 SelfId(),
+                CompileServiceActorId,
                 partitionId,
                 YqSharedResources->UserSpaceYdbDriver,
                 CreateCredentialsProviderFactoryForStructuredToken(

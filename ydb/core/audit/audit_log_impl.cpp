@@ -9,7 +9,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
 
-#include "audit_events.h"
+#include "audit_log_item_builder.h"
 #include "audit_log_service.h"
 #include "audit_log.h"
 
@@ -31,6 +31,38 @@
 
 namespace NKikimr::NAudit {
 
+// TAuditLogActor
+//
+
+struct TEvAuditLog {
+    //
+    // Events declaration
+    //
+
+    enum EEvents {
+        EvBegin = EventSpaceBegin(TKikimrEvents::ES_YDB_AUDIT_LOG),
+
+        // Request actors
+        EvWriteAuditLog = EvBegin + 0,
+
+        EvEnd
+    };
+
+    static_assert(EvEnd <= EventSpaceEnd(TKikimrEvents::ES_YDB_AUDIT_LOG),
+        "expected EvEnd <= EventSpaceEnd(TKikimrEvents::ES_YDB_AUDIT_LOG)"
+    );
+
+    struct TEvWriteAuditLog : public NActors::TEventLocal<TEvWriteAuditLog, EvWriteAuditLog> {
+        TInstant Time;
+        TAuditLogParts Parts;
+
+        TEvWriteAuditLog(TInstant time, TAuditLogParts&& parts)
+            : Time(time)
+            , Parts(std::move(parts))
+        {}
+    };
+};
+
 void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBackends) {
     for (auto& logBackend : logBackends) {
         try {
@@ -45,11 +77,11 @@ void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBacken
     }
 }
 
-TString GetJsonLog(const NEvAuditLog::TEvWriteAuditLog* ev) {
+TString GetJsonLog(TInstant time, const TAuditLogParts& parts) {
     TStringStream ss;
-    ss << ev->Time << ": ";
+    ss << time << ": ";
     NJson::TJsonMap m;
-    for (auto& [k, v] : ev->Parts) {
+    for (auto& [k, v] : parts) {
         m[k] = v;
     }
     NJson::WriteJson(&ss, &m, false, false);
@@ -57,18 +89,18 @@ TString GetJsonLog(const NEvAuditLog::TEvWriteAuditLog* ev) {
     return ss.Str();
 }
 
-TString GetJsonLogCompatibleLog(const NEvAuditLog::TEvWriteAuditLog* ev) {
+TString GetJsonLogCompatibleLog(TInstant time, const TAuditLogParts& parts) {
     TStringStream ss;
     NJsonWriter::TBuf json(NJsonWriter::HEM_DONT_ESCAPE_HTML, &ss);
     {
         auto obj = json.BeginObject();
         obj
             .WriteKey("@timestamp")
-            .WriteString(ev->Time.ToString().data())
+            .WriteString(time.ToString().data())
             .WriteKey("@log_type")
             .WriteString("audit");
 
-        for (auto& [k, v] : ev->Parts) {
+        for (auto& [k, v] : parts) {
             obj.WriteKey(k).WriteString(v);
         }
         json.EndObject();
@@ -77,11 +109,11 @@ TString GetJsonLogCompatibleLog(const NEvAuditLog::TEvWriteAuditLog* ev) {
     return ss.Str();
 }
 
-TString GetTxtLog(const NEvAuditLog::TEvWriteAuditLog* ev) {
+TString GetTxtLog(TInstant time, const TAuditLogParts& parts) {
     TStringStream ss;
-    ss << ev->Time << ": ";
-    for (auto it = ev->Parts.begin(); it != ev->Parts.end(); it++) {
-        if (it != ev->Parts.begin())
+    ss << time << ": ";
+    for (auto it = parts.begin(); it != parts.end(); it++) {
+        if (it != parts.begin())
             ss << ", ";
         ss << it->first << "=" << it->second;
     }
@@ -89,7 +121,7 @@ TString GetTxtLog(const NEvAuditLog::TEvWriteAuditLog* ev) {
     return ss.Str();
 }
 
-// Array of functions for converting NEvAuditLog::TEvWriteAuditLog events to a string.
+// Array of functions for converting TEvAuditLog::TEvWriteAuditLog events to a string.
 // Indexing in the array occurs by the value of the NKikimrConfig::TAuditConfig::EFormat enumeration.
 // The size of AuditLogItemBuilders must be equal to the maximum value of the NKikimrConfig::TAuditConfig::EFormat enumeration.
 static std::vector<TAuditLogItemBuilder> AuditLogItemBuilders = { GetJsonLog, GetTxtLog, GetJsonLogCompatibleLog, nullptr };
@@ -122,7 +154,7 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
-            HFunc(NEvAuditLog::TEvWriteAuditLog, HandleWriteAuditLog);
+            HFunc(TEvAuditLog::TEvWriteAuditLog, HandleWriteAuditLog);
         default:
             HandleUnexpectedEvent(ev);
             break;
@@ -135,14 +167,15 @@ private:
         Die(ctx);
     }
 
-    void HandleWriteAuditLog(const NEvAuditLog::TEvWriteAuditLog::TPtr& ev, const TActorContext& ctx) {
+    void HandleWriteAuditLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ctx);
 
         for (auto& logBackends : LogBackends) {
             const auto builderIndex = static_cast<size_t>(logBackends.first) - 1;
             const auto builder = builderIndex < AuditLogItemBuilders.size()
                 ? AuditLogItemBuilders[builderIndex] : AuditLogItemBuilders[DefaultAuditLogItemBuilder];
-            const auto auditLogItem = builder(ev->Get());
+            const auto msg = ev->Get();
+            const auto auditLogItem = builder(msg->Time, msg->Parts);
             WriteLog(auditLogItem, logBackends.second);
         }
     }
@@ -160,9 +193,9 @@ private:
 
 std::atomic<bool> AUDIT_LOG_ENABLED = false;
 
-void SendAuditLog(const NActors::TActorSystem* sys, TVector<std::pair<TString, TString>>&& parts)
+void SendAuditLog(const NActors::TActorSystem* sys, TAuditLogParts&& parts)
 {
-    auto request = MakeHolder<NEvAuditLog::TEvWriteAuditLog>(Now(), std::move(parts));
+    auto request = MakeHolder<TEvAuditLog::TEvWriteAuditLog>(Now(), std::move(parts));
     sys->Send(MakeAuditServiceID(), request.Release());
 }
 

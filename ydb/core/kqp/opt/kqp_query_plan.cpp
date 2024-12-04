@@ -608,7 +608,7 @@ private:
             Visit(table, range, sourceSettings, planNode);
             return;
         }
-            
+
         const auto table = TString(sourceSettings.Table().Path());
         const auto explainPrompt = TKqpReadTableExplainPrompt::Parse(sourceSettings.ExplainPrompt().Cast());
 
@@ -1018,8 +1018,8 @@ private:
             } else if (TMaybeNode<TKqpReadOlapTableRangesBase>(node)) {
                 auto olapTable = TExprBase(node).Cast<TKqpReadOlapTableRangesBase>();
 
-                auto pred = [](const TExprNode::TPtr& n) -> bool { 
-                    if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false; 
+                auto pred = [](const TExprNode::TPtr& n) -> bool {
+                    if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false;
                 };
 
                 if (auto maybeKqpOlapFilter = FindNode(olapTable.Process().Body().Ptr(), pred)) {
@@ -1096,7 +1096,7 @@ private:
                     } else if (listPtr->Child(2)->ChildrenSize() == 0 && listPtr->Child(2)->Content()) {
                         value = TString(listPtr->Child(2)->Content());
                     }
-                    
+
                     return TStringBuilder() << attr << strComp[compSign] << value;
                 } else if (strRegexp.contains(compSign)) {
                     TString attr = TString(listPtr->Child(1)->Content());
@@ -1106,7 +1106,7 @@ private:
                     } else if (listPtr->Child(2)->ChildrenSize() == 0 && listPtr->Child(2)->Content()) {
                         value = TString(listPtr->Child(2)->Content());
                     }
-                    
+
                     return Sprintf(strRegexp[compSign].c_str(), attr.c_str(), value.c_str());
                 }
             }
@@ -1124,7 +1124,7 @@ private:
             delim = " AND ";
         } else if (TMaybeNode<TKqpOlapOr>(node)) {
             delim = " OR ";
-        } 
+        }
         return JoinStrings(s, delim);
     }
 
@@ -1179,7 +1179,7 @@ private:
     std::variant<ui32, TArgContext> Visit(const TCoCondense1& /*condense*/, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
-        op.Properties["Stage"] = "Intermediate";
+        op.Properties["Phase"] = "Intermediate";
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
@@ -1187,7 +1187,7 @@ private:
     std::variant<ui32, TArgContext> Visit(const TCoCondense& /*condense*/, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
-        op.Properties["Stage"] = "Final";
+        op.Properties["Phase"] = "Final";
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
@@ -1197,7 +1197,7 @@ private:
         op.Properties["Name"] = "Aggregate";
         op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
         op.Properties["Aggregation"] = NPlanUtils::PrettyExprStr(combiner.UpdateHandler());
-        op.Properties["Stage"] = "Intermediate";
+        op.Properties["Phase"] = "Intermediate";
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
@@ -1232,7 +1232,7 @@ private:
             }
             op.Properties["Aggregation"] = JoinStrings(std::move(aggrs), ",");
         }
-        op.Properties["Stage"] = "Intermediate";
+        op.Properties["Phase"] = "Intermediate";
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
@@ -1240,10 +1240,10 @@ private:
     std::variant<ui32, TArgContext> Visit(const TCoWideCombiner& combiner, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
-        op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
-        op.Properties["Aggregation"] = NPlanUtils::PrettyExprStr(combiner.UpdateHandler());
-        op.Properties["Finish"] = NPlanUtils::PrettyExprStr(combiner.FinishHandler());
-        op.Properties["Stage"] = "Final";
+        // op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
+        // op.Properties["Aggregation"] = NPlanUtils::PrettyExprStr(combiner.UpdateHandler());
+        // op.Properties["Finish"] = NPlanUtils::PrettyExprStr(combiner.FinishHandler());
+        op.Properties["Phase"] = "Final";
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
@@ -2079,7 +2079,7 @@ struct TQueryPlanReconstructor {
     TQueryPlanReconstructor(
         const THashMap<int, NJson::TJsonValue>& planIndex,
         const THashMap<TString, NJson::TJsonValue>& precomputes
-    ) 
+    )
         : PlanIndex(planIndex)
         , Precomputes(precomputes)
         , NodeIDCounter(0)
@@ -2176,14 +2176,14 @@ struct TQueryPlanReconstructor {
                 NJson::TJsonValue newOps;
                 NJson::TJsonValue op;
 
-                op["Name"] = "TableLookup"; 
+                op["Name"] = "TableLookup";
                 op["Columns"] = plan.GetMapSafe().at("Columns");
                 op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
                 op["Table"] = plan.GetMapSafe().at("Table");
 
                 if (plan.GetMapSafe().contains("E-Cost")) {
                     op["E-Cost"] = plan.GetMapSafe().at("E-Cost");
-                } 
+                }
                 if (plan.GetMapSafe().contains("E-Rows")) {
                     op["E-Rows"] = plan.GetMapSafe().at("E-Rows");
                 }
@@ -2258,8 +2258,8 @@ struct TQueryPlanReconstructor {
             op.GetMapSafe().erase("Inputs");
         }
 
-        if (op.GetMapSafe().contains("Input") 
-            || op.GetMapSafe().contains("ToFlow") 
+        if (op.GetMapSafe().contains("Input")
+            || op.GetMapSafe().contains("ToFlow")
             || op.GetMapSafe().contains("Member")
             || op.GetMapSafe().contains("AssumeSorted")
             || op.GetMapSafe().contains("Iterator")) {
@@ -2319,8 +2319,10 @@ struct TQueryPlanReconstructor {
                             op1Type = "Join";
                             op1Id = "100";
                         } else if (op1Name == "Filter") {
+                            if (!op1.GetMapSafe().contains("Pushdown") || op1.GetMapSafe().at("Pushdown").GetStringSafe() != "True") {
                             op1Type = "Filter";
                             op1Id = "200";
+                            }
                         } else if (op1Name == "Aggregate") {
                             op1Type = "Aggregation";
                             op1Id = "300";
@@ -2409,7 +2411,7 @@ private:
     const THashMap<int, NJson::TJsonValue>& PlanIndex;
     const THashMap<TString, NJson::TJsonValue>& Precomputes;
     ui32 NodeIDCounter;
-    i32 Budget; // Prevent bugs with inf recursion 
+    i32 Budget; // Prevent bugs with inf recursion
 };
 
 double ComputeCpuTimes(NJson::TJsonValue& plan) {

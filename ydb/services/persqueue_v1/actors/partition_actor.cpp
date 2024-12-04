@@ -26,7 +26,8 @@ TPartitionActor::TPartitionActor(
         const TString& session, const TPartitionId& partition, const ui32 generation, const ui32 step,
         const ui64 tabletID, const TTopicCounters& counters, bool commitsDisabled,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic,
-        bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, std::set<NPQ::TPartitionGraph::Node*> parents
+        bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, std::set<NPQ::TPartitionGraph::Node*> parents,
+        std::unordered_set<ui64> notCommitedToFinishParents
 )
     : ParentId(parentId)
     , ClientId(clientId)
@@ -74,22 +75,21 @@ TPartitionActor::TPartitionActor(
     , UseMigrationProtocol(useMigrationProtocol)
     , FirstRead(true)
     , ReadingFinishedSent(false)
+    , NotCommitedToFinishParents(notCommitedToFinishParents)
 {
 }
 
 
 void TPartitionActor::MakeCommit(const TActorContext& ctx) {
     ui64 offset = ClientReadOffset;
-    if (CommitsDisabled)
-        return;
-    if (CommitsInfly.size() > MAX_COMMITS_INFLY)
+    if (CommitsDisabled || NotCommitedToFinishParents.size() != 0 || CommitsInfly.size() >= MAX_COMMITS_INFLY)
         return;
 
     //Ranges mode
     if (!NextRanges.Empty() && NextRanges.Min() == ClientCommitOffset) {
-        auto first = NextRanges.begin();
-        offset = first->second;
-        NextRanges.EraseInterval(first->first, first->second);
+        auto firstRange = NextRanges.begin();
+        offset = firstRange->second;
+        NextRanges.EraseInterval(firstRange->first, firstRange->second);
 
         ClientCommitOffset = offset;
         ++CommitCookie;
@@ -163,10 +163,10 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
     if (!ClientHasAnyCommits && Parents.size() != 0) {
         std::vector<TKqpHelper::TCommitInfo> commits;
         for (auto& parent: Parents) {
-            TKqpHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true};
+            TKqpHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
             commits.push_back(commit);
         }
-        TKqpHelper::TCommitInfo commit {.PartitionId = Partition.Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false};
+        TKqpHelper::TCommitInfo commit {.PartitionId = Partition.Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};
         commits.push_back(commit);
         auto kqp = std::make_shared<TKqpHelper>(Database, ClientId, Topic->GetPrimaryPath(), commits, readId);
         Kqps.emplace(readId, kqp);
@@ -207,7 +207,7 @@ void TPartitionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, c
 
     if (!kqpIt->second->Handle(ev, ctx)) {
         const auto& record = ev->Get()->Record;
-        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("status is not ok: " + record.GetError(), PersQueue::ErrorCode::ERROR)); // savnik map ydbStatus
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("status is not ok: " + record.GetError(), PersQueue::ErrorCode::ERROR));
     }
 }
 
@@ -221,12 +221,13 @@ void TPartitionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TAc
     }
 
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("KQP query response status is not ok", PersQueue::ErrorCode::ERROR)); // savnik map ydbStatus. Need retry?
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("KQP query response status is not ok", PersQueue::ErrorCode::ERROR)); // savnik: retry?
         return;
     }
 
     auto step = kqpIt->second->Handle(ev, ctx);
     if (step == TKqpHelper::ECurrentStep::DONE) {
+        ClientHasAnyCommits = true;
         CommitDone(ev->Cookie, ctx);
     }
 }
@@ -589,6 +590,11 @@ bool FillBatchedData(
     return hasData;
 }
 
+void TPartitionActor::Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, const TActorContext& ctx) {
+    NotCommitedToFinishParents.erase(ev->Get()->ParentPartitionId);
+    MakeCommit(ctx);
+}
+
 void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
 
     if (ev->Get()->Record.HasErrorCode() && ev->Get()->Record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
@@ -921,7 +927,7 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     ui64 startReadId = CommitsInfly.front().second.StartReadId;
     ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(Partition.AssignId, startReadId, readId, CommittedOffset));
 
-    Kqps.erase(CommitsInfly.front().first); // savnik то че надо удаляю?
+    Kqps.erase(CommitsInfly.front().first);
     CommitsInfly.pop_front();
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition

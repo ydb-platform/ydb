@@ -105,22 +105,22 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
 
     auto* partitionNode = topicInitInfo.PartitionGraph->GetPartition(commitRequest->partition_id());
 
-    if (partitionNode->HierarhicalParents.size() == 0 && partitionNode->Children.size() == 0) {
+    if (partitionNode->AllParents.size() == 0 && partitionNode->DirectChildren.size() == 0) {
         SendCommit(topicInitInfo, commitRequest, ctx);
     } else {
         std::vector<TKqpHelper::TCommitInfo> commits;
 
-        for (auto& parent: partitionNode->HierarhicalParents) {
+        for (auto& parent: partitionNode->AllParents) {
             TKqpHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
             commits.push_back(commit);
         }
 
-        for (auto& child: partitionNode->HierarhicalChildren) {
-            TKqpHelper::TCommitInfo commit {.PartitionId = child->Id, .Offset = 0};
+        for (auto& child: partitionNode->AllChildren) {
+            TKqpHelper::TCommitInfo commit {.PartitionId = child->Id, .Offset = 0, .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
             commits.push_back(commit);
         }
 
-        TKqpHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = Max<i64>(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
+        TKqpHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = commitRequest->offset(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
         commits.push_back(commit);
 
         // savnik if empty database?
@@ -132,16 +132,19 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
 
 void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx) {
     if (!Kqp->Handle(ev, ctx)) {
-        AnswerError("empty list of topics", PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx); // savnik
+        AnswerError(ev->Get()->Record.GetError(), PersQueue::ErrorCode::ERROR, ctx);
     }
 }
 
 void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
-    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) { // savnik finish this part!
-        Ydb::Topic::CommitOffsetResult result;
+    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "strict CommitOffset failed. Kqp error: " << ev->Get()->Record);
+
+        Ydb::Topic::CommitOffsetResult result; // savnik: how to return exception?
         Request().SendResult(result, record.GetYdbStatus());
         Die(ctx);
+        return;
     }
 
     auto step = Kqp->Handle(ev, ctx);
@@ -150,6 +153,7 @@ void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const 
         Ydb::Topic::CommitOffsetResult result;
         Request().SendResult(result, Ydb::StatusIds::SUCCESS);
         Die(ctx);
+        return;
     }
 }
 
@@ -183,7 +187,7 @@ void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topi
         .DoFirstRetryInstantly = true
     };
 
-    PipeClient = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)); // savnik close only in that case
+    PipeClient = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
 
     NKikimrClient::TPersQueueRequest request;
     request.MutablePartitionRequest()->SetTopic(topic.TopicNameConverter->GetPrimaryPath());

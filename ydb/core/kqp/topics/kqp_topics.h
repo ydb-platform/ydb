@@ -35,12 +35,14 @@ public:
     bool GetForceCommit() const;
     bool GetKillReadSession() const;
     bool GetOnlyCheckCommitedToFinish() const;
+    TString GetReadSessionId() const;
 
     void AddOperation(const TString& consumer,
                       const NKikimrKqp::TTopicOperationsRequest_TopicOffsets_PartitionOffsets_OffsetsRange& range,
                       bool forceCommit = false,
                       bool killReadSession = false,
-                      bool onlyCheckCommitedToFinish = false);
+                      bool onlyCheckCommitedToFinish = false,
+                      const TString& readSessionId = {});
 
     void Merge(const TConsumerOperations& rhs);
 
@@ -50,13 +52,15 @@ private:
                           ui64 end,
                           bool forceCommit = false,
                           bool killReadSession = false,
-                          bool onlyCheckCommitedToFinish = false);
+                          bool onlyCheckCommitedToFinish = false,
+                          const TString& readSessionId = {});
 
     TMaybe<TString> Consumer_;
     TDisjointIntervalTree<ui64> Offsets_;
     bool ForceCommit_ = false;
     bool KillReadSession_ = false;
     bool OnlyCheckCommitedToFinish_ = false;
+    TString ReadSessionId_;
 };
 
 struct TTopicOperationTransaction {
@@ -76,7 +80,8 @@ public:
                       const NKikimrKqp::TTopicOperationsRequest_TopicOffsets_PartitionOffsets_OffsetsRange& range,
                       bool forceCommit = false,
                       bool killReadSession = false,
-                      bool onlyCheckCommitedToFinish = false);
+                      bool onlyCheckCommitedToFinish = false,
+                      const TString& readSessionId = {});
     void AddOperation(const TString& topic, ui32 partition,
                       TMaybe<ui32> supportivePartition);
 
@@ -132,7 +137,8 @@ public:
                       const NKikimrKqp::TTopicOperationsRequest_TopicOffsets_PartitionOffsets_OffsetsRange& range,
                       bool forceCommit,
                       bool killReadSession,
-                      bool onlyCheckCommitedToFinish);
+                      bool onlyCheckCommitedToFinish,
+                      const TString& readSessionId);
     void AddOperation(const TString& topic, ui32 partition,
                       TMaybe<ui32> supportivePartition);
 

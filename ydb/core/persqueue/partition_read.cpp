@@ -124,10 +124,10 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
         ui32 partitionId = Partition.OriginalPartitionId;
 
         auto* node = PartitionGraph.GetPartition(partitionId);
-        for (auto* child : node->Children) {
+        for (auto* child : node->DirectChildren) {
             res->Record.AddChildPartitionIds(child->Id);
 
-            for (auto* p : child->Parents) {
+            for (auto* p : child->DirectParents) {
                 if (p->Id != partitionId) {
                     res->Record.AddAdjacentPartitionIds(p->Id);
                 }
@@ -776,7 +776,6 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
 
     const TString& user = read->ClientId;
     auto& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-
     if (!read->SessionId.empty() && !userInfo.NoConsumer) {
         if (userInfo.Session != read->SessionId) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_NO_SESSION].Increment(1);

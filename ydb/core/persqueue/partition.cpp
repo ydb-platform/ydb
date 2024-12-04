@@ -2296,7 +2296,7 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     return true;
 }
 
-TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicate)
+TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicateOut)
 {
     if (tx.ForcePredicateFalse) {
         predicate = false;
@@ -2304,7 +2304,7 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
     }
 
     THashSet<TString> consumers;
-    bool ok = true;
+    bool result = true;
     for (auto& operation : tx.Operations) {
         const TString& consumer = operation.GetConsumer();
         if (TxAffectedConsumers.contains(consumer)) {
@@ -2317,49 +2317,55 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
         if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
             PQ_LOG_D("Partition " << Partition <<
                     " Consumer '" << consumer << "' has been removed");
-            ok = false;
+            result = false;
             break;
         }
 
         if (!UsersInfoStorage->GetIfExists(consumer)) {
             PQ_LOG_D("Partition " << Partition <<
                         " Unknown consumer '" << consumer << "'");
-            ok = false;
+            result = false;
             break;
         }
 
-        bool isAffectedConsumer = AffectedUsers.contains(consumer); // savnik check
+        bool isAffectedConsumer = AffectedUsers.contains(consumer);
         TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
-        if (operation.HasOnlyCheckCommitedToFinish() && operation.GetOnlyCheckCommitedToFinish() && !IsActive()) {
+        if (!operation.GetReadSessionId().Empty() && operation.GetReadSessionId() != userInfo.Session) {
+            PQ_LOG_D("Partition " << Partition <<
+                " Consumer '" << consumer << "'" <<
+                " Bad request (session already dead) " <<
+                " SessionId '" << operation.GetReadSessionId() << "'");
+            result = false;
+        } else if (operation.GetOnlyCheckCommitedToFinish() && !IsActive()) {
             if (static_cast<ui64>(userInfo.Offset) != EndOffset) {
-               ok = false;
+               result = false;
             }
         } else {
-            if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) { // savnik check default
+            if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
                 PQ_LOG_D("Partition " << Partition <<
                             " Consumer '" << consumer << "'" <<
                             " Bad request (invalid range) " <<
                             " Begin " << operation.GetCommitOffsetsBegin() <<
                             " End " << operation.GetCommitOffsetsEnd());
-                ok = false;
+                result = false;
             } else if (!operation.GetForceCommit() && userInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
                 PQ_LOG_D("Partition " << Partition <<
                             " Consumer '" << consumer << "'" <<
                             " Bad request (gap) " <<
                             " Offset " << userInfo.Offset <<
                             " Begin " << operation.GetCommitOffsetsBegin());
-                ok = false;
+                result = false;
             } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > EndOffset) {
                 PQ_LOG_D("Partition " << Partition <<
                             " Consumer '" << consumer << "'" <<
                             " Bad request (behind the last offset) " <<
                             " EndOffset " << EndOffset <<
                             " End " << operation.GetCommitOffsetsEnd());
-                ok = false;
+                result = false;
             }
 
-            if (!ok) {
+            if (!result) {
                 if (!isAffectedConsumer) {
                     AffectedUsers.erase(consumer);
                 }
@@ -2368,10 +2374,10 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             consumers.insert(consumer);
         }
     }
-    if (ok) {
-        TxAffectedConsumers.insert(consumers.begin(), consumers.end()); // savnik check
+    if (result) {
+        TxAffectedConsumers.insert(consumers.begin(), consumers.end());
     }
-    predicate = ok;
+    predicateOut = result;
     return EProcessResult::Continue;
 }
 
@@ -2518,9 +2524,13 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
         Y_ABORT_UNLESS(t->Predicate.Defined() && *t->Predicate);
 
         for (auto& operation : t->Tx->Operations) {
+            if (operation.GetOnlyCheckCommitedToFinish()) {
+                continue;
+            }
+
             TUserInfoBase& userInfo = GetOrCreatePendingUser(operation.GetConsumer());
 
-            if (!operation.HasForceCommit() || !operation.GetForceCommit()) { // savnik check default
+            if (!operation.GetForceCommit()) {
                 Y_ABORT_UNLESS(userInfo.Offset == (i64)operation.GetCommitOffsetsBegin());
             }
 
@@ -2534,7 +2544,6 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
                 userInfo.AnyCommits = true;
                 userInfo.Offset = operation.GetCommitOffsetsEnd();
             }
-
             if (operation.GetKillReadSession()) {
                 userInfo.Session = "";
                 userInfo.PartitionSessionId = 0;

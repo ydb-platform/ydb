@@ -434,7 +434,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitRange:
 
     for (const auto& [b, e] : ev->Get()->CommitInfo.Ranges) {
         if (!RangesMode) {
-            return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "commits ranges in cookies commit mode is prohibited", ctx); // savnik есть другой мод? Надо там тоже чет поддержать?
+            return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "commits ranges in cookies commit mode is prohibited", ctx);
         }
 
         if (b >= e || it->second.NextRanges.Intersects(b, e) || b < it->second.Offset) {
@@ -457,7 +457,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuth::TPtr& 
         Request->RefreshToken(auth, ctx, ctx.SelfID);
     }
 }
-
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDirectReadAck::TPtr& ev, const TActorContext& ctx) {
@@ -487,6 +486,14 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDirectReadAc
     it->second.MaxProcessedDirectReadId = directReadId;
     it->second.PendingDirectReadAcks.push(directReadId);
     ProcessDirectReads(it, ctx);
+    it->second.MaxProcessedDirectReadId = ev->Get()->DirectReadId;
+
+    BytesInflight_ -= drIt->second.ByteSize;
+    if (BytesInflight) {
+        (*BytesInflight) -= drIt->second.ByteSize;
+    }
+    it->second.DirectReads.erase(drIt);
+
     ProcessReads(ctx);
 }
 
@@ -642,14 +649,14 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
     }
 
     auto assignId = ev->Get()->AssignId;
-    auto it = Partitions.find(assignId);
-    if (it == Partitions.end()) {
+    auto partitionIt = Partitions.find(assignId);
+    if (partitionIt == Partitions.end()) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
             << "unknown partition_session_id " << assignId << " #01", ctx);
     }
 
-    Y_ABORT_UNLESS(it->second.Offset < ev->Get()->Offset);
-    it->second.NextRanges.EraseInterval(it->second.Offset, ev->Get()->Offset);
+    Y_ABORT_UNLESS(partitionIt->second.Offset < ev->Get()->Offset);
+    partitionIt->second.NextRanges.EraseInterval(partitionIt->second.Offset, ev->Get()->Offset);
 
     if (ev->Get()->StartCookie == Max<ui64>()) { // means commit at start
         return;
@@ -664,8 +671,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
                 auto c = result.mutable_committed()->add_cookies();
                 c->set_partition_cookie(i);
                 c->set_assign_id(ev->Get()->AssignId);
-                it->second.NextCommits.erase(i);
-                it->second.ReadIdCommitted = i;
+                partitionIt->second.NextCommits.erase(i);
+                partitionIt->second.ReadIdCommitted = i;
             }
         } else { // commit on cookies not supported in this case
             Y_ABORT_UNLESS(false);
@@ -674,7 +681,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
         if constexpr (UseMigrationProtocol) {
             auto c = result.mutable_committed()->add_offset_ranges();
             c->set_assign_id(ev->Get()->AssignId);
-            c->set_start_offset(it->second.Offset);
+            c->set_start_offset(partitionIt->second.Offset);
             c->set_end_offset(ev->Get()->Offset);
         } else {
             auto c = result.mutable_commit_offset_response()->add_partitions_committed_offsets();
@@ -683,14 +690,35 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
         }
     }
 
-    it->second.Offset = ev->Get()->Offset;
+    partitionIt->second.Offset = ev->Get()->Offset;
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " replying for commits"
         << ": assignId# " << ev->Get()->AssignId
         << ", from# " << ev->Get()->StartCookie
         << ", to# " << ev->Get()->LastCookie
-        << ", offset# " << it->second.Offset);
+        << ", offset# " << partitionIt->second.Offset);
     WriteToStreamOrDie(ctx, std::move(result));
+
+    if (ev->Get()->Offset == partitionIt->second.EndOffset && partitionIt->second.HasChildren) {
+        partitionIt->second.CommitedToFinish = true;
+
+        auto topicName = partitionIt->second.Topic->GetInternalName();
+        auto topicIt = Topics.find(partitionIt->second.Topic->GetInternalName());
+        if (topicIt == Topics.end()) {
+            return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+                << "unknown topic partition_session_id: " << assignId, ctx);
+        }
+
+        auto& topic = topicIt->second;
+        for (auto& child: topic.PartitionGraph->GetPartition(partitionIt->second.Partition.Partition)->DirectChildren) {
+            for (auto& otherPartitions: Partitions) {
+                if (otherPartitions.second.Partition.Partition == child->Id) {
+                    ctx.Send(otherPartitions.second.Actor, new TEvPQProxy::TEvParentCommitedToFinish(partitionIt->second.Partition.Partition));
+                }
+            }
+        }
+
+    }
 }
 
 template <bool UseMigrationProtocol>
@@ -1232,10 +1260,19 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
         return CloseSession(PersQueue::ErrorCode::ERROR, error, ctx);
     }
 
-    const TActorId actorId = ctx.Register(new TPartitionActor( // savnik empty topic
+    std::unordered_set<ui64> notCommitedToFinishParents; // savnik: если сначала придет лок на детей, все сломается. Плохо?
+    for (auto& parent: topic.PartitionGraph->GetPartition(record.GetPartition())->DirectParents) {
+        for (auto& otherPartitions: Partitions) { // savnik: to map
+            if (otherPartitions.second.Partition.Partition == parent->Id && !otherPartitions.second.CommitedToFinish) {
+                notCommitedToFinishParents.emplace(otherPartitions.second.Partition.Partition);
+            }
+        }
+    }
+
+    const TActorId actorId = ctx.Register(new TPartitionActor(
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
         record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC, RangesMode,
-        converterIter->second, DirectRead, UseMigrationProtocol, maxLag, readTimestampMs, topic.PartitionGraph->GetPartition(partitionId.Partition)->HierarhicalParents));
+        converterIter->second, DirectRead, UseMigrationProtocol, maxLag, readTimestampMs, topic.PartitionGraph->GetPartition(partitionId.Partition)->HierarhicalParents, notCommitedToFinishParents));
 
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);
@@ -1273,6 +1310,14 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
             << "unknown partition_session_id " << assignId << " #02", ctx);
     }
 
+    auto topicName = it->second.Topic->GetInternalName();
+    auto topicIt = Topics.find(it->second.Topic->GetInternalName());
+    if (topicIt == Topics.end()) {
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+            << "unknown topic partition_session_id: " << assignId, ctx);
+    }
+
+    auto& topic = topicIt->second;
 
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
@@ -1285,6 +1330,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
         it->second.LockSent = true;
         it->second.Offset = ev->Get()->Offset;
         it->second.ConsumerHasAnyCommits = ev->Get()->ClientHasAnyCommits;
+        it->second.HasChildren = topic.PartitionGraph->GetPartition(it->second.Partition.Partition)->DirectChildren.size() > 0;
+        it->second.EndOffset = ev->Get()->EndOffset;
 
         if constexpr (UseMigrationProtocol) {
             result.mutable_assigned()->mutable_topic()->set_path(it->second.Topic->GetFederationPath());

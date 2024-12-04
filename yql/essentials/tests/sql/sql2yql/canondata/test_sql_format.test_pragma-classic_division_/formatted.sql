@@ -16,7 +16,9 @@ DEFINE ACTION $div_8_by_value($value) AS
     SELECT
         8 / $value;
 END DEFINE;
-DO $div_8_by_value(9);
+DO
+    $div_8_by_value(9)
+;
 
 SELECT
     10 / 11;

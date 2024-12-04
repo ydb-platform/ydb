@@ -35,6 +35,9 @@ DEFINE ACTION $aaa($z) AS
     FROM $fullQuery();
 END DEFINE;
 
-EVALUATE FOR $z IN AsList("Input")
-    DO $aaa($z);
-DO $aaa("Input");
+EVALUATE FOR $z IN AsList("Input") DO
+    $aaa($z)
+;
+DO
+    $aaa("Input")
+;

@@ -8963,11 +8963,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         };
         TTestHelper::TColumnTableStore testTableStore;
         testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTableStore, EStatus::SUCCESS);
+        testHelper.CreateTable(testTableStore, EStatus::SCHEME_ERROR);
 
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable, EStatus::SUCCESS);
+        testHelper.CreateTable(testTable, EStatus::SCHEME_ERROR);
     }
 
     Y_UNIT_TEST(DropColumnAfterInsert) {

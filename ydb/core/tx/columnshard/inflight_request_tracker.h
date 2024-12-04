@@ -21,7 +21,6 @@ private:
     std::optional<TInstant> LastRequestFinishedInstant;
     THashSet<ui32> Requests;
     YDB_READONLY(bool, IsLock, false);
-    YDB_READONLY(bool, IsFree, false);
 
     TSnapshotLiveInfo(const NOlap::TSnapshot& snapshot)
         : Snapshot(snapshot) {
@@ -55,15 +54,14 @@ public:
         LastPingInstant = now;
         if (Requests.empty()) {
             AFL_VERIFY(LastRequestFinishedInstant);
-            if (critDuration < *LastPingInstant - *LastRequestFinishedInstant && !IsFree) {
-                IsFree = true;
+            if (critDuration < *LastPingInstant - *LastRequestFinishedInstant && IsLock) {
+                IsLock = false;
                 return true;
             }
-        } else {
-            if (critDuration < *LastPingInstant - Snapshot.GetPlanInstant() && !IsLock) {
-                IsLock = true;
-                return true;
-            }
+        }
+        if (critDuration < *LastPingInstant - Snapshot.GetPlanInstant() && !IsLock) {
+            IsLock = true;
+            return true;
         }
         return false;
     }

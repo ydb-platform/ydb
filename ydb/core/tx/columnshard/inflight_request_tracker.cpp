@@ -91,20 +91,16 @@ public:
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
     TColumnShard* self, const TDuration critDuration, const TInstant now) {
-    std::set<NOlap::TSnapshot> snapshotsToPersist;
-    std::set<NOlap::TSnapshot> snapshotsToUnpersist;
+    std::set<NOlap::TSnapshot> snapshotsToSave;
     std::set<NOlap::TSnapshot> snapshotsToFree;
     for (auto&& i : SnapshotsLive) {
         if (i.second.Ping(critDuration, now)) {
-            if (i.second.GetIsFree()) {
-                snapshotsToFree.emplace(i.first);
-                if (i.second.GetIsLock()) {
-                    Counters->OnSnapshotUnlocked();
-                    snapshotsToUnpersist.emplace(i.first);
-                }
-            } else if (i.second.GetIsLock()) {
+            if (i.second.GetIsLock()) {
                 Counters->OnSnapshotLocked();
-                snapshotsToPersist.emplace(i.first);
+                snapshotsToSave.emplace(i.first);
+            } else {
+                Counters->OnSnapshotUnlocked();
+                snapshotsToFree.emplace(i.first);
             }
         }
     }
@@ -112,9 +108,9 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
         AFL_VERIFY(SnapshotsLive.erase(i));
     }
     Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
-    if (snapshotsToPersist.size() || snapshotsToUnpersist.size()) {
-        NYDBTest::TControllers::GetColumnShardController()->OnRequestTracingChanges(snapshotsToPersist, snapshotsToUnpersist);
-        return std::make_unique<TTransactionSavePersistentSnapshots>(self, std::move(snapshotsToPersist), std::move(snapshotsToUnpersist));
+    if (snapshotsToFree.size() || snapshotsToSave.size()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnRequestTracingChanges(snapshotsToSave, snapshotsToFree);
+        return std::make_unique<TTransactionSavePersistentSnapshots>(self, std::move(snapshotsToSave), std::move(snapshotsToFree));
     } else {
         return nullptr;
     }

@@ -372,17 +372,11 @@ TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveF
 }
 
 NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
-    std::unique_ptr<NColumnShard::NTiers::TConfigsSnapshot> cs(new NColumnShard::NTiers::TConfigsSnapshot(Now()));
+    std::unique_ptr<NColumnShard::NTiers::TTiersSnapshot> cs(new NColumnShard::NTiers::TTiersSnapshot(Now()));
     if (specials.Tiers.empty()) {
         return cs;
     }
-    NColumnShard::NTiers::TTieringRule tRule;
-    tRule.SetTieringRuleId("Tiering1");
     for (auto&& tier : specials.Tiers) {
-        if (!tRule.GetDefaultColumn()) {
-            tRule.SetDefaultColumn(tier.TtlColumn);
-        }
-        UNIT_ASSERT(tRule.GetDefaultColumn() == tier.TtlColumn);
         {
             NKikimrSchemeOp::TStorageTierConfig cProto;
             cProto.SetName(tier.Name);
@@ -396,9 +390,7 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
             NColumnShard::NTiers::TTierConfig tConfig(tier.Name, cProto);
             cs->MutableTierConfigs().emplace(tConfig.GetTierName(), tConfig);
         }
-        tRule.AddInterval(tier.Name, TDuration::Seconds((*tier.EvictAfter).Seconds()));
     }
-    cs->MutableTableTierings().emplace(tRule.GetTieringRuleId(), tRule);
     return cs;
 }
 

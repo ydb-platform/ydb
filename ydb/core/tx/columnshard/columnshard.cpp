@@ -60,8 +60,12 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
             NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId())("process", "SwitchToWork");
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
 
-        for (auto&& i : TablesManager.GetTables()) {
-            ActivateTiering(i.first, i.second.GetTieringUsage());
+        for (const auto& [pathId, tiering] : TablesManager.GetTtl()) {
+            THashSet<TString> tiers;
+            for (const auto& [name, config] : tiering.GetTierByName()) {
+                tiers.emplace(name);
+            }
+            ActivateTiering(pathId, tiers);
         }
 
         Become(&TThis::StateWork);

@@ -110,9 +110,10 @@ public:
     NYdb::NTable::TSession& GetSession();
     void CreateTable(const TColumnTableBase& table, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
     void DropTable(const TString& tableName);
+    void EnsureSecret(const TString& name, const TString& value);
     void CreateTier(const TString& tierName);
     TString CreateTieringRule(const TString& tierName, const TString& columnName);
-    void SetTiering(const TString& tableName, const TString& ruleName);
+    void SetTiering(const TString& tableName, const TString& tierName, const TString& columnName);
     void ResetTiering(const TString& tableName);
     void BulkUpsert(
         const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);

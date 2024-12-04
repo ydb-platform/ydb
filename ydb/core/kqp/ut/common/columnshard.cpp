@@ -68,29 +68,14 @@ namespace NKqp {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    TString TTestHelper::CreateTieringRule(const TString& tierName, const TString& columnName) {
-        const TString ruleName = tierName + "_" + columnName;
-        const TString configTieringStr = TStringBuilder() <<  R"({
-            "rules" : [
-                {
-                    "tierName" : ")" << tierName << R"(",
-                    "durationForEvict" : "10d"
-                }
-            ]
-        })";
-        auto result = GetSession().ExecuteSchemeQuery("CREATE OBJECT IF NOT EXISTS " + ruleName + " (TYPE TIERING_RULE) WITH (defaultColumn = " + columnName + ", description = `" + configTieringStr + "`)").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        return ruleName;
-    }
-
-    void TTestHelper::SetTiering(const TString& tableName, const TString& ruleName) {
-        auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` SET (TIERING = '" << ruleName << "')";
+    void TTestHelper::SetTiering(const TString& tableName, const TString& tierName, const TString& columnName) {
+        auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << tierName << "` ON `" << columnName << "`;";
         auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     void TTestHelper::ResetTiering(const TString& tableName) {
-        auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` RESET (TIERING)";
+        auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` RESET (TTL)";
         auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }

@@ -186,8 +186,6 @@ void TLogTableDescription::SerializeTo(Ydb::LogStore::CreateLogTableRequest& req
 
     if (TtlSettings) {
         TtlSettings->SerializeTo(*request.mutable_ttl_settings());
-    } else if (TieringSettings) {
-        TieringSettings->SerializeTo(*request.mutable_tiering_settings());
     }
 }
 

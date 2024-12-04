@@ -274,16 +274,6 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         }
     }
 
-    if (const auto& tiering = metadata->TableSettings.Tiering) {
-        if (tiering.IsSet()) {
-            proto.set_tiering(tiering.GetValueSet());
-        } else {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = "Can't reset TIERING";
-            return false;
-        }
-    }
-
     if (metadata->TableSettings.StoreExternalBlobs) {
         auto& storageSettings = *proto.mutable_storage_settings();
         TString value = to_lower(metadata->TableSettings.StoreExternalBlobs.GetRef());
@@ -514,7 +504,15 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         const auto& inputSettings = metadata->TableSettings.TtlSettings.GetValueSet();
         auto& resultSettings = *tableDesc.MutableTtlSettings();
         resultSettings.MutableEnabled()->SetColumnName(inputSettings.ColumnName);
-        resultSettings.MutableEnabled()->SetExpireAfterSeconds(inputSettings.ExpireAfter.Seconds());
+        for (const auto& tier : inputSettings.Tiers) {
+            auto* tierProto = resultSettings.MutableEnabled()->AddTiers();
+            tierProto->SetApplyAfterSeconds(tier.ApplyAfter.Seconds());
+            if (tier.StorageName) {
+                tierProto->MutableEvictToExternalStorage()->SetStorageName(*tier.StorageName);
+            } else {
+                tierProto->MutableDelete();
+            }
+        }
         if (inputSettings.ColumnUnit) {
             resultSettings.MutableEnabled()->SetColumnUnit(static_cast<NKikimrSchemeOp::TTTLSettings::EUnit>(*inputSettings.ColumnUnit));
         }

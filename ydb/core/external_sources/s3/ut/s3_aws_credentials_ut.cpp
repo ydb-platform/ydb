@@ -44,6 +44,30 @@ TString GetExternalPort(const TString& service, const TString& port) {
     return result ? Strip(result.back()) : TString{};
 }
 
+void WaitBucket(std::shared_ptr<TKikimrRunner> kikimr, const TString& externalDataSourceName) {
+    auto db = kikimr->GetQueryClient();
+    for (size_t i = 0; i < 100; i++) {
+            auto scriptExecutionOperation = db.ExecuteScript(fmt::format(R"(
+                SELECT * FROM `{external_source}`.`/a/` WITH (
+                    format="json_each_row",
+                    schema(
+                        key Utf8 NOT NULL,
+                        value Utf8 NOT NULL
+                    )
+                )
+            )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+            if (readyOp.Metadata().ExecStatus == EExecStatus::Completed) {
+                return;
+            }
+            Sleep(TDuration::Seconds(1));
+    }
+    UNIT_FAIL("Bucket isn't ready");
+}
+
 Y_UNIT_TEST_SUITE(S3AwsCredentials) {
     Y_UNIT_TEST(ExecuteScriptWithEqSymbol) {
         const TString externalDataSourceName = "/Root/external_data_source";
@@ -69,6 +93,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
             );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        WaitBucket(kikimr, externalDataSourceName);
         auto db = kikimr->GetQueryClient();
         {
             auto scriptExecutionOperation = db.ExecuteScript(fmt::format(R"(

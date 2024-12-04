@@ -40,5 +40,6 @@ target_link_libraries(optimizer-lcbuckets-constructor.global PUBLIC
 
 target_sources(optimizer-lcbuckets-constructor.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/constructor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/zero_level.cpp
 )
 

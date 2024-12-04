@@ -54,16 +54,12 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     auto& copyTables = *cct.MutableCopyTableDescriptions();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    // cct.SetDstBasePath(bcPath.GetDomainPathString());
-
     size_t cutLen = bcPath.GetDomainPathString().size() + 1;
 
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         auto& desc = *copyTables.Add();
-        // working dir?
         desc.SetSrcPath(bcPath.Child(lastFullBackupName).PathString() + item.GetPath().substr(cutLen - 1, item.GetPath().size() - cutLen + 1));
         desc.SetDstPath(item.GetPath());
-        // desc.SetIsBackup(true);
     }
 
     CreateConsistentCopyTables(opId, consistentCopyTables, context, result);
@@ -80,7 +76,7 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         }
         desc.SetDstTablePath(item.GetPath());
 
-        CreateRestoreMultipleIncrementalBackups(opId, restoreIncrs, context, result);
+        CreateRestoreMultipleIncrementalBackups(opId, restoreIncrs, context, true, result);
     }
 
     return result;

@@ -404,7 +404,7 @@ public:
 
         LOG_N("TNewRestoreFromAtTable Propose"
             << ": opId# " << OperationId
-            // << ", srcs# " << workingDir << "/" << Join(srcTableNames)
+            << ", srcs# " << workingDir << "/{" << Join(",", srcTableNames) << "}"
             << ", dst# " << dstTablePathStr);
 
         auto result = MakeHolder<TProposeResponse>(
@@ -444,7 +444,6 @@ public:
                     .NotAsyncReplicaTable()
                     .NotUnderDeleting()
                     .IsCommonSensePath();
-                    // .IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
 
                 if (!checks) {
                     result->SetError(checks.GetStatus(), checks.GetError());
@@ -466,7 +465,6 @@ public:
                 .NotAsyncReplicaTable()
                 .NotUnderDeleting()
                 .IsCommonSensePath();
-                // .IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -558,6 +556,7 @@ bool CreateRestoreMultipleIncrementalBackups(
     TOperationId opId,
     const TTxTransaction& tx,
     TOperationContext& context,
+    bool dstCreatedInSameOp,
     TVector<ISubOperation::TPtr>& result)
 {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups);
@@ -595,24 +594,28 @@ bool CreateRestoreMultipleIncrementalBackups(
     }
 
     const auto dstTablePath = TPath::Resolve(dstTablePathStr, context.SS);
-    // {
-    //     const auto checks = dstTablePath.Check();
-    //     checks
-    //         .NotEmpty()
-    //         .NotUnderDomainUpgrade()
-    //         .IsAtLocalSchemeShard()
-    //         .IsResolved()
-    //         .NotDeleted()
-    //         .IsTable()
-    //         .NotUnderDeleting()
-    //         .IsCommonSensePath();
+    {
+        const auto checks = dstTablePath.Check();
+        if (!dstCreatedInSameOp) {
+            checks
+                .NotEmpty()
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .IsTable()
+                .NotUnderDeleting()
+                .IsCommonSensePath();
+        } else {
+            checks
+                .FailOnExist(TPathElement::EPathType::EPathTypeTable, false);
+        }
 
-    //     if (!checks) {
-    //         result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-    //         return false;
-    //     }
-    // }
-
+        if (!checks) {
+            result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            return false;
+        }
+    }
 
     for (auto& srcTablePath : srcPaths) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(srcTablePath.Base()->PathId));
@@ -636,7 +639,6 @@ bool CreateRestoreMultipleIncrementalBackups(
         auto outTx = TransactionTemplate(srcPaths[0].Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable);
         auto& restoreOp = *outTx.MutableRestoreMultipleIncrementalBackups();
         restoreOp.SetDstTablePath(dstTablePath.PathString());
-        // PathIdFromPathId(dstTablePath.Base()->PathId, restoreOp.MutableDstPathId());
 
         for (const auto& srcTablePath : srcPaths) {
             restoreOp.AddSrcTableNames(srcTablePath.LeafName());
@@ -651,7 +653,7 @@ bool CreateRestoreMultipleIncrementalBackups(
 
 TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     TVector<ISubOperation::TPtr> result;
-    CreateRestoreMultipleIncrementalBackups(opId, tx, context, result);
+    CreateRestoreMultipleIncrementalBackups(opId, tx, context, false, result);
     return result;
 }
 

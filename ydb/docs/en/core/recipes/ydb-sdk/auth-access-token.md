@@ -2,8 +2,6 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-{% include [work in progress message](_includes/addition.md) %}
-
 Below are examples of the code for authentication using a token in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}

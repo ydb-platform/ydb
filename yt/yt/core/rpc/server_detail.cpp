@@ -206,6 +206,9 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
     ToProto(header.mutable_request_id(), RequestId_);
     ToProto(header.mutable_error(), Error_);
 
+    ToProto(header.mutable_service(), GetService());
+    ToProto(header.mutable_method(), GetMethod());
+
     if (RequestHeader_->has_response_format()) {
         header.set_format(RequestHeader_->response_format());
     }

@@ -10,9 +10,26 @@
 #include <util/generic/set.h>
 #include <util/generic/map.h>
 
+#include <yql/essentials/public/purecalc/common/fwd.h>
+
 namespace NFq {
 
 NActors::TActorId RowDispatcherServiceActorId();
+
+struct TPurecalcCompileSettings {
+    bool EnabledLLVM = false;
+
+    std::strong_ordering operator<=>(const TPurecalcCompileSettings& other) const = default;
+};
+
+class IProgramHolder : public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<IProgramHolder>;
+
+public:
+    // Perform program creation and saving
+    virtual void CreateProgram(NYql::NPureCalc::IProgramFactoryPtr programFactory) = 0;
+};
 
 struct TEvRowDispatcher {
     // Event ids.
@@ -33,6 +50,8 @@ struct TEvRowDispatcher {
         EvHeartbeat,
         EvGetInternalStateRequest,
         EvGetInternalStateResponse,
+        EvPurecalcCompileRequest,
+        EvPurecalcCompileResponse,
         EvEnd,
     };
 
@@ -152,6 +171,30 @@ struct TEvRowDispatcher {
     struct TEvGetInternalStateResponse : public NActors::TEventPB<TEvGetInternalStateResponse,
         NFq::NRowDispatcherProto::TEvGetInternalStateResponse, EEv::EvGetInternalStateResponse> {
         TEvGetInternalStateResponse() = default;
+    };
+
+    // Compilation events
+    struct TEvPurecalcCompileRequest : public NActors::TEventLocal<TEvPurecalcCompileRequest, EEv::EvPurecalcCompileRequest> {
+        TEvPurecalcCompileRequest(IProgramHolder::TPtr programHolder, const TPurecalcCompileSettings& settings)
+            : ProgramHolder(std::move(programHolder))
+            , Settings(settings)
+        {}
+
+        IProgramHolder::TPtr ProgramHolder;
+        TPurecalcCompileSettings Settings;
+    };
+
+    struct TEvPurecalcCompileResponse : public NActors::TEventLocal<TEvPurecalcCompileResponse, EEv::EvPurecalcCompileResponse> {
+        explicit TEvPurecalcCompileResponse(const TString& error)
+            : Error(error)
+        {}
+
+        explicit TEvPurecalcCompileResponse(IProgramHolder::TPtr programHolder)
+            : ProgramHolder(std::move(programHolder))
+        {}
+
+        IProgramHolder::TPtr ProgramHolder;  // Same holder that passed into TEvPurecalcCompileRequest
+        TString Error;
     };
 };
 

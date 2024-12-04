@@ -2,8 +2,6 @@
 
 На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-dotnet-examples), использующего [C# (.NET) SDK](https://github.com/ydb-platform/ydb-dotnet-sdk) {{ ydb-short-name }}.
 
-{% include [addition.md](auxilary/addition.md) %}
-
 {% include [steps/01_init.md](steps/01_init.md) %}
 
 Фрагмент кода приложения для инициализации драйвера:

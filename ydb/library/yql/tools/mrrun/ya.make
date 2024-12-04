@@ -63,16 +63,16 @@ PEERDIR(
     yql/essentials/utils/failure_injector
     ydb/public/sdk/cpp/client/ydb_driver
     yql/essentials/core/url_preprocessing
-    ydb/library/yql/providers/yt/comp_nodes/dq
-    ydb/library/yql/providers/yt/comp_nodes/llvm14
-    ydb/library/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/dq
+    yt/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/dq_task_preprocessor
-    ydb/library/yql/providers/yt/gateway/native
-    ydb/library/yql/providers/yt/lib/log
-    ydb/library/yql/providers/yt/mkql_dq
-    ydb/library/yql/providers/yt/lib/yt_download
-    ydb/library/yql/providers/yt/lib/yt_url_lister
-    ydb/library/yql/providers/yt/lib/config_clusters
+    yt/yql/providers/yt/gateway/native
+    yt/yql/providers/yt/lib/log
+    yt/yql/providers/yt/mkql_dq
+    yt/yql/providers/yt/lib/yt_download
+    yt/yql/providers/yt/lib/yt_url_lister
+    yt/yql/providers/yt/lib/config_clusters
     yql/essentials/parser/pg_wrapper
 )
 

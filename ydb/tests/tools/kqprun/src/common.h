@@ -6,7 +6,7 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
+#include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 
 #include <ydb/public/lib/ydb_cli/common/formats.h>
 

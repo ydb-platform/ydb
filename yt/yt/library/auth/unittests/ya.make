@@ -2,8 +2,6 @@ GTEST(unittester-library-auth)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-ALLOCATOR(YT)
-
 SRCS(
     auth_ut.cpp
 )

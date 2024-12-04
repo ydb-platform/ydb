@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(18.1.8)
+VERSION(19.1.3)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/compiler-rt-18.1.8.src.tar.xz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.3/compiler-rt-19.1.3.src.tar.xz)
 
 NO_COMPILER_WARNINGS()
 
@@ -65,7 +65,9 @@ IF (ARCH_AARCH64)
         aarch64/chkstk.S
         aarch64/fp_mode.c
         aarch64/sme-abi-init.c
+        aarch64/sme-abi-vg.c
         aarch64/sme-abi.S
+        aarch64/sme-libc-mem-routines.S
         absvdi2.c
         absvsi2.c
         absvti2.c
@@ -117,6 +119,7 @@ IF (ARCH_AARCH64)
         emutls.c
         enable_execute_stack.c
         eprintf.c
+        extendbfsf2.c
         extenddftf2.c
         extendhfsf2.c
         extendhftf2.c
@@ -284,6 +287,7 @@ ELSEIF (ARCH_X86_64)
         emutls.c
         enable_execute_stack.c
         eprintf.c
+        extendbfsf2.c
         extenddftf2.c
         extendhfsf2.c
         extendhftf2.c
@@ -467,6 +471,7 @@ ELSE()
         emutls.c
         enable_execute_stack.c
         eprintf.c
+        extendbfsf2.c
         extenddftf2.c
         extendhfsf2.c
         extendhftf2.c

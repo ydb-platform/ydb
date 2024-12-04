@@ -4,16 +4,16 @@
 #include "error_helpers.h"
 #include "progress_merger.h"
 
-#include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
-#include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
-#include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
-#include <ydb/library/yql/providers/yt/lib/res_pull/res_or_pull.h>
-#include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
-#include <ydb/library/yql/providers/yt/lib/schema/schema.h>
-#include <ydb/library/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
-#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/common/yql_names.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
+#include <yt/yql/providers/yt/lib/log/yt_logger.h>
+#include <yt/yql/providers/yt/lib/res_pull/res_or_pull.h>
+#include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
+#include <yt/yql/providers/yt/lib/schema/schema.h>
+#include <yt/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
+#include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>

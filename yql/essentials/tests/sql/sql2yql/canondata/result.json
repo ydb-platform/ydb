@@ -7559,6 +7559,13 @@
             "uri": "https://{canondata_backend}/1936273/4a1b39013e1bae40e722cff8ccef8829784964e2/resource.tar.gz#test_sql2yql.test_hor_join-yql-6477_table_path_/sql.yql"
         }
     ],
+    "test_sql2yql.test[hor_join-yql19332_aux_cols]": [
+        {
+            "checksum": "195e1068ca8926582b211c2b2eb5bfbf",
+            "size": 3144,
+            "uri": "https://{canondata_backend}/1784117/39173fc32d12059e969bfcf094e71dd92d4acaeb/resource.tar.gz#test_sql2yql.test_hor_join-yql19332_aux_cols_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[in-basic_in]": [
         {
             "checksum": "d65b144596eb506f4cc5f1f191a89832",
@@ -8408,16 +8415,16 @@
     ],
     "test_sql2yql.test[join-cbo_4tables]": [
         {
-            "checksum": "1259880de97a6753985e841e2e0fca8e",
-            "size": 3360,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql2yql.test_join-cbo_4tables_/sql.yql"
+            "checksum": "771362b9b84ed4085eedf439d2119a49",
+            "size": 3444,
+            "uri": "https://{canondata_backend}/1889210/7632dbbbf855933dd5095f5532a6f69c1a41db51/resource.tar.gz#test_sql2yql.test_join-cbo_4tables_/sql.yql"
         }
     ],
     "test_sql2yql.test[join-cbo_4tables_only_sorted_merge]": [
         {
-            "checksum": "3d6c4b81801d581fd7df5db4ed71e607",
-            "size": 3452,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql2yql.test_join-cbo_4tables_only_sorted_merge_/sql.yql"
+            "checksum": "ae8361131478281c24b9fa00327e44a8",
+            "size": 3536,
+            "uri": "https://{canondata_backend}/1889210/7632dbbbf855933dd5095f5532a6f69c1a41db51/resource.tar.gz#test_sql2yql.test_join-cbo_4tables_only_sorted_merge_/sql.yql"
         }
     ],
     "test_sql2yql.test[join-commonjoin_unused_keys]": [
@@ -8716,9 +8723,9 @@
     ],
     "test_sql2yql.test[join-join_cbo_3_tables]": [
         {
-            "checksum": "ade505b64c963c1a666fadfa8b67ae84",
-            "size": 2714,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql2yql.test_join-join_cbo_3_tables_/sql.yql"
+            "checksum": "26b51441dc8e31032014fde77d6c8cb8",
+            "size": 2798,
+            "uri": "https://{canondata_backend}/1889210/7632dbbbf855933dd5095f5532a6f69c1a41db51/resource.tar.gz#test_sql2yql.test_join-join_cbo_3_tables_/sql.yql"
         }
     ],
     "test_sql2yql.test[join-join_comp_common_table]": [
@@ -8751,9 +8758,9 @@
     ],
     "test_sql2yql.test[join-join_left_cbo]": [
         {
-            "checksum": "4bfc0f9649300fa6c4d2daab376e06de",
-            "size": 1793,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql2yql.test_join-join_left_cbo_/sql.yql"
+            "checksum": "46674f0a5c0ae2dd31bc0986956dded9",
+            "size": 1877,
+            "uri": "https://{canondata_backend}/1889210/7632dbbbf855933dd5095f5532a6f69c1a41db51/resource.tar.gz#test_sql2yql.test_join-join_left_cbo_/sql.yql"
         }
     ],
     "test_sql2yql.test[join-join_no_correlation_in_order_by]": [
@@ -8765,9 +8772,9 @@
     ],
     "test_sql2yql.test[join-join_right_cbo]": [
         {
-            "checksum": "d69c6e50ec981ad24ac25c121958aee7",
-            "size": 1794,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql2yql.test_join-join_right_cbo_/sql.yql"
+            "checksum": "1638f6fcf0c3682c44618aeaa8b450b1",
+            "size": 1878,
+            "uri": "https://{canondata_backend}/1889210/7632dbbbf855933dd5095f5532a6f69c1a41db51/resource.tar.gz#test_sql2yql.test_join-join_right_cbo_/sql.yql"
         }
     ],
     "test_sql2yql.test[join-join_semi_correlation_in_order_by]": [
@@ -25270,6 +25277,11 @@
     "test_sql_format.test[hor_join-yql-6477_table_path]": [
         {
             "uri": "file://test_sql_format.test_hor_join-yql-6477_table_path_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[hor_join-yql19332_aux_cols]": [
+        {
+            "uri": "file://test_sql_format.test_hor_join-yql19332_aux_cols_/formatted.sql"
         }
     ],
     "test_sql_format.test[in-basic_in]": [

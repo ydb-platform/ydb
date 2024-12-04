@@ -45,7 +45,7 @@ class PnpmPackageManager(BasePackageManager):
 
     @staticmethod
     def get_local_pnpm_store():
-        return os.path.join(home_dir(), ".cache", "pnpm-store")
+        return os.path.join(home_dir(), ".cache", "pnpm-9-store")
 
     @timeit
     def _create_local_node_modules(self, nm_store_path: str, store_dir: str, virtual_store_dir: str):

@@ -63,8 +63,17 @@ private:
 
     std::shared_ptr<NActualizer::TController> ActualizationController;
     std::shared_ptr<TSchemaObjectsCache> SchemaObjectsCache = std::make_shared<TSchemaObjectsCache>();
+    TVersionedIndex VersionedIndex;
+    std::shared_ptr<TVersionedIndex> VersionedIndexCopy;
 
 public:
+    virtual const std::shared_ptr<TVersionedIndex>& GetVersionedIndexReadonlyCopy() override {
+        if (!VersionedIndexCopy || !VersionedIndexCopy->IsEqualTo(VersionedIndex)) {
+            VersionedIndexCopy = std::make_shared<TVersionedIndex>(VersionedIndex);
+        }
+        return VersionedIndexCopy;
+    }
+
     const std::shared_ptr<NActualizer::TController>& GetActualizationController() const {
         return ActualizationController;
     }
@@ -224,7 +233,6 @@ public:
     void AppendPortion(const TPortionDataAccessor& portionInfo, const bool addAsAccessor = true);
 
 private:
-    TVersionedIndex VersionedIndex;
     ui64 TabletId;
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats;   // per path_id stats sorted by path_id
     std::map<TInstant, std::vector<TPortionInfo::TConstPtr>> CleanupPortions;

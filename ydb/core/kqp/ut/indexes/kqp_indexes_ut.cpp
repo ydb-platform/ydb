@@ -4437,6 +4437,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         setting.SetValue("1");
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(false);
+        serverSettings.SetAppConfig(appConfig);
+
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4593,6 +4598,20 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         // Without using index by pk directly
+        {
+            const TString query1(Q_(R"(
+                $ids = (AsList(AsStruct(CAST(1 as Uint64) as id), AsStruct(CAST(2 as Uint64) as id)));
+
+                SELECT t.id as id, t.yandexuid as yandexuid, t.uid as uid
+                    FROM AS_TABLE($ids) AS k
+                    INNER JOIN `/Root/user` VIEW PRIMARY KEY AS t
+                    ON t.id = k.id
+                    WHERE uid IS NULL
+                ;)"));
+            const TString expected = R"([[[1u];["abc"];#]])";
+            UNIT_ASSERT_VALUES_EQUAL(execQuery(query1), expected);
+        }
+
         {
             const TString query1(Q_(R"(
                 $ids = (AsList(AsStruct(CAST(1 as Uint64) as id), AsStruct(CAST(2 as Uint64) as id)));

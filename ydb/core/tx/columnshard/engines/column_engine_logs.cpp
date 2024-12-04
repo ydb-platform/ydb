@@ -327,26 +327,27 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     AFL_VERIFY(dataLocksManager);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> changes = std::make_shared<TCleanupPortionsColumnEngineChanges>(StoragesManager);
-
     // Add all portions from dropped paths
     ui64 portionsCount = 0;
     ui64 chunksCount = 0;
     ui32 skipLocked = 0;
     ui32 portionsFromDrop = 0;
     bool limitExceeded = false;
-    const ui32 maxChunksCount = 100000;
+    const ui32 maxChunksCount = 500000;
     const ui32 maxPortionsCount = 1000;
     for (ui64 pathId : pathsToDrop) {
         auto g = GranulesStorage->GetGranuleOptional(pathId);
         if (!g) {
             continue;
         }
-
+        if (dataLocksManager->IsLocked(*g, NDataLocks::ELockCategory::Tables)) {
+            continue;
+        }
         for (auto& [portion, info] : g->GetPortions()) {
             if (info->CheckForCleanup()) {
                 continue;
             }
-            if (dataLocksManager->IsLocked(*info)) {
+            if (dataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Cleanup)) {
                 ++skipLocked;
                 continue;
             }
@@ -360,6 +361,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
             changes->AddPortionToDrop(info);
             ++portionsFromDrop;
         }
+        changes->AddTableToDrop(pathId);
     }
 
     const TInstant snapshotInstant = snapshot.GetPlanInstant();
@@ -370,7 +372,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
             break;
         }
         for (ui32 i = 0; i < it->second.size();) {
-            if (dataLocksManager->IsLocked(it->second[i])) {
+            if (dataLocksManager->IsLocked(it->second[i], NDataLocks::ELockCategory::Cleanup)) {
                 ++skipLocked;
                 ++i;
                 continue;
@@ -399,7 +401,8 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
         }
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size())(
-        "portions_prepared", changes->GetPortionsToDrop().size())("drop", portionsFromDrop)("skip", skipLocked);
+        "portions_prepared", changes->GetPortionsToDrop().size())("drop", portionsFromDrop)("skip", skipLocked)("portions_counter", portionsCount)(
+        "chunks", chunksCount)("limit", limitExceeded)("max_portions", maxPortionsCount)("max_chunks", maxChunksCount);
 
     if (changes->GetPortionsToDrop().empty()) {
         return nullptr;

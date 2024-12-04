@@ -31,10 +31,10 @@ IF (NOT OS_WINDOWS)
         yql/essentials/utils/failure_injector
         yql/essentials/utils/backtrace
         yql/essentials/utils/network
-        ydb/library/yql/providers/yt/comp_nodes/dq
-        ydb/library/yql/providers/yt/comp_nodes/llvm14
-        ydb/library/yql/providers/yt/codec/codegen
-        ydb/library/yql/providers/yt/mkql_dq
+        yt/yql/providers/yt/comp_nodes/dq
+        yt/yql/providers/yt/comp_nodes/llvm14
+        yt/yql/providers/yt/codec/codegen
+        yt/yql/providers/yt/mkql_dq
         ydb/library/yql/providers/dq/actors/yt
         ydb/library/yql/providers/dq/global_worker_manager
         yql/essentials/sql/pg

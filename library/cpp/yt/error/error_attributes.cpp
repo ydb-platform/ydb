@@ -15,7 +15,7 @@ void TErrorAttributes::Clear()
     }
 }
 
-NYson::TYsonString TErrorAttributes::GetYsonAndRemove(const TString& key)
+TErrorAttributes::TValue TErrorAttributes::GetYsonAndRemove(const TKey& key)
 {
     auto result = GetYson(key);
     Remove(key);

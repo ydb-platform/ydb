@@ -1,9 +1,9 @@
 UNITTEST_FOR(ydb/library/yql/providers/yt/actors)
 
 PEERDIR(
-    ydb/library/yql/providers/yt/codec/codegen/no_llvm
-    ydb/library/yql/providers/yt/comp_nodes/no_llvm
-    ydb/library/yql/providers/yt/gateway/file
+    yt/yql/providers/yt/codec/codegen/no_llvm
+    yt/yql/providers/yt/comp_nodes/no_llvm
+    yt/yql/providers/yt/gateway/file
     yql/essentials/minikql/codegen/no_llvm
     ydb/library/actors/testlib
     yql/essentials/public/udf

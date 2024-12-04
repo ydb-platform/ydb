@@ -9,10 +9,10 @@
 def h(input):
     def gen():
         for x in input:
-            yield long(x + 42)
+            yield int(x + 42)
     return gen
 @@))
-(let udf (ScriptUdf 'Python 'h udfType udfScript))
+(let udf (ScriptUdf 'Python3 'h udfType udfScript))
 
 # call udf
 (let result (Apply udf (AsList (Int64 '1) (Int64 '2) (Int64 '3))))

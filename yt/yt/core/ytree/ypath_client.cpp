@@ -151,6 +151,11 @@ NRpc::NProto::TRequestHeader& TYPathRequest::Header()
     return Header_;
 }
 
+bool TYPathRequest::IsAttachmentCompressionEnabled() const
+{
+    return false;
+}
+
 bool TYPathRequest::IsStreamingEnabled() const
 {
     return false;

@@ -2997,6 +2997,21 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         }
     }
 
+    Y_UNIT_TEST(AsyncReplicationInvalidCommitInterval) {
+        auto req = R"(
+            USE plato;
+            CREATE ASYNC REPLICATION MyReplication
+            FOR table1 AS table2, table3 AS table4
+            WITH (
+                COMMIT_INTERVAL = "FOO"
+            );
+        )";
+
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:35: Error: Literal of Interval type is expected for COMMIT_INTERVAL\n");
+    }
+
     Y_UNIT_TEST(AlterAsyncReplicationParseCorrect) {
         auto req = R"(
             USE plato;
@@ -3026,7 +3041,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
-    Y_UNIT_TEST(AlterAsyncReplicationUnsupportedSettings) {
+    Y_UNIT_TEST(AlterAsyncReplicationSettings) {
         auto reqTpl = R"(
             USE plato;
             ALTER ASYNC REPLICATION MyReplication
@@ -3046,19 +3061,17 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             {"password_secret_name", "bar_secret_name"},
         };
 
-        for (const auto& setting : settings) {
-            auto& key = setting.first;
-            auto& value = setting.second;
-            auto req = Sprintf(reqTpl, key.c_str(), value.c_str());
+        for (const auto& [k, v] : settings) {
+            auto req = Sprintf(reqTpl, k.c_str(), v.c_str());
             auto res = SqlToYql(req);
             UNIT_ASSERT(res.Root);
 
-            TVerifyLineFunc verifyLine = [&key, &value](const TString& word, const TString& line) {
+            TVerifyLineFunc verifyLine = [&k, &v](const TString& word, const TString& line) {
                 if (word == "Write") {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alter"));
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(key));
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(value));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(k));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(v));
                 }
             };
 
@@ -3066,6 +3079,27 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             VerifyProgram(res, elementStat, verifyLine);
 
             UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        }
+    }
+
+    Y_UNIT_TEST(AlterAsyncReplicationUnsupportedSettings) {
+        {
+            auto req = R"(
+                USE plato;
+                ALTER ASYNC REPLICATION MyReplication SET (CONSISTENCY_MODE = "STRONG");
+            )";
+            auto res = SqlToYql(req);
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:79: Error: CONSISTENCY_MODE is not supported in ALTER\n");
+        }
+        {
+            auto req = R"(
+                USE plato;
+                ALTER ASYNC REPLICATION MyReplication SET (COMMIT_INTERVAL = Interval("PT10S"));
+            )";
+            auto res = SqlToYql(req);
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:87: Error: COMMIT_INTERVAL is not supported in ALTER\n");
         }
     }
 

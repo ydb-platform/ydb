@@ -89,7 +89,7 @@ public:
     void Send(THolder<T> ev, ui64 cookie = 0) {
         if (LocalRecipient) {
             LastSentDataTime = TInstant::Now();
-            NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), /* flags */ 0, cookie));
+            NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), /* flags */ NActors::IEventHandle::FlagTrackDelivery, cookie));
             return;
         }
 

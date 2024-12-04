@@ -183,6 +183,7 @@ tables:
         not_null: true
     primary_key:
       - ps_partkey
+      - ps_suppkey
 
   - name: region
     columns:

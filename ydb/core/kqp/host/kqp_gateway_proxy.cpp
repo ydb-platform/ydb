@@ -2388,6 +2388,12 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
+            if (settings.Settings.WeakConsistency) {
+                config.MutableWeakConsistency();
+            }
+            if (const auto& consistency = settings.Settings.StrongConsistency) {
+                consistency->Serialize(*config.MutableStrongConsistency());
+            }
 
             auto& targets = *config.MutableSpecific();
             for (const auto& [src, dst] : settings.Targets) {

@@ -620,39 +620,6 @@ TYPED_TEST(TNotGrpcTest, Compression)
     }
 }
 
-#if !defined(_asan_enabled_) && !defined(_msan_enabled_) && defined(_linux_)
-
-TYPED_TEST(TRpcTest, ResponseMemoryTag)
-{
-    static TMemoryTag testMemoryTag = 12345;
-    testMemoryTag++;
-    auto initialMemoryUsage = GetMemoryUsageForTag(testMemoryTag);
-
-    std::vector<TTestProxy::TRspPassCallPtr> rsps;
-    {
-        TTestProxy proxy(this->CreateChannel());
-        TString userName("user");
-
-        TMemoryTagGuard guard(testMemoryTag);
-
-        for (int i = 0; i < 1000; ++i) {
-            auto req = proxy.PassCall();
-            req->SetUser(userName);
-            req->SetMutationId(TGuid::Create());
-            req->SetRetry(false);
-            auto err = req->Invoke().Get();
-            rsps.push_back(err.ValueOrThrow());
-        }
-    }
-
-    auto currentMemoryUsage = GetMemoryUsageForTag(testMemoryTag);
-    EXPECT_GE(currentMemoryUsage - initialMemoryUsage, 200_KB)
-        << "InitialUsage: " << initialMemoryUsage << std::endl
-        << "Current: " << currentMemoryUsage;
-}
-
-#endif
-
 TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
 {
     auto configText = TString(R"({
@@ -828,7 +795,7 @@ TYPED_TEST(TNotGrpcTest, RequestQueueSizeLimit)
     Cerr << Format("End of the RequestQueueSizeLimit test (Id: %v)", testId) << '\n';
 }
 
-TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)
+TYPED_TEST(TNotGrpcTest, RequestMemoryPressureException)
 {
     auto memoryUsageTracker = this->GetMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
@@ -843,7 +810,7 @@ TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)
     auto result = WaitFor(req->Invoke().AsVoid());
 
     // Limit of memory is 32 MB.
-    EXPECT_EQ(NRpc::EErrorCode::MemoryPressure, req->Invoke().Get().GetCode());
+    EXPECT_EQ(NRpc::EErrorCode::RequestMemoryPressure, req->Invoke().Get().GetCode());
 }
 
 TYPED_TEST(TNotGrpcTest, MemoryTracking)

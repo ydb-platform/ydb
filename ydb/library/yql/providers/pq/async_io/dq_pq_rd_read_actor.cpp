@@ -574,8 +574,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
 
     auto& nextOffset = NextOffsetFromRD[partitionId];
     if (nextOffset) {
-        YQL_ENSURE(nextOffset < ev->Get()->Record.GetNextMessageOffset(), "Wrong NextMessageOffset in TEvStatistics, current " << nextOffset << " received " << ev->Get()->Record.GetNextMessageOffset());
-        // TODO check nextOffset
+        YQL_ENSURE(nextOffset <= ev->Get()->Record.GetNextMessageOffset(), "Wrong NextMessageOffset in TEvStatistics, current " << nextOffset << " received " << ev->Get()->Record.GetNextMessageOffset());
     }
     nextOffset = ev->Get()->Record.GetNextMessageOffset();
 
@@ -753,6 +752,7 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     if (sessionInfo.EventsQueue.HandleUndelivered(ev) == NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
         if (sessionInfo.Generation == ev->Cookie) {
             Sessions.erase(ev->Sender);
+            ReadActorByEventQueueId.erase(sessionInfo.EventQueueId);
             ReInit("Reset session state");
         }
     }
@@ -941,6 +941,7 @@ void TDqPqRdReadActor::UpdateSessions() {
         SRC_LOG_I("Distribution is changed, remove sessions");
         for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
             StopSession(sessionInfo);
+            ReadActorByEventQueueId.erase(sessionInfo.EventQueueId);
         }
         Sessions.clear();
     }
@@ -951,14 +952,16 @@ void TDqPqRdReadActor::UpdateSessions() {
         }
 
         SRC_LOG_I("Create session to " << rowDispatcherActorId);
+        auto queueId = ++NextEventQueueId;
         Sessions.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(rowDispatcherActorId),
-            std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, ++NextEventQueueId, ++NextGeneration));
+            std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, queueId, ++NextGeneration));
         auto& session = Sessions.at(rowDispatcherActorId);
         for (auto partitionId : partitions) {
             session.Partitions[partitionId];
         }
+        ReadActorByEventQueueId[queueId] = rowDispatcherActorId;
     }
     LastUsedPartitionDistribution = LastReceivedPartitionDistribution;
 }

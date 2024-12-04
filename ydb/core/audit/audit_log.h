@@ -6,6 +6,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/executor_thread.h>
 

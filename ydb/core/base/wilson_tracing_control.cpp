@@ -22,7 +22,14 @@ public:
     {}
 
     TSamplingThrottlingControl* GetTracingControlPtr() {
+        if (Y_UNLIKELY(!Control)) {
+            Control = CreateNewTracingControl();
+        }
         return Control.Get();
+    }
+
+    void ResetTracingControl() {
+        Control = nullptr;
     }
 
 private:
@@ -52,6 +59,13 @@ void HandleTracing(NWilson::TTraceId& traceId, const TRequestDiscriminator& disc
     TSamplingThrottlingControl* control = GetTracingControlTls();
     if (Y_LIKELY(control)) {
         control->HandleTracing(traceId, discriminator);
+    }
+}
+
+void ClearTracingControl() {
+    if (TracingControlRawPtr) {
+        TracingControlRawPtr = nullptr;
+        FastTlsSingleton<TSamplingThrottlingControlTlsHolder>()->ResetTracingControl();
     }
 }
 

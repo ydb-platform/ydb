@@ -9,8 +9,6 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/core/base/events.h>
-
 #include "audit_log_service.h"
 #include "audit_log.h"
 
@@ -31,38 +29,6 @@
 #define LOG_E(stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::AUDIT_LOG_WRITER, stream)
 
 namespace NKikimr::NAudit {
-
-// TAuditLogActor
-//
-
-struct TEvAuditLog {
-    //
-    // Events declaration
-    //
-
-    enum EEvents {
-        EvBegin = EventSpaceBegin(TKikimrEvents::ES_YDB_AUDIT_LOG),
-
-        // Request actors
-        EvWriteAuditLog = EvBegin + 0,
-
-        EvEnd
-    };
-
-    static_assert(EvEnd <= EventSpaceEnd(TKikimrEvents::ES_YDB_AUDIT_LOG),
-        "expected EvEnd <= EventSpaceEnd(TKikimrEvents::ES_YDB_AUDIT_LOG)"
-    );
-
-    struct TEvWriteAuditLog : public NActors::TEventLocal<TEvWriteAuditLog, EvWriteAuditLog> {
-        TInstant Time;
-        TVector<std::pair<TString, TString>> Parts;
-
-        TEvWriteAuditLog(TInstant time, TVector<std::pair<TString, TString>>&& parts)
-            : Time(time)
-            , Parts(std::move(parts))
-        {}
-    };
-};
 
 void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBackends) {
     for (auto& logBackend : logBackends) {
@@ -122,18 +88,15 @@ TString GetTxtLog(const TEvAuditLog::TEvWriteAuditLog* ev) {
     return ss.Str();
 }
 
-
-using TAuditLogItemBuilder = TString(*)(const TEvAuditLog::TEvWriteAuditLog*);
-
 // Array of functions for converting TEvAuditLog::TEvWriteAuditLog events to a string.
 // Indexing in the array occurs by the value of the NKikimrConfig::TAuditConfig::EFormat enumeration.
+// The size of AuditLogItemBuilders must be equal to the maximum value of the NKikimrConfig::TAuditConfig::EFormat enumeration.
 static std::vector<TAuditLogItemBuilder> AuditLogItemBuilders = { GetJsonLog, GetTxtLog, GetJsonLogCompatibleLog, nullptr };
 
-// numbering enumeration starts with one
+// numbering enumeration starts from one
 static constexpr size_t DefaultAuditLogItemBuilder = static_cast<size_t>(NKikimrConfig::TAuditConfig::JSON) - 1;
 
-template<>
-void RegisterAuditLogItemBuilder<TEvAuditLog::TEvWriteAuditLog>(NKikimrConfig::TAuditConfig::EFormat format, TAuditLogItemBuilder builder) {
+void RegisterAuditLogItemBuilder(NKikimrConfig::TAuditConfig::EFormat format, TAuditLogItemBuilder builder) {
     size_t index = static_cast<size_t>(format);
     if (index < AuditLogItemBuilders.size()) {
         AuditLogItemBuilders[index] = builder;

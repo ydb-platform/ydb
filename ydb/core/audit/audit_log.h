@@ -6,6 +6,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <ydb/core/base/events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/executor_thread.h>
@@ -40,10 +41,40 @@ namespace NKikimr::NAudit {
 
 extern std::atomic<bool> AUDIT_LOG_ENABLED;
 
+struct TEvAuditLog {
+    //
+    // Events declaration
+    //
+
+    enum EEvents {
+        EvBegin = EventSpaceBegin(TKikimrEvents::ES_YDB_AUDIT_LOG),
+
+        // Request actors
+        EvWriteAuditLog = EvBegin + 0,
+
+        EvEnd
+    };
+
+    static_assert(EvEnd <= EventSpaceEnd(TKikimrEvents::ES_YDB_AUDIT_LOG),
+        "expected EvEnd <= EventSpaceEnd(TKikimrEvents::ES_YDB_AUDIT_LOG)"
+    );
+
+    struct TEvWriteAuditLog : public NActors::TEventLocal<TEvWriteAuditLog, EvWriteAuditLog> {
+        TInstant Time;
+        TVector<std::pair<TString, TString>> Parts;
+
+        TEvWriteAuditLog(TInstant time, TVector<std::pair<TString, TString>>&& parts)
+            : Time(time)
+            , Parts(std::move(parts))
+        {}
+    };
+};
+
+using TAuditLogItemBuilder = TString(*)(const TEvAuditLog::TEvWriteAuditLog*);
+
 void SendAuditLog(const NActors::TActorSystem* sys, TVector<std::pair<TString, TString>>&& parts);
 
 // Registration of a function for converting audit events to a string in a specified format
-template <typename T>
-void RegisterAuditLogItemBuilder(NKikimrConfig::TAuditConfig::EFormat format, TString(*)(const T*));
+void RegisterAuditLogItemBuilder(NKikimrConfig::TAuditConfig::EFormat format, TAuditLogItemBuilder builder);
 
 }   // namespace NKikimr::NAudit

@@ -580,6 +580,7 @@ void TRowDispatcher::UpdateMetrics() {
     for (const auto& [key, stats] : AggrStats.LastQueryStats) {
         if (!stats) {
             toDelete.insert(key);
+            continue;
         }
         SetQueryMetrics(key, stats->UnreadBytes.Max, stats->UnreadBytes.Avg, stats->ReadLagMessages.Max);
     }
@@ -662,7 +663,7 @@ TString TRowDispatcher::GetInternalState() {
     }
     str << "TopicSessions:\n";
     for (auto& [key, sessionsInfo] : TopicSessions) {
-        str << "  " << key.TopicPath  << " / " << key.PartitionId  << " / " << key.ReadGroup;
+        str << "  " << key.TopicPath << " / " << key.PartitionId  << " / " << key.ReadGroup;
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
             str << " / " << LeftPad(actorId, 32)
                 << " data rate " << toHumanDR(sessionInfo.AggrReadBytes.Sum) << " unread bytes " << toHuman(sessionInfo.Stat.UnreadBytes)
@@ -901,7 +902,7 @@ void TRowDispatcher::Handle(const TEvPrivate::TEvTryConnect::TPtr& ev) {
 void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr& ev) {
     auto it = ConsumersByEventQueueId.find(ev->Get()->EventQueueId);
     if (it == ConsumersByEventQueueId.end()) {
-        LOG_ROW_DISPATCHER_WARN("No consumer with EventQueueId = " << ev->Get()->EventQueueId);
+        LOG_ROW_DISPATCHER_TRACE("No consumer with EventQueueId = " << ev->Get()->EventQueueId);
         return;
     }
     auto& sessionInfo = it->second;

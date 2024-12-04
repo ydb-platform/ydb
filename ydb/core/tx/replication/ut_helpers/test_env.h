@@ -43,9 +43,7 @@ class TEnv {
         auto req = MakeHolder<NSchemeShard::TEvSchemeShard::TEvLogin>();
         req->Record.SetUser(user);
         req->Record.SetPassword(password);
-        ForwardToTablet(*Server.GetRuntime(), schemeShardId, Sender, req.Release());
-
-        auto resp = Server.GetRuntime()->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(Sender);
+        auto resp = Send<NSchemeShard::TEvSchemeShard::TEvLoginResult>(schemeShardId, std::move(req));
         UNIT_ASSERT(resp->Get()->Record.GetError().empty());
         UNIT_ASSERT(!resp->Get()->Record.GetToken().empty());
     }
@@ -181,8 +179,22 @@ public:
 
     template <typename TEvResponse>
     auto Send(const TActorId& recipient, THolder<IEventBase> ev) {
-        SendAsync(recipient, ev.Release());
+        return Send<TEvResponse>(recipient, ev.Release());
+    }
+
+    void SendAsync(ui64 tabletId, IEventBase* ev) {
+        ForwardToTablet(*Server.GetRuntime(), tabletId, Sender, ev);
+    }
+
+    template <typename TEvResponse>
+    auto Send(ui64 tabletId, IEventBase* ev) {
+        SendAsync(tabletId, ev);
         return Server.GetRuntime()->GrabEdgeEvent<TEvResponse>(Sender);
+    }
+
+    template <typename TEvResponse>
+    auto Send(ui64 tabletId, THolder<IEventBase> ev) {
+        return Send<TEvResponse>(tabletId, ev.Release());
     }
 
     auto& GetRuntime() {

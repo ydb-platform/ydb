@@ -24,7 +24,6 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
     const bool IsIndexOnly;
     const ui32 ForceBlockedGeneration;
     const bool Decommission;
-    TInstant StartTime;
 
     TMap<TLogoBlobID, TBlobStatusTracker> BlobStatus;
     TBlobStorageGroupInfo::TGroupVDisks FailedDisks;
@@ -48,7 +47,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         for (const TEvBlobStorage::TEvRangeResult::TResponse& resp : reply->Responses) {
             size += resp.Buffer.size();
         }*/
-        Mon->CountRangeResponseTime(TActivationContext::Now() - StartTime);
+        Mon->CountRangeResponseTime(TActivationContext::Monotonic() - RequestStartTime);
         SendResponseAndDie(std::move(reply));
     }
 
@@ -339,23 +338,16 @@ public:
         return ERequestType::Range;
     }
 
-    TBlobStorageGroupRangeRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvRange *ev,
-            ui64 cookie, NWilson::TSpan&& span, TInstant now,
-            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
-                NKikimrServices::BS_PROXY_RANGE, false, {}, now, storagePoolCounters,
-                ev->RestartCounter, std::move(span), std::move(ev->ExecutionRelay))
-        , TabletId(ev->TabletId)
-        , From(ev->From)
-        , To(ev->To)
-        , Deadline(ev->Deadline)
-        , MustRestoreFirst(ev->MustRestoreFirst)
-        , IsIndexOnly(ev->IsIndexOnly)
-        , ForceBlockedGeneration(ev->ForceBlockedGeneration)
-        , Decommission(ev->Decommission)
-        , StartTime(now)
+    TBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters& params, NWilson::TSpan&& span)
+        : TBlobStorageGroupRequestActor(params, std::move(span))
+        , TabletId(params.Common.Event->TabletId)
+        , From(params.Common.Event->From)
+        , To(params.Common.Event->To)
+        , Deadline(params.Common.Event->Deadline)
+        , MustRestoreFirst(params.Common.Event->MustRestoreFirst)
+        , IsIndexOnly(params.Common.Event->IsIndexOnly)
+        , ForceBlockedGeneration(params.Common.Event->ForceBlockedGeneration)
+        , Decommission(params.Common.Event->Decommission)
         , FailedDisks(&Info->GetTopology())
     {}
 
@@ -402,14 +394,9 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupRangeRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvRange *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TInstant now,
-        TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Range");
-    return new TBlobStorageGroupRangeRequest(info, state, source, mon, ev, cookie, std::move(span), now,
-            storagePoolCounters);
+IActor* CreateBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters params) {
+    NWilson::TSpan span(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.Range");
+    return new TBlobStorageGroupRangeRequest(params, std::move(span));
 }
 
 };//NKikimr

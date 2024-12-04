@@ -134,7 +134,6 @@ public:
     void MockStopSession(const NYql::NPq::NProto::TDqPqTopicSource& source, ui64 partitionId, TActorId readActorId) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         event->Record.MutableSource()->CopyFrom(source);
-        //event->Record.SetPartitionId(partitionId);
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
     }
 
@@ -154,7 +153,6 @@ public:
 
     void MockSessionError(ui64 partitionId, TActorId topicSessionId, TActorId readActorId) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvSessionError>();
-        //event->Record.SetPartitionId(partitionId);
         event->ReadActorId = readActorId;
         Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
     }
@@ -206,7 +204,6 @@ public:
     void ExpectSessionError(NActors::TActorId readActorId, ui64 partitionId) {
         auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvSessionError>(readActorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        //UNIT_ASSERT(eventHolder->Get()->Record.GetPartitionId() == partitionId);
     }
 
     NActors::TActorId ExpectRegisterTopicSession() {

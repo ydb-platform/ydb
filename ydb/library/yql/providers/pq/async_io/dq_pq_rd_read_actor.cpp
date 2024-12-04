@@ -396,8 +396,6 @@ void TDqPqRdReadActor::ProcessGlobalState() {
 }
 
 void TDqPqRdReadActor::ProcessSessionsState() {
-    // bool needSendCoordinatorRequest = false;
-
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
         switch (sessionInfo.Status) {
         case TSession::ESessionStatus::INIT:
@@ -416,18 +414,6 @@ void TDqPqRdReadActor::ProcessSessionsState() {
             break;
         }
     }
-
-    // if (needSendCoordinatorRequest) {
-    //     auto partitionToRead = GetPartitionsToRead();
-    //     auto cookie = ++CoordinatorRequestCookie;
-    //     SRC_LOG_I("Send TEvCoordinatorRequest to coordinator " << CoordinatorActorId->ToString() << ", partIds: "
-    //         << JoinSeq(", ", partitionToRead) << " cookie " << cookie);
-    //     Send(
-    //         *CoordinatorActorId,
-    //         new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, partitionToRead),
-    //         IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-    //         cookie);
-    // }
 }
 
 void TDqPqRdReadActor::ProcessState() {
@@ -467,11 +453,9 @@ void TDqPqRdReadActor::CommitState(const NDqProto::TCheckpoint& /*checkpoint*/) 
 
 void TDqPqRdReadActor::StopSession(TSession& sessionInfo) {
     SRC_LOG_I("Send StopSession to " << sessionInfo.RowDispatcherActorId
-        //<< " partition " << sessionInfo.PartitionId 
         << " generation " << sessionInfo.Generation);
     auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
     *event->Record.MutableSource() = SourceParams;
-   // event->Record.SetPartitionId(sessionInfo.PartitionId);
     sessionInfo.EventsQueue.Send(event.release(), sessionInfo.Generation);
 }
 

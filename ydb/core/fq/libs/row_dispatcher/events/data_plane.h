@@ -92,7 +92,7 @@ struct TEvRowDispatcher {
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
             const TSet<ui32>& partitionIds,
             const TString token,
-            TMap<ui32, ui64> readOffsets,
+            const TMap<ui32, ui64>& readOffsets,
             ui64 startingMessageTimestampMs,
             const TString& queryId) {
             *Record.MutableSource() = sourceParams;

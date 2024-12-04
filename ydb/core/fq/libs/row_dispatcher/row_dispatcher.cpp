@@ -252,7 +252,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         ui64 MessageBatch = 0;
     };
 
-    struct ConsumerPartition {
+    struct TConsumerPartition {
         bool PendingGetNextBatch = false;
         bool PendingNewDataArrived = false;
         TActorId TopicSessionId;
@@ -281,7 +281,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         NYql::NDq::TRetryEventsQueue EventsQueue;
         ui64 EventQueueId;
         NFq::NRowDispatcherProto::TEvStartSession Proto;
-        THashMap<ui32, ConsumerPartition> Partitions;
+        THashMap<ui32, TConsumerPartition> Partitions;
         const TString QueryId;
         ConsumerCounters Counters;
         TopicSessionClientStatistic Stat;
@@ -778,7 +778,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
-   // ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(ev->Sender);
     if (it == Consumers.end()) {
         LOG_ROW_DISPATCHER_WARN("Wrong consumer, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId());
@@ -873,7 +872,6 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbea
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {    
-   // ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(ev->Get()->ReadActorId);
     if (it == Consumers.end()) {
         LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvNewDataArrived from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId());
@@ -887,7 +885,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) 
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
-   // ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(ev->Get()->ReadActorId);
     if (it == Consumers.end()) {
         LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvMessageBatch  from " << ev->Sender << " to " << ev->Get()->ReadActorId);
@@ -915,7 +912,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("Received TEvStatistics from " << ev->Sender);
-    //ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(ev->Get()->ReadActorId);
     if (it == Consumers.end()) {
         LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvStatistics from " << ev->Sender << " to " << ev->Get()->ReadActorId << " part id " << ev->Get()->Record.GetPartitionId());

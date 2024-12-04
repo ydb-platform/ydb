@@ -319,6 +319,66 @@ public:
     }
 };
 
+class TDone: public TSubOperationState {
+private:
+    static bool IsExpectedTxType(TTxState::ETxType txType) {
+        switch (txType) {
+        case TTxState::TxRestoreIncrementalBackupAtTable:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    TString DebugHint() const override {
+        return TStringBuilder()
+            << "TRestoreMultipleIncrementalBackups TDone"
+            << ", operationId: " << OperationId;
+    }
+public:
+    explicit TDone(
+            TOperationId id,
+            const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups& restoreOp)
+        : OperationId(id)
+        , RestoreOp(restoreOp)
+    {
+        IgnoreMessages(DebugHint(), AllIncomingEvents());
+    }
+
+
+    bool ProgressState(TOperationContext& context) override {
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(IsExpectedTxType(txState->TxType));
+        Y_ABORT_UNLESS(txState->LoopStep == RestoreOp.SrcPathIdsSize());
+        Y_ABORT_UNLESS(txState->TargetPathId == PathIdFromPathId(RestoreOp.GetSrcPathIds(RestoreOp.SrcPathIdsSize() - 1)));
+
+        // LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        //            DebugHint() << " ProgressState"
+        //                        << ", SourcePathId: " << txState->SourcePathId
+        //                        << ", TargetPathId: " << txState->TargetPathId
+        //                        << ", at schemeshard: " << ssId);
+
+        // // clear resources on src
+        // NIceDb::TNiceDb db(context.GetDB());
+        // TPathElement::TPtr srcPath = context.SS->PathsById.at(txState->SourcePathId);
+        // context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNotExist);
+
+        // TPathElement::TPtr dstPath = context.SS->PathsById.at(txState->TargetPathId);
+        // context.OnComplete.ReleasePathState(OperationId, dstPath->PathId, TPathElement::EPathState::EPathStateNoChanges);
+
+        context.OnComplete.DoneOperation(OperationId);
+        return true;
+    }
+
+private:
+    const TOperationId OperationId;
+    const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups RestoreOp;
+};
+
 class TNewRestoreFromAtTable : public TSubOperation {
     static TTxState::ETxState InitialState() {
         return TTxState::ConfigureParts;
@@ -370,7 +430,7 @@ class TNewRestoreFromAtTable : public TSubOperation {
         case TTxState::ProposedWaitParts:
             return MakeHolder<NIncrRestore::TProposedWaitParts>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return MakeHolder<NIncrRestore::TDone>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups());
         default:
             return nullptr;
         }

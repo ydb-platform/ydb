@@ -89,7 +89,7 @@ struct THashableKey {
 struct TKeyHash {
     using is_transparent = void;
 
-    bool operator()(TConstArrayRef<TCell> key) const {
+    size_t operator()(TConstArrayRef<TCell> key) const {
         return absl::Hash<THashableKey>()(THashableKey{ key });
     }
 };
@@ -376,14 +376,16 @@ public:
                     }
                 }
 
-                if (rowSize > freeSpace - (i64)resultStats.ResultBytesCount) {
-                    row.DeleteUnreferenced();
+                if (rowSize + (i64)resultStats.ResultBytesCount > freeSpace) {
                     sizeLimitExceeded = true;
+                }
+
+                if (resultStats.ResultRowsCount && sizeLimitExceeded) {
+                    row.DeleteUnreferenced();
                     break;
                 }
 
                 batch.push_back(std::move(row));
-
                 storageRowSize = std::max(storageRowSize, (i64)8);
 
                 resultStats.ReadRowsCount += 1;
@@ -817,7 +819,7 @@ public:
             for (; result.FirstUnprocessedRow < result.Rows.size(); ++result.FirstUnprocessedRow) {
                 auto& row = result.Rows[result.FirstUnprocessedRow];
 
-                if (resultStats.ResultBytesCount + row.Stats.ResultBytesCount > (ui64)freeSpace) {
+                if (resultStats.ResultRowsCount && resultStats.ResultBytesCount + row.Stats.ResultBytesCount > (ui64)freeSpace) {
                     sizeLimitExceeded = true;
                     break;
                 }

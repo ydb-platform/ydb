@@ -17,8 +17,11 @@ DEFINE ACTION $aaa($z) AS
         FROM $table;
     END DEFINE;
     $ccc = EvaluateCode(QuoteCode($bbb));
-    DO $ccc("1");
+    DO
+        $ccc("1")
+    ;
 END DEFINE;
 
-EVALUATE FOR $z IN AsList(AsTuple("Input", "foo"), AsTuple("Input", "bar"))
-    DO $aaa($z);
+EVALUATE FOR $z IN AsList(AsTuple("Input", "foo"), AsTuple("Input", "bar")) DO
+    $aaa($z)
+;

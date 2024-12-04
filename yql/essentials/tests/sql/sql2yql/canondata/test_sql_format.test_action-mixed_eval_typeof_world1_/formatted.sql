@@ -49,9 +49,10 @@ DEFINE ACTION $func($input, $output) AS
 END DEFINE;
 $exps = [('Input', 'Output1'), ('Input', 'Output2'), ('Input', 'Output3')];
 
-EVALUATE FOR $exp_name IN $exps
-    DO BEGIN
-        $input = $exp_name.0;
-        $output = $exp_name.1;
-        DO $func($input, $output);
-    END DO;
+EVALUATE FOR $exp_name IN $exps DO BEGIN
+    $input = $exp_name.0;
+    $output = $exp_name.1;
+    DO
+        $func($input, $output)
+    ;
+END DO;

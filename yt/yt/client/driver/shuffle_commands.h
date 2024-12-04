@@ -18,6 +18,8 @@ private:
     std::string Account;
     int PartitionCount;
     NObjectClient::TTransactionId ParentTransactionId;
+    std::optional<std::string> MediumName;
+    std::optional<int> ReplicationFactor;
 
     void DoExecute(ICommandContextPtr context) override;
 };

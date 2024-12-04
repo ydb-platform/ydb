@@ -156,7 +156,7 @@ namespace NActors {
     void TIOExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
         if (Harmonizer) {
             TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
-            poolState.UsedCpu = stats.AvgConsumedCpu;
+            poolState.UsedCpu = stats.AvgElapsedUs;
         }
         poolState.CurrentLimit = PoolThreads;
         poolState.MaxLimit = PoolThreads;

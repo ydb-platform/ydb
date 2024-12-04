@@ -187,7 +187,12 @@ public:
     }
 
     bool IsVolatile() const override {
-        return !HasOlapTable();
+        return !HasOlapTable()
+            && !IsReadOnly()
+            && !IsSingleShard();
+
+        // TODO: && !HasPersistentChannels;
+        // Note: currently persistent channels are never used
     }
 
     bool HasSnapshot() const override {

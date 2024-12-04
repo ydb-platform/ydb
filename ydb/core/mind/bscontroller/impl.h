@@ -996,6 +996,10 @@ public:
                 std::tie(BoxId, Fqdn, IcPort) = std::move(key);
             }
 
+            THostKey ChangeBox(Schema::BoxHostV2::BoxId::Type newBoxId) const {
+                return {{newBoxId, Fqdn, IcPort}};
+            }
+
             auto GetKey() const {
                 return std::tie(BoxId, Fqdn, IcPort);
             }

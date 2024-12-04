@@ -108,16 +108,45 @@ namespace NKikimr::NBsController {
         TBoxInfo& origin = getBox(cmd.GetOriginBoxId(), cmd.GetOriginBoxGeneration(), "origin");
         TBoxInfo& target = getBox(cmd.GetTargetBoxId(), cmd.GetTargetBoxGeneration(), "target");
 
-        while (origin.Hosts) {
-            auto node = origin.Hosts.extract(origin.Hosts.begin());
-            node.key().BoxId = cmd.GetTargetBoxId();
-            if (!target.Hosts.insert(std::move(node)).inserted) {
-                throw TExError() << "duplicate hosts in merged box";
+        THashMap<std::tuple<THostConfigId, THostConfigId>, THostConfigId> mergedHostConfigs;
+
+        for (auto& [originKey, originValue] : origin.Hosts) {
+            const TBoxInfo::THostKey targetKey = originKey.ChangeBox(cmd.GetTargetBoxId()); // make new key for target set
+            if (const auto [it, inserted] = target.Hosts.try_emplace(targetKey, std::move(originValue)); !inserted) {
+                TBoxInfo::THostInfo& targetValue = it->second;
+                if (targetValue.EnforcedNodeId != originValue.EnforcedNodeId) {
+                    throw TExError() << "different EnforcedNodeId for the same HostId# " << THostId(originKey);
+                } else {
+                    const auto sourceConfigs = std::make_tuple(std::min(originValue.HostConfigId, targetValue.HostConfigId),
+                        std::max(originValue.HostConfigId, targetValue.HostConfigId));
+
+                    const auto [jt, inserted] = mergedHostConfigs.try_emplace(sourceConfigs);
+                    if (inserted) {
+                        auto& hostConfigs = HostConfigs.Unshare();
+                        jt->second = hostConfigs.empty() ? 1 : std::prev(hostConfigs.end())->first + 1;
+                        Y_ABORT_UNLESS(!hostConfigs.contains(jt->second));
+                        THostConfigInfo& newHostConfig = hostConfigs[jt->second];
+                        newHostConfig.Generation = 1;
+
+                        auto addDrivesFrom = [&, jt = jt](THostConfigId hostConfigId) {
+                            const auto it = hostConfigs.find(hostConfigId);
+                            if (it == hostConfigs.end()) {
+                                throw TExError() << "missing HostConfig for origin/target box";
+                            }
+                            for (const auto& [key, value] : it->second.Drives) {
+                                const THostConfigInfo::TDriveKey newKey{{jt->second, key.Path}};
+                                if (const auto [it, inserted] = newHostConfig.Drives.emplace(newKey, value); !inserted) {
+                                    throw TExError() << "duplicate drives in origin/target host configs";
+                                }
+                            }
+                        };
+                        addDrivesFrom(originValue.HostConfigId);
+                        addDrivesFrom(targetValue.HostConfigId);
+                    }
+                    targetValue.HostConfigId = jt->second;
+                }
             }
         }
-
-        // spin the generation
-        target.Generation = target.Generation.GetOrElse(1) + 1;
 
         auto& storagePools = StoragePools.Unshare();
         auto& storagePoolGroups = StoragePoolGroups.Unshare();

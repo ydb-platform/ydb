@@ -181,4 +181,6 @@ message TFeatureFlags {
     optional bool ForceDistconfDisable = 156 [default = false];
     optional bool EnableScaleRecommender = 157 [default = false];
     optional bool EnableVDiskThrottling = 158 [default = false];
+    optional bool EnableDataShardInMemoryStateMigration = 159 [default = true];
+    optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = false];
 }

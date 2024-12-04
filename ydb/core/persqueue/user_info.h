@@ -45,7 +45,7 @@ struct TUserInfoBase {
     ui32 Generation = 0;
     ui32 Step = 0;
     i64 Offset = 0;
-    bool AnyCommits = false; // savnik что-то еще надо сделать, чтобы эта штука персистилась?
+    bool AnyCommits = false;
 
     bool Important = false;
     TInstant ReadFromTimestamp;

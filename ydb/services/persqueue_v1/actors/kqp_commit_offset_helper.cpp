@@ -94,8 +94,6 @@ void TKqpHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NAc
     offsets->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
     offsets->Record.MutableRequest()->MutableTopicOperations()->SetConsumer(Consumer);
 
-    // savnik need set something else?
-
     auto* topic = offsets->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
     topic->set_path(Path);
 
@@ -105,6 +103,7 @@ void TKqpHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NAc
         partition->set_force_commit(true);
         partition->set_kill_read_session(commit.KillReadSession);
         partition->set_only_check_commited_to_finish(commit.OnlyCheckCommitedToFinish);
+        partition->set_read_session_id(commit.ReadSessionId);
         auto* offset = partition->add_partition_offsets();
         offset->set_end(commit.Offset);
     }

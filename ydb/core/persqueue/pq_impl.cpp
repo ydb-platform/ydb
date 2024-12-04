@@ -3976,7 +3976,8 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                                 operation.GetCommitOffsetsEnd(),
                                 operation.HasForceCommit() ? operation.GetForceCommit() : false,
                                 operation.HasKillReadSession() ? operation.GetKillReadSession() : false,
-                                operation.HasOnlyCheckCommitedToFinish() ? operation.GetOnlyCheckCommitedToFinish() : false);
+                                operation.HasOnlyCheckCommitedToFinish() ? operation.GetOnlyCheckCommitedToFinish() : false,
+                                operation.HasReadSessionId() ? operation.GetReadSessionId() : "");
         }
     }
 

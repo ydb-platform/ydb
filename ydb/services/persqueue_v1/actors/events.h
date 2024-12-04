@@ -89,6 +89,7 @@ struct TEvPQProxy {
         EvReadingStarted,
         EvReadingFinished,
         EvAlterTopicResponse,
+        EvParentCommitedToFinish,
         EvEnd
     };
 
@@ -418,6 +419,14 @@ struct TEvPQProxy {
         ui64 StartCookie;
         ui64 LastCookie;
         ui64 Offset;
+    };
+
+    struct TEvParentCommitedToFinish : public NActors::TEventLocal<TEvParentCommitedToFinish, EvParentCommitedToFinish> {
+        explicit TEvParentCommitedToFinish(ui64 parentPartitionId)
+            : ParentPartitionId(parentPartitionId)
+        { }
+
+        ui64 ParentPartitionId;
     };
 
     struct TEvReleasePartition : public NActors::TEventLocal<TEvReleasePartition, EvReleasePartition> {

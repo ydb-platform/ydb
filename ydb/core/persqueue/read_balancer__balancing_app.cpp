@@ -76,7 +76,7 @@ void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
                     for (auto& [partitionId, partition] : consumer->Partitions) {
                         const auto* family = consumer->FindFamily(partitionId);
                         const auto* node = consumer->GetPartitionGraph().GetPartition(partitionId);
-                        TString style = node && node->Children.empty() ? "text-success" : "text-muted";
+                        TString style = node && node->DirectChildren.empty() ? "text-success" : "text-muted";
                         auto* partitionInfo = GetPartitionInfo(partitionId);
 
                         TABLER() {
@@ -110,7 +110,7 @@ void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
                             }
                             TABLED() {
                                 if (node) {
-                                    for (auto* parent : node->Parents) {
+                                    for (auto* parent : node->DirectParents) {
                                         HREF("#" + partitionAnchor(parent->Id)) { __stream << parent->Id; }
                                         __stream << ", ";
                                     }

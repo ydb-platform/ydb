@@ -811,7 +811,7 @@ struct TEvPQ {
         {
         }
 
-        void AddOperation(TString consumer, ui64 begin, ui64 end, bool forceCommit = false, bool killReadSession = false, bool onlyCheckCommitedToFinish = false) {
+        void AddOperation(TString consumer, ui64 begin, ui64 end, bool forceCommit = false, bool killReadSession = false, bool onlyCheckCommitedToFinish = false, TString readSessionId = {}) {
             NKikimrPQ::TPartitionOperation operation;
             operation.SetCommitOffsetsBegin(begin);
             operation.SetCommitOffsetsEnd(end);
@@ -819,6 +819,7 @@ struct TEvPQ {
             operation.SetForceCommit(forceCommit);
             operation.SetKillReadSession(killReadSession);
             operation.SetOnlyCheckCommitedToFinish(onlyCheckCommitedToFinish);
+            operation.SetReadSessionId(readSessionId);
 
             Operations.push_back(std::move(operation));
         }

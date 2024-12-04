@@ -89,6 +89,7 @@ message TTopicOperationsRequest {
             optional bool force_commit = 3;
             optional bool kill_read_session = 4;
             optional bool only_check_commited_to_finish = 5;
+            optional string read_session_id = 6;
 
             message OffsetsRange {
                 optional int64 start = 1;

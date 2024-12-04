@@ -68,7 +68,7 @@ private:
     static constexpr ui32 MAX_PIPE_RESTARTS = 100; //after 100 restarts without progress kill session
     static constexpr ui32 RESTART_PIPE_DELAY_MS = 100;
 
-    static constexpr ui32 MAX_COMMITS_INFLY = 3;
+    static constexpr ui32 MAX_COMMITS_INFLY = 1;
 
 
 public:
@@ -76,7 +76,8 @@ public:
                      const TString& session, const TPartitionId& partition, ui32 generation, ui32 step,
                      const ui64 tabletID, const TTopicCounters& counters, const bool commitsDisabled,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, bool directRead,
-                     bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, std::set<NPQ::TPartitionGraph::Node*> parents);
+                     bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, std::set<NPQ::TPartitionGraph::Node*> parents,
+                     std::unordered_set<ui64> notCommitedToFinishParents);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -106,6 +107,9 @@ private:
 
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+
+            HFunc(TEvPQProxy::TEvParentCommitedToFinish, Handle);
+
         default:
             break;
         };
@@ -131,6 +135,8 @@ private:
 
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, const TActorContext& ctx);
 
     void HandlePoison(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleWakeup(const NActors::TActorContext& ctx);
@@ -256,6 +262,8 @@ private:
 
     bool FirstRead;
     bool ReadingFinishedSent;
+
+    std::unordered_set<ui64> NotCommitedToFinishParents;
 };
 
 

@@ -960,6 +960,7 @@ message TPartitionOperation {
     optional bool ForceCommit = 7;
     optional bool KillReadSession = 8;
     optional bool OnlyCheckCommitedToFinish = 9;
+    optional string ReadSessionId = 10;
 };
 
 message TWriteId {

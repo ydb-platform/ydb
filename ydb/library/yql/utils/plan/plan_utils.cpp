@@ -56,7 +56,8 @@ TString ToStr(const TCoAsStruct& asStruct) {
         auto value = PrettyExprStr(TExprBase(kv->Child(1)));
 
         if (!key.empty() && !value.empty()) {
-            args.push_back(TStringBuilder() << key << ": " << value);
+            if (key.StartsWith("_yql_agg_")) args.push_back(value);
+            else args.push_back(TStringBuilder() << key << ": " << value);
         }
     }
 
@@ -250,8 +251,14 @@ TString PrettyExprStr(const TExprBase& expr) {
     } else if (expr.Maybe<TCoMin>() || expr.Maybe<TCoMax>() || expr.Maybe<TCoInc>()) {
         return AggrOpToStr(expr);
     } else if (aggregations.contains(expr.Ref().Content())) {
-        return TStringBuilder() << aggregations.at(expr.Ref().Content()) << "("
-            << PrettyExprStr(TExprBase(expr.Ref().Child(0))) << ',' << PrettyExprStr(TExprBase(expr.Ref().Child(1))) << ")";
+        TVector<TString> children;
+        for (auto i = 0; i <= 1; i++) {
+            auto str = PrettyExprStr(TExprBase(expr.Ref().Child(i)));
+            if (str && !str.StartsWith("state._yql_agg_")) {
+                children.push_back(std::move(str));
+            }
+        }
+        return TStringBuilder() << aggregations.at(expr.Ref().Content()) << "(" << JoinStrings(std::move(children), ",") << ")";
     } else if (expr.Maybe<TCoBinaryArithmetic>() || expr.Maybe<TCoCompare>()) {
         return BinaryOpToStr(expr);
     } else if (expr.Maybe<TCoAnd>() || expr.Maybe<TCoOr>() || expr.Maybe<TCoXor>()) {
@@ -262,21 +269,25 @@ TString PrettyExprStr(const TExprBase& expr) {
             || expr.Maybe<TCoCoalesce>() || expr.Maybe<TCoConvert>()) {
         return PrettyExprStr(TExprBase(expr.Ref().Child(0)));
     } else if (auto nth = expr.Maybe<TCoNth>()) {
-        return ToStr(nth.Cast());
+        // return ToStr(nth.Cast());
+        return "";
     // } else if (auto arg = expr.Maybe<TCoArgument>()) {
     //     return ""; // not argument deduction yet, so just skip them
     } else if (expr.Raw()->IsList()) {
         TVector<TString> items;
         for (const auto& item : expr.Raw()->ChildrenList()) {
             if (auto str = PrettyExprStr(TExprBase(item))) {
-                items.push_back(std::move(str));
+                if (!str.StartsWith("_yql_agg_")) {
+                    items.push_back(std::move(str));
+                }
             }
         }
 
         return TStringBuilder() << "[" << JoinStrings(std::move(items), ",") << "]";
     } else {
         auto raw = TString(expr.Ref().Content());
-        return raw.StartsWith("_yql_agg_") ? "" : raw;
+        // return raw.StartsWith("_yql_agg_") ? "" : raw;
+        return raw;
     }
 
     return {};

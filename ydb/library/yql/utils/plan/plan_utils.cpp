@@ -44,7 +44,7 @@ TString ToStr(const TCoLambda& lambda) {
             if (auto str = PrettyExprStr(TExprBase(lambda.Raw()->ChildPtr(i)))) {
                 bodies.push_back(std::move(str));
             }
-        } 
+        }
         return TStringBuilder() << "(" << JoinStrings(std::move(bodies), ",") << ")";
     }
 }
@@ -275,7 +275,8 @@ TString PrettyExprStr(const TExprBase& expr) {
 
         return TStringBuilder() << "[" << JoinStrings(std::move(items), ",") << "]";
     } else {
-        return TString(expr.Ref().Content());
+        auto raw = TString(expr.Ref().Content());
+        return raw.StartsWith("_yql_agg_") ? "" : raw;
     }
 
     return {};

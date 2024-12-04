@@ -149,8 +149,8 @@ private:
         TQueue<std::pair<ui64, TString>> Buffer;
         ui64 UnreadBytes = 0;
         bool DataArrivedSent = false;
-        TMaybe<ui64> NextMessageOffset;
-        ui64 LastSendedNextMessageOffset = 0;
+        TMaybe<ui64> NextMessageOffset;                 // offset to restart topic session
+        TMaybe<ui64> ProcessedNextMessageOffset;        // offset of fully processed data (to save to checkpoint)
         TVector<ui64> FieldsIds;
         TDuration ReconnectPeriod;
         TStats Stat;        // Send (filtered) to read_actor
@@ -507,16 +507,15 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatisticToReadActor::TPtr&) 
     
     auto readBytes = ClientsStats.Bytes;
     for (auto& [actorId, info] : Clients) {
-        if (!info.NextMessageOffset) {
+        if (!info.ProcessedNextMessageOffset) {
             continue;
         }
         auto event = std::make_unique<TEvRowDispatcher::TEvStatistics>();
         event->Record.SetPartitionId(PartitionId);
-        event->Record.SetNextMessageOffset(*info.NextMessageOffset);
+        event->Record.SetNextMessageOffset(*info.ProcessedNextMessageOffset);
         event->Record.SetReadBytes(readBytes);
-        info.LastSendedNextMessageOffset = *info.NextMessageOffset;
         event->ReadActorId = info.ReadActorId;
-        LOG_ROW_DISPATCHER_TRACE("Send statistics to " << info.ReadActorId << ", offset " << *info.NextMessageOffset);
+        LOG_ROW_DISPATCHER_TRACE("Send statistics to " << info.ReadActorId << ", offset " << *info.ProcessedNextMessageOffset);
         Send(RowDispatcherActorId, event.release());
     }
     ClientsStats.Clear();
@@ -538,6 +537,11 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr& ev) {
     for (auto& [actorId, info] : Clients) {
         if (!info.NextMessageOffset || *info.NextMessageOffset < ev->Get()->Offset + 1) {
             info.NextMessageOffset = ev->Get()->Offset + 1;
+        }
+        if (info.Buffer.empty()) {
+            if (!info.ProcessedNextMessageOffset || *info.ProcessedNextMessageOffset < ev->Get()->Offset + 1) {
+                info.ProcessedNextMessageOffset = ev->Get()->Offset + 1;
+            }
         }
     }
 }
@@ -774,7 +778,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
     } while(!info.Buffer.empty());
     info.Stat.Add(dataSize, eventsSize);
     info.FilteredDataRate->Add(dataSize);
-    info.LastSendedNextMessageOffset = *info.NextMessageOffset;
+    info.ProcessedNextMessageOffset = *info.NextMessageOffset;
 }
 
 void TTopicSession::UpdateFieldsIds(TClientsInfo& info) {

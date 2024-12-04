@@ -170,10 +170,10 @@ std::set<ui32> TPartitionGraph::GetActiveChildren(ui32 id) const {
         const auto* n = queue.front();
         queue.pop_front();
 
-        if (n->Children.empty()) {
+        if (n->DirectChildren.empty()) {
             result.emplace(n->Id);
         } else {
-            queue.insert(queue.end(), n->Children.begin(), n->Children.end());
+            queue.insert(queue.end(), n->DirectChildren.begin(), n->DirectChildren.end());
         }
     }
 
@@ -186,7 +186,7 @@ void Travers0(std::deque<const TPartitionGraph::Node*>& queue, const std::functi
         queue.pop_front();
 
         if (func(node->Id)) {
-            queue.insert(queue.end(), node->Children.begin(), node->Children.end());
+            queue.insert(queue.end(), node->DirectChildren.begin(), node->DirectChildren.end());
         }
     }
 }
@@ -203,7 +203,7 @@ void TPartitionGraph::Travers(const std::function<bool (ui32 id)>& func) const {
             continue;
         }
 
-        queue.insert(queue.end(), n.Children.begin(), n.Children.end());
+        queue.insert(queue.end(), n.DirectChildren.begin(), n.DirectChildren.end());
     }
 
     Travers0(queue, func);
@@ -220,7 +220,7 @@ void TPartitionGraph::Travers(ui32 id, const std::function<bool (ui32 id)>& func
     }
 
     std::deque<const Node*> queue;
-    queue.insert(queue.end(), n->Children.begin(), n->Children.end());
+    queue.insert(queue.end(), n->DirectChildren.begin(), n->DirectChildren.end());
 
     Travers0(queue, func);
 }
@@ -270,14 +270,14 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
     for (const auto& p : partitions) {
         auto& node = result[GetPartitionId(p)];
 
-        node.Children.reserve(p.ChildPartitionIdsSize());
+        node.DirectChildren.reserve(p.ChildPartitionIdsSize());
         for (auto id : p.GetChildPartitionIds()) {
-            node.Children.push_back(&result[id]);
+            node.DirectChildren.push_back(&result[id]);
         }
 
-        node.Parents.reserve(p.ParentPartitionIdsSize());
+        node.DirectParents.reserve(p.ParentPartitionIdsSize());
         for (auto id : p.GetParentPartitionIds()) {
-            node.Parents.push_back(&result[id]);
+            node.DirectParents.push_back(&result[id]);
         }
 
         if (p.GetParentPartitionIds().empty()) {
@@ -290,19 +290,19 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
         queue.pop_front();
 
         bool allCompleted = true;
-        for (auto* c : n->Parents) {
-            if (c->HierarhicalParents.empty() && !c->Parents.empty()) {
+        for (auto* c : n->DirectParents) {
+            if (c->AllParents.empty() && !c->DirectParents.empty()) {
                 allCompleted = false;
                 break;
             }
         }
 
         if (allCompleted) {
-            for (auto* c : n->Parents) {
-                n->HierarhicalParents.insert(c->HierarhicalParents.begin(), c->HierarhicalParents.end());
-                n->HierarhicalParents.insert(c);
+            for (auto* c : n->DirectParents) {
+                n->AllParents.insert(c->AllParents.begin(), c->AllParents.end());
+                n->AllParents.insert(c);
             }
-            queue.insert(queue.end(), n->Children.begin(), n->Children.end());
+            queue.insert(queue.end(), n->DirectChildren.begin(), n->DirectChildren.end());
         }
     }
 
@@ -313,8 +313,8 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
             auto* current = queue.front();
             queue.pop_front();
 
-            for (auto* child : current->Children) {
-                if (node.HierarhicalChildren.insert(child).second) {
+            for (auto* child : current->DirectChildren) {
+                if (node.AllChildren.insert(child).second) {
                     queue.push_back(child);
                 }
             }
@@ -332,11 +332,11 @@ TPartitionGraph::Node::Node(ui32 id, ui64 tabletId, const TString& from, const T
 }
 
 bool TPartitionGraph::Node::IsRoot() const {
-    return Parents.empty();
+    return DirectParents.empty();
 }
 
 bool TPartitionGraph::Node::IsParent(ui32 partitionId) const {
-    return AnyOf(Parents, [=](const auto& p) {
+    return AnyOf(DirectParents, [=](const auto& p) {
         return p->Id == partitionId;
     });
 }

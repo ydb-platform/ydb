@@ -23,6 +23,7 @@ public:
         i64 Offset;
         bool KillReadSession;
         bool OnlyCheckCommitedToFinish;
+        TString ReadSessionId;
     };
 
     TKqpHelper(TString database, TString consumer, TString path, std::vector<TCommitInfo> commits, ui64 cookie = 0);

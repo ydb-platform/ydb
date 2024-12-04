@@ -46,11 +46,14 @@ struct TPartitionActorInfo {
     TDisjointIntervalTree<ui64> NextRanges;
     ui64 Offset;
     bool ConsumerHasAnyCommits;
+    bool HasChildren;
+    bool CommitedToFinish;
 
     TInstant AssignTimestamp;
 
     ui64 Generation;
     ui64 NodeId;
+    ui64 EndOffset;
 
 
     struct TDirectReadInfo {

@@ -78,12 +78,11 @@ void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBacken
     }
 }
 
-TString GetJsonLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
-    const auto* msg = ev->Get();
+TString GetJsonLog(const TEvAuditLog::TEvWriteAuditLog* ev) {
     TStringStream ss;
-    ss << msg->Time << ": ";
+    ss << ev->Time << ": ";
     NJson::TJsonMap m;
-    for (auto& [k, v] : msg->Parts) {
+    for (auto& [k, v] : ev->Parts) {
         m[k] = v;
     }
     NJson::WriteJson(&ss, &m, false, false);
@@ -91,19 +90,18 @@ TString GetJsonLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
     return ss.Str();
 }
 
-TString GetJsonLogCompatibleLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
-    const auto* msg = ev->Get();
+TString GetJsonLogCompatibleLog(const TEvAuditLog::TEvWriteAuditLog* ev) {
     TStringStream ss;
     NJsonWriter::TBuf json(NJsonWriter::HEM_DONT_ESCAPE_HTML, &ss);
     {
         auto obj = json.BeginObject();
         obj
             .WriteKey("@timestamp")
-            .WriteString(msg->Time.ToString().data())
+            .WriteString(ev->Time.ToString().data())
             .WriteKey("@log_type")
             .WriteString("audit");
 
-        for (auto& [k, v] : msg->Parts) {
+        for (auto& [k, v] : ev->Parts) {
             obj.WriteKey(k).WriteString(v);
         }
         json.EndObject();
@@ -112,17 +110,34 @@ TString GetJsonLogCompatibleLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
     return ss.Str();
 }
 
-TString GetTxtLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
-    const auto* msg = ev->Get();
+TString GetTxtLog(const TEvAuditLog::TEvWriteAuditLog* ev) {
     TStringStream ss;
-    ss << msg->Time << ": ";
-    for (auto it = msg->Parts.begin(); it != msg->Parts.end(); it++) {
-        if (it != msg->Parts.begin())
+    ss << ev->Time << ": ";
+    for (auto it = ev->Parts.begin(); it != ev->Parts.end(); it++) {
+        if (it != ev->Parts.begin())
             ss << ", ";
         ss << it->first << "=" << it->second;
     }
     ss << Endl;
     return ss.Str();
+}
+
+
+using TAuditLogItemBuilder = TString(*)(const TEvAuditLog::TEvWriteAuditLog*);
+
+// Array of functions for converting TEvAuditLog::TEvWriteAuditLog events to a string.
+// Indexing in the array occurs by the value of the NKikimrConfig::TAuditConfig::EFormat enumeration.
+static std::vector<TAuditLogItemBuilder> AuditLogItemBuilders = { GetJsonLog, GetTxtLog, GetJsonLogCompatibleLog, nullptr };
+
+// numbering enumeration starts with one
+static constexpr size_t DefaultAuditLogItemBuilder = static_cast<size_t>(NKikimrConfig::TAuditConfig::JSON) - 1;
+
+template<>
+void RegisterAuditLogItemBuilder<TEvAuditLog::TEvWriteAuditLog>(NKikimrConfig::TAuditConfig::EFormat format, TAuditLogItemBuilder builder) {
+    size_t index = static_cast<size_t>(format);
+    if (index < AuditLogItemBuilders.size()) {
+        AuditLogItemBuilders[index] = builder;
+    }
 }
 
 class TAuditLogActor final : public TActor<TAuditLogActor> {
@@ -160,20 +175,11 @@ private:
         Y_UNUSED(ctx);
 
         for (auto& logBackends : LogBackends) {
-            switch (logBackends.first) {
-                case NKikimrConfig::TAuditConfig::JSON:
-                    WriteLog(GetJsonLog(ev), logBackends.second);
-                    break;
-                case NKikimrConfig::TAuditConfig::TXT:
-                    WriteLog(GetTxtLog(ev), logBackends.second);
-                    break;
-                case NKikimrConfig::TAuditConfig::JSON_LOG_COMPATIBLE:
-                    WriteLog(GetJsonLogCompatibleLog(ev), logBackends.second);
-                    break;
-                default:
-                    WriteLog(GetJsonLog(ev), logBackends.second);
-                    break;
-            }
+            const auto builderIndex = static_cast<size_t>(logBackends.first) - 1;
+            const auto builder = builderIndex < AuditLogItemBuilders.size()
+                ? AuditLogItemBuilders[builderIndex] : AuditLogItemBuilders[DefaultAuditLogItemBuilder];
+            const auto auditLogItem = builder(ev->Get());
+            WriteLog(auditLogItem, logBackends.second);
         }
     }
 

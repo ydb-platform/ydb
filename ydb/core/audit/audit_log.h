@@ -41,4 +41,8 @@ extern std::atomic<bool> AUDIT_LOG_ENABLED;
 
 void SendAuditLog(const NActors::TActorSystem* sys, TVector<std::pair<TString, TString>>&& parts);
 
+// Registration of a function for converting audit events to a string in a specified format
+template <typename T>
+void RegisterAuditLogItemBuilder(NKikimrConfig::TAuditConfig::EFormat format, TString(*)(const T*));
+
 }   // namespace NKikimr::NAudit

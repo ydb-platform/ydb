@@ -30,16 +30,8 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, EnableInsert);
 
     REGISTER_SETTING(*this, _LiteralTimeout);
-    REGISTER_SETTING(*this, _TableTimeout)
-        .ValueSetter([this](const TString&, ui64 value) {
-            _TableTimeout = value;
-            QueryTimeout = Min(QueryTimeout.Get().GetOrElse(TDefault::TableTimeout), value);
-        });
-
-    REGISTER_SETTING(*this, QueryTimeout)
-        .ValueSetter([this](const TString&, ui64 value) {
-            QueryTimeout = Min(value, _TableTimeout.Get().GetOrElse(TDefault::TableTimeout));
-        });
+    REGISTER_SETTING(*this, _TableTimeout);
+    REGISTER_SETTING(*this, QueryTimeout);
 
     REGISTER_SETTING(*this, _LongWorkersAllocationWarnTimeout);
     REGISTER_SETTING(*this, _LongWorkersAllocationFailTimeout);

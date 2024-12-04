@@ -226,7 +226,12 @@ public:
     }
 
     ui64 GetQueryTimeout() const {
-        return QueryTimeout.Get().GetOrElse(_TableTimeout.Get().GetOrElse(TDefault::TableTimeout));
+        auto upper = _TableTimeout.Get().GetOrElse(TDefault::TableTimeout);
+        if (QueryTimeout.Get().Defined()) {
+            return Min(*QueryTimeout.Get(), upper);
+        }
+
+        return upper;
     }
 
     bool IsSpillingEngineEnabled() const {

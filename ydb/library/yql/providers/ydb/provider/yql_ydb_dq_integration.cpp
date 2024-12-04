@@ -101,6 +101,7 @@ public:
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TYdbSourceSettings>()
+                    .World(ydbReadTable.World())
                     .Table(ydbReadTable.Table())
                     .Token<TCoSecureParam>()
                         .Name().Build(token)

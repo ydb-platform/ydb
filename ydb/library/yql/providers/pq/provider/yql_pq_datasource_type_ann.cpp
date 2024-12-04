@@ -137,6 +137,11 @@ public:
         }
 
         TDqPqTopicSource topicSource = input.Cast<TDqPqTopicSource>();
+
+        if (!EnsureWorldType(topicSource.World().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
         TPqTopic topic = topicSource.Topic();
 
         if (!EnsureCallable(topic.Ref(), ctx)) {
@@ -151,12 +156,6 @@ public:
             return TStatus::Error;
         }
 
-        auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-
-        const TStatus filterAnnotationStatus = NYql::NPushdown::AnnotateFilterPredicate(input.Ptr(), TDqPqTopicSource::idx_FilterPredicate, rowSchema, ctx);
-        if (filterAnnotationStatus != TStatus::Ok) {
-            return filterAnnotationStatus;
-        }
 
         if (topic.Metadata().Empty()) {
             input.Ptr()->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)));

@@ -30,6 +30,7 @@ message TLoadControlConfig {
 }
 
 message TComputeDatabaseConfig {
+    string Id = 7;
     TYdbStorageConfig ControlPlaneConnection = 1;
     TYdbStorageConfig SchemeConnection = 6;
     TYdbStorageConfig ExecutionConnection = 3;
@@ -44,6 +45,7 @@ message TDatabaseMapping {
 
 message TYdbComputeControlPlane {
     message TSingle {
+        string Id = 3;
         TYdbStorageConfig Connection = 1;
     }
 

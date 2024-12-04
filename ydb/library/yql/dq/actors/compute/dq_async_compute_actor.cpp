@@ -16,15 +16,6 @@ constexpr TDuration MIN_QUOTED_CPU_TIME = TDuration::MilliSeconds(10);
 
 using namespace NActors;
 
-namespace {
-
-bool IsDebugLogEnabled(const TActorSystem* actorSystem) {
-    auto* settings = actorSystem->LoggerSettings();
-    return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, NKikimrServices::KQP_COMPUTE);
-}
-
-} // anonymous namespace
-
 //Used in Async CA to interact with TaskRunnerActor
 struct TComputeActorAsyncInputHelperAsync : public TComputeActorAsyncInputHelper
 {
@@ -96,16 +87,6 @@ public:
     }
 
     void DoBootstrap() {
-        const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
-
-        TLogFunc logger;
-        if (IsDebugLogEnabled(actorSystem)) {
-            logger = [actorSystem, txId = GetTxId(), taskId = Task.GetId()] (const TString& message) {
-                LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << txId
-                    << ", task: " << taskId << ": " << message);
-            };
-        }
-
         NActors::IActor* actor;
         THashSet<ui32> inputWithDisabledCheckpointing;
         for (const auto&[idx, inputInfo]: InputChannelsMap) {
@@ -281,6 +262,38 @@ private:
             }
         }
 
+        html << "<h3>InputTransform</h3>";
+        for (const auto& [id, info]: InputTransformsMap) {
+            html << "<h4>Input Transform Id: " << id << "</h4>";
+            html << "LogPrefix: " << info.LogPrefix << "<br />";
+            html << "Type: " << info.Type << "<br />";
+            html << "PendingWatermark: " << !!info.PendingWatermark << " " << (!info.PendingWatermark ? TString{} : info.PendingWatermark->ToString()) << "<br />";
+            html << "WatermarksMode: " << NDqProto::EWatermarksMode_Name(info.WatermarksMode) << "<br />";
+            html << "FreeSpace: " << info.GetFreeSpace() << "<br />";
+            if (info.Buffer) {
+                html << "DqInputBuffer.InputIndex: " << info.Buffer->GetInputIndex() << "<br />";
+                html << "DqInputBuffer.FreeSpace: " << info.Buffer->GetFreeSpace() << "<br />";
+                html << "DqInputBuffer.StoredBytes: " << info.Buffer->GetStoredBytes() << "<br />";
+                html << "DqInputBuffer.Empty: " << info.Buffer->Empty() << "<br />";
+                html << "DqInputBuffer.InputType: " << (info.Buffer->GetInputType() ? info.Buffer->GetInputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
+                html << "DqInputBuffer.InputWidth: " << (info.Buffer->GetInputWidth() ? ToString(*info.Buffer->GetInputWidth()) : TString{"unknown"})  << "<br />";
+                html << "DqInputBuffer.IsFinished: " << info.Buffer->IsFinished() << "<br />";
+                html << "DqInputBuffer.IsPending: " << info.Buffer->IsPending() << "<br />";
+
+                const auto& popStats = info.Buffer->GetPopStats();
+                html << "DqInputBuffer.PopStats.Bytes: " << popStats.Bytes << "<br />";
+                html << "DqInputBuffer.PopStats.DecompressedBytes: " << popStats.DecompressedBytes << "<br />";
+                html << "DqInputBuffer.PopStats.Rows: " << popStats.Rows << "<br />";
+                html << "DqInputBuffer.PopStats.Chunks: " << popStats.Chunks << "<br />";
+                html << "DqInputBuffer.PopStats.Splits: " << popStats.Splits << "<br />";
+                html << "DqInputBuffer.PopStats.FirstMessageTs: " << popStats.FirstMessageTs.ToString() << "<br />";
+                html << "DqInputBuffer.PopStats.PauseMessageTs: " << popStats.PauseMessageTs.ToString() << "<br />";
+                html << "DqInputBuffer.PopStats.ResumeMessageTs: " << popStats.ResumeMessageTs.ToString() << "<br />";
+                html << "DqInputBuffer.PopStats.LastMessageTs: " << popStats.LastMessageTs.ToString() << "<br />";
+                html << "DqInputChannel.PopStats.WaitTime: " << popStats.WaitTime.ToString() << "<br />";
+            }
+        }
+
         html << "<h3>OutputChannels</h3>";
         for (const auto& [id, info]: OutputChannelsMap) {
             html << "<h4>Input Channel Id: " << id << "</h4>";
@@ -440,7 +453,7 @@ private:
         if (!shouldSkipData && !outputChannel.EarlyFinish && !hasFreeMemory) {
             CA_LOG_T("DrainOutputChannel return because No free memory in channel, channel: " << outputChannel.ChannelId);
             ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
-            ProcessOutputsState.AllOutputsFinished = !outputChannel.Finished;
+            ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
             return;
         }
 

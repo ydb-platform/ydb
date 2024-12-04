@@ -188,7 +188,7 @@
             {"Index": 6, "Name": "LeftJoinKeyNames", "Type": "TCoAtomList"},
             {"Index": 7, "Name": "RightJoinKeyNames", "Type": "TCoAtomList"},
             {"Index": 8, "Name": "TTL", "Type": "TCoAtom"},
-            {"Index": 9, "Name": "MaxDelay", "Type": "TCoAtom"},
+            {"Index": 9, "Name": "MaxDelayedRows", "Type": "TCoAtom"},
             {"Index": 10, "Name": "MaxCachedRows", "Type": "TCoAtom"}
         ]
     },

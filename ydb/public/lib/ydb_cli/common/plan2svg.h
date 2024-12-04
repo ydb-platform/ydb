@@ -90,6 +90,7 @@ public:
     std::shared_ptr<TSingleMetric> InputBytes;
     std::shared_ptr<TSingleMetric> InputRows;
     std::vector<std::string> KeyColumns;
+    std::vector<std::string> SortColumns;
     bool CteConnection = false;
     ui32 CteIndentX = 0;
     ui32 CteOffsetY = 0;

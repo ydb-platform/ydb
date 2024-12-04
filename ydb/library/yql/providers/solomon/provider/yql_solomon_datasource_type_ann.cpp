@@ -34,7 +34,11 @@ public:
     }
 
     TStatus HandleSoSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 12U, ctx)) {
+        if (!EnsureArgsCount(*input, 13, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureWorldType(*input->Child(TSoSourceSettings::idx_World), ctx)) {
             return TStatus::Error;
         }
 

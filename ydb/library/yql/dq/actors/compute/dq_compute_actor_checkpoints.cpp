@@ -407,7 +407,7 @@ void TDqComputeActorCheckpoints::Handle(NActors::TEvInterconnect::TEvNodeConnect
 
 void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     LOG_D("Handle undelivered");
-    if (!EventsQueue.HandleUndelivered(ev)) {
+    if (EventsQueue.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
         LOG_E("TEvUndelivered: " << ev->Get()->SourceType);
     }
 }

@@ -38,6 +38,7 @@
 #include <ydb/library/yql/providers/dq/local_gateway/yql_dq_gateway_local.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
@@ -234,7 +235,16 @@ bool FillUsedUrls(
 
 NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    RegisterDqPqReadActorFactory(*factory, driver, nullptr);
+    
+    TPqGatewayServices pqServices(
+        driver,
+        nullptr,
+        nullptr,
+        std::make_shared<TPqGatewayConfig>(),
+        nullptr
+    );
+    RegisterDqPqReadActorFactory(*factory, driver, nullptr, CreatePqNativeGateway(pqServices));
+    RegisterDqPqReadActorFactory(*factory, driver, nullptr, CreatePqNativeGateway(std::move(pqServices)));
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
     RegisterDqPqWriteActorFactory(*factory, driver, nullptr);

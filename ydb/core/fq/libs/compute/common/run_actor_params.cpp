@@ -49,6 +49,7 @@ TRunActorParams::TRunActorParams(
     const TString& tenantName,
     uint64_t resultBytesLimit,
     TDuration executionTtl,
+    TInstant requestSubmittedAt,
     TInstant requestStartedAt,
     ui32 restartCount,
     const TString& jobId,
@@ -103,6 +104,7 @@ TRunActorParams::TRunActorParams(
     , TenantName(tenantName)
     , ResultBytesLimit(resultBytesLimit)
     , ExecutionTtl(executionTtl)
+    , RequestSubmittedAt(requestSubmittedAt)
     , RequestStartedAt(requestStartedAt)
     , RestartCount(restartCount)
     , JobId(jobId)

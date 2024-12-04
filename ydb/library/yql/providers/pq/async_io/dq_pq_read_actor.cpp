@@ -74,6 +74,7 @@ struct TEvPrivate {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
 
         EvSourceDataReady = EvBegin,
+        EvReconnectSession,
 
         EvEnd
     };
@@ -83,6 +84,7 @@ struct TEvPrivate {
     // Events
 
     struct TEvSourceDataReady : public TEventLocal<TEvSourceDataReady, EvSourceDataReady> {};
+    struct TEvReconnectSession : public TEventLocal<TEvReconnectSession, EvReconnectSession> {};
 };
 
 } // namespace
@@ -98,6 +100,9 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
             InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
             InFlySubscribe = task->GetCounter("InFlySubscribe");
             AsyncInputDataRate = task->GetCounter("AsyncInputDataRate", true);
+            ReconnectRate = task->GetCounter("ReconnectRate", true);
+            DataRate = task->GetCounter("DataRate", true);
+            WaitEventTimeMs = sink->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(13, 2, 1)); // ~ 1ms -> ~ 8s
         }
 
         ~TMetrics() {
@@ -110,6 +115,9 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
         ::NMonitoring::TDynamicCounters::TCounterPtr AsyncInputDataRate;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
+        ::NMonitoring::TDynamicCounters::TCounterPtr DataRate;
+        NMonitoring::THistogramPtr WaitEventTimeMs;
     };
 
 public:
@@ -128,7 +136,8 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        i64 bufferSize)
+        i64 bufferSize,
+        const IPqGateway::TPtr& pqGateway)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
         , Metrics(txId, taskId, counters)
@@ -136,7 +145,9 @@ public:
         , HolderFactory(holderFactory)
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
+        , PqGateway(pqGateway)
     {
+        Y_UNUSED(TDuration::TryParse(SourceParams.GetReconnectPeriod(), ReconnectPeriod));
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
         TPqMetaExtractor fieldsExtractor;
         for (const auto& fieldName : SourceParams.GetMetadataFields()) {
@@ -185,9 +196,9 @@ public:
         }
     }
 
-    NYdb::NTopic::TTopicClient& GetTopicClient() {
+    ITopicClient& GetTopicClient() {
         if (!TopicClient) {
-            TopicClient = std::make_unique<NYdb::NTopic::TTopicClient>(Driver, GetTopicClientSettings());
+            TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings());
         }
         return *TopicClient;
     }
@@ -207,6 +218,7 @@ public:
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvSourceDataReady, Handle);
+        hFunc(TEvPrivate::TEvReconnectSession, Handle);
     )
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
@@ -215,9 +227,26 @@ private:
         if (ev.Get()->Cookie) {
             Metrics.InFlySubscribe->Dec();
         }
+        if (WaitEventStartedAt) {
+            auto waitEventDurationMs = (TInstant::Now() - *WaitEventStartedAt).MilliSeconds();
+            Metrics.WaitEventTimeMs->Collect(waitEventDurationMs);
+            WaitEventStartedAt.Clear();
+        }
         Metrics.InFlyAsyncInputData->Set(1);
         Metrics.AsyncInputDataRate->Inc();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+    }
+
+    void Handle(TEvPrivate::TEvReconnectSession::TPtr&) {
+        SRC_LOG_D("SessionId: " << GetSessionId() << ", Reconnect epoch: " << Metrics.ReconnectRate->Val());
+        Metrics.ReconnectRate->Inc();
+        if (ReadSession) {
+            ReadSession->Close(TDuration::Zero());
+            ReadSession.reset();
+            ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
+        }
+
+        Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
     }
 
     // IActor & IDqComputeActorAsyncInput
@@ -229,7 +258,7 @@ private:
             ReadSession->Close(TDuration::Zero());
             ReadSession.reset();
         }
-        TopicClient.reset();
+        TopicClient.Reset();
         TActor<TDqPqReadActor>::PassAway();
     }
 
@@ -256,6 +285,12 @@ private:
 
         const auto now = TInstant::Now();
         MaybeScheduleNextIdleCheck(now);
+
+        if (!InflightReconnect && ReconnectPeriod != TDuration::Zero()) {
+            Metrics.ReconnectRate->Inc();
+            Schedule(ReconnectPeriod, new TEvPrivate::TEvSourceDataReady());
+            InflightReconnect = true;
+        }
 
         i64 usedSpace = 0;
         if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
@@ -359,6 +394,7 @@ private:
             SubscribedOnEvent = true;
             Metrics.InFlySubscribe->Inc();
             NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
+            WaitEventStartedAt = TInstant::Now();
             EventFuture = GetReadSession().WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
                 actorSystem->Send(selfId, new TEvPrivate::TEvSourceDataReady(), 0, 1);
             });
@@ -390,6 +426,7 @@ private:
         std::move(readyBatch.Data.begin(), readyBatch.Data.end(), std::back_inserter(buffer));
         watermark = readyBatch.Watermark;
         usedSpace = readyBatch.UsedSpace;
+        Metrics.DataRate->Add(readyBatch.UsedSpace);
 
         for (const auto& [PartitionSession, ranges] : readyBatch.OffsetRanges) {
             for (const auto& [start, end] : ranges) {
@@ -563,12 +600,14 @@ private:
     };
 
 private:
+    bool InflightReconnect = false;
+    TDuration ReconnectPeriod;
     TMetrics Metrics;
     const i64 BufferSize;
     const THolderFactory& HolderFactory;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    std::unique_ptr<NYdb::NTopic::TTopicClient> TopicClient;
+    ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     NThreading::TFuture<void> EventFuture;
     std::queue<std::pair<ui64, NYdb::NTopic::TDeferredCommit>> DeferredCommits;
@@ -578,6 +617,8 @@ private:
     std::queue<TReadyBatch> ReadyBuffer;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
+    IPqGateway::TPtr PqGateway;
+    TMaybe<TInstant> WaitEventStartedAt;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
@@ -593,6 +634,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
+    IPqGateway::TPtr pqGateway,
     i64 bufferSize
     )
 {
@@ -618,19 +660,24 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         counters,
-        bufferSize
+        bufferSize,
+        pqGateway
     );
 
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
+
+        if (reconnectPeriod) {
+            settings.SetReconnectPeriod(reconnectPeriod);
+        }
 
         if (!settings.GetSharedReading()) {
             return CreateDqPqReadActor(
@@ -646,6 +693,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 args.ComputeActorId,
                 args.HolderFactory,
                 counters,
+                pqGateway,
                 PQReadDefaultFreeSpace);
         }
 

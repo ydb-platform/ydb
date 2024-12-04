@@ -18,7 +18,7 @@ private:
     TNamedFunction ParseOneMeasure(const TRule_row_pattern_measure_definition& node);
     TVector<TNamedFunction> ParseMeasures(const TRule_row_pattern_measure_list& node);
     std::pair<TPosition, ERowsPerMatch> ParseRowsPerMatch(const TRule_row_pattern_rows_per_match& rowsPerMatchClause);
-    std::pair<TPosition, TAfterMatchSkipTo> ParseAfterMatchSkipTo(const TRule_row_pattern_skip_to& skipToClause);
+    std::pair<TPosition, NYql::NMatchRecognize::TAfterMatchSkipTo> ParseAfterMatchSkipTo(const TRule_row_pattern_skip_to& skipToClause);
     NYql::NMatchRecognize::TRowPatternTerm ParsePatternTerm(const TRule_row_pattern_term& node);
     NYql::NMatchRecognize::TRowPattern ParsePattern(const TRule_row_pattern& node);
     TNamedFunction ParseOneDefinition(const TRule_row_pattern_definition& node);

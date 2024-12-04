@@ -211,6 +211,7 @@ public:
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TSoSourceSettings>()
+                    .World(soReadObject.World())
                     .Project(soReadObject.Object().Project())
                     .Token<TCoSecureParam>()
                         .Name().Build(token)

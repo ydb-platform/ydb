@@ -68,6 +68,7 @@ struct TRunActorParams { // TODO2 : Change name
         const TString& tenantName,
         uint64_t resultBytesLimit,
         TDuration executionTtl,
+        TInstant requestSubmittedAt,
         TInstant requestStartedAt,
         ui32 restartCount,
         const TString& jobId,
@@ -131,6 +132,7 @@ struct TRunActorParams { // TODO2 : Change name
     const TString TenantName;
     const uint64_t ResultBytesLimit;
     const TDuration ExecutionTtl;
+    TInstant RequestSubmittedAt;
     TInstant RequestStartedAt;
     const ui32 RestartCount;
     const TString JobId;

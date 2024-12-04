@@ -198,11 +198,34 @@ protected:
         }
     }
 
+    ~TDqComputeActorBase() override {
+        if (Terminated) {
+            return;
+        }
+        Free();
+    }
+
+    void Free() {
+        auto guard = BindAllocator();
+        if (!guard) {
+            return;
+        }
+#define CLEANUP(what) decltype(what) what##_; what.swap(what##_);
+        CLEANUP(InputChannelsMap);
+        CLEANUP(SourcesMap);
+        CLEANUP(InputTransformsMap);
+        CLEANUP(OutputChannelsMap);
+        CLEANUP(SinksMap);
+        CLEANUP(OutputTransformsMap);
+#undef CLEANUP
+    }
+
     void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
         if (taskCounters) {
             MkqlMemoryQuota = taskCounters->GetCounter("MkqlMemoryQuota");
             OutputChannelSize = taskCounters->GetCounter("OutputChannelSize");
             SourceCpuTimeMs = taskCounters->GetCounter("SourceCpuTimeMs", true);
+            InputTransformCpuTimeMs = taskCounters->GetCounter("InputTransformCpuTimeMs", true);
         }
     }
 
@@ -488,19 +511,8 @@ protected:
                 }
             }
 
-            {
-                if (guard) {
-                    // free MKQL memory then destroy TaskRunner and Allocator
-#define CLEANUP(what) decltype(what) what##_; what.swap(what##_);
-                    CLEANUP(InputChannelsMap);
-                    CLEANUP(SourcesMap);
-                    CLEANUP(InputTransformsMap);
-                    CLEANUP(OutputChannelsMap);
-                    CLEANUP(SinksMap);
-                    CLEANUP(OutputTransformsMap);
-#undef CLEANUP
-                }
-            }
+            // free MKQL memory then destroy TaskRunner and Allocator
+            Free();
         }
 
         if (RuntimeSettings.TerminateHandler) {
@@ -1308,6 +1320,7 @@ protected:
                         .SecureParams = secureParams,
                         .TaskParams = taskParams,
                         .ComputeActorId = this->SelfId(),
+                        .TaskCounters = TaskCounters,
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
                         .Alloc = Alloc,
@@ -1397,11 +1410,20 @@ protected:
 
     void OnNewAsyncInputDataArrived(const IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::TPtr& ev) {
         Y_ABORT_UNLESS(SourcesMap.FindPtr(ev->Get()->InputIndex) || InputTransformsMap.FindPtr(ev->Get()->InputIndex));
-        auto cpuTimeDelta = TakeSourceCpuTimeDelta();
-        if (SourceCpuTimeMs) {
-            SourceCpuTimeMs->Add(cpuTimeDelta.MilliSeconds());
+        {
+            auto cpuTimeDelta = TakeSourceCpuTimeDelta();
+            if (SourceCpuTimeMs) {
+                SourceCpuTimeMs->Add(cpuTimeDelta.MilliSeconds());
+            }
+            CpuTimeSpent += cpuTimeDelta;
         }
-        CpuTimeSpent += cpuTimeDelta;
+        {
+            auto cpuTimeDelta = TakeInputTransformCpuTimeDelta();
+            if (InputTransformCpuTimeMs) {
+                InputTransformCpuTimeMs->Add(cpuTimeDelta.MilliSeconds());
+            }
+            CpuTimeSpent += cpuTimeDelta;
+        }
         ContinueExecute(EResumeSource::CANewAsyncInput);
     }
 
@@ -1596,6 +1618,21 @@ public:
         return result;
     }
 
+    TDuration GetInputTransformCpuTime() const {
+        auto result = TDuration::Zero();
+        for (auto& [inputIndex, sourceInfo] : InputTransformsMap) {
+            result += sourceInfo.AsyncInput->GetCpuTime();
+        }
+        return result;
+    }
+
+    TDuration TakeInputTransformCpuTimeDelta() {
+        auto newInputTransformCpuTime = GetInputTransformCpuTime();
+        auto result = newInputTransformCpuTime - InputTransformCpuTime;
+        InputTransformCpuTime = newInputTransformCpuTime;
+        return result;
+    }
+
     void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) {
         if (RuntimeSettings.CollectNone()) {
             return;
@@ -1605,7 +1642,7 @@ public:
             ReportEventElapsedTime();
         }
 
-        dst->SetCpuTimeUs(CpuTime.MicroSeconds());
+        dst->SetCpuTimeUs(CpuTime.MicroSeconds() + SourceCpuTime.MicroSeconds() + InputTransformCpuTime.MicroSeconds());
         dst->SetMaxMemoryUsage(MemoryLimits.MemoryQuotaManager->GetMaxMemorySize());
 
         if (auto memProfileStats = GetMemoryProfileStats(); memProfileStats) {
@@ -1638,10 +1675,13 @@ public:
             }
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, RuntimeSettings.GetCollectStatsLevel());
 
-            // More accurate cpu time counter:
+            auto cpuTimeUs = taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds();
             if (TDerived::HasAsyncTaskRunner) {
-                protoTask->SetCpuTimeUs(CpuTime.MicroSeconds() + taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds());
+                // Async TR is another actor, summarize CPU usage
+                cpuTimeUs += CpuTime.MicroSeconds();
             }
+            // CpuTimeUs does include SourceCpuTime
+            protoTask->SetCpuTimeUs(cpuTimeUs + SourceCpuTime.MicroSeconds() + InputTransformCpuTime.MicroSeconds());
             protoTask->SetSourceCpuTimeUs(SourceCpuTime.MicroSeconds());
 
             ui64 ingressBytes = 0;
@@ -1901,6 +1941,7 @@ protected:
     TDqComputeActorMetrics MetricsReporter;
     NWilson::TSpan ComputeActorSpan;
     TDuration SourceCpuTime;
+    TDuration InputTransformCpuTime;
 private:
     bool Running = true;
     TInstant LastSendStatsTime;
@@ -1910,6 +1951,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryQuota;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputChannelSize;
     ::NMonitoring::TDynamicCounters::TCounterPtr SourceCpuTimeMs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputTransformCpuTimeMs;
     THolder<NYql::TCounters> Stat;
     TDuration CpuTimeSpent;
 };

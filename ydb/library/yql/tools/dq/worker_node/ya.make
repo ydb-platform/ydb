@@ -19,6 +19,7 @@ IF (NOT OS_WINDOWS)
         ydb/library/yql/providers/dq/stats_collector
         ydb/library/yql/providers/dq/task_runner
         ydb/library/yql/providers/pq/async_io
+        ydb/library/yql/providers/pq/gateway/native
         ydb/library/yql/providers/pq/proto
         ydb/library/yql/providers/s3/actors
         ydb/library/yql/providers/ydb/actors

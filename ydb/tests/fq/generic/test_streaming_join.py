@@ -130,6 +130,7 @@ TESTCASES = [
                 ('{"id":9,"user":3}', '{"id":9,"user_id":3,"lookup":"ydb30"}'),
                 ('{"id":2,"user":2}', '{"id":2,"user_id":2,"lookup":"ydb20"}'),
                 ('{"id":1,"user":1}', '{"id":1,"user_id":1,"lookup":"ydb10"}'),
+                ('{"id":10,"user":null}', '{"id":10,"user_id":null,"lookup":null}'),
                 ('{"id":4,"user":3}', '{"id":4,"user_id":3,"lookup":"ydb30"}'),
                 ('{"id":5,"user":3}', '{"id":5,"user_id":3,"lookup":"ydb30"}'),
                 ('{"id":6,"user":1}', '{"id":6,"user_id":1,"lookup":"ydb10"}'),
@@ -349,6 +350,10 @@ TESTCASES = [
                     '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
                     '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115}',
                 ),
+                (
+                    '{"id":3,"za":2,"yb":null,"yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":null,"yc":114,"zd":115}',
+                ),
             ]
         ),
     ),
@@ -389,6 +394,10 @@ TESTCASES = [
                 (
                     '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
                     '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115}',
+                ),
+                (
+                    '{"id":3,"za":null,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":null,"yb":"1","yc":114,"zd":115}',
                 ),
             ]
         ),
@@ -505,6 +514,19 @@ class TestStreamingJoin(TestYdsBase):
         read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))
         messages_ctr = Counter(map(freeze, map(json.loads, map(itemgetter(1), messages))))
         assert read_data_ctr == messages_ctr
+
+        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+            sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks")
+            for component in ["Lookup", "LookupSrc"]:
+                componentSensors = sensors.find_sensors(
+                    labels={"operation": query_id, "component": component},
+                    key_label="sensor",
+                )
+                for k in componentSensors:
+                    print(
+                        f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
+                        file=sys.stderr,
+                    )
 
         fq_client.abort_query(query_id)
         fq_client.wait_query(query_id)

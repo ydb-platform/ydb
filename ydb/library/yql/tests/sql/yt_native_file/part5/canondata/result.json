@@ -2052,6 +2052,27 @@
             "uri": "https://{canondata_backend}/1871182/1ba48914c21beb3df20272c8218b20981a428432/resource.tar.gz#test.test_lineage-window_tablerow-default.txt-Results_/Output.yqlrun.txt.attr"
         }
     ],
+    "test.test[match_recognize-after_match_skip_past_last_row-default.txt-Debug]": [
+        {
+            "checksum": "53f5efe11cf530787e416b733c2b7f53",
+            "size": 1254,
+            "uri": "https://{canondata_backend}/1917492/b6d69ba0bdf3cfac8aa79db6bee1738a75d1edc4/resource.tar.gz#test.test_match_recognize-after_match_skip_past_last_row-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[match_recognize-after_match_skip_past_last_row-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1917492/b6d69ba0bdf3cfac8aa79db6bee1738a75d1edc4/resource.tar.gz#test.test_match_recognize-after_match_skip_past_last_row-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[match_recognize-after_match_skip_past_last_row-default.txt-Results]": [
+        {
+            "checksum": "6583532367519fd2d47e3f77357d5627",
+            "size": 1591,
+            "uri": "https://{canondata_backend}/1917492/b6d69ba0bdf3cfac8aa79db6bee1738a75d1edc4/resource.tar.gz#test.test_match_recognize-after_match_skip_past_last_row-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[optimizers-test_lmap_opts--Debug]": [
         {
             "checksum": "e0c91cd592cbfa870bdc55a48f225229",

@@ -15,5 +15,6 @@ constexpr TStringBuf WatermarksEnableSetting = "WatermarksEnable";
 constexpr TStringBuf WatermarksGranularityUsSetting = "WatermarksGranularityUs";
 constexpr TStringBuf WatermarksLateArrivalDelayUsSetting = "WatermarksLateArrivalDelayUs";
 constexpr TStringBuf WatermarksIdlePartitionsSetting = "WatermarksIdlePartitions";
+constexpr TStringBuf ReconnectPeriod = "ReconnectPeriod";
 
 } // namespace NYql

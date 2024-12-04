@@ -241,6 +241,9 @@ public:
         Functions["ReplicateScalars"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["BlockMergeFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
         Functions["BlockMergeManyFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
+        Functions["MultiHoppingCore"] = &TCallableConstraintTransformer::MultiHoppingCoreWrap;
+        Functions["StablePickle"] = &TCallableConstraintTransformer::FromFirst<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode>;
+        Functions["Unpickle"] = &TCallableConstraintTransformer::FromSecond<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode>;
     }
 
     std::optional<IGraphTransformer::TStatus> ProcessCore(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -2892,6 +2895,26 @@ private:
 
         return TStatus::Ok;
     }
+
+    TStatus MultiHoppingCoreWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const {
+        if (const auto status = UpdateAllChildLambdasConstraints(*input); status != TStatus::Ok) {
+            return status;
+        }
+
+        TExprNode::TPtr keySelectorLambda = input->Child(TCoMultiHoppingCore::idx_KeyExtractor);
+        const auto keys = GetPathsToKeys(keySelectorLambda->Tail(), keySelectorLambda->Head().Head());
+        std::vector<std::string_view> columns(keys.size());
+        std::transform(keys.begin(), keys.end(), columns.begin(), [](const TPartOfConstraintBase::TPathType& path) -> std::string_view {
+            return path.front();
+        });
+        if (!columns.empty()) {
+            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
+            input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
+        }
+        
+        return TStatus::Ok;
+    }
+
 private:
     template <class TConstraintContainer>
     static void CopyExcept(TConstraintContainer& dst, const TConstraintContainer& from, const TSet<TStringBuf>& except) {

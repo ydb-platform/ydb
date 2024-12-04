@@ -71,11 +71,11 @@ struct TEvYdbCompute {
 
     // Events
     struct TEvExecuteScriptRequest : public NActors::TEventLocal<TEvExecuteScriptRequest, EvExecuteScriptRequest> {
-        TEvExecuteScriptRequest(TString sql, TString idempotencyKey, const TDuration& resultTtl, const TDuration& operationTimeout, Ydb::Query::Syntax syntax, Ydb::Query::ExecMode execMode, Ydb::Query::StatsMode statsMode, const TString& traceId, const std::map<TString, Ydb::TypedValue>& queryParameters)
+        TEvExecuteScriptRequest(TString sql, TString idempotencyKey, const TDuration& resultTtl, const TInstant& operationDeadline, Ydb::Query::Syntax syntax, Ydb::Query::ExecMode execMode, Ydb::Query::StatsMode statsMode, const TString& traceId, const std::map<TString, Ydb::TypedValue>& queryParameters)
             : Sql(std::move(sql))
             , IdempotencyKey(std::move(idempotencyKey))
             , ResultTtl(resultTtl)
-            , OperationTimeout(operationTimeout)
+            , OperationDeadline(operationDeadline)
             , Syntax(syntax)
             , ExecMode(execMode)
             , StatsMode(statsMode)
@@ -86,7 +86,7 @@ struct TEvYdbCompute {
         TString Sql;
         TString IdempotencyKey;
         TDuration ResultTtl;
-        TDuration OperationTimeout;
+        TInstant OperationDeadline;
         Ydb::Query::Syntax Syntax = Ydb::Query::SYNTAX_YQL_V1;
         Ydb::Query::ExecMode ExecMode = Ydb::Query::EXEC_MODE_EXECUTE;
         Ydb::Query::StatsMode StatsMode = Ydb::Query::StatsMode::STATS_MODE_FULL;

@@ -42,4 +42,4 @@ namespace NYql {
         THashMap<TString, TGenericClusterConfig> ClusterNamesToClusterConfigs; // cluster name -> cluster config
         THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames;         // database id -> cluster name
     };
-} //namespace NYql
+} // namespace NYql

@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     actors_factory.cpp
+    common.cpp
     coordinator.cpp
     json_filter.cpp
     json_parser.cpp
@@ -13,12 +14,15 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
+    contrib/libs/simdjson
     ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/row_dispatcher/events
+    ydb/core/fq/libs/row_dispatcher/purecalc_compilation
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/ydb
+    ydb/core/mon
     ydb/library/actors/core
     ydb/library/security
     ydb/library/yql/dq/actors/common
@@ -30,10 +34,16 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_table
 )
 
+CFLAGS(
+    -Wno-assume
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE_FOR_TESTS(
-    ut
-)
+IF(NOT EXPORT_CMAKE)
+    RECURSE_FOR_TESTS(
+        ut
+    )
+ENDIF()

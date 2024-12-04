@@ -60,8 +60,6 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
         config.HasMinDesiredDirectoriesOfFilesPerQuery()
             ? config.GetMinDesiredDirectoriesOfFilesPerQuery()
             : 100;
-    MaxReadSizePerQuery =
-        config.HasMaxReadSizePerQuery() ? config.GetMaxReadSizePerQuery() : 4_GB;
     MaxInflightListsPerQuery =
         config.HasMaxInflightListsPerQuery() ? config.GetMaxInflightListsPerQuery() : 1;
     ListingCallbackThreadCount = config.HasListingCallbackThreadCount()

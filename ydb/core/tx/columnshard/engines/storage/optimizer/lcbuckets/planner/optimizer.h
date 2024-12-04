@@ -4,6 +4,8 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
+class TLevelConstructorContainer;
+
 class TOptimizerPlanner: public IOptimizerPlanner {
 private:
     using TBase = IOptimizerPlanner;
@@ -144,8 +146,8 @@ public:
         return result;
     }
 
-    TOptimizerPlanner(
-        const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema);
+    TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

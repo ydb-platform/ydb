@@ -586,7 +586,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
             ExecSQL(server, edgeActor, R"(
                 UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (4, 400, NULL)
+                  (2, 2000, NULL)
                 , (5, NULL, true)
                 ;
             )");
@@ -606,9 +606,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 "{ items { uint32_value: 4 } items { uint32_value: 40 } }, "
                 "{ items { uint32_value: 5 } items { uint32_value: 50 } }"
                 );
-
         } else {
-
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/Table`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 2 } items { uint32_value: 2000 } }, "
+                "{ items { uint32_value: 3 } items { uint32_value: 30 } }, "
+                "{ items { uint32_value: 4 } items { uint32_value: 40 } }"
+                );
         }
     }
 

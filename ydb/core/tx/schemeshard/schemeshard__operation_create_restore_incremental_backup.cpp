@@ -356,19 +356,9 @@ public:
         Y_ABORT_UNLESS(txState->LoopStep == RestoreOp.SrcPathIdsSize());
         Y_ABORT_UNLESS(txState->TargetPathId == PathIdFromPathId(RestoreOp.GetSrcPathIds(RestoreOp.SrcPathIdsSize() - 1)));
 
-        // LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        //            DebugHint() << " ProgressState"
-        //                        << ", SourcePathId: " << txState->SourcePathId
-        //                        << ", TargetPathId: " << txState->TargetPathId
-        //                        << ", at schemeshard: " << ssId);
-
-        // // clear resources on src
-        // NIceDb::TNiceDb db(context.GetDB());
-        // TPathElement::TPtr srcPath = context.SS->PathsById.at(txState->SourcePathId);
-        // context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNotExist);
-
-        // TPathElement::TPtr dstPath = context.SS->PathsById.at(txState->TargetPathId);
-        // context.OnComplete.ReleasePathState(OperationId, dstPath->PathId, TPathElement::EPathState::EPathStateNoChanges);
+        for (const auto& pathId : RestoreOp.GetSrcPathIds()) {
+            context.OnComplete.ReleasePathState(OperationId, PathIdFromPathId(pathId), TPathElement::EPathState::EPathStateNoChanges);
+        }
 
         context.OnComplete.DoneOperation(OperationId);
         return true;

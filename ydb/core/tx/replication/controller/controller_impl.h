@@ -11,16 +11,19 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
+#include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/replication/service/service.h>
+#include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/map.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -93,6 +96,8 @@ private:
     void Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
 
     void CreateSession(ui32 nodeId, const TActorContext& ctx);
@@ -127,6 +132,7 @@ private:
     class TTxDropDstResult;
     class TTxResolveSecretResult;
     class TTxWorkerError;
+    class TTxAssignTxId;
 
     // tx runners
     void RunTxInitSchema(const TActorContext& ctx);
@@ -146,6 +152,7 @@ private:
     void RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
     void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx);
+    void RunTxAssignTxId(const TActorContext& ctx);
 
     // other
     template <typename T>
@@ -193,6 +200,13 @@ private:
     // drop stream limiter
     TDeque<TActorId> RequestedDropStream;
     THashSet<TActorId> InflightDropStream;
+
+    TActorId TxAllocatorClient;
+    TDeque<ui64> AllocatedTxIds; // got from tx allocator
+    bool AllocateTxIdInFlight = false;
+    TMap<TRowVersion, ui64> AssignedTxIds; // tx ids assigned to version
+    TMap<TRowVersion, THashSet<ui32>> PendingTxId;
+    bool AssignTxIdInFlight = false;
 
 }; // TController
 

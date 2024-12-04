@@ -61,11 +61,21 @@ struct TControllerSchema: NIceDb::Schema {
         using TColumns = TableColumns<ReplicationId, TargetId, Name, State>;
     };
 
+    struct TxIds: Table<5> {
+        struct VersionStep: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct VersionTxId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WriteTxId: Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<VersionStep, VersionTxId>;
+        using TColumns = TableColumns<VersionStep, VersionTxId, WriteTxId>;
+    };
+
     using TTables = SchemaTables<
         SysParams,
         Replications,
         Targets,
-        SrcStreams
+        SrcStreams,
+        TxIds
     >;
 
 }; // TControllerSchema

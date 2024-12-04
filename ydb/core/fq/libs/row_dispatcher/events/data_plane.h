@@ -8,7 +8,7 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 
-#include <yql/essentials/public/purecalc/common/fwd.h>
+#include <ydb/library/yql/public/purecalc/common/fwd.h>
 
 namespace NFq {
 

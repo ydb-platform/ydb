@@ -6,9 +6,10 @@ SRCS(
 
 PEERDIR(
     ydb/core/fq/libs/row_dispatcher/events
-    ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper
 
     ydb/library/actors/core
+
+    ydb/library/yql/public/purecalc/common/no_pg_wrapper
 )
 
 YQL_LAST_ABI_VERSION()

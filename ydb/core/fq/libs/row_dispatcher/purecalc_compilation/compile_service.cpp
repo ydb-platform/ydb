@@ -4,7 +4,7 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
-#include <yql/essentials/public/purecalc/common/interface.h>
+#include <ydb/library/yql/public/purecalc/common/interface.h>
 
 namespace NFq::NRowDispatcher {
 

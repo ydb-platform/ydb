@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index 3b1c3a6..0b4f9ef 100644
+index 6e3b0e3..c0af95d 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -1063,7 +1063,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD _LIBCPP_END_NAMESPACE_STD
+@@ -1062,7 +1062,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD _LIBCPP_END_NAMESPACE_STD
  #  ifndef _LIBCPP_HAS_NO_ASAN
      extern "C" _LIBCPP_EXPORTED_FROM_ABI void
      __sanitizer_annotate_contiguous_container(const void*, const void*, const void*, const void*);

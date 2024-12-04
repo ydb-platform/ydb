@@ -74,8 +74,8 @@ SRCS(
     log_metrics.h
     mailbox.cpp
     mailbox.h
-    mailbox_queue_revolving.h
-    mailbox_queue_simple.h
+    mailbox_lockfree.cpp
+    mailbox_lockfree.h
     mon.cpp
     mon.h
     mon_stats.cpp

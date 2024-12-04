@@ -1,5 +1,17 @@
 #include "schemeshard__operation_common.h"
 
+#include <ydb/core/blob_depot/events.h>
+#include <ydb/core/blockstore/core/blockstore.h>
+#include <ydb/core/filestore/core/filestore.h>
+#include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/tx/sequenceshard/public/events.h>
+
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -298,7 +310,7 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint() << " ProgressState"
                             << ", operation type: " << TTxState::TypeName(txState->TxType)
-                            << ", at tablet" << ssId);
+                            << ", at tablet# " << ssId);
 
     if (txState->TxType == TTxState::TxDropTable
         || txState->TxType == TTxState::TxAlterTable
@@ -1073,8 +1085,8 @@ bool CollectProposeTransactionResults(const TOperationId& operationId,
 TSet<ui32> AllIncomingEvents() {
     TSet<ui32> result;
 
-#define AddToList(TEvType, TxType)          \
-    result.insert(TEvType::EventType);
+#define AddToList(NS, TEvType, ...) \
+    result.insert(::NKikimr::NS::TEvType::EventType);
 
     SCHEMESHARD_INCOMING_EVENTS(AddToList)
 #undef AddToList

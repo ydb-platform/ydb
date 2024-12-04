@@ -18,8 +18,8 @@
 
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>

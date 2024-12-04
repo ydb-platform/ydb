@@ -2,33 +2,29 @@
 
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 #include <algorithm>
 
 #define LOG_T(s) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << SelfId << ", TxId: " << TxId << ", task: " << TaskId << ". Watermarks. " << s)
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
 #define LOG_D(s) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << SelfId << ", TxId: " << TxId << ", task: " << TaskId << ". Watermarks. " << s)
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
 #define LOG_I(s) \
-    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "SelfId: " << SelfId << ", TxId: " << TxId << ", task: " << TaskId << ". Watermarks. " << s)
+    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
 #define LOG_W(s) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << SelfId << ", TxId: " << TxId << ", task: " << TaskId << ". Watermarks. " << s)
+    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
 #define LOG_E(s) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << SelfId << ", TxId: " << TxId << ", task: " << TaskId << ". Watermarks. " << s)
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
 
 namespace NYql::NDq {
 
 using namespace NActors;
 
 TDqComputeActorWatermarks::TDqComputeActorWatermarks(
-    NActors::TActorIdentity selfId,
-    const TTxId txId,
-    ui64 taskId
+    const TString& logPrefix
 )
-    : SelfId(selfId)
-    , TxId(txId)
-    , TaskId(taskId) {
+    : LogPrefix(logPrefix) {
 }
 
 void TDqComputeActorWatermarks::RegisterAsyncInput(ui64 inputId) {
@@ -164,6 +160,10 @@ bool TDqComputeActorWatermarks::MaybePopPendingWatermark() {
 void TDqComputeActorWatermarks::PopPendingWatermark() {
     LOG_T("Watermark " << *PendingWatermark << " was popped. ");
     PendingWatermark = Nothing();
+}
+
+void TDqComputeActorWatermarks::SetLogPrefix(const TString& logPrefix) {
+    LogPrefix = logPrefix;
 }
 
 } // namespace NYql::NDq

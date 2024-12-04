@@ -17,7 +17,7 @@ namespace numpy
                                        pS const &array_shape);
 
     auto uniform(double low, double high, long size)
-        -> decltype(uniform(low, high, types::array<long, 1>{{size}}));
+        -> decltype(uniform(low, high, types::array_tuple<long, 1>{{size}}));
 
     double uniform(double low = 0.0, double high = 1.0,
                    types::none_type size = {});

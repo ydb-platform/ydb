@@ -20,6 +20,11 @@
 #include "liburing.h"
 #include "helpers.h"
 
+// on fast enough machines with enough cores, the first few threads will post
+// enough sem's to cause the main thread to exit while some threads are half way
+// initialization. This causes a null deference somewhere in thread cleanup,
+// which trips ASAN.
+#ifndef CONFIG_USE_SANITIZER
 #define IORING_ENTRIES 8
 
 static pthread_t *threads;
@@ -116,3 +121,9 @@ int main(int argc, char *argv[])
 	// Exit without resource cleanup
 	exit(EXIT_SUCCESS);
 }
+#else
+int main(int argc, char *argv[])
+{
+	return T_EXIT_SKIP;
+}
+#endif

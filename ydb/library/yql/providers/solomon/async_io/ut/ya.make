@@ -11,12 +11,12 @@ PEERDIR(
     library/cpp/http/simple
     library/cpp/retry
     ydb/core/testlib/basics
-    ydb/library/yql/minikql/computation/llvm14
-    ydb/library/yql/minikql/comp_nodes/llvm14
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql
-    ydb/library/yql/sql/pg_dummy
-    ydb/library/yql/providers/common/comp_nodes
+    yql/essentials/minikql/computation/llvm14
+    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql
+    yql/essentials/sql/pg_dummy
+    yql/essentials/providers/common/comp_nodes
     ydb/library/yql/providers/common/ut_helpers
 )
 

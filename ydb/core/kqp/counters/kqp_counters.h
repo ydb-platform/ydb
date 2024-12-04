@@ -11,7 +11,7 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tx/tx_proxy/mon.h>
 
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 

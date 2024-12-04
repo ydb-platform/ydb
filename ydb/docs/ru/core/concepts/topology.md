@@ -85,4 +85,6 @@
 * [Документация для DevOps-инженеров](../devops/index.md)
 * [{#T}](../reference/configuration/index.md#domains-blob)
 * [Примеры конфигурационных файлов кластера](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)
+{% if audience != "corp" %}
 * [{#T}](../contributor/distributed-storage.md)
+{% endif %}

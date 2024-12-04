@@ -17,7 +17,7 @@ namespace numpy
     return functor::power()(base,
                             functor::linspace()(start, stop, num, endpoint));
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

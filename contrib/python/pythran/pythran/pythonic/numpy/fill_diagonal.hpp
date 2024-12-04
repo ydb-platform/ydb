@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/fill_diagonal.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/NoneType.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -15,14 +15,14 @@ namespace numpy
                                  typename std::decay<E>::type::dtype fill_value)
   {
     constexpr auto N = std::decay<E>::type::value;
-    types::array<long, N> indices;
+    types::array_tuple<long, N> indices;
     for (long i = 0, n = sutils::min(expr); i < n; ++i) {
       std::fill(indices.begin(), indices.end(), i);
       expr.fast(indices) = fill_value;
     }
     return {};
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

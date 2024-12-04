@@ -1,13 +1,13 @@
 import os
-import sys
 import subprocess
-
+import sys
 from abc import ABCMeta, abstractmethod
 from six import add_metaclass
 
 from .constants import NPM_REGISTRY_URL
 from .package_json import PackageJson
 from .utils import build_nm_path, build_pj_path
+from .timeit import timeit
 
 
 class PackageManagerError(RuntimeError):
@@ -126,7 +126,8 @@ class BasePackageManager(object):
 
         return [p[prefix_len:] for p in pj.get_workspace_map(ignore_self=True).keys()]
 
-    def _exec_command(self, args, include_defaults=True, script_path=None, env=None):
+    @timeit
+    def _exec_command(self, args, cwd: str, include_defaults=True, script_path=None, env=None):
         if not self.nodejs_bin_path:
             raise PackageManagerError("Unable to execute command: nodejs_bin_path is not configured")
 
@@ -135,9 +136,7 @@ class BasePackageManager(object):
             + args
             + (self._get_default_options() if include_defaults else [])
         )
-        p = subprocess.Popen(
-            cmd, cwd=self.build_path, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
-        )
+        p = subprocess.Popen(cmd, cwd=cwd, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         stdout, stderr = p.communicate()
 
         if p.returncode != 0:

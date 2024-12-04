@@ -70,6 +70,10 @@ void TServiceContextBase::Initialize()
 
     RequestId_ = FromProto<TRequestId>(RequestHeader_->request_id());
     RealmId_ = FromProto<TRealmId>(RequestHeader_->realm_id());
+    MutationId_ = FromProto<TMutationId>(RequestHeader_->mutation_id());
+    ServiceName_ = FromProto<std::string>(RequestHeader_->service());
+    MethodName_ = FromProto<std::string>(RequestHeader_->method());
+
     AuthenticationIdentity_.User = RequestHeader_->has_user() ? RequestHeader_->user() : RootUserName;
     AuthenticationIdentity_.UserTag = RequestHeader_->has_user_tag() ? RequestHeader_->user_tag() : AuthenticationIdentity_.User;
 
@@ -114,7 +118,9 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
             responseMessage.End());
 
         if (header.has_codec()) {
-            YT_VERIFY(TryEnumCast(header.codec(), &ResponseCodec_));
+            auto codec = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
+            YT_VERIFY(codec);
+            ResponseCodec_ = *codec;
             SetResponseBodySerializedWithCompression();
         }
         if (header.has_format()) {
@@ -200,18 +206,16 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
     ToProto(header.mutable_request_id(), RequestId_);
     ToProto(header.mutable_error(), Error_);
 
+    ToProto(header.mutable_service(), GetService());
+    ToProto(header.mutable_method(), GetMethod());
+
     if (RequestHeader_->has_response_format()) {
         header.set_format(RequestHeader_->response_format());
     }
 
     // COMPAT(danilalexeev): legacy RPC codecs.
     if (IsResponseBodySerializedWithCompression()) {
-        if (RequestHeader_->has_response_codec()) {
-            header.set_codec(ToProto(ResponseCodec_));
-        } else {
-            ResponseBody_ = PushEnvelope(ResponseBody_, ResponseCodec_);
-            ResponseAttachments_ = DecompressAttachments(ResponseAttachments_, ResponseCodec_);
-        }
+        header.set_codec(ToProto(ResponseCodec_));
     }
 
     auto message = Error_.IsOK()
@@ -221,7 +225,7 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
             ResponseAttachments_)
         : CreateErrorResponseMessage(header);
 
-    auto responseMessageError = CheckBusMessageLimits(ResponseMessage_);
+    auto responseMessageError = CheckBusMessageLimits(message);
     if (!responseMessageError.IsOK()) {
         return CreateErrorResponseMessage(responseMessageError);
     }
@@ -397,14 +401,14 @@ TMutationId TServiceContextBase::GetMutationId() const
     return FromProto<TMutationId>(RequestHeader_->mutation_id());
 }
 
-std::string TServiceContextBase::GetService() const
+const std::string& TServiceContextBase::GetService() const
 {
-    return FromProto<std::string>(RequestHeader_->service());
+    return ServiceName_;
 }
 
-std::string TServiceContextBase::GetMethod() const
+const std::string& TServiceContextBase::GetMethod() const
 {
-    return FromProto<std::string>(RequestHeader_->method());
+    return MethodName_;
 }
 
 TRealmId TServiceContextBase::GetRealmId() const
@@ -609,12 +613,12 @@ TMutationId TServiceContextWrapper::GetMutationId() const
     return UnderlyingContext_->GetMutationId();
 }
 
-std::string TServiceContextWrapper::GetService() const
+const std::string& TServiceContextWrapper::GetService() const
 {
     return UnderlyingContext_->GetService();
 }
 
-std::string TServiceContextWrapper::GetMethod() const
+const std::string& TServiceContextWrapper::GetMethod() const
 {
     return UnderlyingContext_->GetMethod();
 }

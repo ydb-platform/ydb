@@ -8,7 +8,6 @@ copy=[
     "gradlew.bat",
     "gradle/wrapper/gradle-wrapper.jar",
     "gradle/wrapper/gradle-wrapper.properties",
-    ".idea/vcs.xml",
 ]
 
 [targets.EXTRA_ONLY]
@@ -21,6 +20,9 @@ template="build.gradle.kts.jinja"
 template={ path="build.gradle.kts.proto.jinja", dest="build.gradle.kts" }
 
 [attrs.target]
+# DEPRECATED
+annotation_processors="list"
+
 required_jdk="str"
 add_vcs_info_to_mf="bool"
 junit4_test="flag"
@@ -28,8 +30,7 @@ junit5_test="flag"
 app_main_class="str"
 jar_source_set="list"
 enable_preview="flag"
-annotation_processors="list"
-use_annotation_processor="str"
+use_annotation_processor="list"
 
 publish="flag"
 publish_group="str"
@@ -43,6 +44,8 @@ proto_common_version="str"
 
 proto_grpc="flag"
 proto_grpc_version="str"
+proto_kotlin_grpc="flag"
+proto_kotlin_grpc_version="str"
 
 kotlin_version="str"
 with_kotlin="flag"

@@ -3868,6 +3868,44 @@ Y_UNIT_TEST_SUITE(Cdc) {
         MustNotLoseSchemaSnapshot(true);
     }
 
+    Y_UNIT_TEST(ShouldBreakLocksOnConcurrentSchemeTx) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+
+        TString sessionId;
+        TString txId;
+        KqpSimpleBegin(runtime, sessionId, txId, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 11);");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, "SELECT key, value FROM `/Root/Table`;"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }");
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1;"),
+            "ERROR: ABORTED");
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+        });
+    }
+
     Y_UNIT_TEST(ResolvedTimestampsContinueAfterMerge) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

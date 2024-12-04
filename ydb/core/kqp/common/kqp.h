@@ -17,7 +17,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/dq/actors/dq.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>

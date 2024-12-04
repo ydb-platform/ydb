@@ -19,12 +19,12 @@
 #include <yt/yt/core/concurrency/thread_affinity.h>
 
 #include <yt/yt/core/misc/finally.h>
-#include <library/cpp/yt/threading/atomic_object.h>
 
 #include <yt/yt/core/tracing/public.h>
 
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -178,12 +178,15 @@ private:
     TEnumIndexedArray<EMultiplexingBand, TBandBucket> Buckets_;
 
     std::atomic<bool> TerminationFlag_ = false;
-    TAtomicObject<TError> TerminationError_;
+    NThreading::TAtomicObject<TError> TerminationError_;
 
     TSessionPtr GetOrCreateSession(const TSendOptions& options)
     {
         auto& bucket = Buckets_[options.MultiplexingBand];
-        auto index = options.MultiplexingParallelism <= 1 ? 0 : bucket.CurrentSessionIndex++ % options.MultiplexingParallelism;
+        auto parallelism = TTcpDispatcher::Get()->GetMultiplexingParallelism(
+            options.MultiplexingBand,
+            options.MultiplexingParallelism);
+        auto index = parallelism <= 1 ? 0 : bucket.CurrentSessionIndex++ % parallelism;
 
         // Fast path.
         {
@@ -209,7 +212,7 @@ private:
                     << TerminationError_.Load();
             }
 
-            bucket.Sessions.reserve(options.MultiplexingParallelism);
+            bucket.Sessions.reserve(parallelism);
             while (bucket.Sessions.size() <= index) {
                 auto session = New<TSession>(
                     options.MultiplexingBand,
@@ -684,7 +687,7 @@ private:
         std::array<TBucket, BucketCount> RequestBuckets_;
 
         std::atomic<bool> TerminationFlag_ = false;
-        TAtomicObject<TError> TerminationError_;
+        NThreading::TAtomicObject<TError> TerminationError_;
 
 
         TFuture<void> GetBusReadyFuture()
@@ -715,7 +718,7 @@ private:
                 header.clear_timeout();
             }
 
-            if (options.RequestHeavy) {
+            if (options.RequestHeavy || request->IsAttachmentCompressionEnabled()) {
                 BIND(&IClientRequest::Serialize, request)
                     .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
                     .Run()
@@ -894,16 +897,40 @@ private:
                 auto guard = Guard(*bucket);
 
                 if (bucket->Terminated) {
-                    YT_LOG_WARNING("Response received via a terminated channel (RequestId: %v)",
-                        requestId);
+                    YT_LOG_WARNING("Response received via a terminated channel "
+                        "(RequestId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
+                        requestId,
+                        header.service(),
+                        header.method(),
+                        GetMessageBodySize(message),
+                        GetTotalMessageAttachmentSize(message));
+
                     return;
                 }
 
                 auto it = bucket->ActiveRequestMap.find(requestId);
                 if (it == bucket->ActiveRequestMap.end()) {
                     // This may happen when the other party responds to an already timed-out request.
-                    YT_LOG_DEBUG("Response for an incorrect or obsolete request received (RequestId: %v)",
-                        requestId);
+                    YT_LOG_DEBUG("Response for an incorrect or obsolete request received "
+                        "(RequestId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
+                        requestId,
+                        header.service(),
+                        header.method(),
+                        GetMessageBodySize(message),
+                        GetTotalMessageAttachmentSize(message));
+
+                    if (header.has_service()) {
+                        const auto* counters = TClientRequestPerformanceProfiler::FindPerformanceCounters(
+                            FromProto<std::string>(header.service()),
+                            FromProto<std::string>(header.method()));
+                        if (counters) {
+                            TClientRequestPerformanceProfiler::ProfileReplyWithoutContext(
+                                message,
+                                counters,
+                                /*recognized*/ false);
+                        }
+                    }
+
                     return;
                 }
 
@@ -924,7 +951,7 @@ private:
                     message = TrackMemory(MemoryUsageTracker_, std::move(message));
                     if (MemoryUsageTracker_->IsExceeded()) {
                         auto error = TError(
-                            NRpc::EErrorCode::MemoryPressure,
+                            NRpc::EErrorCode::ResponseMemoryPressure,
                             "Response is dropped due to high memory pressure");
                         requestControl->ProfileError(error);
                         NotifyError(
@@ -980,13 +1007,12 @@ private:
                 return;
             }
 
-            NCompression::ECodec codec;
-            int intCodec = header.codec();
-            if (!TryEnumCast(intCodec, &codec)) {
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
+            if (!codecId) {
                 responseHandler->HandleError(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Streaming payload codec %v is not supported",
-                    intCodec));
+                    header.codec()));
                 return;
             }
 
@@ -997,13 +1023,13 @@ private:
                 MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
                     builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
                 }),
-                codec,
+                *codecId,
                 !attachments.back());
 
             TStreamingPayload payload{
-                codec,
+                *codecId,
                 sequenceNumber,
-                std::move(attachments)
+                std::move(attachments),
             };
             responseHandler->HandleStreamingPayload(payload);
         }

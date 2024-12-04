@@ -126,8 +126,8 @@ public:
 };
 
 bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
-    NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())(
+        "process", "TTxUpdateSchema::Execute");
     ACFL_INFO("step", "TTxUpdateSchema.Execute_Start")("details", Self->NormalizerController.DebugString());
 
     while (!Self->NormalizerController.IsNormalizationFinished()) {
@@ -153,6 +153,8 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxUpdateSchema::Complete(const TActorContext& ctx) {
+    NActors::TLogContextGuard gLogging =
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("process", "TTxUpdateSchema::Complete");
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxUpdateSchema.Complete");
     Self->Counters.GetCSCounters().Initialization.OnTxUpdateSchemaFinished(TMonotonic::Now() - StartInstant);
     if (NormalizerTasks.empty()) {
@@ -175,6 +177,7 @@ class TTxApplyNormalizer: public TTransactionBase<TColumnShard> {
 public:
     TTxApplyNormalizer(TColumnShard* self, NOlap::INormalizerChanges::TPtr changes)
         : TBase(self)
+        , IsDryRun(self->NormalizerController.GetNormalizer()->GetIsDryRun())
         , Changes(changes) {
     }
 
@@ -185,18 +188,24 @@ public:
     }
 
 private:
+    const bool IsDryRun;
+    bool NormalizerFinished = false;
     NOlap::INormalizerChanges::TPtr Changes;
 };
 
 bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&) {
     NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString());
-    if (!Changes->ApplyOnExecute(txc, Self->NormalizerController)) {
-        return false;
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "TTxApplyNormalizer::Execute");
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString())(
+        "dry_run", IsDryRun);
+    if (!IsDryRun) {
+        if (!Changes->ApplyOnExecute(txc, Self->NormalizerController)) {
+            return false;
+        }
     }
 
-    if (Self->NormalizerController.GetNormalizer()->GetActiveTasksCount() == 1) {
+    if (Self->NormalizerController.GetNormalizer()->DecActiveCounters() == 0) {
+        NormalizerFinished = true;
         NIceDb::TNiceDb db(txc.DB);
         Self->NormalizerController.OnNormalizerFinished(db);
     }
@@ -204,13 +213,18 @@ bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&)
 }
 
 void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Complete")("tablet_id", Self->TabletID())("event", "initialize_shard");
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())(
+        "event", "TTxApplyNormalizer::Complete");
     AFL_VERIFY(!Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "apply_normalizer_changes")(
-        "details", Self->NormalizerController.DebugString())("size", Changes->GetSize());
-    Changes->ApplyOnComplete(Self->NormalizerController);
-    Self->NormalizerController.GetNormalizer()->OnResultReady();
-    if (Self->NormalizerController.GetNormalizer()->HasActiveTasks()) {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "apply_normalizer_changes")("details", Self->NormalizerController.DebugString())(
+        "size", Changes->GetSize())("dry_run", IsDryRun);
+    if (IsDryRun) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_changes_dry_run")(
+            "normalizer", Self->NormalizerController.GetNormalizer()->GetClassName())("changes", Changes->DebugString());
+    } else {
+        Changes->ApplyOnComplete(Self->NormalizerController);
+    }
+    if (!NormalizerFinished) {
         return;
     }
 
@@ -240,6 +254,8 @@ public:
 };
 
 bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())(
+        "process", "TTxInitSchema::Execute");
     LOG_S_DEBUG("TxInitSchema.Execute at tablet " << Self->TabletID());
 
     const bool isFirstRun = txc.DB.GetScheme().IsEmpty();
@@ -252,7 +268,7 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         }
     }
     {
-        NOlap::TNormalizationController::TInitContext initCtx(Self->Info());
+        NOlap::TNormalizationController::TInitContext initCtx(Self->Info(), Self->TabletID(), Self->SelfId());
         Self->NormalizerController.InitNormalizers(initCtx);
     }
 
@@ -286,6 +302,8 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxInitSchema::Complete(const TActorContext& ctx) {
+    NActors::TLogContextGuard gLogging =
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("process", "TTxInitSchema::Complete");
     Self->Counters.GetCSCounters().Initialization.OnTxInitSchemaFinished(TMonotonic::Now() - StartInstant);
     LOG_S_DEBUG("TxInitSchema.Complete at tablet " << Self->TabletID(););
     Self->Execute(new TTxUpdateSchema(Self), ctx);

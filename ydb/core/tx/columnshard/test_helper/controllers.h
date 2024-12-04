@@ -36,7 +36,7 @@ protected:
         return TDuration::Zero();
     }
 public:
-    virtual bool CheckPortionForEvict(const std::shared_ptr<TPortionInfo>& portion) const override {
+    virtual bool CheckPortionForEvict(const TPortionInfo& portion) const override {
         if (SkipSpecialCheckForEvict) {
             return true;
         } else {

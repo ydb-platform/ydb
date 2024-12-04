@@ -11,7 +11,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
-    ydb/library/minsketch
+    yql/essentials/core/minsketch
 )
 
 YQL_LAST_ABI_VERSION()

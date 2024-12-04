@@ -30,7 +30,7 @@
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -77,6 +77,79 @@ struct TAppConfigResult : public IKqpGateway::TGenericResult {
     std::shared_ptr<const NKikimrConfig::TAppConfig> Config;
 };
 
+bool ContainOnlyLiteralStages(NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest& request) {
+    for (const auto& tx : request.Transactions) {
+        if (tx.Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
+            return false;
+        }
+
+        for (const auto& stage : tx.Body->GetStages()) {
+            if (stage.InputsSize() != 0) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, NKqpProto::TKqpPhyQuery& phyQuery, const TString& program, const NKikimrMiniKQL::TType& resultType) {
+    literalRequest.NeedTxId = false;
+    literalRequest.MaxAffectedShards = 0;
+    literalRequest.TotalReadSizeLimitBytes = 0;
+    literalRequest.MkqlMemoryLimit = 100_MB;
+
+    auto& transaction = *phyQuery.AddTransactions();
+    transaction.SetType(NKqpProto::TKqpPhyTx::TYPE_COMPUTE);
+
+    auto& stage = *transaction.AddStages();
+    auto& stageProgram = *stage.MutableProgram();
+    stageProgram.SetRuntimeVersion(NYql::NDqProto::RUNTIME_VERSION_YQL_1_0);
+    stageProgram.SetRaw(program);
+    stage.SetOutputsCount(1);
+
+    auto& taskResult = *transaction.AddResults();
+    *taskResult.MutableItemType() = resultType;
+    auto& taskConnection = *taskResult.MutableConnection();
+    taskConnection.SetStageIndex(0);
+}
+
+void FillLiteralResult(const IKqpGateway::TExecPhysicalResult& result, IKqpGateway::TExecuteLiteralResult& literalResult) {
+    if (result.Success()) {
+        YQL_ENSURE(result.Results.size() == 1);
+        literalResult.SetSuccess();
+        literalResult.Result = result.Results[0];
+    } else {
+        literalResult.SetStatus(result.Status());
+        literalResult.AddIssues(result.Issues());
+    }
+}
+
+void FillPhysicalResult(std::unique_ptr<TEvKqpExecuter::TEvTxResponse>& ev, IKqpGateway::TExecPhysicalResult& result, TQueryData::TPtr params, ui32 txIndex) {
+    auto& response = *ev->Record.MutableResponse();
+    if (response.GetStatus() == Ydb::StatusIds::SUCCESS) {
+        result.SetSuccess();
+        result.ExecuterResult.Swap(response.MutableResult());
+        {
+            auto g = params->TypeEnv().BindAllocator();
+
+            auto& txResults = ev->GetTxResults();
+            result.Results.reserve(txResults.size());
+            for(auto& tx : txResults) {
+                result.Results.emplace_back(tx.GetMkql());
+            }
+            params->AddTxHolders(std::move(ev->GetTxHolders()));
+
+            if (!txResults.empty()) {
+                params->AddTxResults(txIndex, std::move(txResults));
+            }
+        }
+    } else {
+        for (auto& issue : response.GetIssues()) {
+            result.AddIssue(NYql::IssueFromMessage(issue));
+        }
+    }
+}
 
 template<typename TRequest, typename TResponse, typename TResult>
 class TProxyRequestHandler: public TRequestHandlerBase<
@@ -202,9 +275,8 @@ public:
             ResultSet.set_truncated(true);
         }
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetEnough(truncated);
-        resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
         resp->Record.SetFreeSpace(ResultSetBytesLimit);
         ctx.Send(ev->Sender, resp.Release());
     }
@@ -473,8 +545,7 @@ public:
             }
         }
 
-        auto response = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        response->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        auto response = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(SizeLimit && SizeLimit < std::numeric_limits<i64>::max() ? SizeLimit : std::numeric_limits<i64>::max());
         Send(ev->Sender, response.Release());
     }
@@ -597,32 +668,8 @@ private:
     }
 
     void ProcessPureExecution(std::unique_ptr<TEvKqpExecuter::TEvTxResponse>& ev) {
-        auto* response = ev->Record.MutableResponse();
-
         TResult result;
-        if (response->GetStatus() == Ydb::StatusIds::SUCCESS) {
-            result.SetSuccess();
-            result.ExecuterResult.Swap(response->MutableResult());
-            {
-                auto g = Parameters->TypeEnv().BindAllocator();
-
-                auto& txResults = ev->GetTxResults();
-                result.Results.reserve(txResults.size());
-                for(auto& tx : txResults) {
-                    result.Results.emplace_back(tx.GetMkql());
-                }
-                Parameters->AddTxHolders(std::move(ev->GetTxHolders()));
-
-                if (!txResults.empty()) {
-                    Parameters->AddTxResults(TxIndex, std::move(txResults));
-                }
-            }
-        } else {
-            for (auto& issue : response->GetIssues()) {
-                result.AddIssue(NYql::IssueFromMessage(issue));
-            }
-        }
-
+        FillPhysicalResult(ev, result, Parameters, TxIndex);
         Promise.SetValue(std::move(result));
         this->PassAway();
     }
@@ -1216,13 +1263,7 @@ public:
 
             const auto serializedDiffAcl = acl.SerializeAsString();
 
-            TVector<std::pair<const TString*, std::pair<TString, TString>>> pathPairs;
-            pathPairs.reserve(settings.Paths.size());
-            for (const auto& path : settings.Paths) {
-                pathPairs.push_back(std::make_pair(&path, NSchemeHelpers::SplitPathByDirAndBaseNames(path)));
-            }
-
-            for (const auto& path : pathPairs) {
+            for (const auto& currentPath : settings.Paths) {
                 promises.push_back(NewPromise<TGenericResult>());
                 futures.push_back(promises.back().GetFuture());
 
@@ -1233,14 +1274,18 @@ public:
                     record.SetUserToken(UserToken->GetSerializedToken());
                 }
 
-                const auto& [dirname, basename] = path.second;
+                auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(currentPath);
+                if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+                    dirname = JoinPath({Database, dirname});
+                }
+
                 NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
                 modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
                 modifyScheme->SetWorkingDir(dirname);
                 modifyScheme->MutableModifyACL()->SetName(basename);
 
                 modifyScheme->MutableModifyACL()->SetDiffACL(serializedDiffAcl);
-                SendSchemeRequest(ev.Release()).Apply([promise = promises.back(), path = *path.first](const TFuture<TGenericResult>& future) mutable{
+                SendSchemeRequest(ev.Release()).Apply([promise = promises.back(), path = currentPath](const TFuture<TGenericResult>& future) mutable {
                     auto result = future.GetValue();
                     if (!result.Success()) {
                         result.AddIssue(NYql::TIssue("Error for the path: " + path));
@@ -1281,6 +1326,14 @@ public:
     }
 
     TFuture<TGenericResult> DropBackupCollection(const TString&, const NYql::TDropBackupCollectionSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> Backup(const TString&, const NYql::TBackupSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> BackupIncremental(const TString&, const NYql::TBackupSettings&) override {
         return NotImplemented<TGenericResult>();
     }
 
@@ -1783,77 +1836,58 @@ public:
         auto preparedQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
         auto& phyQuery = *preparedQuery->MutablePhysicalQuery();
         NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest literalRequest(txAlloc);
-
-        literalRequest.NeedTxId = false;
-        literalRequest.MaxAffectedShards = 0;
-        literalRequest.TotalReadSizeLimitBytes = 0;
-        literalRequest.MkqlMemoryLimit = 100_MB;
-
-        auto& transaction = *phyQuery.AddTransactions();
-        transaction.SetType(NKqpProto::TKqpPhyTx::TYPE_COMPUTE);
-
-        auto& stage = *transaction.AddStages();
-        auto& stageProgram = *stage.MutableProgram();
-        stageProgram.SetRuntimeVersion(NYql::NDqProto::RUNTIME_VERSION_YQL_1_0);
-        stageProgram.SetRaw(program);
-        stage.SetOutputsCount(1);
-
-        auto& taskResult = *transaction.AddResults();
-        *taskResult.MutableItemType() = resultType;
-        auto& taskConnection = *taskResult.MutableConnection();
-        taskConnection.SetStageIndex(0);
+        PrepareLiteralRequest(literalRequest, phyQuery, program, resultType);
 
         NKikimr::NKqp::TPreparedQueryHolder queryHolder(preparedQuery.release(), txAlloc->HolderFactory.GetFunctionRegistry());
-
         NKikimr::NKqp::TQueryData::TPtr params = std::make_shared<NKikimr::NKqp::TQueryData>(txAlloc);
-
         literalRequest.Transactions.emplace_back(queryHolder.GetPhyTx(0), params);
 
         return ExecuteLiteral(std::move(literalRequest), params, 0).Apply([](const auto& future) {
             const auto& result = future.GetValue();
-
             TExecuteLiteralResult literalResult;
-
-            if (result.Success()) {
-                YQL_ENSURE(result.Results.size() == 1);
-                literalResult.SetSuccess();
-                literalResult.Result = result.Results[0];
-            } else {
-                literalResult.SetStatus(result.Status());
-                literalResult.AddIssues(result.Issues());
-            }
-
+            FillLiteralResult(result, literalResult);
             return literalResult;
         });
     }
 
+    TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override {
+        auto preparedQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        auto& phyQuery = *preparedQuery->MutablePhysicalQuery();
+        NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest literalRequest(txAlloc);
+        PrepareLiteralRequest(literalRequest, phyQuery, program, resultType);
+
+        NKikimr::NKqp::TPreparedQueryHolder queryHolder(preparedQuery.release(), txAlloc->HolderFactory.GetFunctionRegistry());
+        NKikimr::NKqp::TQueryData::TPtr params = std::make_shared<NKikimr::NKqp::TQueryData>(txAlloc);
+        literalRequest.Transactions.emplace_back(queryHolder.GetPhyTx(0), params);
+
+        auto result = ExecuteLiteralInstant(std::move(literalRequest), params, 0);
+
+        TExecuteLiteralResult literalResult;
+        FillLiteralResult(result, literalResult);
+        return literalResult;
+    }
 
     TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
         YQL_ENSURE(!request.Transactions.empty());
         YQL_ENSURE(request.DataShardLocks.empty());
         YQL_ENSURE(!request.NeedTxId);
-
-        auto containOnlyLiteralStages = [](const auto& request) {
-            for (const auto& tx : request.Transactions) {
-                if (tx.Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
-                    return false;
-                }
-
-                for (const auto& stage : tx.Body->GetStages()) {
-                    if (stage.InputsSize() != 0) {
-                        return false;
-                    }
-                }
-            }
-
-            return true;
-        };
-
-        YQL_ENSURE(containOnlyLiteralStages(request));
+        YQL_ENSURE(ContainOnlyLiteralStages(request));
         auto promise = NewPromise<TExecPhysicalResult>();
         IActor* requestHandler = new TKqpExecLiteralRequestHandler(std::move(request), Counters, promise, params, txIndex);
         RegisterActor(requestHandler);
         return promise.GetFuture();
+    }
+
+    TExecPhysicalResult ExecuteLiteralInstant(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
+        YQL_ENSURE(!request.Transactions.empty());
+        YQL_ENSURE(request.DataShardLocks.empty());
+        YQL_ENSURE(!request.NeedTxId);
+        YQL_ENSURE(ContainOnlyLiteralStages(request));
+
+        auto ev = ::NKikimr::NKqp::ExecuteLiteral(std::move(request), Counters, TActorId{}, MakeIntrusive<TUserRequestContext>());
+        TExecPhysicalResult result;
+        FillPhysicalResult(ev, result, params, txIndex);
+        return result;
     }
 
     TFuture<TQueryResult> ExecScanQueryAst(const TString& cluster, const TString& query,

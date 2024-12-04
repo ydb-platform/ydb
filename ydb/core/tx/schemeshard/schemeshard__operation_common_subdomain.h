@@ -1,6 +1,5 @@
 #pragma once
 
-#include "schemeshard_impl.h"
 #include "schemeshard__operation_part.h"
 
 namespace NKikimr::NSchemeShard {
@@ -62,8 +61,8 @@ public:
     TConfigureParts(TOperationId id);
 
     bool ProgressState(TOperationContext& context) override;
-    bool HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, TOperationContext& context) override;
-    bool HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TOperationContext& context) override;
+    bool HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult__HandlePtr& ev, TOperationContext& context) override;
+    bool HandleReply(TEvSubDomain::TEvConfigureStatus__HandlePtr& ev, TOperationContext& context) override;
 };
 
 class TPropose: public TSubOperationState {
@@ -80,7 +79,7 @@ public:
     TPropose(TOperationId id);
 
     bool ProgressState(TOperationContext& context) override;
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override;
+    bool HandleReply(TEvPrivate::TEvOperationPlan__HandlePtr& ev, TOperationContext& context) override;
 };
 
 } // namespace NSubDomainState

@@ -92,8 +92,8 @@ protected:
 
     virtual bool CanCacheError(const TError& error) noexcept;
 
-    //! PingEntry resets refresh timer period and behaves like successful entry update.
-    void PingEntry(const TKey& key);
+    //! Ping resets refresh timer period and behaves like successful entry update.
+    void Ping(const TKey& key);
 
 private:
     const NLogging::TLogger Logger_;
@@ -151,6 +151,8 @@ private:
     bool TryEraseExpired(
         const TEntryPtr& Entry,
         const TKey& key);
+
+    void Erase(THashMap<TKey, TEntryPtr>::iterator it);
 
     void UpdateAll();
 

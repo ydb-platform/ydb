@@ -12,7 +12,7 @@
 #include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/core/fq/libs/common/debug_info.h>
 #include <ydb/core/fq/libs/control_plane_config/events/events.h>

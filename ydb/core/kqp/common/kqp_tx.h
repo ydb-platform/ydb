@@ -507,9 +507,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
-bool HasOlapTableWriteInStage(
-    const NKqpProto::TKqpPhyStage& stage,
-    const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& tables);
+bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage);
 bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);

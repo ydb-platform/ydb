@@ -12,7 +12,7 @@ namespace purity
 
   struct pure_tag {
   };
-}
+} // namespace purity
 
 template <class T>
 struct purity_of {

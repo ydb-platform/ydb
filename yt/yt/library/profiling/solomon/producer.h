@@ -32,7 +32,7 @@ class TCounterWriter final
 {
 public:
     TCounterWriter(
-        IRegistryImplPtr registry,
+        IRegistryPtr registry,
         TProducerCountersPtr counters,
         i64 iteration);
 
@@ -42,7 +42,7 @@ public:
     void AddCounter(const std::string& name, i64 value) override;
 
 private:
-    IRegistryImplPtr Registry_;
+    IRegistryPtr Registry_;
     std::vector<TProducerCountersPtr> Counters_;
     i64 Iteration_;
 };
@@ -80,7 +80,7 @@ class TProducerSet
 public:
     void AddProducer(TProducerStatePtr state);
 
-    void Collect(IRegistryImplPtr profiler, IInvokerPtr invoker);
+    void Collect(IRegistryPtr profiler, IInvokerPtr invoker);
 
     void Profile(const TWeakProfiler& profiler);
 

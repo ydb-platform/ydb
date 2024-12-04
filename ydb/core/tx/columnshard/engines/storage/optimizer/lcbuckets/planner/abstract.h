@@ -261,7 +261,7 @@ public:
         if (Portions.size() <= 1) {
             return true;
         }
-        return MemoryUsage < (((ui64)512) << 20) && CurrentLevelPortionsInfo.GetChunksCount() + TargetLevelPortionsInfo.GetChunksCount() < 100000
+        return MemoryUsage < (((ui64)512) << 20) && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < 1000
             && Portions.size() < 10000;
     }
 

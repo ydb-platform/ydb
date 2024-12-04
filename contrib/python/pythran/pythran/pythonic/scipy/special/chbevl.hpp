@@ -14,7 +14,7 @@ namespace scipy
   namespace special
   {
     template <size_t N>
-    double chbevl(double x, const double(&array)[N])
+    double chbevl(double x, const double (&array)[N])
     {
       const double *p = &array[0];
       double b0 = *p++;
@@ -32,7 +32,7 @@ namespace scipy
     }
 
   } // namespace special
-}
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

@@ -27,7 +27,7 @@ namespace builtins
     {
       return f.readlines(sizehint);
     }
-  }
-}
+  } // namespace file
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

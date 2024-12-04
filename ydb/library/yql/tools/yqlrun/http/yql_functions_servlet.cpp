@@ -1,9 +1,9 @@
 #include "yql_functions_servlet.h"
 
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
-#include <ydb/library/yql/providers/config/yql_config_provider.h>
-#include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
-#include <ydb/library/yql/core/type_ann/type_ann_core.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yql/essentials/providers/config/yql_config_provider.h>
+#include <yql/essentials/providers/result/provider/yql_result_provider.h>
+#include <yql/essentials/core/type_ann/type_ann_core.h>
 
 
 namespace {

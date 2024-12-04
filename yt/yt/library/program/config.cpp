@@ -132,8 +132,6 @@ void TSingletonsConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("yp_service_discovery", &TThis::YPServiceDiscovery)
         .DefaultNew();
-    registrar.Parameter("solomon_exporter", &TThis::SolomonExporter)
-        .DefaultNew();
     registrar.Parameter("logging", &TThis::Logging)
         .DefaultCtor([] { return NLogging::TLogManagerConfig::CreateDefault(); })
         .ResetOnLoad();

@@ -129,6 +129,7 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
         format,
         reader->GetNameTable(),
         {reader->GetTableSchema()},
+        {Path.GetColumns()},
         context->Request().OutputStream,
         false,
         ControlAttributes,
@@ -1810,6 +1811,37 @@ void TGetTabletErrorsCommand::DoExecute(ICommandContextPtr context)
                 })
             .EndMap();
     });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TGetTableMountInfoCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("path", &TThis::Path_);
+}
+
+void TGetTableMountInfoCommand::DoExecute(ICommandContextPtr context)
+{
+    auto tableMountCache = context->GetClient()->GetTableMountCache();
+    auto tableInfo = WaitFor(tableMountCache->GetTableInfo(Path_))
+        .ValueOrThrow();
+
+    // Rudimentary, for tests only
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .BeginMap()
+            .Item("lower_cap_bound").Value(tableInfo->LowerCapBound)
+            .Item("upper_cap_bound").Value(tableInfo->UpperCapBound)
+            .Item("primary_revision").Value(tableInfo->PrimaryRevision)
+            .Item("secondary_revision").Value(tableInfo->SecondaryRevision)
+            .Item("schemas")
+                .DoMap([&tableInfo] (auto fluent) {
+                    for (auto kind : TEnumTraits<ETableSchemaKind>::GetDomainValues()) {
+                        if (auto schemaPtr = tableInfo->Schemas[kind]) {
+                            fluent.Item(ToString(kind)).Value(schemaPtr);
+                        }
+                    }
+                })
+        .EndMap());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -146,9 +146,11 @@ namespace NLs {
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
 
-    TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Metric metric,
-                                      Ydb::Table::VectorIndexSettings_VectorType vectorType,
-                                      ui32 vectorDimension
+    TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
+                                     Ydb::Table::VectorIndexSettings_VectorType vectorType,
+                                     ui32 vectorDimension,
+                                     ui32 clusters,
+                                     ui32 levels
                                   );
 
     TCheckFunc SequenceName(const TString& name);

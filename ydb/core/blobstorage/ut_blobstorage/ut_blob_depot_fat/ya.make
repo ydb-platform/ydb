@@ -1,6 +1,5 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 

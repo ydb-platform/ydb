@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_path_element.h"
+
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include "schemeshard_impl.h"
 

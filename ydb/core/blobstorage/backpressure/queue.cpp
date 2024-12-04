@@ -46,8 +46,10 @@ TBlobStorageQueue::~TBlobStorageQueue() {
     for (TItemList *queue : {&Queues.Waiting, &Queues.InFlight, &Queues.Unused}) {
         for (TItem& item : *queue) {
             SetItemQueue(item, EItemQueue::NotSet);
+            --*QueueSize;
         }
     }
+    *QueueWindowSize -= WindowSize;
 }
 
 void TBlobStorageQueue::UpdateCostModel(TInstant now, const NKikimrBlobStorage::TVDiskCostSettings& settings,

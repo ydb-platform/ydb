@@ -105,7 +105,7 @@ sudo usermod -aG disk ydb
     sudo chown -R root:bin /opt/ydb
     ```
 
-## Подготовьте и отформатируйте диски на каждом сервере {#prepare-disks}
+## Подготовьте и очистите диски на каждом сервере {#prepare-disks}
 
 {% include [_includes/storage-device-requirements.md](../../_includes/storage-device-requirements.md) %}
 
@@ -131,7 +131,13 @@ sudo usermod -aG disk ydb
 
     Для упрощения последующей настройки удобно использовать одинаковые метки дисков на серверах кластера, имеющих идентичную конфигурацию дисков.
 
-2. Отформатируйте диск встроенной в исполняемый файл `ydbd` командой:
+2. Очистите диск встроенной в исполняемый файл `ydbd` командой:
+
+{% note warning %}
+
+После выполнения команды данные на диске сотрутся.
+
+{% endnote %}
 
     ```bash
     sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01

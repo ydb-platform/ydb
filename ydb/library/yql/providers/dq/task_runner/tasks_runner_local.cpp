@@ -4,14 +4,14 @@
 #include <ydb/library/yql/providers/dq/counters/task_counters.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/yson/node/node_io.h>

@@ -19,6 +19,9 @@ namespace NKikimr {
     namespace NGRpcService {
         class TInFlightLimiterRegistry;
     }
+    namespace NSharedCache {
+        class TSharedCachePages;
+    }
 }
 
 namespace NKikimrCms {
@@ -189,6 +192,7 @@ struct TAppData {
     ::NMonitoring::TDynamicCounterPtr Counters;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
+    TIntrusivePtr<NSharedCache::TSharedCachePages> SharedCachePages;
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
 

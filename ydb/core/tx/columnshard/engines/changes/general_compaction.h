@@ -50,6 +50,7 @@ public:
     class TMemoryPredictorChunkedPolicy: public IMemoryPredictor {
     private:
         ui64 SumMemoryFix = 0;
+        ui64 SumMemoryRaw = 0;
     public:
         virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) override;
     };

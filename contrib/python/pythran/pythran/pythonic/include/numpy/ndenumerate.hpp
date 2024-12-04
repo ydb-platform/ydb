@@ -11,7 +11,7 @@ namespace numpy
   struct ndenumerate_iterator
       : std::iterator<
             std::random_access_iterator_tag,
-            std::tuple<types::array<long, E::value>, typename E::dtype>> {
+            std::tuple<types::array_tuple<long, E::value>, typename E::dtype>> {
     long index;
     E const &expr;
     typename E::dtype *iter;
@@ -19,7 +19,7 @@ namespace numpy
     ndenumerate_iterator();
     ndenumerate_iterator(E const &expr, long first);
 
-    std::tuple<types::array<long, E::value>, typename E::dtype>
+    std::tuple<types::array_tuple<long, E::value>, typename E::dtype>
     operator*() const;
 
     ndenumerate_iterator &operator++();
@@ -48,7 +48,7 @@ namespace numpy
 
   NUMPY_EXPR_TO_NDARRAY0_DECL(ndenumerate);
   DEFINE_FUNCTOR(pythonic::numpy, ndenumerate);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

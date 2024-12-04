@@ -22,7 +22,7 @@ namespace numpy
     else
       return arange(start, stop + (endpoint ? step * .5 : 0), step, d);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -16,7 +16,6 @@ PY_SRCS(
 PEERDIR(
     build/plugins/lib/nots/package_manager/base
     contrib/python/PyYAML
-    contrib/python/six
 )
 
 END()

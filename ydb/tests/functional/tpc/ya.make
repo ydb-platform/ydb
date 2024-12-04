@@ -2,26 +2,33 @@ IF (NOT SANITIZER_TYPE)
 
 PY3TEST()
 
-TEST_SRCS(test_generator.py)
+PY_SRCS(
+    conftest.py
+)
 
-TIMEOUT(600)
+TEST_SRCS(
+    test_tpch.py
+)
+
 SIZE(MEDIUM)
 
-ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+REQUIREMENTS(ram:16)
+
+ENV(YDB_ENABLE_COLUMN_TABLES="true")
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+
+PEERDIR(
+    ydb/tests/library
+    ydb/tests/olap/load/lib
+)
 
 DEPENDS(
     ydb/apps/ydb
+    ydb/apps/ydbd
 )
 
-PEERDIR(
-    ydb/tests/oss/ydb_sdk_import
-    ydb/public/sdk/python
-    contrib/python/PyHamcrest
-    ydb/tests/library
-)
-
-FORK_SUBTESTS()
 FORK_TEST_FILES()
+
 END()
 
 ENDIF()

@@ -9,30 +9,17 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NYdb {
 namespace NLogStore {
 
 TMaybe<TTtlSettings> TtlSettingsFromProto(const Ydb::Table::TtlSettings& proto) {
-    switch (proto.mode_case()) {
-    case Ydb::Table::TtlSettings::kDateTypeColumn:
-        return TTtlSettings(
-            proto.date_type_column(),
-            proto.run_interval_seconds()
-        );
-
-    case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
-        return TTtlSettings(
-            proto.value_since_unix_epoch(),
-            proto.run_interval_seconds()
-        );
-
-    default:
-        break;
+    if (auto settings = TTtlSettings::FromProto(proto)) {
+        return *settings;
     }
-    return {};
+    return Nothing();
 }
 
 static TCompression CompressionFromProto(const Ydb::LogStore::Compression& compression) {

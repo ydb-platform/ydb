@@ -2,8 +2,8 @@
 
 #include "servlet.h"
 
-#include <ydb/library/yql/ast/yql_errors.h>
-#include <ydb/library/yql/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_errors.h>
+#include <yql/essentials/ast/yql_ast.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>

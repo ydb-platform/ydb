@@ -152,7 +152,7 @@ message TFeatureFlags {
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
     optional bool EnableResourcePools = 129 [default = true];
-    optional bool EnableColumnStatistics = 130 [default = true];
+    optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
     optional bool EnableVectorIndex = 133 [default = false];
@@ -176,4 +176,7 @@ message TFeatureFlags {
     optional bool EnableTopicAutopartitioningForReplication = 151 [default = false];
     optional bool EnableDriveSerialsDiscovery = 152 [default = false];
     optional bool EnableSeparateDiskSpaceQuotas = 153 [default = false];
+    optional bool EnableAntlr4Parser = 154 [default = false];
+    optional bool EnableReleaseNodeNameOnGracefulShutdown = 155 [default = false];
+    optional bool ForceDistconfDisable = 156 [default = false];
 }

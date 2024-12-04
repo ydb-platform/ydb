@@ -728,7 +728,6 @@ private:
     }
 
 private:
-    THttpRequest Request_;
     NHttpClient::IHttpResponsePtr Response_;
     IInputStream* ResponseStream_;
 };

@@ -4,8 +4,8 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/locks/sys_tables.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NKikimr {
 namespace NSysView {

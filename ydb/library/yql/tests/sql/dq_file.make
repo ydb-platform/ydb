@@ -22,20 +22,23 @@ FORK_TESTS()
 FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
+ENV(YQL_YQLRUN_PATH="ydb/library/yql/tools/yqlrun/yqlrun")
+
 DEPENDS(
-    ydb/library/yql/tools/astdiff
+    yql/essentials/tools/astdiff
     ydb/library/yql/tools/dqrun
     ydb/library/yql/tools/yqlrun
-    ydb/library/yql/tests/common/test_framework/udfs_deps
-    ydb/library/yql/udfs/test/test_import
+    yql/essentials/tests/common/test_framework/udfs_deps
+    yql/essentials/udfs/test/test_import
 )
 DATA(
     arcadia/ydb/library/yql/tests/sql # python files
-    arcadia/ydb/library/yql/mount
-    arcadia/ydb/library/yql/cfg/tests
+    arcadia/yql/essentials/tests/sql/suites
+    arcadia/yql/essentials/mount
+    arcadia/yql/essentials/cfg/tests
 )
 PEERDIR(
-    ydb/library/yql/tests/common/test_framework
+    yql/essentials/tests/common/test_framework
     library/python/testing/swag/lib
 )
 

@@ -7,7 +7,7 @@
 
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>

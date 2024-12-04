@@ -1,7 +1,7 @@
 #include "kqp_scan_data.h"
 
-#include <ydb/library/yql/public/udf/udf_ut_helpers.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <yql/essentials/public/udf/udf_ut_helpers.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NMiniKQL {

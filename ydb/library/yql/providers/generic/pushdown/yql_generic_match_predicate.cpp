@@ -53,6 +53,9 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kTypedValue:
                 case NYql::NConnector::NApi::TExpression::kArithmeticalExpression:
                 case NYql::NConnector::NApi::TExpression::kNull:
+                case NYql::NConnector::NApi::TExpression::kCoalesce:
+                case NYql::NConnector::NApi::TExpression::kIf:
+                case NYql::NConnector::NApi::TExpression::kCast:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return false;
             }
@@ -66,6 +69,9 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kColumn:
                 case NYql::NConnector::NApi::TExpression::kArithmeticalExpression:
                 case NYql::NConnector::NApi::TExpression::kNull:
+                case NYql::NConnector::NApi::TExpression::kCoalesce:
+                case NYql::NConnector::NApi::TExpression::kIf:
+                case NYql::NConnector::NApi::TExpression::kCast:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return false;
             }
@@ -275,6 +281,9 @@ namespace NYql::NGenericPushDown {
                 }
                 case NYql::NConnector::NApi::TExpression::kArithmeticalExpression:
                 case NYql::NConnector::NApi::TExpression::kNull:
+                case NYql::NConnector::NApi::TExpression::kCoalesce:
+                case NYql::NConnector::NApi::TExpression::kIf:
+                case NYql::NConnector::NApi::TExpression::kCast:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return Triple::Unknown;
             }

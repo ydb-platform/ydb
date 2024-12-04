@@ -69,6 +69,25 @@ DEFINE_REFCOUNTED_TYPE(IPrioritizedInvoker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct IBoundedConcurrencyInvoker
+    : public virtual IInvoker
+{
+    using IInvoker::Invoke;
+
+    //! Updates invoker's max concurrent invocations value.
+    //!
+    //! Does nothing, if the value stays the same.
+    //! If the value increases, pending closures are invoked until #maxConcurrentInvocations is reached.
+    //! If the value decreases, value is scheduled to be changed, but only changes once
+    //! number of outstanding requests is less or equal to #maxConcurrentInvocations, and
+    //! then the value actually changes.
+    virtual void SetMaxConcurrentInvocations(int maxConcurrentInvocations) = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IBoundedConcurrencyInvoker);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct ISuspendableInvoker
     : public virtual IInvoker
 {

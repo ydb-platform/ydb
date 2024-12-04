@@ -4,6 +4,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/protos/sys_view.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 namespace {
 
@@ -212,6 +213,7 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx,
     newStats.FullCompactionTs = tableStats.GetLastFullCompactionTs();
     newStats.MemDataSize = tableStats.GetInMemSize();
     newStats.StartTime = TInstant::MilliSeconds(rec.GetStartTime());
+    newStats.HasSchemaChanges = tableStats.GetHasSchemaChanges();
     newStats.HasLoanedData = tableStats.GetHasLoanedParts();
     for (ui64 tabletId : rec.GetUserTablePartOwners()) {
         newStats.PartOwners.insert(TTabletId(tabletId));

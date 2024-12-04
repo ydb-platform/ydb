@@ -59,6 +59,9 @@ class TTxInternalScan;
 namespace NPlain {
 class TIndexScannerConstructor;
 }
+namespace NSimple {
+class TIndexScannerConstructor;
+}
 }   // namespace NReader
 
 namespace NDataSharing {
@@ -96,6 +99,7 @@ class TTxRemoveSharedBlobs;
 class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
+class TTxBlobsWritingFailed;
 
 namespace NLoading {
 class TInsertTableInitializer;
@@ -109,7 +113,7 @@ class TSharingSessionsInitializer;
 class TInFlightReadsInitializer;
 class TSpecialValuesInitializer;
 class TTablesManagerInitializer;
-}
+}   // namespace NLoading
 
 extern bool gAllowLogBatchingDefaultValue;
 
@@ -162,6 +166,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxPlanStep;
     friend class TTxWrite;
     friend class TTxBlobsWritingFinished;
+    friend class TTxBlobsWritingFailed;
     friend class TTxReadBase;
     friend class TTxRead;
     friend class TTxWriteIndex;
@@ -198,6 +203,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NReader::TTxScan;
     friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
+    friend class NOlap::NReader::NSimple::TIndexScannerConstructor;
 
     class TStoragesManager;
     friend class TTxController;
@@ -245,6 +251,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx);
+
     void Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext& ctx);
@@ -281,7 +289,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(NOlap::NDataAccessorControl::TEvAskDataAccessors::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
 
     ITransaction* CreateTxInitSchema();
 
@@ -384,8 +392,8 @@ protected:
     }
 
     STFUNC(StateWork) {
-        const TLogContextGuard gLogging =
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
+        const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
+            "self_id", SelfId())("ev", ev->GetTypeName());
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
@@ -407,6 +415,7 @@ protected:
             HFunc(TEvColumnShard::TEvWrite, Handle);
             HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
             HFunc(TEvPrivate::TEvStartCompaction, Handle);
+            HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
             HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
 
             HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
@@ -441,7 +450,7 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
-            HFunc(NOlap::NDataAccessorControl::TEvAskDataAccessors, Handle);
+            HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -576,6 +585,7 @@ private:
     void SetupCompaction(const std::set<ui64>& pathIds);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
+    void SetupMetadata();
     bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});
     void SetupCleanupPortions();
     void SetupCleanupTables();

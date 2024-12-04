@@ -166,7 +166,8 @@
         "default": [
             "Intel-NDA",
             "mimepp",
-            "OracleOebs"
+            "OracleOebs",
+            "Custom-cryptopro-client"
         ]
     },
     "REQUIRE_CITATION": {

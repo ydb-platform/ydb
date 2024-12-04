@@ -2,25 +2,27 @@
 
 #include <ydb/library/yql/tools/yqlrun/gateway_spec.h>
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
-#include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
-#include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider_impl.h>
-#include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
-#include <ydb/library/yql/sql/v1/format/sql_format.h>
+#include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
+#include <yt/yql/providers/yt/common/yql_names.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider_impl.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
+#include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/sql/v1/format/sql_format.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/log/tls_backend.h>
-#include <ydb/library/yql/core/services/yql_out_transformers.h>
-#include <ydb/library/yql/utils/utf8.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/tls_backend.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/utils/utf8.h>
 
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/yson/node/node_io.h>
@@ -173,7 +175,7 @@ struct TTableFileHolder {
 };
 
 TProgramPtr MakeFileProgram(const TString& program, TYqlServer& yqlServer,
-    const THashMap<TString, TString>& tables, const THashMap<std::pair<TString, TString>, 
+    const THashMap<TString, TString>& tables, const THashMap<std::pair<TString, TString>,
     TVector<std::pair<TString, TString>>>& rtmrTableAttributes, const TString& tmpDir) {
 
     TVector<TDataProviderInitializer> dataProvidersInit;
@@ -189,7 +191,7 @@ TProgramPtr MakeFileProgram(const TString& program, TYqlServer& yqlServer,
     dataProvidersInit.push_back(GetDqDataProviderInitializer([](const TDqStatePtr&){
        return new TNullTransformer;
     }, {}, dqCompFactory, {}, yqlServer.FileStorage));
-    dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+    dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
     dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     ExtProviderSpecific(yqlServer.FunctionRegistry, dataProvidersInit, rtmrTableAttributes);

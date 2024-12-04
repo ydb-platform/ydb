@@ -8,41 +8,54 @@ using namespace NYdb;
 using namespace NYdb::NConsoleClient;
 
 Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
-    bool CompareValues(const TValue& lhs, const TValue& rhs) {
-        TString stringFirst, stringSecond;
-        NProtoBuf::TextFormat::PrintToString(lhs.GetProto(), &stringFirst);
-        NProtoBuf::TextFormat::PrintToString(rhs.GetProto(), &stringSecond);
-        return stringFirst == stringSecond;
+    void AssertValuesEqual(const TValue& actual, const TValue& expected) {
+        TString actualString, expectedString;
+        NProtoBuf::TextFormat::PrintToString(actual.GetProto(), &actualString);
+        NProtoBuf::TextFormat::PrintToString(expected.GetProto(), &expectedString);
+        UNIT_ASSERT_VALUES_EQUAL_C(actualString, expectedString,
+            "Expected string: \"" << expectedString << "\", actual string: \"" << actualString << "\"");
     }
 
-    void CommonTestParams(TString&& header, TString&& data, const std::map<TString, TValue>& result) {
+    void CommonTestParams(TString&& header, TString&& data, const std::map<TString, TValue>& estimatedResult) {
         std::map<TString, TType> paramTypes;
-        for (const auto& [name, value] : result) {
+        for (const auto& [name, value] : estimatedResult) {
             paramTypes.insert({name, value.GetType()});
         }
         std::map<TString, TString> paramSources;
         TCsvParser parser(std::move(header), ',', "", &paramTypes, &paramSources);
         TParamsBuilder paramBuilder;
-        parser.GetParams(std::move(data), paramBuilder, TCsvParser::TParseMetadata{});
+        parser.BuildParams(data, paramBuilder, TCsvParser::TParseMetadata{});
         auto values = paramBuilder.Build().GetValues();
-        UNIT_ASSERT_EQUAL(values.size(), result.size());
-        for (const auto& [name, value] : result) {
+        UNIT_ASSERT_EQUAL(values.size(), estimatedResult.size());
+        for (const auto& [name, value] : estimatedResult) {
             auto it = values.find(name);
             UNIT_ASSERT_UNEQUAL(it, values.end());
-            UNIT_ASSERT(CompareValues(value, it->second));
+            AssertValuesEqual(value, it->second);
         }
     }
 
-    void CommonTestValue(TString&& header, TString&& data, const TValue& result) {
+    void CommonTestValue(TString&& header, TString&& data, const TValue& estimatedResult) {
         std::map<TString, TType> paramTypes;
-        for (auto member : result.GetType().GetProto().struct_type().members()) {
+        for (auto member : estimatedResult.GetType().GetProto().struct_type().members()) {
             paramTypes.insert({member.name(), member.type()});
         }
 
         TCsvParser parser(std::move(header), ',', "", &paramTypes, nullptr);
         TValueBuilder valueBuilder;
-        parser.GetValue(std::move(data), valueBuilder, result.GetType(), TCsvParser::TParseMetadata{});
-        UNIT_ASSERT(CompareValues(valueBuilder.Build(), result));
+        parser.BuildValue(data, valueBuilder, estimatedResult.GetType(), TCsvParser::TParseMetadata{});
+        AssertValuesEqual(valueBuilder.Build(), estimatedResult);
+    }
+
+    void CommonTestBuildList(TString&& header, std::vector<TString>&& data, const TValue& estimatedResult) {
+        std::map<TString, TType> columnTypes;
+        for (auto member : estimatedResult.GetType().GetProto().list_type().item().struct_type().members()) {
+            columnTypes.insert({member.name(), member.type()});
+        }
+
+        TCsvParser parser(std::move(header), ',', "", &columnTypes, nullptr);
+        parser.BuildLineType();
+        TValue builtResult = parser.BuildList(data, "testFile.csv", 0);
+        AssertValuesEqual(builtResult, estimatedResult);
     }
 
     TValue MakeStruct(const TString& name, const TValue& value) {
@@ -71,6 +84,37 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         CommonTestValue("name", "100000000000", MakeStruct("name", TValueBuilder().Uint64(100000000000).Build()));
     }
 
+    Y_UNIT_TEST(IntegerTypesTestList) {
+        CommonTestBuildList(
+            "int8,int16,int32,int64,uint8,uint16,uint32,uint64",
+            {
+                "-1,-10000,-1000000,-100000000000,1,10000,1000000,100000000000",
+                "-2,-20000,-2000000,-200000000000,2,20000,2000000,200000000000"
+            },
+            TValueBuilder().BeginList()
+                .AddListItem().BeginStruct()
+                    .AddMember("int8").Int8(-1)
+                    .AddMember("int16").Int16(-10000)
+                    .AddMember("int32").Int32(-1000000)
+                    .AddMember("int64").Int64(-100000000000)
+                    .AddMember("uint8").Uint8(1)
+                    .AddMember("uint16").Uint16(10000)
+                    .AddMember("uint32").Uint32(1000000)
+                    .AddMember("uint64").Uint64(100000000000)
+                    .EndStruct()
+                .AddListItem().BeginStruct()
+                    .AddMember("int8").Int8(-2)
+                    .AddMember("int16").Int16(-20000)
+                    .AddMember("int32").Int32(-2000000)
+                    .AddMember("int64").Int64(-200000000000)
+                    .AddMember("uint8").Uint8(2)
+                    .AddMember("uint16").Uint16(20000)
+                    .AddMember("uint32").Uint32(2000000)
+                    .AddMember("uint64").Uint64(200000000000)
+                    .EndStruct()
+                .EndList().Build());
+    }
+
     Y_UNIT_TEST(DateTypesTestParams) {
         CommonTestParams("name", "\"2001-01-01\"", {{"$name", TValueBuilder().Date(TInstant::ParseIso8601("2001-01-01")).Build()}});
         CommonTestParams("name", "\"2001-01-01T12:12:12\"", {{"$name", TValueBuilder().Datetime(TInstant::ParseIso8601("2001-01-01T12:12:12")).Build()}});
@@ -95,6 +139,41 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         CommonTestValue("name", "\"2001-01-01,Europe/Moscow\"", MakeStruct("name", TValueBuilder().TzDate("2001-01-01,Europe/Moscow").Build()));
         CommonTestValue("name", "\"2001-01-01T12:12:12,Europe/Moscow\"", MakeStruct("name", TValueBuilder().TzDatetime("2001-01-01T12:12:12,Europe/Moscow").Build()));
         CommonTestValue("name", "\"2001-01-01T12:12:12.111111,Europe/Moscow\"", MakeStruct("name", TValueBuilder().TzTimestamp("2001-01-01T12:12:12.111111,Europe/Moscow").Build()));
+    }
+
+    Y_UNIT_TEST(DateTypesTestBuildList) {
+        CommonTestBuildList(
+            "dateIso8601,dateTimeIso8601,timestampIso8601,date,datetime,timestamp,interval,tzDate,tzDatetime,tzTimestamp",
+            {
+                "\"2001-01-01\",\"2001-01-01T12:12:12\",\"2001-01-01T12:12:12.111111\",12000,1200000,120000000,-2000,\"2001-01-01,Europe/Moscow\",\"2001-01-01T12:12:12,Europe/Moscow\",\"2001-01-01T12:12:12.111111,Europe/Moscow\"",
+                "\"2001-01-02\",\"2001-01-01T12:12:13\",\"2001-01-01T12:12:12.222222\",13000,1300000,130000000,-3000,\"2001-01-02,Europe/Moscow\",\"2001-01-01T12:12:13,Europe/Moscow\",\"2001-01-01T12:12:12.222222,Europe/Moscow\""
+            },
+            TValueBuilder().BeginList()
+                .AddListItem().BeginStruct()
+                    .AddMember("dateIso8601").Date(TInstant::ParseIso8601("2001-01-01"))
+                    .AddMember("dateTimeIso8601").Datetime(TInstant::ParseIso8601("2001-01-01T12:12:12"))
+                    .AddMember("timestampIso8601").Timestamp(TInstant::ParseIso8601("2001-01-01T12:12:12.111111"))
+                    .AddMember("date").Date(TInstant::Days(12000))
+                    .AddMember("datetime").Datetime(TInstant::Seconds(1200000))
+                    .AddMember("timestamp").Timestamp(TInstant::MicroSeconds(120000000))
+                    .AddMember("interval").Interval(-2000)
+                    .AddMember("tzDate").TzDate("2001-01-01,Europe/Moscow")
+                    .AddMember("tzDatetime").TzDatetime("2001-01-01T12:12:12,Europe/Moscow")
+                    .AddMember("tzTimestamp").TzTimestamp("2001-01-01T12:12:12.111111,Europe/Moscow")
+                    .EndStruct()
+                .AddListItem().BeginStruct()
+                    .AddMember("dateIso8601").Date(TInstant::ParseIso8601("2001-01-02"))
+                    .AddMember("dateTimeIso8601").Datetime(TInstant::ParseIso8601("2001-01-01T12:12:13"))
+                    .AddMember("timestampIso8601").Timestamp(TInstant::ParseIso8601("2001-01-01T12:12:12.222222"))
+                    .AddMember("date").Date(TInstant::Days(13000))
+                    .AddMember("datetime").Datetime(TInstant::Seconds(1300000))
+                    .AddMember("timestamp").Timestamp(TInstant::MicroSeconds(130000000))
+                    .AddMember("interval").Interval(-3000)
+                    .AddMember("tzDate").TzDate("2001-01-02,Europe/Moscow")
+                    .AddMember("tzDatetime").TzDatetime("2001-01-01T12:12:13,Europe/Moscow")
+                    .AddMember("tzTimestamp").TzTimestamp("2001-01-01T12:12:12.222222,Europe/Moscow")
+                    .EndStruct()
+                .EndList().Build());
     }
 
     Y_UNIT_TEST(OtherPrimitiveTypeTestParams) {
@@ -132,6 +211,43 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         CommonTestValue("name", "строка", MakeStruct("name", TValueBuilder().OptionalUtf8("строка").Build()));
         CommonTestValue("name", "\"\"", MakeStruct("name", TValueBuilder().OptionalUtf8({}).Build()));
         CommonTestValue("name", "данные", MakeStruct("name", TValueBuilder().Pg(TPgValue(TPgValue::VK_TEXT, "данные", TPgType("some_type"))).Build()));
+    }
+
+    Y_UNIT_TEST(OtherPrimitiveTypesTestBuildList) {
+        CommonTestBuildList(
+            "utf8,string,bool,float,double,dyNumber,decimal,uuid,json,optionalUtf8,pg",
+            {
+                "строка1,строка2,true,1.183,1.183,\"1.183\",1.183,550e8400-e29b-41d4-a716-446655440000,\"{\"\"a\"\":10, \"\"b\"\":\"\"string1\"\"}\",\"строка1\",\"данные1\"",
+                "строка3,строка4,false,1.184,1.184,\"1.184\",1.184,550e8400-e29b-41d4-a716-446655440001,\"{\"\"a\"\":11, \"\"b\"\":\"\"string2\"\"}\",\"строка2\",\"данные2\""
+            },
+            TValueBuilder().BeginList()
+                .AddListItem().BeginStruct()
+                    .AddMember("utf8").Utf8("строка1")
+                    .AddMember("string").String("строка2")
+                    .AddMember("bool").Bool(true)
+                    .AddMember("float").Float(1.183)
+                    .AddMember("double").Double(1.183)
+                    .AddMember("dyNumber").DyNumber("1.183")
+                    .AddMember("decimal").Decimal(TDecimalValue("1.183", 22, 9))
+                    .AddMember("uuid").Uuid(TUuidValue("550e8400-e29b-41d4-a716-446655440000"))
+                    .AddMember("json").Json("{\"a\":10, \"b\":\"string1\"}")
+                    .AddMember("optionalUtf8").OptionalUtf8("строка1")
+                    .AddMember("pg").Pg(TPgValue(TPgValue::VK_TEXT, "данные1", TPgType("some_type")))
+                    .EndStruct()
+                .AddListItem().BeginStruct()
+                    .AddMember("utf8").Utf8("строка3")
+                    .AddMember("string").String("строка4")
+                    .AddMember("bool").Bool(false)
+                    .AddMember("float").Float(1.184)
+                    .AddMember("double").Double(1.184)
+                    .AddMember("dyNumber").DyNumber("1.184")
+                    .AddMember("decimal").Decimal(TDecimalValue("1.184", 22, 9))
+                    .AddMember("uuid").Uuid(TUuidValue("550e8400-e29b-41d4-a716-446655440001"))
+                    .AddMember("json").Json("{\"a\":11, \"b\":\"string2\"}")
+                    .AddMember("optionalUtf8").OptionalUtf8("строка2")
+                    .AddMember("pg").Pg(TPgValue(TPgValue::VK_TEXT, "данные2", TPgType("some_type")))
+                    .EndStruct()
+                .EndList().Build());
     }
 
     Y_UNIT_TEST(EdgeValuesTestParams) {

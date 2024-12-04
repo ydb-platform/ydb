@@ -69,7 +69,19 @@ message TReplicationConfig {
         TTargetSpecific Specific = 5;
     }
 
-    optional bool InitialSync = 6;
+    reserved 6; // InitialSync
+
+    message TWeakConsistency {
+    }
+
+    message TStrongConsistency {
+        optional uint64 CommitIntervalMilliSeconds = 1;
+    }
+
+    oneof Consistency {
+        TWeakConsistency WeakConsistency = 7;
+        TStrongConsistency StrongConsistency = 8;
+    }
 }
 
 message TReplicationState {

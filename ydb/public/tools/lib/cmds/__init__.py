@@ -12,7 +12,7 @@ from six.moves.urllib.parse import urlparse
 
 import yatest
 
-from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
+from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
@@ -358,6 +358,10 @@ def deploy(arguments):
 
     if 'YDB_EXPERIMENTAL_PG' in os.environ:
         optionals['pg_compatible_expirement'] = True
+
+    kafka_api_port = int(os.environ.get("YDB_KAFKA_PROXY_PORT", "0"))
+    if kafka_api_port != 0:
+        optionals['kafka_api_port'] = kafka_api_port
 
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),

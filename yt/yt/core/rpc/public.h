@@ -32,7 +32,9 @@ struct TServiceDescriptor;
 struct TMethodDescriptor;
 
 DECLARE_REFCOUNTED_CLASS(TRequestQueue)
+
 DECLARE_REFCOUNTED_STRUCT(IRequestQueueProvider)
+DECLARE_REFCOUNTED_CLASS(TPerUserRequestQueueProvider);
 
 using TInvokerProvider = TCallback<IInvokerPtr(const NRpc::NProto::TRequestHeader&)>;
 
@@ -184,8 +186,9 @@ YT_DEFINE_ERROR_ENUM(
     ((Overloaded)                   (118)) // The server is currently overloaded and unable to handle additional requests.
                                            // The client should try to reduce their request rate until the server has had a chance to recover.
     ((SslError)                     (static_cast<int>(NBus::EErrorCode::SslError)))
-    ((MemoryPressure)               (120))
+    ((RequestMemoryPressure)        (120)) // There is no enough memory to handle RPC request.
     ((GlobalDiscoveryError)         (121)) // Single peer discovery interrupts discovery session.
+    ((ResponseMemoryPressure)       (122)) // There is no enouth memory to handle RPC response.
 );
 
 DEFINE_ENUM(EMessageFormat,

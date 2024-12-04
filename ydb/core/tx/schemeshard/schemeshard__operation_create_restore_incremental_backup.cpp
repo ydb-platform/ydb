@@ -2,6 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
 #include "schemeshard__operation_create_cdc_stream.h"
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)

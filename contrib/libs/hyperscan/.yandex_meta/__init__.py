@@ -103,11 +103,6 @@ def post_install(self):
     for runtime_name in RUNTIMES.keys():
         instantiate_runtime(self, runtime_name=runtime_name, runtime_yamake=runtime_yamake)
 
-    with self.yamakes["runtime_avx512"] as m:
-        # Do not sanitize to workaround the ICE in clang-16
-        # See DEVTOOLSSUPPORT-49258 for details.
-        m.NO_SANITIZE = True
-
     with self.yamakes["."] as hyperscan:
         hyperscan.RECURSE = [f"runtime_{name}" for name in sorted(RUNTIMES.keys())]
         # rename make_unique into std::make_unique to resolve ambigousness with boost::make_unique

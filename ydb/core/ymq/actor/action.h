@@ -111,15 +111,15 @@ public:
         DoBootstrap();
     }
 
-    void Bootstrap(const NActors::TActorContext&) {    
+    void Bootstrap(const NActors::TActorContext&) {
         #define SQS_REQUEST_CASE(action)                                        \
             const auto& request = SourceSqsRequest_.Y_CAT(Get, action)();       \
             auto response = Response_.Y_CAT(Mutable, action)();                 \
             FillAuthInformation(request);                                       \
             response->SetRequestId(RequestId_);
-            
+
         SQS_SWITCH_REQUEST_CUSTOM(SourceSqsRequest_, ENUMERATE_ALL_ACTIONS, Y_ABORT_UNLESS(false));
-        #undef SQS_REQUEST_CASE 
+        #undef SQS_REQUEST_CASE
 
         RLOG_SQS_DEBUG("Request started. Actor: " << this->SelfId()); // log new request id
         StartTs_ = TActivationContext::Now();
@@ -130,6 +130,7 @@ public:
 
         // Set timeout
         if (cfg.GetRequestTimeoutMs()) {
+            TimeoutCookie_.Reset(ISchedulerCookie::Make2Way());
             this->Schedule(TDuration::MilliSeconds(cfg.GetRequestTimeoutMs()), new TEvWakeup(REQUEST_TIMEOUT_WAKEUP_TAG), TimeoutCookie_.Get());
         }
 
@@ -349,7 +350,7 @@ protected:
                 RESPONSE_BATCH_CASE(SendMessageBatch)
                 RESPONSE_CASE(SetQueueAttributes)
                 RESPONSE_CASE(ListDeadLetterSourceQueues)
-                RESPONSE_CASE(CountQueues) 
+                RESPONSE_CASE(CountQueues)
             case NKikimrClient::TSqsResponse::kDeleteQueueBatch:
             case NKikimrClient::TSqsResponse::kGetQueueAttributesBatch:
             case NKikimrClient::TSqsResponse::kPurgeQueueBatch:
@@ -382,7 +383,7 @@ private:
         );
     }
 
-protected: 
+protected:
     template <class TResponse>
     void AuditLogEntry(const TResponse& response, const TString& requestId, const TError* error = nullptr) {
         if (!error && response.HasError()) {
@@ -555,7 +556,7 @@ private:
         UserName_ = request.GetAuth().GetUserName();
         FolderId_ = request.GetAuth().GetFolderId();
         UserSID_ = request.GetAuth().GetUserSID();
-        
+
         if (IsCloud() && !FolderId_) {
             auto items = ParseCloudSecurityToken(SecurityToken_);
             UserName_ = std::get<0>(items);
@@ -885,7 +886,7 @@ protected:
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
     bool NeedReportSqsActionInflyCounter = false;
     bool NeedReportYmqActionInflyCounter = false;
-    TSchedulerCookieHolder TimeoutCookie_ = ISchedulerCookie::Make2Way();
+    TSchedulerCookieHolder TimeoutCookie_;
     NKikimrClient::TSqsRequest SourceSqsRequest_;
 };
 

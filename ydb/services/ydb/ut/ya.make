@@ -4,11 +4,9 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -38,13 +36,13 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
-    ydb/core/testlib/default
+    ydb/core/testlib/pg
     ydb/core/tx/datashard/ut_common
     ydb/core/grpc_services/base
     ydb/core/testlib
     ydb/core/security
-    ydb/library/yql/minikql/dom
-    ydb/library/yql/minikql/jsonpath
+    yql/essentials/minikql/dom
+    yql/essentials/minikql/jsonpath
     ydb/library/testlib/service_mocks/ldap_mock
     ydb/public/lib/experimental
     ydb/public/lib/json_value

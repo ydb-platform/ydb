@@ -10,6 +10,8 @@
 
 #include <library/cpp/yt/assert/assert.h>
 
+#include <library/cpp/yt/misc/cast.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -203,7 +205,7 @@ template <class T>
     requires TEnumTraits<T>::IsEnum && (!TEnumTraits<T>::IsBitEnum)
 void FromProto(T* original, int serialized)
 {
-    *original = static_cast<T>(serialized);
+    *original = CheckedEnumCast<T>(serialized);
 }
 
 template <class T>
@@ -217,7 +219,7 @@ template <class T>
     requires TEnumTraits<T>::IsBitEnum
 void FromProto(T* original, ui64 serialized)
 {
-    *original = static_cast<T>(serialized);
+    *original = CheckedEnumCast<T>(serialized);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

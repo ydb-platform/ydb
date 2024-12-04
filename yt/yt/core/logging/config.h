@@ -80,7 +80,10 @@ public:
     static constexpr const TStringBuf WriterType = "file";
 
     TString FileName;
+    //! If `true` add `timestamp` to all log files including active one.
     bool UseTimestampSuffix;
+    //! If `true` add `timestamp` only to old versions of log files and  use format `%Y%m%d-%H%M%S` for timestamp.
+    bool UseLogrotateCompatibleTimestampSuffix;
     bool EnableCompression;
     bool EnableNoReuse;
     ECompressionMethod CompressionMethod;

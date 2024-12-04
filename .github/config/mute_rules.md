@@ -89,3 +89,60 @@ Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
 - If the `summary:` column shows `mute <= 3` and `success rate >= 98%` - **it's time to enable the test**.
 - Perform steps from [How to Unmute](#how-to-unmute)
 - You are awesome!
+
+### Unmute stable and flaky tests automaticaly
+
+
+**setup**
+1) ```pip install PyGithub```
+2) request git token
+```
+# Github api (personal access token (classic)) token shoud have permitions to
+# repo
+# - repo:status
+# - repo_deployment
+# - public_repo
+# admin:org
+# project
+```
+3) save it to env `export GITHUB_TOKEN=<token>
+4) save to env `export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=<iam_cloud_file> 
+
+**How to use**
+
+0) *update your branch* - you shoud have last version of muted_ya localy
+1) Run instance https://github.com/ydb-platform/ydb/actions/workflows/collect_analytics.yml
+2) wait till end of step `Collect all test monitor (how long tests in state)` (about 7 min)
+3) run `create_new_muted_ya.py update_muted_ya` - it creates bunch of files in `%repo_path%/mute_update/`
+     
+| File Name                              | Description                                                                                     |
+|----------------------------------------|-------------------------------------------------------------------------------------------------|
+| deleted.txt                            | Tests what look like deleted (no runs 28 days in a row)                                         |
+| deleted_debug.txt                      | With detailed info                                                                              |
+| flaky.txt                              | Tests which are flaky today AND total runs > 3 AND fail_count > 2                               |
+| flaky_debug.txt                        | With detailed info                                                                              |
+| muted_stable.txt                       | Muted tests which are stable for the last 14 days                                               |
+| muted_stable_debug.txt                 | With detailed info                                                                              |
+| new_muted_ya.txt                       | Muted_ya.txt version with excluded **muted_stable** and **deleted** tests                       |
+| new_muted_ya_debug.txt                 | With detailed info                                                                              |
+| new_muted_ya_with_flaky.txt            | Muted_ya.txt version with excluded **muted_stable** and **deleted** tests and included **flaky**|
+| new_muted_ya_with_flaky_debug.txt      | With detailed info                                                                              |
+|muted_ya_sorted.txt| original muted_ya with resolved wildcards for real tests (not chunks)|
+|muted_ya_sorted_debug.txt| With detailed info|
+
+
+**1. Unmute Stable**
+1) replace content of [muted_ya](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) with content of **new_muted_ya.txt** 
+2) create new PR and paste in PR Description 
+- `<Unmuted tests : stable 9 and deleted 0>`  from concole output
+-  content from **muted_stable_debug** and **deleted_debug**
+3) Merge
+ example https://github.com/ydb-platform/ydb/pull/11099
+
+**2. Mute Flaky** (AFTER UNMUTE STABLE ONLY)
+1) replace content of [muted_ya](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) with content of **new_muted_ya_with_flaky.txt** 
+2) create new PR 
+2) run `create_new_muted_ya.py create_issues` - it creates issue for each flaky test in **flaky.txt** 
+3) copy from console output text like ' Created issue ...' and paste in PR
+4) merge
+ example https://github.com/ydb-platform/ydb/pull/11101

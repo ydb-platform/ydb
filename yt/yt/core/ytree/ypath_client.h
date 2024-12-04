@@ -58,6 +58,8 @@ public:
     const NRpc::NProto::TRequestHeader& Header() const override;
     NRpc::NProto::TRequestHeader& Header() override;
 
+    bool IsAttachmentCompressionEnabled() const override;
+
     bool IsStreamingEnabled() const override;
 
     const NRpc::TStreamingParameters& ClientAttachmentsStreamingParameters() const override;

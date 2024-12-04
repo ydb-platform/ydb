@@ -1,6 +1,6 @@
 #include "yql_position.h"
 
-#include <ydb/library/yql/utils/line_split.h>
+#include <yql/essentials/utils/line_split.h>
 
 #include <util/charset/utf8.h>
 #include <util/stream/str.h>

@@ -9,6 +9,7 @@
 
 #include <yt/yt/core/misc/collection_helpers.h>
 
+#include <yt/yt/library/profiling/solomon/config.h>
 #include <yt/yt/library/profiling/solomon/exporter.h>
 
 #include <util/datetime/base.h>

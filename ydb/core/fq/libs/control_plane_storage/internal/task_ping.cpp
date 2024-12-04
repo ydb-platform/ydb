@@ -8,7 +8,7 @@
 #include <ydb/core/metering/metering.h>
 
 #include <ydb/library/protobuf_printer/size_printer.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
 #include <google/protobuf/util/time_util.h>
 

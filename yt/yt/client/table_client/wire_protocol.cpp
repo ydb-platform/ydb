@@ -536,8 +536,9 @@ class TWireProtocolReader
     : public IWireProtocolReader
 {
 public:
-    explicit TWireProtocolReader(TSharedRef data, TRowBufferPtr rowBuffer)
+    explicit TWireProtocolReader(TSharedRef data, TRowBufferPtr rowBuffer, TWireProtocolOptions options)
         : RowBuffer_(rowBuffer ? std::move(rowBuffer) : New<TRowBuffer>(TWireProtocolReaderTag(), ReaderBufferChunkSize))
+        , Options_(std::move(options))
         , Data_(std::move(data))
         , Current_(Data_.Begin())
     { }
@@ -781,9 +782,11 @@ public:
 
 private:
     const TRowBufferPtr RowBuffer_;
+    const TWireProtocolOptions Options_;
 
     TSharedRef Data_;
     TIterator Current_;
+
 
     void ValidateSizeAvailable(size_t size)
     {
@@ -857,15 +860,15 @@ private:
 
     void DoReadStringData(EValueType type, ui32 length, const char** result, bool captureValues)
     {
-        ui32 limit = 0;
+        i64 limit = 0;
         if (type == EValueType::String) {
-            limit = MaxStringValueLength;
+            limit = Options_.MaxStringValueLength;
         }
         if (type == EValueType::Any) {
-            limit = MaxAnyValueLength;
+            limit = Options_.MaxAnyValueLength;
         }
         if (type == EValueType::Composite) {
-            limit = MaxCompositeValueLength;
+            limit = Options_.MaxCompositeValueLength;
         }
         if (length > limit) {
             THROW_ERROR_EXCEPTION("Value of type %Qlv is too long: length %v, limit %v",
@@ -994,10 +997,10 @@ private:
 
     void ValidateVersionedRowTimestampCount(const TVersionedRowHeader& rowHeader)
     {
-        if (rowHeader.WriteTimestampCount > MaxTimestampCountPerRow) {
+        if (rowHeader.WriteTimestampCount > Options_.MaxTimestampCountPerRow) {
             THROW_ERROR_EXCEPTION("Too many write timestamps in a versioned row");
         }
-        if (rowHeader.DeleteTimestampCount > MaxTimestampCountPerRow) {
+        if (rowHeader.DeleteTimestampCount > Options_.MaxTimestampCountPerRow) {
             THROW_ERROR_EXCEPTION("Too many delete timestamps in a versioned row");
         }
     }
@@ -1005,10 +1008,10 @@ private:
     void ValidateVersionedRowDataWeight(TVersionedRow row)
     {
         auto dataWeight = GetDataWeight(row);
-        if (dataWeight > MaxServerVersionedRowDataWeight) {
+        if (static_cast<i64>(dataWeight) > Options_.MaxVersionedRowDataWeight) {
             THROW_ERROR_EXCEPTION("Versioned row data weight is too large: %v > %v",
                 dataWeight,
-                MaxServerVersionedRowDataWeight)
+                Options_.MaxVersionedRowDataWeight)
                 << TErrorAttribute("key", ToOwningKey(row));
         }
     }
@@ -1052,9 +1055,9 @@ auto IWireProtocolReader::GetSchemaData(const TTableSchema& schema) -> TSchemaDa
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<IWireProtocolReader> CreateWireProtocolReader(TSharedRef data, TRowBufferPtr rowBuffer)
+std::unique_ptr<IWireProtocolReader> CreateWireProtocolReader(TSharedRef data, TRowBufferPtr rowBuffer, TWireProtocolOptions options)
 {
-    return std::make_unique<TWireProtocolReader>(std::move(data), std::move(rowBuffer));
+    return std::make_unique<TWireProtocolReader>(std::move(data), std::move(rowBuffer), std::move(options));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1068,12 +1071,14 @@ public:
         NCompression::ECodec codecId,
         TTableSchemaPtr schema,
         bool schemaful,
-        const NLogging::TLogger& logger)
+        const NLogging::TLogger& logger,
+        TWireProtocolOptions options)
         : CompressedBlocks_(compressedBlocks)
         , Codec_(NCompression::GetCodec(codecId))
         , Schema_(std::move(schema))
         , Schemaful_(schemaful)
         , Logger(logger.WithTag("ReaderId: %v", TGuid::Create()))
+        , Options_(std::move(options))
     {
         YT_LOG_DEBUG("Wire protocol rowset reader created (BlockCount: %v, TotalCompressedSize: %v)",
             CompressedBlocks_.size(),
@@ -1102,7 +1107,7 @@ public:
             uncompressedBlock.Size());
 
         auto rowBuffer = New<TRowBuffer>(TWireProtocolReaderTag(), ReaderBufferChunkSize);
-        WireReader_ = CreateWireProtocolReader(uncompressedBlock, std::move(rowBuffer));
+        WireReader_ = CreateWireProtocolReader(uncompressedBlock, std::move(rowBuffer), Options_);
 
         if (!SchemaChecked_) {
             auto actualSchema = WireReader_->ReadTableSchema();
@@ -1164,6 +1169,7 @@ private:
     const TTableSchemaPtr Schema_;
     bool Schemaful_;
     const NLogging::TLogger Logger;
+    const TWireProtocolOptions Options_;
 
     int BlockIndex_ = 0;
     std::unique_ptr<IWireProtocolReader> WireReader_;
@@ -1177,14 +1183,16 @@ IWireProtocolRowsetReaderPtr CreateWireProtocolRowsetReader(
     NCompression::ECodec codecId,
     TTableSchemaPtr schema,
     bool schemaful,
-    const NLogging::TLogger& logger)
+    const NLogging::TLogger& logger,
+    TWireProtocolOptions options)
 {
     return New<TWireProtocolRowsetReader>(
         compressedBlocks,
         codecId,
         std::move(schema),
         schemaful,
-        logger);
+        logger,
+        std::move(options));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

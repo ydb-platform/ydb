@@ -7,7 +7,7 @@
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>

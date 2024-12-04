@@ -7,8 +7,8 @@
 #include <ydb/library/actors/core/executor_pool_io.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
@@ -87,14 +87,12 @@ public:
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         TControlWrapper enablePutBatching(DefaultEnablePutBatching, false, true);
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
-        TControlWrapper slowDiskThreshold(DefaultSlowDiskThreshold * 1000, 1, 1000000);
-        TControlWrapper predictedDelayMultiplier(DefaultPredictedDelayMultiplier * 1000, 1, 1000000);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(GroupInfo), false, nodeMon,
             std::move(storagePoolCounters), TBlobStorageProxyParameters{
-                .EnablePutBatching = enablePutBatching,
-                .EnableVPatch = enableVPatch,
-                .SlowDiskThreshold = slowDiskThreshold,
-                .PredictedDelayMultiplier = predictedDelayMultiplier,
+                .Controls = TBlobStorageProxyControlWrappers{
+                    .EnablePutBatching = enablePutBatching,
+                    .EnableVPatch = enableVPatch,
+                }
             }
         );
         setup->LocalServices.emplace_back(MakeBlobStorageProxyID(GroupInfo->GroupID),

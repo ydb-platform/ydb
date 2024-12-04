@@ -181,6 +181,14 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         });
     }
 
+    Y_UNIT_TEST_F(TestSendMessageEmptyQueueUrl, THttpProxyTestMockForSQS) {
+        // We had a bug that crashed the server if QueueUrl was empty in a request.
+        SendMessage({
+            {"QueueUrl", ""},
+            {"MessageBody", "MessageBody-0"}
+        }, 400);
+    }
+
     Y_UNIT_TEST_F(TestSendMessageFifoQueue, THttpProxyTestMock) {
         auto json = CreateQueue({
             {"QueueName", "ExampleQueueName.fifo"},

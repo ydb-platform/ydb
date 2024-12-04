@@ -1,6 +1,6 @@
-#include <ydb/library/yql/providers/yt/job/yql_job_registry.h>
+#include <yt/yql/providers/yt/job/yql_job_registry.h>
 
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 
 #include <yt/cpp/mapreduce/client/init.h>
 

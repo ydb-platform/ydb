@@ -61,6 +61,7 @@ PEERDIR(
     ydb/core/tx/columnshard/resource_subscriber
     ydb/core/tx/columnshard/normalizer
     ydb/core/tx/columnshard/blobs_action/storages_manager
+    ydb/core/tx/columnshard/data_accessor/in_mem
     ydb/core/tx/tiering
     ydb/core/tx/conveyor/usage
     ydb/core/tx/priorities/service

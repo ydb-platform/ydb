@@ -1,6 +1,7 @@
 #include "schemeshard__operation_common_resource_pool.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 
 namespace NKikimr::NSchemeShard {
@@ -204,6 +205,30 @@ public:
 };
 
 }  // anonymous namespace
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateResourcePool().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateResourcePool()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewResourcePool(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateResourcePool>(id, tx);

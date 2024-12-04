@@ -1,7 +1,7 @@
 #include "yql_dq_statistics_json.h"
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NYql {
 

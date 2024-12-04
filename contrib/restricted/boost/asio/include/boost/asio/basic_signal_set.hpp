@@ -2,7 +2,7 @@
 // basic_signal_set.hpp
 // ~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -27,6 +27,7 @@
 #include <boost/asio/detail/type_traits.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/execution_context.hpp>
+#include <boost/asio/signal_set_base.hpp>
 
 #include <boost/asio/detail/push_options.hpp>
 
@@ -94,7 +95,7 @@ namespace asio {
  * least one thread.
  */
 template <typename Executor = any_io_executor>
-class basic_signal_set
+class basic_signal_set : public signal_set_base
 {
 private:
   class initiate_async_wait;
@@ -134,10 +135,10 @@ public:
    */
   template <typename ExecutionContext>
   explicit basic_signal_set(ExecutionContext& context,
-      typename constraint<
+      constraint_t<
         is_convertible<ExecutionContext&, execution_context&>::value,
         defaulted_constraint
-      >::type = defaulted_constraint())
+      > = defaulted_constraint())
     : impl_(0, 0, context)
   {
   }
@@ -180,10 +181,10 @@ public:
    */
   template <typename ExecutionContext>
   basic_signal_set(ExecutionContext& context, int signal_number_1,
-      typename constraint<
+      constraint_t<
         is_convertible<ExecutionContext&, execution_context&>::value,
         defaulted_constraint
-      >::type = defaulted_constraint())
+      > = defaulted_constraint())
     : impl_(0, 0, context)
   {
     boost::system::error_code ec;
@@ -239,10 +240,10 @@ public:
   template <typename ExecutionContext>
   basic_signal_set(ExecutionContext& context, int signal_number_1,
       int signal_number_2,
-      typename constraint<
+      constraint_t<
         is_convertible<ExecutionContext&, execution_context&>::value,
         defaulted_constraint
-      >::type = defaulted_constraint())
+      > = defaulted_constraint())
     : impl_(0, 0, context)
   {
     boost::system::error_code ec;
@@ -308,10 +309,10 @@ public:
   template <typename ExecutionContext>
   basic_signal_set(ExecutionContext& context, int signal_number_1,
       int signal_number_2, int signal_number_3,
-      typename constraint<
+      constraint_t<
         is_convertible<ExecutionContext&, execution_context&>::value,
         defaulted_constraint
-      >::type = defaulted_constraint())
+      > = defaulted_constraint())
     : impl_(0, 0, context)
   {
     boost::system::error_code ec;
@@ -334,7 +335,7 @@ public:
   }
 
   /// Get the executor associated with the object.
-  executor_type get_executor() BOOST_ASIO_NOEXCEPT
+  const executor_type& get_executor() noexcept
   {
     return impl_.get_executor();
   }
@@ -368,6 +369,58 @@ public:
       boost::system::error_code& ec)
   {
     impl_.get_service().add(impl_.get_implementation(), signal_number, ec);
+    BOOST_ASIO_SYNC_OP_VOID_RETURN(ec);
+  }
+
+  /// Add a signal to a signal_set with the specified flags.
+  /**
+   * This function adds the specified signal to the set. It has no effect if the
+   * signal is already in the set.
+   *
+   * Flags other than flags::dont_care require OS support for the @c sigaction
+   * call, and this function will fail with @c error::operation_not_supported if
+   * this is unavailable.
+   *
+   * The specified flags will conflict with a prior, active registration of the
+   * same signal, if either specified a flags value other than flags::dont_care.
+   * In this case, the @c add will fail with @c error::invalid_argument.
+   *
+   * @param signal_number The signal to be added to the set.
+   *
+   * @param f Flags to modify the behaviour of the specified signal.
+   *
+   * @throws boost::system::system_error Thrown on failure.
+   */
+  void add(int signal_number, flags_t f)
+  {
+    boost::system::error_code ec;
+    impl_.get_service().add(impl_.get_implementation(), signal_number, f, ec);
+    boost::asio::detail::throw_error(ec, "add");
+  }
+
+  /// Add a signal to a signal_set with the specified flags.
+  /**
+   * This function adds the specified signal to the set. It has no effect if the
+   * signal is already in the set.
+   *
+   * Flags other than flags::dont_care require OS support for the @c sigaction
+   * call, and this function will fail with @c error::operation_not_supported if
+   * this is unavailable.
+   *
+   * The specified flags will conflict with a prior, active registration of the
+   * same signal, if either specified a flags value other than flags::dont_care.
+   * In this case, the @c add will fail with @c error::invalid_argument.
+   *
+   * @param signal_number The signal to be added to the set.
+   *
+   * @param f Flags to modify the behaviour of the specified signal.
+   *
+   * @param ec Set to indicate what error occurred, if any.
+   */
+  BOOST_ASIO_SYNC_OP_VOID add(int signal_number, flags_t f,
+      boost::system::error_code& ec)
+  {
+    impl_.get_service().add(impl_.get_implementation(), signal_number, f, ec);
     BOOST_ASIO_SYNC_OP_VOID_RETURN(ec);
   }
 
@@ -538,15 +591,12 @@ public:
    */
   template <
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code, int))
-      SignalToken BOOST_ASIO_DEFAULT_COMPLETION_TOKEN_TYPE(executor_type)>
-  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(SignalToken,
-      void (boost::system::error_code, int))
-  async_wait(
-      BOOST_ASIO_MOVE_ARG(SignalToken) token
-        BOOST_ASIO_DEFAULT_COMPLETION_TOKEN(executor_type))
-    BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+      SignalToken = default_completion_token_t<executor_type>>
+  auto async_wait(
+      SignalToken&& token = default_completion_token_t<executor_type>())
+    -> decltype(
       async_initiate<SignalToken, void (boost::system::error_code, int)>(
-          declval<initiate_async_wait>(), token)))
+        declval<initiate_async_wait>(), token))
   {
     return async_initiate<SignalToken, void (boost::system::error_code, int)>(
         initiate_async_wait(this), token);
@@ -554,8 +604,8 @@ public:
 
 private:
   // Disallow copying and assignment.
-  basic_signal_set(const basic_signal_set&) BOOST_ASIO_DELETED;
-  basic_signal_set& operator=(const basic_signal_set&) BOOST_ASIO_DELETED;
+  basic_signal_set(const basic_signal_set&) = delete;
+  basic_signal_set& operator=(const basic_signal_set&) = delete;
 
   class initiate_async_wait
   {
@@ -567,13 +617,13 @@ private:
     {
     }
 
-    executor_type get_executor() const BOOST_ASIO_NOEXCEPT
+    const executor_type& get_executor() const noexcept
     {
       return self_->get_executor();
     }
 
     template <typename SignalHandler>
-    void operator()(BOOST_ASIO_MOVE_ARG(SignalHandler) handler) const
+    void operator()(SignalHandler&& handler) const
     {
       // If you get an error on the following line it means that your handler
       // does not meet the documented type requirements for a SignalHandler.

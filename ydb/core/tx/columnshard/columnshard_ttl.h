@@ -48,13 +48,6 @@ public:
 
     void SetPathTtl(ui64 pathId, TDescription&& descr) {
         if (descr.Eviction) {
-            auto& evict = descr.Eviction;
-            auto it = Columns.find(evict->ColumnName);
-            if (it != Columns.end()) {
-                evict->ColumnName = *it; // replace string dups (memory efficiency)
-            } else {
-                Columns.insert(evict->ColumnName);
-            }
             PathTtls[pathId] = descr;
         } else {
             PathTtls.erase(pathId);
@@ -74,11 +67,16 @@ public:
         return true;
     }
 
-    const THashSet<TString>& TtlColumns() const { return Columns; }
+    THashSet<TString> TtlColumns() const {
+        THashSet<TString> columns;
+        for (const auto& [pathId, settings] : PathTtls) {
+            columns.insert(settings.Eviction->ColumnName);
+        }
+        return columns;
+    }
 
 private:
     THashMap<ui64, TDescription> PathTtls; // pathId -> ttl
-    THashSet<TString> Columns;
 
     std::shared_ptr<NOlap::TTierInfo> Convert(const TDescription& descr) const
     {

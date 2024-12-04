@@ -1,0 +1,416 @@
+commit e79890583f1ba8bb4d58d7456043a7e65205b34d
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-10-05
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-10-05
+
+    Bump package and library versions
+
+commit 54cfefe9c32387f1085766f60520bc458f7f374d
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-10-05
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-10-05
+
+    Update AUTHORS
+
+commit 107aef87ce82eacab564b10eb1eead752bde1507
+Merge: 6e1a15d 0758422
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-10-03
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-10-03
+
+    Merge pull request #267 from ngtcp2/check-header-value-avx2
+    
+    Optimize nghttp3_check_header_value
+
+commit 6e1a15d42d8484425bf29744aaeef6631c8873f5
+Merge: ade24b7 94fce2e
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-10-02
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-10-02
+
+    Merge pull request #268 from ngtcp2/cmake-remove-trailing-ws
+    
+    cmake: Remove trailing spaces
+
+commit 94fce2ec75fa9eb27144590ece9006da5541db9c
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-10-02
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-10-02
+
+    cmake: Remove trailing spaces
+
+commit 07584226aa11a92f78072a4925d3eac81e4bd19c
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-10-01
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-10-01
+
+    Optimize nghttp3_check_header_value
+    
+    Optimize nghttp3_check_header_value with AVX2 instructions if
+    available.
+
+commit ade24b7f2da755485149ebca0340264b99abae8d
+Merge: bdfd99f f808f05
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-10-01
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-10-01
+
+    Merge pull request #266 from ngtcp2/revert-265
+    
+    Revert "Optimize nghttp3_check_header_value"
+
+commit f808f05439ad903034e30d05ee7f0023ad12fb48
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-10-01
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-10-01
+
+    Revert "Optimize nghttp3_check_header_value"
+    
+    This reverts commit 21c3e2ffaeda7d2f69f9718945c79b846e6443d2.
+
+commit bdfd99f2f41805c4a9513e523019c9e3c9b1d17d
+Merge: d602bd1 21c3e2f
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-09-30
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-09-30
+
+    Merge pull request #265 from ngtcp2/check-header-value-sse42
+    
+    Optimize nghttp3_check_header_value
+
+commit d602bd1ab20b49066614779dc272996c184abce7
+Merge: 68bc239 8fd4bd8
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-09-30
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-09-30
+
+    Merge pull request #264 from ngtcp2/limit-huffman-decode
+    
+    Do huffman encoding only when the reduction is more than 25%
+
+commit 21c3e2ffaeda7d2f69f9718945c79b846e6443d2
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-29
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-30
+
+    Optimize nghttp3_check_header_value
+    
+    Optimize nghttp3_check_header_value with SSE4.2 instructions if
+    available.
+
+commit 8fd4bd833e764f5b0d46f7b8ed2ae2708cafbfd1
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-29
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-29
+
+    Do huffman encoding only when the reduction is more than 25%
+    
+    Do huffman encoding only when the reduction is more than 25% because
+    huffman decoding is quite costly for relatively large field values.
+
+commit 68bc239d34c1ee43647993c722e3db8bdbc1238f
+Merge: 0889971 76c42e2
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-09-29
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-09-29
+
+    Merge pull request #263 from ngtcp2/qpack-opcode-switch
+    
+    qpack: Switch on opcode
+
+commit 76c42e277f6ff2062a9311e2fd11653c28f0e97b
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-27
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-27
+
+    qpack: Switch on opcode
+
+commit 0889971045eb3f2199c3763599227a0a256a018e
+Merge: 02ea26c 4ff70b1
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-09-25
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-09-25
+
+    Merge pull request #262 from ngtcp2/simplify-http-on-req-resp-header
+    
+    Simplify http_request_on_header and http_response_on_header
+
+commit 4ff70b1254296800dc8387862e49b51091ce23b9
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-25
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-25
+
+    Simplify http_request_on_header and http_response_on_header
+
+commit 02ea26c95bcd40b06734ad01e77033f9be4e30c5
+Merge: ccbc5dd 1199810
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-09-25
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-09-25
+
+    Merge pull request #261 from ngtcp2/refactor-http-on-header
+    
+    Refactor http on header
+
+commit 1199810f2bf48279759e86edabfd99b2cc3b165f
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-24
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-25
+
+    Add gennmchartbl.py
+
+commit 3e53cbbd1b1785187d896085480582906d69a00e
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-24
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-25
+
+    Refactor nghttp3_http_on_header
+    
+    Rearrange switch statements so that token switch is done just once.
+    Apply some optimisations by removing unneeded lines of code and
+    conditionals.
+
+commit ccbc5ddd25a2bca46e120131f84aa6f59c4ba93d
+Merge: 3e14e6f 8ff5d34
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-09-19
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-09-19
+
+    Merge pull request #260 from ngtcp2/ispow2
+    
+    ispow2: Better fallback implementation
+
+commit 8ff5d342097a164780e9b0388e82a7c6e78773ae
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-19
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-19
+
+    ispow2: Better fallback implementation
+
+commit 3e14e6f020c4105d8358189e767a8c570f9612b0
+Merge: a872b6c c6669de
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-09-14
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-09-14
+
+    Merge pull request #259 from ngtcp2/clang-format-fuzz
+    
+    clang-format files under fuzz
+
+commit c6669deacd8bbe39e842f8d415bf2caf9d460e22
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-14
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-14
+
+    clang-format files under fuzz
+
+commit a872b6ca8a1fef513e8f4b2d50ebc0dd4906879e
+Merge: b970523 8511829
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-09-14
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-09-14
+
+    Merge pull request #258 from ngtcp2/macro-comments
+    
+    Consistent macro comments
+
+commit 85118298ee2051508809f48bba06a997b62c63e5
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-14
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-14
+
+    Consistent macro comments
+    
+    Make macro comments consistent throughout the codebase.  Fixup
+    HAVE_BE64TOH and HAVE_BSWAP_64 cmakedefine to match the semantics of
+    autotools.  Fix nghttp3_ntohl64 and nghttp3_htonl64 for bigendian in
+    examples.
+
+commit b9705237a948c2ee7ea239b2392b13db7c85ceca
+Merge: 31a1543 c75f960
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-09-11
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-09-11
+
+    Merge pull request #256 from ngtcp2/optimize-read-varint
+    
+    Optimize nghttp3_read_varint
+
+commit c75f960a12d4c9914987f328b3cf98661202164a
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-11
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-11
+
+    Optimize nghttp3_read_varint
+
+commit 31a1543276ecb7fcab2b16b8ba2655e478e5d2b4
+Merge: 7473d2f a0e5fb0
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-09-10
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-09-10
+
+    Merge pull request #255 from ngtcp2/map-update
+    
+    nghttp3_map: Port ngtcp2 changes
+
+commit a0e5fb0bc3f11faf493ce0e50294e38b43b37aa4
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-10
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-10
+
+    nghttp3_map: Port ngtcp2 changes
+
+commit 7473d2f0aa6a2edd15be3e06fcecdac576a9fab0
+Merge: 99ba689 8a8d45c
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-09-04
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-09-04
+
+    Merge pull request #254 from ngtcp2/amend-253
+    
+    Fix potential overflow
+
+commit 8a8d45cb734eb8087773988cafee3a15906e7f52
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-04
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-04
+
+    Fix potential overflow
+
+commit 99ba6896a219cdd85c29e20068c7a3b946d4c57f
+Merge: 2c4a381 b8c6cca
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-09-04
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-09-04
+
+    Merge pull request #253 from ngtcp2/qpack-buf-reserve
+    
+    Refactor qpack reserve_buf
+
+commit b8c6cca46afac0ca60e927377cc6831de76e76f1
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-09-04
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-09-04
+
+    Refactor qpack reserve_buf
+    
+    Previously, reserve_buf_small and reserve_buf were doing the same
+    thing.  Remove them and call reserve_buf_internal directly.  Optimize
+    the code to round up to the next highest power of 2.
+
+commit 2c4a3816bbeab45e7c9092aecc915b54a3c88ccb
+Merge: e9f34d9 f4d323a
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-08-31
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-08-31
+
+    Merge pull request #252 from fcharlie/arm-intrinsics
+    
+    Fix ARM64 __popcnt intrinsics
+
+commit f4d323ad0a2d5ac8a6445cb7b06e3efa95d19f39
+Author:     Force Charlie <charlieio@outlook.com>
+AuthorDate: 2024-08-30
+Commit:     Force Charlie <charlieio@outlook.com>
+CommitDate: 2024-08-30
+
+    Fix ARM64 __popcnt intrinsics
+
+commit e9f34d95a81b2792605f7d8c78dd30c9112d3d04
+Merge: 32a66a3 a9e8cd5
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-08-30
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-08-30
+
+    Merge pull request #250 from talregev/TalR/fix_include_export
+    
+    Fix include export
+
+commit a9e8cd5d9ac82b9e4385cdfdec0d0e231b22f662
+Author:     Tal Regev <tal.regev@gmail.com>
+AuthorDate: 2024-08-30
+Commit:     Tal Regev <tal.regev@gmail.com>
+CommitDate: 2024-08-30
+
+    Fix include export
+
+commit 32a66a3fe442835568072a0f0d78ad1a54bb882a
+Merge: 8067396 c7bd7f3
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-08-28
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-08-28
+
+    Merge pull request #248 from talregev/TalR/cmake_export
+    
+    Fix cmake export
+
+commit c7bd7f3666babf7ed4cd411120031d78c53810e8
+Author:     Tal Regev <tal.regev@gmail.com>
+AuthorDate: 2024-08-28
+Commit:     Tal Regev <tal.regev@gmail.com>
+CommitDate: 2024-08-28
+
+    Fix cmake export
+
+commit 806739676fcf0ba61f94c23e4b35567f697ee013
+Merge: 3c7c7f2 96737c0
+Author:     Tatsuhiro Tsujikawa <404610+tatsuhiro-t@users.noreply.github.com>
+AuthorDate: 2024-08-28
+Commit:     GitHub <noreply@github.com>
+CommitDate: 2024-08-28
+
+    Merge pull request #249 from ngtcp2/change-clang-format-options
+    
+    Change clang-format options
+
+commit 96737c00a942d0911f59fa7265954b08f0e09114
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-08-28
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-08-28
+
+    Change clang-format options
+
+commit 3c7c7f29b1eba52363fe01907d796b96b38a0ee8
+Author:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+AuthorDate: 2024-08-24
+Commit:     Tatsuhiro Tsujikawa <tatsuhiro.t@gmail.com>
+CommitDate: 2024-08-24
+
+    Bump package version

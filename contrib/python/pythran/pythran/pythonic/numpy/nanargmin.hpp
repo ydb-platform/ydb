@@ -3,10 +3,10 @@
 
 #include "pythonic/include/numpy/nanargmin.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/builtins/ValueError.hpp"
 #include "pythonic/numpy/isnan.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -36,7 +36,7 @@ namespace numpy
         _nanargmin((*begin).begin(), (*begin).end(), min, index, where,
                    utils::int_<N - 1>());
     }
-  }
+  } // namespace
 
   template <class E>
   long nanargmin(E const &expr)
@@ -51,7 +51,7 @@ namespace numpy
     else
       throw types::ValueError("empty sequence");
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

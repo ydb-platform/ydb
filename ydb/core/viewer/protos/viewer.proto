@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import "ydb/core/graph/protos/graph.proto";
 import "ydb/core/protos/tablet_counters.proto";
+import "ydb/core/protos/memory_stats.proto";
 import "ydb/core/protos/node_whiteboard.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/tablet.proto";
@@ -396,6 +397,7 @@ message TTenant {
     repeated TStorageUsage TablesStorage = 44;
     repeated TStorageUsage DatabaseStorage = 45;
     uint32 CoresTotal = 50;
+    optional NKikimrMemory.TMemoryStats MemoryStats = 51;
 }
 
 message TTenants {
@@ -762,11 +764,26 @@ enum EAutocompleteType {
 }
 
 message TQueryAutocomplete {
+    enum EDefaultKind {
+        None = 0;
+        Sequence = 1;
+        Literal = 2;
+        Reserved3 = 3;
+        Reserved4 = 4;
+        Reserved5 = 5;
+        Reserved6 = 6;
+        Reserved7 = 7;
+        Reserved8 = 8;
+        Reserved9 = 9;
+    }
     message TResult {
         message TEntity {
             string Name = 1;
             EAutocompleteType Type = 2;
             string Parent = 3;
+            optional uint32 PKIndex = 4;
+            optional bool NotNull = 5;
+            EDefaultKind Default = 6;
         }
         optional uint32 Total = 1;
         repeated TEntity Entities = 2;

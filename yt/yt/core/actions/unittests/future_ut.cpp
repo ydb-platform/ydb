@@ -591,7 +591,7 @@ TEST_F(TFutureTest, ApplyVoidToFutureInt)
     ::TThread thread(&AsynchronousIntSetter, &setter);
 
     auto source = kicker.ToFuture();
-    auto  target = source
+    auto target = source
         .Apply(BIND([&] () -> TFuture<int> {
             ++state;
             thread.Start();

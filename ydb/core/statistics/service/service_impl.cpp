@@ -26,7 +26,7 @@
 
 #include <util/datetime/cputimer.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
@@ -746,6 +746,7 @@ private:
         entry.Operation = TNavigate::EOp::OpPath;
         entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
         entry.RedirectRequired = redirectRequired;
+        entry.ShowPrivatePath = true;
     }
 
     void Handle(TEvStatistics::TEvGetStatistics::TPtr& ev) {

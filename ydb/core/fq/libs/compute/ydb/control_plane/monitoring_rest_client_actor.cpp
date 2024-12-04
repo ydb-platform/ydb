@@ -12,7 +12,7 @@
 
 #include <ydb/library/yql/utils/actors/http_sender.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
-#include <ydb/library/yql/utils/url_builder.h>
+#include <yql/essentials/utils/url_builder.h>
 
 #include <library/cpp/json/json_reader.h>
 

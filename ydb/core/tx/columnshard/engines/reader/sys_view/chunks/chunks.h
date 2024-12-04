@@ -109,12 +109,15 @@ private:
         std::shared_ptr<TDataAccessorsRequest> Request;
         NColumnShard::TCounterGuard WaitingCountersGuard;
         const NActors::TActorId OwnerId;
+        const std::shared_ptr<NReader::TReadContext> Context;
+
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*selfPtr*/) override {
             Guard = std::move(guard);
             AccessorsManager->AskData(std::move(Request));
             return true;
         }
+        virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
 
         virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
             if (result.HasErrors()) {
@@ -150,9 +153,8 @@ public:
 
 class TStoreSysViewPolicy: public NAbstract::ISysViewPolicy {
 protected:
-    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(
-        const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const override {
-        return std::make_unique<TConstructor>(snapshot, itemsLimit, reverse);
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TScannerConstructorContext& request) const override {
+        return std::make_unique<TConstructor>(request);
     }
     virtual std::shared_ptr<NAbstract::IMetadataFiller> DoCreateMetadataFiller() const override {
         return std::make_shared<NAbstract::TMetadataFromStore>();
@@ -165,9 +167,8 @@ public:
 
 class TTableSysViewPolicy: public NAbstract::ISysViewPolicy {
 protected:
-    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(
-        const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const override {
-        return std::make_unique<TConstructor>(snapshot, itemsLimit, reverse);
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TScannerConstructorContext& request) const override {
+        return std::make_unique<TConstructor>(request);
     }
     virtual std::shared_ptr<NAbstract::IMetadataFiller> DoCreateMetadataFiller() const override {
         return std::make_shared<NAbstract::TMetadataFromTable>();

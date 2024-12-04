@@ -787,7 +787,7 @@ Y_UNIT_TEST_SUITE(DBase) {
                 stream << cache->DumpRanges();
                 return stream.Str();
             } else {
-                return nullptr;
+                return "";
             }
         };
 
@@ -860,7 +860,7 @@ Y_UNIT_TEST_SUITE(DBase) {
                 stream << cache->DumpRanges();
                 return stream.Str();
             } else {
-                return nullptr;
+                return "";
             }
         };
 

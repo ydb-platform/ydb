@@ -1,9 +1,7 @@
 #include "signals.h"
 #include "utils.h"
 
-#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
-#include <contrib/ydb/library/yql/providers/yt/lib/log/yt_logger.h>
 
 #include <util/stream/output.h>
 #include <util/generic/yexception.h>
@@ -108,66 +106,6 @@ const char* strsignal(int signo)
 }
 #endif
 
-namespace {
-
-class TEmergencyLogOutput: public IOutputStream {
-public:
-    TEmergencyLogOutput()
-        : Current_(Buf_)
-        , End_(Y_ARRAY_END(Buf_))
-    {
-    }
-
-    ~TEmergencyLogOutput() {
-    }
-
-private:
-    inline size_t Avail() const noexcept {
-        return End_ - Current_;
-    }
-
-    void DoFlush() override {
-        if (Current_ != Buf_) {
-            NYql::NLog::YqlLogger().Write(TLOG_EMERG, Buf_, Current_ - Buf_);
-            Current_ = Buf_;
-        }
-    }
-
-    void DoWrite(const void* buf, size_t len) override {
-        len = Min(len, Avail());
-        if (len) {
-            char* end = Current_ + len;
-            memcpy(Current_, buf, len);
-            Current_ = end;
-        }
-    }
-
-private:
-    char Buf_[1 << 20];
-    char* Current_;
-    char* const End_;
-
-};
-
-TEmergencyLogOutput EMERGENCY_LOG_OUT;
-
-}
-
-void LogBacktraceOnSignal(int signum)
-{
-    if (NYql::NLog::IsYqlLoggerInitialized()) {
-        EMERGENCY_LOG_OUT << strsignal(signum) << TStringBuf(" (pid=") << GetPID() << TStringBuf("): ");
-        NYql::NBacktrace::KikimrBackTraceFormatImpl(&EMERGENCY_LOG_OUT);
-        EMERGENCY_LOG_OUT.Flush();
-    }
-    NYql::FlushYtDebugLog();
-    /* Now reraise the signal. We reactivate the signal’s default handling,
-       which is to terminate the process. We could just call exit or abort,
-       but reraising the signal sets the return status from the process
-       correctly. */
-    raise(signum);
-}
-
 
 #ifdef _unix_
 int SetSignalHandler(int signo, void (*handler)(int))
@@ -213,7 +151,6 @@ void SetSignalHandlers(const TSignalHandlerDesc* handlerDescs)
         ythrow TSystemError() << "Cannot set sigprocmask";
     }
 
-    NYql::NBacktrace::AddAfterFatalCallback([](int signo){ LogBacktraceOnSignal(signo); });
     NYql::NBacktrace::RegisterKikimrFatalActions();
 }
 

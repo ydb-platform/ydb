@@ -35,6 +35,31 @@ void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TS
     );
 }
 
+void AuditLogAccessDenied(const IRequestProxyCtx* ctx, const TString& database, const TString& userSID, const TString& sanitizedToken)
+{
+    static const TString GrpcConnComponentName = "grpc-access-denied";
+
+    const TString remoteAddress = NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName());
+
+    AUDIT_LOG(
+        AUDIT_PART("component", GrpcConnComponentName)
+
+        AUDIT_PART("remote_address", remoteAddress)
+        AUDIT_PART("subject", userSID)
+        AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
+        AUDIT_PART("database", database)
+        AUDIT_PART("operation", ctx->GetRequestName())
+    );
+
+    LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER, "AUDIT: "
+        << "User has no permission to perform query on this database " << database 
+        << ", subject " << userSID
+        << ", sanitized_token " << (!sanitizedToken.empty() ? sanitizedToken : EmptyValue)
+        << ", operation " << ctx->GetRequestName()
+        << ", remote_address " << remoteAddress
+    );
+}
+
 void AuditLog(ui32 status, const TAuditLogParts& parts)
 {
     static const TString GrpcProxyComponentName = "grpc-proxy";

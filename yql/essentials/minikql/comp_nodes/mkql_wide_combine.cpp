@@ -332,10 +332,6 @@ public:
         }
     }
 
-    void IncRows() {
-        CounterRows_.Inc();
-    }
-
     NUdf::TUnboxedValuePod* Extract() {
         if (!ExtractIt) {
             ExtractIt.emplace(Storage, RowSize(), States.GetSize());
@@ -348,6 +344,7 @@ public:
             return nullptr;
         }
         NUdf::TUnboxedValuePod* result = ExtractIt->GetValuePtr();
+        CounterRows_.Inc();
         return result;
     }
 
@@ -528,7 +525,11 @@ public:
         NUdf::TUnboxedValue* value = nullptr;
         if (GetMode() == EOperatingMode::InMemory) {
             value = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract());
-            if (!value) IsEverythingExtracted = true;
+            if (value) {
+                CounterRows_.Inc();
+            } else {
+                IsEverythingExtracted = true;
+            }
             return value;
         }
 
@@ -536,7 +537,9 @@ public:
         MKQL_ENSURE(SpilledBuckets.size() > 0, "Internal logic error");
 
         value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets.front().InMemoryProcessingState->Extract());
-        if (!value) {
+        if (value) {
+            CounterRows_.Inc();
+        } else {
             SpilledBuckets.front().InMemoryProcessingState->ReadMore<false>();
             SpilledBuckets.pop_front();
             if (SpilledBuckets.empty()) IsEverythingExtracted = true;
@@ -898,10 +901,6 @@ public:
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
 
-    void IncRows() {
-        CounterRows_.Inc();
-    }
-
 private:
     bool StateWantsToSpill = false;
     bool IsEverythingExtracted = false;
@@ -1055,7 +1054,6 @@ public:
 
             if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
                 Nodes.FinishItem(ctx, values, output);
-                ptr->IncRows();
                 return EFetchResult::One;
             }
         }
@@ -1501,7 +1499,6 @@ public:
                     case TSpillingSupportState::EUpdateResult::Extract:
                         if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
                             Nodes.FinishItem(ctx, values, output);
-                            ptr->IncRows();
                             return EFetchResult::One;
                         }
                         continue;

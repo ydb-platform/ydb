@@ -199,6 +199,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NOlap::TWaitCompactionController>();
         csController->SetSmallSizeDetector(1000000);
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
+        csController->SetOverrideReadTimeoutClean(TDuration::Seconds(5));
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
 
@@ -256,7 +257,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         {
             const TInstant start = TInstant::Now();
             while (
-                Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() && TInstant::Now() - start < TDuration::Seconds(10)) {
+                Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() && TInstant::Now() - start < TDuration::Seconds(15)) {
                 Cerr << "Wait empty... " << Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() << Endl;
                 Sleep(TDuration::Seconds(2));
             }

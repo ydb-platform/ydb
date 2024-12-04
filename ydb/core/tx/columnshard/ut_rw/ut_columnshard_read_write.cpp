@@ -2666,8 +2666,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             ProposeCommit(runtime, sender, txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
-        AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
-        AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val(), 1);
 
         Cerr << "Compactions happened: " << csDefaultControllerGuard->GetCompactionStartedCounter().Val() << Endl;
         Cerr << "Indexations happened: " << csDefaultControllerGuard->GetInsertStartedCounter().Val() << Endl;

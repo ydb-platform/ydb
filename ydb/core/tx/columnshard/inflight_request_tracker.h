@@ -21,6 +21,7 @@ private:
     std::optional<TInstant> LastRequestFinishedInstant;
     THashSet<ui32> Requests;
     YDB_READONLY(bool, IsLock, false);
+    YDB_READONLY(bool, IsFree, false);
 
     TSnapshotLiveInfo(const NOlap::TSnapshot& snapshot)
         : Snapshot(snapshot) {
@@ -31,15 +32,11 @@ public:
         AFL_VERIFY(Requests.emplace(cookie).second);
     }
 
-    [[nodiscard]] bool DelRequest(const ui32 cookie, const TInstant now) {
+    void DelRequest(const ui32 cookie, const TInstant now) {
         AFL_VERIFY(Requests.erase(cookie));
         if (Requests.empty()) {
             LastRequestFinishedInstant = now;
         }
-        if (!IsLock && Requests.empty()) {
-            return true;
-        }
-        return false;
     }
 
     static TSnapshotLiveInfo BuildFromRequest(const NOlap::TSnapshot& reqSnapshot) {
@@ -58,8 +55,8 @@ public:
         LastPingInstant = now;
         if (Requests.empty()) {
             AFL_VERIFY(LastRequestFinishedInstant);
-            if (critDuration < *LastPingInstant - *LastRequestFinishedInstant && IsLock) {
-                IsLock = false;
+            if (critDuration < *LastPingInstant - *LastRequestFinishedInstant && !IsFree) {
+                IsFree = true;
                 return true;
             }
         } else {

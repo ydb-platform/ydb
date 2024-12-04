@@ -19,9 +19,7 @@ NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFli
         {
             auto it = SnapshotsLive.find(readMetaBase->GetRequestSnapshot());
             AFL_VERIFY(it != SnapshotsLive.end());
-            if (it->second.DelRequest(cookie, now)) {
-                SnapshotsLive.erase(it);
-            }
+            it->second.DelRequest(cookie, now);
         }
 
         if (NOlap::NReader::NPlain::TReadMetadata::TConstPtr readMeta =
@@ -33,7 +31,6 @@ NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFli
             }
         }
     }
-    Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
 
     RequestsMeta.erase(cookie);
     return readMetaBase;
@@ -94,26 +91,30 @@ public:
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
     TColumnShard* self, const TDuration critDuration, const TInstant now) {
-    std::set<NOlap::TSnapshot> snapshotsToSave;
+    std::set<NOlap::TSnapshot> snapshotsToPersist;
+    std::set<NOlap::TSnapshot> snapshotsToUnpersist;
     std::set<NOlap::TSnapshot> snapshotsToFree;
     for (auto&& i : SnapshotsLive) {
         if (i.second.Ping(critDuration, now)) {
-            if (i.second.GetIsLock()) {
-                Counters->OnSnapshotLocked();
-                snapshotsToSave.emplace(i.first);
-            } else {
-                Counters->OnSnapshotUnlocked();
+            if (i.second.GetIsFree()) {
                 snapshotsToFree.emplace(i.first);
+                if (i.second.GetIsLock()) {
+                    Counters->OnSnapshotUnlocked();
+                    snapshotsToUnpersist.emplace(i.first);
+                }
+            } else if (i.second.GetIsLock()) {
+                Counters->OnSnapshotUnlocked();
+                snapshotsToPersist.emplace(i.first);
             }
         }
     }
     for (auto&& i : snapshotsToFree) {
-        SnapshotsLive.erase(i);
+        AFL_VERIFY(SnapshotsLive.erase(i));
     }
     Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
-    if (snapshotsToFree.size() || snapshotsToSave.size()) {
-        NYDBTest::TControllers::GetColumnShardController()->OnRequestTracingChanges(snapshotsToSave, snapshotsToFree);
-        return std::make_unique<TTransactionSavePersistentSnapshots>(self, std::move(snapshotsToSave), std::move(snapshotsToFree));
+    if (snapshotsToPersist.size() || snapshotsToUnpersist.size()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnRequestTracingChanges(snapshotsToPersist, snapshotsToUnpersist);
+        return std::make_unique<TTransactionSavePersistentSnapshots>(self, std::move(snapshotsToPersist), std::move(snapshotsToUnpersist));
     } else {
         return nullptr;
     }

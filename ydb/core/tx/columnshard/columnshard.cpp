@@ -196,6 +196,7 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const TActorContext& ctx) {
+    Cerr << "aboba" << Endl;
     if (auto writeTx =
             InFlightReadsTracker.Ping(this, NYDBTest::TControllers::GetColumnShardController()->GetPingCheckPeriod(), TInstant::Now())) {
         Execute(writeTx.release(), ctx);

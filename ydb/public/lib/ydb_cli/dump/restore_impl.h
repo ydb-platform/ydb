@@ -118,6 +118,7 @@ class TRestoreClient {
     TRestoreResult CheckSchema(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc);
     TRestoreResult RestoreIndexes(const TString& dbPath, const NTable::TTableDescription& desc);
+    TRestoreResult RestoreChangefeeds(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestorePermissions(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const THashSet<TString>& oldEntries);
 
 public:

@@ -343,6 +343,15 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
         LOG_D("Skip restoring indexes of " << dbPath.Quote());
     }
 
+    if (settings.RestoreChangefeed_) {
+        auto result = RestoreChangefeeds(dbPath, dumpedDesc);
+        if (!result.IsSuccess()) {
+            return result;
+        }
+    } else if (!dumpedDesc.GetChangefeedDescriptions().empty()) {
+        LOG_D("Skip restoring changefeeds of " << dbPath.Quote());
+    }
+
     return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
@@ -527,6 +536,52 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
         });
         if (!forgetStatus.IsSuccess()) {
             LOG_E("Error building index " << index.GetIndexName().Quote() << " on " << dbPath.Quote());
+            return Result<TRestoreResult>(dbPath, std::move(forgetStatus));
+        }
+    }
+
+    return Result<TRestoreResult>();
+}
+
+TRestoreResult TRestoreClient::RestoreChangefeeds(const TString& dbPath, const TTableDescription& desc) {
+    TMaybe<TTableDescription> actualDesc;
+    auto descResult = DescribeTable(TableClient, dbPath, actualDesc);
+    if (!descResult.IsSuccess()) {
+        return Result<TRestoreResult>(dbPath, std::move(descResult));
+    }
+
+    for (const auto& changefeed : desc.GetChangefeedDescriptions()) {
+        if (FindPtr(actualDesc->GetChangefeedDescriptions(), changefeed)) {
+            continue;
+
+        LOG_D("Restore changefeed " << changefeed.GetName().Quote() << " on " << dbPath.Quote());
+
+        TOperation::TOperationId buildChangefeedId;
+        auto buildChangefeedStatus = TableClient.RetryOperationSync([&, &outId = buildChangefeedId](TSession session) {
+            auto settings = TAlterTableSettings().AppendAddChangefeeds(changefeed);
+            auto result = session.AlterTableLong(dbPath, settings).GetValueSync();
+            if (IsOperationStarted(result.Status())) {
+                outId = result.Id();
+            }
+            return result.Status();
+        });
+
+        if (!IsOperationStarted(buildChangefeedStatus)) {
+            LOG_E("Error building changefeed " << changefeed.GetName().Quote() << " on " << dbPath.Quote());
+            return Result<TRestoreResult>(dbPath, std::move(buildChangefeedStatus));
+        }
+
+        auto waitForIndexBuildStatus = WaitForIndexBuild(OperationClient, buildChangefeedId);
+        if (!waitForIndexBuildStatus.IsSuccess()) {
+            LOG_E("Error building changefeed " << changefeed.GetName().Quote() << " on " << dbPath.Quote());
+            return Result<TRestoreResult>(dbPath, std::move(waitForIndexBuildStatus));
+        }
+
+        auto forgetStatus = NConsoleClient::RetryFunction([&]() {
+            return OperationClient.Forget(buildChangefeedId).GetValueSync();
+        });
+        if (!forgetStatus.IsSuccess()) {
+            LOG_E("Error building changefeed " << changefeed.GetName().Quote() << " on " << dbPath.Quote());
             return Result<TRestoreResult>(dbPath, std::move(forgetStatus));
         }
     }

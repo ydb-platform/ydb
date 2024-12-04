@@ -37,6 +37,7 @@ static constexpr const char *PERMISSIONS_FILE_NAME = "permissions.pb";
 static constexpr const char *INCOMPLETE_DATA_FILE_NAME = "incomplete.csv";
 static constexpr const char *INCOMPLETE_FILE_NAME = "incomplete";
 static constexpr const char *EMPTY_FILE_NAME = "empty_dir";
+static constexpr const char *CHANGEFEED_FILE_NAME = "changefeed";
 
 static constexpr size_t IO_BUFFER_SIZE = 2 << 20; // 2 MiB
 static constexpr i64 FILE_SPLIT_THRESHOLD = 128 << 20; // 128 MiB
@@ -471,6 +472,28 @@ void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& p
     outFile.Write(permissionsStr.data(), permissionsStr.size());
 }
 
+TString CreateChageefeedBackupFileName(const TString& changefeedName) {
+    return TStringBuilder() << CHANGEFEED_FILE_NAME << "_" << changefeedName;
+}
+
+void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
+
+    const auto fullPath = JoinDatabasePath(dbPrefix, path);
+    auto desc = DescribeTable(driver, fullPath);
+
+    for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
+        Ydb::Table::Changefeed proto;
+        changefeedDesc.SerializeTo(proto);
+
+        TString changefeedStr;
+        google::protobuf::TextFormat::PrintToString(proto, &changefeedStr);
+        const auto fileName = CreateChageefeedBackupFileName(changefeedDesc.GetName());
+        LOG_D("Write changefeed into " << folderPath.Child(fileName).GetPath().Quote());
+        TFile outFile(folderPath.Child(fileName), CreateAlways | WrOnly);
+        outFile.Write(changefeedStr.data(), changefeedStr.size());
+    }
+}
+
 void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, const TString& path,
         const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered) {
     Y_ENSURE(!path.empty());
@@ -489,6 +512,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     TFile outFile(folderPath.Child(SCHEME_FILE_NAME), CreateAlways | WrOnly);
     outFile.Write(schemaStr.data(), schemaStr.size());
 
+    BackupChangefeeds(driver, dbPrefix, path, folderPath);
     BackupPermissions(driver, dbPrefix, path, folderPath);
 
     if (!schemaOnly) {

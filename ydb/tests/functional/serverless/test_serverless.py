@@ -506,7 +506,7 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             .with_column(ydb.Column('value_num', ydb.OptionalType(ydb.DataType.Uint64)))
             .with_primary_key('id')
         )
-	"""
+        """
 
     sessions = []
 
@@ -627,7 +627,7 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
 
         data = 'a' * 7000000
         for start in range(0, 1):
-             IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(1, data)]))
+            IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(1, data)]))
 
         for _ in range(120):
             time.sleep(1)

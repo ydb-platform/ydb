@@ -116,7 +116,7 @@ public:
         modifyAcl->SetNewOwner(NACLib::TSystemUsers::Tmp().GetUserSID());
 
         NACLib::TDiffACL diffAcl;
-        const auto useAccess = NACLib::EAccessRights::CreateDirectory;
+        const auto useAccess = NACLib::EAccessRights::CreateDirectory | NACLib::EAccessRights::DescribeSchema;
         diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, AppData()->AllAuthenticatedUsers);
         diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);
         modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
@@ -159,7 +159,7 @@ public:
         modifyAcl->SetNewOwner(UserToken->GetUserSID());
 
         NACLib::TDiffACL diffAcl;
-        const auto useAccess = NACLib::EAccessRights::CreateDirectory;
+        const auto useAccess = NACLib::EAccessRights::CreateDirectory | NACLib::EAccessRights::DescribeSchema;
         diffAcl.RemoveAccess(NACLib::EAccessType::Allow, useAccess, AppData()->AllAuthenticatedUsers);
         diffAcl.RemoveAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);
         modifyAcl->SetDiffACL(diffAcl.SerializeAsString());

@@ -103,7 +103,7 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
                     snapshotsToUnpersist.emplace(i.first);
                 }
             } else if (i.second.GetIsLock()) {
-                Counters->OnSnapshotUnlocked();
+                Counters->OnSnapshotLocked();
                 snapshotsToPersist.emplace(i.first);
             }
         }

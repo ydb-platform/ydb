@@ -4,27 +4,9 @@ This section describes how the TTL mechanism works and what its limits are. It a
 
 ## How it works {#how-it-works}
 
-The table's TTL is a sequence of storage tiers. Each tier contains an expression (TTL expression) and an action. When the expression triggers, that tier is assigned to the row. When a tier is assigned to a row, the specified action is automatically performed: moving the row to external storage or deleting it. External storage is represented by the [external data source](../../datamodel/external_data_source.md) object. The delete action can only be specified for the last tier.
+The table's TTL is a sequence of storage tiers. Each tier contains an expression (TTL expression) and an action. When the expression is triggered, that tier is assigned to the row. When a tier is assigned to a row, the specified action is automatically performed: moving the row to external storage or deleting it. External storage is represented by the [external data source](../../datamodel/external_data_source.md) object.
 
-{% note info %}
-
-Currently, only {{ objstorage-name }} is supported as external storage.
-
-{% endnote %}
-
-{{ ydb-short-name }} allows you to specify a column (TTL column) whose values are used in TTL expressions. The expression triggers when the specified number of seconds has passed since the time recorded in the TTL column.
-
-{% note info %}
-
-Automatic data eviction to external storage is available only for column-oriented tables. For row-oriented tables, this functionality is under development.
-
-{% endnote %}
-
-{% note warning %}
-
-An item with the `NULL` value in the TTL column is never deleted.
-
-{% endnote %}
+{{ ydb-short-name }} allows you to specify a column (TTL column) whose values are used in TTL expressions. The expression is triggered when the specified number of seconds has passed since the time recorded in the TTL column. For rows with `NULL` value in TTL column, the expression is not triggered.
 
 The timestamp for deleting a table item is determined by the formula:
 
@@ -73,6 +55,8 @@ The *BRO* has the following properties:
 
 * You can't specify multiple TTL columns.
 * You can't delete the TTL column. However, if this is required, you should first [disable TTL](#disable) for the table.
+* Only {{ objstorage-name }} is supported as external storage.
+* The delete action can only be specified for the last tier.
 
 ## Setup {#setting}
 
@@ -192,11 +176,7 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
 ### Enabling eviction to Object Storage for an existing table {#enable-tiering-on-existing-tables}
 
-{% note info %}
-
-This functionality is only available for column-oriented tables. For row-oriented tables, this functionality is under development.
-
-{% endnote %}
+{% include [OLTP_not_allow_note](../../../../_includes/not_allow_for_oltp_note.md) %}
 
 In the following example, rows of the table `mytable` will be moved to the bucket described in the external data source `/Root/s3_cold_data` one hour after the time recorded in the column `created_at` and will be deleted after 24 hours:
 
@@ -205,7 +185,11 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 - YQL
 
   ```yql
-  ALTER TABLE `mytable` SET (TTL = Interval("PT1H") TO EXTERNAL DATA SOURCE `/Root/s3_cold_data`, Interval(PT24H) DELETE ON modified_at AS SECONDS);
+  ALTER TABLE `mytable` SET (
+      TTL =
+          Interval("PT1H") TO EXTERNAL DATA SOURCE `/Root/s3_cold_data`,
+          Interval(PT24H) DELETE
+      ON modified_at AS SECONDS);
   ```
 
 {% if oss == true %}

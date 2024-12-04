@@ -47,7 +47,30 @@ A colum-oriented table is created by specifying the parameter `STORE = COLUMN` i
   );
 ```
 
-The properties and capabilities of columnar tables are described in the article [{#T}](../../../../concepts/datamodel/table.md), and the specifics of their creation through YQL are described on the page [{#T}](./index.md). Also, the TTL (Time to Live) — the lifespan of a row — can be specified in the WITH clause for row-based and columnar tables. [TTL](../../../../concepts/ttl.md) automatically deletes rows when the specified number of seconds has passed since the time recorded in the TTL column. TTL can be specified when creating row-based and columnar tables or added later using the `ALTER TABLE` command only for row-based tables.
+The properties and capabilities of columnar tables are described in the article [{#T}](../../../../concepts/datamodel/table.md), and the specifics of their creation through YQL are described on the page [{#T}](./index.md).
+
+## Time to Live (TTL) {#time-to-live}
+
+The TTL (Time to Live) — the lifespan of a row — can be specified in the WITH clause for row-based and columnar tables. [TTL](../../../../concepts/ttl.md) automatically deletes rows or evicts them to external storage when the specified number of seconds has passed since the time recorded in the TTL column. TTL can be specified when creating row-based and columnar tables or added later using the `ALTER TABLE` command only for row-based tables.
+
+The short form of the TTL value for specifying the time to delete rows:
+```
+Interval("<literal>") ON column [AS <unit>]
+```
+
+The general form of the TTL value:
+```
+Interval("<literal1>") action1, ..., Interval("<literalN>") actionN ON column [AS <unit>]
+```
+
+* `action` — the action performed when the TTL expression triggers. Allowed values:
+    * `DELETE` — delete the row;
+    * `TO EXTERNAL DATA SOURCE <path>` — evict the row to external storage specified by the [external data source](../../datamodel/external_data_source.md) at the path `<path>`.
+* `<unit>` — the unit of measurement, specified only for columns with a [numeric type](../../../../concepts/ttl.md#restrictions):
+    * `SECONDS`;
+    * `MILLISECONDS`;
+    * `MICROSECONDS`;
+    * `NANOSECONDS`.
 
 Example of creating a row-oriented and column-oriented tables with TTL:
 
@@ -84,5 +107,26 @@ Example of creating a row-oriented and column-oriented tables with TTL:
     ```
 
 {% endlist %}
+
+Example of creating a column-oriented table with eviction to external storage:
+
+{% include [OLTP_not_allow_note](../../../../../_includes/not_allow_for_oltp_note.md) %}
+
+```yql
+CREATE TABLE table_name (
+    a Uint64 NOT NULL,
+    b Timestamp NOT NULL,
+    c Float,
+    PRIMARY KEY (a, b)
+)
+PARTITION BY HASH(b)
+WITH (
+    STORE = COLUMN,
+    TTL =
+        Interval("PT1D") TO EXTERNAL DATA SOURCE `/Root/s3`,
+        Interval("P2D") DELETE
+    ON b
+);
+```
 
 {% endif %}

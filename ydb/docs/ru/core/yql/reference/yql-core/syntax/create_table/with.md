@@ -46,7 +46,30 @@ WITH (
   );
 ```
 
-Свойства и возможности колоночных таблиц описаны в статье [{#T}](../../../../concepts/datamodel/table.md), а специфика их создания через YQL описана на странице [{#T}](./index.md). Также в блоке `WITH` можно задать TTL (Time to Live) — время жизни строки для строковых и колоночных таблиц. [TTL](../../../../concepts/ttl.md) автоматически удаляет строки, когда проходит указанное количество секунд от времени, записанного в TTL-колонку. TTL можно задать при создании строковой и колоночной таблицы или добавить позже командой `ALTER TABLE` только в строковую таблицу.
+Свойства и возможности колоночных таблиц описаны в статье [{#T}](../../../../concepts/datamodel/table.md), а специфика их создания через YQL описана на странице [{#T}](./index.md).
+
+## Time to Live (TTL) {#time-to-live}
+
+В блоке `WITH` можно задать TTL (Time to Live) — время жизни строки для строковых и колоночных таблиц. [TTL](../../../../concepts/ttl.md) автоматически удаляет или вытесняет во внешнее хранилище строки, когда проходит указанное количество секунд от времени, записанного в TTL-колонку. TTL можно задать при создании строковой и колоночной таблицы или добавить позже командой `ALTER TABLE` только в строковую таблицу.
+
+Краткая форма значения TTL для задания времени удаления строк:
+```
+Interval("<literal>") ON column [AS <unit>]
+```
+
+Общий вид значения TTL:
+```
+Interval("<literal1>") action1, Interval("<literal1>") action2, ..., Interval("<literal1>") actionN ON column [AS <unit>]
+```
+
+* `action` — действие, которое выполняется при срабатывании TTL-выражения. Допустимые значения:
+    * `DELETE` — удалить строку;
+    * `TO EXTERNAL DATA SOURCE <path>` — вытеснить строку во внешнее хранилище, заданное [внешним источником данных](../../datamodel/external_data_source.md) по пути `<path>`.
+* `<unit>` — единица измерения, указывается только для колонок с [числовым типом](../../../../concepts/ttl.md#restrictions):
+    * `SECONDS`;
+    * `MILLISECONDS`;
+    * `MICROSECONDS`;
+    * `NANOSECONDS`.
 
 Пример создания строковой и колоночной таблицы с TTL:
 
@@ -83,5 +106,26 @@ WITH (
     ```
 
 {% endlist %}
+
+Пример создания колоночной таблицы с вытеснением строк во внешнее хранилище:
+
+{% include [OLTP_not_allow_note](../../../../../_includes/not_allow_for_oltp_note.md) %}
+
+```yql
+CREATE TABLE table_name (
+    a Uint64 NOT NULL,
+    b Timestamp NOT NULL,
+    c Float,
+    PRIMARY KEY (a, b)
+)
+PARTITION BY HASH(b)
+WITH (
+    STORE = COLUMN,
+    TTL =
+        Interval("PT1D") TO EXTERNAL DATA SOURCE `/Root/s3`,
+        Interval("P2D") DELETE
+    ON b
+);
+```
 
 {% endif %}

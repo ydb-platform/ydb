@@ -132,8 +132,9 @@ public:
 
         void AddSticky(TPageId pageId, TSharedPageRef page) noexcept {
             Y_ABORT_UNLESS(page.IsUsed());
-            StickyPages.emplace(pageId, page);
-            StickyPagesSize += TPinnedPageRef(page)->size();
+            if (StickyPages.emplace(pageId, page).second) {
+                StickyPagesSize += TPinnedPageRef(page)->size();
+            }
         }
 
         bool IsSticky(TPageId pageId) const noexcept {

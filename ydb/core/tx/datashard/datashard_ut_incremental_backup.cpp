@@ -528,6 +528,90 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(SimpleRestoreBackupCollection, WithIncremental) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `MyCollection`
+              ( TABLE `/Root/Table`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = ')" + TString(WithIncremental ? "true" : "false") +  R"('
+              );
+            )", false);
+
+        CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000001Z_full", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000001Z_full/Table` (key, value) VALUES
+                (1, 10)
+              , (2, 20)
+              , (3, 30)
+              , (4, 40)
+              , (5, 50)
+              ;
+            )");
+
+        if (WithIncremental) {
+            auto opts = TShardedTableOptions()
+                .AllowSystemColumnNames(true)
+                .Columns({
+                    {"key", "Uint32", true, false},
+                    {"value", "Uint32", false, false},
+                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}});
+
+            CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000002Z_incremental", "Table", opts);
+
+            ExecSQL(server, edgeActor, R"(
+                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
+                  (2, 200, NULL)
+                , (1, NULL, true)
+                ;
+            )");
+
+            CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000003Z_incremental", "Table", opts);
+
+            ExecSQL(server, edgeActor, R"(
+                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
+                  (4, 400, NULL)
+                , (5, NULL, true)
+                ;
+            )");
+        }
+
+        ExecSQL(server, edgeActor, R"(RESTORE `MyCollection`;)", false);
+
+        if (!WithIncremental) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/Table`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 20 } }, "
+                "{ items { uint32_value: 3 } items { uint32_value: 30 } }, "
+                "{ items { uint32_value: 4 } items { uint32_value: 40 } }, "
+                "{ items { uint32_value: 5 } items { uint32_value: 50 } }"
+                );
+
+        } else {
+
+        }
+    }
+
     Y_UNIT_TEST(E2EBackupCollection) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

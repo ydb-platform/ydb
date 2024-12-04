@@ -64,19 +64,21 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 
     CreateConsistentCopyTables(opId, consistentCopyTables, context, result);
 
-    for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
-        NKikimrSchemeOp::TModifyScheme restoreIncrs;
-        restoreIncrs.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups);
-        restoreIncrs.SetInternal(true);
+    if (incBackupNames) {
+        for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+            NKikimrSchemeOp::TModifyScheme restoreIncrs;
+            restoreIncrs.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups);
+            restoreIncrs.SetInternal(true);
 
-        auto& desc = *restoreIncrs.MutableRestoreMultipleIncrementalBackups();
-        for (const auto& incr : incBackupNames) {
-            auto path = bcPath.Child(incr).PathString() + item.GetPath().substr(cutLen - 1, item.GetPath().size() - cutLen + 1);
-            desc.AddSrcTableNames(path);
+            auto& desc = *restoreIncrs.MutableRestoreMultipleIncrementalBackups();
+            for (const auto& incr : incBackupNames) {
+                auto path = bcPath.Child(incr).PathString() + item.GetPath().substr(cutLen - 1, item.GetPath().size() - cutLen + 1);
+                desc.AddSrcTableNames(path);
+            }
+            desc.SetDstTablePath(item.GetPath());
+
+            CreateRestoreMultipleIncrementalBackups(opId, restoreIncrs, context, true, result);
         }
-        desc.SetDstTablePath(item.GetPath());
-
-        CreateRestoreMultipleIncrementalBackups(opId, restoreIncrs, context, true, result);
     }
 
     return result;

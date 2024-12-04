@@ -26,12 +26,6 @@ namespace NTable {
 
         using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
 
-        // TODO: get rid of pinning data logic and get data from TSharedPageRef directly
-        struct TPinnedPage {
-            NSharedCache::TSharedPageRef SharedPageRef;
-            TSharedData SharedData;
-        };
-
         struct TLoaderEnv : public IPages {
             TLoaderEnv(TIntrusivePtr<TCache> cache)
                 : Cache(std::move(cache))
@@ -72,7 +66,7 @@ namespace NTable {
                 }
 
                 if (savedPage != SavedPages.end()) {
-                    return &savedPage->second.SharedData;
+                    return &savedPage->second;
                 } else {
                     NeedPages.insert(pageId);
                     return nullptr;
@@ -108,13 +102,14 @@ namespace NTable {
         private:
             void AddSavedPage(TPageId pageId, NSharedCache::TSharedPageRef page) noexcept
             {
-                auto data = NSharedCache::TPinnedPageRef(page).GetData();
-                SavedPages.emplace(pageId, TPinnedPage{page, data});
+                SavedPages[pageId] = NSharedCache::TPinnedPageRef(page).GetData();
+                SavedPagesRefs.emplace_back(std::move(page));
             }
 
             const TPart* Part = nullptr;
             TIntrusivePtr<TCache> Cache;
-            THashMap<TPageId, TPinnedPage> SavedPages;
+            THashMap<TPageId, TSharedData> SavedPages;
+            TVector<NSharedCache::TSharedPageRef> SavedPagesRefs;
             THashSet<TPageId> NeedPages;
         };
 

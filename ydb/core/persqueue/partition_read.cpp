@@ -466,7 +466,7 @@ TReadAnswer TReadInfo::FormAnswer(
         Y_ABORT_UNLESS(offset < Offset || partNo <= PartNo);
         TKey key(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount, false);
         ui64 firstHeaderOffset = GetFirstHeaderOffset(key, blobValue);
-        for (TBlobIterator it(key, blobValue); it.IsValid() && !needStop; it.Next()) {
+        for (TBlobIterator it(key, blobValue); it.IsValid(); it.Next()) {
             TBatch batch = it.GetBatch();
             auto& header = batch.Header;
             batch.Unpack();
@@ -488,12 +488,11 @@ TReadAnswer TReadInfo::FormAnswer(
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "FormAnswer processing batch offset "
                 << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount() << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
 
-            ui32 i = 0;
-            for (i = pos; i < batch.Blobs.size(); ++i) {
+            for (size_t i = pos; i < batch.Blobs.size(); ++i) {
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 
-                Y_ABORT_UNLESS(PartNo == res.GetPartNo(), "pos %" PRIu32 " i %" PRIu32 " Offset %" PRIu64 " PartNo %" PRIu16 " offset %" PRIu64 " partNo %" PRIu16,
+                Y_ABORT_UNLESS(PartNo == res.GetPartNo(), "pos %" PRIu32 " i %" PRIu64 " Offset %" PRIu64 " PartNo %" PRIu16 " offset %" PRIu64 " partNo %" PRIu16,
                          pos, i, Offset, PartNo, offset, res.GetPartNo());
 
                 if (userInfo) {
@@ -510,13 +509,8 @@ TReadAnswer TReadInfo::FormAnswer(
                 } else {
                     ++PartNo;
                 }
-                if (updateUsage(res)) {
-                    break;
-                }
-            }
 
-            if (i != batch.Blobs.size()) {//not fully processed batch - next definetely will not be processed
-                needStop = true;
+                needStop = updateUsage(res);
             }
         }
     }

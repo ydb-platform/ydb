@@ -538,6 +538,20 @@ message TStorageTierConfig {
     optional TCompressionOptions Compression = 3;
 }
 
+message TCompactionLevelConstructorContainer {
+    optional string ClassName = 1;
+
+    message TZeroLevel {
+        optional uint32 PortionsLiveDurationSeconds = 1;
+        optional uint64 ExpectedBlobsSize = 2;
+    }
+
+    oneof Implementation {
+        TZeroLevel ZeroLevel = 10;
+    }
+
+}
+
 message TCompactionPlannerConstructorContainer {
     optional string ClassName = 1;
 
@@ -551,7 +565,7 @@ message TCompactionPlannerConstructorContainer {
     }
 
     message TLCOptimizer {
-
+        repeated TCompactionLevelConstructorContainer Levels = 1;
     }
 
     oneof Implementation {

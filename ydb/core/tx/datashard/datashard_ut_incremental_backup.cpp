@@ -223,6 +223,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/IncrBackupImpl`
+                ORDER BY key
                 )"),
             result);
 
@@ -242,6 +243,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/IncrBackupImpl`
+                ORDER BY key
                 )"),
             result);
     }
@@ -294,6 +296,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/Table`
+                ORDER BY key
                 )"),
             "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 30 } }");
@@ -353,9 +356,11 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/Table`
+                ORDER BY key
                 )"),
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/RestoreTable`
+                ORDER BY key
                 )"));
     }
 

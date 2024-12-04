@@ -36,7 +36,7 @@
  class BaseQueryTxMode(IToProto):
 --- contrib/python/ydb/py3/ydb/draft/_apis.py	(index)
 +++ contrib/python/ydb/py3/ydb/draft/_apis.py	(working tree)
-@@ -1,21 +1,20 @@
+@@ -1,28 +1,22 @@
  # -*- coding: utf-8 -*-
  import typing
 
@@ -59,8 +59,17 @@
          ydb_dynamic_config_v1_pb2_grpc,
      )
 
--    from .._grpc.common.draft.protos import (
+-    try:
+-        from .._grpc.common.draft.protos import (
+-            ydb_dynamic_config_pb2,
+-        )
+-    except ImportError:
+-        from .._grpc.common.protos.draft import (
+-            ydb_dynamic_config_pb2,
+-        )
 +    from contrib.ydb.public.api.protos.draft import (
-         ydb_dynamic_config_pb2,
-     )
++        ydb_dynamic_config_pb2,
++    )
 
+
+ ydb_dynamic_config = ydb_dynamic_config_pb2

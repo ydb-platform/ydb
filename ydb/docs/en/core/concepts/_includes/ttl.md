@@ -4,15 +4,15 @@ This section describes how the TTL mechanism works and what its limits are. It a
 
 ## How it works {#how-it-works}
 
-The table's TTL is a sequence of storage tiers. Each tier contains an expression (TTL expression) and an action. When the expression triggers, that tier is assigned to the row. When a tier is assigned to a row, the specified action is automatically performed: moving the row to an external storage or deleting it. External storage is represented by the [external data source](https://ydb.tech/docs/en/concepts/datamodel/external_data_source) object. Deleting action can only be specified for the last tier.
+The table's TTL is a sequence of storage tiers. Each tier contains an expression (TTL expression) and an action. When the expression triggers, that tier is assigned to the row. When a tier is assigned to a row, the specified action is automatically performed: moving the row to external storage or deleting it. External storage is represented by the [external data source](../../datamodel/external_data_source.md) object. The delete action can only be specified for the last tier.
 
 {% note info %}
 
-Currently, only an Object Storage is available as external storage.
+Currently, only {{ objstorage-name }} is supported as external storage.
 
 {% endnote %}
 
-{{ ydb-short-name }} allows you to specify a column (TTL column) whose values are used in TTL expressions. The expression triggers when the specified number of seconds have passed since the time recorded in the TTL column.
+{{ ydb-short-name }} allows you to specify a column (TTL column) whose values are used in TTL expressions. The expression triggers when the specified number of seconds has passed since the time recorded in the TTL column.
 
 {% note info %}
 
@@ -198,7 +198,7 @@ This functionality is only available for column-oriented tables. For row-oriente
 
 {% endnote %}
 
-In the following example, rows of the table `mytable` will be moved to the bucket described in the external data source `/Root/s3_cold_data` one hour after the time recorded in the column `created_at`, and will be deleted after 24 hours:
+In the following example, rows of the table `mytable` will be moved to the bucket described in the external data source `/Root/s3_cold_data` one hour after the time recorded in the column `created_at` and will be deleted after 24 hours:
 
 {% list tabs group=tool %}
 

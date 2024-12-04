@@ -3,12 +3,14 @@
 #include "optimizer.h"
 #include "zero_level.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/constructor.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-TOptimizerPlanner::TOptimizerPlanner(
-    const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
+TOptimizerPlanner::TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
+    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors)
     : TBase(pathId)
     , Counters(std::make_shared<TCounters>())
     , StoragesManager(storagesManager)
@@ -19,9 +21,19 @@ TOptimizerPlanner::TOptimizerPlanner(
     Levels.emplace_back(
         std::make_shared<TLevelPortions>(2, 0.9, maxPortionBlobBytes, nullptr, PortionsInfo, Counters->GetLevelCounters(2)));
 */
-    Levels.emplace_back(std::make_shared<TZeroLevelPortions>(2, nullptr, Counters->GetLevelCounters(2), TDuration::Max()));
-    Levels.emplace_back(std::make_shared<TZeroLevelPortions>(1, Levels.back(), Counters->GetLevelCounters(1), TDuration::Max()));
-    Levels.emplace_back(std::make_shared<TZeroLevelPortions>(0, Levels.back(), Counters->GetLevelCounters(0), TDuration::Seconds(180)));
+    if (levelConstructors.size()) {
+        std::shared_ptr<IPortionsLevel> nextLevel;
+        ui32 idx = levelConstructors.size();
+        for (auto it = levelConstructors.rbegin(); it != levelConstructors.rend(); ++it) {
+            --idx;
+            Levels.emplace_back((*it)->BuildLevel(nextLevel, idx, Counters->GetLevelCounters(idx)));
+        }
+    } else {
+        Levels.emplace_back(std::make_shared<TZeroLevelPortions>(2, nullptr, Counters->GetLevelCounters(2), TDuration::Max(), 1 << 20));
+        Levels.emplace_back(std::make_shared<TZeroLevelPortions>(1, Levels.back(), Counters->GetLevelCounters(1), TDuration::Max(), 1 << 20));
+        Levels.emplace_back(
+            std::make_shared<TZeroLevelPortions>(0, Levels.back(), Counters->GetLevelCounters(0), TDuration::Seconds(180), 1 << 20));
+    }
     std::reverse(Levels.begin(), Levels.end());
     RefreshWeights();
 }

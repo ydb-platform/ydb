@@ -97,11 +97,6 @@ public:
             return PageMap.size();
         }
 
-        const TSharedData* Lookup(TPageId pageId) const noexcept {
-            auto* page = GetPage(pageId);
-            return page ? page->GetPinnedBody() : nullptr;
-        }
-
         TPage* GetPage(TPageId pageId) const noexcept {
             return PageMap[pageId].Get();
         }

@@ -65,7 +65,7 @@ namespace NTable {
                     if (auto cachedPage = Cache->GetPage(pageId); cachedPage) {
                         if (auto sharedPageRef = cachedPage->SharedBody; sharedPageRef && sharedPageRef.Use()) {
                             // Save page in case it's evicted on the next iteration
-                            AddSavedPage(pageId, sharedPageRef);
+                            AddSavedPage(pageId, std::move(sharedPageRef));
                             savedPage = SavedPages.find(pageId);
                         }
                     }

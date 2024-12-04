@@ -3,7 +3,7 @@
 #include "flat_page_iface.h"
 #include "flat_sausage_fetch.h"
 #include "flat_fwd_misc.h"
-#include <ydb/core/tablet_flat/shared_handle.h>
+#include "shared_handle.h"
 
 namespace NKikimr {
 namespace NTable {

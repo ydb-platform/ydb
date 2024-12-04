@@ -195,6 +195,10 @@ message TEvNodeConfigInvokeOnRoot {
         string YAML = 1;
     }
 
+    message TBootstrap {
+        string SelfAssemblyUUID = 1;
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -205,6 +209,7 @@ message TEvNodeConfigInvokeOnRoot {
         TAdvanceGeneration AdvanceGeneration = 7;
         TFetchStorageConfig FetchStorageConfig = 8;
         TReplaceStorageConfig ReplaceStorageConfig = 9;
+        TBootstrap Bootstrap = 10;
     }
 }
 

@@ -44,7 +44,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         return false;
     }
 
-    if (!ttl.HasExpireAfterSeconds()) {
+    if (!ttl.HasExpireAfterSeconds() && ttl.GetTiers().empty()) {
         errors.AddError("TTL without eviction time");
         return false;
     }
@@ -65,6 +65,18 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
     if (!NValidation::TTTLValidator::ValidateUnit(columnType.GetTypeId(), unit, errStr)) {
         errors.AddError(errStr);
         return false;
+    }
+    if (!NValidation::TTTLValidator::ValidateTiers(ttl.GetTiers(), errStr)) {
+        errors.AddError(errStr);
+        return false;
+    }
+    if (!AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
+        for (const auto& tier : ttl.GetTiers()) {
+            if (tier.HasEvictToExternalStorage()) {
+                errors.AddError(NKikimrScheme::StatusPreconditionFailed, "Tiering functionality is disabled for OLAP tables");
+                return false;
+            }
+        }
     }
     {
         bool correct = false;

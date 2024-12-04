@@ -58,7 +58,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
             return false;
         }
 
-        if (!NValidation::TTTLValidator::ValidateTiers(enabled, errStr)) {
+        if (!NValidation::TTTLValidator::ValidateTiers(enabled.GetTiers(), errStr)) {
             return false;
         }
 

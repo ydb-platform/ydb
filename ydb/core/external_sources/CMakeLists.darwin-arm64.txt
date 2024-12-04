@@ -15,6 +15,7 @@
 add_subdirectory(object_storage)
 add_subdirectory(ut)
 add_subdirectory(hive_metastore)
+add_subdirectory(s3)
 
 add_library(ydb-core-external_sources)
 

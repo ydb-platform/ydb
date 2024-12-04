@@ -19,6 +19,7 @@ get_built_tool_path(
   enum_parser
 )
 
+add_subdirectory(ut_assign_tx_id)
 add_subdirectory(ut_dst_creator)
 add_subdirectory(ut_stream_creator)
 add_subdirectory(ut_target_discoverer)
@@ -42,6 +43,7 @@ target_link_libraries(tx-replication-controller PUBLIC
   tx-replication-common
   tx-replication-ydb_proxy
   core-tx-scheme_board
+  core-tx-tx_allocator_client
   ydb-core-util
   ydb-core-ydb_convert
   ydb-services-metadata
@@ -70,6 +72,7 @@ target_sources(tx-replication-controller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/target_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/target_with_stream.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tenant_resolver.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_assign_tx_id.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_alter_dst_result.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_alter_replication.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_assign_stream_name.cpp

@@ -53,18 +53,20 @@ WITH (
 В блоке `WITH` можно задать TTL (Time to Live) — время жизни строки для строковых и колоночных таблиц. [TTL](../../../../concepts/ttl.md) автоматически удаляет или вытесняет во внешнее хранилище строки, когда проходит указанное количество секунд от времени, записанного в TTL-колонку. TTL можно задать при создании строковой и колоночной таблицы или добавить позже командой `ALTER TABLE` только в строковую таблицу.
 
 Краткая форма значения TTL для задания времени удаления строк:
-```
+
+```yql
 Interval("<literal>") ON column [AS <unit>]
 ```
 
 Общий вид значения TTL:
-```
+
+```yql
 Interval("<literal1>") action1, Interval("<literal1>") action2, ..., Interval("<literal1>") actionN ON column [AS <unit>]
 ```
 
 * `action` — действие, которое выполняется при срабатывании TTL-выражения. Допустимые значения:
     * `DELETE` — удалить строку;
-    * `TO EXTERNAL DATA SOURCE <path>` — вытеснить строку во внешнее хранилище, заданное [внешним источником данных](../../datamodel/external_data_source.md) по пути `<path>`.
+    * `TO EXTERNAL DATA SOURCE <path>` — вытеснить строку во внешнее хранилище, заданное [внешним источником данных](../../../../concepts/datamodel/external_data_source.md) по пути `<path>`.
 * `<unit>` — единица измерения, указывается только для колонок с [числовым типом](../../../../concepts/ttl.md#restrictions):
     * `SECONDS`;
     * `MILLISECONDS`;
@@ -109,7 +111,7 @@ Interval("<literal1>") action1, Interval("<literal1>") action2, ..., Interval("<
 
 Пример создания колоночной таблицы с вытеснением строк во внешнее хранилище:
 
-{% include [OLTP_not_allow_note](../../../../../_includes/not_allow_for_oltp_note.md) %}
+{% include [OLTP_not_allow_note](../../../../_includes/not_allow_for_oltp_note.md) %}
 
 ```yql
 CREATE TABLE table_name (

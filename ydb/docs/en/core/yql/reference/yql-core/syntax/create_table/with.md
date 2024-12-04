@@ -31,7 +31,6 @@ WITH (
 
 {% if backend_name == "YDB" %}
 
-
 A colum-oriented table is created by specifying the parameter `STORE = COLUMN` in the `WITH` clause:
 
 ```sql
@@ -54,18 +53,20 @@ The properties and capabilities of columnar tables are described in the article 
 The TTL (Time to Live) — the lifespan of a row — can be specified in the WITH clause for row-based and columnar tables. [TTL](../../../../concepts/ttl.md) automatically deletes rows or evicts them to external storage when the specified number of seconds has passed since the time recorded in the TTL column. TTL can be specified when creating row-based and columnar tables or added later using the `ALTER TABLE` command only for row-based tables.
 
 The short form of the TTL value for specifying the time to delete rows:
-```
+
+```yql
 Interval("<literal>") ON column [AS <unit>]
 ```
 
 The general form of the TTL value:
-```
+
+```yql
 Interval("<literal1>") action1, ..., Interval("<literalN>") actionN ON column [AS <unit>]
 ```
 
 * `action` — the action performed when the TTL expression triggers. Allowed values:
     * `DELETE` — delete the row;
-    * `TO EXTERNAL DATA SOURCE <path>` — evict the row to external storage specified by the [external data source](../../datamodel/external_data_source.md) at the path `<path>`.
+    * `TO EXTERNAL DATA SOURCE <path>` — evict the row to external storage specified by the [external data source](../../../../concepts/datamodel/external_data_source.md) at the path `<path>`.
 * `<unit>` — the unit of measurement, specified only for columns with a [numeric type](../../../../concepts/ttl.md#restrictions):
     * `SECONDS`;
     * `MILLISECONDS`;
@@ -110,7 +111,7 @@ Example of creating a row-oriented and column-oriented tables with TTL:
 
 Example of creating a column-oriented table with eviction to external storage:
 
-{% include [OLTP_not_allow_note](../../../../../_includes/not_allow_for_oltp_note.md) %}
+{% include [OLTP_not_allow_note](../../../../_includes/not_allow_for_oltp_note.md) %}
 
 ```yql
 CREATE TABLE table_name (

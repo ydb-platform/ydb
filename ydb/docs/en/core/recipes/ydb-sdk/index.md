@@ -25,6 +25,7 @@ Table of contents:
 - [Inserting data](upsert.md)
 - [Bulk upsert of data](bulk-upsert.md)
 - [Setting up the transaction execution mode](tx-control.md)
+- [Configuring time to live (TTL)](ttl.md)
 - [Troubleshooting](debug.md)
 
   - [Enable logging](debug-logs.md)

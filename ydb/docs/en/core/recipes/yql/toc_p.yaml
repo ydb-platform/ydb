@@ -5,3 +5,5 @@ items:
   href: accessing-json.md
 - name: Modifying JSON
   href: modifying-json.md
+- name: Configuring time to live (TTL)
+  href: ttl.md

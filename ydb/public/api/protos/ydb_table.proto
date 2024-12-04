@@ -1252,8 +1252,17 @@ message ReadRowsResponse {
     Ydb.ResultSet result_set = 3;
 }
 
+message MultiTable {
+    repeated string tables = 1;
+    // size of each table in tables list
+    repeated uint64 numrows = 2;
+}
+
 message BulkUpsertRequest {
-    string table = 1;
+    oneof mode {
+        string table = 1;
+        MultiTable multi_table = 9;
+    }
     // "rows" parameter must be a list of structs where each stuct represents one row.
     // It must contain all key columns but not necessarily all non-key columns.
     // Similar to UPSERT statement only values of specified columns will be updated.
@@ -1265,6 +1274,7 @@ message BulkUpsertRequest {
         Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 7;
         Ydb.Formats.CsvSettings csv_settings = 8;
     }
+
 
     // It's last in the definition to help with sidecar patterns
     bytes data = 1000;

@@ -151,8 +151,34 @@ private:
         return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
     }
 
-    const TString& GetTable() override {
-        return GetProtoRequest(Request.get())->table();
+    const TString &GetTable(ui32 idx) override {
+        auto *request = GetProtoRequest(Request.get());
+        if(request->has_multi_table()) {
+            return request->multi_table().tables(idx);
+        } else {
+            Y_ABORT_UNLESS(request->has_table());
+            Y_ABORT_UNLESS(idx == 0);
+            return request->table();
+        }
+    }
+
+    ui32 GetNumTables() override {
+        auto *request = GetProtoRequest(Request.get());
+        if(request->has_multi_table()) {
+            return request->multi_table().tables().size();
+        }
+        Y_ABORT_UNLESS(request->has_table());
+        return 1;
+    }
+
+    ui64 GetTableSize(ui64 idx) override {
+        auto *request = GetProtoRequest(Request.get());
+
+        if(request->has_multi_table()) {
+            return request->multi_table().numrows(idx);
+        }
+        Y_ABORT_UNLESS(request->has_table());
+        return Batch->num_rows();
     }
 
     const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
@@ -176,6 +202,7 @@ private:
     }
 
     bool CheckAccess(TString& errorMessage) override {
+        // TODO: !!!!
         if (Request->GetSerializedToken().empty())
             return true;
 
@@ -184,9 +211,9 @@ private:
         auto resolveResult = GetResolveNameResult();
         if (!resolveResult) {
             TStringStream explanation;
-            explanation << "Access denied for " << userToken.GetUserSID()
-                        << " table '" << GetProtoRequest(Request.get())->table()
-                        << "' has not been resolved yet";
+            // explanation << "Access denied for " << userToken.GetUserSID()
+            //             << " table '" << GetProtoRequest(Request.get())->table() // TODO
+            //             << "' has not been resolved yet";
 
             errorMessage = explanation.Str();
             return false;
@@ -197,9 +224,9 @@ private:
                 && !entry.SecurityObject->CheckAccess(access, userToken))
             {
                 TStringStream explanation;
-                explanation << "Access denied for " << userToken.GetUserSID()
-                            << " with access " << NACLib::AccessRightsToString(access)
-                            << " to table '" << GetProtoRequest(Request.get())->table() << "'";
+                // explanation << "Access denied for " << userToken.GetUserSID()
+                //             << " with access " << NACLib::AccessRightsToString(access)
+                //             << " to table '" << GetProtoRequest(Request.get())->table() << "'"; // TODO
 
                 errorMessage = explanation.Str();
                 return false;
@@ -329,8 +356,34 @@ private:
         return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
     }
 
-    const TString& GetTable() override {
-        return GetProtoRequest(Request.get())->table();
+    const TString &GetTable(ui32 idx) override {
+        auto *request = GetProtoRequest(Request.get());
+        if(request->has_multi_table()) {
+            return request->multi_table().tables(idx);
+        } else {
+            Y_ABORT_UNLESS(request->has_table());
+            Y_ABORT_UNLESS(idx == 0);
+            return request->table();
+        }
+    }
+
+    ui32 GetNumTables() override {
+        auto *request = GetProtoRequest(Request.get());
+        if(request->has_multi_table()) {
+            return request->multi_table().tables().size();
+        }
+        Y_ABORT_UNLESS(request->has_table());
+        return 1;
+    }
+
+    ui64 GetTableSize(ui64 idx) override {
+        auto *request = GetProtoRequest(Request.get());
+
+        if(request->has_multi_table()) {
+            return request->multi_table().numrows(idx);
+        }
+        Y_ABORT_UNLESS(request->has_table());
+        return Batch->num_rows();
     }
 
     const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
@@ -366,6 +419,7 @@ private:
     }
 
     bool CheckAccess(TString& errorMessage) override {
+        // TODO!!!!!!
         if (Request->GetSerializedToken().empty())
             return true;
 
@@ -374,9 +428,9 @@ private:
         auto resolveResult = GetResolveNameResult();
         if (!resolveResult) {
             TStringStream explanation;
-            explanation << "Access denied for " << userToken.GetUserSID()
-                        << " table '" << GetProtoRequest(Request.get())->table()
-                        << "' has not been resolved yet";
+            // explanation << "Access denied for " << userToken.GetUserSID()
+            //             << " table '" << GetProtoRequest(Request.get())->table() //TODO
+            //             << "' has not been resolved yet";
 
             errorMessage = explanation.Str();
             return false;
@@ -387,9 +441,9 @@ private:
                 && !entry.SecurityObject->CheckAccess(access, userToken))
             {
                 TStringStream explanation;
-                explanation << "Access denied for " << userToken.GetUserSID()
-                            << " with access " << NACLib::AccessRightsToString(access)
-                            << " to table '" << GetProtoRequest(Request.get())->table() << "'";
+                // explanation << "Access denied for " << userToken.GetUserSID()
+                //             << " with access " << NACLib::AccessRightsToString(access)
+                //             << " to table '" << GetProtoRequest(Request.get())->table() << "'"; // TODO
 
                 errorMessage = explanation.Str();
                 return false;

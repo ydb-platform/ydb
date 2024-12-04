@@ -40,8 +40,18 @@ private:
         return TString();
     }
 
-    const TString& GetTable() override {
+    const TString &GetTable(ui32 idx) override {
+        Y_ABORT_UNLESS(idx == 0);
         return Table;
+    }
+
+    ui64 GetTableSize(ui64 idx) override {
+        Y_ABORT_UNLESS(idx == 0);
+        return Rows->size();
+    }
+
+    ui32 GetNumTables() override {
+        return 1;
     }
 
     const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {

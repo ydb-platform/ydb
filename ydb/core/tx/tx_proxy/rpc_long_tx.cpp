@@ -50,14 +50,8 @@ public:
     }
 
 protected:
-    void ProceedWithSchema(const NSchemeCache::TSchemeCacheNavigate& resp) {
+    void ProceedWithSchema(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
         NWilson::TProfileSpan pSpan = ActorSpan.BuildChildrenSpan("ProceedWithSchema");
-        if (resp.ErrorCount > 0) {
-            // TODO: map to a correct error
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "There was an error during table query");
-        }
-
-        auto& entry = resp.ResultSet[0];
 
         if (UserToken && entry.SecurityObject) {
             const ui32 access = NACLib::UpdateRow;
@@ -234,20 +228,22 @@ class TLongTxWriteInternal: public TLongTxWriteBase<TLongTxWriteInternal> {
 
 public:
     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId, const TString& databaseName,
-        const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-        std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite)
+        const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, ui32 entryIdx, std::shared_ptr<arrow::RecordBatch> batch,
+        std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite, const ui32 cookie)
         : TBase(databaseName, path, TString(), longTxId, dedupId, noTxWrite)
         , ReplyTo(replyTo)
         , NavigateResult(navigateResult)
+        , EntryIdx(entryIdx)
         , Batch(batch)
-        , Issues(issues) {
+        , Issues(issues)
+        , Cookie(cookie) {
         Y_ABORT_UNLESS(Issues);
         DataAccessor = std::make_unique<TParsedBatchData>(Batch);
     }
 
     void Bootstrap() {
         Y_ABORT_UNLESS(NavigateResult);
-        ProceedWithSchema(*NavigateResult);
+        ProceedWithSchema(NavigateResult->ResultSet[EntryIdx]);
     }
 
 protected:
@@ -264,28 +260,30 @@ protected:
         if (!message.empty()) {
             Issues->AddIssue(NYql::TIssue(message));
         }
-        this->Send(ReplyTo, new TEvents::TEvCompleted(0, status));
+        this->Send(ReplyTo, new TEvents::TEvCompleted(0, status), 0, Cookie);
         PassAway();
     }
 
     void ReplySuccess() override {
-        this->Send(ReplyTo, new TEvents::TEvCompleted(0, Ydb::StatusIds::SUCCESS));
+        this->Send(ReplyTo, new TEvents::TEvCompleted(0, Ydb::StatusIds::SUCCESS), 0, Cookie);
         PassAway();
     }
 
 private:
     const TActorId ReplyTo;
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
+    ui32 EntryIdx;
     std::shared_ptr<arrow::RecordBatch> Batch;
     std::shared_ptr<NYql::TIssues> Issues;
+    const ui32 Cookie;
 };
 
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
     const TString& dedupId, const TString& databaseName, const TString& path,
-    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite) {
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, ui32 entryIdx, std::shared_ptr<arrow::RecordBatch> batch,
+    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite, const ui32 cookie) {
     return ctx.RegisterWithSameMailbox(
-        new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues, noTxWrite));
+        new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, entryIdx, batch, issues, noTxWrite, cookie));
 }
 
 //

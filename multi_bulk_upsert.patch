@@ -1,0 +1,571 @@
+diff --git a/ydb/core/grpc_services/rpc_load_rows.cpp b/ydb/core/grpc_services/rpc_load_rows.cpp
+index 2faf34222ef..7ef97e89760 100644
+--- a/ydb/core/grpc_services/rpc_load_rows.cpp
++++ b/ydb/core/grpc_services/rpc_load_rows.cpp
+@@ -151,8 +151,34 @@ private:
+         return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
+     }
+ 
+-    const TString& GetTable() override {
+-        return GetProtoRequest(Request.get())->table();
++    const TString &GetTable(ui32 idx) override {
++        auto *request = GetProtoRequest(Request.get());
++        if(request->has_multi_table()) {
++            return request->multi_table().tables(idx);
++        } else {
++            Y_ABORT_UNLESS(request->has_table());
++            Y_ABORT_UNLESS(idx == 0);
++            return request->table();
++        }
++    }
++
++    ui32 GetNumTables() override {
++        auto *request = GetProtoRequest(Request.get());
++        if(request->has_multi_table()) {
++            return request->multi_table().tables().size();
++        }
++        Y_ABORT_UNLESS(request->has_table());
++        return 1;
++    }
++
++    ui64 GetTableSize(ui64 idx) override {
++        auto *request = GetProtoRequest(Request.get());
++
++        if(request->has_multi_table()) {
++            return request->multi_table().numrows(idx);
++        }
++        Y_ABORT_UNLESS(request->has_table());
++        return Batch->num_rows();
+     }
+ 
+     const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
+@@ -176,6 +202,7 @@ private:
+     }
+ 
+     bool CheckAccess(TString& errorMessage) override {
++        // TODO: !!!!
+         if (Request->GetSerializedToken().empty())
+             return true;
+ 
+@@ -184,9 +211,9 @@ private:
+         auto resolveResult = GetResolveNameResult();
+         if (!resolveResult) {
+             TStringStream explanation;
+-            explanation << "Access denied for " << userToken.GetUserSID()
+-                        << " table '" << GetProtoRequest(Request.get())->table()
+-                        << "' has not been resolved yet";
++            // explanation << "Access denied for " << userToken.GetUserSID()
++            //             << " table '" << GetProtoRequest(Request.get())->table() // TODO
++            //             << "' has not been resolved yet";
+ 
+             errorMessage = explanation.Str();
+             return false;
+@@ -197,9 +224,9 @@ private:
+                 && !entry.SecurityObject->CheckAccess(access, userToken))
+             {
+                 TStringStream explanation;
+-                explanation << "Access denied for " << userToken.GetUserSID()
+-                            << " with access " << NACLib::AccessRightsToString(access)
+-                            << " to table '" << GetProtoRequest(Request.get())->table() << "'";
++                // explanation << "Access denied for " << userToken.GetUserSID()
++                //             << " with access " << NACLib::AccessRightsToString(access)
++                //             << " to table '" << GetProtoRequest(Request.get())->table() << "'"; // TODO
+ 
+                 errorMessage = explanation.Str();
+                 return false;
+@@ -329,8 +356,34 @@ private:
+         return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
+     }
+ 
+-    const TString& GetTable() override {
+-        return GetProtoRequest(Request.get())->table();
++    const TString &GetTable(ui32 idx) override {
++        auto *request = GetProtoRequest(Request.get());
++        if(request->has_multi_table()) {
++            return request->multi_table().tables(idx);
++        } else {
++            Y_ABORT_UNLESS(request->has_table());
++            Y_ABORT_UNLESS(idx == 0);
++            return request->table();
++        }
++    }
++
++    ui32 GetNumTables() override {
++        auto *request = GetProtoRequest(Request.get());
++        if(request->has_multi_table()) {
++            return request->multi_table().tables().size();
++        }
++        Y_ABORT_UNLESS(request->has_table());
++        return 1;
++    }
++
++    ui64 GetTableSize(ui64 idx) override {
++        auto *request = GetProtoRequest(Request.get());
++
++        if(request->has_multi_table()) {
++            return request->multi_table().numrows(idx);
++        }
++        Y_ABORT_UNLESS(request->has_table());
++        return Batch->num_rows();
+     }
+ 
+     const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
+@@ -366,6 +419,7 @@ private:
+     }
+ 
+     bool CheckAccess(TString& errorMessage) override {
++        // TODO!!!!!!
+         if (Request->GetSerializedToken().empty())
+             return true;
+ 
+@@ -374,9 +428,9 @@ private:
+         auto resolveResult = GetResolveNameResult();
+         if (!resolveResult) {
+             TStringStream explanation;
+-            explanation << "Access denied for " << userToken.GetUserSID()
+-                        << " table '" << GetProtoRequest(Request.get())->table()
+-                        << "' has not been resolved yet";
++            // explanation << "Access denied for " << userToken.GetUserSID()
++            //             << " table '" << GetProtoRequest(Request.get())->table() //TODO
++            //             << "' has not been resolved yet";
+ 
+             errorMessage = explanation.Str();
+             return false;
+@@ -387,9 +441,9 @@ private:
+                 && !entry.SecurityObject->CheckAccess(access, userToken))
+             {
+                 TStringStream explanation;
+-                explanation << "Access denied for " << userToken.GetUserSID()
+-                            << " with access " << NACLib::AccessRightsToString(access)
+-                            << " to table '" << GetProtoRequest(Request.get())->table() << "'";
++                // explanation << "Access denied for " << userToken.GetUserSID()
++                //             << " with access " << NACLib::AccessRightsToString(access)
++                //             << " to table '" << GetProtoRequest(Request.get())->table() << "'"; // TODO
+ 
+                 errorMessage = explanation.Str();
+                 return false;
+diff --git a/ydb/core/tx/tx_proxy/rpc_long_tx.cpp b/ydb/core/tx/tx_proxy/rpc_long_tx.cpp
+index 435dd536bec..ce7750d9c86 100644
+--- a/ydb/core/tx/tx_proxy/rpc_long_tx.cpp
++++ b/ydb/core/tx/tx_proxy/rpc_long_tx.cpp
+@@ -50,14 +50,8 @@ public:
+     }
+ 
+ protected:
+-    void ProceedWithSchema(const NSchemeCache::TSchemeCacheNavigate& resp) {
++    void ProceedWithSchema(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+         NWilson::TProfileSpan pSpan = ActorSpan.BuildChildrenSpan("ProceedWithSchema");
+-        if (resp.ErrorCount > 0) {
+-            // TODO: map to a correct error
+-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "There was an error during table query");
+-        }
+-
+-        auto& entry = resp.ResultSet[0];
+ 
+         if (UserToken && entry.SecurityObject) {
+             const ui32 access = NACLib::UpdateRow;
+@@ -234,20 +228,22 @@ class TLongTxWriteInternal: public TLongTxWriteBase<TLongTxWriteInternal> {
+ 
+ public:
+     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId, const TString& databaseName,
+-        const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
+-        std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite)
++        const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, ui32 entryIdx, std::shared_ptr<arrow::RecordBatch> batch,
++        std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite, const ui32 cookie)
+         : TBase(databaseName, path, TString(), longTxId, dedupId, noTxWrite)
+         , ReplyTo(replyTo)
+         , NavigateResult(navigateResult)
++        , EntryIdx(entryIdx)
+         , Batch(batch)
+-        , Issues(issues) {
++        , Issues(issues)
++        , Cookie(cookie) {
+         Y_ABORT_UNLESS(Issues);
+         DataAccessor = std::make_unique<TParsedBatchData>(Batch);
+     }
+ 
+     void Bootstrap() {
+         Y_ABORT_UNLESS(NavigateResult);
+-        ProceedWithSchema(*NavigateResult);
++        ProceedWithSchema(NavigateResult->ResultSet[EntryIdx]);
+     }
+ 
+ protected:
+@@ -264,28 +260,30 @@ protected:
+         if (!message.empty()) {
+             Issues->AddIssue(NYql::TIssue(message));
+         }
+-        this->Send(ReplyTo, new TEvents::TEvCompleted(0, status));
++        this->Send(ReplyTo, new TEvents::TEvCompleted(0, status), 0, Cookie);
+         PassAway();
+     }
+ 
+     void ReplySuccess() override {
+-        this->Send(ReplyTo, new TEvents::TEvCompleted(0, Ydb::StatusIds::SUCCESS));
++        this->Send(ReplyTo, new TEvents::TEvCompleted(0, Ydb::StatusIds::SUCCESS), 0, Cookie);
+         PassAway();
+     }
+ 
+ private:
+     const TActorId ReplyTo;
+     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
++    ui32 EntryIdx;
+     std::shared_ptr<arrow::RecordBatch> Batch;
+     std::shared_ptr<NYql::TIssues> Issues;
++    const ui32 Cookie;
+ };
+ 
+ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
+     const TString& dedupId, const TString& databaseName, const TString& path,
+-    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
+-    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite) {
++    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, ui32 entryIdx, std::shared_ptr<arrow::RecordBatch> batch,
++    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite, const ui32 cookie) {
+     return ctx.RegisterWithSameMailbox(
+-        new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues, noTxWrite));
++        new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, entryIdx, batch, issues, noTxWrite, cookie));
+ }
+ 
+ //
+diff --git a/ydb/core/tx/tx_proxy/upload_rows.cpp b/ydb/core/tx/tx_proxy/upload_rows.cpp
+index 5bf5d915eea..fbac883a5dc 100644
+--- a/ydb/core/tx/tx_proxy/upload_rows.cpp
++++ b/ydb/core/tx/tx_proxy/upload_rows.cpp
+@@ -40,10 +40,20 @@ private:
+         return TString();
+     }
+ 
+-    const TString& GetTable() override {
++    const TString &GetTable(ui32 idx) override {
++        Y_ABORT_UNLESS(idx == 0);
+         return Table;
+     }
+ 
++    ui64 GetTableSize(ui64 idx) override {
++        Y_ABORT_UNLESS(idx == 0);
++        return Rows->size();
++    }
++
++    ui32 GetNumTables() override {
++        return 1;
++    }
++
+     const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
+         return *Rows;
+     }
+diff --git a/ydb/core/tx/tx_proxy/upload_rows_common_impl.h b/ydb/core/tx/tx_proxy/upload_rows_common_impl.h
+index d92f7a0503a..d71497fb0bb 100644
+--- a/ydb/core/tx/tx_proxy/upload_rows_common_impl.h
++++ b/ydb/core/tx/tx_proxy/upload_rows_common_impl.h
+@@ -103,8 +103,8 @@ namespace NTxProxy {
+ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
+     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
+     const TString& databaseName, const TString& path,
+-    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
+-    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite);
++    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, ui32 entryIdx, std::shared_ptr<arrow::RecordBatch> batch,
++    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite, const ui32 cookie);
+ 
+ template <NKikimrServices::TActivity::EType DerivedActivityType>
+ class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
+@@ -176,6 +176,7 @@ protected:
+     THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
+     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvert;
+     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvertInplace;
++    THashSet<ui32> WaitingRequest;
+ 
+     bool WriteToTableShadow = false;
+     bool AllowWriteToPrivateTable = false;
+@@ -207,7 +208,7 @@ public:
+         StartTime = TAppData::TimeProvider->Now();
+         ImmediateWrite = AppData(ctx)->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert();
+         OnBeforeStart(ctx);
+-        ResolveTable(GetTable(), ctx);
++        ResolveTables(ctx);
+     }
+ 
+     void Die(const NActors::TActorContext& ctx) override {
+@@ -286,7 +287,9 @@ private:
+     }
+ 
+     virtual TString GetDatabase() = 0;
+-    virtual const TString& GetTable() = 0;
++    virtual const TString &GetTable(ui32 idx) = 0;
++    virtual ui64 GetTableSize(ui64 idx) = 0;
++    virtual ui32 GetNumTables() = 0;
+     virtual const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const = 0;
+     virtual bool CheckAccess(TString& errorMessage) = 0;
+     virtual TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const = 0;
+@@ -318,7 +321,7 @@ private:
+     }
+ 
+ private:
+-    STFUNC(StateWaitResolveTable) {
++    STFUNC(StateWaitResolveTables) {
+         switch (ev->GetTypeRewrite()) {
+             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+@@ -330,7 +333,7 @@ private:
+     }
+ 
+     TStringBuilder LogPrefix() {
+-        return TStringBuilder() << "Bulk upsert to table '" << GetTable() << "'";
++        return TStringBuilder() << "Bulk upsert to tables '" << GetTable(0) << "'"; // TODO
+     }
+ 
+     static bool SameDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {
+@@ -354,6 +357,7 @@ private:
+     }
+ 
+     bool BuildSchema(const NActors::TActorContext& ctx, TString& errorMessage, bool makeYqbSchema) {
++        // TODO: validate each column has identical schema (or in the same columnstore)
+         Y_UNUSED(ctx);
+         Y_ABORT_UNLESS(ResolveNamesResult);
+ 
+@@ -558,29 +562,33 @@ private:
+         return true;
+     }
+ 
+-    void ResolveTable(const TString& table, const NActors::TActorContext& ctx) {
++    void ResolveTables(const NActors::TActorContext& ctx) {
+         // TODO: check all params;
+         // Cerr << *Request->GetProtoRequest() << Endl;
+ 
+         AuditContextStart();
+ 
+         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+-        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+-        entry.Path = ::NKikimr::SplitPath(table);
+-        if (entry.Path.empty()) {
+-            return ReplyWithError(
+-                Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Bulk upsert. Invalid table path specified: '" << table << "'", ctx);
++        
++        for(ui32 i = 0; i<GetNumTables(); i++) {
++            const TString &table = GetTable(i);
++            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
++            entry.Path = ::NKikimr::SplitPath(table);
++            if (entry.Path.empty()) {
++                return ReplyWithError(
++                    Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Bulk upsert. Invalid table path specified: '" << table << "'", ctx);
++                }
++            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
++            entry.SyncVersion = true;
++            entry.ShowPrivatePath = AllowWriteToPrivateTable;
++            request->ResultSet.emplace_back(entry);
+         }
+-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+-        entry.SyncVersion = true;
+-        entry.ShowPrivatePath = AllowWriteToPrivateTable;
+-        request->ResultSet.emplace_back(entry);
+         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, Span.GetTraceId());
+ 
+         TimeoutTimerActorId = CreateLongTimer(ctx, Timeout,
+             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
+ 
+-        TBase::Become(&TThis::StateWaitResolveTable);
++        TBase::Become(&TThis::StateWaitResolveTables);
+     }
+ 
+     void HandleTimeout(const TActorContext& ctx) {
+@@ -594,18 +602,28 @@ private:
+     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
+ 
+-        Y_ABORT_UNLESS(request.ResultSet.size() == 1);
+-        const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
++        const NSchemeCache::TSchemeCacheNavigate::TEntry& base_entry = request.ResultSet.front();
++
++
++        for(auto &entry: request.ResultSet) {
++            if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
++                return ReplyWithError(entry.Status, ctx);
++            }
++
++            if (entry.TableId.IsSystemView()) {
++                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view", ctx);
++            }
+ 
+-        if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+-            return ReplyWithError(entry.Status, ctx);
++            if(entry.Kind != base_entry.Kind) {
++                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "All tables in MultiBulkUpsert mode should have identical schema" ,ctx);
++            }
+         }
+ 
+-        TableKind = entry.Kind;
++        TableKind = base_entry.Kind;
+         bool isColumnTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
+ 
+-        if (entry.TableId.IsSystemView()) {
+-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view", ctx);
++        if(request.ResultSet.size() > 1) {
++            Y_ABORT_UNLESS(isColumnTable);
+         }
+ 
+         // TODO: fast fail for all tables?
+@@ -821,11 +839,20 @@ private:
+         Y_ABORT_UNLESS(Batch);
+ 
+         TBase::Become(&TThis::StateWaitWriteBatchResult);
+-        ui32 batchNo = 0;
+-        TString dedupId = ToString(batchNo);
+-        DoLongTxWriteSameMailbox(
+-            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, ImmediateWrite);
+-    }
++
++
++        ui64 currentOffset = 0;
++        for(ui32 i = 0; i<GetNumTables(); i++) {
++            const TString &path = GetTable(i);
++            ui64 size = GetTableSize(i);
++            auto slice = Batch->Slice(currentOffset, size);
++            currentOffset += size;
++            TString dedupId = ToString(i);
++            WaitingRequest.emplace(i);
++            DoLongTxWriteSameMailbox(
++                ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), path, ResolveNamesResult, i, slice, Issues, ImmediateWrite, i);
++        }
++     }
+ 
+     void RollbackLongTx(const TActorContext& ctx) {
+         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, TStringBuilder() << "rolling back LongTx '" << LongTxId.ToString() << "'");
+@@ -850,7 +877,15 @@ private:
+                 RaiseIssue(issue);
+             }
+             return ReplyWithResult(status, ctx);
+-        } else if (ImmediateWrite) {
++        }
++        
++        WaitingRequest.erase(ev->Cookie);
++
++        if(!WaitingRequest.empty()) {
++            return;
++        }
++        
++        if (ImmediateWrite) {
+             return ReplyWithResult(status, ctx);
+         } else {
+             CommitLongTx(ctx);
+diff --git a/ydb/library/workload/tpcds/s10_canonical/q39.result.gz b/ydb/library/workload/tpcds/s10_canonical/q39.result.gz
+index e6ba8ded4ab..8ce9d99c231 100644
+Binary files a/ydb/library/workload/tpcds/s10_canonical/q39.result.gz and b/ydb/library/workload/tpcds/s10_canonical/q39.result.gz differ
+diff --git a/ydb/public/api/protos/ydb_table.proto b/ydb/public/api/protos/ydb_table.proto
+index cb6b8628657..b26cbe6d530 100644
+--- a/ydb/public/api/protos/ydb_table.proto
++++ b/ydb/public/api/protos/ydb_table.proto
+@@ -1252,8 +1252,17 @@ message ReadRowsResponse {
+     Ydb.ResultSet result_set = 3;
+ }
+ 
++message MultiTable {
++    repeated string tables = 1;
++    // size of each table in tables list
++    repeated uint64 numrows = 2;
++}
++
+ message BulkUpsertRequest {
+-    string table = 1;
++    oneof mode {
++        string table = 1;
++        MultiTable multi_table = 9;
++    }
+     // "rows" parameter must be a list of structs where each stuct represents one row.
+     // It must contain all key columns but not necessarily all non-key columns.
+     // Similar to UPSERT statement only values of specified columns will be updated.
+@@ -1266,6 +1275,7 @@ message BulkUpsertRequest {
+         Ydb.Formats.CsvSettings csv_settings = 8;
+     }
+ 
++
+     // It's last in the definition to help with sidecar patterns
+     bytes data = 1000;
+ }
+diff --git a/ydb/public/sdk/cpp/client/ydb_table/impl/table_client.cpp b/ydb/public/sdk/cpp/client/ydb_table/impl/table_client.cpp
+index 38a84818661..91728f64bdf 100644
+--- a/ydb/public/sdk/cpp/client/ydb_table/impl/table_client.cpp
++++ b/ydb/public/sdk/cpp/client/ydb_table/impl/table_client.cpp
+@@ -999,6 +999,41 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const TString& table, EDa
+     return promise.GetFuture();
+ }
+ 
++TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const TVector<TString> &tables, const TVector<ui64> &numrows,
++    const TString& data, const TString& schema, const TBulkUpsertSettings& settings) {
++    auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
++
++    Ydb::Table::MultiTable multiTable;
++
++    for(ui64 i=0; i < tables.size(); i++) {
++        multiTable.add_tables(tables[i]);
++        multiTable.add_numrows(numrows[i]);
++    }
++
++    *request.mutable_multi_table() = std::move(multiTable);
++    request.mutable_arrow_batch_settings()->set_schema(schema);
++    request.set_data(data);
++
++    auto promise = NewPromise<TBulkUpsertResult>();
++
++    auto extractor = [promise]
++        (google::protobuf::Any* any, TPlainStatus status) mutable {
++            Y_UNUSED(any);
++            TBulkUpsertResult val(TStatus(std::move(status)));
++            promise.SetValue(std::move(val));
++        };
++
++    Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
++        std::move(request),
++        extractor,
++        &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert,
++        DbDriverState_,
++        INITIAL_DEFERRED_CALL_DELAY,
++        TRpcRequestSettings::Make(settings));
++
++    return promise.GetFuture();
++}
++
+ TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TTableClient::TImpl::StreamExecuteScanQueryInternal(const TString& query,
+     const ::google::protobuf::Map<TString, Ydb::TypedValue>* params,
+     const TStreamExecScanQuerySettings& settings)
+diff --git a/ydb/public/sdk/cpp/client/ydb_table/impl/table_client.h b/ydb/public/sdk/cpp/client/ydb_table/impl/table_client.h
+index da681f0d959..6f513bafe39 100644
+--- a/ydb/public/sdk/cpp/client/ydb_table/impl/table_client.h
++++ b/ydb/public/sdk/cpp/client/ydb_table/impl/table_client.h
+@@ -137,6 +137,8 @@ public:
+     TAsyncBulkUpsertResult BulkUpsert(const TString& table, TValue&& rows, const TBulkUpsertSettings& settings);
+     TAsyncBulkUpsertResult BulkUpsert(const TString& table, EDataFormat format,
+         const TString& data, const TString& schema, const TBulkUpsertSettings& settings);
++    TAsyncBulkUpsertResult BulkUpsert(const TVector<TString> &tables, const TVector<ui64> &numrows,
++    const TString& data, const TString& schema, const TBulkUpsertSettings& settings);
+ 
+     TFuture<std::pair<TPlainStatus, TScanQueryProcessorPtr>> StreamExecuteScanQueryInternal(const TString& query,
+         const ::google::protobuf::Map<TString, Ydb::TypedValue>* params,
+diff --git a/ydb/public/sdk/cpp/client/ydb_table/table.cpp b/ydb/public/sdk/cpp/client/ydb_table/table.cpp
+index 4f461f92060..a27e27ca980 100644
+--- a/ydb/public/sdk/cpp/client/ydb_table/table.cpp
++++ b/ydb/public/sdk/cpp/client/ydb_table/table.cpp
+@@ -1502,6 +1502,12 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TString& table, EDataForma
+     return Impl_->BulkUpsert(table, format, data, schema, settings);
+ }
+ 
++TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TVector<TString> &tables, const TVector<ui64> &numrows,
++        const TString& data, const TString& schema, const TBulkUpsertSettings& settings)
++{
++    return Impl_->BulkUpsert(tables, numrows, data, schema, settings);
++}
++
+ TAsyncReadRowsResult TTableClient::ReadRows(const TString& table, TValue&& rows, const TVector<TString>& columns,
+     const TReadRowsSettings& settings)
+ {
+diff --git a/ydb/public/sdk/cpp/client/ydb_table/table.h b/ydb/public/sdk/cpp/client/ydb_table/table.h
+index b58b99a70f4..8a3ae94dcb8 100644
+--- a/ydb/public/sdk/cpp/client/ydb_table/table.h
++++ b/ydb/public/sdk/cpp/client/ydb_table/table.h
+@@ -1255,6 +1255,8 @@ public:
+         const TBulkUpsertSettings& settings = TBulkUpsertSettings());
+     TAsyncBulkUpsertResult BulkUpsert(const TString& table, EDataFormat format,
+         const TString& data, const TString& schema = {}, const TBulkUpsertSettings& settings = TBulkUpsertSettings());
++    TAsyncBulkUpsertResult BulkUpsert(const TVector<TString> &tables, const TVector<ui64> &numrows,
++        const TString& data, const TString& schema, const TBulkUpsertSettings& settings);
+ 
+     TAsyncReadRowsResult ReadRows(const TString& table, TValue&& keys, const TVector<TString>& columns = {},
+         const TReadRowsSettings& settings = TReadRowsSettings());

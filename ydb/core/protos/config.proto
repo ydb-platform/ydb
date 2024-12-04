@@ -1662,6 +1662,7 @@ message TColumnShardConfig {
     optional uint32 SmallPortionDetectSizeLimit = 24 [default = 1048576];  // 1 << 20
     optional bool ColumnChunksV0Usage = 25 [default = true];
     optional bool ColumnChunksV1Usage = 26 [default = true];
+    optional bool AllowNullableColumnsInPK = 27 [default = false];
 }
 
 message TSchemeShardConfig {

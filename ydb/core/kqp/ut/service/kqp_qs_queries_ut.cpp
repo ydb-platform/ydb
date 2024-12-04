@@ -1280,7 +1280,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAuthToken("user0@builtin");
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());

@@ -1515,8 +1515,25 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false)
-            .SetEnableTempTables(true);
+            .SetEnableTempTables(true)
+            .SetAuthToken("user0@builtin");;
         TKikimrRunner kikimr(settings);
+
+        {
+            auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("root@builtin");
+            auto driver = TDriver(driverConfig);
+            auto schemeClient = NYdb::NScheme::TSchemeClient(driver);
+
+            NYdb::NScheme::TPermissions permissions("user0@builtin",
+                {"ydb.generic.read", "ydb.generic.write"}
+            );
+            auto result = schemeClient.ModifyPermissions("/Root",
+                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
 
         const TString query = R"(
             CREATE TABLE `/Root/Source` (

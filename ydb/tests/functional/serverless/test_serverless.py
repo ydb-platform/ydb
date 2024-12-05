@@ -6,6 +6,11 @@ import time
 import copy
 import pytest
 import subprocess
+import datetime
+
+from ydb.retries import (
+    RetrySettings,
+)
 
 from hamcrest import assert_that, contains_inanyorder, not_none, not_, only_contains, is_in
 from tornado import gen
@@ -487,124 +492,16 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             CREATE TABLE `{path}` (
             id Uint64 NOT NULL,
             value_string Utf8,
-            value_num Utf8,
             PRIMARY KEY(id)
             )
             PARTITION BY HASH(id)
             WITH (
-                STORE = COLUMN
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+                TTL=interval("PT1M") on id as seconds
             )
         """
         )
-
-        """
-        session.create_table(
-            path,
-            ydb.TableDescription()
-            .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
-            .with_column(ydb.Column('value_string', ydb.OptionalType(ydb.DataType.Utf8)))
-            .with_column(ydb.Column('value_num', ydb.OptionalType(ydb.DataType.Uint64)))
-            .with_primary_key('id')
-        )
-        """
-
-    sessions = []
-
-    class SessionHolder(object):
-        def __init__(self, session):
-            self.session = session
-
-        def __enter__(self):
-            return self.session
-
-        def __exit__(self, exc_type=None, exc_value=None, exc_traceback=None):
-            if exc_type is None and exc_value is None:
-                sessions.append(self.session)
-            else:
-                self.session.reset()
-
-    @gen.coroutine
-    def async_session():
-        if sessions:
-            session = sessions.pop()
-        else:
-            session = yield driver.table_client.session().async_create()
-        raise gen.Return(SessionHolder(session))
-
-    def restart_coro_on_bad_session(func):
-        @gen.coroutine
-        @functools.wraps(func)
-        def wrapped(*args, **kwargs):
-            while True:
-                try:
-                    res = yield func(*args, **kwargs)
-                except ydb.BadSession:
-                    pass
-                else:
-                    break
-            raise gen.Return(res)
-        return wrapped
-
-    @restart_coro_on_bad_session
-    @gen.coroutine
-    def async_write_key(path, key, value, ignore_out_of_space=True):
-        try:
-            with (yield async_session()) as session:
-                query = yield session.async_prepare('''\
-                    DECLARE $key AS Uint64;
-                    DECLARE $value AS Utf8;
-
-                    UPSERT INTO `{path}` (id, value_string) VALUES ($key, $value);
-                '''.format(path=path))
-                with session.transaction(ydb.SerializableReadWrite()) as tx:
-                    yield tx.async_execute(
-                        query,
-                        parameters={
-                            '$key': key,
-                            '$value': value,
-                        },
-                        commit_tx=True,
-                    )
-        except ydb.Unavailable as e:
-            if not ignore_out_of_space or 'DISK_SPACE_EXHAUSTED' not in str(e):
-                raise
-
-    @restart_coro_on_bad_session
-    @gen.coroutine
-    def async_erase_key(path, key):
-        with (yield async_session()) as session:
-            query = yield session.async_prepare('''\
-                DECLARE $key AS Uint64;
-
-                DELETE FROM `{path}` WHERE id = $key;
-            '''.format(path=path))
-            with session.transaction(ydb.SerializableReadWrite()) as tx:
-                logger.debug("erasing table %s key %r", path, key)
-                yield tx.async_execute(
-                    query,
-                    parameters={
-                        '$key': key,
-                    },
-                    commit_tx=True,
-                )
-
-    @gen.coroutine
-    def async_write_keys(path, start, cnt):
-        futures = []
-        for i in range(start, start + cnt):
-            futures.append(async_write_key(path, i, 'a' * 71680))
-        waiter = gen.WaitIterator(*futures)
-        while not waiter.done():
-            yield waiter.next()
-
-    @gen.coroutine
-    def async_erase_keys(path, start, cnt):
-        futures = []
-        for i in range(start, start + cnt):
-            futures.append(async_erase_key(path, i))
-        waiter = gen.WaitIterator(*futures)
-        while not waiter.done():
-            yield waiter.next()
 
     class BulkUpsertRow(object):
         __slots__ = ('id', 'value_string')
@@ -621,13 +518,14 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
         yield driver.table_client.async_bulk_upsert(path, rows, column_types)
 
     driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
-    with ydb.SessionPool(driver) as pool:
+    with ydb.QuerySessionPool(driver) as qpool:
         path = os.path.join(database, "dirA0", "table")
-        pool.retry_operation_sync(create_table, None, path)
+        with ydb.SessionPool(driver) as pool:
+            pool.retry_operation_sync(create_table, None, path)
 
         data = 'a' * 7000000
         for start in range(0, 1):
-            IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(1, data)]))
+            IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(int(datetime.datetime.now().timestamp()), data)]))
 
         for _ in range(120):
             time.sleep(1)
@@ -640,8 +538,21 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
 
         # Writes should be denied when database moves into DiskQuotaExceeded state
         time.sleep(1)
+        logger.debug("start insert");
+        with pytest.raises(ydb.issues.Overloaded, match=r'.*overload data error.*'):
+            qpool.execute_with_retries("UPSERT INTO `{}`(id, value_string) VALUES({}, 'xxx')".format(path, int(datetime.datetime.now().timestamp()) + 100), retry_settings=RetrySettings(max_retries=0));
+        logger.debug("finish insert");
         with pytest.raises(ydb.Unavailable, match=r'.*out of disk space.*'):
             IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(0, 'test')]))
+
+        for _ in range(300):
+            time.sleep(1)
+            described = ydb_cluster.client.describe(database, '')
+            logger.debug('database state after erase_keys: %s', described)
+            if not described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded:
+                break
+        else:
+            assert False, 'database did not move out of DiskQuotaExceeded state'
 
 
 def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):

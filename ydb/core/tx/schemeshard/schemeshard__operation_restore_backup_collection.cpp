@@ -36,6 +36,12 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     if (!bcPath.Base()->GetChildren().size()) {
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Nothing to restore")};
     } else {
+        static_assert(
+            std::is_same_v<
+                TMap<TString, TPathId>,
+                std::decay_t<decltype(bcPath.Base()->GetChildren())>> == true,
+            "Assume path children list is lexicographically sorted");
+
         for (auto& [child, _] : bcPath.Base()->GetChildren()) {
             if (child.EndsWith("_full")) {
                 lastFullBackupName = child;
@@ -54,11 +60,17 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     auto& copyTables = *cct.MutableCopyTableDescriptions();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    size_t cutLen = bcPath.GetDomainPathString().size() + 1;
-
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+        std::pair<TString, TString> paths;
+        TString err;
+        if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
+            result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
+            return {};
+        }
+        auto& relativeItemPath = paths.second;
+
         auto& desc = *copyTables.Add();
-        desc.SetSrcPath(bcPath.Child(lastFullBackupName).PathString() + item.GetPath().substr(cutLen - 1, item.GetPath().size() - cutLen + 1));
+        desc.SetSrcPath(JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), lastFullBackupName, relativeItemPath}));
         desc.SetDstPath(item.GetPath());
     }
 
@@ -66,14 +78,21 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 
     if (incBackupNames) {
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+            std::pair<TString, TString> paths;
+            TString err;
+            if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
+                result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
+                return {};
+            }
+            auto& relativeItemPath = paths.second;
+
             NKikimrSchemeOp::TModifyScheme restoreIncrs;
             restoreIncrs.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups);
             restoreIncrs.SetInternal(true);
 
             auto& desc = *restoreIncrs.MutableRestoreMultipleIncrementalBackups();
             for (const auto& incr : incBackupNames) {
-                auto path = bcPath.Child(incr).PathString() + item.GetPath().substr(cutLen - 1, item.GetPath().size() - cutLen + 1);
-                desc.AddSrcTableNames(path);
+                desc.AddSrcTableNames(JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), incr, relativeItemPath}));
             }
             desc.SetDstTablePath(item.GetPath());
 

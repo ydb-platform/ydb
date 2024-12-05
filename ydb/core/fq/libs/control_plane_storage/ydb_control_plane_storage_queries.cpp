@@ -43,6 +43,8 @@ FederatedQuery::IamAuth::IdentityCase GetIamAuth(const FederatedQuery::Connectio
             return setting.greenplum_cluster().auth().identity_case();
         case FederatedQuery::ConnectionSetting::kMysqlCluster:
             return setting.mysql_cluster().auth().identity_case();
+        case FederatedQuery::ConnectionSetting::kLogging:
+            return setting.logging().auth().identity_case();
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
             return FederatedQuery::IamAuth::IDENTITY_NOT_SET;
     }

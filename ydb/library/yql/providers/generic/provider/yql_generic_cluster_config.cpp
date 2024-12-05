@@ -135,6 +135,20 @@ namespace NYql {
         clusterConfig.mutable_datasourceoptions()->insert({TString("schema"), TString(it->second)});
     }
 
+    void ParseServiceName(const THashMap<TString, TString>& properties,
+                          NYql::TGenericClusterConfig& clusterConfig) {
+        auto it = properties.find("service_name");
+        if (it == properties.cend()) {
+            return;
+        }
+
+        if (!it->second) {
+            return;
+        }
+
+        clusterConfig.mutable_datasourceoptions()->insert({TString("service_name"), TString(it->second)});
+    }
+
     void ParseMdbClusterId(const THashMap<TString, TString>& properties,
                            NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("mdb_cluster_id");
@@ -188,11 +202,27 @@ namespace NYql {
                        NYql::TGenericClusterConfig& clusterConfig) {
         using namespace NConnector::NApi;
 
-        if (IsIn({EDataSourceKind::GREENPLUM, EDataSourceKind::YDB, EDataSourceKind::MYSQL, EDataSourceKind::MS_SQL_SERVER}, clusterConfig.GetKind())) {
+        // For some datasources the PROTOCOL is not required
+        if (clusterConfig.GetKind() == EDataSourceKind::LOGGING) {
+            clusterConfig.SetProtocol(EProtocol::PROTOCOL_UNSPECIFIED);
+            return;
+        }
+
+        // For the most of transactional databases the PROTOCOL is always NATIVE 
+        if (IsIn({
+                EDataSourceKind::GREENPLUM,
+                EDataSourceKind::YDB,
+                EDataSourceKind::MYSQL,
+                EDataSourceKind::MS_SQL_SERVER,
+                EDataSourceKind::ORACLE,
+                }, 
+               clusterConfig.GetKind()
+            )) {
             clusterConfig.SetProtocol(EProtocol::NATIVE);
             return;
         }
 
+        // For the rest, parse the property into typed enum value
         auto it = properties.find("protocol");
         if (it == properties.cend()) {
             ythrow yexception() << "missing 'PROTOCOL' value";
@@ -246,13 +276,31 @@ namespace NYql {
         clusterConfig.SetServiceAccountIdSignature(it->second);
     }
 
-    bool KeyIsSet(const THashMap<TString, TString>& properties, const TString& key) {
-        const auto iter = properties.find(key);
-        if (iter == properties.cend()) {
-            return false;
+    void ParseFolderId(const THashMap<TString, TString>& properties,
+                     NYql::TGenericClusterConfig& clusterConfig) {
+        auto it = properties.find("folder_id");
+        if (it == properties.cend()) {
+            // FOLDER_ID is optional field
+            return;
         }
 
-        return !iter->second.Empty();
+        if (!it->second) {
+            // FOLDER_ID is optional field
+            return;
+        }
+
+        clusterConfig.mutable_datasourceoptions()->insert({"folder_id", TString(it->second)});
+    }
+
+    using TProtoProperties = google::protobuf::Map<TProtoStringType, TProtoStringType>;
+
+    TString GetPropertyWithDefault(const TProtoProperties& properties, const TString& key) {
+        const auto iter = properties.find(key);
+        if (iter == properties.cend()) {
+            return TString{};
+        }
+
+        return iter->second;
     }
 
     TGenericClusterConfig GenericClusterConfigFromProperties(const TString& clusterName, const THashMap<TString, TString>& properties) {
@@ -264,12 +312,14 @@ namespace NYql {
         ParseUseTLS(properties, clusterConfig);
         ParseDatabaseName(properties, clusterConfig);
         ParseSchema(properties, clusterConfig);
+        ParseServiceName(properties, clusterConfig);
         ParseMdbClusterId(properties, clusterConfig);
         ParseDatabaseId(properties, clusterConfig);
         ParseSourceType(properties, clusterConfig);
         ParseProtocol(properties, clusterConfig);
         ParseServiceAccountId(properties, clusterConfig);
         ParseServiceAccountIdSignature(properties, clusterConfig);
+        ParseFolderId(properties, clusterConfig);
 
         return clusterConfig;
     }
@@ -294,7 +344,9 @@ namespace NYql {
             Token=[{token} char(s)]
             UseSsl={use_ssl},
             DatabaseName={database_name},
-            Protocol={protocol}
+            Protocol={protocol},
+            Schema={schema},
+            FolderId={folder_id}
         )",
             "context"_a = context,
             "msg"_a = msg,
@@ -310,7 +362,10 @@ namespace NYql {
             "token"_a = ToString(clusterConfig.GetToken().size()),
             "use_ssl"_a = clusterConfig.GetUseSsl() ? "TRUE" : "FALSE",
             "database_name"_a = clusterConfig.GetDatabaseName(),
-            "protocol"_a = NConnector::NApi::EProtocol_Name(clusterConfig.GetProtocol()));
+            "protocol"_a = NConnector::NApi::EProtocol_Name(clusterConfig.GetProtocol()),
+            "schema"_a = GetPropertyWithDefault(clusterConfig.datasourceoptions(), "schema"),
+            "folder_id"_a = GetPropertyWithDefault(clusterConfig.datasourceoptions(), "folder_id")
+        );
     }
 
     static const TSet<NConnector::NApi::EDataSourceKind> managedDatabaseKinds{
@@ -328,6 +383,10 @@ namespace NYql {
         NConnector::NApi::EDataSourceKind::MYSQL,
         NConnector::NApi::EDataSourceKind::POSTGRESQL,
     };
+
+    bool DataSourceMustHaveDataBaseName(const NConnector::NApi::EDataSourceKind& sourceKind) {
+        return traditionalRelationalDatabaseKinds.contains(sourceKind) && sourceKind != NConnector::NApi::ORACLE;
+    }
 
     void ValidateGenericClusterConfig(
         const NYql::TGenericClusterConfig& clusterConfig,
@@ -405,7 +464,7 @@ namespace NYql {
 
         // All the databases with exception to managed YDB:
         // * DATABASE_NAME is mandatory field
-        if (traditionalRelationalDatabaseKinds.contains(clusterConfig.GetKind())) {
+        if (DataSourceMustHaveDataBaseName(clusterConfig.GetKind())) {
             if (!clusterConfig.GetDatabaseName()) {
                 return ValidationError(
                     clusterConfig,
@@ -424,10 +483,5 @@ namespace NYql {
         }
 
         // TODO: validate Credentials.basic.password after ClickHouse recipe fix
-        // TODO: validate DatabaseName field during https://st.yandex-team.ru/YQ-2494
-
-        if (clusterConfig.GetProtocol() == NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED) {
-            return ValidationError(clusterConfig, context, "empty field 'Protocol'");
-        }
     }
 }

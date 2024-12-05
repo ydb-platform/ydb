@@ -226,9 +226,6 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
     return MakeHolder<TEvIndexBuilder::TEvCancelRequest>(ui64(indexBuildId), domainPath.PathString(), ui64(indexBuildId));
 }
 
-TString ImportItemPathName(const TString& importPathName, ui32 itemIdx) {
-    return TStringBuilder() << importPathName << "/" << itemIdx;
-}
 
 } // NSchemeShard
 } // NKikimr

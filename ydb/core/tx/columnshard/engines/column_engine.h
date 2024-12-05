@@ -13,7 +13,6 @@
 
 namespace NKikimr::NColumnShard {
 class TTiersManager;
-class TTtl;
 }   // namespace NKikimr::NColumnShard
 
 namespace NKikimr::NOlap {
@@ -329,6 +328,7 @@ public:
 
     virtual std::vector<TCSMetadataRequest> CollectMetadataRequests() const = 0;
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
+    virtual const std::shared_ptr<TVersionedIndex>& GetVersionedIndexReadonlyCopy() = 0;
     virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const = 0;
     virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const;
 
@@ -365,8 +365,8 @@ public:
     virtual TSnapshot LastUpdate() const {
         return TSnapshot::Zero();
     }
-    virtual void OnTieringModified(
-        const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) = 0;
+    virtual void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const ui64 pathId) = 0;
+    virtual void OnTieringModified(const THashMap<ui64, NOlap::TTiering>& ttl) = 0;
 };
 
 }   // namespace NKikimr::NOlap

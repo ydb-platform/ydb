@@ -95,6 +95,11 @@ struct TEvService {
 
     struct TEvTxIdResult: public TEventPB<TEvTxIdResult, NKikimrReplication::TEvTxIdResult, EvTxIdResult> {
         TEvTxIdResult() = default;
+
+        explicit TEvTxIdResult(ui64 tabletId, ui64 generation) {
+            Record.MutableController()->SetTabletId(tabletId);
+            Record.MutableController()->SetGeneration(generation);
+        }
     };
 
     struct TEvHeartbeat: public TEventPB<TEvHeartbeat, NKikimrReplication::TEvHeartbeat, EvHeartbeat> {

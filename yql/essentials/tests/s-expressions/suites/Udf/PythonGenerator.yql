@@ -8,11 +8,11 @@
 (let udfScript (String '@@
 def g0():
     def gen():
-        for x in xrange(1, 4):
-            yield long(x + 42)
+        for x in range(1, 4):
+            yield int(x + 42)
     return gen
 @@))
-(let udf (ScriptUdf 'Python 'g0 udfType udfScript))
+(let udf (ScriptUdf 'Python3 'g0 udfType udfScript))
 
 # call udf
 (let result (Apply udf))

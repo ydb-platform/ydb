@@ -73,7 +73,7 @@ public:
                      const TString& session, const TPartitionId& partition, ui32 generation, ui32 step,
                      const ui64 tabletID, const TTopicCounters& counters, const bool commitsDisabled,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, bool directRead,
-                     bool useMigrationProtocol);
+                     bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -160,6 +160,9 @@ private:
     const ui32 Step;
 
     const ui64 TabletID;
+
+    const ui32 MaxTimeLagMs;
+    const ui64 ReadTimestampMs;
 
     ui64 ReadOffset;
     ui64 ClientReadOffset;

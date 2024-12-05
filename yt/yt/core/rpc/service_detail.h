@@ -328,7 +328,7 @@ protected:
     struct TSerializedResponse
     {
         TSharedRef Body;
-        std::vector<TSharedRef> Attachments;
+        TFuture<std::vector<TSharedRef>> AttachmentsFuture;
     };
 
     TSerializedResponse SerializeResponse()
@@ -351,8 +351,7 @@ protected:
         if (requestHeader.has_response_format()) {
             auto format = TryCheckedEnumCast<EMessageFormat>(requestHeader.response_format());
             if (!format) {
-                THROW_ERROR_EXCEPTION(
-                    EErrorCode::ProtocolError,
+                THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError,
                     "Message format %v is not supported",
                     requestHeader.response_format());
             }
@@ -371,11 +370,11 @@ protected:
             }
         }
 
-        auto responseAttachments = CompressAttachments(Response_->Attachments(), attachmentCodecId);
+        auto responseAttachmentsFuture = AsyncCompressAttachments(Response_->Attachments(), attachmentCodecId);
 
         return TSerializedResponse{
             .Body = std::move(serializedBody),
-            .Attachments = std::move(responseAttachments),
+            .AttachmentsFuture = std::move(responseAttachmentsFuture),
         };
     }
 
@@ -392,11 +391,18 @@ protected:
                 return;
             }
 
-            underlyingContext->SetResponseBody(std::move(response.Body));
-            underlyingContext->ResponseAttachments() = std::move(response.Attachments);
+            response.AttachmentsFuture.SubscribeUnique(
+                BIND([this, this_ = MakeStrong(this), responseBody = std::move(response.Body)] (TErrorOr<std::vector<TSharedRef>>&& compressedAttachments) {
+                    const auto& underlyingContext = this->GetUnderlyingContext();
+                    if (compressedAttachments.IsOK()) {
+                        underlyingContext->SetResponseBody(std::move(responseBody));
+                        underlyingContext->ResponseAttachments() = std::move(compressedAttachments.Value());
+                    }
+                    underlyingContext->Reply(TError(std::move(compressedAttachments)));
+                }));
+        } else {
+            underlyingContext->Reply(error);
         }
-
-        underlyingContext->Reply(error);
     }
 };
 

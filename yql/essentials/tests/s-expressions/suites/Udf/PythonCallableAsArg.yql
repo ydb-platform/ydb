@@ -14,9 +14,9 @@
 (let udfType (CallableType '() '(str) '(funcType) '(ui64)))
 (let udfScript (String '@@
 def new_string(func, x):
-    return func('x', x) + ':' + func('y', x)
+    return func(b'x', x) + b':' + func(b'y', x)
 @@))
-(let udf (ScriptUdf 'Python 'new_string udfType udfScript))
+(let udf (ScriptUdf 'Python3 'new_string udfType udfScript))
 
 # call udf
 (let x (Uint64 '3))

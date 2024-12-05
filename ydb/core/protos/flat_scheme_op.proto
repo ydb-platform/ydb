@@ -222,11 +222,24 @@ message TTTLSettings {
         optional uint32 MaxShardsInFlight = 6 [default = 0]; // zero means no limit
     }
 
+    message TEvictionToExternalStorageSettings {
+        optional string StorageName = 1;
+    }
+
+    message TTier {
+        optional uint32 ApplyAfterSeconds = 1;
+        oneof Action {
+            google.protobuf.Empty Delete = 2;
+            TEvictionToExternalStorageSettings EvictToExternalStorage = 3;
+        }
+    }
+
     message TEnabled {
         optional string ColumnName = 1;
-        optional uint32 ExpireAfterSeconds = 2;
+        optional uint32 ExpireAfterSeconds = 2 [deprecated = true];
         optional EUnit ColumnUnit = 3;
         optional TSysSettings SysSettings = 4;
+        repeated TTier Tiers = 5;
     }
 
     message TDisabled {
@@ -237,7 +250,7 @@ message TTTLSettings {
         TDisabled Disabled = 2;
     }
 
-    optional string UseTiering = 3;
+    reserved 3;
 }
 
 message TTableReplicationConfig {
@@ -447,6 +460,20 @@ message TStorageTierConfig {
     optional TCompressionOptions Compression = 3;
 }
 
+message TCompactionLevelConstructorContainer {
+    optional string ClassName = 1;
+
+    message TZeroLevel {
+        optional uint32 PortionsLiveDurationSeconds = 1;
+        optional uint64 ExpectedBlobsSize = 2;
+    }
+
+    oneof Implementation {
+        TZeroLevel ZeroLevel = 10;
+    }
+
+}
+
 message TCompactionPlannerConstructorContainer {
     optional string ClassName = 1;
 
@@ -460,7 +487,7 @@ message TCompactionPlannerConstructorContainer {
     }
 
     message TLCOptimizer {
-
+        repeated TCompactionLevelConstructorContainer Levels = 1;
     }
 
     oneof Implementation {
@@ -581,10 +608,11 @@ message TColumnDataLifeCycle {
     message TTtl {
         optional string ColumnName = 1;
         oneof Expire {
-            uint32 ExpireAfterSeconds = 2;
+            uint32 ExpireAfterSeconds = 2 [deprecated = true]; // ignored if Tiers are not empty
             uint64 ExpireAfterBytes = 4;
         }
         optional TTTLSettings.EUnit ColumnUnit = 3;
+        repeated TTTLSettings.TTier Tiers = 5;
     }
 
     message TDisabled {
@@ -598,7 +626,7 @@ message TColumnDataLifeCycle {
     // Incremented on each settings change
     optional uint64 Version = 3 [default = 1];
 
-    optional string UseTiering = 5;
+    reserved 5;
 }
 
 message TColumnTableTtlSettingsPreset {

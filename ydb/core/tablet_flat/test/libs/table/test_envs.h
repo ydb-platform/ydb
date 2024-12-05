@@ -182,11 +182,11 @@ namespace NTest {
 
                 for (auto &seq: IndexFetch) {
                     NPageCollection::TLoadedPage page(seq, *Store->GetPage(IndexRoom, seq));
-                    PageLoadingLogic->Fill(page, Store->GetPageType(IndexRoom, seq)); /* will move data */
+                    PageLoadingLogic->Fill(page, {}, Store->GetPageType(IndexRoom, seq)); /* will move data */
                 }
                 for (auto &seq: GroupFetch) {
                     NPageCollection::TLoadedPage page(seq, *Store->GetPage(GroupRoom, seq));
-                    PageLoadingLogic->Fill(page, Store->GetPageType(GroupRoom, seq)); /* will move data */
+                    PageLoadingLogic->Fill(page, {}, Store->GetPageType(GroupRoom, seq)); /* will move data */
                 }
 
                 IndexFetch.clear();

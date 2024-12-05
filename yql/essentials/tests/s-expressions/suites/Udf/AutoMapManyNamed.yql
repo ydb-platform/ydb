@@ -58,7 +58,7 @@ def f(x,y,z):
     (let select (block '(
       (let core (AsList (Uint32 '0)))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf0) '() (AsStruct '('x (Int32 '"1")) '('y (Int32 '"2")) '('z (Int32 '"3")))))))
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python3 '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf0) '() (AsStruct '('x (Int32 '"1")) '('y (Int32 '"2")) '('z (Int32 '"3")))))))
         (let res (AsList res))
         (return res)
       )))))
@@ -78,7 +78,7 @@ def f(x,y,z):
     (let select (block '(
       (let core (AsList (Uint32 '0)))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf1) '() (AsStruct '('x ("Just" (Int32 '"1"))) '('y (Int32 '"2")) '('z (Int32 '"3")))))))
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python3 '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf1) '() (AsStruct '('x ("Just" (Int32 '"1"))) '('y (Int32 '"2")) '('z (Int32 '"3")))))))
         (let res (AsList res))
         (return res)
       )))))
@@ -98,7 +98,7 @@ def f(x,y,z):
     (let select (block '(
       (let core (AsList (Uint32 '0)))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf2) '() (AsStruct '('x ("Just" (Int32 '"1"))) '('y ("Just" (Int32 '"2"))) '('z (Int32 '"3")))))))
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python3 '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf2) '() (AsStruct '('x ("Just" (Int32 '"1"))) '('y ("Just" (Int32 '"2"))) '('z (Int32 '"3")))))))
         (let res (AsList res))
         (return res)
       )))))
@@ -118,7 +118,7 @@ def f(x,y,z):
     (let select (block '(
       (let core (AsList (Uint32 '0)))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf3) '() (AsStruct '('x ("Just" (Int32 '"1"))) '('y ("Just" (Int32 '"2"))) '('z ("Just" (Int32 '"3"))))))))
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python3 '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf3) '() (AsStruct '('x ("Just" (Int32 '"1"))) '('y ("Just" (Int32 '"2"))) '('z ("Just" (Int32 '"3"))))))))
         (let res (AsList res))
         (return res)
       )))))
@@ -138,7 +138,7 @@ def f(x,y,z):
     (let select (block '(
       (let core (AsList (Uint32 '0)))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf4) '(("Just" (Int32 '"1"))) (AsStruct '('y ("Just" (Int32 '"2"))) '('z ("Just" (Int32 '"3"))))))))
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python3 '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf4) '(("Just" (Int32 '"1"))) (AsStruct '('y ("Just" (Int32 '"2"))) '('z ("Just" (Int32 '"3"))))))))
         (let res (AsList res))
         (return res)
       )))))
@@ -158,7 +158,7 @@ def f(x,y,z):
     (let select (block '(
       (let core (AsList (Uint32 '0)))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf5) '(("Just" (Int32 '"1")) ("Just" (Int32 '"2"))) (AsStruct '('z ("Just" (Int32 '"3"))))))))
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python3 '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf5) '(("Just" (Int32 '"1")) ("Just" (Int32 '"2"))) (AsStruct '('z ("Just" (Int32 '"3"))))))))
         (let res (AsList res))
         (return res)
       )))))
@@ -178,7 +178,7 @@ def f(x,y,z):
     (let select (block '(
       (let core (AsList (Uint32 '0)))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf6) '() (AsStruct '('x (Int32 '"4")) '('y (Int32 '"5")) '('z (Int32 '"6")))))))
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python3 '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf6) '() (AsStruct '('x (Int32 '"4")) '('y (Int32 '"5")) '('z (Int32 '"6")))))))
         (let res (AsList res))
         (return res)
       )))))
@@ -198,7 +198,7 @@ def f(x,y,z):
     (let select (block '(
       (let core (AsList (Uint32 '0)))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf7) '() (AsStruct '('x ("Just" (Int32 '"4"))) '('y (Int32 '"5")) '('z (Int32 '"6")))))))
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python3 '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf7) '() (AsStruct '('x ("Just" (Int32 '"4"))) '('y (Int32 '"5")) '('z (Int32 '"6")))))))
         (let res (AsList res))
         (return res)
       )))))
@@ -218,7 +218,7 @@ def f(x,y,z):
     (let select (block '(
       (let core (AsList (Uint32 '0)))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf8) '() (AsStruct '('x ("Just" (Int32 '"4"))) '('y ("Just" (Int32 '"5"))) '('z (Int32 '"6")))))))
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python3 '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf8) '() (AsStruct '('x ("Just" (Int32 '"4"))) '('y ("Just" (Int32 '"5"))) '('z (Int32 '"6")))))))
         (let res (AsList res))
         (return res)
       )))))
@@ -238,7 +238,7 @@ def f(x,y,z):
     (let select (block '(
       (let core (AsList (Uint32 '0)))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf9) '() (AsStruct '('x ("Just" (Int32 '"4"))) '('y ("Just" (Int32 '"5"))) '('z ("Just" (Int32 '"6"))))))))
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python3 '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf9) '() (AsStruct '('x ("Just" (Int32 '"4"))) '('y ("Just" (Int32 '"5"))) '('z ("Just" (Int32 '"6"))))))))
         (let res (AsList res))
         (return res)
       )))))
@@ -258,7 +258,7 @@ def f(x,y,z):
     (let select (block '(
       (let core (AsList (Uint32 '0)))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf10) '(("Just" (Int32 '"4"))) (AsStruct '('y ("Just" (Int32 '"5"))) '('z ("Just" (Int32 '"6"))))))))
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python3 '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf10) '(("Just" (Int32 '"4"))) (AsStruct '('y ("Just" (Int32 '"5"))) '('z ("Just" (Int32 '"6"))))))))
         (let res (AsList res))
         (return res)
       )))))
@@ -278,7 +278,7 @@ def f(x,y,z):
     (let select (block '(
       (let core (AsList (Uint32 '0)))
       (let core (FlatMap core (lambda '(row) (block '(
-        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf11) '(("Just" (Int32 '"4")) ("Just" (Int32 '"5"))) (AsStruct '('z ("Just" (Int32 '"6"))))))))
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python3 '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf11) '(("Just" (Int32 '"4")) ("Just" (Int32 '"5"))) (AsStruct '('z ("Just" (Int32 '"6"))))))))
         (let res (AsList res))
         (return res)
       )))))

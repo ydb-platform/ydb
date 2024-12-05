@@ -2,7 +2,6 @@
 #include "background_controller.h"
 #include "columnshard.h"
 #include "columnshard_private_events.h"
-#include "columnshard_ttl.h"
 #include "counters.h"
 #include "defs.h"
 #include "inflight_request_tracker.h"
@@ -99,6 +98,7 @@ class TTxRemoveSharedBlobs;
 class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
+class TTxBlobsWritingFailed;
 
 namespace NLoading {
 class TInsertTableInitializer;
@@ -165,6 +165,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxPlanStep;
     friend class TTxWrite;
     friend class TTxBlobsWritingFinished;
+    friend class TTxBlobsWritingFailed;
     friend class TTxReadBase;
     friend class TTxRead;
     friend class TTxWriteIndex;
@@ -321,7 +322,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
         putStatus.OnYellowChannels(Executor());
     }
 
-    void ActivateTiering(const ui64 pathId, const TString& useTiering);
+    void ActivateTiering(const ui64 pathId, const THashSet<TString>& usedTiers);
     void OnTieringModified(const std::optional<ui64> pathId = {});
 
 public:
@@ -535,7 +536,6 @@ private:
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
-    static TDuration GetMaxReadStaleness();
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

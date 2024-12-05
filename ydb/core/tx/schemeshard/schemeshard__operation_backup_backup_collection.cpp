@@ -1,10 +1,35 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_create_cdc_stream.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
+#include "schemeshard__backup_collection_common.h"
 
 #include <ydb/core/tx/schemeshard/backup/constants.h>
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection>;
+
+namespace NOperation {
+
+template <>
+std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
+    TTag,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& backupOp = tx.GetBackupBackupCollection();
+    return NBackup::GetRequiredPaths(tx, backupOp.GetTargetDir(), backupOp.GetName(), context);
+}
+
+template <>
+bool Rewrite(TTag, TTxTransaction& tx) {
+    auto now = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now());
+    tx.MutableBackupBackupCollection()->SetTargetDir(now + "_full");
+    return true;
+}
+
+} // namespace NOperation
 
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     TVector<ISubOperation::TPtr> result;

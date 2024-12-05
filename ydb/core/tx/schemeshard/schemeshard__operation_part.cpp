@@ -1,5 +1,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_utils.h"  // for TransactionTemplate
 #include "schemeshard_path.h"
 
 #include <ydb/core/base/hive.h>
@@ -164,7 +165,7 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
         }
 
         for (auto& [implName, implPathId] : child.Base()->GetChildren()) {
-            Y_ABORT_UNLESS(NTableIndex::IsImplTable(implName) 
+            Y_ABORT_UNLESS(NTableIndex::IsImplTable(implName)
                         || implName == "streamImpl"
                 , "unexpected name %s", implName.c_str());
 

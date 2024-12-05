@@ -116,6 +116,7 @@ class TPartition : public TActorBootstrapped<TPartition> {
     friend TInitInfoRangeStep;
     friend TInitDataRangeStep;
     friend TInitDataStep;
+    friend TInitEndWriteTimestampStep;
 
     friend TPartitionSourceManager;
 
@@ -440,6 +441,7 @@ private:
     void HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
 
+    ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -470,6 +472,8 @@ public:
     // Minimal offset, the data from which cannot be deleted, because it is required by an important consumer
     ui64 ImportantClientsMinOffset() const;
 
+    TInstant GetEndWriteTimestamp() const; // For tests only
+    THead& GetHead(); // For tests only
 
     //Bootstrap sends kvRead
     //Become StateInit
@@ -666,6 +670,8 @@ private:
 //                          [DataKeysBody  ][DataKeysHead                      ]
     ui64 StartOffset;
     ui64 EndOffset;
+    TInstant EndWriteTimestamp;
+    TInstant PendingWriteTimestamp;
 
     ui64 WriteInflightSize;
     TActorId Tablet;
@@ -956,6 +962,10 @@ private:
                            TEvKeyValue::TEvRequest* request,
                            const TActorContext& ctx);
     ui32 RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request);
+
+    void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
+
+    size_t WriteNewSizeFromSupportivePartitions = 0;
 };
 
 } // namespace NKikimr::NPQ

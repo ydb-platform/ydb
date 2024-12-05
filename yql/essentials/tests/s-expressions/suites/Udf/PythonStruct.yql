@@ -18,7 +18,7 @@ def NewPerson(name, age):
     return Person(name, age)
 
 @@))
-(let udf (ScriptUdf 'Python 'NewPerson udfType udfScript))
+(let udf (ScriptUdf 'Python3 'NewPerson udfType udfScript))
 
 # call udf
 (let result (Apply udf (String 'Jamel) (Uint32 '99)))

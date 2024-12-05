@@ -32,7 +32,7 @@ public:
     TFairShareInvokerQueue(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
         const std::vector<TBucketDescription>& bucketDescriptions,
-        NProfiling::IRegistryImplPtr registry = {});
+        NProfiling::IRegistryPtr registry = {});
 
     ~TFairShareInvokerQueue();
 

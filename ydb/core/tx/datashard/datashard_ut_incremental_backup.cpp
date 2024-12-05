@@ -223,6 +223,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/IncrBackupImpl`
+                ORDER BY key
                 )"),
             result);
 
@@ -242,6 +243,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/IncrBackupImpl`
+                ORDER BY key
                 )"),
             result);
     }
@@ -294,6 +296,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/Table`
+                ORDER BY key
                 )"),
             "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 30 } }");
@@ -353,12 +356,85 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/Table`
+                ORDER BY key
                 )"),
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/RestoreTable`
+                ORDER BY key
                 )"));
     }
 
-} // Cdc
+    Y_UNIT_TEST_TWIN(SimpleBackupBackupCollection, WithIncremental) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+                (1, 10)
+              , (2, 20)
+              , (3, 30)
+              ;
+            )");
+
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `MyCollection`
+              ( TABLE `/Root/Table`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = ')" + TString(WithIncremental ? "true" : "false") +  R"('
+              );
+            )", false);
+
+        ExecSQL(server, edgeActor, R"(BACKUP `MyCollection`;)", false);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                -- TODO: fix with navigate after proper scheme cache handling
+                SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000001Z_full/Table`
+                ORDER BY key
+                )"),
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/Table`
+                ORDER BY key
+                )"));
+
+
+        if (WithIncremental) {
+            ExecSQL(server, edgeActor, R"(
+                UPSERT INTO `/Root/Table` (key, value) VALUES
+                (2, 200);
+            )");
+
+            ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/Table` WHERE key=1;)");
+
+            ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
+
+            SimulateSleep(server, TDuration::Seconds(1));
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    -- TODO: fix with navigate after proper scheme cache handling
+                    SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { null_flag_value: NULL_VALUE } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 200 } }");
+        }
+    }
+
+} // Y_UNIT_TEST_SUITE(IncrementalBackup)
 
 } // NKikimr

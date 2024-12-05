@@ -20,8 +20,6 @@
 
 #include <library/cpp/yt/global/variable.h>
 
-#include <library/cpp/yt/memory/memory_tag.h>
-
 #include <library/cpp/yt/memory/function_view.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
@@ -179,13 +177,6 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-
-Y_FORCE_INLINE TMemoryTag SwapMemoryTag(TMemoryTag tag)
-{
-    auto result = GetCurrentMemoryTag();
-    SetCurrentMemoryTag(tag);
-    return result;
-}
 
 Y_FORCE_INLINE TFiberId SwapCurrentFiberId(TFiberId fiberId)
 {
@@ -818,7 +809,6 @@ protected:
     void OnSwitch()
     {
         FiberId_ = SwapCurrentFiberId(FiberId_);
-        MemoryTag_ = SwapMemoryTag(MemoryTag_);
         Fls_ = SwapCurrentFls(Fls_);
         MinLogLevel_ = SwapMinLogLevel(MinLogLevel_);
     }
@@ -826,13 +816,11 @@ protected:
     ~TBaseSwitchHandler()
     {
         YT_VERIFY(FiberId_ == InvalidFiberId);
-        YT_VERIFY(MemoryTag_ == NullMemoryTag);
         YT_VERIFY(!Fls_);
         YT_VERIFY(MinLogLevel_ == ELogLevel::Minimum);
     }
 
 private:
-    TMemoryTag MemoryTag_ = NullMemoryTag;
     TFls* Fls_ = nullptr;
     TFiberId FiberId_ = InvalidFiberId;
     ELogLevel MinLogLevel_ = ELogLevel::Minimum;
@@ -1147,7 +1135,6 @@ TFiberCanceler GetCurrentFiberCanceler()
     }
 
     if (!switchHandler->Canceler()) {
-        TMemoryTagGuard guard(NullMemoryTag);
         switchHandler->Canceler() = New<NDetail::TCanceler>(GetCurrentFiberId());
     }
 
@@ -1161,8 +1148,6 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
     YT_VERIFY(!IsContextSwitchForbidden());
     YT_VERIFY(future);
     YT_ASSERT(invoker);
-
-    TMemoryTagGuard memoryTagGuard(NullMemoryTag);
 
     auto* currentFiber = NDetail::TryGetCurrentFiber();
     if (!currentFiber) {

@@ -846,6 +846,18 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
     db.Table<T>().Key(node.NodeId).Update<T::Location>(node.Location.GetSerializedLocation());
 }
 
+void TNodeBroker::DbReleaseSlotIndex(const TNodeInfo &node,
+                                       TTransactionContext &txc) 
+{
+
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Release slot index (" << node.SlotIndex << ") node " << node.IdString() );
+    NIceDb::TNiceDb db(txc.DB);
+    using T = Schema::Nodes;
+    db.Table<T>().Key(node.NodeId)
+        .UpdateToNull<T::SlotIndex>();
+}
+  
 void TNodeBroker::DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
                                        TTransactionContext &txc)
 {
@@ -1014,6 +1026,14 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         })
     };
     ctx.RegisterWithSameMailbox(new TResolveTenantActor(ev, SelfId()));
+}
+
+void TNodeBroker::Handle(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev,
+                         const TActorContext &ctx) {
+    LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvGracefulShutdownRequest"
+        << ": request# " << ev->Get()->Record.ShortDebugString());   
+    TabletCounters->Cumulative()[COUNTER_GRACEFUL_SHUTDOWN_REQUESTS].Increment(1);
+    ProcessTx(CreateTxGracefulShutdown(ev), ctx);                     
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,

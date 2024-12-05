@@ -6,7 +6,7 @@
 (let ui32 (DataType 'Uint32))
 (let udfType (CallableType '() '(ui32) '(ui32) '(ui32)))
 (let udfScript (String '"def Sum(x, y): return x + y"))
-(let udf (ScriptUdf 'Python 'Sum udfType udfScript))
+(let udf (ScriptUdf 'Python3 'Sum udfType udfScript))
 
 # call udf
 (let x (Uint32 '10))

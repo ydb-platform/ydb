@@ -313,6 +313,14 @@ ui64 TPartition::ImportantClientsMinOffset() const {
     return minOffset;
 }
 
+TInstant TPartition::GetEndWriteTimestamp() const {
+    return EndWriteTimestamp;
+}
+
+THead& TPartition::GetHead() {
+    return Head;
+}
+
 void TPartition::HandleWakeup(const TActorContext& ctx) {
     FilterDeadlinedWrites(ctx);
 
@@ -356,6 +364,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     meta.SetStartOffset(StartOffset);
     meta.SetEndOffset(Max(NewHead.GetNextOffset(), EndOffset));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
+    meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
 
     if (IsSupportive()) {
         auto* counterData = meta.MutableCounterData();
@@ -1114,6 +1123,14 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
     if (!tx.Predicate.GetOrElse(true)) {
         return EProcessResult::Continue;
     }
+
+    if (!CanWrite()) {
+        tx.Predicate = false;
+        tx.Message = TStringBuilder() << "Partition " << Partition << " is inactive. Writing is not possible";
+        tx.WriteInfoApplied = true;
+        return EProcessResult::Continue;
+    }
+
     auto& srcIdInfo = tx.WriteInfo->SrcIdInfo;
 
     EProcessResult ret = EProcessResult::Continue;
@@ -1939,6 +1956,8 @@ void TPartition::RunPersist() {
             // Messages written
             MsgsWrittenTotal.Inc(writeInfo->MessagesWrittenTotal);
             MsgsWrittenGrpc.Inc(writeInfo->MessagesWrittenTotal);
+
+            WriteNewSizeFromSupportivePartitions += writeInfo->BytesWrittenTotal;
         }
         WriteInfosApplied.clear();
         //Done with counters.

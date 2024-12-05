@@ -986,7 +986,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, ui32 messageLimit) {
             // Get DirectReadResponse messages, send DirectReadAck messages.
-            while (currTotalMessages < messageLimit) {
+
+            auto endTime = TInstant::Now() + TDuration::Seconds(10);
+            while (currTotalMessages < messageLimit && endTime > TInstant::Now()) {
                 Cerr << "Wait for direct read id: " << nextReadId << ", currently have " << currTotalMessages << " messages" << Endl;
 
                 Ydb::Topic::StreamDirectReadMessage::FromServer resp;
@@ -1106,7 +1108,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     THolder<TEvPQ::TEvGetFullDirectReadData> RequestCacheData(TTestActorRuntime* runtime, TEvPQ::TEvGetFullDirectReadData* request) {
         const auto& edgeId = runtime->AllocateEdgeActor();
         runtime->Send(NPQ::MakePQDReadCacheServiceActorId(), edgeId, request);
-        auto resp = runtime->GrabEdgeEvent<TEvPQ::TEvGetFullDirectReadData>();
+        auto resp = runtime->GrabEdgeEvent<TEvPQ::TEvGetFullDirectReadData>(TDuration::Seconds(10));
         UNIT_ASSERT(resp);
         return resp;
     }
@@ -1159,10 +1161,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         ui32 totalMsg = 0;
         ui64 nextReadId = 1;
         Sleep(TDuration::Seconds(3));
+        Cerr << ">>>>> 1" << Endl << Flush;
         setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 50);
+
         Cerr << "First read\n";
         setup.DoRead(assignId, nextReadId, totalMsg, 40);
+        setup.DoRead(assignId, nextReadId, totalMsg, 42);
 
+        Cerr << ">>>>> 3" << Endl << Flush;
         Topic::StreamReadMessage::FromClient req;
         req.mutable_read_request()->set_bytes_size(40_MB);
         if (!setup.ControlStream->Write(req)) {
@@ -1171,11 +1177,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << "Second read\n";
         setup.DoRead(assignId, nextReadId, totalMsg, 50);
 
+        Cerr << ">>>>> 5" << Endl << Flush;
         Sleep(TDuration::Seconds(1));
+        Cerr << ">>>>> 6" << Endl << Flush;
         auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.StagedReads.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.Reads.size(), 0);
+        Cerr << ">>>>> 7" << Endl << Flush;
     }
 
     Y_UNIT_TEST(DirectReadBadCases) {
@@ -1332,6 +1341,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << "Request cache data\n";
         auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
+
         Cerr << "Kill the tablet\n";
         server.Server->AnnoyingClient->KillTablet(*(server.Server->CleverServer), tabletId);
         Cerr << "Get session closure\n";
@@ -2802,7 +2812,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
     // expects that L2 size is 32Mb
     Y_UNIT_TEST(Cache) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetGrpcMaxMessageSize(18_MB));
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetGrpcMaxMessageSize(48_MB));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8_MB, 86400);
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
@@ -2811,7 +2821,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         for (ui32 i = 0; i < 32; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
 
-        auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 16);
+        Cerr << ">>>>> 1" << Endl << Flush;
+        auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 23);
+        Cerr << ">>>>> 2" << Endl << Flush;
         auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
         UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 3);
@@ -2821,8 +2833,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         for (ui32 i = 0; i < 8; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value);
 
-        info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 16);
-        info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
+        Cerr << ">>>>> 3" << Endl << Flush;
+        info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 23);
+        Cerr << ">>>>> 4" << Endl << Flush;
+        info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 22);
 
         ui32 fromDisk = info0.BlobsFromDisk + info16.BlobsFromDisk;
         ui32 fromCache = info0.BlobsFromCache + info16.BlobsFromCache;
@@ -2862,7 +2876,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(SameOffset) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetGrpcMaxMessageSize(48_MB));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 6_MB, 86400);
         TString secondTopic = DEFAULT_TOPIC_NAME + "2";
         server.AnnoyingClient->CreateTopic(secondTopic, 1, 6_MB, 86400);
@@ -2882,13 +2896,16 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             server.AnnoyingClient->WriteToPQ({secondTopic, 0, "source1", i}, mb);
         }
 
-        auto info1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 1, "user1"}, 1);
-        auto info2 = server.AnnoyingClient->ReadFromPQ({secondTopic, 0, 0, 1, "user1"}, 1);
+        Cerr << ">>>>> 1" << Endl << Flush;
+        auto info1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 1, "user1"}, 7);
+        Cerr << ">>>>> 2" << Endl << Flush;
+        auto info2 = server.AnnoyingClient->ReadFromPQ({secondTopic, 0, 0, 1, "user1"}, 7);
+        Cerr << ">>>>> 3" << Endl << Flush;
 
         UNIT_ASSERT_VALUES_EQUAL(info1.BlobsFromCache, 1);
         UNIT_ASSERT_VALUES_EQUAL(info2.BlobsFromCache, 1);
-        UNIT_ASSERT_VALUES_EQUAL(info1.Values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(info2.Values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(info1.Values.size(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(info2.Values.size(), 7);
         UNIT_ASSERT_VALUES_EQUAL(info1.Values[0].size(), valueSize);
         UNIT_ASSERT_VALUES_EQUAL(info2.Values[0].size(), valueSize);
         UNIT_ASSERT(info1.Values[0] == value1);

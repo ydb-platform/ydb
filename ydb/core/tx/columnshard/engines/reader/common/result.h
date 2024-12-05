@@ -7,12 +7,15 @@
 #include <ydb/core/tx/program/program.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+
 namespace NKikimr::NOlap::NReader {
+
+class TReadContext;
 
 // Represents a batch of rows produced by ASC or DESC scan with applied filters and partial aggregation
 class TPartialReadResult: public TNonCopyable {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>, ResourcesGuard);
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TGroupGuard>, GroupGuard);
     NArrow::TShardedRecordBatch ResultBatch;
 
@@ -20,6 +23,7 @@ private:
     // NOTE: it might be different from the Key of last row in ResulBatch in case of filtering/aggregation/limit
     std::shared_ptr<IScanCursor> ScanCursor;
     YDB_READONLY_DEF(std::optional<ui32>, NotFinishedIntervalIdx);
+    const NColumnShard::TCounterGuard Guard;
 
 public:
     void Cut(const ui32 limit) {
@@ -54,21 +58,14 @@ public:
         return ScanCursor;
     }
 
-    explicit TPartialReadResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& resourcesGuard,
-        std::shared_ptr<NGroupedMemoryManager::TGroupGuard>&& gGuard, const NArrow::TShardedRecordBatch& batch,
-        const std::shared_ptr<IScanCursor>& scanCursor, const std::optional<ui32> notFinishedIntervalIdx)
-        : ResourcesGuard(std::move(resourcesGuard))
-        , GroupGuard(std::move(gGuard))
-        , ResultBatch(batch)
-        , ScanCursor(scanCursor)
-        , NotFinishedIntervalIdx(notFinishedIntervalIdx) {
-        Y_ABORT_UNLESS(ResultBatch.GetRecordsCount());
-        Y_ABORT_UNLESS(ScanCursor);
-    }
+    explicit TPartialReadResult(const std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& resourceGuards,
+        const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& gGuard, const NArrow::TShardedRecordBatch& batch,
+        const std::shared_ptr<IScanCursor>& scanCursor, const std::shared_ptr<TReadContext>& context,
+        const std::optional<ui32> notFinishedIntervalIdx);
 
     explicit TPartialReadResult(const NArrow::TShardedRecordBatch& batch, const std::shared_ptr<IScanCursor>& scanCursor,
-        const std::optional<ui32> notFinishedIntervalIdx)
-        : TPartialReadResult(nullptr, nullptr, batch, scanCursor, notFinishedIntervalIdx) {
+        const std::shared_ptr<TReadContext>& context, const std::optional<ui32> notFinishedIntervalIdx)
+        : TPartialReadResult({}, nullptr, batch, scanCursor, context, notFinishedIntervalIdx) {
     }
 };
 

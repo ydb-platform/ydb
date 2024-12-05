@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "error_attribute.h"
 
 #include <ranges>
 
@@ -23,6 +24,7 @@ namespace NDetail {
 template <class T>
 struct TMergeableDictionaryImpl
 {
+    // TL;DR: MakeIterableView returns something like std::span<std::pair<TKey, TValue>>.
     using TView = std::invoke_result_t<decltype(&TMergeDictionariesTraits<T>::MakeIterableView), const T&>;
     using TIterator = std::ranges::iterator_t<TView>;
     using TValue = typename std::iterator_traits<TIterator>::value_type;
@@ -33,10 +35,10 @@ struct TMergeableDictionaryImpl
 
     static constexpr bool CorrectTupleElements = requires {
         typename std::tuple_element<0, TValue>::type;
-        std::same_as<typename std::tuple_element<0, TValue>::type, TString>;
+        std::same_as<typename std::tuple_element<0, TValue>::type, TErrorAttribute::TKey>;
 
         typename std::tuple_element<1, TValue>::type;
-        std::same_as<typename std::tuple_element<1, TValue>::type, NYson::TYsonString>;
+        std::same_as<typename std::tuple_element<1, TValue>::type, TErrorAttribute::TValue>;
     };
 };
 

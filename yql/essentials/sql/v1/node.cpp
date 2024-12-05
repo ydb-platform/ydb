@@ -172,6 +172,14 @@ const TString* INode::GetColumnName() const {
     return nullptr;
 }
 
+bool INode::IsPlainColumn() const {
+    return GetColumnName() != nullptr;
+}
+
+bool INode::IsTableRow() const {
+    return false;
+}
+
 void INode::AssumeColumn() {
 }
 
@@ -464,6 +472,14 @@ const TString* IProxyNode::GetLiteral(const TString& type) const {
 
 const TString* IProxyNode::GetColumnName() const {
     return Inner->GetColumnName();
+}
+
+bool IProxyNode::IsPlainColumn() const {
+    return Inner->IsPlainColumn();
+}
+
+bool IProxyNode::IsTableRow() const {
+    return Inner->IsTableRow();
 }
 
 void IProxyNode::AssumeColumn() {
@@ -2478,6 +2494,18 @@ public:
 
     const TString* GetColumnName() const override {
         return ColumnOnly ? Ids[0].Expr->GetColumnName() : nullptr;
+    }
+
+    bool IsPlainColumn() const override {
+        if (GetColumnName()) {
+            return true;
+        }
+
+        if (Ids[0].Expr->IsTableRow()) {
+            return true;
+        }
+
+        return false;
     }
 
     const TString* GetSourceName() const override {

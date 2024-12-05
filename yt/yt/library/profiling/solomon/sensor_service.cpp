@@ -1,4 +1,6 @@
 #include "sensor_service.h"
+
+#include "config.h"
 #include "cube.h"
 #include "exporter.h"
 #include "registry.h"

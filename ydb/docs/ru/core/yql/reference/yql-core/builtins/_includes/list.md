@@ -363,6 +363,56 @@ ListTake(List<T>, Uint64)->List<T>
 ListTake(List<T>?, Uint64)->List<T>?
 ```
 
+## ListSample и ListSampleN {#listsample}
+
+Возвращает выборку без повторений из элементов списка.
+
+- `ListSample` выбирает каждый элемент независимо с заданной вероятностью.
+
+- `ListSampleN` выбирает фиксированное количество элементов (если длина списка меньше размера выборки, то вернется исходный список).
+
+Если вероятность/размер выборки является NULL, то вернется исходный список.
+
+Дополнительный аргумент используется для управления случайностью, подробнее см. [документацию к `Random`](./basic/random.md).
+
+### Примеры
+
+```yql
+$list = AsList(1, 2, 3, 4, 5);
+
+SELECT ListSample($list, 0.5);  -- [1, 2, 5]
+SELECT ListSampleN($list, 2);  -- [4, 2]
+```
+
+### Сигнатура
+
+```yql
+ListSample(List<T>, Double?[, U])->List<T>
+ListSample(List<T>?, Double?[, U])->List<T>?
+
+ListSampleN(List<T>, Uint64?[, U])->List<T>
+ListSampleN(List<T>?, Uint64?[, U])->List<T>?
+```
+
+## ListShuffle {#listshuffle}
+
+Возвращает копию списка с элементами, перестановленными в случайном порядке. Дополнительный аргумент используется для управления случайностью, подробнее см. [документацию к `Random`](./basic/random.md).
+
+### Примеры
+
+```yql
+$list = AsList(1, 2, 3, 4, 5);
+
+SELECT ListShuffle($list);  -- [1, 3, 5, 2, 4]
+```
+
+### Сигнатура
+
+```yql
+ListShuffle(List<T>[, U])->List<T>
+ListShuffle(List<T>?[, U])->List<T>?
+```
+
 ## ListIndexOf {#listindexof}
 
 Ищет элемент с указанным значением в списке и при первом обнаружении возвращает его индекс. Отсчет индексов начинается с 0, а в случае отсутствия элемента возвращается `NULL`.
@@ -749,7 +799,8 @@ SELECT ListFromRange(Datetime("2022-05-23T15:30:00Z"), Datetime("2022-05-30T15:3
 ### Сигнатура
 
 ```yql
-ListFromRange(T, T)->LazyList<T> -- T - числовой тип или тип, представляющий дату/время
+ListFromRange(T{Flags:AutoMap}, T{Flags:AutoMap}, T?)->LazyList<T> -- T — числовой тип
+ListFromRange(T{Flags:AutoMap}, T{Flags:AutoMap}, I?)->LazyList<T> -- T — тип, представляющий дату/время, I — интервал
 ```
 
 ## ListReplicate {#listreplicate}

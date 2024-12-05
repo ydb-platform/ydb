@@ -11,10 +11,21 @@ std::unique_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::Build
 }
 
 std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) {
+    const bool needSnapshots = ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax();
+    if (!needSnapshots && FFColumns->GetColumnIds().size() == 1 &&
+        FFColumns->GetColumnIds().contains(NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX)) {
+        std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>(*this);
+        source->SetSourceInMemory(true);
+        result->SetBranchName("FAKE");
+        result->AddStep(std::make_shared<TBuildFakeSpec>(source->GetRecordsCount()));
+        result->AddStep<TBuildResultStep>(0, source->GetRecordsCount());
+        return result;
+    }
     if (!source->GetStageData().HasPortionAccessor()) {
         if (!AskAccumulatorsScript) {
             AskAccumulatorsScript = std::make_shared<TFetchingScript>(*this);
-            AskAccumulatorsScript->AddStep<TAllocateMemoryStep>(source->PredictAccessorsSize(), EStageFeaturesIndexes::Accessors);
+            AskAccumulatorsScript->AddStep<TAllocateMemoryStep>(
+                source->PredictAccessorsSize(FFColumns->GetColumnIds()), EStageFeaturesIndexes::Accessors);
             AskAccumulatorsScript->AddStep<TPortionAccessorFetchingStep>();
             AskAccumulatorsScript->AddStep<TDetectInMem>(*FFColumns);
         }
@@ -31,7 +42,6 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
         }
     }();
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
-    const bool needSnapshots = ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax();
     const bool hasDeletions = source->GetHasDeletions();
     bool needShardingFilter = false;
     if (!!ReadMetadata->GetRequestShardingInfo()) {
@@ -45,23 +55,17 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
                                           [hasDeletions ? 1 : 0];
         if (!result) {
             TGuard<TMutex> wg(Mutex);
-            result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
-                                         [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0];
+            result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
+                                         [hasDeletions ? 1 : 0];
             if (!result) {
                 result = BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions);
-                CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
-                                    [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0] = result;
+                CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
+                                    [hasDeletions ? 1 : 0] = result;
             }
         }
         AFL_VERIFY(result);
-        if (*result) {
-            return *result;
-        } else {
-            std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>(*this);
-            result->SetBranchName("FAKE");
-            result->AddStep(std::make_shared<TBuildFakeSpec>(source->GetRecordsCount()));
-            return result;
-        }
+        AFL_VERIFY(*result);
+        return *result;
     }
 }
 
@@ -96,32 +100,32 @@ public:
         const bool sequential) {
         auto actualColumns = columns - AssemblerReadyColumns;
         AssemblerReadyColumns = AssemblerReadyColumns + columns;
-        if (!actualColumns.IsEmpty()) {
-            auto actualSet = std::make_shared<TColumnsSet>(actualColumns.GetColumnIds(), FullSchema);
-            if (sequential) {
-                const auto notSequentialColumnIds = GuaranteeNotOptional->Intersect(*actualSet);
-                if (notSequentialColumnIds.size()) {
-                    script.Allocation(notSequentialColumnIds, stage, EMemType::Raw);
-                    std::shared_ptr<TColumnsSet> cross = actualSet->BuildSamePtr(notSequentialColumnIds);
-                    script.AddStep<TAssemblerStep>(cross, purposeId);
-                    *actualSet = *actualSet - *cross;
-                }
-                if (!actualSet->IsEmpty()) {
-                    script.Allocation(notSequentialColumnIds, stage, EMemType::RawSequential);
-                    script.AddStep<TOptionalAssemblerStep>(actualSet, purposeId);
-                }
-            } else {
-                script.Allocation(actualColumns.GetColumnIds(), stage, EMemType::Raw);
-                script.AddStep<TAssemblerStep>(actualSet, purposeId);
-            }
-            return true;
+        if (actualColumns.IsEmpty()) {
+            return false;
         }
-        return false;
+        auto actualSet = std::make_shared<TColumnsSet>(actualColumns.GetColumnIds(), FullSchema);
+        if (sequential) {
+            const auto notSequentialColumnIds = GuaranteeNotOptional->Intersect(*actualSet);
+            if (notSequentialColumnIds.size()) {
+                script.Allocation(notSequentialColumnIds, stage, EMemType::Raw);
+                std::shared_ptr<TColumnsSet> cross = actualSet->BuildSamePtr(notSequentialColumnIds);
+                script.AddStep<TAssemblerStep>(cross, purposeId);
+                *actualSet = *actualSet - *cross;
+            }
+            if (!actualSet->IsEmpty()) {
+                script.Allocation(notSequentialColumnIds, stage, EMemType::RawSequential);
+                script.AddStep<TOptionalAssemblerStep>(actualSet, purposeId);
+            }
+        } else {
+            script.Allocation(actualColumns.GetColumnIds(), stage, EMemType::Raw);
+            script.AddStep<TAssemblerStep>(actualSet, purposeId);
+        }
+        return true;
     }
 };
 
-std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots,
-    const bool partialUsageByPredicateExt, const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const {
+std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
+    const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const {
     std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>(*this);
     const bool partialUsageByPredicate = partialUsageByPredicateExt && PredicateColumns->GetColumnsCount();
 
@@ -188,7 +192,6 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
     : CommonContext(commonContext) {
-
     ReadMetadata = dynamic_pointer_cast<const TReadMetadata>(CommonContext->GetReadMetadata());
     Y_ABORT_UNLESS(ReadMetadata);
     Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
@@ -212,7 +215,7 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
         kffAccessors = 0.01;
     }
 
-    std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> stages = { 
+    std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> stages = {
         NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
             stagePrefix + "::ACCESSORS", kffAccessors * TGlobalLimits::ScanMemoryLimit),
         NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
@@ -223,8 +226,8 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     };
     ProcessMemoryGuard =
         NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(CommonContext->GetReadMetadata()->GetTxId(), stages);
-    ProcessScopeGuard =
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildScopeGuard(CommonContext->GetReadMetadata()->GetTxId(), GetCommonContext()->GetScanId());
+    ProcessScopeGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildScopeGuard(
+        CommonContext->GetReadMetadata()->GetTxId(), GetCommonContext()->GetScanId());
 
     auto readSchema = ReadMetadata->GetResultSchema();
     SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSnapshotColumnIdsSet(), readSchema);
@@ -274,6 +277,7 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     } else {
         ProgramInputColumns = FFColumns;
     }
+    AllUsageColumns = std::make_shared<TColumnsSet>(*FFColumns + *PredicateColumns);
 
     PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), readSchema);
     MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);

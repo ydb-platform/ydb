@@ -35,62 +35,62 @@ struct TSensorInfo
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSolomonRegistry
-    : public IRegistryImpl
+    : public IRegistry
 {
 public:
     explicit TSolomonRegistry();
 
-    ICounterImplPtr RegisterCounter(
+    ICounterPtr RegisterCounter(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    ITimeCounterImplPtr RegisterTimeCounter(
+    ITimeCounterPtr RegisterTimeCounter(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    IGaugeImplPtr RegisterGauge(
+    IGaugePtr RegisterGauge(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    ITimeGaugeImplPtr RegisterTimeGauge(
+    ITimeGaugePtr RegisterTimeGauge(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    ISummaryImplPtr RegisterSummary(
+    ISummaryPtr RegisterSummary(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    IGaugeImplPtr RegisterGaugeSummary(
+    IGaugePtr RegisterGaugeSummary(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    ITimeGaugeImplPtr RegisterTimeGaugeSummary(
+    ITimeGaugePtr RegisterTimeGaugeSummary(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    ITimerImplPtr RegisterTimerSummary(
+    ITimerPtr RegisterTimerSummary(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    ITimerImplPtr RegisterTimeHistogram(
+    ITimerPtr RegisterTimeHistogram(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    IHistogramImplPtr RegisterGaugeHistogram(
+    IHistogramPtr RegisterGaugeHistogram(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    IHistogramImplPtr RegisterRateHistogram(
+    IHistogramPtr RegisterRateHistogram(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;

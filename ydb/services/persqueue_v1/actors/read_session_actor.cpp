@@ -1272,7 +1272,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     const TActorId actorId = ctx.Register(new TPartitionActor(
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
         record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC, RangesMode,
-        converterIter->second, DirectRead, UseMigrationProtocol, maxLag, readTimestampMs, topic.PartitionGraph->GetPartition(partitionId.Partition)->HierarhicalParents, notCommitedToFinishParents));
+        converterIter->second, Request->GetDatabaseName().GetOrElse(AppData(ctx)->PQConfig.GetDatabase()), DirectRead, UseMigrationProtocol, maxLag, readTimestampMs, topic.PartitionGraph->GetPartition(partitionId.Partition)->AllParents, notCommitedToFinishParents));
 
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);

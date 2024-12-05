@@ -2331,7 +2331,7 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
         bool isAffectedConsumer = AffectedUsers.contains(consumer);
         TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
-        if (!operation.GetReadSessionId().Empty() && operation.GetReadSessionId() != userInfo.Session) {
+        if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
             PQ_LOG_D("Partition " << Partition <<
                 " Consumer '" << consumer << "'" <<
                 " Bad request (session already dead) " <<

@@ -63,6 +63,8 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     ForsetiOpPieceSizeSsd = TControlWrapper(64 * 1024, 1, Cfg->BufferPoolBufferSizeBytes);
     ForsetiOpPieceSizeRot = TControlWrapper(512 * 1024, 1, Cfg->BufferPoolBufferSizeBytes);
     ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ?  ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
+    UseNoopSchedulerSSD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
+    UseNoopSchedulerHDD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
 
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -2480,7 +2482,7 @@ void TPDisk::ProcessFastOperationsQueue() {
                 static_cast<TContinueReadMetadata&>(*req).Execute(PCtx->ActorSystem);
                 break;
             default:
-                Y_FAIL_S("Unexpected request type# " << (ui64)req->GetType());
+                Y_FAIL_S("Unexpected request type# " << TypeName(*req));
                 break;
         }
     }
@@ -2564,11 +2566,13 @@ void TPDisk::OnDriveStartup() {
 bool TPDisk::Initialize() {
 
 #define REGISTER_LOCAL_CONTROL(control) \
-    PCtx->ActorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(control, \
+    icb->RegisterLocalControl(control, \
             TStringBuilder() << "PDisk_" << PCtx->PDiskId << "_" << #control)
 
     if (!IsStarted) {
         if (PCtx->ActorSystem && PCtx->ActorSystem->AppData<TAppData>() && PCtx->ActorSystem->AppData<TAppData>()->Icb) {
+            auto& icb = PCtx->ActorSystem->AppData<TAppData>()->Icb;
+
             REGISTER_LOCAL_CONTROL(SlowdownAddLatencyNs);
             REGISTER_LOCAL_CONTROL(EnableForsetiBinLog);
             REGISTER_LOCAL_CONTROL(ForsetiMinLogCostNsControl);
@@ -2576,6 +2580,8 @@ bool TPDisk::Initialize() {
             REGISTER_LOCAL_CONTROL(ForsetiMaxLogBatchNs);
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeSsd);
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeRot);
+            icb->RegisterSharedControl(UseNoopSchedulerHDD, "PDiskControls.UseNoopSchedulerHDD");
+            icb->RegisterSharedControl(UseNoopSchedulerSSD, "PDiskControls.UseNoopSchedulerSSD");
 
             if (Cfg->SectorMap) {
                 auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -3093,7 +3099,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
     return true;
 }
 
-void TPDisk::PushRequestToForseti(TRequestBase *request) {
+void TPDisk::PushRequestToScheduler(TRequestBase *request) {
     if (request->GateId != GateFastOperation) {
         bool isAdded = false;
 
@@ -3162,7 +3168,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                     ui32 jobSize = Min(remainingSize, jobSizeLimit);
                     TChunkWritePiece *piece = new TChunkWritePiece(whole, idx * jobSizeLimit, jobSize, std::move(span));
                     piece->EstimateCost(DriveModel);
-                    AddJobToForseti(cbs, piece, request->JobKind);
+                    AddJobToScheduler(cbs, piece, request->JobKind);
                     remainingSize -= jobSize;
                 }
                 Y_VERIFY_S(remainingSize == 0, remainingSize);
@@ -3186,12 +3192,12 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                             jobSizeLimit * Format.SectorSize);
                     piece->EstimateCost(DriveModel);
                     piece->SelfPointer = piece;
-                    AddJobToForseti(cbs, piece, request->JobKind);
+                    AddJobToScheduler(cbs, piece, request->JobKind);
                     totalSectors -= jobSize;
                 }
                 Y_VERIFY_S(totalSectors == 0, totalSectors);
             } else {
-                AddJobToForseti(cbs, request, request->JobKind);
+                AddJobToScheduler(cbs, request, request->JobKind);
             }
         }
     } else {
@@ -3202,7 +3208,16 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
     }
 }
 
-void TPDisk::AddJobToForseti(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind) {
+void TPDisk::AddJobToScheduler(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind) {
+    if (UseNoopSchedulerCached) {
+        // TODO
+        Y_FAIL();
+        RouteRequest(request);
+        LWTRACK(PDiskAddToNoopScheduler, request->Orbit, PCtx->PDiskId, request->ReqId.Id, HPSecondsFloat(request->CreationTime),
+                request->Owner, request->IsFast, request->PriorityClass);
+        return;
+    }
+
     LWTRACK(PDiskAddToScheduler, request->Orbit, PCtx->PDiskId, request->ReqId.Id, HPSecondsFloat(request->CreationTime),
             request->Owner, request->IsFast, request->PriorityClass);
     request->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InScheduler");
@@ -3212,8 +3227,8 @@ void TPDisk::AddJobToForseti(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab:
     job->JobKind = jobKind;
     ForsetiTimeNs++;
     ForsetiScheduler.AddJob(cbs, job, request->Owner, request->GateId, ForsetiTimeNs);
-    LOG_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " ReqId# %" PRIu64
-            " AddJobToForseti", (ui32)PCtx->PDiskId, (ui64)request->ReqId.Id);
+    P_LOG(PRI_DEBUG, BPD84, "Add job to scheduler", (type, TypeName(*request)) , (reqCost, request->Cost),
+        (ForsetiTimeNs, ForsetiTimeNs) , (owner, request->Owner) , (gateId, (ui64)request->GateId) , (jobKind, (ui64)jobKind));
 }
 
 void TPDisk::RouteRequest(TRequestBase *request) {
@@ -3235,7 +3250,7 @@ void TPDisk::RouteRequest(TRequestBase *request) {
             if (auto span = request->SpanStack.PeekTop()) {
                 span->Event("move_to_batcher", {});
             }
-            JointLogReads.push_back(request);
+            JointLogReads.emplace_back(request);
             break;
         case ERequestType::RequestChunkReadPiece:
         {
@@ -3292,7 +3307,10 @@ void TPDisk::RouteRequest(TRequestBase *request) {
             break;
         }
         default:
-            Y_FAIL_S("RouteRequest, unexpected request type# " << ui64(request->GetType()));
+            FastOperationsQueue.push_back(std::unique_ptr<TRequestBase>(request));
+            LOG_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " ReqId# %" PRIu64
+                    " PushRequestToScheduler Push to FastOperationsQueue.size# %" PRIu64,
+                    (ui32)PCtx->PDiskId, (ui64)request->ReqId.Id, (ui64)FastOperationsQueue.size());
             break;
     }
 }
@@ -3329,7 +3347,7 @@ void TPDisk::ProcessPausedQueue() {
             TRequestBase *ev = PausedQueue.front();
             PausedQueue.pop_front();
             if (PreprocessRequest(ev)) {
-                PushRequestToForseti(ev);
+                PushRequestToScheduler(ev);
             }
         }
     }
@@ -3367,10 +3385,12 @@ void TPDisk::EnqueueAll() {
     TGuard<TMutex> guard(StateMutex);
     size_t initialQueueSize = InputQueue.GetWaitingSize();
     size_t processedReqs = 0;
-    size_t pushedToForsetiReqs = 0;
+    size_t pushedToSchedulerReqs = 0;
 
     while (InputQueue.GetWaitingSize() > 0) {
         TRequestBase* request = InputQueue.Pop();
+        P_LOG(PRI_TRACE, BPD83, "EnqueueAll, pop from InputQueue",
+            (requestType, TypeName(*request)), (alreadyProcessedReqs, processedReqs));
         AtomicSub(InputQueueCost, request->Cost);
         if (IsQueuePaused) {
             if (IsQueueStep) {
@@ -3410,8 +3430,8 @@ void TPDisk::EnqueueAll() {
             }
         } else {
             if (PreprocessRequest(request)) {
-                PushRequestToForseti(request);
-                ++pushedToForsetiReqs;
+                PushRequestToScheduler(request);
+                ++pushedToSchedulerReqs;
             }
         }
         ++processedReqs;
@@ -3421,31 +3441,10 @@ void TPDisk::EnqueueAll() {
     }
 
     double spentTimeMs = (TMonotonic::Now() - start).MillisecondsFloat();
-    LWTRACK(PDiskEnqueueAllDetails, UpdateCycleOrbit, PCtx->PDiskId, initialQueueSize, processedReqs, pushedToForsetiReqs, spentTimeMs);
+    LWTRACK(PDiskEnqueueAllDetails, UpdateCycleOrbit, PCtx->PDiskId, initialQueueSize, processedReqs, pushedToSchedulerReqs, spentTimeMs);
 }
 
-void TPDisk::Update() {
-    Mon.UpdateDurationTracker.UpdateStarted();
-    LWTRACK(PDiskUpdateStarted, UpdateCycleOrbit, PCtx->PDiskId);
-
-    {
-        TGuard<TMutex> guard(StateMutex);
-        ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
-        ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ? ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
-        ForsetiOpPieceSizeCached = Min<i64>(ForsetiOpPieceSizeCached, Cfg->BufferPoolBufferSizeBytes);
-        ForsetiOpPieceSizeCached = AlignDown<i64>(ForsetiOpPieceSizeCached, Format.SectorSize);
-        // Switch the scheduler when possible
-        ForsetiScheduler.SetIsBinLogEnabled(EnableForsetiBinLog);
-
-        // Make input queue empty
-        EnqueueAll();
-    }
-
-    // Make token injection to correct drive model underestimations and avoid disk underutilization
-
-    Mon.UpdateDurationTracker.SchedulingStart();
-
-    // Schedule using Forseti Scheduler
+void TPDisk::GetJobsFromForsetti() {
     // Prepare
     UpdateMinLogCostNs();
     ui64 milliBatchSize = ForsetiMilliBatchSize;
@@ -3516,6 +3515,7 @@ void TPDisk::Update() {
             }
             ForsetiTimeNs++;
             ForsetiScheduler.CompleteJob(ForsetiTimeNs, job);
+            P_LOG(PRI_TRACE, BPD01, "forsetti CompleteJob", (requestType, TypeName(*req)), (ForsetiTimeNs, ForsetiTimeNs));
         } else {
             break;
         }
@@ -3525,7 +3525,40 @@ void TPDisk::Update() {
             realDuration, virtualDuration, ForsetiTimeNs, totalCost, virtualDeadline);
     LWTRACK(PDiskMilliBatchSize, UpdateCycleOrbit, PCtx->PDiskId, totalLogCost, totalNonLogCost, totalLogReqs, totalNonLogReqs);
     ForsetiRealTimeCycles = nowCycles;
+    P_LOG(PRI_DEBUG, BPD82, "got requests from forsetti", (totalLogReqs, totalLogReqs), (totalChunkReqs, totalNonLogReqs));
+}
 
+void TPDisk::Update() {
+    Mon.UpdateDurationTracker.UpdateStarted();
+    LWTRACK(PDiskUpdateStarted, UpdateCycleOrbit, PCtx->PDiskId);
+
+    {
+        TGuard<TMutex> guard(StateMutex);
+        ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
+        ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ? ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
+        ForsetiOpPieceSizeCached = Min<i64>(ForsetiOpPieceSizeCached, Cfg->BufferPoolBufferSizeBytes);
+        ForsetiOpPieceSizeCached = AlignDown<i64>(ForsetiOpPieceSizeCached, Format.SectorSize);
+
+        auto prev = UseNoopSchedulerCached;
+        UseNoopSchedulerCached = PDiskCategory.IsSolidState() ? UseNoopSchedulerSSD : UseNoopSchedulerHDD;
+        // if we are going to start using noop scheduler then drain Forseti scheduler
+        if (!prev && UseNoopSchedulerCached) {
+            // TODO
+        }
+
+        // Switch the scheduler when possible
+        ForsetiScheduler.SetIsBinLogEnabled(EnableForsetiBinLog);
+
+        // Make input queue empty
+        EnqueueAll();
+    }
+
+    // Make token injection to correct drive model underestimations and avoid disk underutilization
+
+    Mon.UpdateDurationTracker.SchedulingStart();
+
+    // Schedule using Forseti Scheduler
+    GetJobsFromForsetti();
 
     // Processing
     bool isNonLogWorkloadPresent = !JointChunkWrites.empty() || !FastOperationsQueue.empty() ||
@@ -3584,6 +3617,9 @@ void TPDisk::Update() {
 
     ClearQuarantineChunks();
 
+    if (UseNoopSchedulerCached) {
+        // TODO
+    }
     if (tact == ETact::TactLc) {
         ProcessLogWriteQueueAndCommits();
     }

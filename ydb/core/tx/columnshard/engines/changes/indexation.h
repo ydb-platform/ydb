@@ -11,7 +11,7 @@
 
 namespace NKikimr::NOlap {
 
-class TInsertColumnEngineChanges: public TChangesWithAppend {
+class TInsertColumnEngineChanges: public TChangesWithAppend, public NColumnShard::TMonitoringObjectsCounter<TInsertColumnEngineChanges> {
 private:
     using TBase = TChangesWithAppend;
     std::vector<TCommittedData> DataToIndex;

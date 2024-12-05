@@ -69,6 +69,16 @@ public:
         return Tasks;
     }
 
+    TString DebugString() const {
+        TStringBuilder result;
+        result << "{";
+        for (auto&& i : Tasks) {
+            result << i.first.DebugString() << ":" << i.second.size() << ";";
+        }
+        result << "}";
+        return result;
+    }
+
     bool AddPortion(const std::shared_ptr<const TPortionInfo>& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait);
 
     bool IsRWAddressAvailable(const TRWAddress& address) const {

@@ -37,7 +37,8 @@ jobs:
         
         conflicts_file=$(mktemp)
         git merge main --no-commit --no-ff main | true > $conflicts_file
-        git merge --abort
+        git reset HEAD --hard
+        git clean -fd
         if [ -s $conflicts_file ];then
           echo Conflicts detected, trying to remove referenced CMakeLists* files
           grep -E -o '\s\S*CMakeLists\S*\s' $conflicts_file | xargs rm

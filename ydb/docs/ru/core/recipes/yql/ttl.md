@@ -32,7 +32,7 @@ ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON modified_at AS SECONDS);
 ALTER TABLE `mytable` SET (
     TTL =
         Interval("PT1H") TO EXTERNAL DATA SOURCE `/Root/s3_cold_data`,
-        Interval(PT24H) DELETE
+        Interval("PT24H") DELETE
     ON modified_at AS SECONDS
 );
 ```

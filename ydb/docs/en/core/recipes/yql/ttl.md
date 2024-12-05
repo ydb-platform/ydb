@@ -32,7 +32,7 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 ALTER TABLE `mytable` SET (
   TTL =
       Interval("PT1H") TO EXTERNAL DATA SOURCE `/Root/s3_cold_data`,
-      Interval(PT24H) DELETE
+      Interval("PT24H") DELETE
   ON modified_at AS SECONDS
 );
 ```

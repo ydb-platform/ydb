@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                           .ExtractValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
-        csController->SetOverrideReadTimeoutClean(TDuration::Zero());
+        csController->SetOverrideMaxReadStaleness(TDuration::Zero());
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         {
             const TInstant start = TInstant::Now();

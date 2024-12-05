@@ -61,6 +61,9 @@ public:
     };
 
 protected:
+    virtual std::optional<TDuration> DoGetStalenessLivetimePing() const {
+        return {};
+    }
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
         return;
     }
@@ -85,7 +88,7 @@ protected:
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
 
-    virtual TDuration DoGetPingCheckPeriod(const TDuration defaultValue) const {
+    virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
         return defaultValue;
     }
     virtual TDuration DoGetOverridenGCPeriod(const TDuration defaultValue) const {
@@ -109,7 +112,7 @@ protected:
     virtual ui64 DoGetSmallPortionSizeDetector(const ui64 defaultValue) const {
         return defaultValue;
     }
-    virtual TDuration DoGetReadTimeoutClean(const TDuration defaultValue) const {
+    virtual TDuration DoGetMaxReadStaleness(const TDuration defaultValue) const {
         return defaultValue;
     }
     virtual TDuration DoGetGuaranteeIndexationInterval(const TDuration defaultValue) const {
@@ -158,9 +161,13 @@ public:
     }
     virtual bool CheckPortionForEvict(const NOlap::TPortionInfo& portion) const;
 
-    TDuration GetPingCheckPeriod() const {
-        const TDuration defaultValue = 0.6 * GetReadTimeoutClean();
-        return DoGetPingCheckPeriod(defaultValue);
+    TDuration GetStalenessLivetimePing(const TDuration defValue) const {
+        const auto val = DoGetStalenessLivetimePing();
+        if (!val || defValue < *val) {
+            return defValue;
+        } else {
+            return *val;
+        }
     }
 
     virtual bool IsBackgroundEnabled(const EBackground /*id*/) const {
@@ -261,9 +268,16 @@ public:
     }
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
-    TDuration GetReadTimeoutClean() const {
+    TDuration GetMaxReadStaleness() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetMaxReadStaleness_ms());
-        return DoGetReadTimeoutClean(defaultValue);
+        return DoGetMaxReadStaleness(defaultValue);
+    }
+    TDuration GetMaxReadStalenessInMem() const {
+        return 0.9 * GetMaxReadStaleness();
+    }
+    TDuration GetUsedSnapshotLivetime() const {
+        const TDuration defaultValue = 0.6 * GetMaxReadStaleness();
+        return DoGetUsedSnapshotLivetime(defaultValue);
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
         return EOptimizerCompactionWeightControl::Force;

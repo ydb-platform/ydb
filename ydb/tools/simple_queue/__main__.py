@@ -85,7 +85,7 @@ def get_table_description(table_name):
         CREATE TABLE `{table_name}` (
             key Uint64 NOT NULL,
             `timestamp` Timestamp NOT NULL,
-            value Utf8 FAMILY lz4_family NOT NULL, 
+            value Utf8 FAMILY lz4_family NOT NULL,
             PRIMARY KEY (key),
             FAMILY lz4_family (
                 COMPRESSION = "lz4"

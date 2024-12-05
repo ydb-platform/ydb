@@ -1,3 +1,4 @@
+* Fixed a bug in `ydb import file csv` where multiple columns with escaped quotes in the same row were parsed incorrectly
 * Truncate query results output in benchmarks
 
 ## 2.17.0 ##

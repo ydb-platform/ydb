@@ -522,9 +522,9 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_WRITE_CYCLE].IncrementFor(totalLatencyMs);
     TabletCounters.Cumulative()[COUNTER_PQ_WRITE_CYCLE_BYTES_TOTAL].Increment(WriteCycleSize);
-    TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_OK].Increment(WriteNewSize + RewriteSize);
+    TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_OK].Increment(WriteNewSize);
     TabletCounters.Percentile()[COUNTER_PQ_WRITE_CYCLE_BYTES].IncrementFor(WriteCycleSize);
-    TabletCounters.Percentile()[COUNTER_PQ_WRITE_NEW_BYTES].IncrementFor(WriteNewSize + RewriteSize);
+    TabletCounters.Percentile()[COUNTER_PQ_WRITE_NEW_BYTES].IncrementFor(WriteNewSize);
 
     UpdateAfterWriteCounters(true);
 
@@ -539,8 +539,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     PQ_LOG_D("TPartition::HandleWriteResponse " <<
              "writeNewSize# " << WriteNewSize <<
-             " WriteNewSizeFromSupportivePartitions# " << WriteNewSizeFromSupportivePartitions <<
-             " RewriteSize# " << RewriteSize);
+             " WriteNewSizeFromSupportivePartitions# " << WriteNewSizeFromSupportivePartitions);
 
     if (SupportivePartitionTimeLag) {
         SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
@@ -550,7 +549,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
-    RewriteSize = 0;
     WriteNewSizeFull = 0;
     WriteNewSizeInternal = 0;
     WriteNewSizeUncompressed = 0;
@@ -1264,8 +1262,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
         WriteNewSizeUncompressed += p.Msg.UncompressedSize + p.Msg.SourceId.size();
         WriteNewSizeInternal += p.Msg.External ? 0 : (p.Msg.SourceId.size() + p.Msg.Data.size());
-    } else {
-        RewriteSize += p.Msg.SourceId.size() + p.Msg.Data.size();
     }
     if (p.Msg.PartNo == 0 && !p.Internal) {
         ++WriteNewMessages;
@@ -1697,7 +1693,6 @@ void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
-    RewriteSize = 0;
     WriteNewSizeUncompressed = 0;
     WriteNewSizeUncompressed = 0;
     WriteNewMessages = 0;

@@ -841,7 +841,6 @@ private:
     ui32 WriteCycleSizeEstimate = 0;
     ui32 WriteKeysSizeEstimate = 0;
     ui32 WriteNewSize = 0;
-    ui64 RewriteSize = 0;
     ui32 WriteNewSizeFull = 0;
     ui32 WriteNewSizeInternal = 0;
     ui64 WriteNewSizeUncompressed = 0;

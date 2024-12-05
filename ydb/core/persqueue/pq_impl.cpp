@@ -1236,14 +1236,12 @@ TPartitionInfo& TPersQueue::GetPartitionInfo(const TPartitionId& partitionId)
     return it->second;
 }
 
-void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::AccountPartitionCounters(const TPartitionId& partitionId,
+                                          const TTabletCountersBase& counters,
+                                          const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvPQ::TEvPartitionCounters" <<
-             " PartitionId " << ev->Get()->Partition);
-
-    const auto& partitionId = ev->Get()->Partition;
     auto& partition = GetPartitionInfo(partitionId);
-    auto diff = ev->Get()->Counters.MakeDiffForAggr(partition.Baseline);
+    auto diff = counters.MakeDiffForAggr(partition.Baseline);
     ui64 cpuUsage = diff->Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE].Get();
     ui64 networkBytesUsage = diff->Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Get();
     if (ResourceMetrics) {
@@ -1259,7 +1257,7 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
     }
 
     Counters->Populate(*diff.Get());
-    ev->Get()->Counters.RememberCurrentStateAsBaseline(partition.Baseline);
+    counters.RememberCurrentStateAsBaseline(partition.Baseline);
 
     // restore cache's simple counters cleaned by partition's counters
     SetCacheCounters(CacheCounters);
@@ -1269,6 +1267,16 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
             reservedSize += p.second.Baseline.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
     }
     Counters->Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(reservedSize);
+}
+
+void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext& ctx)
+{
+    PQ_LOG_D("Handle TEvPQ::TEvPartitionCounters" <<
+             " PartitionId " << ev->Get()->Partition);
+
+    AccountPartitionCounters(ev->Get()->Partition,
+                             ev->Get()->Counters,
+                             ctx);
 }
 
 
@@ -4681,6 +4689,10 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
     Y_ABORT_UNLESS(partitionId == event->PartitionId);
     Y_ABORT_UNLESS(partitionId.IsSupportivePartition());
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
+
+    AccountPartitionCounters(event->PartitionId,
+                             event->Counters,
+                             ctx);
 
     DeletePartition(partitionId, ctx);
 

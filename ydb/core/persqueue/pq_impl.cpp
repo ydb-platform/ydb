@@ -4642,11 +4642,9 @@ void TPersQueue::BeginInitTransactions()
     PlannedTxs.clear();
 }
 
-void TPersQueue::InitTxsOrder()
+std::array<NKikimrPQ::TTransaction::EState, 6> GetTxsStatesDirectOrder()
 {
-    TxsOrder.clear();
-
-    const auto states = {
+    return {
         NKikimrPQ::TTransaction::PLANNED,
         NKikimrPQ::TTransaction::CALCULATING,
         NKikimrPQ::TTransaction::CALCULATED,
@@ -4654,8 +4652,22 @@ void TPersQueue::InitTxsOrder()
         NKikimrPQ::TTransaction::EXECUTING,
         NKikimrPQ::TTransaction::EXECUTED
     };
+}
 
-    for (auto state : states) {
+std::array<NKikimrPQ::TTransaction::EState, 6> GetTxsStatesReverseOrder()
+{
+    auto states = GetTxsStatesDirectOrder();
+    std::reverse(states.begin(), states.end());
+    return states;
+}
+
+void TPersQueue::InitTxsOrder()
+{
+    TxsOrder.clear();
+
+    static const auto txStates = GetTxsStatesDirectOrder();
+
+    for (auto state : txStates) {
         TxsOrder[state].clear();
     }
 }
@@ -4696,19 +4708,12 @@ void TPersQueue::EndInitTransactions()
 
 void TPersQueue::TryStartTransaction(const TActorContext& ctx)
 {
-    const auto txStateReverseOrder = {
-        NKikimrPQ::TTransaction::EXECUTED,
-        NKikimrPQ::TTransaction::EXECUTING,
-        NKikimrPQ::TTransaction::WAIT_RS,
-        NKikimrPQ::TTransaction::CALCULATED,
-        NKikimrPQ::TTransaction::CALCULATING,
-        NKikimrPQ::TTransaction::PLANNED
-    };
+    static const auto txStates = GetTxsStatesReverseOrder();
 
     ResendEvReadSetToReceivers(ctx);
     DeleteSupportivePartitions(ctx);
 
-    for (auto state : txStateReverseOrder) {
+    for (auto state : txStates) {
         const auto& txQueue = TxsOrder[state];
         if (txQueue.empty()) {
             continue;

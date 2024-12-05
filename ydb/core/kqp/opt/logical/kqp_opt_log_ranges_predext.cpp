@@ -184,6 +184,21 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
             for (auto& index : mainTableDesc.Metadata->Indexes) {
                 if (index.Type != TIndexDescription::EType::GlobalAsync && index.State == TIndexDescription::EIndexState::Ready) {
                     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(index.Name)).first->Name);
+
+                    bool uselessIndex = true;
+                    for (size_t i = 0; i < mainTableDesc.Metadata->KeyColumnNames.size(); ++i) {
+                        if (i >= tableDesc.Metadata->KeyColumnNames.size()) {
+                            break;
+                        }
+                        if (mainTableDesc.Metadata->KeyColumnNames[i] != tableDesc.Metadata->KeyColumnNames[i]) {
+                            uselessIndex = false;
+                            break;
+                        }
+                    }
+                    if (uselessIndex) {
+                        continue;
+                    }
+
                     auto buildResult = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
                     bool needsJoin = calcNeedsJoin(tableDesc.Metadata);
 

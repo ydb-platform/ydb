@@ -38,7 +38,7 @@ namespace {
         const auto opId = TOperationId(item.WaitTxId, FirstSubTxId);
         if (item.WaitTxId != InvalidTxId && ss->TxInFlight.contains(opId)) {
             const auto& txState = ss->TxInFlight.at(opId);
-            if (txState.TxType != TTxState::TxBackup) {
+            if (txState.TxType != TTxState::TxRestore) {
                 return;
             }
 
@@ -46,28 +46,27 @@ namespace {
             itemProgress.set_parts_completed(txState.Shards.size() - txState.ShardsInProgress.size());
             *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(txState.StartTime.Seconds());
         } else {
-            const auto path = TPath::Resolve(ImportItemPathName(ss, importInfo, itemIdx), ss);
-            if (!path.IsResolved() || !ss->Tables.contains(path.Base()->PathId)) {
+            if (!ss->Tables.contains(item->DstPathId)) {
                 return;
             }
 
-            auto table = ss->Tables.at(path.Base()->PathId);
-            auto it = table->BackupHistory.end();
+            auto table = ss->Tables.at(item->DstPathId);
+            auto it = table->RestoreHistory.end();
             if (item.WaitTxId != InvalidTxId) {
-                it = table->BackupHistory.find(item.WaitTxId);
-            } else if (table->BackupHistory.size() == 1) {
-                it = table->BackupHistory.begin();
+                it = table->RestoreHistory.find(item.WaitTxId);
+            } else if (table->RestoreHistory.size() == 1) {
+                it = table->RestoreHistory.begin();
             }
 
-            if (it == table->BackupHistory.end()) {
+            if (it == table->RestoreHistory.end()) {
                 return;
             }
 
-            const auto& backupResult = it->second;
-            itemProgress.set_parts_total(backupResult.TotalShardCount);
-            itemProgress.set_parts_completed(backupResult.TotalShardCount);
-            *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(backupResult.StartDateTime);
-            *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(backupResult.CompletionDateTime);
+            const auto& restoreResult = it->second;
+            itemProgress.set_parts_total(restoreResult.TotalShardCount);
+            itemProgress.set_parts_completed(restoreResult.TotalShardCount);
+            *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(restoreResult.StartDateTime);
+            *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(restoreResult.CompletionDateTime);
         }
     }
 

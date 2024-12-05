@@ -4021,30 +4021,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        const auto permissions = R"(
-            actions {
-              change_owner: "eve"
-            }
-            actions {
-              grant {
-                subject: "alice"
-                permission_names: "ydb.generic.read"
-              }
-            }
-            actions {
-              grant {
-                subject: "alice"
-                permission_names: "ydb.generic.write"
-              }
-            }
-            actions {
-              grant {
-                subject: "bob"
-                permission_names: "ydb.generic.read"
-              }
-            }
-        )";
-
         const auto data = GenerateTestData(R"(
             columns {
               name: "key"
@@ -4063,17 +4039,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        const TString userSID = "user@builtin";
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: ""
-              }
+          ImportFromS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+              source_prefix: ""
+              destination_path: "/MyRoot/Table"
             }
-        )", port), userSID);
+          }
+        )", port));
         env.TestWaitNotification(runtime, txId);
 
         const auto desc = TestGetImport(runtime, txId, "/MyRoot");

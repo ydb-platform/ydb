@@ -36,7 +36,7 @@ jobs:
         prevsha=$(git rev-parse HEAD)
         
         conflicts_file=$(mktemp)
-        git merge main --no-commit --no-ff main > $conflicts_file
+        (git merge main --no-commit --no-ff main > $conflicts_file) | true
         git reset HEAD --hard > /dev/null
         git clean -fd > /dev/null
         if [ -s $conflicts_file ];then

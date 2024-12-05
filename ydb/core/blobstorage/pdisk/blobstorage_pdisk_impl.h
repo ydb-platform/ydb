@@ -33,6 +33,8 @@
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 
+#include <queue>
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -74,10 +76,9 @@ public:
     TAtomic InputQueueCost = 0;
 
     TVector<TRequestBase*> JointLogReads;
-    TVector<TIntrusivePtr<TRequestBase>> JointChunkReads;
-    TVector<TRequestBase*> JointChunkWrites;
-    TVector<TLogWrite*> JointLogWrites;
-    TVector<TLogWrite*> JointCommits;
+    std::queue<TIntrusivePtr<TRequestBase>> JointChunkReads;
+    std::queue<TRequestBase*> JointChunkWrites;
+    std::queue<TLogWrite*> JointLogWrites;
     TVector<TChunkTrim*> JointChunkTrims;
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
@@ -102,6 +103,9 @@ public:
     TControlWrapper ForsetiMaxLogBatchNs;
     TControlWrapper ForsetiOpPieceSizeSsd;
     TControlWrapper ForsetiOpPieceSizeRot;
+    TControlWrapper UseNoopSchedulerSSD;
+    TControlWrapper UseNoopSchedulerHDD;
+    bool UseNoopSchedulerCached = false;
 
     // SectorMap Controls
     TControlWrapper SectorMapFirstSectorReadRate;
@@ -348,7 +352,8 @@ public:
     void KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEventSender *completionAction);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Update process
-    void ProcessLogWriteQueueAndCommits();
+    void ProcessLogWriteQueue();
+    void ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWrite*> commits);
     void ProcessChunkForgetQueue();
     void ProcessChunkWriteQueue();
     void ProcessChunkReadQueue();
@@ -405,12 +410,13 @@ public:
     bool PreprocessRequestImpl(T *req); // const;
     NKikimrProto::EReplyStatus CheckOwnerAndRound(TRequestBase* req, TStringStream& err);
     bool PreprocessRequest(TRequestBase *request);
-    void PushRequestToForseti(TRequestBase *request);
-    void AddJobToForseti(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind);
+    void PushRequestToScheduler(TRequestBase *request);
+    void AddJobToScheduler(TRequestBase *request, NSchLab::EJobKind jobKind);
     void RouteRequest(TRequestBase *request);
     void ProcessPausedQueue();
     void ProcessPendingActivities();
     void EnqueueAll();
+    void GetJobsFromForsetti();
     void Update() override;
     void Wakeup() override;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -432,4 +438,3 @@ bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui3
 
 } // NPDisk
 } // NKikimr
-

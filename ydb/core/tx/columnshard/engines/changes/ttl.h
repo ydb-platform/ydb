@@ -7,7 +7,7 @@
 
 namespace NKikimr::NOlap {
 
-class TTTLColumnEngineChanges: public TChangesWithAppend {
+class TTTLColumnEngineChanges: public TChangesWithAppend, public NColumnShard::TMonitoringObjectsCounter<TTTLColumnEngineChanges> {
 private:
     using TBase = TChangesWithAppend;
 

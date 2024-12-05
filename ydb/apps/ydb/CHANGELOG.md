@@ -1,3 +1,7 @@
+* Truncate query results output in benchmarks
+
+## 2.17.0 ##
+
 * Fixed a bug in TPC-H tables schema where the `partsupp` table had incorrect list of key columns
 * Enhanced parallelism of data restoring in `ydb tools restore`
 * Fixed a bug where `ydb tools restore` was failing with `Too much data` if `--upload-batch-bytes` option value was set exactly to it's maximum possible value (16MiB)

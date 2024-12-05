@@ -250,7 +250,7 @@ message TTTLSettings {
         TDisabled Disabled = 2;
     }
 
-    optional string UseTiering = 3;
+    reserved 3;
 }
 
 message TTableReplicationConfig {
@@ -460,6 +460,20 @@ message TStorageTierConfig {
     optional TCompressionOptions Compression = 3;
 }
 
+message TCompactionLevelConstructorContainer {
+    optional string ClassName = 1;
+
+    message TZeroLevel {
+        optional uint32 PortionsLiveDurationSeconds = 1;
+        optional uint64 ExpectedBlobsSize = 2;
+    }
+
+    oneof Implementation {
+        TZeroLevel ZeroLevel = 10;
+    }
+
+}
+
 message TCompactionPlannerConstructorContainer {
     optional string ClassName = 1;
 
@@ -473,7 +487,7 @@ message TCompactionPlannerConstructorContainer {
     }
 
     message TLCOptimizer {
-
+        repeated TCompactionLevelConstructorContainer Levels = 1;
     }
 
     oneof Implementation {
@@ -612,7 +626,7 @@ message TColumnDataLifeCycle {
     // Incremented on each settings change
     optional uint64 Version = 3 [default = 1];
 
-    optional string UseTiering = 5;
+    reserved 5;
 }
 
 message TColumnTableTtlSettingsPreset {
@@ -975,7 +989,15 @@ message TRestoreIncrementalBackup {
     optional string SrcTableName = 1;
     optional NKikimrProto.TPathID SrcPathId = 3;
 
-    optional string DstTableName = 2;
+    optional string DstTablePath = 2; // Absolute path
+    optional NKikimrProto.TPathID DstPathId = 4;
+}
+
+message TRestoreMultipleIncrementalBackups {
+    repeated string SrcTableNames = 1;
+    repeated NKikimrProto.TPathID SrcPathIds = 3;
+
+    optional string DstTablePath = 2; // Absolute path
     optional NKikimrProto.TPathID DstPathId = 4;
 }
 
@@ -1663,13 +1685,14 @@ message TModifyScheme {
 
     optional TResourcePoolDescription CreateResourcePool = 72;
 
-    optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
+    optional TRestoreMultipleIncrementalBackups RestoreMultipleIncrementalBackups = 73;
 
     optional TBackupCollectionDescription CreateBackupCollection = 74;
     optional TBackupCollectionDescription AlterBackupCollection = 75;
     optional TBackupCollectionDescription DropBackupCollection = 76;
     optional TBackupBackupCollection BackupBackupCollection = 78;
     optional TBackupBackupCollection BackupIncrementalBackupCollection = 79;
+    optional TBackupBackupCollection RestoreBackupCollection = 80;
 
     optional TMove MoveSequence = 77;
 

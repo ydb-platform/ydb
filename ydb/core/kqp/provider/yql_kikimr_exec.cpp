@@ -1686,13 +1686,6 @@ public:
                             ConvertTtlSettingsToProto(ttlSettings, *alterTableRequest.mutable_set_ttl_settings());
                         } else if (name == "resetTtlSettings") {
                             alterTableRequest.mutable_drop_ttl_settings();
-                        } else if (name == "setTiering") {
-                            const auto tieringName = TString(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                            );
-                            alterTableRequest.set_set_tiering(tieringName);
-                        } else if (name == "resetTiering") {
-                            alterTableRequest.mutable_drop_tiering();
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                 TStringBuilder() << "Unknown table profile setting: " << name));
@@ -2665,6 +2658,28 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing BACKUP INCREMENTAL");
+        }
+
+        if (auto maybeRestore = TMaybeNode<TKiRestore>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto restore = maybeRestore.Cast();
+
+            TBackupSettings settings;
+            settings.Name = TString(restore.BackupCollection());
+
+            auto cluster = TString(restore.DataSink().Cluster());
+            auto future = Gateway->Restore(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing RESTORE");
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()

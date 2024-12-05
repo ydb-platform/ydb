@@ -552,7 +552,7 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
 void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString codec = "") {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-    csControllerGuard->SetOverrideReadTimeoutClean(TDuration::Max());
+    csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -2654,7 +2654,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             PlanCommit(runtime, sender, planStep, txId);
         }
         UNIT_ASSERT_EQUAL(cleanupsHappened, 0);
-        csDefaultControllerGuard->SetOverrideRequestsTracePingCheckPeriod(TDuration::Zero());
+        csDefaultControllerGuard->SetOverrideStalenessLivetimePing(TDuration::Zero());
+        csDefaultControllerGuard->SetOverrideUsedSnapshotLivetime(TDuration::Zero());
         {
             auto read = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());

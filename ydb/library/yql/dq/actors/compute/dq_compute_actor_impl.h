@@ -110,14 +110,7 @@ public:
     void Bootstrap() {
         try {
             StartTime = TInstant::Now();
-            {
-                TStringBuilder prefixBuilder;
-                prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
-                if (RequestContext) {
-                    prefixBuilder << "Ctx: " << *RequestContext << ". ";
-                }
-                LogPrefix = prefixBuilder;
-            }
+            InitializeLogPrefix(); // re-initialize with SelfId
             CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
 
             Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
@@ -176,7 +169,7 @@ protected:
         , FunctionRegistry(functionRegistry)
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
-        , WatermarksTracker(this->SelfId(), TxId, Task.GetId())
+        , WatermarksTracker(LogPrefix)
         , TaskCounters(taskCounters)
         , MetricsReporter(taskCounters)
         , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
@@ -230,6 +223,26 @@ protected:
             OutputChannelSize = taskCounters->GetCounter("OutputChannelSize");
             SourceCpuTimeMs = taskCounters->GetCounter("SourceCpuTimeMs", true);
             InputTransformCpuTimeMs = taskCounters->GetCounter("InputTransformCpuTimeMs", true);
+        }
+    }
+
+    void InitializeLogPrefix() {
+        TStringBuilder prefixBuilder;
+        prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
+        if (RequestContext) {
+            prefixBuilder << "Ctx: " << *RequestContext << ". ";
+        }
+        LogPrefix = std::move(prefixBuilder);
+
+        WatermarksTracker.SetLogPrefix(LogPrefix);
+        for (auto& [_, info]: InputTransformsMap) {
+            info.SetLogPrefix(LogPrefix);
+        }
+        for (auto& [_, info]: SourcesMap) {
+            info.SetLogPrefix(LogPrefix);
+        }
+        for (auto& [_, info]: InputChannelsMap) {
+            info.SetLogPrefix(LogPrefix);
         }
     }
 
@@ -788,7 +801,7 @@ protected:
 
 protected:
     struct TInputChannelInfo {
-        const TString LogPrefix;
+        TString LogPrefix;
         ui64 ChannelId;
         ui32 SrcStageId;
         IDqInputChannel::TPtr Channel;
@@ -847,6 +860,10 @@ protected:
             if (Channel) {  // async actor doesn't hold channels, so channel is resumed in task runner actor
                 Channel->Resume();
             }
+        }
+
+        void SetLogPrefix(const TString& logPrefix) {
+            LogPrefix = logPrefix;
         }
     };
 
@@ -1609,6 +1626,7 @@ protected:
         RequestContext = MakeIntrusive<NYql::NDq::TRequestContext>(Task.GetRequestContext());
 
         InitializeWatermarks();
+        InitializeLogPrefix(); // note: SelfId is not initialized here
     }
 
 private:

@@ -6,13 +6,13 @@ on:
 
 jobs:
   main:
-    name: Build and run all tests
+    name: Build and run tests
     runs-on: [ self-hosted, "${{ inputs.runner_label || 'auto-provisioned' }}", "${{ format('build-preset-{0}', inputs.build_preset || 'relwithdebinfo') }}" ]
     strategy:
       fail-fast: false # do not stop wf if the tests in one of the configurations failed
       matrix:
-        build_preset: [release, relwithdebinfo, release-asan] # list of build presets to run in each brunch
-        branch: [main]  # all branches to test
+        build_preset: [relwithdebinfo, release-asan, release-msan, release-tsan] # list of build presets to run in each brunch
+        branch: [main]  #  branches to test
 
     steps:
     - name: Checkout
@@ -43,6 +43,7 @@ jobs:
         test_type: unittest,py3test,py2test,pytest
         test_threads: 52
         put_build_results_to_cache: false
+        additional_ya_make_args: -DDEBUGINFO_LINES_ONLY  # we don't need full symbols in CI checks
         secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',
           secrets.TESTMO_TOKEN2, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
         vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","TESTMO_URL":"{3}","TESTMO_PROJECT_ID":"{4}"}}',

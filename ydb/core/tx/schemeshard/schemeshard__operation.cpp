@@ -108,14 +108,14 @@ bool TSchemeShard::ProcessOperationParts(
         context.IsAllowedPrivateTables = true;
     }
 
-    for (auto& part : parts) {
-        TString errStr;
-        if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
-            response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
-            response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-        } else {
-            response = part->Propose(owner, context);
-        }
+        for (auto& part : parts) {
+            TString errStr;
+            if (!static_cast<TSchemeShard*>(context.SS)->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
+                response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
+                response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            } else {
+                response = part->Propose(owner, context);
+            }
 
         Y_ABORT_UNLESS(response);
 
@@ -319,14 +319,14 @@ void AbortOperation(TOperationContext& context, const TTxId txId, const TString&
     );
 
     context.GetTxc().DB.RollbackChanges();
-    context.SS->AbortOperationPropose(txId, context);
+    static_cast<TSchemeShard*>(context.SS)->AbortOperationPropose(txId, context);
 }
 
 bool IsCommitRedoSizeOverLimit(TString* reason, TOperationContext& context) {
     // MaxCommitRedoMB is the ICB control shared with NTabletFlatExecutor::TExecutor.
     // We subtract from MaxCommitRedoMB additional 1MB for anything extra
     // that executor/tablet may (or may not) add under the hood
-    const ui64 limitBytes = (context.SS->MaxCommitRedoMB - 1) << 20;  // MB to bytes
+    const ui64 limitBytes = (static_cast<TSchemeShard*>(context.SS)->MaxCommitRedoMB - 1) << 20;  // MB to bytes
     const ui64 commitRedoBytes = context.GetTxc().DB.GetCommitRedoBytes();
     if (commitRedoBytes >= limitBytes) {
         *reason = TStringBuilder()
@@ -548,7 +548,7 @@ void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::
     const auto txId = ev->Get()->Record.GetTxId();
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "TTxOperationReply<" <<  ev->GetTypeName() << "> execute"
-            << ", at schemeshard: " << context.SS->TabletID()
+            << ", at schemeshard: " << context.SS->SelfTabletId()
             << ", send out-of-scope reply, for txId " << txId
     );
     const TActorId ackTo = ev->Get()->GetSource();
@@ -704,7 +704,7 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
                 THolder<TEvPrivate::TEvOperationPlan> msg = MakeHolder<TEvPrivate::TEvOperationPlan>(ui64(step), ui64(txId));
                 TEvPrivate::TEvOperationPlan::TPtr personalEv = (TEventHandle<TEvPrivate::TEvOperationPlan>*) new IEventHandle(
-                            context.SS->SelfId(), context.SS->SelfId(), msg.Release());
+                            Self->SelfId(), Self->SelfId(), msg.Release());
 
                 operation->Parts.at(partIdx)->HandleReply(personalEv, context);
             }

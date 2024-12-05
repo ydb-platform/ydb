@@ -1,7 +1,7 @@
 #include "schemeshard__operation_common_external_table.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
 
 #include <utility>

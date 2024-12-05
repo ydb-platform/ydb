@@ -1,5 +1,6 @@
 #include "schemeshard__operation_common_external_table.h"
 
+#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>

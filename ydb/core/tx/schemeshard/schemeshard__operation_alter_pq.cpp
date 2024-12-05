@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
+#include "schemeshard_limits.h"
 
 #include "schemeshard_utils.h"  // for PQGroupReserve
 
@@ -108,7 +109,7 @@ public:
             }
 
             ui32 totalGroupCount = alter.GetTotalGroupCount();
-            if (!totalGroupCount || totalGroupCount > TSchemeShard::MaxPQGroupPartitionsCount) {
+            if (!totalGroupCount || totalGroupCount > NSchemeShard::MaxPQGroupPartitionsCount) {
                 errStr = Sprintf("Invalid total groups count specified: %u", totalGroupCount);
                 return nullptr;
             }
@@ -147,11 +148,11 @@ public:
 
             if (alterConfig.GetPartitionConfig().HasLifetimeSeconds()) {
                 const auto lifetimeSeconds = alterConfig.GetPartitionConfig().GetLifetimeSeconds();
-                if (lifetimeSeconds <= 0 || (ui32)lifetimeSeconds > TSchemeShard::MaxPQLifetimeSeconds) {
+                if (lifetimeSeconds <= 0 || (ui32)lifetimeSeconds > NSchemeShard::MaxPQLifetimeSeconds) {
                     errStr = TStringBuilder() << "Invalid retention period"
                         << ": specified: " << lifetimeSeconds << "s"
                         << ", min: " << 1 << "s"
-                        << ", max: " << TSchemeShard::MaxPQLifetimeSeconds << "s";
+                        << ", max: " << NSchemeShard::MaxPQLifetimeSeconds << "s";
                     return nullptr;
                 }
             } else {
@@ -775,20 +776,20 @@ public:
         }
         ui64 partitionsToCreate = alterData->PartitionsToAdd.size();
 
-        if (alterData->TotalGroupCount > TSchemeShard::MaxPQGroupPartitionsCount) {
+        if (alterData->TotalGroupCount > NSchemeShard::MaxPQGroupPartitionsCount) {
             errStr = TStringBuilder()
                     << "Invalid partition count specified: " << alterData->TotalGroupCount
-                    << " vs " << TSchemeShard::MaxPQGroupPartitionsCount;
+                    << " vs " << NSchemeShard::MaxPQGroupPartitionsCount;
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
         const auto& partConfig = newTabletConfig.GetPartitionConfig();
 
-        if ((ui32)partConfig.GetWriteSpeedInBytesPerSecond() > TSchemeShard::MaxPQWriteSpeedPerPartition) {
+        if ((ui32)partConfig.GetWriteSpeedInBytesPerSecond() > NSchemeShard::MaxPQWriteSpeedPerPartition) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Invalid write speed"
                 << ": specified: " << partConfig.GetWriteSpeedInBytesPerSecond() << "bps"
-                << ", max: " << TSchemeShard::MaxPQWriteSpeedPerPartition << "bps");
+                << ", max: " << NSchemeShard::MaxPQWriteSpeedPerPartition << "bps");
             return result;
         }
 
@@ -890,7 +891,7 @@ public:
                      "TAlterPQ AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

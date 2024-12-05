@@ -13,6 +13,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 class TSchemeShard;
+struct TSchemeshardState;
 
 class TSideEffects: public TSimpleRefCount<TSideEffects> {
 public:
@@ -127,8 +128,8 @@ public:
 
     void ToProgress(TIndexBuildId id);
 
-    void ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
-    void ApplyOnComplete(TSchemeShard* ss, const TActorContext &ctx);
+    void ApplyOnExecute(TSchemeshardState* sst, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
+    void ApplyOnComplete(TSchemeshardState* sst, const TActorContext &ctx);
     TPublications ExtractPublicationsToSchemeBoard();
 
     void Barrier(TOperationId opId, TString barrierName);

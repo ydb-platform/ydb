@@ -1,7 +1,9 @@
 #pragma once
 
+#include <ydb/core/scheme_types/scheme_type_info.h>  // for NScheme::TTypeInfo and NScheme::NTypeIds
+
 #include "schemeshard_types.h"
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_fwd.h"
 
 #include <ydb/core/base/table_index.h>
 
@@ -51,7 +53,7 @@ public:
 namespace NTableIndex {
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NSchemeShard::TTableInfoPtr& baseTableInfo,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
@@ -65,7 +67,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NSchemeShard::TTableInfoPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
@@ -78,13 +80,13 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix = {});
 
-TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
+TTableColumns ExtractInfo(const NSchemeShard::TTableInfoPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
 using TColumnTypes = THashMap<TString, NScheme::TTypeInfo>;
 
-bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTypes& columnsTypes, TString& explain);
+bool ExtractTypes(const NSchemeShard::TTableInfoPtr& baseTableInfo, TColumnTypes& columnsTypes, TString& explain);
 bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDesc, TColumnTypes& columnsTypes, TString& explain);
 
 bool IsCompatibleKeyTypes(

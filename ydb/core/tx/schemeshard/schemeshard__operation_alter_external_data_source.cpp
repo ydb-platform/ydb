@@ -1,7 +1,7 @@
 #include "schemeshard__operation_common_external_data_source.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 
 #include <utility>
 
@@ -200,7 +200,7 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner,
                                       TOperationContext& context) override {
         Y_UNUSED(owner);
-        const auto ssId              = context.SS->SelfTabletId();
+        const auto ssId = context.SS->SelfTabletId();
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& externalDataSourceDescription =
             Transaction.GetCreateExternalDataSource();
@@ -210,8 +210,8 @@ public:
               << ": opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
-                                                   static_cast<ui64>(OperationId.GetTxId()),
-                                                   static_cast<ui64>(ssId));
+                                                   ui64(OperationId.GetTxId()),
+                                                   ui64(ssId));
 
         if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
             if (!context.SS->EnableExternalDataSourcesOnServerless) {

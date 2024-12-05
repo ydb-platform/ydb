@@ -1,4 +1,5 @@
 #include "schemeshard_path.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/path.h>
@@ -1100,15 +1101,15 @@ TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
         << "state: " << element->PathState;
 }
 
-TPath::TPath(TSchemeShard* ss)
-    : SS(ss)
+TPath::TPath(TSchemeshardState* ss)
+    : SS(static_cast<TSchemeShard*>(ss))
 {
     Y_ABORT_UNLESS(SS);
     Y_ABORT_UNLESS(IsEmpty() && !IsResolved());
 }
 
-TPath::TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss)
-    : SS(ss)
+TPath::TPath(TVector<TPathElement::TPtr>&& elements, TSchemeshardState* ss)
+    : SS(static_cast<TSchemeShard*>(ss))
     , Elements(std::move(elements))
 {
     Y_ABORT_UNLESS(SS);
@@ -1170,7 +1171,7 @@ bool TPath::operator !=(const TPath& another) const {
     return !(*this == another);
 }
 
-TPath TPath::Root(TSchemeShard* ss) {
+TPath TPath::Root(TSchemeshardState* ss) {
     Y_ABORT_UNLESS(ss);
     return TPath::Init(ss->RootPathId(), ss);
 }
@@ -1318,7 +1319,7 @@ TPath TPath::Child(const TString& name, TSplitChildTag) const {
     return result;
 }
 
-TPath TPath::Resolve(const TString path, TSchemeShard* ss) {
+TPath TPath::Resolve(const TString path, TSchemeshardState* ss) {
     Y_ABORT_UNLESS(ss);
 
     TPath nullPrefix{ss};
@@ -1335,7 +1336,7 @@ TPath TPath::Resolve(const TPath& prefix, TVector<TString>&& pathParts) {
     return result;
 }
 
-TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeShard* ss) {
+TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeshardState* ss) {
     TPath nullPrefix{ss};
     auto pathParts = SplitPath(path);
 
@@ -1349,7 +1350,7 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
 
         TPath headOpPath = Init(txState->TargetPathId, ss);
 
-        auto headPathNameParts = ss->RootPathElements;
+        auto headPathNameParts = static_cast<TSchemeShard*>(ss)->RootPathElements;
         headPathNameParts.insert(headPathNameParts.end(), std::next(headOpPath.NameParts.begin()), headOpPath.NameParts.end());
 
         if (headPathNameParts.size() + 1 == pathParts.size()
@@ -1379,7 +1380,7 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
     return Resolve(nullPrefix, std::move(pathParts));
 }
 
-TPath TPath::Init(const TPathId pathId, TSchemeShard* ss) {
+TPath TPath::Init(const TPathId pathId, TSchemeshardState* ss) {
     Y_ABORT_UNLESS(ss);
 
     if (!ss->PathsById.contains(pathId)) {
@@ -1399,6 +1400,13 @@ TPath TPath::Init(const TPathId pathId, TSchemeShard* ss) {
     std::reverse(parts.begin(), parts.end());
 
     return TPath(std::move(parts), ss);
+}
+
+TString TPath::PathToString(const TPathId pathId, const TSchemeshardState* ss) {
+    Y_ABORT_UNLESS(ss);
+
+    TPath path = TPath::Init(pathId, const_cast<TSchemeshardState*>(ss));
+    return path.PathString();
 }
 
 TPathElement::TPtr TPath::Base() const {

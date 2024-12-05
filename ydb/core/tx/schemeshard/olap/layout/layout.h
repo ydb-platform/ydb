@@ -63,7 +63,7 @@ public:
     }
 };
 
-class TSchemeShard;
+struct TSchemeshardState;
 
 class TColumnTablesLayout {
 private:
@@ -107,7 +107,7 @@ public:
         Groups.erase(std::remove_if(Groups.begin(), Groups.end(), pred), Groups.end());
     }
 
-    static std::vector<ui64> ShardIdxToTabletId(const std::vector<TShardIdx>& shards, const TSchemeShard& ss);
+    static std::vector<ui64> ShardIdxToTabletId(const std::vector<TShardIdx>& shards, const TSchemeshardState& ss);
 
     static TColumnTablesLayout BuildTrivial(const std::vector<ui64>& tabletIds);
 };

@@ -231,6 +231,7 @@ SRCS(
     schemeshard_import_flow_proposals.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
+    schemeshard_info_types_fwd.h
     schemeshard_path.cpp
     schemeshard_path.h
     schemeshard_path_describer.cpp
@@ -244,6 +245,7 @@ SRCS(
     schemeshard_svp_migration.cpp
     schemeshard_svp_migration.h
     schemeshard_tx_infly.h
+    schemeshard_tx_infly.cpp
     schemeshard_types.cpp
     schemeshard_types.h
     schemeshard_user_attr_limits.h

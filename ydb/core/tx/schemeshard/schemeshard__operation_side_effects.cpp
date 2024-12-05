@@ -1,7 +1,8 @@
+#include "schemeshard__operation_iface.h"
+#include "schemeshard_impl.h"
 #include "schemeshard__operation_side_effects.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
-#include "schemeshard_impl.h"
 
 #include <ydb/core/tx/tx_processing.h>
 
@@ -157,10 +158,12 @@ void TSideEffects::Dependence(TTxId parent, TTxId child) {
     Dependencies.push_back(TDependence(parent, child));
 }
 
-void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
+void TSideEffects::ApplyOnExecute(TSchemeshardState* sst, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TSideEffects ApplyOnExecute"
-                << " at tablet# " << ss->TabletID());
+                << " at tablet# " << sst->SelfTabletId());
+
+    TSchemeShard* ss = static_cast<TSchemeShard*>(sst);
 
     DoDoneParts(ss, ctx);
     DoSetBarriers(ss, ctx);
@@ -198,10 +201,12 @@ void TSideEffects::Barrier(TOperationId opId, TString barrierName) {
 }
 
 
-void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
+void TSideEffects::ApplyOnComplete(TSchemeshardState* sst, const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TSideEffects ApplyOnComplete"
-                    << " at tablet# " << ss->TabletID());
+                    << " at tablet# " << sst->SelfTabletId());
+
+    TSchemeShard* ss = static_cast<TSchemeShard*>(sst);
 
     DoCoordinatorAck(ss, ctx);
     DoMediatorsAck(ss, ctx);
@@ -351,7 +356,7 @@ void TSideEffects::DoMediatorsAck(TSchemeShard* ss, const TActorContext& ctx) {
                     << " stepId#" << step);
 
         ctx.Send(mediator, new TEvTxProcessing::TEvPlanStepAccepted(
-                     ss->TabletID(),
+                     ui64(ss->SelfTabletId()),
                      ui64(step)));
     }
 }
@@ -381,7 +386,7 @@ void TSideEffects::DoCoordinatorAck(TSchemeShard* ss, const TActorContext& ctx) 
                         << " countTxs#" << txIds.size());
 
             ctx.Send(coordinator, new TEvTxProcessing::TEvPlanStepAck(
-                         ss->TabletID(),
+                         ui64(ss->SelfTabletId()),
                          ui64(step),
                          txIds.begin(), txIds.end()));
         }
@@ -396,7 +401,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "DoUpdateTenant no IsExternalSubDomainRoot"
                            << ", pathId: : " << pathId
-                           << ", at schemeshard: " << ss->TabletID());
+                           << ", at schemeshard: " << ss->SelfTabletId());
             continue;
         }
 
@@ -409,14 +414,14 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "DoUpdateTenant no IsActiveChild"
                            << ", pathId: : " << pathId
-                           << ", at schemeshard: " << ss->TabletID());
+                           << ", at schemeshard: " << ss->SelfTabletId());
             continue;
         }
 
         auto& tenantLink = ss->SubDomainsLinks.GetLink(pathId);
         Y_ABORT_UNLESS(tenantLink.DomainKey == pathId);
 
-        auto message = MakeHolder<TEvSchemeShard::TEvUpdateTenantSchemeShard>(ss->TabletID(), ss->Generation());
+        auto message = MakeHolder<TEvSchemeShard::TEvUpdateTenantSchemeShard>(ui64(ss->SelfTabletId()), ss->Generation());
 
         bool hasChanges = false;
 
@@ -561,7 +566,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
                            << ", actualUserAttrsVersion: " << actualUserAttrsVersion
                            << ", tenantHive: " << subDomain->GetTenantHiveID()
                            << ", tenantSysViewProcessor: " << subDomain->GetTenantSysViewProcessorID()
-                           << ", at schemeshard: " << ss->TabletID());
+                           << ", at schemeshard: " << ss->SelfTabletId());
             continue;
         }
 
@@ -569,7 +574,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
                    "Send TEvUpdateTenantSchemeShard"
                        << ", to actor: " << tenantLink.ActorId
                        << ", msg: " << message->Record.ShortDebugString()
-                       << ", at schemeshard: " << ss->TabletID());
+                       << ", at schemeshard: " << ss->SelfTabletId());
 
         Send(tenantLink.ActorId, message.Release());
     }
@@ -624,7 +629,7 @@ void TSideEffects::DoSend(TSchemeShard* ss, const TActorContext& ctx) {
                         << " to actor: " << actor
                         << " msg type: " << message->Type()
                         << " msg: " << message->ToString().substr(0, 1000)
-                        << " at schemeshard: " << ss->TabletID());
+                        << " at schemeshard: " << ss->SelfTabletId());
 
         ctx.Send(actor, message.Release(), flags, cookie);
     }
@@ -643,7 +648,7 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Send tablet strongly msg "
                         << " operationId: " << opId
-                        << " from tablet: " << ss->TabletID()
+                        << " from tablet: " << ss->SelfTabletId()
                         << " to tablet: " << tablet
                         << " cookie: " << cookie
                         << " msg type: " << msgType);
@@ -655,7 +660,7 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
                        "Send tablet strongly msg "
                            << ", operation already done"
                            << ", operationId: " << opId
-                           << " from tablet: " << ss->TabletID()
+                           << " from tablet: " << ss->SelfTabletId()
                            << " to tablet: " << tablet
                            << " cookie: " << cookie
                            << " msg type: " << msgType);
@@ -685,7 +690,7 @@ void TSideEffects::DoBindMsgAcks(TSchemeShard *ss, const TActorContext &ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Ack tablet strongly msg"
                         << " opId: " << opId
-                        << " from tablet: " << ss->TabletID()
+                        << " from tablet: " << ss->SelfTabletId()
                         << " to tablet: " << tablet
                         << " cookie: " << cookie);
 
@@ -1105,7 +1110,7 @@ void TSideEffects::DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTrans
 
         THolder<TEvPrivate::TEvCompleteBarrier> msg = MakeHolder<TEvPrivate::TEvCompleteBarrier>(txId, name);
         TEvPrivate::TEvCompleteBarrier::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCompleteBarrier>*) new IEventHandle(
-                    context.SS->SelfId(), context.SS->SelfId(), msg.Release());
+                    ss->SelfId(), ss->SelfId(), msg.Release());
 
         for (auto& partId: blockedParts) {
             operation->Parts.at(partId)->HandleReply(personalEv, context);

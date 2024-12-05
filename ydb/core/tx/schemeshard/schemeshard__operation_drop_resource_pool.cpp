@@ -1,6 +1,6 @@
 #include "schemeshard__operation_common_resource_pool.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 
 
 namespace NKikimr::NSchemeShard {
@@ -24,7 +24,7 @@ public:
         const TPathId& pathId = txState->TargetPathId;
         const TPathElement::TPtr pathPtr = context.SS->PathsById.at(pathId);
         const TPathElement::TPtr parentDirPtr = context.SS->PathsById.at(pathPtr->ParentPathId);
-    
+
         NIceDb::TNiceDb db(context.GetDB());
 
         Y_ABORT_UNLESS(!pathPtr->Dropped());

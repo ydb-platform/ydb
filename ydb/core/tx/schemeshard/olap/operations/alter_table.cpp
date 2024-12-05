@@ -1,10 +1,13 @@
 #include "alter/abstract/object.h"
 #include "alter/abstract/update.h"
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_iface.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/base/hive.h>
+
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
@@ -59,7 +62,7 @@ public:
             auto txShardString = update->GetShardTxBodyString((ui64)tabletId, seqNo);
             auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                 update->GetShardTransactionKind(),
-                context.SS->TabletID(),
+                ui64(context.SS->SelfTabletId()),
                 context.Ctx.SelfID,
                 ui64(OperationId.GetTxId()),
                 txShardString, seqNo,
@@ -106,7 +109,7 @@ public:
                      << " at tablet: " << ssId
                      << ", stepId: " << step);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -142,10 +145,10 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply ProgressState"
+                     DebugHint() << " ProgressState"
                      << " at tablet: " << ssId);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -387,7 +390,7 @@ public:
                      "TAlterColumnTable AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

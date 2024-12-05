@@ -1,6 +1,8 @@
 #include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common_subdomain.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_subdomain.h"
+
 #include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
 
@@ -15,7 +17,7 @@ using namespace NSchemeShard;
 void DeclareShards(TTxState& txState, TTxId txId, TPathId pathId,
                    ui32 count, TTabletTypes::EType type,
                    const TChannelsBindings& channelsBindings,
-                   TSchemeShard* ss)
+                   TSchemeshardState* ss)
 {
     txState.Shards.reserve(count);
     for (ui64 i = 0; i < count; ++i) {
@@ -26,7 +28,7 @@ void DeclareShards(TTxState& txState, TTxId txId, TPathId pathId,
     }
 }
 
-void PersistShards(NIceDb::TNiceDb& db, TTxState& txState, TSchemeShard* ss) {
+void PersistShards(NIceDb::TNiceDb& db, TTxState& txState, TSchemeshardState* ss) {
     for (const auto& shard : txState.Shards) {
         Y_ABORT_UNLESS(ss->ShardInfos.contains(shard.Idx), "shard info is set before");
         auto& shardInfo = ss->ShardInfos.at(shard.Idx);
@@ -214,7 +216,8 @@ public:
         std::sort(requestedStoragePools.begin(), requestedStoragePools.end());
         auto uniqEnd = std::unique(requestedStoragePools.begin(), requestedStoragePools.end());
         if (uniqEnd !=  requestedStoragePools.end()) {
-            if (!context.SS->ChannelProfiles || context.SS->ChannelProfiles->Profiles.size() == 0) {
+            auto self = static_cast<const TSchemeShard*>(context.SS);
+            if (!self->ChannelProfiles || self->ChannelProfiles->Profiles.size() == 0) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "Requested not uniq storage pools, for example, '" + uniqEnd->GetName() + "'");
                 return result;
             }
@@ -359,7 +362,7 @@ public:
                      "TCreateSubDomain AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

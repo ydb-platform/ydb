@@ -1,3 +1,4 @@
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
 
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
@@ -168,7 +169,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
 {
     auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
     event->Record.SetTxId(ui64(txId));
-    ActorIdToProto(context.SS->SelfId(), event->Record.MutableSourceActor());
+    ActorIdToProto(context.SS->SelfActorId(), event->Record.MutableSourceActor());
 
     MakePQTabletConfig(context,
                       *event->Record.MutableConfig()->MutableTabletConfig(),
@@ -400,7 +401,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
 
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint()
-                    << " HandleReply ProgressState"
+                    << " ProgressState"
                     << ", at schemeshard: " << ssId);
 
     TTxState* txState = context.SS->FindTx(OperationId);

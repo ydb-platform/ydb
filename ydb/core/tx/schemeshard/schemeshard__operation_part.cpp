@@ -1,7 +1,8 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard_path.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
-#include "schemeshard_path.h"
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/kesus/tablet/events.h>
@@ -62,6 +63,26 @@ struct TDebugEvent<TEvPrivate::TEvUndoTenantUpdate> {
     }
 };
 
+TOperationContext::TOperationContext(
+        TSchemeShard* ss,
+        NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
+        TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange,
+        TMaybe<NACLib::TUserToken>&& userToken)
+    : SS(ss)
+    , Ctx(ctx)
+    , OnComplete(onComplete)
+    , MemChanges(memChanges)
+    , DbChanges(dbChange)
+    , UserToken(userToken)
+    , Txc(txc)
+{}
+
+TOperationContext::TOperationContext(
+        TSchemeShard* ss,
+        NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
+        TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange)
+    : TOperationContext(ss, txc, ctx, onComplete, memChanges, dbChange, Nothing())
+{}
 
 template <EventBasePtr TEvPtr>
 TString ISubOperationState::DebugReply(const TEvPtr& ev) {

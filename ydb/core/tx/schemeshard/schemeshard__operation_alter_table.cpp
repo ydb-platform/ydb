@@ -1,6 +1,6 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
@@ -217,7 +217,7 @@ void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr
     context.OnComplete.ActivateTx(opId);
 }
 
-bool CheckDroppingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableDescription& alter, const TPath& tablePath, TString& errStr) {
+bool CheckDroppingColumns(const TSchemeshardState* ss, const NKikimrSchemeOp::TTableDescription& alter, const TPath& tablePath, TString& errStr) {
     TSet<TString> deletedColumns;
 
     for (const auto& colDescr: alter.GetDropColumns()) {
@@ -672,7 +672,7 @@ public:
                      "TAlterTable AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -1,6 +1,9 @@
 #pragma once
 
+#include <ydb/core/statistics/events.h>
+
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 
 namespace NKikimr::NSchemeShard {
 

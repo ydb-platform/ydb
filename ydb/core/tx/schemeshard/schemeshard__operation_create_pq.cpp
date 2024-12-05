@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
+#include "schemeshard_limits.h"
 #include "schemeshard__op_traits.h"
 
 #include "schemeshard_utils.h"  // for PQGroupReserve
@@ -31,7 +32,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         partitionCount = op.GetTotalGroupCount();
     }
 
-    ui32 partsPerTablet = TSchemeShard::DefaultPQTabletPartitionsCount;
+    ui32 partsPerTablet = NSchemeShard::DefaultPQTabletPartitionsCount;
     if (op.HasPartitionPerTablet()) {
         partsPerTablet = op.GetPartitionPerTablet();
     }
@@ -47,7 +48,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         return nullptr;
     }
 
-    if (partitionCount == 0 || partitionCount > TSchemeShard::MaxPQGroupPartitionsCount) {
+    if (partitionCount == 0 || partitionCount > NSchemeShard::MaxPQGroupPartitionsCount) {
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = Sprintf("Invalid total partition count specified: %u", partitionCount);
         return nullptr;
@@ -67,21 +68,21 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         return nullptr;
     }
 
-    if ((ui32)op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond() > TSchemeShard::MaxPQWriteSpeedPerPartition) {
+    if ((ui32)op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond() > NSchemeShard::MaxPQWriteSpeedPerPartition) {
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = TStringBuilder() << "Invalid write speed"
             << ": specified: " << op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond() << "bps"
-            << ", max: " << TSchemeShard::MaxPQWriteSpeedPerPartition << "bps";
+            << ", max: " << NSchemeShard::MaxPQWriteSpeedPerPartition << "bps";
         return nullptr;
     }
 
     const auto lifetimeSeconds = op.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds();
-    if (lifetimeSeconds <= 0 || (ui32)lifetimeSeconds > TSchemeShard::MaxPQLifetimeSeconds) {
+    if (lifetimeSeconds <= 0 || (ui32)lifetimeSeconds > NSchemeShard::MaxPQLifetimeSeconds) {
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = TStringBuilder() << "Invalid retention period"
             << ": specified: " << lifetimeSeconds << "s"
             << ", min: " << 1 << "s"
-            << ", max: " << TSchemeShard::MaxPQLifetimeSeconds << "s";
+            << ", max: " << NSchemeShard::MaxPQLifetimeSeconds << "s";
         return nullptr;
     }
 
@@ -147,7 +148,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         pqGroupInfo->PartitionsToAdd.emplace(i, i + 1, keyRange);
     }
 
-    if (partsPerTablet == 0 || partsPerTablet > TSchemeShard::MaxPQTabletPartitionsCount) {
+    if (partsPerTablet == 0 || partsPerTablet > NSchemeShard::MaxPQTabletPartitionsCount) {
         status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("Invalid partition per tablet count specified: %u", partsPerTablet);
         return nullptr;
@@ -161,7 +162,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     pqGroupInfo->ActivePartitionCount = partitionCount;
 
     ui32 tabletCount = pqGroupInfo->ExpectedShardCount();
-    if (tabletCount > TSchemeShard::MaxPQGroupTabletsCount) {
+    if (tabletCount > NSchemeShard::MaxPQGroupTabletsCount) {
         status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("Invalid tablet count specified: %u", tabletCount);
         return nullptr;
@@ -207,7 +208,7 @@ void ApplySharding(TTxId txId,
                    TTxState& txState,
                    const TChannelsBindings& rbBindedChannels,
                    const TChannelsBindings& pqBindedChannels,
-                   TSchemeShard* ss) {
+                   TSchemeshardState* ss) {
     pqGroup->AlterVersion = 0;
     TShardInfo shardInfo = TShardInfo::PersQShardInfo(txId, pathId);
     shardInfo.BindedChannels = pqBindedChannels;
@@ -578,7 +579,7 @@ public:
                      "TCreatePQ AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

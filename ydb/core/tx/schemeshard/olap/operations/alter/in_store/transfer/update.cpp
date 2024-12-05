@@ -1,6 +1,6 @@
 #include "update.h"
 #include <ydb/core/tx/columnshard/data_sharing/initiator/controller/schemeshard.h>
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_iface.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
@@ -15,7 +15,7 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
         NKikimrColumnShardDataSharingProto::TDestinationSession destinationSession;
         destinationSession.SetSessionId(alter.GetSessionId());
         *destinationSession.MutableInitiatorController() = NKikimr::NOlap::NDataSharing::TInitiatorControllerContainer(
-            std::make_shared<NKikimr::NOlap::NDataSharing::TSSInitiatorController>(context.GetSSOperationContext()->SS->TabletID(), 0)).SerializeToProto();
+            std::make_shared<NKikimr::NOlap::NDataSharing::TSSInitiatorController>(ui64(context.GetSSOperationContext()->SS->SelfTabletId()), 0)).SerializeToProto();
         {
             auto& pathIdRemap = *destinationSession.AddPathIds();
             pathIdRemap.SetSourcePathId(context.GetOriginalEntity().GetPathId().LocalPathId);

@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__operation_common.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -137,7 +138,7 @@ public:
                             << "on dst datashard: " << datashardId
                             << " splitOp: " << OperationId
                             << " alterVersion: " << alterVersion
-                            << " at tablet: " << context.SS->TabletID());
+                            << " at tablet: " << context.SS->SelfTabletId());
 
             const ui32 rangeIdx = getDstRangeIdx(datashardId);
             const auto& rangeDescr = splitDescr.GetDestinationRanges(rangeIdx);
@@ -151,7 +152,7 @@ public:
             Y_ABORT_UNLESS(txState->SplitDescription);
             auto event = MakeHolder<TEvDataShard::TEvInitSplitMergeDestination>(
                 ui64(OperationId.GetTxId()),
-                context.SS->TabletID(),
+                ui64(context.SS->SelfTabletId()),
                 subDomainPathId,
                 splitDescForShard,
                 context.SS->SelectProcessingParams(txState->TargetPathId));
@@ -344,7 +345,7 @@ public:
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " Starting split on src datashard " << datashardId
                         << " splitOpId# " << OperationId
-                        << " at tablet " << context.SS->TabletID());
+                        << " at tablet " << context.SS->SelfTabletId());
 
             auto event = MakeHolder<TEvDataShard::TEvSplit>(ui64(OperationId.GetTxId()));
 
@@ -447,10 +448,10 @@ public:
                 continue;
             }
 
-            if (!context.SS->ShardInfos.contains(shard.Idx) || context.SS->ShardDeleter.Has(shard.Idx)) {
+            if (!context.SS->ShardInfos.contains(shard.Idx) || static_cast<TSchemeShard*>(context.SS)->ShardDeleter.Has(shard.Idx)) {
                 LOG_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                           "Src datashard idx %" PRIu64 " for splitOp# %" PRIu64 " is already deleted or is intended to at tablet %" PRIu64,
-                          shard.Idx, OperationId.GetTxId(), context.SS->TabletID());
+                          shard.Idx, OperationId.GetTxId(), context.SS->SelfTabletId());
                 continue;
             }
 
@@ -459,7 +460,7 @@ public:
             needToNotifySrc = true;
             LOG_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                       "Notify src datashard %" PRIu64 " on partitioning changed splitOp# %" PRIu64 " at tablet %" PRIu64,
-                      datashardId, OperationId.GetTxId(), context.SS->TabletID());
+                      datashardId, OperationId.GetTxId(), context.SS->SelfTabletId());
 
             THolder<TEvDataShard::TEvSplitPartitioningChanged> event = MakeHolder<TEvDataShard::TEvSplitPartitioningChanged>(ui64(OperationId.GetTxId()));
 
@@ -649,7 +650,7 @@ public:
         }
 
         TVector<TString> rangeEnds;
-        if (!TSchemeShard::FillSplitPartitioning(rangeEnds, keyColTypeIds, info.GetSplitBoundary(), errStr)) {
+        if (!NSchemeShard::FillSplitPartitioning(rangeEnds, keyColTypeIds, info.GetSplitBoundary(), errStr)) {
             return false;
         }
 
@@ -856,7 +857,7 @@ public:
             LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "Cannot start split/merge operation"
                            << " for table \"" << info.GetTablePath() << "\" (id " << path.Base()->PathId << ")"
-                           << " at tablet " << context.SS->TabletID()
+                           << " at tablet " << context.SS->SelfTabletId()
                            << " because the operation involves too many parts: " << totalSrcPartCount);
             return result;
         }
@@ -983,7 +984,7 @@ public:
                      "TSplitMerge AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);

@@ -1,7 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common_subdomain.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/persqueue/config/config.h>
@@ -14,7 +14,7 @@ using namespace NSchemeShard;
 void DeclareShards(TTxState& txState, TTxId txId, TPathId pathId,
                    ui32 count, TTabletTypes::EType type,
                    const TChannelsBindings& channelsBindings,
-                   TSchemeShard* ss)
+                   TSchemeshardState* ss)
 {
     txState.Shards.reserve(count);
     for (ui64 i = 0; i < count; ++i) {
@@ -25,7 +25,7 @@ void DeclareShards(TTxState& txState, TTxId txId, TPathId pathId,
     }
 }
 
-void PersistShards(NIceDb::TNiceDb& db, TTxState& txState, ui64 shardsToCreate, TSchemeShard* ss) {
+void PersistShards(NIceDb::TNiceDb& db, TTxState& txState, ui64 shardsToCreate, TSchemeshardState* ss) {
     for (const auto& shard : txState.Shards) {
         Y_ABORT_UNLESS(shard.Operation == TTxState::ETxState::CreateParts);
         Y_ABORT_UNLESS(ss->ShardInfos.contains(shard.Idx), "shard info is set before");
@@ -348,7 +348,7 @@ public:
                      "TAlterSubDomain AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

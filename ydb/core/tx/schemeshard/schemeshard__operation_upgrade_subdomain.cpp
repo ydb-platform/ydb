@@ -1,4 +1,5 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
@@ -297,7 +298,7 @@ public:
 
 
         auto event = MakeHolder<TEvSchemeShard::TEvMigrateSchemeShard>();
-        event->Record.SetSchemeShardGeneration(context.SS->Generation());
+        event->Record.SetSchemeShardGeneration(static_cast<TSchemeShard*>(context.SS)->Generation());
 
         *event->Record.MutablePath() = DescribePath(context, pathId);
         *event->Record.MutablePathVersion() = context.SS->GetPathVersion(path);
@@ -378,7 +379,7 @@ public:
                    DebugHint() << " HandleReply TEvSchemeShard::TEvMigrateSchemeShardResult"
                                << ", at tablet# " << ssId);
 
-        Y_ABORT_UNLESS(ev->Get()->GetPathId().OwnerId == context.SS->TabletID());
+        Y_ABORT_UNLESS(ev->Get()->GetPathId().OwnerId == ui64(ssId));
 
         TPathId pathId = ev->Get()->GetPathId();
         context.OnComplete.UnbindMsgFromPipe(OperationId, TenantSchemeShardId, pathId);
@@ -1272,7 +1273,7 @@ public:
                      "TUpgradeSubDomain AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         TTxState* upgradeState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(upgradeState);
@@ -1285,7 +1286,7 @@ public:
 
             THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
             TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
-                context.SS->SelfId(), context.SS->SelfId(), msg.Release());
+                context.SS->SelfActorId(), context.SS->SelfActorId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
         }
 
@@ -1429,14 +1430,14 @@ public:
         case NKikimrSchemeOp::TUpgradeSubDomain::Commit: {
             THolder<TEvPrivate::TEvCommitTenantUpdate> msg = MakeHolder<TEvPrivate::TEvCommitTenantUpdate>();
             TEvPrivate::TEvCommitTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCommitTenantUpdate>*) new IEventHandle(
-                context.SS->SelfId(), context.SS->SelfId(), msg.Release());
+                context.SS->SelfActorId(), context.SS->SelfActorId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
             break;
         }
         case NKikimrSchemeOp::TUpgradeSubDomain::Undo: {
             THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
             TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
-                context.SS->SelfId(), context.SS->SelfId(), msg.Release());
+                context.SS->SelfActorId(), context.SS->SelfActorId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
             break;
         }
@@ -1477,7 +1478,7 @@ public:
                      "TUpgradeSubDomainDecision AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -1505,7 +1506,7 @@ ISubOperation::TPtr CreateUpgradeSubDomainDecision(TOperationId id, TTxState::ET
     return MakeSubOperation<TUpgradeSubDomainDecision>(id, state);
 }
 
-ISubOperation::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateCompatibleSubdomainDrop(TSchemeshardState* ss, TOperationId id, const TTxTransaction& tx) {
     const auto& info = tx.GetDrop();
 
     const TString& parentPathStr = tx.GetWorkingDir();

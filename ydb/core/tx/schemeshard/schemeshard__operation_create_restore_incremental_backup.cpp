@@ -1,14 +1,14 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include "schemeshard__operation_create_cdc_stream.h"
 
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 
 namespace NKikimr::NSchemeShard {
 
@@ -81,7 +81,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << context.SS->TabletID());
+                               << ", at schemeshard: " << context.SS->SelfTabletId());
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -113,7 +113,7 @@ public:
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply " << ev->Get()->ToString()
-                               << ", at schemeshard: " << context.SS->TabletID());
+                               << ", at schemeshard: " << context.SS->SelfTabletId());
 
         if (!NTableState::CollectProposeTransactionResults(OperationId, ev, context)) {
             return false;
@@ -153,7 +153,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << context.SS->TabletID());
+                               << ", at schemeshard: " << context.SS->SelfTabletId());
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -173,7 +173,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " TEvDataShard::TEvSchemaChanged"
                                << " triggers early, save it"
-                               << ", at schemeshard: " << context.SS->TabletID());
+                               << ", at schemeshard: " << context.SS->SelfTabletId());
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -183,7 +183,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvOperationPlan"
                                << ", step: " << ev->Get()->StepId
-                               << ", at schemeshard: " << context.SS->TabletID());
+                               << ", at schemeshard: " << context.SS->SelfTabletId());
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -274,7 +274,7 @@ public:
         auto result = MakeHolder<TProposeResponse>(
             NKikimrScheme::StatusAccepted,
             ui64(OperationId.GetTxId()),
-            context.SS->TabletID());
+            ui64(context.SS->SelfTabletId()));
 
         const auto workingDirPath = TPath::Resolve(workingDir, context.SS);
         {

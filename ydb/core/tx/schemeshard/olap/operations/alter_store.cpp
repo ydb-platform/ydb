@@ -1,7 +1,10 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_iface.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+
 #include <ydb/library/formats/arrow/accessor/common/const.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/base/hive.h>
 
 #include "checks.h"
 
@@ -149,7 +152,7 @@ public:
             if (shard.TabletType == ETabletType::ColumnShard) {
                 auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_SCHEMA,
-                    context.SS->TabletID(),
+                    ui64(context.SS->SelfTabletId()),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
                     columnShardTxBody, seqNo,
@@ -594,7 +597,7 @@ public:
                      "TAlterOlapStore AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

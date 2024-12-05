@@ -11,6 +11,7 @@
 namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
+struct TSchemeshardState;
 
 class TPath {
     TSchemeShard* SS;
@@ -107,8 +108,8 @@ public:
 
 public:
     struct TSplitChildTag {};
-    explicit TPath(TSchemeShard* ss);
-    TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss);
+    explicit TPath(TSchemeshardState* ss);
+    TPath(TVector<TPathElement::TPtr>&& elements, TSchemeshardState* ss);
 
     TPath(const TPath& path) = default;
     TPath(TPath&& path) = default;
@@ -120,16 +121,18 @@ public:
 
     explicit operator bool() const;
 
-    static TPath Resolve(const TString path, TSchemeShard* ss);
+    static TPath Resolve(const TString path, TSchemeshardState* ss);
     static TPath Resolve(const TPath& prefix, TVector<TString>&& pathParts);
-    static TPath ResolveWithInactive(TOperationId opId, const TString path, TSchemeShard* ss);
+    static TPath ResolveWithInactive(TOperationId opId, const TString path, TSchemeshardState* ss);
 
-    static TPath Init(const TPathId pathId, TSchemeShard* ss);
+    static TPath Init(const TPathId pathId, TSchemeshardState* ss);
+    static TString PathToString(const TPathId pathId, const TSchemeshardState* ss);
+
     TChecker Check(const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) const;
     bool IsEmpty() const;
     bool IsResolved() const;
 
-    static TPath Root(TSchemeShard* ss);
+    static TPath Root(TSchemeshardState* ss);
     TString PathString() const;
     TPath& Rise();
     TPath Parent() const;

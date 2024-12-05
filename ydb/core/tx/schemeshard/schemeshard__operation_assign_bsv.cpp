@@ -1,5 +1,5 @@
 #include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
+#include "schemeshard__operation_iface.h"
 
 namespace {
 
@@ -24,7 +24,7 @@ public:
                          << ", operationId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
 
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
 

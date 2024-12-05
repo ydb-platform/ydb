@@ -1,4 +1,8 @@
+#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
+
+#include "schemeshard_cdc_stream_common.h"
 
 #include "schemeshard_private.h"
 #include <ydb/core/base/hive.h>

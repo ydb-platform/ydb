@@ -54,7 +54,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-class TSchemeShard;
+struct TSchemeshardState;
 
 struct TForceShardSplitSettings {
     ui64 ForceShardSplitDataSize;
@@ -3580,8 +3580,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return 0.0;
     }
 
-    void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;
-    void SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* to) const;
+    void SerializeToProto(TSchemeshardState* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;
+    void SerializeToProto(TSchemeshardState* ss, NKikimrSchemeOp::TIndexBuildConfig* to) const;
 
 };
 

@@ -22,4 +22,5 @@ NKikimrSchemeOp::TShardIdx TShardIdx::SerializeToProto() const {
 TConclusion<TShardIdx> TShardIdx::BuildFromProto(const NKikimrSchemeOp::TShardIdx& proto) {
     return FromProto(proto);
 }
+
 }

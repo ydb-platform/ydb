@@ -1,6 +1,6 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -33,7 +33,7 @@ bool ValidateConfig(const NKikimrSchemeOp::TRtmrVolumeDescription& op, TString& 
     return true;
 }
 
-TRtmrVolumeInfo::TPtr CreateRtmrVolume(const NKikimrSchemeOp::TRtmrVolumeDescription& op, TTxState& state, TSchemeShard* ss) {
+TRtmrVolumeInfo::TPtr CreateRtmrVolume(const NKikimrSchemeOp::TRtmrVolumeDescription& op, TTxState& state, TSchemeshardState* ss) {
     TRtmrVolumeInfo::TPtr rtmrVol = new TRtmrVolumeInfo;
 
     state.Shards.clear();
@@ -387,7 +387,7 @@ public:
                      "TCreateRTMR AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -1,6 +1,6 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_iface.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 

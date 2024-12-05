@@ -1,9 +1,8 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
 
 #include "schemeshard_utils.h"  // for TransactionTemplate
-
-#include "schemeshard_impl.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -366,7 +365,7 @@ public:
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropIndexAtMainTable AbortPropose"
                          << ", opId: " << OperationId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -374,7 +373,7 @@ public:
                      "TDropIndexAtMainTable AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -398,7 +397,7 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateDropIndex"
                     << ", message: " << tx.ShortDebugString()
-                    << ", at schemeshard: " << context.SS->TabletID());
+                    << ", at schemeshard: " << context.SS->SelfTabletId());
 
     auto dropOperation = tx.GetDropIndex();
 

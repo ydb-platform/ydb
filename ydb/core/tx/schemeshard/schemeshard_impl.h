@@ -9,18 +9,13 @@
 #include "schemeshard_build_index.h"
 #include "schemeshard_private.h"
 #include "schemeshard_types.h"
-#include "schemeshard_path_element.h"
 #include "schemeshard_path.h"
 #include "schemeshard_domain_links.h"
-#include "schemeshard_info_types.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_self_pinger.h"
 #include "schemeshard_shard_deleter.h"
 #include "schemeshard_schema.h"
-#include "schemeshard__operation.h"
 #include "schemeshard__stats.h"
-
-#include "olap/manager/manager.h"
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
@@ -50,9 +45,10 @@
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
-#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/blob_depot/events.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/core/util/token_bucket.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
@@ -60,13 +56,9 @@
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
 
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/blob_depot/events.h>
-
-#include <ydb/library/login/login.h>
-
 #include <util/generic/ptr.h>
+
+#include "schemeshard__operation_iface.h"
 
 namespace NKikimr::NSchemeShard::NBackground {
 struct TEvListRequest;
@@ -75,12 +67,12 @@ struct TEvListRequest;
 namespace NKikimr {
 namespace NSchemeShard {
 
-extern const ui64 NEW_TABLE_ALTER_VERSION;
+// extern const ui64 NEW_TABLE_ALTER_VERSION;
 
 class TSchemeShard
     : public TActor<TSchemeShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
-    , public IQuotaCounters
+    , public TSchemeshardState
 {
 private:
     class TPipeClientFactory : public NTabletPipe::IClientFactory {
@@ -171,12 +163,12 @@ private:
     };
 
 public:
-    static constexpr ui32 DefaultPQTabletPartitionsCount = 1;
-    static constexpr ui32 MaxPQTabletPartitionsCount = 1000;
-    static constexpr ui32 MaxPQGroupTabletsCount = 10*1000;
-    static constexpr ui32 MaxPQGroupPartitionsCount = 20*1000;
-    static constexpr ui32 MaxPQWriteSpeedPerPartition = 50*1024*1024;
-    static constexpr ui32 MaxPQLifetimeSeconds = 31 * 86400;
+    // static constexpr ui32 DefaultPQTabletPartitionsCount = 1;
+    // static constexpr ui32 MaxPQTabletPartitionsCount = 1000;
+    // static constexpr ui32 MaxPQGroupTabletsCount = 10*1000;
+    // static constexpr ui32 MaxPQGroupPartitionsCount = 20*1000;
+    // static constexpr ui32 MaxPQWriteSpeedPerPartition = 50*1024*1024;
+    // static constexpr ui32 MaxPQLifetimeSeconds = 31 * 86400;
     static constexpr ui32 PublishChunkSize = 1000;
 
     static const TSchemeLimits DefaultLimits;
@@ -189,13 +181,13 @@ public:
 
     TControlWrapper AllowConditionalEraseOperations;
     TControlWrapper AllowServerlessStorageBilling;
-    TControlWrapper DisablePublicationsOfDropping;
+    // TControlWrapper DisablePublicationsOfDropping;
     TControlWrapper FillAllocatePQ;
 
     // Shared with NTabletFlatExecutor::TExecutor
     TControlWrapper MaxCommitRedoMB;
 
-    TSplitSettings SplitSettings;
+    // TSplitSettings SplitSettings;
 
     struct TTenantInitState {
         enum EInitState {
@@ -211,15 +203,15 @@ public:
     // In RO mode we don't accept any modifications from users but process all in-flight operations in normal way
     bool IsReadOnlyMode = false;
 
-    bool IsDomainSchemeShard = false;
+    // bool IsDomainSchemeShard = false;
 
-    TPathId ParentDomainId = InvalidPathId;
+    // TPathId ParentDomainId = InvalidPathId;
     TString ParentDomainEffectiveACL;
     ui64 ParentDomainEffectiveACLVersion = 0;
     TEffectiveACL ParentDomainCachedEffectiveACL;
     TString ParentDomainOwner;
 
-    THashSet<TString> SystemBackupSIDs;
+    // THashSet<TString> SystemBackupSIDs;
     TInstant ServerlessStorageLastBillTime;
 
     TParentDomainLink ParentDomainLink;
@@ -228,54 +220,54 @@ public:
     TVector<TString> RootPathElements;
 
     ui64 MaxIncompatibleChange = 0;
-    THashMap<TPathId, TPathElement::TPtr> PathsById;
-    TLocalPathId NextLocalPathId = 0;
+    // THashMap<TPathId, TPathElement::TPtr> PathsById;
+    // TLocalPathId NextLocalPathId = 0;
 
-    THashMap<TPathId, TTableInfo::TPtr> Tables;
-    THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
-
-    THashMap<TPathId, TTableIndexInfo::TPtr> Indexes;
-    THashMap<TPathId, TCdcStreamInfo::TPtr> CdcStreams;
-    THashMap<TPathId, TSequenceInfo::TPtr> Sequences;
-    THashMap<TPathId, TReplicationInfo::TPtr> Replications;
-    THashMap<TPathId, TBlobDepotInfo::TPtr> BlobDepots;
-
-    THashMap<TPathId, TTxId> TablesWithSnapshots;
-    THashMap<TTxId, TSet<TPathId>> SnapshotTables;
-    THashMap<TTxId, TStepId> SnapshotsStepIds;
-
-    THashMap<TPathId, TTxId> LockedPaths;
-
-    THashMap<TPathId, TTopicInfo::TPtr> Topics;
-    THashMap<TPathId, TRtmrVolumeInfo::TPtr> RtmrVolumes;
-    THashMap<TPathId, TSolomonVolumeInfo::TPtr> SolomonVolumes;
-    THashMap<TPathId, TSubDomainInfo::TPtr> SubDomains;
-    THashMap<TPathId, TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes;
-    THashMap<TPathId, TFileStoreInfo::TPtr> FileStoreInfos;
-    THashMap<TPathId, TKesusInfo::TPtr> KesusInfos;
-    THashMap<TPathId, TOlapStoreInfo::TPtr> OlapStores;
-    THashMap<TPathId, TExternalTableInfo::TPtr> ExternalTables;
-    THashMap<TPathId, TExternalDataSourceInfo::TPtr> ExternalDataSources;
-    THashMap<TPathId, TViewInfo::TPtr> Views;
-    THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
-    THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
-
-    TTempDirsState TempDirsState;
-
-    TTablesStorage ColumnTables;
-    std::shared_ptr<NKikimr::NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
-
-    // it is only because we need to manage undo of upgrade subdomain, finally remove it
-    THashMap<TPathId, TVector<TTabletId>> RevertedMigrations;
-
-    THashMap<TTxId, TOperation::TPtr> Operations;
-    THashMap<TTxId, TPublicationInfo> Publications;
-    THashMap<TOperationId, TTxState> TxInFlight;
-
-    ui64 NextLocalShardIdx = 0;
-    THashMap<TShardIdx, TShardInfo> ShardInfos;
-    THashMap<TShardIdx, TAdoptedShard> AdoptedShards;
-    THashMap<TTabletId, TShardIdx> TabletIdToShardIdx;
+//     THashMap<TPathId, TTableInfo::TPtr> Tables;
+//     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
+//
+//     THashMap<TPathId, TTableIndexInfo::TPtr> Indexes;
+//     THashMap<TPathId, TCdcStreamInfo::TPtr> CdcStreams;
+//     THashMap<TPathId, TSequenceInfo::TPtr> Sequences;
+//     THashMap<TPathId, TReplicationInfo::TPtr> Replications;
+//     THashMap<TPathId, TBlobDepotInfo::TPtr> BlobDepots;
+//
+//     THashMap<TPathId, TTxId> TablesWithSnapshots;
+//     THashMap<TTxId, TSet<TPathId>> SnapshotTables;
+//     THashMap<TTxId, TStepId> SnapshotsStepIds;
+//
+//     THashMap<TPathId, TTxId> LockedPaths;
+//
+//     THashMap<TPathId, TTopicInfo::TPtr> Topics;
+//     THashMap<TPathId, TRtmrVolumeInfo::TPtr> RtmrVolumes;
+//     THashMap<TPathId, TSolomonVolumeInfo::TPtr> SolomonVolumes;
+//     THashMap<TPathId, TSubDomainInfo::TPtr> SubDomains;
+//     THashMap<TPathId, TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes;
+//     THashMap<TPathId, TFileStoreInfo::TPtr> FileStoreInfos;
+//     THashMap<TPathId, TKesusInfo::TPtr> KesusInfos;
+//     THashMap<TPathId, TOlapStoreInfo::TPtr> OlapStores;
+//     THashMap<TPathId, TExternalTableInfo::TPtr> ExternalTables;
+//     THashMap<TPathId, TExternalDataSourceInfo::TPtr> ExternalDataSources;
+//     THashMap<TPathId, TViewInfo::TPtr> Views;
+//     THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
+//     THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
+//
+//     TTempDirsState TempDirsState;
+//
+//     TTablesStorage ColumnTables;
+//     std::shared_ptr<NKikimr::NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
+//
+//     // it is only because we need to manage undo of upgrade subdomain, finally remove it
+//     THashMap<TPathId, TVector<TTabletId>> RevertedMigrations;
+//
+//     THashMap<TTxId, TOperation::TPtr> Operations;
+//     THashMap<TTxId, TPublicationInfo> Publications;
+//     THashMap<TOperationId, TTxState> TxInFlight;
+//
+//     ui64 NextLocalShardIdx = 0;
+//     THashMap<TShardIdx, TShardInfo> ShardInfos;
+//     THashMap<TShardIdx, TAdoptedShard> AdoptedShards;
+//     THashMap<TTabletId, TShardIdx> TabletIdToShardIdx;
     THashMap<TShardIdx, TVector<TActorId>> ShardDeletionSubscribers; // for tests
 
     // in case of integral hists we need to remember what values we have set
@@ -322,29 +314,29 @@ public:
 
     THashSet<TShardIdx> ShardsWithBorrowed; // shards have parts from another shards
     THashSet<TShardIdx> ShardsWithLoaned;   // shards have parts loaned to another shards
-    bool EnableBackgroundCompaction = false;
-    bool EnableBackgroundCompactionServerless = false;
-    bool EnableBorrowedSplitCompaction = false;
-    bool EnableMoveIndex = true;
-    bool EnableAlterDatabaseCreateHiveFirst = false;
-    bool EnablePQConfigTransactionsAtSchemeShard = false;
-    bool EnableStatistics = false;
-    bool EnableTablePgTypes = false;
-    bool EnableServerlessExclusiveDynamicNodes = false;
-    bool EnableAddColumsWithDefaults = false;
-    bool EnableReplaceIfExistsForExternalEntities = false;
-    bool EnableTempTables = false;
-    bool EnableTableDatetime64 = false;
-    bool EnableResourcePoolsOnServerless = false;
-    bool EnableVectorIndex = false;
-    bool EnableExternalDataSourcesOnServerless = false;
-    bool EnableParameterizedDecimal = false;
+    // bool EnableBackgroundCompaction = false;
+    // bool EnableBackgroundCompactionServerless = false;
+    // bool EnableBorrowedSplitCompaction = false;
+    // bool EnableMoveIndex = true;
+    // bool EnableAlterDatabaseCreateHiveFirst = false;
+    // bool EnablePQConfigTransactionsAtSchemeShard = false;
+    // bool EnableStatistics = false;
+    // bool EnableTablePgTypes = false;
+    // bool EnableServerlessExclusiveDynamicNodes = false;
+    // bool EnableAddColumsWithDefaults = false;
+    // bool EnableReplaceIfExistsForExternalEntities = false;
+    // bool EnableTempTables = false;
+    // bool EnableTableDatetime64 = false;
+    // bool EnableResourcePoolsOnServerless = false;
+    // bool EnableVectorIndex = false;
+    // bool EnableExternalDataSourcesOnServerless = false;
+    // bool EnableParameterizedDecimal = false;
 
     TShardDeleter ShardDeleter;
 
     // Counter-strike stuff
-    TTabletCountersBase* TabletCounters = nullptr;
-    TAutoPtr<TTabletCountersBase> TabletCountersPtr;
+    // TTabletCountersBase* TabletCounters = nullptr;
+    // TAutoPtr<TTabletCountersBase> TabletCountersPtr;
 
     TAutoPtr<TSelfPinger> SelfPinger;
 
@@ -369,18 +361,18 @@ public:
     bool TopicPersistStatsPending = false;
     TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats> TopicStatsQueue;
 
-    TSet<TPathId> CleanDroppedPathsCandidates;
-    TSet<TPathId> CleanDroppedSubDomainsCandidates;
+    // TSet<TPathId> CleanDroppedPathsCandidates;
+    // TSet<TPathId> CleanDroppedSubDomainsCandidates;
     bool CleanDroppedPathsInFly = false;
     bool CleanDroppedPathsDisabled = true;
     bool CleanDroppedSubDomainsInFly = false;
 
-    TTokenBucket DropBlockStoreVolumeRateLimiter;
+    // TTokenBucket DropBlockStoreVolumeRateLimiter;
 
     TActorId DelayedInitTenantDestination;
     TAutoPtr<TEvSchemeShard::TEvInitTenantSchemeShardResult> DelayedInitTenantReply;
 
-    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
+    // NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
 
     THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
     bool ProcessOperationParts(
@@ -393,60 +385,60 @@ public:
         TOperationContext& context);
     void AbortOperationPropose(const TTxId txId, TOperationContext& context);
 
-    THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
-        const TString& body, const TActorContext& ctx) const;
+    // THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
+    //     const TString& body, const TActorContext& ctx) const;
 
-    TPathId RootPathId() const {
-        return MakeLocalId(TPathElement::RootPathId);
-    }
-
-    bool IsRootPathId(const TPathId& pId) const {
-        return pId == RootPathId();
-    }
-
-    bool IsServerlessDomain(TSubDomainInfo::TPtr domainInfo) const {
-        const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
-        return !IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != ParentDomainId;
-    }
-
-    bool IsServerlessDomain(const TPath& domain) const {
-        return IsServerlessDomain(domain.DomainInfo());
-    }
+//     TPathId RootPathId() const {
+//         return MakeLocalId(TPathElement::RootPathId);
+//     }
+//
+//     bool IsRootPathId(const TPathId& pId) const {
+//         return pId == RootPathId();
+//     }
+//
+//     bool IsServerlessDomain(TSubDomainInfo::TPtr domainInfo) const {
+//         const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
+//         return !IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != ParentDomainId;
+//     }
+//
+//     bool IsServerlessDomain(const TPath& domain) const {
+//         return IsServerlessDomain(domain.DomainInfo());
+//     }
 
     bool IsServerlessDomainGlobal(TPathId domainPathId, TSubDomainInfo::TConstPtr domainInfo) const {
         const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
         return IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != domainPathId;
     }
 
-    TPathId MakeLocalId(const TLocalPathId& localPathId) const {
-        return TPathId(TabletID(), localPathId);
-    }
+//     TPathId MakeLocalId(const TLocalPathId& localPathId) const {
+//         return TPathId(TabletID(), localPathId);
+//     }
+//
+//     TShardIdx MakeLocalId(const TLocalShardIdx& localShardIdx) const {
+//         return TShardIdx(TabletID(), localShardIdx);
+//     }
 
-    TShardIdx MakeLocalId(const TLocalShardIdx& localShardIdx) const {
-        return TShardIdx(TabletID(), localShardIdx);
-    }
+    // bool IsLocalId(const TPathId& pathId) const {
+    //     return pathId.OwnerId == TabletID();
+    // }
 
-    bool IsLocalId(const TPathId& pathId) const {
-        return pathId.OwnerId == TabletID();
-    }
+    // bool IsLocalId(const TShardIdx& shardIdx) const {
+    //     return shardIdx.GetOwnerId() == TabletID();
+    // }
 
-    bool IsLocalId(const TShardIdx& shardIdx) const {
-        return shardIdx.GetOwnerId() == TabletID();
-    }
-
-    TPathId GetCurrentSubDomainPathId() const {
-        return RootPathId();
-    }
-
-    TPathId PeekNextPathId() const {
-        return MakeLocalId(NextLocalPathId);
-    }
-
-    TPathId AllocatePathId() {
-       TPathId next = PeekNextPathId();
-       ++NextLocalPathId;
-       return next;
-    }
+    // TPathId GetCurrentSubDomainPathId() const {
+    //     return RootPathId();
+    // }
+//
+//     TPathId PeekNextPathId() const {
+//         return MakeLocalId(NextLocalPathId);
+//     }
+//
+//     TPathId AllocatePathId() {
+//        TPathId next = PeekNextPathId();
+//        ++NextLocalPathId;
+//        return next;
+//     }
 
     TTxId GetCachedTxId(const TActorContext& ctx);
 
@@ -456,7 +448,7 @@ public:
     // Transient sequence number that monotonically increases within SS tablet generation. It is included in events
     // sent from SS to DS and is used for deduplication.
     ui64 SchemeOpRound = 1;
-    TMessageSeqNo StartRound(TTxState& state);// For SS -> DS propose events
+    // TMessageSeqNo StartRound(TTxState& state);// For SS -> DS propose events
     TMessageSeqNo NextRound();
 
     void Clear();
@@ -508,57 +500,57 @@ public:
                             THashMap<TString, TVector<ui32>>& reverseBinding,
                             TStorageRoom& room,
                             TString& errorMsg);
-    bool GetBindingsRooms(const TPathId domainId,
-                          const NKikimrSchemeOp::TPartitionConfig& partitionConfig,
-                          TVector<TStorageRoom>& rooms,
-                          THashMap<ui32, ui32>& familyRooms,
-                          TChannelsBindings& binding,
-                          TString& errStr);
-
-    /**
-     * For each existing partition generates possible changes to channels
-     * cand per-shard partition config based on an updated partitionConfig
-     * for a table in the given domain.
-     */
-    bool GetBindingsRoomsChanges(
-            const TPathId domainId,
-            const TVector<TTableShardInfo>& partitions,
-            const NKikimrSchemeOp::TPartitionConfig& partitionConfig,
-            TBindingsRoomsChanges& changes,
-            TString& errStr);
+//     bool GetBindingsRooms(const TPathId domainId,
+//                           const NKikimrSchemeOp::TPartitionConfig& partitionConfig,
+//                           TVector<TStorageRoom>& rooms,
+//                           THashMap<ui32, ui32>& familyRooms,
+//                           TChannelsBindings& binding,
+//                           TString& errStr);
+//
+//     /**
+//      * For each existing partition generates possible changes to channels
+//      * cand per-shard partition config based on an updated partitionConfig
+//      * for a table in the given domain.
+//      */
+//     bool GetBindingsRoomsChanges(
+//             const TPathId domainId,
+//             const TVector<TTableShardInfo>& partitions,
+//             const NKikimrSchemeOp::TPartitionConfig& partitionConfig,
+//             TBindingsRoomsChanges& changes,
+//             TString& errStr);
 
     /**
      * Generates channels bindings for column shards based on the given storage config
      */
-    bool GetOlapChannelsBindings(const TPathId domainId,
-                                 const NKikimrSchemeOp::TColumnStorageConfig& channelsConfig,
-                                 TChannelsBindings& channelsBindings,
-                                 TString& errStr);
+    // bool GetOlapChannelsBindings(const TPathId domainId,
+    //                              const NKikimrSchemeOp::TColumnStorageConfig& channelsConfig,
+    //                              TChannelsBindings& channelsBindings,
+    //                              TString& errStr);
 
-    bool IsStorageConfigLogic(const TTableInfo::TCPtr tableInfo) const;
-    bool IsCompatibleChannelProfileLogic(const TPathId domainId, const TTableInfo::TCPtr tableInfo) const;
-    bool GetChannelsBindings(const TPathId domainId, const TTableInfo::TCPtr tableInfo, TChannelsBindings& binding, TString& errStr)   const;
+    // bool IsStorageConfigLogic(const TTableInfo::TCPtr tableInfo) const;
+    // bool IsCompatibleChannelProfileLogic(const TPathId domainId, const TTableInfo::TCPtr tableInfo) const;
+    // bool GetChannelsBindings(const TPathId domainId, const TTableInfo::TCPtr tableInfo, TChannelsBindings& binding, TString& errStr)   const;
 
-    bool ResolveTabletChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
-    bool ResolveRtmrChannels(const TPathId domainId, TChannelsBindings& channelsBinding) const;
-    bool ResolveSolomonChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
-    bool ResolveSolomonChannels(const NKikimrSchemeOp::TKeyValueStorageConfig &config, const TPathId domainId, TChannelsBindings& channelsBinding) const;
-    bool ResolvePqChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
-    bool ResolveChannelsByPoolKinds(
-        const TVector<TStringBuf>& channelPoolKinds,
-        const TPathId domainId,
-        TChannelsBindings& channelsBinding) const;
-    static void SetNbsChannelsParams(
-        const google::protobuf::RepeatedPtrField<NKikimrBlockStore::TChannelProfile>& ecps,
-        TChannelsBindings& channelsBinding);
-    static void SetNfsChannelsParams(
-        const google::protobuf::RepeatedPtrField<NKikimrFileStore::TChannelProfile>& ecps,
-        TChannelsBindings& channelsBinding);
-    static void SetPqChannelsParams(
-        const google::protobuf::RepeatedPtrField<NKikimrPQ::TChannelProfile>& ecps,
-        TChannelsBindings& channelsBinding);
+    // bool ResolveTabletChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
+    // bool ResolveRtmrChannels(const TPathId domainId, TChannelsBindings& channelsBinding) const;
+    // bool ResolveSolomonChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
+    // bool ResolveSolomonChannels(const NKikimrSchemeOp::TKeyValueStorageConfig &config, const TPathId domainId, TChannelsBindings& channelsBinding) const;
+    // bool ResolvePqChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
+    // bool ResolveChannelsByPoolKinds(
+    //     const TVector<TStringBuf>& channelPoolKinds,
+    //     const TPathId domainId,
+    //     TChannelsBindings& channelsBinding) const;
+    // static void SetNbsChannelsParams(
+    //     const google::protobuf::RepeatedPtrField<NKikimrBlockStore::TChannelProfile>& ecps,
+    //     TChannelsBindings& channelsBinding);
+    // static void SetNfsChannelsParams(
+    //     const google::protobuf::RepeatedPtrField<NKikimrFileStore::TChannelProfile>& ecps,
+    //     TChannelsBindings& channelsBinding);
+    // static void SetPqChannelsParams(
+    //     const google::protobuf::RepeatedPtrField<NKikimrPQ::TChannelProfile>& ecps,
+    //     TChannelsBindings& channelsBinding);
 
-    bool ResolveSubdomainsChannels(const TStoragePools& storagePools, TChannelsBindings& channelsBinding);
+    // bool ResolveSubdomainsChannels(const TStoragePools& storagePools, TChannelsBindings& channelsBinding);
 
     using TChannelResolveDetails = std::function<bool (ui32 profileId,
                                                       const TChannelProfiles::TProfile& profile,
@@ -568,294 +560,297 @@ public:
     static bool ResolveChannelsDetailsAsIs(ui32 /*profileId*/, const TChannelProfiles::TProfile& profile, const TStoragePools& storagePools, TChannelsBindings& channelsBinding);
     static bool TabletResolveChannelsDetails(ui32 profileId, const TChannelProfiles::TProfile& profile, const TStoragePools& storagePools, TChannelsBindings& channelsBinding);
 
-    void ClearDescribePathCaches(const TPathElement::TPtr node, bool force = false);
+    // void ClearDescribePathCaches(const TPathElement::TPtr node, bool force = false);
     TString PathToString(TPathElement::TPtr item);
-    NKikimrSchemeOp::TPathVersion  GetPathVersion(const TPath& pathEl) const;
-    ui64 GetAliveChildren(TPathElement::TPtr pathEl, const std::optional<TPathElement::EPathType>& type = std::nullopt) const;
+    // NKikimrSchemeOp::TPathVersion  GetPathVersion(const TPath& pathEl) const;
+    // ui64 GetAliveChildren(TPathElement::TPtr pathEl, const std::optional<TPathElement::EPathType>& type = std::nullopt) const;
 
     const TTableInfo* GetMainTableForIndex(TPathId indexTableId) const;
-    bool IsBackupTable(TPathId pathId) const;
+    // bool IsBackupTable(TPathId pathId) const;
 
-    TPathId ResolvePathIdForDomain(TPathId pathId) const;
-    TPathId ResolvePathIdForDomain(TPathElement::TPtr pathEl) const;
-    TSubDomainInfo::TPtr ResolveDomainInfo(TPathId pathId) const;
-    TSubDomainInfo::TPtr ResolveDomainInfo(TPathElement::TPtr pathEl) const;
+    // TPathId ResolvePathIdForDomain(TPathId pathId) const;
+    // TPathId ResolvePathIdForDomain(TPathElement::TPtr pathEl) const;
+    // TSubDomainInfo::TPtr ResolveDomainInfo(TPathId pathId) const;
+    // TSubDomainInfo::TPtr ResolveDomainInfo(TPathElement::TPtr pathEl) const;
 
     TPathId GetDomainKey(TPathElement::TPtr pathEl) const;
     TPathId GetDomainKey(TPathId pathId) const;
 
-    const NKikimrSubDomains::TProcessingParams& SelectProcessingParams(TPathId id) const;
-    const NKikimrSubDomains::TProcessingParams& SelectProcessingParams(TPathElement::TPtr pathEl) const;
+    // const NKikimrSubDomains::TProcessingParams& SelectProcessingParams(TPathId id) const;
+    // const NKikimrSubDomains::TProcessingParams& SelectProcessingParams(TPathElement::TPtr pathEl) const;
 
     TTabletId SelectCoordinator(TTxId txId, TPathId pathId) const;
     TTabletId SelectCoordinator(TTxId txId, TPathElement::TPtr pathEl) const;
 
-    bool CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr);
-    bool CheckLocks(const TPathId pathId, const TTxId lockTxId, TString& errStr) const;
-    bool CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr) const;
+    // bool CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr);
+    // bool CheckLocks(const TPathId pathId, const TTxId lockTxId, TString& errStr) const;
+    // bool CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr) const;
     bool CheckInFlightLimit(TTxState::ETxType txType, TString& errStr) const;
     bool CheckInFlightLimit(NKikimrSchemeOp::EOperationType opType, TString& errStr) const;
-    bool CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKikimrScheme::EStatus& status, TString& errStr) const;
+    // bool CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKikimrScheme::EStatus& status, TString& errStr) const;
 
-    TShardIdx ReserveShardIdxs(ui64 count);
-    TShardIdx NextShardIdx(const TShardIdx& shardIdx, ui64 inc) const;
-    template <typename T>
-    TShardIdx RegisterShardInfo(T&& shardInfo) {
-        return RegisterShardInfo(ReserveShardIdxs(1), std::forward<T>(shardInfo));
-    }
+    // TShardIdx ReserveShardIdxs(ui64 count);
+    // TShardIdx NextShardIdx(const TShardIdx& shardIdx, ui64 inc) const;
+//     template <typename T>
+//     TShardIdx RegisterShardInfo(T&& shardInfo) {
+//         return RegisterShardInfo(ReserveShardIdxs(1), std::forward<T>(shardInfo));
+//     }
+//
+//     template <typename T>
+//     TShardIdx RegisterShardInfo(const TShardIdx& shardIdx, T&& shardInfo) {
+//         Y_ABORT_UNLESS(shardIdx.GetOwnerId() == TabletID());
+//         const auto localId = ui64(shardIdx.GetLocalId());
+//         Y_VERIFY_S(localId < NextLocalShardIdx, "shardIdx: " << shardIdx << " NextLocalShardIdx: " << NextLocalShardIdx);
+//         Y_VERIFY_S(!ShardInfos.contains(shardIdx), "shardIdx: " << shardIdx << " already registered");
+//         IncrementPathDbRefCount(shardInfo.PathId, "new shard created");
+//         ShardInfos.emplace(shardIdx, std::forward<T>(shardInfo));
+//         return shardIdx;
+//     }
 
-    template <typename T>
-    TShardIdx RegisterShardInfo(const TShardIdx& shardIdx, T&& shardInfo) {
-        Y_ABORT_UNLESS(shardIdx.GetOwnerId() == TabletID());
-        const auto localId = ui64(shardIdx.GetLocalId());
-        Y_VERIFY_S(localId < NextLocalShardIdx, "shardIdx: " << shardIdx << " NextLocalShardIdx: " << NextLocalShardIdx);
-        Y_VERIFY_S(!ShardInfos.contains(shardIdx), "shardIdx: " << shardIdx << " already registered");
-        IncrementPathDbRefCount(shardInfo.PathId, "new shard created");
-        ShardInfos.emplace(shardIdx, std::forward<T>(shardInfo));
-        return shardIdx;
-    }
-
-    TTxState& CreateTx(TOperationId opId, TTxState::ETxType txType, TPathId targetPath, TPathId sourcePath = InvalidPathId);
-    TTxState* FindTx(TOperationId opId);
-    TTxState* FindTxSafe(TOperationId opId, const TTxState::ETxType& txType);
+    // TTxState& CreateTx(TOperationId opId, TTxState::ETxType txType, TPathId targetPath, TPathId sourcePath = InvalidPathId);
+    // TTxState* FindTx(TOperationId opId);
+    // TTxState* FindTxSafe(TOperationId opId, const TTxState::ETxType& txType);
     void RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb& db, TOperationId opId, TTxState* txState);
     static TPathElement::EPathState CalcPathState(TTxState::ETxType txType, TPathElement::EPathState oldState);
 
-    TMaybe<NKikimrSchemeOp::TPartitionConfig> GetTablePartitionConfigWithAlterData(TPathId pathId) const;
-    void DeleteSplitOp(TOperationId txId, TTxState& txState);
-    bool ShardIsUnderSplitMergeOp(const TShardIdx& idx) const;
+    // TMaybe<NKikimrSchemeOp::TPartitionConfig> GetTablePartitionConfigWithAlterData(TPathId pathId) const;
+    // void DeleteSplitOp(TOperationId txId, TTxState& txState);
+    // bool ShardIsUnderSplitMergeOp(const TShardIdx& idx) const;
 
-    THashSet<TShardIdx> CollectAllShards(const THashSet<TPathId>& paths) const;
+    // THashSet<TShardIdx> CollectAllShards(const THashSet<TPathId>& paths) const;
     void ExamineTreeVFS(TPathId nodeId, std::function<void(TPathElement::TPtr)> func, const TActorContext& ctx);
-    THashSet<TPathId> ListSubTree(TPathId subdomain_root, const TActorContext& ctx);
-    THashSet<TTxId> GetRelatedTransactions(const THashSet<TPathId>& paths, const TActorContext &ctx);
+    // THashSet<TPathId> ListSubTree(TPathId subdomain_root, const TActorContext& ctx);
+    // THashSet<TTxId> GetRelatedTransactions(const THashSet<TPathId>& paths, const TActorContext &ctx);
 
-    void MarkAsDropping(TPathElement::TPtr node, TTxId txId, const TActorContext& ctx);
-    void MarkAsDropping(const THashSet<TPathId>& paths, TTxId txId, const TActorContext& ctx);
+    // void MarkAsDropping(TPathElement::TPtr node, TTxId txId, const TActorContext& ctx);
+    // void MarkAsDropping(const THashSet<TPathId>& paths, TTxId txId, const TActorContext& ctx);
 
     void UncountNode(TPathElement::TPtr node);
-    void MarkAsMigrated(TPathElement::TPtr node, const TActorContext& ctx);
+    // void MarkAsMigrated(TPathElement::TPtr node, const TActorContext& ctx);
 
-    void DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, NIceDb::TNiceDb& db, const TActorContext& ctx);
-    void DropPaths(const THashSet<TPathId>& paths, TStepId step, TTxId txId, NIceDb::TNiceDb& db, const TActorContext& ctx);
+    // void DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, NIceDb::TNiceDb& db, const TActorContext& ctx);
+    // void DropPaths(const THashSet<TPathId>& paths, TStepId step, TTxId txId, NIceDb::TNiceDb& db, const TActorContext& ctx);
 
     void DoShardsDeletion(const THashSet<TShardIdx>& shardIdx, const TActorContext& ctx);
 
-    void SetPartitioning(TPathId pathId, const std::vector<TShardIdx>& partitioning);
-    void SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo);
-    void SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableInfo);
-    void SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
-    void OnShardRemoved(const TShardIdx& shardIdx);
+    // void SetPartitioning(TPathId pathId, const std::vector<TShardIdx>& partitioning);
+    // void SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo);
+    // void SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableInfo);
+    // void SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
+    // void OnShardRemoved(const TShardIdx& shardIdx);
+    void SysViewUpdatePartitioning(TPathId pathId, std::vector<NSysView::TShardIdx>&& partitioning) const;
+    void SysViewUpdatePartitioning(TPathId pathId, const std::vector<TShardIdx>& partitioning) const;
+
     auto BuildStatsForCollector(TPathId tableId, TShardIdx shardIdx, TTabletId datashardId, ui32 followerId,
         TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TPartitionStats& stats, const TActorContext& ctx);
 
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, TString& value, TString defValue = TString());
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, ui64& value, ui64 defVal = 0);
 
-    void IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
-    void DecrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
+    // void IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
+    // void DecrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
 
     // incompatible changes
     void BumpIncompatibleChanges(NIceDb::TNiceDb& db, ui64 incompatibleChange);
 
-    // path
-    void PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId);
-    void PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TPtr path);
-    void PersistLastTxId(NIceDb::TNiceDb& db, const TPathElement::TPtr path);
-    void PersistPathDirAlterVersion(NIceDb::TNiceDb& db, const TPathElement::TPtr path);
-    void PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path);
-    void PersistOwner(NIceDb::TNiceDb& db, const TPathElement::TPtr path);
-    void PersistCreateTxId(NIceDb::TNiceDb& db, const TPathId pathId, TTxId txId);
-    void PersistCreateStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step);
-    void PersistDropStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step, TOperationId opId);
-
-    // user attrs
-    void ApplyAndPersistUserAttrs(NIceDb::TNiceDb& db, const TPathId& pathId);
-    void PersistUserAttributes(NIceDb::TNiceDb& db, TPathId pathId, TUserAttributes::TPtr oldAttrs, TUserAttributes::TPtr alterAttrs);
-    void PersistAlterUserAttributes(NIceDb::TNiceDb& db, TPathId pathId);
-
-    // table index
-    void PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId);
-    void PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId& pathId);
-
-    // cdc stream
-    void PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId);
-    void PersistCdcStreamAlterData(NIceDb::TNiceDb& db, const TPathId& pathId);
-    void PersistRemoveCdcStream(NIceDb::TNiceDb& db, const TPathId& tableId);
-
-    static void PersistTxMinStep(NIceDb::TNiceDb& db, const TOperationId opId, TStepId minStep);
-    void PersistRemoveTx(NIceDb::TNiceDb& db, const TOperationId opId, const TTxState& txState);
-    void PersistTable(NIceDb::TNiceDb &db, const TPathId pathId);
-    void PersistChannelsBinding(NIceDb::TNiceDb& db, const TShardIdx shardId, const TChannelsBindings& bindedChannels);
-    void PersistTablePartitioning(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
-    void PersistTablePartitioningDeletion(NIceDb::TNiceDb& db, const TPathId tableId, const TTableInfo::TPtr tableInfo);
-    void PersistTablePartitionCondErase(NIceDb::TNiceDb& db, const TPathId& pathId, ui64 id, const TTableInfo::TPtr tableInfo);
-    void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, ui64 partitionId, const TPartitionStats& stats);
-    void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TShardIdx& shardIdx, const TTableInfo::TPtr tableInfo);
-    void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TTableInfo::TPtr tableInfo);
-    void PersistTableCreated(NIceDb::TNiceDb& db, const TPathId tableId);
-    void PersistTableAlterVersion(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
-    void PersistTableFinishColumnBuilding(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 colId);
-    void PersistTableAltered(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
-    void PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, const TTableInfo::TAlterDataPtr alter);
-    void PersistPersQueueGroup(NIceDb::TNiceDb &db, TPathId pathId, const TTopicInfo::TPtr);
-    void PersistPersQueueGroupStats(NIceDb::TNiceDb &db, const TPathId pathId, const TTopicStats& stats);
-    void PersistRemovePersQueueGroup(NIceDb::TNiceDb &db, TPathId pathId);
-    void PersistAddPersQueueGroupAlter(NIceDb::TNiceDb &db, TPathId pathId, const TTopicInfo::TPtr);
-    void PersistRemovePersQueueGroupAlter(NIceDb::TNiceDb &db, TPathId pathId);
-    void PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardIdx shardIdx, const TTopicTabletInfo::TTopicPartitionInfo& partitionInfo);
-    void PersistRemovePersQueue(NIceDb::TNiceDb &db, TPathId pathId, ui32 pqId);
-    void PersistRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId, const TRtmrVolumeInfo::TPtr rtmrVol);
-    void PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId);
-    void PersistSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId, const TSolomonVolumeInfo::TPtr rtmrVol);
-    void PersistRemoveSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId);
-    void PersistAlterSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId, const TSolomonVolumeInfo::TPtr rtmrVol);
-    static void PersistAddTxDependency(NIceDb::TNiceDb& db, const TTxId parentOpId, TTxId txId);
-    static void PersistRemoveTxDependency(NIceDb::TNiceDb& db, TTxId opId, TTxId dependentOpId);
-    void PersistUpdateTxShard(NIceDb::TNiceDb& db, TOperationId txId, TShardIdx shardIdx, ui32 operation);
-    void PersistRemoveTxShard(NIceDb::TNiceDb& db, TOperationId txId, TShardIdx shardIdx);
-    void PersistShardMapping(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTabletId tabletId, TPathId pathId, TTxId txId, TTabletTypes::EType type);
-    void PersistAdoptedShardMapping(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTabletId tabletId, ui64 prevOwner, TLocalShardIdx prevShardIdx);
-    void PersistShardPathId(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId);
-    void PersistDeleteAdopted(NIceDb::TNiceDb& db, TShardIdx shardIdx);
-
-    void PersistSnapshotTable(NIceDb::TNiceDb& db, const TTxId snapshotId, const TPathId tableId);
-    void PersistSnapshotStepId(NIceDb::TNiceDb& db, const TTxId snapshotId, const TStepId stepId);
-    void PersistDropSnapshot(NIceDb::TNiceDb& db, const TTxId snapshotId, const TPathId tableId);
-    void PersistLongLock(NIceDb::TNiceDb& db, const TTxId lockId, const TPathId pathId);
-    void PersistUnLock(NIceDb::TNiceDb& db, const TPathId pathId);
-
-    void PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId);
-    void ChangeTxState(NIceDb::TNiceDb& db, const TOperationId opId, TTxState::ETxState newState);
-    void PersistCancelTx(NIceDb::TNiceDb& db, const TOperationId opId, const TTxState& txState);
-    void PersistTxPlanStep(NIceDb::TNiceDb& db, TOperationId opId, TStepId step);
-
-
-    void PersistShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTxId txId);
-    void PersistUpdateNextPathId(NIceDb::TNiceDb& db) const;
-    void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
-    void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
-    void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;
-    void PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);
-    void PersistShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx, const TChannelsBindings& bindedChannels);
-    void PersistUnknownShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx);
-    void PersistTxShardStatus(NIceDb::TNiceDb& db, TOperationId opId, TShardIdx shardIdx, const TTxState::TShardStatus& status);
-    void PersistBackupSettings(NIceDb::TNiceDb& db, TPathId pathId, const NKikimrSchemeOp::TBackupTask& settings);
-    void PersistBackupDone(NIceDb::TNiceDb& db, TPathId pathId);
-    void PersistCompletedBackupRestore(NIceDb::TNiceDb& db, TTxId txId, const TTxState& txState, const TTableInfo::TBackupRestoreResult& info, TTableInfo::TBackupRestoreResult::EKind kind);
-    void PersistCompletedBackup(NIceDb::TNiceDb& db, TTxId txId, const TTxState& txState, const TTableInfo::TBackupRestoreResult& backupInfo);
-    void PersistCompletedRestore(NIceDb::TNiceDb& db, TTxId txId, const TTxState& txState, const TTableInfo::TBackupRestoreResult& restoreInfo);
-    void PersistSchemeLimit(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistStoragePools(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId);
-    void PersistSubDomainVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomainDeclaredSchemeQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomainDatabaseQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomainState(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomainSecurityStateVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomainPrivateShards(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistDeleteSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomainAuditSettings(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomainAuditSettingsAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomainServerlessComputeResourcesMode(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomainServerlessComputeResourcesModeAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistKesusInfo(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
-    void PersistKesusVersion(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
-    void PersistAddKesusAlter(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
-    void PersistRemoveKesusAlter(NIceDb::TNiceDb& db, TPathId pathId);
-    void PersistRemoveKesusInfo(NIceDb::TNiceDb& db, TPathId pathId);
-    void PersistRemoveTableIndex(NIceDb::TNiceDb& db, TPathId tableId);
-    void PersistRemoveTable(NIceDb::TNiceDb& db, TPathId tableId, const TActorContext& ctx);
-    void PersistRevertedMigration(NIceDb::TNiceDb& db, TPathId pathId, TTabletId abandonedSchemeShardId);
-
-    // BlockStore
-    void PersistBlockStorePartition(NIceDb::TNiceDb& db, TPathId pathId, ui32 partitionId, TShardIdx shardIdx, ui64 version);
-    void PersistBlockStoreVolume(NIceDb::TNiceDb& db, TPathId pathId, const TBlockStoreVolumeInfo::TPtr);
-    void PersistBlockStoreVolumeMountToken(NIceDb::TNiceDb& db, TPathId pathId, const TBlockStoreVolumeInfo::TPtr volume);
-    void PersistAddBlockStoreVolumeAlter(NIceDb::TNiceDb& db, TPathId pathId, const TBlockStoreVolumeInfo::TPtr);
-    void PersistRemoveBlockStoreVolumeAlter(NIceDb::TNiceDb& db, TPathId pathId);
-    void PersistRemoveBlockStorePartition(NIceDb::TNiceDb& db, TPathId pathId, ui32 partitionId);
-    void PersistRemoveBlockStoreVolume(NIceDb::TNiceDb& db, TPathId pathId);
-
-    // FileStore
-    void PersistFileStoreInfo(NIceDb::TNiceDb& db, TPathId pathId, const TFileStoreInfo::TPtr);
-    void PersistAddFileStoreAlter(NIceDb::TNiceDb& db, TPathId pathId, const TFileStoreInfo::TPtr);
-    void PersistRemoveFileStoreAlter(NIceDb::TNiceDb& db, TPathId pathId);
-    void PersistRemoveFileStoreInfo(NIceDb::TNiceDb& db, TPathId pathId);
-
-    // OlapStore
-    void PersistOlapStore(NIceDb::TNiceDb& db, TPathId pathId, const TOlapStoreInfo& storeInfo, bool isAlter = false);
-    void PersistOlapStoreRemove(NIceDb::TNiceDb& db, TPathId pathId, bool isAlter = false);
-    void PersistOlapStoreAlter(NIceDb::TNiceDb& db, TPathId pathId, const TOlapStoreInfo& storeInfo);
-    void PersistOlapStoreAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
-
-    // ColumnTable
-    void PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo, bool isAlter = false);
-    void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId);
-    void PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo);
-    void PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
-
-    // Sequence
-    void PersistSequence(NIceDb::TNiceDb& db, TPathId pathId, const TSequenceInfo& sequenceInfo);
-    void PersistSequence(NIceDb::TNiceDb& db, TPathId pathId);
-    void PersistSequenceRemove(NIceDb::TNiceDb& db, TPathId pathId);
-    void PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId, const TSequenceInfo& sequenceInfo);
-    void PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId);
-    void PersistSequenceAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
-
-    // Replication
-    void PersistReplication(NIceDb::TNiceDb& db, TPathId pathId, const TReplicationInfo& replicationInfo);
-    void PersistReplicationRemove(NIceDb::TNiceDb& db, TPathId pathId);
-    void PersistReplicationAlter(NIceDb::TNiceDb& db, TPathId pathId, const TReplicationInfo& replicationInfo);
-    void PersistReplicationAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
-
-    // BlobDepot
-    void PersistBlobDepot(NIceDb::TNiceDb& db, TPathId pathId, const TBlobDepotInfo& blobDepotInfo);
-
-    void PersistAddTableShardPartitionConfig(NIceDb::TNiceDb& db, TShardIdx shardIdx, const NKikimrSchemeOp::TPartitionConfig& config);
-
+//     // path
+//     void PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId);
+//     void PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TPtr path);
+//     void PersistLastTxId(NIceDb::TNiceDb& db, const TPathElement::TPtr path);
+//     void PersistPathDirAlterVersion(NIceDb::TNiceDb& db, const TPathElement::TPtr path);
+//     void PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path);
+//     void PersistOwner(NIceDb::TNiceDb& db, const TPathElement::TPtr path);
+//     void PersistCreateTxId(NIceDb::TNiceDb& db, const TPathId pathId, TTxId txId);
+//     void PersistCreateStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step);
+//     void PersistDropStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step, TOperationId opId);
+//
+//     // user attrs
+//     void ApplyAndPersistUserAttrs(NIceDb::TNiceDb& db, const TPathId& pathId);
+//     void PersistUserAttributes(NIceDb::TNiceDb& db, TPathId pathId, TUserAttributes::TPtr oldAttrs, TUserAttributes::TPtr alterAttrs);
+//     void PersistAlterUserAttributes(NIceDb::TNiceDb& db, TPathId pathId);
+//
+//     // table index
+//     void PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId);
+//     void PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId& pathId);
+//
+//     // cdc stream
+//     void PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId);
+//     void PersistCdcStreamAlterData(NIceDb::TNiceDb& db, const TPathId& pathId);
+//     void PersistRemoveCdcStream(NIceDb::TNiceDb& db, const TPathId& tableId);
+//
+//     static void PersistTxMinStep(NIceDb::TNiceDb& db, const TOperationId opId, TStepId minStep);
+//     void PersistRemoveTx(NIceDb::TNiceDb& db, const TOperationId opId, const TTxState& txState);
+//     void PersistTable(NIceDb::TNiceDb &db, const TPathId pathId);
+//     void PersistChannelsBinding(NIceDb::TNiceDb& db, const TShardIdx shardId, const TChannelsBindings& bindedChannels);
+//     void PersistTablePartitioning(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
+//     void PersistTablePartitioningDeletion(NIceDb::TNiceDb& db, const TPathId tableId, const TTableInfo::TPtr tableInfo);
+//     void PersistTablePartitionCondErase(NIceDb::TNiceDb& db, const TPathId& pathId, ui64 id, const TTableInfo::TPtr tableInfo);
+//     void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, ui64 partitionId, const TPartitionStats& stats);
+//     void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TShardIdx& shardIdx, const TTableInfo::TPtr tableInfo);
+//     void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TTableInfo::TPtr tableInfo);
+//     void PersistTableCreated(NIceDb::TNiceDb& db, const TPathId tableId);
+//     void PersistTableAlterVersion(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
+//     void PersistTableFinishColumnBuilding(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 colId);
+//     void PersistTableAltered(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
+//     void PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, const TTableInfo::TAlterDataPtr alter);
+//     void PersistPersQueueGroup(NIceDb::TNiceDb &db, TPathId pathId, const TTopicInfo::TPtr);
+//     void PersistPersQueueGroupStats(NIceDb::TNiceDb &db, const TPathId pathId, const TTopicStats& stats);
+//     void PersistRemovePersQueueGroup(NIceDb::TNiceDb &db, TPathId pathId);
+//     void PersistAddPersQueueGroupAlter(NIceDb::TNiceDb &db, TPathId pathId, const TTopicInfo::TPtr);
+//     void PersistRemovePersQueueGroupAlter(NIceDb::TNiceDb &db, TPathId pathId);
+//     void PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardIdx shardIdx, const TTopicTabletInfo::TTopicPartitionInfo& partitionInfo);
+//     void PersistRemovePersQueue(NIceDb::TNiceDb &db, TPathId pathId, ui32 pqId);
+//     void PersistRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId, const TRtmrVolumeInfo::TPtr rtmrVol);
+//     void PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId);
+//     void PersistSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId, const TSolomonVolumeInfo::TPtr rtmrVol);
+//     void PersistRemoveSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId);
+//     void PersistAlterSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId, const TSolomonVolumeInfo::TPtr rtmrVol);
+//     static void PersistAddTxDependency(NIceDb::TNiceDb& db, const TTxId parentOpId, TTxId txId);
+//     static void PersistRemoveTxDependency(NIceDb::TNiceDb& db, TTxId opId, TTxId dependentOpId);
+//     void PersistUpdateTxShard(NIceDb::TNiceDb& db, TOperationId txId, TShardIdx shardIdx, ui32 operation);
+//     void PersistRemoveTxShard(NIceDb::TNiceDb& db, TOperationId txId, TShardIdx shardIdx);
+//     void PersistShardMapping(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTabletId tabletId, TPathId pathId, TTxId txId, TTabletTypes::EType type);
+//     void PersistAdoptedShardMapping(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTabletId tabletId, ui64 prevOwner, TLocalShardIdx prevShardIdx);
+//     void PersistShardPathId(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId);
+//     void PersistDeleteAdopted(NIceDb::TNiceDb& db, TShardIdx shardIdx);
+//
+//     void PersistSnapshotTable(NIceDb::TNiceDb& db, const TTxId snapshotId, const TPathId tableId);
+//     void PersistSnapshotStepId(NIceDb::TNiceDb& db, const TTxId snapshotId, const TStepId stepId);
+//     void PersistDropSnapshot(NIceDb::TNiceDb& db, const TTxId snapshotId, const TPathId tableId);
+//     void PersistLongLock(NIceDb::TNiceDb& db, const TTxId lockId, const TPathId pathId);
+//     void PersistUnLock(NIceDb::TNiceDb& db, const TPathId pathId);
+//
+//     void PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId);
+//     void ChangeTxState(NIceDb::TNiceDb& db, const TOperationId opId, TTxState::ETxState newState);
+//     void PersistCancelTx(NIceDb::TNiceDb& db, const TOperationId opId, const TTxState& txState);
+//     void PersistTxPlanStep(NIceDb::TNiceDb& db, TOperationId opId, TStepId step);
+//
+//
+//     void PersistShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTxId txId);
+//     void PersistUpdateNextPathId(NIceDb::TNiceDb& db) const;
+//     void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
+//     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
+//     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;
+//     void PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);
+//     void PersistShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx, const TChannelsBindings& bindedChannels);
+//     void PersistUnknownShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx);
+//     void PersistTxShardStatus(NIceDb::TNiceDb& db, TOperationId opId, TShardIdx shardIdx, const TTxState::TShardStatus& status);
+//     void PersistBackupSettings(NIceDb::TNiceDb& db, TPathId pathId, const NKikimrSchemeOp::TBackupTask& settings);
+//     void PersistBackupDone(NIceDb::TNiceDb& db, TPathId pathId);
+//     void PersistCompletedBackupRestore(NIceDb::TNiceDb& db, TTxId txId, const TTxState& txState, const TTableInfo::TBackupRestoreResult& info, TTableInfo::TBackupRestoreResult::EKind kind);
+//     void PersistCompletedBackup(NIceDb::TNiceDb& db, TTxId txId, const TTxState& txState, const TTableInfo::TBackupRestoreResult& backupInfo);
+//     void PersistCompletedRestore(NIceDb::TNiceDb& db, TTxId txId, const TTxState& txState, const TTableInfo::TBackupRestoreResult& restoreInfo);
+//     void PersistSchemeLimit(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistStoragePools(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId);
+//     void PersistSubDomainVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistSubDomainDeclaredSchemeQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistSubDomainDatabaseQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistSubDomainState(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistSubDomainSecurityStateVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistSubDomainPrivateShards(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistDeleteSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistSubDomainAuditSettings(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistSubDomainAuditSettingsAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistSubDomainServerlessComputeResourcesMode(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistSubDomainServerlessComputeResourcesModeAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+//     void PersistKesusInfo(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
+//     void PersistKesusVersion(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
+//     void PersistAddKesusAlter(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
+//     void PersistRemoveKesusAlter(NIceDb::TNiceDb& db, TPathId pathId);
+//     void PersistRemoveKesusInfo(NIceDb::TNiceDb& db, TPathId pathId);
+//     void PersistRemoveTableIndex(NIceDb::TNiceDb& db, TPathId tableId);
+//     void PersistRemoveTable(NIceDb::TNiceDb& db, TPathId tableId, const TActorContext& ctx);
+//     void PersistRevertedMigration(NIceDb::TNiceDb& db, TPathId pathId, TTabletId abandonedSchemeShardId);
+//
+//     // BlockStore
+//     void PersistBlockStorePartition(NIceDb::TNiceDb& db, TPathId pathId, ui32 partitionId, TShardIdx shardIdx, ui64 version);
+//     void PersistBlockStoreVolume(NIceDb::TNiceDb& db, TPathId pathId, const TBlockStoreVolumeInfo::TPtr);
+//     void PersistBlockStoreVolumeMountToken(NIceDb::TNiceDb& db, TPathId pathId, const TBlockStoreVolumeInfo::TPtr volume);
+//     void PersistAddBlockStoreVolumeAlter(NIceDb::TNiceDb& db, TPathId pathId, const TBlockStoreVolumeInfo::TPtr);
+//     void PersistRemoveBlockStoreVolumeAlter(NIceDb::TNiceDb& db, TPathId pathId);
+//     void PersistRemoveBlockStorePartition(NIceDb::TNiceDb& db, TPathId pathId, ui32 partitionId);
+//     void PersistRemoveBlockStoreVolume(NIceDb::TNiceDb& db, TPathId pathId);
+//
+//     // FileStore
+//     void PersistFileStoreInfo(NIceDb::TNiceDb& db, TPathId pathId, const TFileStoreInfo::TPtr);
+//     void PersistAddFileStoreAlter(NIceDb::TNiceDb& db, TPathId pathId, const TFileStoreInfo::TPtr);
+//     void PersistRemoveFileStoreAlter(NIceDb::TNiceDb& db, TPathId pathId);
+//     void PersistRemoveFileStoreInfo(NIceDb::TNiceDb& db, TPathId pathId);
+//
+//     // OlapStore
+//     void PersistOlapStore(NIceDb::TNiceDb& db, TPathId pathId, const TOlapStoreInfo& storeInfo, bool isAlter = false);
+//     void PersistOlapStoreRemove(NIceDb::TNiceDb& db, TPathId pathId, bool isAlter = false);
+//     void PersistOlapStoreAlter(NIceDb::TNiceDb& db, TPathId pathId, const TOlapStoreInfo& storeInfo);
+//     void PersistOlapStoreAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
+//
+//     // ColumnTable
+//     void PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo, bool isAlter = false);
+//     void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId);
+//     void PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo);
+//     void PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
+//
+//     // Sequence
+//     void PersistSequence(NIceDb::TNiceDb& db, TPathId pathId, const TSequenceInfo& sequenceInfo);
+    // void PersistSequence(NIceDb::TNiceDb& db, TPathId pathId);
+//     void PersistSequenceRemove(NIceDb::TNiceDb& db, TPathId pathId);
+//     void PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId, const TSequenceInfo& sequenceInfo);
+    // void PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId);
+//     void PersistSequenceAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
+//
+//     // Replication
+//     void PersistReplication(NIceDb::TNiceDb& db, TPathId pathId, const TReplicationInfo& replicationInfo);
+//     void PersistReplicationRemove(NIceDb::TNiceDb& db, TPathId pathId);
+//     void PersistReplicationAlter(NIceDb::TNiceDb& db, TPathId pathId, const TReplicationInfo& replicationInfo);
+//     void PersistReplicationAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
+//
+//     // BlobDepot
+//     void PersistBlobDepot(NIceDb::TNiceDb& db, TPathId pathId, const TBlobDepotInfo& blobDepotInfo);
+//
+//     void PersistAddTableShardPartitionConfig(NIceDb::TNiceDb& db, TShardIdx shardIdx, const NKikimrSchemeOp::TPartitionConfig& config);
+//
     void PersistPublishingPath(NIceDb::TNiceDb& db, TTxId txId, TPathId pathId, ui64 version);
     void PersistRemovePublishingPath(NIceDb::TNiceDb& db, TTxId txId, TPathId pathId, ui64 version);
-
-
+//
+//
     void PersistInitState(NIceDb::TNiceDb& db);
-
+//
     void PersistStorageBillingTime(NIceDb::TNiceDb& db);
+//
+//     // ExternalTable
+//     void PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr externalTable);
+//     void PersistRemoveExternalTable(NIceDb::TNiceDb& db, TPathId pathId);
+//
+//     // ExternalDataSource
+//     void PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId, const TExternalDataSourceInfo::TPtr externalDataSource);
+//     void PersistRemoveExternalDataSource(NIceDb::TNiceDb& db, TPathId pathId);
+//
+//     void PersistView(NIceDb::TNiceDb &db, TPathId pathId);
+//     void PersistRemoveView(NIceDb::TNiceDb& db, TPathId pathId);
+//
+//     // ResourcePool
+//     void PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId, const TResourcePoolInfo::TPtr resourcePool);
+//     void PersistRemoveResourcePool(NIceDb::TNiceDb& db, TPathId pathId);
+//
+//     // BackupCollection
+//     void PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection);
+//     void PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId);
 
-    // ExternalTable
-    void PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr externalTable);
-    void PersistRemoveExternalTable(NIceDb::TNiceDb& db, TPathId pathId);
+    // TTabletId GetGlobalHive(const TActorContext& ctx) const;
 
-    // ExternalDataSource
-    void PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId, const TExternalDataSourceInfo::TPtr externalDataSource);
-    void PersistRemoveExternalDataSource(NIceDb::TNiceDb& db, TPathId pathId);
-
-    void PersistView(NIceDb::TNiceDb &db, TPathId pathId);
-    void PersistRemoveView(NIceDb::TNiceDb& db, TPathId pathId);
-
-    // ResourcePool
-    void PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId, const TResourcePoolInfo::TPtr resourcePool);
-    void PersistRemoveResourcePool(NIceDb::TNiceDb& db, TPathId pathId);
-
-    // BackupCollection
-    void PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection);
-    void PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId);
-
-    TTabletId GetGlobalHive(const TActorContext& ctx) const;
-
-    enum class EHiveSelection : uint8_t {
-        ANY,
-        IGNORE_TENANT,
-    };
-
-    TTabletId ResolveHive(TPathId pathId, const TActorContext& ctx, EHiveSelection selection) const;
-    TTabletId ResolveHive(TPathId pathId, const TActorContext& ctx) const;
-    TTabletId ResolveHive(TShardIdx shardIdx, const TActorContext& ctx) const;
-    TShardIdx GetShardIdx(TTabletId tabletId) const;
-    TShardIdx MustGetShardIdx(TTabletId tabletId) const;
+//     enum class EHiveSelection : uint8_t {
+//         ANY,
+//         IGNORE_TENANT,
+//     };
+//
+//     TTabletId ResolveHive(TPathId pathId, const TActorContext& ctx, EHiveSelection selection) const;
+//     TTabletId ResolveHive(TPathId pathId, const TActorContext& ctx) const;
+//     TTabletId ResolveHive(TShardIdx shardIdx, const TActorContext& ctx) const;
+    // TShardIdx GetShardIdx(TTabletId tabletId) const;
+    // TShardIdx MustGetShardIdx(TTabletId tabletId) const;
     TTabletTypes::EType GetTabletType(TTabletId tabletId) const;
 
     struct TTxMonitoring;
@@ -1019,43 +1014,40 @@ public:
     void PublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths, const TActorContext& ctx);
     void PublishToSchemeBoard(TTxId txId, TDeque<TPathId>&& paths, const TActorContext& ctx);
 
-    void ApplyPartitionConfigStoragePatch(
-        NKikimrSchemeOp::TPartitionConfig& config,
-        const NKikimrSchemeOp::TPartitionConfig& patch) const;
-    void FillTableDescriptionForShardIdx(
-        TPathId tableId, TShardIdx shardIdx, NKikimrSchemeOp::TTableDescription* tableDescr,
-        TString rangeBegin, TString rangeEnd,
-        bool rangeBeginInclusive, bool rangeEndInclusive,
-        bool newTable = false);
-    void FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64 schemaVersion, NKikimrSchemeOp::TTableDescription* tableDescr);
-    static bool FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 keySize, NScheme::TTypeInfo firstKeyColType,
-                                        ui32 partitionCount, const NScheme::TTypeRegistry* typeRegistry, TString& errStr);
-    static bool FillSplitPartitioning(TVector<TString>& rangeEnds, const TConstArrayRef<NScheme::TTypeInfo>& keyColTypes,
-                                      const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries,
-                                      TString& errStr);
+//     void FillTableDescriptionForShardIdx(
+//         TPathId tableId, TShardIdx shardIdx, NKikimrSchemeOp::TTableDescription* tableDescr,
+//         TString rangeBegin, TString rangeEnd,
+//         bool rangeBeginInclusive, bool rangeEndInclusive,
+//         bool newTable = false);
+//     void FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64 schemaVersion, NKikimrSchemeOp::TTableDescription* tableDescr);
+//     static bool FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 keySize, NScheme::TTypeInfo firstKeyColType,
+//                                         ui32 partitionCount, const NScheme::TTypeRegistry* typeRegistry, TString& errStr);
+//     static bool FillSplitPartitioning(TVector<TString>& rangeEnds, const TConstArrayRef<NScheme::TTypeInfo>& keyColTypes,
+//                                       const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries,
+//                                       TString& errStr);
+//
+//     TString FillAlterTableTxBody(TPathId tableId, TShardIdx shardIdx, TMessageSeqNo seqNo) const;
+//     TString FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, ui32 shardNum, TMessageSeqNo seqNo) const;
+//
+//     // static void FillSeqNo(NKikimrTxDataShard::TFlatSchemeTransaction &tx, TMessageSeqNo seqNo);
+//     // static void FillSeqNo(NKikimrTxColumnShard::TSchemaTxBody &tx, TMessageSeqNo seqNo);
+//
+//     void FillAsyncIndexInfo(const TPathId& tableId, NKikimrTxDataShard::TFlatSchemeTransaction& tx);
 
-    TString FillAlterTableTxBody(TPathId tableId, TShardIdx shardIdx, TMessageSeqNo seqNo) const;
-    TString FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, ui32 shardNum, TMessageSeqNo seqNo) const;
-
-    static void FillSeqNo(NKikimrTxDataShard::TFlatSchemeTransaction &tx, TMessageSeqNo seqNo);
-    static void FillSeqNo(NKikimrTxColumnShard::TSchemaTxBody &tx, TMessageSeqNo seqNo);
-
-    void FillAsyncIndexInfo(const TPathId& tableId, NKikimrTxDataShard::TFlatSchemeTransaction& tx);
-
-    void DescribeTable(const TTableInfo& tableInfo, const NScheme::TTypeRegistry* typeRegistry,
-                       bool fillConfig, NKikimrSchemeOp::TTableDescription* entry) const;
+    // void DescribeTable(const TTableInfo& tableInfo, const NScheme::TTypeRegistry* typeRegistry,
+    //                    bool fillConfig, NKikimrSchemeOp::TTableDescription* entry) const;
     void DescribeTableIndex(const TPathId& pathId, const TString& name,
         bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry
     ) const;
-    void DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo,
-        bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry
-    ) const;
+    // void DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo,
+    //     bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry
+    // ) const;
     void DescribeCdcStream(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TCdcStreamDescription& desc);
-    void DescribeCdcStream(const TPathId& pathId, const TString& name, TCdcStreamInfo::TPtr info, NKikimrSchemeOp::TCdcStreamDescription& desc);
+    // void DescribeCdcStream(const TPathId& pathId, const TString& name, TCdcStreamInfo::TPtr info, NKikimrSchemeOp::TCdcStreamDescription& desc);
     void DescribeSequence(const TPathId& pathId, const TString& name,
-        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal = false);
+        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal = false) const;
     void DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info,
-        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal = false);
+        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal = false) const;
     void DescribeReplication(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TReplicationDescription& desc);
     void DescribeReplication(const TPathId& pathId, const TString& name, TReplicationInfo::TPtr info, NKikimrSchemeOp::TReplicationDescription& desc);
     void DescribeBlobDepot(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TBlobDepotDescription& desc);
@@ -1293,7 +1285,7 @@ public:
     void Handle(TEvBackup::TEvDeleteBackupCollectionRequest::TPtr& ev, const TActorContext& ctx);
     // } // NBackup
 
-    void FillTableSchemaVersion(ui64 schemaVersion, NKikimrSchemeOp::TTableDescription *tableDescr) const;
+    // void FillTableSchemaVersion(ui64 schemaVersion, NKikimrSchemeOp::TTableDescription *tableDescr) const;
 
     // namespace NIndexBuilder {
     TControlWrapper AllowDataColumnForIndexTable;
@@ -1442,6 +1434,8 @@ public:
 
 
 public:
+    // IQuotaCounters
+    //
     void ChangeStreamShardsCount(i64 delta) override;
     void ChangeStreamShardsQuota(i64 delta) override;
     void ChangeStreamReservedStorageCount(i64 delta) override;
@@ -1456,18 +1450,25 @@ public:
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
     void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) override;
 
-    NLogin::TLoginProvider LoginProvider;
+    // NLogin::TLoginProvider LoginProvider;
 
 private:
+    // IActor
+    //
+    void Die(const TActorContext &ctx) override;
+    void Registered(TActorSystem* sys, const TActorId& owner) override;
+
+    // TTabletExecutedFlat
+    //
+    void OnActivateExecutor(const TActorContext &ctx) override;
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
-    void OnActivateExecutor(const TActorContext &ctx) override;
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;
     void DefaultSignalTabletActive(const TActorContext &ctx) override;
-    void Cleanup(const TActorContext &ctx);
     void Enqueue(STFUNC_SIG) override;
-    void Die(const TActorContext &ctx) override;
 
+    // NFlatExecutorSetup::ITablet
+    //
     bool ReassignChannelsEnabled() const override {
         return true;
     }
@@ -1477,7 +1478,7 @@ private:
     static NTabletPipe::TClientConfig GetPipeClientConfig();
 
 public:
-    static const NKikimrConfig::TDomainsConfig& GetDomainsConfig();
+    // static const NKikimrConfig::TDomainsConfig& GetDomainsConfig();
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR;

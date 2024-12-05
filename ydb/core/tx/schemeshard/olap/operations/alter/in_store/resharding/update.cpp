@@ -1,7 +1,7 @@
 #include "update.h"
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/task.h>
 #include <ydb/core/tx/schemeshard/olap/bg_tasks/tx_chain/task.h>
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_iface.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {

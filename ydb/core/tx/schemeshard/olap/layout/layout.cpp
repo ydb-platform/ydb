@@ -1,10 +1,10 @@
 #include "layout.h"
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_iface.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NSchemeShard {
 
-std::vector<ui64> TColumnTablesLayout::ShardIdxToTabletId(const std::vector<TShardIdx>& shards, const TSchemeShard& ss) {
+std::vector<ui64> TColumnTablesLayout::ShardIdxToTabletId(const std::vector<TShardIdx>& shards, const TSchemeshardState& ss) {
     std::vector<ui64> result;
     for (const auto& shardIdx : shards) {
         auto* shardInfo = ss.ShardInfos.FindPtr(shardIdx);

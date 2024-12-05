@@ -1,6 +1,6 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
 
 #include "schemeshard_utils.h"  // for IsAllowedKeyType
@@ -79,11 +79,11 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
     if (op.HasUniformPartitionsCount()) {
         Y_ABORT_UNLESS(!keyColIds.empty());
         auto firstKeyColType = keyColTypeIds[0];
-        if (!TSchemeShard::FillUniformPartitioning(rangeEnds, keyColIds.size(), firstKeyColType, partitionCount, typeRegistry, errStr)) {
+        if (!NSchemeShard::FillUniformPartitioning(rangeEnds, keyColIds.size(), firstKeyColType, partitionCount, typeRegistry, errStr)) {
             return false;
         }
     } else {
-        if (!TSchemeShard::FillSplitPartitioning(rangeEnds, keyColTypeIds, op.GetSplitBoundary(), errStr)) {
+        if (!NSchemeShard::FillSplitPartitioning(rangeEnds, keyColTypeIds, op.GetSplitBoundary(), errStr)) {
             return false;
         }
     }
@@ -145,7 +145,7 @@ void ApplyPartitioning(TTxId txId,
                        TTableInfo::TPtr tableInfo,
                        TTxState& txState,
                        const TChannelsBindings& bindedChannels,
-                       TSchemeShard* ss,
+                       TSchemeshardState* ss,
                        TVector<TTableShardInfo>& partitions) {
     TShardInfo datashardInfo = TShardInfo::DataShardInfo(txId, pathId);
     datashardInfo.BindedChannels = bindedChannels;
@@ -334,7 +334,7 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply ProgressState"
+                     DebugHint() << " ProgressState"
                      << " at tablet: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -752,7 +752,7 @@ public:
                      "TCreateTable AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

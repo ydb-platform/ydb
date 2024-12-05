@@ -1,5 +1,5 @@
 #include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_subdomain.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
@@ -8,10 +8,10 @@
 #include <ydb/core/base/hive.h>
 
 
-#define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_E(stream) LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#define LOG_E(stream) LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 
 namespace NKikimr::NSchemeShard {
 
@@ -20,7 +20,7 @@ namespace {
 void AddShardsTo(TTxState& txState, TTxId txId, TPathId pathId,
     ui32 count, TTabletTypes::EType type,
     const TChannelsBindings& channelsBindings,
-    TSchemeShard* ss)
+    TSchemeshardState* ss)
 {
     txState.Shards.reserve(count);
     for (ui64 i = 0; i < count; ++i) {

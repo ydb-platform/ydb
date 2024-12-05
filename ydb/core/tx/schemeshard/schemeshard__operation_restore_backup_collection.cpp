@@ -1,8 +1,25 @@
+#include "schemeshard__backup_collection_common.h"
+#include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 
 namespace NKikimr::NSchemeShard {
 
-// TODO: add required paths
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection>;
+
+namespace NOperation {
+
+template <>
+std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
+    TTag,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& restoreOp = tx.GetRestoreBackupCollection();
+    return NBackup::GetRestoreRequiredPaths(tx, restoreOp.GetName(), context);
+}
+
+} // namespace NOperation
+
 
 TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     TVector<ISubOperation::TPtr> result;
@@ -72,6 +89,7 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), lastFullBackupName, relativeItemPath}));
         desc.SetDstPath(item.GetPath());
+        desc.SetAllowUnderSameOperation(true);
     }
 
     CreateConsistentCopyTables(opId, consistentCopyTables, context, result);

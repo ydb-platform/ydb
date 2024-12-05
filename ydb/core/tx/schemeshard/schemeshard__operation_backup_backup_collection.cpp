@@ -19,7 +19,7 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
     const TOperationContext& context)
 {
     const auto& backupOp = tx.GetBackupBackupCollection();
-    return NBackup::GetRequiredPaths(tx, backupOp.GetTargetDir(), backupOp.GetName(), context);
+    return NBackup::GetBackupRequiredPaths(tx, backupOp.GetTargetDir(), backupOp.GetName(), context);
 }
 
 template <>

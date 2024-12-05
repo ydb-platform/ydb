@@ -1,7 +1,6 @@
 #include "schemeshard_import.h"
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_import_flow_proposals.h"
 
 #include <util/generic/xrange.h>
 
@@ -46,11 +45,11 @@ namespace {
             itemProgress.set_parts_completed(txState.Shards.size() - txState.ShardsInProgress.size());
             *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(txState.StartTime.Seconds());
         } else {
-            if (!ss->Tables.contains(item->DstPathId)) {
+            if (!ss->Tables.contains(item.DstPathId)) {
                 return;
             }
 
-            auto table = ss->Tables.at(item->DstPathId);
+            auto table = ss->Tables.at(item.DstPathId);
             auto it = table->RestoreHistory.end();
             if (item.WaitTxId != InvalidTxId) {
                 it = table->RestoreHistory.find(item.WaitTxId);

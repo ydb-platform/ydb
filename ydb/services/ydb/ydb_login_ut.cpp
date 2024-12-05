@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.h>
 
@@ -51,8 +52,25 @@ public:
         client.SetSecurityToken("root@builtin");
         client.ModifyACL("", "Root", acl.SerializeAsString());
     }
+
+    void TestConnectRight(TString token, TString expectedErrorReason) {
+        NYdb::NQuery::TClientSettings settings;
+        settings.Database("/Root");
+        settings.AuthToken(token);
+
+        NYdb::NQuery::TQueryClient client = NYdb::NQuery::TQueryClient(Connection, settings);
+        const TString sql = "SELECT 1;";
+        const auto result = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            
+        if (expectedErrorReason.empty()) {
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT_C(result.GetStatus() != NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedErrorReason, result.GetIssues().ToString());
+        }
+    }
     
-    void Ls(TString token, TString expectedErrorReason) {
+    void TestDescribeRight(TString token, TString expectedErrorReason) {
         TClient client(*(Server.ServerSettings));
         client.SetSecurityToken(token);
         auto response = client.Ls("Root");
@@ -78,8 +96,8 @@ private:
         authConfig->SetUseLoginProvider(true);
         authConfig->SetEnableLoginAuthentication(isLoginAuthenticationEnabled);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
-        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
         appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
+        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 
         return appConfig;
     }
@@ -113,7 +131,8 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         UNIT_ASSERT_NO_EXCEPTION(token = loginProvider->GetAuthInfo());
         UNIT_ASSERT(!token.empty());
 
-        loginConnection.Ls(token, "");
+        loginConnection.TestConnectRight(token, "");
+        loginConnection.TestDescribeRight(token, "");
 
         loginConnection.Stop();
     }
@@ -150,7 +169,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         UNIT_ASSERT_NO_EXCEPTION(token = loginProvider->GetAuthInfo());
         UNIT_ASSERT(!token.empty());
         
-        loginConnection.Ls(token, "Access denied");
+        loginConnection.TestConnectRight(token, "User has no permission");
 
         loginConnection.Stop();
     }
@@ -166,7 +185,8 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         UNIT_ASSERT_NO_EXCEPTION(token = loginProvider->GetAuthInfo());
         UNIT_ASSERT(!token.empty());
         
-        loginConnection.Ls(token, "Access denied");
+        loginConnection.TestConnectRight(token, "");
+        loginConnection.TestDescribeRight(token, "Access denied");
 
         loginConnection.Stop();
     }

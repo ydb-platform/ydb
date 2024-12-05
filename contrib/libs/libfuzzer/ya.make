@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(15.0.5)
+VERSION(18.1.8)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-15.0.5.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-18.1.8.tar.gz)
 
 SET(SANITIZER_CFLAGS)
 

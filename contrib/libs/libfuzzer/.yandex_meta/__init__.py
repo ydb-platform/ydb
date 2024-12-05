@@ -1,6 +1,5 @@
 from devtools.yamaker.modules import Linkable, Switch
-
-# from devtools.yamaker.platform_macros import LLVM_VERSION
+from devtools.yamaker.platform_macros import LLVM_VERSION
 from devtools.yamaker.project import CMakeNinjaNixProject
 
 
@@ -47,7 +46,7 @@ def post_install(self):
 
 
 llvm_libfuzzer = CMakeNinjaNixProject(
-    nixattr="llvmPackages_14.compiler-rt",
+    nixattr=f"llvmPackages_{LLVM_VERSION}.compiler-rt",
     arcdir="contrib/libs/libfuzzer",
     copy_sources=[
         "include/fuzzer/FuzzedDataProvider.h",

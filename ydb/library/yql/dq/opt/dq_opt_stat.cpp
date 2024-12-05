@@ -558,8 +558,10 @@ void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationConte
     if (input->ChildrenSize() && input->Child(0)->IsCallable("AsStruct")) {
         nAttrs = input->Child(0)->ChildrenSize();
     }
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
-        EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0));
+    auto outputStats = std::make_shared<TOptimizerStatistics>(
+        EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0);
+    outputStats->StorageType = EStorageType::RowStorage;
+    typeCtx->SetStats(input.Get(), outputStats);
 }
 
 /***
@@ -580,6 +582,7 @@ bool InferStatisticsForListParam(const TExprNode::TPtr& input, TTypeAnnotationCo
             int nRows = 100;
             int nAttrs = maybeStructType.Cast().Ptr()->ChildrenSize();
             auto resStats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0);
+            resStats->StorageType = EStorageType::RowStorage;
             typeCtx->SetStats(input.Get(), resStats);
         }
     }

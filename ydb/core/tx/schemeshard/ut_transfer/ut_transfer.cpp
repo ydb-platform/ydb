@@ -52,4 +52,66 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         });
     }
 
-} // TReplicationTests
+    Y_UNIT_TEST(CreateSequential) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        THashSet<ui64> controllerIds;
+
+        for (int i = 0; i < 2; ++i) {
+            const auto name = Sprintf("Transfer%d", i);
+
+            TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme(name));
+            env.TestWaitNotification(runtime, txId);
+
+            const auto desc = DescribePath(runtime, "/MyRoot/" + name);
+            TestDescribeResult(desc, {
+                NLs::PathExist,
+                NLs::Finished,
+            });
+
+            controllerIds.insert(ExtractControllerId(desc.GetPathDescription()));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(controllerIds.size(), 2);
+    }
+
+    Y_UNIT_TEST(CreateInParallel) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        THashSet<ui64> controllerIds;
+
+        for (int i = 0; i < 2; ++i) {
+            TVector<TString> names;
+            TVector<ui64> txIds;
+
+            for (int j = 0; j < 2; ++j) {
+                auto name = Sprintf("Transfer%d-%d", i, j);
+
+                TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme(name));
+
+                names.push_back(std::move(name));
+                txIds.push_back(txId);
+            }
+
+            env.TestWaitNotification(runtime, txIds);
+            for (const auto& name : names) {
+                const auto desc = DescribePath(runtime, "/MyRoot/" + name);
+                TestDescribeResult(desc, {
+                    NLs::PathExist,
+                    NLs::Finished,
+                });
+
+                controllerIds.insert(ExtractControllerId(desc.GetPathDescription()));
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(controllerIds.size(), 4);
+    }
+
+} // TTransferTests

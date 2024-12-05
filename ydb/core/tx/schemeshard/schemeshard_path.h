@@ -174,6 +174,7 @@ public:
     bool IsCdcStream() const;
     bool IsSequence() const;
     bool IsReplication() const;
+    bool IsTransfer() const;
     ui32 Depth() const;
     ui64 Shards() const;
     const TString& LeafName() const;

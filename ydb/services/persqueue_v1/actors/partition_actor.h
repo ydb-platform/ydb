@@ -75,7 +75,7 @@ public:
      TPartitionActor(const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie,
                      const TString& session, const TPartitionId& partition, ui32 generation, ui32 step,
                      const ui64 tabletID, const TTopicCounters& counters, const bool commitsDisabled,
-                     const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, bool directRead,
+                     const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
                      bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, std::set<NPQ::TPartitionGraph::Node*> parents,
                      std::unordered_set<ui64> notCommitedToFinishParents);
     ~TPartitionActor();

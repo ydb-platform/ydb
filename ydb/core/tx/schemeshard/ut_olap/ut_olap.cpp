@@ -566,7 +566,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Tiers: {
                         ApplyAfterSeconds: 360
                         EvictToExternalStorage {
-                            Storage: "Tier1"
+                            Storage: "/Root/Tier1"
                         }
                     }
                 }
@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             NLs::HasColumnTableSchemaPreset("default"),
             NLs::HasColumnTableSchemaVersion(1),
             NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsTier("timestamp", TDuration::Seconds(360), "Tier1")));
+            NLs::HasColumnTableTtlSettingsTier("timestamp", TDuration::Seconds(360), "/Root/Tier1")));
 
         TString tableSchema4 = R"(
             Name: "Table4"
@@ -592,7 +592,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Tiers: {
                         ApplyAfterSeconds: 3600000000
                         EvictToExternalStorage {
-                            Storage: "Tier1"
+                            Storage: "/Root/Tier1"
                         }
                     }
                 }

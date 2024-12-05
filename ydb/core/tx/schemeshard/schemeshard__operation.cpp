@@ -1499,8 +1499,8 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return {CreateAlterResourcePool(NextPartId(), tx)};
 
     // IncrementalBackup
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
-        return CreateRestoreIncrementalBackup(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
+        return CreateRestoreMultipleIncrementalBackups(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
@@ -1516,6 +1516,8 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return CreateBackupBackupCollection(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
         return CreateBackupIncrementalBackupCollection(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
+        return CreateRestoreBackupCollection(NextPartId(), tx, context);
     }
 
     Y_UNREACHABLE();

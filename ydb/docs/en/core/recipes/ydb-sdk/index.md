@@ -25,6 +25,13 @@ Table of contents:
 - [Inserting data](upsert.md)
 - [Bulk upsert of data](bulk-upsert.md)
 - [Setting up the transaction execution mode](tx-control.md)
+- Coordination
+
+  - [Distributed lock](distributed-lock.md)
+  - [Service discovery](service-discovery.md)
+  - [Configuration publication](config-publication.md)
+  - [Leader election](leader-election.md)
+
 - [Troubleshooting](debug.md)
 
   - [Enable logging](debug-logs.md)

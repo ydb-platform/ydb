@@ -27,43 +27,9 @@
 
 #include <yt/yt/library/tcmalloc/config.h>
 
-#include <library/cpp/yt/stockpile/stockpile.h>
+#include <yt/yt/library/stockpile/config.h>
 
 namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TStockpileConfig
-    : public TStockpileOptions
-    , public NYTree::TYsonStruct
-{
-public:
-    TStockpileConfigPtr ApplyDynamic(const TStockpileDynamicConfigPtr& dynamicConfig) const;
-
-    REGISTER_YSON_STRUCT(TStockpileConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TStockpileConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TStockpileDynamicConfig
-    : public NYTree::TYsonStruct
-{
-public:
-    std::optional<i64> BufferSize;
-    std::optional<int> ThreadCount;
-    std::optional<EStockpileStrategy> Strategy;
-    std::optional<TDuration> Period;
-
-    REGISTER_YSON_STRUCT(TStockpileDynamicConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TStockpileDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

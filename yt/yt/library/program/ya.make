@@ -20,6 +20,7 @@ PEERDIR(
     yt/yt/library/profiling/solomon
     yt/yt/library/profiling/tcmalloc
     yt/yt/library/profiling/perf
+    yt/yt/library/stockpile
     yt/yt/library/ytprof
     yt/yt/library/tcmalloc
     yt/yt/library/tracing/jaeger

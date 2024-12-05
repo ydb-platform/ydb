@@ -35,8 +35,6 @@
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
-#include <library/cpp/yt/stockpile/stockpile.h>
-
 #include <util/string/split.h>
 #include <util/system/thread.h>
 
@@ -139,9 +137,7 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
         ? config->TCMalloc->ApplyDynamic(dynamicConfig->TCMalloc)
         : config->TCMalloc);
 
-    if (dynamicConfig->Stockpile) {
-        TStockpileManager::Reconfigure(*config->Stockpile->ApplyDynamic(dynamicConfig->Stockpile));
-    }
+    TStockpileManager::Reconfigure(*config->Stockpile->ApplyDynamic(dynamicConfig->Stockpile));
 
     NYson::SetProtobufInteropConfig(config->ProtobufInterop->ApplyDynamic(dynamicConfig->ProtobufInterop));
 }

@@ -5495,7 +5495,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
             auto ttl = desc.GetTableDescription().GetTtlSettings();
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "/Root/tier");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "/Root/tier2");
             UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlDeleteAction>(ttl->GetTiers()[0].GetAction()).GetApplyAfter(), TDuration::Seconds(10));
         }
 

@@ -70,7 +70,6 @@ protected:
         auto& op = *tx.MutableCreateIncrementalRestoreSrc();
         op.MutableSrcPathId()->CopyFrom(RestoreOp.GetSrcPathIds(LoopStep));
         op.SetSrcTableName(RestoreOp.GetSrcTableNames(LoopStep));
-        // op.MutableDstPathId()->CopyFrom(RestoreOp.GetDstPathId());
         PathIdFromPathId(pathId, op.MutableDstPathId());
         op.SetDstTablePath(RestoreOp.GetDstTablePath());
     }
@@ -224,101 +223,6 @@ protected:
     const TOperationId OperationId;
 }; // TProposeAtTable
 
-// FIXME: maybe remove
-class TProposedWaitParts: public TSubOperationState {
-private:
-    TOperationId OperationId;
-    const TTxState::ETxState NextState;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NTableState::TProposedWaitParts"
-                << " operationId# " << OperationId;
-    }
-
-public:
-    TProposedWaitParts(TOperationId id, TTxState::ETxState nextState = TTxState::Done)
-        : OperationId(id)
-        , NextState(nextState)
-    {
-        IgnoreMessages(DebugHint(),
-            { TEvHive::TEvCreateTabletReply::EventType
-            , TEvDataShard::TEvProposeTransactionResult::EventType
-            , TEvPrivate::TEvOperationPlan::EventType }
-        );
-    }
-
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        const auto& evRecord = ev->Get()->Record;
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvSchemaChanged"
-                               << " at tablet: " << ssId);
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvSchemaChanged"
-                                << " at tablet: " << ssId
-                                << " message: " << evRecord.ShortDebugString());
-
-        if (!NTableState::CollectSchemaChanged(OperationId, ev, context)) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " HandleReply TEvSchemaChanged"
-                                    << " CollectSchemaChanged: false");
-            return false;
-        }
-
-        Y_ABORT_UNLESS(context.SS->FindTx(OperationId));
-        TTxState& txState = *context.SS->FindTx(OperationId);
-
-        if (!txState.ReadyForNotifications) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " HandleReply TEvSchemaChanged"
-                                    << " ReadyForNotifications: false");
-            return false;
-        }
-
-        return true;
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " ProgressState"
-                     << " at tablet: " << ssId);
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-
-        NIceDb::TNiceDb db(context.GetDB());
-
-        txState->ClearShardsInProgress();
-        for (TTxState::TShardOperation& shard : txState->Shards) {
-            if (shard.Operation < TTxState::ProposedWaitParts) {
-                shard.Operation = TTxState::ProposedWaitParts;
-                context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
-            }
-            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
-            context.OnComplete.RouteByTablet(OperationId,  context.SS->ShardInfos.at(shard.Idx).TabletID);
-        }
-        txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
-
-        // Move all notifications that were already received
-        // NOTE: SchemeChangeNotification is sent form DS after it has got PlanStep from coordinator and the schema tx has completed
-        // At that moment the SS might not have received PlanStep from coordinator yet (this message might be still on its way to SS)
-        // So we are going to accumulate SchemeChangeNotification that are received before this Tx switches to WaitParts state
-        txState->AcceptPendingSchemeNotification();
-
-        // Got notifications from all datashards?
-        if (txState->ShardsInProgress.empty()) {
-            NTableState::AckAllSchemaChanges(OperationId, *txState, context);
-            context.SS->ChangeTxState(db, OperationId, NextState);
-            return true;
-        }
-
-        return false;
-    }
-};
-
 class TDone: public TSubOperationState {
 private:
     static bool IsExpectedTxType(TTxState::ETxType txType) {
@@ -418,7 +322,8 @@ class TNewRestoreFromAtTable : public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<NIncrRestore::TProposeAtTable>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NIncrRestore::TProposedWaitParts>(OperationId);
+            // TODO: check the right next state always choosen
+            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
             return MakeHolder<NIncrRestore::TDone>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups());
         default:

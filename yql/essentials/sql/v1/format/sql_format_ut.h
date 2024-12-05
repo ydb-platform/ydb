@@ -532,7 +532,7 @@ Y_UNIT_TEST(TopicExistsStatement) {
 Y_UNIT_TEST(Do) {
     TCases cases = {
         {"do $a(1,2,3)",
-            "DO $a(1, 2, 3);\n"},
+            "DO\n\t$a(1, 2, 3)\n;\n"},
         {"do begin values(1); end do;",
             "DO BEGIN\n\tVALUES\n\t\t(1);\nEND DO;\n"},
     };
@@ -556,7 +556,7 @@ Y_UNIT_TEST(DefineActionOrSubquery) {
             "DEFINE ACTION $a() AS\n\tDEFINE ACTION $b() AS\n\t\t"
             "VALUES\n\t\t\t(1);\n\tEND DEFINE;\n\n\t"
             "DEFINE SUBQUERY $c() AS\n\t\tSELECT\n\t\t\t1;\n\t"
-            "END DEFINE;\n\tDO $b();\n\n\tPROCESS $c();\nEND DEFINE;\n"},
+            "END DEFINE;\n\tDO\n\t\t$b()\n\t;\n\n\tPROCESS $c();\nEND DEFINE;\n"},
     };
 
     TSetup setup;
@@ -566,14 +566,14 @@ Y_UNIT_TEST(DefineActionOrSubquery) {
 Y_UNIT_TEST(If) {
     TCases cases = {
         {"evaluate if 1=1 do $a()",
-            "EVALUATE IF 1 == 1\n\tDO $a();\n"},
+            "EVALUATE IF 1 == 1 DO\n\t$a()\n;\n"},
         {"evaluate if 1=1 do $a() else do $b()",
-            "EVALUATE IF 1 == 1\n\tDO $a()\nELSE\n\tDO $b();\n"},
+            "EVALUATE IF 1 == 1 DO\n\t$a()\nELSE DO\n\t$b()\n;\n"},
         {"evaluate if 1=1 do begin select 1; end do",
-            "EVALUATE IF 1 == 1\n\tDO BEGIN\n\t\tSELECT\n\t\t\t1;\n\tEND DO;\n"},
+            "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1;\nEND DO;\n"},
         {"evaluate if 1=1 do begin select 1; end do else do begin select 2; end do",
-            "EVALUATE IF 1 == 1\n\tDO BEGIN\n\t\tSELECT\n\t\t\t1;\n\tEND DO\n"
-            "ELSE\n\tDO BEGIN\n\t\tSELECT\n\t\t\t2;\n\tEND DO;\n"},
+            "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1;\nEND DO "
+            "ELSE DO BEGIN\n\tSELECT\n\t\t2;\nEND DO;\n"},
     };
 
     TSetup setup;
@@ -583,15 +583,15 @@ Y_UNIT_TEST(If) {
 Y_UNIT_TEST(For) {
     TCases cases = {
         {"evaluate for $x in [] do $a($x)",
-            "EVALUATE FOR $x IN []\n\tDO $a($x);\n"},
+            "EVALUATE FOR $x IN [] DO\n\t$a($x)\n;\n"},
         {"evaluate for $x in [] do $a($x) else do $b()",
-            "EVALUATE FOR $x IN []\n\tDO $a($x)\nELSE\n\tDO $b();\n"},
+            "EVALUATE FOR $x IN [] DO\n\t$a($x)\nELSE DO\n\t$b()\n;\n"},
         {"evaluate for $x in [] do begin select $x; end do",
-            "EVALUATE FOR $x IN []\n\tDO BEGIN\n\t\tSELECT\n\t\t\t$x;\n\tEND DO;\n"},
+            "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x;\nEND DO;\n"},
         {"evaluate for $x in [] do begin select $x; end do else do begin select 2; end do",
-            "EVALUATE FOR $x IN []\n\tDO BEGIN\n\t\tSELECT\n\t\t\t$x;\n\tEND DO\nELSE\n\tDO BEGIN\n\t\tSELECT\n\t\t\t2;\n\tEND DO;\n"},
+            "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x;\nEND DO ELSE DO BEGIN\n\tSELECT\n\t\t2;\nEND DO;\n"},
         {"evaluate parallel for $x in [] do $a($x)",
-            "EVALUATE PARALLEL FOR $x IN []\n\tDO $a($x);\n"},
+            "EVALUATE PARALLEL FOR $x IN [] DO\n\t$a($x)\n;\n"},
     };
 
     TSetup setup;

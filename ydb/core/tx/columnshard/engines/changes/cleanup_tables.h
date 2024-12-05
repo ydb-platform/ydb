@@ -3,7 +3,8 @@
 
 namespace NKikimr::NOlap {
 
-class TCleanupTablesColumnEngineChanges: public TColumnEngineChanges {
+class TCleanupTablesColumnEngineChanges: public TColumnEngineChanges,
+                                         public NColumnShard::TMonitoringObjectsCounter<TCleanupTablesColumnEngineChanges> {
 private:
     using TBase = TColumnEngineChanges;
 protected:

@@ -46,7 +46,7 @@ void FromProto(
     NTableClient::TVersionedWriteOptions* options,
     const NProto::TVersionedWriteOptions& protoOptions)
 {
-    options->WriteMode = FromProto<EVersionedIOMode>(protoOptions.write_mode());
+    FromProto(&options->WriteMode, protoOptions.write_mode());
 }
 
 std::optional<TString> GetTimestampColumnOriginalNameOrNull(TStringBuf name)

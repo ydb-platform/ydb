@@ -351,8 +351,7 @@ protected:
         if (requestHeader.has_response_format()) {
             auto format = TryCheckedEnumCast<EMessageFormat>(requestHeader.response_format());
             if (!format) {
-                THROW_ERROR_EXCEPTION(
-                    EErrorCode::ProtocolError,
+                THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError,
                     "Message format %v is not supported",
                     requestHeader.response_format());
             }

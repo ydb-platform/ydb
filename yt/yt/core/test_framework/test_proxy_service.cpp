@@ -56,16 +56,14 @@ const IServicePtr& TTestChannel::GetServiceOrThrow(const TServiceId& serviceId) 
 
     if (serviceMapIt == services.end()) {
         if (realmId) {
-            auto innerError = TError(EErrorCode::NoSuchRealm, "Request realm is unknown")
+            auto innerError = TError(NRpc::EErrorCode::NoSuchRealm, "Request realm is unknown")
                 << TErrorAttribute("service", serviceName)
                 << TErrorAttribute("realm_id", realmId);
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::NoSuchService,
+            THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
                 "Service is not registered")
                 << innerError;
         } else {
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::NoSuchService,
+            THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
                 "Service is not registered")
                 << TErrorAttribute("service", serviceName)
                 << TErrorAttribute("realm_id", realmId);
@@ -74,8 +72,7 @@ const IServicePtr& TTestChannel::GetServiceOrThrow(const TServiceId& serviceId) 
     auto& serviceMap = serviceMapIt->second;
     auto serviceIt = serviceMap.find(serviceName);
     if (serviceIt == serviceMap.end()) {
-        THROW_ERROR_EXCEPTION(
-            EErrorCode::NoSuchService,
+        THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
             "Service is not registered")
             << TErrorAttribute("service", serviceName)
             << TErrorAttribute("realm_id", realmId);

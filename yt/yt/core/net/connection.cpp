@@ -1236,7 +1236,7 @@ public:
 
     TFuture<void> Abort() override
     {
-        return Impl_->Abort(TError(EErrorCode::Aborted, "Connection aborted"));
+        return Impl_->Abort(TError(NNet::EErrorCode::Aborted, "Connection aborted"));
     }
 
     TFuture<void> CloseRead() override

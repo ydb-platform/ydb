@@ -3471,6 +3471,8 @@ message TReqStartShuffle
     required string account = 1;
     required int32 partition_count = 2;
     required NYT.NProto.TGuid parent_transaction_id = 3;
+    optional string medium_name = 4;
+    optional int32 replication_factor = 5;
 }
 
 message TRspStartShuffle

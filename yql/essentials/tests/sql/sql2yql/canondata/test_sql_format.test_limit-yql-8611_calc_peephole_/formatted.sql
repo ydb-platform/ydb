@@ -29,5 +29,6 @@ DEFINE ACTION $make_bucket($bucket_number) AS
     );
 END DEFINE;
 
-EVALUATE FOR $bucket_number IN $buckets
-    DO $make_bucket(CAST($bucket_number AS String));
+EVALUATE FOR $bucket_number IN $buckets DO
+    $make_bucket(CAST($bucket_number AS String))
+;

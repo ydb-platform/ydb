@@ -1267,7 +1267,7 @@ private:
         YQL_CLOG(TRACE, ProviderDq) << "HandlePull " << NCommon::ExprToPrettyString(ctx, *input);
 
         TInstant startTime = TInstant::Now();
-        ui64 executionTimeout = State->Settings->_TableTimeout.Get().GetOrElse(TDqSettings::TDefault::TableTimeout);
+        ui64 executionTimeout = State->Settings->GetQueryTimeout();
         auto pull = TPull(input);
 
         THashMap<TString, TString> pullSettings;

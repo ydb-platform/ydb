@@ -157,13 +157,44 @@ class TController::TTxInit: public TTxBase {
         return true;
     }
 
+    bool LoadWorkers(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::Workers>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        while (!rowset.EndOfSet()) {
+            const auto id = TWorkerId(
+                rowset.GetValue<Schema::Workers::ReplicationId>(),
+                rowset.GetValue<Schema::Workers::TargetId>(),
+                rowset.GetValue<Schema::Workers::WorkerId>()
+            );
+            const auto version = TRowVersion(
+                rowset.GetValue<Schema::Workers::HeartbeatVersionStep>(),
+                rowset.GetValue<Schema::Workers::HeartbeatVersionTxId>()
+            );
+
+            auto* worker = Self->GetOrCreateWorker(id);
+            worker->SetHeartbeat(version);
+            Self->WorkersWithHeartbeat.insert(id);
+            Self->WorkersByHeartbeat[version].insert(id);
+
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     inline bool Load(NIceDb::TNiceDb& db) {
         Self->Reset();
         return LoadSysParams(db)
             && LoadReplications(db)
             && LoadTargets(db)
             && LoadSrcStreams(db)
-            && LoadTxIds(db);
+            && LoadTxIds(db)
+            && LoadWorkers(db);
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {

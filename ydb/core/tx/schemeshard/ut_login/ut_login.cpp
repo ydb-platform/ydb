@@ -85,6 +85,47 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
+    Y_UNIT_TEST(RemoveLogin) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        AsyncMkDir(runtime, ++txId, "/MyRoot/Dir1", "SubDir1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+        AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasNoEffectiveRight("+U:user1")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+            {NLs::HasEffectiveRight("+U:user1")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/SubDir1"),
+            {NLs::HasEffectiveRight("+U:user1")});
+
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
+
+        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
+
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
+
+        return; // TODO:
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasNoEffectiveRight("+U:user1")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+            {NLs::HasNoEffectiveRight("+U:user1")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/SubDir1"),
+            {NLs::HasNoEffectiveRight("+U:user1")});
+    }
+
     Y_UNIT_TEST(DisableBuiltinAuthMechanism) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

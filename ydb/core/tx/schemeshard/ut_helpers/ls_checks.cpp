@@ -1271,29 +1271,25 @@ void CheckRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TStr
 
 TCheckFunc HasRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        CheckRight(record, right, true, true);
+        CheckRight(record, right, true, false);
     };
 }
 
 TCheckFunc HasNoRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        CheckRight(record, right, false, true);
+        CheckRight(record, right, false, false);
     };
-}
-
-void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave) {
-    CheckRight(record, right, mustHave, true);
 }
 
 TCheckFunc HasEffectiveRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        CheckEffectiveRight(record, right, true);
+        CheckRight(record, right, true, true);
     };
 }
 
 TCheckFunc HasNoEffectiveRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        CheckEffectiveRight(record, right, false);
+        CheckRight(record, right, false, true);
     };
 }
 

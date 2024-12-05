@@ -68,6 +68,16 @@ public:
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
+                        for (const TPathId pathId : context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx)) {
+                            TPathElement::TPtr path = context.SS->PathsById.at(pathId);
+                            NACLib::TACL acl(path->ACL);
+                            if (acl.RemoveAccess(user)) {
+                                ++path->ACLVersion;
+                                path->ACL = acl.SerializeAsString();
+                                context.SS->PersistACL(db, path);
+                            }
+                        }
+
                         db.Table<Schema::LoginSids>().Key(user).Delete();
                         for (const TString& group : response.TouchedGroups) {
                             db.Table<Schema::LoginSidMembers>().Key(group, user).Delete();

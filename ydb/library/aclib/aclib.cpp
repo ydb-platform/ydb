@@ -379,6 +379,23 @@ std::pair<ui32, ui32> TACL::RemoveAccess(const NACLibProto::TACE& filter) {
     return modified;
 }
 
+bool TACL::RemoveAccess(const NACLib::TSID& sid) {
+    auto* ACL = MutableACE();
+    
+    auto newEnd = std::remove_if(ACL->begin(), ACL->end(), [&sid](const NACLibProto::TACE& ace) {
+        return ace.GetSID() == sid;
+    });
+
+    if (newEnd == ACL->end()) {
+        return false;
+    }
+    
+    while (newEnd != ACL->end()) {
+        ACL->RemoveLast();
+    }
+    return true;
+}
+
 void TACL::SortACL() {
     Sort(*(MutableACE()), [](const NACLibProto::TACE& a, const NACLibProto::TACE& b) -> bool { return a.GetAccessType() < b.GetAccessType(); });
 }

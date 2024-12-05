@@ -130,6 +130,6 @@ message TPasswordComplexitySettings {
     optional uint32 MinUpperCaseCount = 3;
     optional uint32 MinNumbersCount = 4;
     optional uint32 MinSpecialCharsCount = 5;
-    optional string SpecialChars = 6 [default = "!@#$%^&*()_+{}|<>?="];
+    optional string SpecialChars = 6;
     optional bool CanContainUsername = 7;
 }

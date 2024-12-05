@@ -7339,18 +7339,18 @@ void TSchemeShard::ConfigureLoginProvider(
         .MinUpperCaseCount = complexitySettings.GetMinUpperCaseCount(),
         .MinNumbersCount = complexitySettings.GetMinNumbersCount(),
         .MinSpecialCharsCount = complexitySettings.GetMinSpecialCharsCount(),
-        .SpecialChars = complexitySettings.GetSpecialChars(),
+        .SpecialChars = (complexitySettings.GetSpecialChars().empty() ? NLogin::TPasswordComplexitySettings::VALID_SPECIAL_CHARS : complexitySettings.GetSpecialChars()),
         .CanContainUsername = complexitySettings.GetCanContainUsername()
     });
     LoginProvider.UpdatePasswordCheckParameters(passwordComplexitySettings);
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "LoginProvider configured: MinLength# " << passwordComplexitySettings.MinLength
+                 "PasswordComplexitySettings for LoginProvider configured: MinLength# " << passwordComplexitySettings.MinLength
                  << ", MinLowerCaseCount# " << passwordComplexitySettings.MinLowerCaseCount
                  << ", MinUpperCaseCount# " << passwordComplexitySettings.MinUpperCaseCount
                  << ", MinNumbersCount# " << passwordComplexitySettings.MinNumbersCount
                  << ", MinSpecialCharsCount# " << passwordComplexitySettings.MinSpecialCharsCount
-                 << ", SpecialChars# " << complexitySettings.GetSpecialChars()
+                 << ", SpecialChars# " << (complexitySettings.GetSpecialChars().empty() ? NLogin::TPasswordComplexitySettings::VALID_SPECIAL_CHARS : complexitySettings.GetSpecialChars())
                  << ", CanContainUsername# " << (passwordComplexitySettings.CanContainUsername ? "true" : "false"));
 }
 

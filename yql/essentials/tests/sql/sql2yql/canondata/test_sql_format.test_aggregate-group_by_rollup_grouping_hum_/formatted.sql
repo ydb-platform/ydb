@@ -5,12 +5,9 @@ SELECT
     key_first,
     val_first,
     CASE grouping(key_first, val_first)
-        WHEN 1
-            THEN 'Total By First digit key'
-        WHEN 2
-            THEN 'Total By First char value'
-        WHEN 3
-            THEN 'Grand Total'
+        WHEN 1 THEN 'Total By First digit key'
+        WHEN 2 THEN 'Total By First char value'
+        WHEN 3 THEN 'Grand Total'
         ELSE 'Group'
     END AS group
 FROM plato.Input

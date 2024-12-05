@@ -21,16 +21,14 @@ SELECT
     sum(
         CASE
             WHEN o_orderpriority == '1-URGENT'
-            OR o_orderpriority == '2-HIGH'
-                THEN 1
+            OR o_orderpriority == '2-HIGH' THEN 1
             ELSE 0
         END
     ) AS high_line_count,
     sum(
         CASE
             WHEN o_orderpriority != '1-URGENT'
-            AND o_orderpriority != '2-HIGH'
-                THEN 1
+            AND o_orderpriority != '2-HIGH' THEN 1
             ELSE 0
         END
     ) AS low_line_count

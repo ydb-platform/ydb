@@ -2,12 +2,9 @@
 /* postgres can not */
 $hum_gr_kv = ($grouping) -> {
     RETURN CASE $grouping
-        WHEN 1
-            THEN 'Total By First digit key'
-        WHEN 2
-            THEN 'Total By First char value'
-        WHEN 3
-            THEN 'Grand Total'
+        WHEN 1 THEN 'Total By First digit key'
+        WHEN 2 THEN 'Total By First char value'
+        WHEN 3 THEN 'Grand Total'
         ELSE 'Group'
     END;
 };

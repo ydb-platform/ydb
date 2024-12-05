@@ -1449,11 +1449,11 @@ Y_UNIT_TEST(LambdaInsideExpr) {
 Y_UNIT_TEST(CaseExpr) {
     TCases cases = {
         {"SELECT CASE WHEN 1 == 2 THEN 3 WHEN 4 == 5 THEN 6 WHEN 7 == 8 THEN 9 ELSE 10 END;",
-            "SELECT\n\tCASE\n\t\tWHEN 1 == 2\n\t\t\tTHEN 3\n\t\tWHEN 4 == 5\n\t\t\tTHEN 6\n\t\tWHEN 7 == 8\n\t\t\tTHEN 9\n\t\tELSE 10\n\tEND;\n"},
+            "SELECT\n\tCASE\n\t\tWHEN 1 == 2 THEN 3\n\t\tWHEN 4 == 5 THEN 6\n\t\tWHEN 7 == 8 THEN 9\n\t\tELSE 10\n\tEND;\n"},
         {"SELECT CAST(CASE WHEN 1 == 2 THEN 3 WHEN 4 == 5 THEN 6 ELSE 10 END AS String);",
-            "SELECT\n\tCAST(\n\t\tCASE\n\t\t\tWHEN 1 == 2\n\t\t\t\tTHEN 3\n\t\t\tWHEN 4 == 5\n\t\t\t\tTHEN 6\n\t\t\tELSE 10\n\t\tEND AS String\n\t);\n"},
+            "SELECT\n\tCAST(\n\t\tCASE\n\t\t\tWHEN 1 == 2 THEN 3\n\t\t\tWHEN 4 == 5 THEN 6\n\t\t\tELSE 10\n\t\tEND AS String\n\t);\n"},
         {"SELECT CASE x WHEN 1 THEN 2 WHEN 3 THEN 4 WHEN 5 THEN 6 ELSE 10 END;",
-            "SELECT\n\tCASE x\n\t\tWHEN 1\n\t\t\tTHEN 2\n\t\tWHEN 3\n\t\t\tTHEN 4\n\t\tWHEN 5\n\t\t\tTHEN 6\n\t\tELSE 10\n\tEND;\n"},
+            "SELECT\n\tCASE x\n\t\tWHEN 1 THEN 2\n\t\tWHEN 3 THEN 4\n\t\tWHEN 5 THEN 6\n\t\tELSE 10\n\tEND;\n"},
     };
 
     TSetup setup;

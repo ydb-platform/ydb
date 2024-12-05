@@ -8,8 +8,7 @@ $data = (
 
 SELECT
     CASE
-        WHEN eval < 5
-            THEN eval
+        WHEN eval < 5 THEN eval
         ELSE CAST(NULL AS Int64)
     END ?? -1,
     key

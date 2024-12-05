@@ -15,8 +15,7 @@ SELECT
     region,
     max(
         CASE
-            WHEN age % 10u BETWEEN 1u AND region % 10u
-                THEN age
+            WHEN age % 10u BETWEEN 1u AND region % 10u THEN age
             ELSE 0u
         END
     ) AS max_age_at_range_intersect

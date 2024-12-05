@@ -2384,17 +2384,6 @@ private:
         Visit(msg.GetToken5());
     }
 
-    void VisitWhenExpr(const TRule_when_expr& msg) {
-        VisitKeyword(msg.GetToken1());
-        Visit(msg.GetRule_expr2());
-
-        NewLine();
-        PushCurrentIndent();
-        VisitKeyword(msg.GetToken3());
-        Visit(msg.GetRule_expr4());
-        PopCurrentIndent();
-    }
-
     void VisitWithTableSettingsExpr(const TRule_with_table_settings& msg) {
         VisitKeyword(msg.GetToken1());
         Visit(msg.GetToken2());
@@ -2781,7 +2770,6 @@ TStaticData::TStaticData()
         {TRule_define_action_or_subquery_body::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDefineActionOrSubqueryBody)},
         {TRule_exists_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExistsExpr)},
         {TRule_case_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCaseExpr)},
-        {TRule_when_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWhenExpr)},
         {TRule_with_table_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithTableSettingsExpr)},
         {TRule_table_setting_value::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableSettingValue)},
         {TRule_ttl_tier_action::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTtlTierAction)},

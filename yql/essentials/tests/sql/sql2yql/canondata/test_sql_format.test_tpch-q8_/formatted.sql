@@ -95,8 +95,7 @@ SELECT
     o_year,
     sum(
         CASE
-            WHEN nation == 'MOZAMBIQUE'
-                THEN volume
+            WHEN nation == 'MOZAMBIQUE' THEN volume
             ELSE 0
         END
     ) / sum(volume) AS mkt_share

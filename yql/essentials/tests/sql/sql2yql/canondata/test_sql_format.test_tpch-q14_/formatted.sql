@@ -6,8 +6,7 @@ $border = Date("1994-08-01");
 SELECT
     100.00 * sum(
         CASE
-            WHEN StartsWith(p.p_type, 'PROMO')
-                THEN l.l_extendedprice * (1 - l.l_discount)
+            WHEN StartsWith(p.p_type, 'PROMO') THEN l.l_extendedprice * (1 - l.l_discount)
             ELSE 0
         END
     ) / sum(l.l_extendedprice * (1 - l.l_discount)) AS promo_revenue

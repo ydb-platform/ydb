@@ -1,12 +1,9 @@
 /* yt can not */
 $round_period = ($day, $period) -> {
     RETURN CASE
-        WHEN $period == 'd'
-            THEN $day
-        WHEN $period == 'w'
-            THEN DateTime::MakeDate(DateTime::StartOfWeek($day))
-        WHEN $period == 'm'
-            THEN DateTime::MakeDate(DateTime::StartOfMonth($day))
+        WHEN $period == 'd' THEN $day
+        WHEN $period == 'w' THEN DateTime::MakeDate(DateTime::StartOfWeek($day))
+        WHEN $period == 'm' THEN DateTime::MakeDate(DateTime::StartOfMonth($day))
         ELSE $day
     END
 };
@@ -47,12 +44,9 @@ SELECT
     month,
     GROUPING(month) AS grouping_month,
     CASE
-        WHEN GROUPING(week) == 1 AND GROUPING(month) == 1
-            THEN 'd'
-        WHEN GROUPING(day) == 1 AND GROUPING(month) == 1
-            THEN 'w'
-        WHEN GROUPING(day) == 1 AND GROUPING(week) == 1
-            THEN 'm'
+        WHEN GROUPING(week) == 1 AND GROUPING(month) == 1 THEN 'd'
+        WHEN GROUPING(day) == 1 AND GROUPING(month) == 1 THEN 'w'
+        WHEN GROUPING(day) == 1 AND GROUPING(week) == 1 THEN 'm'
         ELSE NULL
     END AS period_type,
     user_cards_segm,

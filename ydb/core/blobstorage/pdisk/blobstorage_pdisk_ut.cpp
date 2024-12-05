@@ -1027,13 +1027,11 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         static int testCase = 0;
         switch(testCase++) {
             case 0: {
-                TBuffer x;
                 auto data = PrepareData(size);
-                x.Append(data.data(), data.size());
 
                 auto counter = MakeIntrusive<::NMonitoring::TCounterForPtr>();
                 TMemoryConsumer consumer(counter);
-                TTrackableBuffer buffer(std::move(consumer), x.Data(), x.Size());
+                TTrackableBuffer buffer(std::move(consumer), data.data(), data.size());
                 return MakeIntrusive<NPDisk::TEvChunkWrite::TBufBackedUpParts>(std::move(buffer));
             }
             case 1: {
@@ -1043,7 +1041,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 if (size >= partsCount) {
                     for (size_t i = 0; i < partsCount - 1; ++i) {
                         TRope x(PrepareData(rng.Uniform(1, size / partsCount)));
-                        Cerr << x.size();
                         createdBytes += x.size();
                         rope.Insert(rope.End(), std::move(x));
                     }

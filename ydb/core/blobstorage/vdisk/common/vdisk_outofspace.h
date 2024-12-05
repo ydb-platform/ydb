@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/protos/whiteboard_disk_states.pb.h>
 
 namespace NKikimr {
 
@@ -85,6 +86,16 @@ namespace NKikimr {
 
         ui32 GetLocalUsedChunks() const {
             return static_cast<ui32>(AtomicGet(LocalUsedChunks));
+        }
+
+        NKikimrWhiteboard::TOosParams WhiteboardOosParams() const {
+            NKikimrWhiteboard::TOosParams params;
+            params.SetLocalDiskState(StatusFlagToSpaceColor(GetLocalStatusFlags()));
+            params.SetLocalDiskStateChunks(StatusFlagToSpaceColor(GetLocalChunkStatusFlags()));
+            params.SetLocalDiskStateLog(StatusFlagToSpaceColor(GetLocalLogStatusFlags()));
+            params.SetGlobalGroupState(StatusFlagToSpaceColor(GetGlobalStatusFlags().Flags));
+            params.SetGlobalWhiteboardFlag(GlobalWhiteboardFlag());
+            return params;
         }
 
     private:

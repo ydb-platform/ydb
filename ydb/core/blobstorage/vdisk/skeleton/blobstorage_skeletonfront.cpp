@@ -1066,6 +1066,7 @@ namespace NKikimr {
         void UpdateWhiteboard(const TActorContext &ctx, bool schedule = true) {
             // out of space
             const auto outOfSpaceFlags = VCtx->GetOutOfSpaceState().LocalWhiteboardFlag();
+            const auto oosParams = VCtx->GetOutOfSpaceState().WhiteboardOosParams();
             // skeleton state
             const auto state = VDiskMonGroup.VDiskState();
             // replicated?
@@ -1082,7 +1083,7 @@ namespace NKikimr {
                 light = Max(light, queue->GetCumulativeLight());
             }
             // send a message to Whiteboard
-            auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags,
+            auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags, oosParams,
                 replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, unsyncedVDisks, light, HasUnreadableBlobs);
             if (ReplMonGroup.ReplUnreplicatedVDisks()) {
                 const i64 a = ReplMonGroup.ReplWorkUnitsDone();
@@ -1103,7 +1104,8 @@ namespace NKikimr {
                          std::nullopt,
                          state,
                          replicated,
-                         outOfSpaceFlags));
+                         outOfSpaceFlags,
+                         oosParams));
             // repeat later
             if (schedule) {
                 ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard);

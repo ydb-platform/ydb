@@ -351,6 +351,13 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
     if (m.HasDiskSpace()) {
         pb->SetDiskSpace(NKikimrWhiteboard::EFlag_Name(m.GetDiskSpace()));
     }
+    if (m.HasOosParams()) {
+        pb->SetLocalDiskState(NKikimrBlobStorage::TPDiskSpaceColor::E_Name(m.GetOosParams().GetLocalDiskState()));
+        pb->SetLocalChunkState(NKikimrBlobStorage::TPDiskSpaceColor::E_Name(m.GetOosParams().GetLocalDiskStateChunks()));
+        pb->SetLocalLogState(NKikimrBlobStorage::TPDiskSpaceColor::E_Name(m.GetOosParams().GetLocalDiskStateLog()));
+        pb->SetGlobalGroupState(NKikimrBlobStorage::TPDiskSpaceColor::E_Name(m.GetOosParams().GetGlobalGroupState()));
+        pb->SetGlobalWhiteboardFlag(NKikimrWhiteboard::EFlag_Name(m.GetOosParams().GetGlobalWhiteboardFlag()));
+    }
     pb->SetKind(NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(kind));
     if (isBeingDeleted) {
         pb->SetIsBeingDeleted(true);

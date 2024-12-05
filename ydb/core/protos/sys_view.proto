@@ -219,6 +219,11 @@ message TVSlotInfo {
     optional string DiskSpace = 15;
     optional bool Replicated = 16;
     optional string State = 17;
+    optional string LocalDiskState = 18;
+    optional string LocalChunkState = 19;
+    optional string LocalLogState = 20;
+    optional string GlobalGroupState = 21;
+    optional string GlobalWhiteboardFlag = 22;
     // metrics ?
 }
 

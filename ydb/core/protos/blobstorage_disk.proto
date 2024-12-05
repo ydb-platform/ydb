@@ -66,6 +66,7 @@ message TVDiskMetrics {
     optional NKikimrWhiteboard.EVDiskState State = 11;
     optional bool Replicated = 12;
     optional NKikimrWhiteboard.EFlag DiskSpace = 13;
+    optional NKikimrWhiteboard.TOosParams OosParams = 14;
 }
 
 message TPDiskMetrics {

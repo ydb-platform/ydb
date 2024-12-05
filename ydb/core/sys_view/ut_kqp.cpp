@@ -965,18 +965,23 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     AllocatedSize,
                     AvailableSize,
                     DiskSpace,
+                    GlobalGroupState,
+                    GlobalWhiteboardFlag,
                     FailDomain,
                     FailRealm,
                     GroupGeneration,
                     GroupId,
                     Kind,
+                    LocalDiskState,
+                    LocalChunkState,
+                    LocalLogState,
                     NodeId,
                     PDiskId,
                     Replicated,
                     State,
                     Status,
                     VDisk,
-                    VSlotId
+                    VSlotId,
                 FROM `/Root/.sys/ds_vslots` WHERE GroupId >= 0x80000000;
             )").GetValueSync();
 
@@ -992,16 +997,21 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 15);
+        TYsonFieldChecker check(ysonString, 20);
 
         check.Uint64(0u, true); // AllocatedSize
         check.Uint64(0u, true); // AvailableSize
         check.Null(); // DiskSpace
+        check.Null(); // GlobalGroupState
+        check.Null(); // GlobalWhiteboardFlag
         check.Uint64(0u); // FailDomain
         check.Uint64(0u); // FailRealm
         check.Uint64(1u); // GroupGeneration
         check.Uint64(2181038080u); // GroupId
         check.String("Default"); // Kind
+        check.Null(); // LocalDiskState
+        check.Null(); // LocalChunkState
+        check.Null(); // LocalLogState
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(1u); // PDiskId
         check.Null(); // Replicated

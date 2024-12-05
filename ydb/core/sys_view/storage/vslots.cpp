@@ -40,6 +40,11 @@ public:
             {T::Kind::ColumnId, {E::kInfoFieldNumber, V::kKindFieldNumber}},
             {T::Replicated::ColumnId, {E::kInfoFieldNumber, V::kReplicatedFieldNumber}},
             {T::DiskSpace::ColumnId, {E::kInfoFieldNumber, V::kDiskSpaceFieldNumber}},
+            {T::LocalDiskState::ColumnId, {E::kInfoFieldNumber, V::kLocalDiskStateFieldNumber}},
+            {T::LocalChunkState::ColumnId, {E::kInfoFieldNumber, V::kLocalChunkStateFieldNumber}},
+            {T::LocalLogState::ColumnId, {E::kInfoFieldNumber, V::kLocalLogStateFieldNumber}},
+            {T::GlobalGroupState::ColumnId, {E::kInfoFieldNumber, V::kGlobalGroupStateFieldNumber}},
+            {T::GlobalWhiteboardFlag::ColumnId, {E::kInfoFieldNumber, V::kGlobalWhiteboardFlagFieldNumber}},
         };
         return fieldMap;
     }

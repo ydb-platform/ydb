@@ -1,5 +1,7 @@
 package NKikimrWhiteboard;
 
+import "ydb/core/protos/whiteboard_flags.proto";
+import "ydb/core/protos/blobstorage_disk_color.proto";
 
 enum EVDiskState {
     Initial = 1;
@@ -8,4 +10,12 @@ enum EVDiskState {
     SyncGuidRecoveryError = 4;
     OK = 5;
     PDiskError = 6;
+}
+
+message TOosParams {
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E LocalDiskState = 1;
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E LocalDiskStateChunks = 2;
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E LocalDiskStateLog = 3;
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E GlobalGroupState = 4;
+    optional NKikimrWhiteboard.EFlag GlobalWhiteboardFlag = 5;
 }

@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         loginConnection.Stop();
     }
 
-    Y_UNIT_TEST(DisableBuiltinAuthMechanism) {
+    Y_UNIT_TEST(DisableLoginAuthentication) {
         TLoginClientConnection loginConnection(false);
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});

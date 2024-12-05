@@ -89,24 +89,24 @@ class ScenarioTestHelper:
             self._name = name
             self._compression = compression
             self._compression_level = compression_level
-        
+
         def to_yql(self) -> str:
             """Convert to YQL"""
+            nl = '\n'
+            return f'FAMILY {self._name}{nl}    (COMPRESSION = "{self._compression.name}"{",{nl}    COMPRESSION_LEVEL = " + str(self._compression_level) if self._compression_level != None else ""}{nl})'
 
-            return f'FAMILY {self._name}\n    (COMPRESSION = "{self._compression.name}"{",\n    COMPRESSION_LEVEL = " + str(self._compression_level) if self._compression_level != None else ""}\n)'
-        
         @property
         def name(self) -> str:
             """Column family name."""
 
             return self._name
-        
+
         @property
         def compression(self) -> ScenarioTestHelper.Compression:
             """Compression"""
 
             return self._compression
-        
+
         @property
         def compression_level(self) -> Optional[int]:
             """Compression level."""
@@ -155,7 +155,7 @@ class ScenarioTestHelper:
             """Column type."""
 
             return self._type
-        
+
         def column_family(self) -> str:
             """Colum family name"""
 
@@ -210,7 +210,7 @@ class ScenarioTestHelper:
 
             self.key_columns += vargs
             return self
-    
+
         def with_column_family(self, *vargs, **kargs) -> ScenarioTestHelper.Schema:
             """Add a column family.
 

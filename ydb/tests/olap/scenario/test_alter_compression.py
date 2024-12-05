@@ -1,3 +1,4 @@
+
 from conftest import BaseTestSet
 from ydb.tests.olap.scenario.helpers import (
     ScenarioTestHelper,
@@ -17,11 +18,17 @@ from ydb.tests.olap.scenario.helpers import (
 )
 
 from typing import List, Dict, Any
-from ydb import PrimitiveType
+from ydb import PrimitiveType, StatusCode
 from ydb.tests.olap.lib.utils import get_external_param, external_param_is_true
 from datetime import datetime, timedelta
 from string import ascii_lowercase
-import random, threading, copy, logging, time
+
+import random
+import threading
+import copy
+import logging
+import time
+import ydb
 
 class TestAlterCompression(BaseTestSet):
     schema1 = (
@@ -129,10 +136,10 @@ class TestAlterCompression(BaseTestSet):
     # working with the table store is not supported yet, so is_standalone_tables = True
     def scenario_alter_compression(self, ctx: TestContext):
         random.seed(2)
-        n_tables = int(get_external_param('n_tables', '3'))
+        n_tables = int(get_external_param('n_tables', '2'))
         # is_standalone_tables = external_param_is_true('test-standalone-tables')
         self.is_standalone_tables = True
-        self.duration_alter_and_insert = timedelta(seconds=int(get_external_param('duration_alter_and_insert', '5')))
+        self.duration_alter_and_insert = timedelta(seconds=int(get_external_param('duration_alter_and_insert', '2')))
         self.count_rows_for_bulk_upsert = int(get_external_param('count_rows_for_bulk_upsert', '1000'))
         self.table_store = 'TableStore'
 

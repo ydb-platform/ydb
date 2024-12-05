@@ -4,7 +4,8 @@ from ydb.types import BulkUpsertColumns
 from abc import abstractmethod, ABC
 from ydb import PrimitiveType
 from typing import override, Any, List, Dict
-import random, string
+import random
+import string
 
 
 class IColumnValueGenerator(ABC):

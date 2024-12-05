@@ -150,6 +150,7 @@ class Action(ABC):
         """Title to display in Allure."""
         pass
 
+
 class AlterTableAction(Action):
     """The base class for all actions when changing table-like objects.
 
@@ -201,6 +202,7 @@ class AddColumn(AlterTableAction):
     def title(self) -> str:
         return f'add column `{self._column.name}`'
 
+
 class AlterColumnBase(Action):
     """The base class for all actions on a column."""
 
@@ -214,13 +216,14 @@ class AlterColumnBase(Action):
         """Title to display in Allure."""
         pass
 
+
 class AlterFamily(AlterColumnBase):
     """Alter family for a column."""
 
     def __init__(self, colum_family_name: str) -> None:
         super().__init__()
         self._colum_family_name = colum_family_name
-    
+
     @override
     def to_yql(self) -> str:
         return f'SET FAMILY {self._colum_family_name}'
@@ -228,6 +231,7 @@ class AlterFamily(AlterColumnBase):
     @override
     def title(self) -> str:
         return f'set family {self._colum_family_name}'
+
 
 class AlterColumn(AlterTableAction):
     """Alter a column in a table-like object.
@@ -261,6 +265,7 @@ class AlterColumn(AlterTableAction):
     @override
     def title(self) -> str:
         return f'altert column {self._column_name}`{self._action.title()}`'
+
 
 class DropColumn(AlterTableAction):
     """Remove a column from a table-like object.
@@ -389,6 +394,7 @@ class AddColumnFamily(AlterTableAction):
     def title(self) -> str:
         return f'add family `{self._column_family.name}`'
 
+
 class ColumnFamilyAction(Action):
     """The base class for all actions when changing colum family."""
 
@@ -404,13 +410,14 @@ class ColumnFamilyAction(Action):
 
         pass
 
+
 class AlterCompression(AlterTableAction):
     """Alter compression codec for a column family."""
 
     def __init__(self, compression: ScenarioTestHelper.Compression) -> None:
         super().__init__()
         self._compression = compression
-    
+
     @override
     def to_yql(self) -> str:
         return f'SET COMPRESSION "{self._compression.name}"'
@@ -418,14 +425,15 @@ class AlterCompression(AlterTableAction):
     @override
     def title(self) -> str:
         return f'set compression "{self._compression.name}"'
-    
+
+
 class AlterCompressionLevel(AlterTableAction):
     """Alter compression codec level for a column family."""
 
     def __init__(self, compression_level: int) -> None:
         super().__init__()
         self._compression_level = compression_level
-    
+
     @override
     def to_yql(self) -> str:
         return f'SET COMPRESSION_LEVEL {self._compression_level}'
@@ -433,6 +441,7 @@ class AlterCompressionLevel(AlterTableAction):
     @override
     def title(self) -> str:
         return f'set compression level {self._compression_level}'
+
 
 class AlterColumnFamily(AlterTableAction):
     """Alter a column family to a table-like object.
@@ -467,6 +476,7 @@ class AlterColumnFamily(AlterTableAction):
     @override
     def title(self) -> str:
         return f'alter family `{self._column_family_name}` {self._action.title()}'
+
 
 class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
     """The base class for all requests to change table-like objects.

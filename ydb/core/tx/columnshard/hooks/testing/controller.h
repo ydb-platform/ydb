@@ -146,7 +146,7 @@ protected:
     virtual TDuration DoGetUsedSnapshotLivetime(const TDuration def) const override {
         return OverrideUsedSnapshotLivetime.value_or(def);
     }
-    virtual std::optional<TDuration> DoGetStalenessLivetimePing() const {
+    virtual std::optional<TDuration> DoGetStalenessLivetimePing() const override {
         return OverrideStalenessLivetimePing;
     }
     virtual TDuration DoGetCompactionActualizationLag(const TDuration def) const override {

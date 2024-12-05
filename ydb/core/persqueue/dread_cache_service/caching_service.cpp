@@ -45,7 +45,6 @@ public:
 
         Become(&TThis::StateWork);
         Y_UNUSED(ctx);
-        //Y_ABORT_UNLESS(Counters);
     }
 
     STRICT_STFUNC(StateWork,
@@ -66,6 +65,7 @@ private:
         const auto& ctx = ActorContext();
         auto key = MakeSessionKey(ev->Get());
         PQ_CPROXY_LOG_D("client session connected with id '" << key.SessionId << "'");
+        ChangeCounterValue("CreateClientSessionRate", 1, false, true);
         auto sessionIter = ServerSessions.find(key);
         if (sessionIter.IsEnd()) {
             PQ_CPROXY_LOG_D("unknown session id '" << key.SessionId << "', close session");
@@ -88,7 +88,11 @@ private:
         // Without this response, the client might have to wait until there are topic messages to send.
         ctx.Send(sender, new TEvPQProxy::TEvDirectReadDataSessionConnectedResponse(key.PartitionSessionId, ev->Get()->Generation));
 
+        if (!sessionIter->second.Client.Defined()) {
+            ChangeCounterValue("ActiveClientSessions", 1, false);
+        } // else Its probably a misbehavior by client (or proxy) but we can handle it anyway
         sessionIter->second.Client = TCacheClientContext{sender, startingReadId};
+
         AssignByProxy[sender].insert(key.PartitionSessionId);
         while(SendNextReadToClient(sessionIter)) {
             // Empty
@@ -105,6 +109,7 @@ private:
                     Ydb::PersQueue::ErrorCode::ErrorCode::OK, "", ev->Sender
             );
         }
+        AssignByProxy.erase(assignIter);
     }
 
     void HandleRegister(TEvPQ::TEvRegisterDirectReadSession::TPtr& ev) {
@@ -149,6 +154,7 @@ private:
         }
         ChangeCounterValue("StagedReadDataSize", ins.first->second->ByteSize(), false);
         ChangeCounterValue("StagedReadsCount", 1, false);
+        ChangeCounterValue("StagedReadsRate", 1, false, true);
         PQ_CPROXY_LOG_D("staged direct read id " << ev->Get()->ReadKey.ReadId << " for session: " << sessionKey.SessionId);
     }
 
@@ -178,6 +184,7 @@ private:
         if (inserted) {
             ChangeCounterValue("PublishedReadDataSize", stagedIter->second->ByteSize(), false);
             ChangeCounterValue("PublishedReadsCount", 1, false);
+            ChangeCounterValue("PublishedReadsRate", 1, false, true);
         }
         ChangeCounterValue("StagedReadDataSize", -stagedIter->second->ByteSize(), false);
         ChangeCounterValue("StagedReadsCount", -1, false);
@@ -201,10 +208,12 @@ private:
         if (iter->second.Generation != generation) { // Stale generation in event, ignore it
             return;
         }
+        bool didForget = false;
         auto readIter = iter->second.Reads.find(ev->Get()->ReadKey.ReadId);
         if (readIter != iter->second.Reads.end()) {
             ChangeCounterValue("PublishedReadDataSize", -readIter->second->ByteSize(), false);
             ChangeCounterValue("PublishedReadsCount", -1, false);
+            didForget = true;
 
             iter->second.Reads.erase(readIter);
         }
@@ -212,7 +221,11 @@ private:
         if (stagedIter != iter->second.StagedReads.end()) {
             ChangeCounterValue("StagedReadDataSize", -stagedIter->second->ByteSize(), false);
             ChangeCounterValue("StagedReadsCount", -1, false);
+            didForget = true;
             iter->second.StagedReads.erase(stagedIter);
+        }
+        if (didForget) {
+            ChangeCounterValue("ForgetReadsRate", 1, false, true);
         }
         iter->second.StagedReads.erase(ev->Get()->ReadKey.ReadId);
     }
@@ -234,13 +247,15 @@ private:
         if (!assignIter.IsEnd()) {
             assignIter->second.erase(sessionIter->first.PartitionSessionId);
         }
+        if (sessionIter->second.Client.Defined()) {
+            ChangeCounterValue("ActiveClientSessions", -1, false);
+        }
         sessionIter->second.Client = Nothing();
     }
 
     [[nodiscard]] bool DestroyServerSession(TSessionsMap::iterator sessionIter, ui64 generation) {
         if (sessionIter.IsEnd() || sessionIter->second.Generation > generation)
             return false;
-        Cerr << "CahceProxy: DestroyServerSession with generation: " << generation << Endl;
         DestroyPartitionSession(sessionIter, Ydb::PersQueue::ErrorCode::READ_ERROR_NO_SESSION, "Closed by server");
         ServerSessions.erase(sessionIter);
         ChangeCounterValue("ActiveServerSessions", ServerSessions.size(), true);
@@ -311,6 +326,7 @@ private:
             return false;
         }
         auto result = SendData(sessionIter->first.PartitionSessionId, client, nextData->first, nextData->second);
+        ChangeCounterValue("SendDataRate", 1, false, true);
         if (!result) {
             //ToDo: for discuss. Error in parsing partition response - shall we kill the entire session or just the partition session?
             DestroyClientSession(sessionIter, false, Ydb::PersQueue::ErrorCode::OK, "");
@@ -369,10 +385,10 @@ private:
         return true;
     }
 
-    void ChangeCounterValue(const TString& name, i64 value, bool isAbs) {
+    void ChangeCounterValue(const TString& name, i64 value, bool isAbs, bool deriv = false) {
         if (!Counters)
             return;
-        auto counter = Counters->GetCounter(name, false);
+        auto counter = Counters->GetCounter(name, deriv);
         if (isAbs)
             counter->Set(value);
         else if (value >= 0)
@@ -510,9 +526,12 @@ private:
 
 
 IActor* CreatePQDReadCacheService(const ::NMonitoring::TDynamicCounterPtr& counters) {
-    Y_VERIFY_DEBUG(counters);
-    return new TPQDirectReadCacheService(
-        GetServiceCounters(counters, "persqueue")->GetSubgroup("subsystem", "caching_service"));
+    if (counters) {
+        return new TPQDirectReadCacheService(
+            GetServiceCounters(counters, "persqueue")->GetSubgroup("subsystem", "caching_service"));
+    } else {
+        return new TPQDirectReadCacheService(nullptr);
+    }
 }
 
 } // namespace NKikimr::NPQ

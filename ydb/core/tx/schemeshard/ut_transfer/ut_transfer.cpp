@@ -114,4 +114,33 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         UNIT_ASSERT_VALUES_EQUAL(controllerIds.size(), 4);
     }
 
+    Y_UNIT_TEST(CreateDropRecreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        ui64 controllerId = 0;
+
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme("Transfer"));
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Transfer");
+            TestDescribeResult(desc, {NLs::PathExist});
+            controllerId = ExtractControllerId(desc.GetPathDescription());
+        }
+
+        TestDropTransfer(runtime, ++txId, "/MyRoot", "Transfer");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Transfer"), {NLs::PathNotExist});
+
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme("Transfer"));
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Transfer");
+            TestDescribeResult(desc, {NLs::PathExist});
+            UNIT_ASSERT_VALUES_UNEQUAL(controllerId, ExtractControllerId(desc.GetPathDescription()));
+        }
+    }
+
 } // TTransferTests

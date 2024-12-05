@@ -102,27 +102,6 @@ def get_table_description(table_name):
         );
     """.format(table_name=table_name)
 
-    return """
-        CREATE TABLE `{table_name}` (
-            key Uint64 NOT NULL,
-            `timestamp` Timestamp NOT NULL,
-            value Utf8 FAMILY lz4_family NOT NULL, 
-            PRIMARY KEY (key),
-            FAMILY lz4_family (
-                COMPRESSION = "lz4"
-            ),
-            INDEX by_timestamp GLOBAL ON (`timestamp`)
-        )
-        WITH (
-            TTL = Interval("PT240S") ON `timestamp`,
-            AUTO_PARTITIONING_BY_SIZE = ENABLED,
-            AUTO_PARTITIONING_BY_LOAD = ENABLED,
-            AUTO_PARTITIONING_PARTITION_SIZE_MB = 128,
-            READ_REPLICAS_SETTINGS = "PER_AZ:1",
-            KEY_BLOOM_FILTER = ENABLED
-        );
-    """.format(table_name=table_name)
-
 
 def timestamp():
     return int(1000 * time.time())

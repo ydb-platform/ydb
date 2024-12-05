@@ -194,7 +194,7 @@ ui64 TColumnShard::GetOutdatedStep() const {
 }
 
 NOlap::TSnapshot TColumnShard::GetMinReadSnapshot() const {
-    ui64 delayMillisec = GetMaxReadStaleness().MilliSeconds();
+    ui64 delayMillisec = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness().MilliSeconds();
     ui64 passedStep = GetOutdatedStep();
     ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
 
@@ -1598,10 +1598,6 @@ void TColumnShard::OnTieringModified(const std::optional<ui64> pathId) {
 const NKikimr::NColumnShard::NTiers::TManager* TColumnShard::GetTierManagerPointer(const TString& tierId) const {
     Y_ABORT_UNLESS(!!Tiers);
     return Tiers->GetManagerOptional(tierId);
-}
-
-TDuration TColumnShard::GetMaxReadStaleness() {
-    return NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean();
 }
 
 } // namespace NKikimr::NColumnShard

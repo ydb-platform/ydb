@@ -5,8 +5,6 @@
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/testlib/cs_helper.h>
 
-#include <format>
-
 extern "C" {
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
 }
@@ -25,7 +23,8 @@ namespace NKqp {
         }
 
         Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
-        TableClient = std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient());
+        TableClient =
+            std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")));
         Session = std::make_unique<NYdb::NTable::TSession>(TableClient->CreateSession().GetValueSync().GetSession());
     }
 
@@ -48,8 +47,7 @@ namespace NKqp {
     }
 
     void TTestHelper::CreateTier(const TString& tierName) {
-        // auto result = GetSession().ExecuteSchemeQuery(R"(
-        auto result = Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")).GetSession().GetValueSync().GetSession().ExecuteSchemeQuery(R"(
+        auto result = GetSession().ExecuteSchemeQuery(R"(
             UPSERT OBJECT `accessKey` (TYPE SECRET) WITH (value = `secretAccessKey`);
             UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);
             CREATE EXTERNAL DATA SOURCE `)" + tierName + R"(` WITH (

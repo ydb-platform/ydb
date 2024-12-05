@@ -17,7 +17,7 @@ private:
     THashSet<TLogoBlobID> BlobIdsToRemove;
     void Handle(NWrappers::NExternalStorage::TEvDeleteObjectResponse::TPtr& ev);
     void CheckFinished();
-    void OnDeleteBlobFinished(const TLogoBlobID& blobId, bool success, const TString& errorMessage = "");
+    void OnDeleteBlobFinished(const TLogoBlobID& blobId);
 
     virtual void DoOnSharedRemovingFinished() override {
         CheckFinished();

@@ -8,7 +8,7 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
     TString errorMessage;
     Y_ABORT_UNLESS(ev->Get()->Key);
     AFL_VERIFY(TLogoBlobID::Parse(logoBlobId, *ev->Get()->Key, errorMessage))("error", errorMessage);
-    OnDeleteBlobFinished(logoBlobId, ev->Get()->IsSuccess());
+    OnDeleteBlobFinished(logoBlobId);
 }
 
 void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
@@ -23,7 +23,10 @@ void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
     Become(&TGarbageCollectionActor::StateWork);
     if (!GCTask->GetExternalStorageOperator()) {
         for (auto&& i : BlobIdsToRemove) {
-            OnDeleteBlobFinished(i, false, "storage operator is uninitialized for tier: " + GCTask->GetStorageId());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "delete_object_failed")(
+                "reason", "storage operator is uninitialized for tier: " + GCTask->GetStorageId());
+            // TODO: reply means success (?). Confirm or deny. If confirmed, fix here and in Handle
+            OnDeleteBlobFinished(i);
         }
         return;
     }
@@ -44,11 +47,7 @@ void TGarbageCollectionActor::CheckFinished() {
     }
 }
 
-void TGarbageCollectionActor::OnDeleteBlobFinished(const TLogoBlobID& blobId, bool success, const TString& errorMessage) {
-    if (success) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "delete_object_failed")(
-            "reason", errorMessage);
-    }
+void TGarbageCollectionActor::OnDeleteBlobFinished(const TLogoBlobID& blobId) {
     BlobIdsToRemove.erase(blobId);
     CheckFinished();
 }

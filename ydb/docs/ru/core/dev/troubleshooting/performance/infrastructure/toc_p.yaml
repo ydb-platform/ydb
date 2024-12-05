@@ -1,0 +1,9 @@
+items:
+    - name: Сетевые проблемы
+      href: network.md
+    - name: Сбои ЦОД
+      href: dc-outage.md
+    - name: Работы и учения ЦОД
+      href: dc-drills.md
+    - name: Аппаратные проблемы
+      href: hardware.md

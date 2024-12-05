@@ -30,7 +30,7 @@ Autobalancing occurs in the following cases:
 
 - **Uneven distribution of database objects**
 
-    {{ ydb-short-name }} uses the **ObjectImbalance** metric to monitor the distribution of tablets utilizing the **[counter](*counter)** resource across {{ ydb-short-name }} nodes. When {{ ydb-short-name }} nodes restart, these tablets may not distribute evenly, prompting Hive to initiate the autobalancing procedure.
+    {{ ydb-short-name }} uses the **ObjectImbalance** metric to monitor the distribution of tablets utilizing the **[count](*count)** resource across {{ ydb-short-name }} nodes. When {{ ydb-short-name }} nodes restart, these tablets may not distribute evenly, prompting Hive to initiate the autobalancing procedure.
 
 
 ## Diagnostics
@@ -84,4 +84,3 @@ Adjust Hive balancer settings:
 
 
 [*count]: Count is a virtual resource for distributing tablets of the same type evenly between nodes.
-

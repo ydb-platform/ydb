@@ -167,5 +167,12 @@ enum EOperationType {
     // Move sequence
     ESchemeOpMoveSequence = 108;
 
+    // Transfer
+    ESchemeOpCreateTransfer = 111;
+    ESchemeOpAlterTransfer = 112;
+    ESchemeOpDropTransfer = 113;
+    ESchemeOpDropTransferCascade = 114;
+    
+    
     // Some entries are grouped by semantics, so are out of order
 }

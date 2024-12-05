@@ -248,6 +248,14 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropReplicationCascade);
     DROP_BY_PATH_ID_HELPERS(DropReplicationCascade);
 
+    // transfer
+    GENERIC_HELPERS(CreateTransfer);
+    GENERIC_HELPERS(AlterTransfer);
+    GENERIC_HELPERS(DropTransfer);
+    DROP_BY_PATH_ID_HELPERS(DropTransfer);
+    GENERIC_HELPERS(DropTransferCascade);
+    DROP_BY_PATH_ID_HELPERS(DropTransferCascade);
+
     // pq
     GENERIC_HELPERS(CreatePQGroup);
     GENERIC_HELPERS(AlterPQGroup);

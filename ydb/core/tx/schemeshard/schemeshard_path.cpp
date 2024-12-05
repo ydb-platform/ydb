@@ -1713,6 +1713,12 @@ bool TPath::IsReplication() const {
     return Base()->IsReplication();
 }
 
+bool TPath::IsTransfer() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->IsTransfer();
+}
+
 ui32 TPath::Depth() const {
     return NameParts.size();
 }

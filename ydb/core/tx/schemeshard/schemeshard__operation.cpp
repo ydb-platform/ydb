@@ -1191,6 +1191,16 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropReplicationCascade:
         return CreateDropReplication(NextPartId(), txState, true);
 
+    // Transfer
+    case TTxState::ETxType::TxCreateTransfer:
+        return CreateNewTransfer(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterTransfer:
+        return CreateAlterTransfer(NextPartId(), txState);
+    case TTxState::ETxType::TxDropTransfer:
+        return CreateDropTransfer(NextPartId(), txState, false);
+    case TTxState::ETxType::TxDropTransferCascade:
+        return CreateDropTransfer(NextPartId(), txState, true);
+
     // BlobDepot
     case TTxState::ETxType::TxCreateBlobDepot:
         return CreateNewBlobDepot(NextPartId(), txState);
@@ -1449,6 +1459,16 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return {CreateDropReplication(NextPartId(), tx, false)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
         return {CreateDropReplication(NextPartId(), tx, true)};
+
+    // Transfer
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
+        return {CreateNewTransfer(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer:
+        return {CreateAlterTransfer(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer:
+        return {CreateDropTransfer(NextPartId(), tx, false)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade:
+        return {CreateDropTransfer(NextPartId(), tx, true)};
 
     // BlobDepot
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:

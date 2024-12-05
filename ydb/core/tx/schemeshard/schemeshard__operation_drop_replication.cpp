@@ -379,4 +379,12 @@ ISubOperation::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState st
     return MakeSubOperation<TDropReplication>(id, state, cascade);
 }
 
+ISubOperation::TPtr CreateDropTransfer(TOperationId id, const TTxTransaction& tx, bool cascade) {
+    return MakeSubOperation<TDropReplication>(id, tx, cascade);
+}
+
+ISubOperation::TPtr CreateDropTransfer(TOperationId id, TTxState::ETxState state, bool cascade) {
+    return MakeSubOperation<TDropReplication>(id, state, cascade);
+}
+
 }

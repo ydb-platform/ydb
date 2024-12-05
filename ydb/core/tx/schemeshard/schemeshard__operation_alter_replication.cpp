@@ -443,4 +443,12 @@ ISubOperation::TPtr CreateAlterReplication(TOperationId id, TTxState::ETxState s
     return MakeSubOperation<TAlterReplication>(id, state);
 }
 
+ISubOperation::TPtr CreateAlterTransfer(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TAlterReplication>(id, tx);
+}
+
+ISubOperation::TPtr CreateAlterTransfer(TOperationId id, TTxState::ETxState state) {
+    return MakeSubOperation<TAlterReplication>(id, state);
+}
+
 }

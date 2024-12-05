@@ -235,6 +235,16 @@ class TCreateReplication: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    explicit TCreateReplication(const TOperationId& id, TTxState::ETxState state, TPathElement::EPathType pathType)
+        : TSubOperation(id, state)
+        , PathType(pathType) {
+    }
+
+    explicit TCreateReplication(const TOperationId& id, const TTxTransaction& tx, TPathElement::EPathType pathType)
+        : TSubOperation(id, tx)
+        , PathType(pathType) {
+    }
+
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         auto desc = Transaction.GetReplication();
@@ -328,7 +338,7 @@ public:
         path->CreateTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();
         path->PathState = TPathElement::EPathState::EPathStateCreate;
-        path->PathType = TPathElement::EPathType::EPathTypeReplication;
+        path->PathType = PathType;
         result->SetPathId(path->PathId.LocalPathId);
 
         context.SS->IncrementPathDbRefCount(path->PathId);
@@ -419,16 +429,27 @@ public:
         context.OnComplete.DoneOperation(OperationId);
     }
 
+private:
+    const TPathElement::EPathType PathType;
+
 }; // TCreateReplication
 
 } // anonymous
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateReplication>(id, tx);
+    return MakeSubOperation<TCreateReplication>(id, tx, TPathElement::EPathType::EPathTypeReplication);
 }
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state) {
-    return MakeSubOperation<TCreateReplication>(id, state);
+    return MakeSubOperation<TCreateReplication>(id, state, TPathElement::EPathType::EPathTypeReplication);
+}
+
+ISubOperation::TPtr CreateNewTransfer(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TCreateReplication>(id, tx, TPathElement::EPathType::EPathTypeTransfer);
+}
+
+ISubOperation::TPtr CreateNewTransfer(TOperationId id, TTxState::ETxState state) {
+    return MakeSubOperation<TCreateReplication>(id, state, TPathElement::EPathType::EPathTypeTransfer);
 }
 
 }

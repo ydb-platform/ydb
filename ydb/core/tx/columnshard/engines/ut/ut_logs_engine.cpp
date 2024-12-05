@@ -363,7 +363,7 @@ private:
     std::shared_ptr<TColumnEngineChanges> Changes;
     const std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
 
-    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
+    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& /*guard*/) override {
         const TDataAccessorsInitializationContext context(VersionedIndex);
         Changes->SetFetchedDataAccessors(std::move(result), context);
     }
@@ -442,7 +442,7 @@ private:
     std::shared_ptr<IMetadataAccessorResultProcessor> Processor;
     TColumnEngineForLogs& Engine;
 
-    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
+    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& /*guard*/) override {
         Processor->ApplyResult(std::move(result), Engine);
     }
 

@@ -205,10 +205,10 @@ private:
     TFetchingScriptCursor Step;
     std::shared_ptr<IDataSource> Source;
     const NColumnShard::TCounterGuard Guard;
-    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
+    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
         AFL_VERIFY(!result.HasErrors());
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
-        Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
+        Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()), std::move(guard));
         AFL_VERIFY(Step.Next());
         auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId());
         NConveyor::TScanServiceOperator::SendTaskToExecute(task);

@@ -341,10 +341,6 @@ public:
     ui64 TotalBlobsSize() const {
         return Blobs.GetTotalBlobsSize();
     }
-
-    bool HasMetadataResourcesGuard() const {
-        return FetchedDataAccessors && FetchedDataAccessors->HasResourcesGuard();
-    }
 };
 
 }

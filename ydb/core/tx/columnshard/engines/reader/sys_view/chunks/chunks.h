@@ -79,15 +79,17 @@ private:
         using TBase = IDataTasksProcessor::ITask;
         YDB_READONLY_DEF(std::vector<TPortionDataAccessor>, Accessors);
         NColumnShard::TCounterGuard WaitingCountersGuard;
+        std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     public:
         TString GetTaskClassIdentifier() const override {
             return "TApplyResult";
         }
 
-        TApplyResult(const std::vector<TPortionDataAccessor>& accessors, NColumnShard::TCounterGuard&& waitingCountersGuard)
+        TApplyResult(const std::vector<TPortionDataAccessor>& accessors, NColumnShard::TCounterGuard&& waitingCountersGuard, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& resourcesGuard)
             : TBase(NActors::TActorId())
             , Accessors(accessors)
             , WaitingCountersGuard(std::move(waitingCountersGuard))
+            , ResourcesGuard(std::move(resourcesGuard))
         {
         }
 
@@ -119,7 +121,7 @@ private:
         }
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
 
-        virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
+        virtual void DoOnRequestsFinished(TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
             if (result.HasErrors()) {
                 NActors::TActivationContext::AsActorContext().Send(
                     OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(TConclusionStatus::Fail("cannot fetch accessors")));
@@ -127,7 +129,7 @@ private:
                 AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
                 NActors::TActivationContext::AsActorContext().Send(
                     OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-                                 std::make_shared<TApplyResult>(result.GetPortions(), std::move(WaitingCountersGuard))));
+                                 std::make_shared<TApplyResult>(result.GetPortions(), std::move(WaitingCountersGuard), std::move(guard))));
             }
         }
 

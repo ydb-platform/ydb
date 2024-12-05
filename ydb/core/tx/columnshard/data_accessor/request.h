@@ -14,7 +14,6 @@ private:
     THashMap<ui64, std::vector<TPortionDataAccessor>> AccessorsByPathId;
     THashMap<ui64, TPortionDataAccessor> PortionsById;
     std::vector<TPortionDataAccessor> Portions;
-    std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
 public:
     const std::vector<TPortionDataAccessor>& GetPortions() const {
@@ -62,30 +61,17 @@ public:
     bool HasErrors() const {
         return ErrorsByPathId.size();
     }
-
-    void SetResourcesGuard(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
-        AFL_VERIFY(!ResourcesGuard);
-        AFL_VERIFY(guard);
-        ResourcesGuard = guard;
-    }
-
-    bool HasResourcesGuard() const {
-        return !!ResourcesGuard;
-    }
 };
 
 class IDataAccessorRequestsSubscriber: public NColumnShard::TMonitoringObjectsCounter<IDataAccessorRequestsSubscriber> {
 private:
     THashSet<ui64> RequestIds;
-    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> DataAccessorsResources;
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
-    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) = 0;
+    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) = 0;
 
     void OnRequestsFinished(TDataAccessorsResult&& result) {
-        if (DataAccessorsResources) {
-            result.SetResourcesGuard(std::move(DataAccessorsResources));
-        }
-        DoOnRequestsFinished(std::move(result));
+        DoOnRequestsFinished(std::move(result), std::move(ResourcesGuard));
     }
 
     void RegisterRequestId(const TDataAccessorsRequest& request);
@@ -107,9 +93,9 @@ public:
     }
 
     void SetResourcesGuard(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
-        AFL_VERIFY(!DataAccessorsResources);
+        AFL_VERIFY(!ResourcesGuard);
         AFL_VERIFY(guard);
-        DataAccessorsResources = guard;
+        ResourcesGuard = guard;
     }
 
     virtual ~IDataAccessorRequestsSubscriber() = default;
@@ -117,7 +103,7 @@ public:
 
 class TFakeDataAccessorsSubscriber: public IDataAccessorRequestsSubscriber {
 private:
-    virtual void DoOnRequestsFinished(TDataAccessorsResult&& /*result*/) override {
+    virtual void DoOnRequestsFinished(TDataAccessorsResult&& /*result*/, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& /*guard*/) override {
     }
 };
 

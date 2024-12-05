@@ -134,7 +134,7 @@ public:
         std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
         const std::set<ui32> ColumnTagsRequested;
 
-        virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override {
+        virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
             THashMap<ui32, std::unique_ptr<TCountMinSketch>> sketchesByColumns;
             for (auto id : ColumnTagsRequested) {
                 sketchesByColumns.emplace(id, TCountMinSketch::Create());

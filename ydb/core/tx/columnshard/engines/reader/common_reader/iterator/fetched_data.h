@@ -25,6 +25,7 @@ private:
     YDB_READONLY(bool, UseFilter, false);
 
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AccessorsGuard;
+    std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> MetadataGuard;
     std::optional<TPortionDataAccessor> PortionAccessor;
     bool DataAdded = false;
 
@@ -55,9 +56,12 @@ public:
         return !!PortionAccessor;
     }
 
-    void SetPortionAccessor(TPortionDataAccessor&& accessor) {
+    void SetPortionAccessor(TPortionDataAccessor&& accessor, std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>&& guard) {
         AFL_VERIFY(!PortionAccessor);
         PortionAccessor = std::move(accessor);
+        AFL_VERIFY(!MetadataGuard);
+        AFL_VERIFY(!!guard);
+        MetadataGuard = std::move(guard);
     }
 
     const TPortionDataAccessor& GetPortionAccessor() const {

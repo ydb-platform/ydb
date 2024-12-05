@@ -35,8 +35,7 @@ $users = (
         CAST(Random(idx + x) AS Uint64) % $count AS j,
         subkey
     FROM $users_0
-        FLATTEN BY
-            lst AS x
+        FLATTEN BY lst AS x
 );
 
 SELECT

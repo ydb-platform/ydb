@@ -14,8 +14,7 @@ SELECT
     iv
 FROM $data
     AS d
-    FLATTEN BY
-        lv AS iv
+    FLATTEN BY lv AS iv
 WHERE iv < 'd'
 ORDER BY
     mod,

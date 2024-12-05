@@ -4,8 +4,7 @@ $sub = (
     SELECT
         key
     FROM Input
-        FLATTEN LIST BY
-            key
+        FLATTEN LIST BY key
 );
 
 INSERT INTO Output

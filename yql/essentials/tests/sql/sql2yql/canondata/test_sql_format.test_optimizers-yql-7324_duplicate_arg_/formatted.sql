@@ -20,5 +20,4 @@ SELECT
     event_id,
     test_ids
 FROM $input
-    FLATTEN BY
-        event_ids AS event_id;
+    FLATTEN BY event_ids AS event_id;

@@ -10,5 +10,4 @@ FROM (
     FROM Input
     WHERE value > ''
 )
-    FLATTEN LIST BY
-        key2;
+    FLATTEN LIST BY key2;

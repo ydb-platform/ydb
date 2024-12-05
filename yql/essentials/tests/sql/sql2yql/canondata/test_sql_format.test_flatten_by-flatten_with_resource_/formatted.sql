@@ -22,5 +22,4 @@ SELECT
     key,
     $load(resourceList) AS value
 FROM $input
-    FLATTEN BY
-        resourceList;
+    FLATTEN BY resourceList;

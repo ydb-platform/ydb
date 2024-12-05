@@ -21,5 +21,4 @@ FROM (
         ) AS joins
     FROM @tmp
 )
-    FLATTEN LIST BY
-        joins AS id;
+    FLATTEN LIST BY joins AS id;

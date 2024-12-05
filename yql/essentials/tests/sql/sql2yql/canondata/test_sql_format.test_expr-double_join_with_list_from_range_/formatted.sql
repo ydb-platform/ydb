@@ -13,8 +13,7 @@ $list =
             SELECT
                 ListFromRange(1us, 333us) AS lst
         )
-            FLATTEN LIST BY
-                lst
+            FLATTEN LIST BY lst
     );
 
 $usr =

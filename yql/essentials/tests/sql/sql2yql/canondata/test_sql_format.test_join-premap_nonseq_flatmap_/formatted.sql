@@ -8,8 +8,7 @@ $hashes = (
         SELECT
             ListFromRange(0, 3) AS multiplier
     )
-        FLATTEN BY
-            multiplier
+        FLATTEN BY multiplier
 );
 
 SELECT

@@ -791,7 +791,7 @@ Y_UNIT_TEST(Select) {
         {"select 1 from user flatten columns",
             "SELECT\n\t1\nFROM user\n\tFLATTEN COLUMNS;\n"},
         {"select 1 from user flatten list by user",
-            "SELECT\n\t1\nFROM user\n\tFLATTEN LIST BY\n\t\tuser;\n"},
+            "SELECT\n\t1\nFROM user\n\tFLATTEN LIST BY user;\n"},
         {"select 1 from user flatten list by (user,user)",
             "SELECT\n\t1\nFROM user\n\tFLATTEN LIST BY (\n\t\tuser,\n\t\tuser\n\t);\n"},
         {"select 1 from $user(1,2)",

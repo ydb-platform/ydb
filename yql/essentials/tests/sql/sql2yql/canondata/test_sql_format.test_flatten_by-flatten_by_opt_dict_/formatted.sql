@@ -13,7 +13,6 @@ $data_dict = (
 SELECT
     *
 FROM $data_dict
-    FLATTEN DICT BY
-        dk
+    FLATTEN DICT BY dk
 ORDER BY
     mod;

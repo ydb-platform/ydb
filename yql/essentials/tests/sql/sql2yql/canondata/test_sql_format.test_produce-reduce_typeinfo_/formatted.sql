@@ -28,8 +28,7 @@ FROM (
     SELECT
         *
     FROM $r1
-        FLATTEN LIST BY
-            arg_0
+        FLATTEN LIST BY arg_0
 )
     FLATTEN COLUMNS
 ORDER BY

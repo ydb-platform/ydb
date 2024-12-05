@@ -18,8 +18,7 @@ SELECT
     `struct`.`struct`
 FROM $data_dict
     AS dd
-    FLATTEN BY
-        list_struct AS `struct`
+    FLATTEN BY list_struct AS `struct`
 ORDER BY
     mod,
     column1;

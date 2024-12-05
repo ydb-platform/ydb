@@ -11,7 +11,6 @@ FROM (
     SELECT
         ListFromRange(10, 0, -1) AS x
 )
-    FLATTEN BY
-        x
+    FLATTEN BY x
 ASSUME ORDER BY
     x DESC;

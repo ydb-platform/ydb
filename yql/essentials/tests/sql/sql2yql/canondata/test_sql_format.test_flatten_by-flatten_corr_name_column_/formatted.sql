@@ -18,8 +18,7 @@ SELECT
     l
 FROM $data
     AS l
-    FLATTEN BY
-        l
+    FLATTEN BY l
 ORDER BY
     n,
     l;
@@ -29,8 +28,7 @@ SELECT
     l
 FROM $data
     AS l
-    FLATTEN BY
-        l.l
+    FLATTEN BY l.l
 ORDER BY
     n,
     l;
@@ -40,8 +38,7 @@ SELECT
     l
 FROM $data
     AS s
-    FLATTEN BY
-        s.l
+    FLATTEN BY s.l
 ORDER BY
     n,
     l;

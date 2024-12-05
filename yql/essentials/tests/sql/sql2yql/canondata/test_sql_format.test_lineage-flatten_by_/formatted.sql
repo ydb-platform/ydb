@@ -6,8 +6,7 @@ $subquery1 =
         subkey,
         z
     FROM Input
-        FLATTEN LIST BY
-            value AS z;
+        FLATTEN LIST BY value AS z;
 
 $subquery2 =
     SELECT

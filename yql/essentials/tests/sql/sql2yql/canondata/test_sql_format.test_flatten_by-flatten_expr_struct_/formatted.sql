@@ -17,8 +17,7 @@ SELECT
     n,
     l
 FROM $data
-    FLATTEN BY
-        s.l AS l
+    FLATTEN BY s.l AS l
 ORDER BY
     n,
     l;

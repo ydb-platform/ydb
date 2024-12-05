@@ -14,8 +14,7 @@ SELECT
     subkey,
     some(lst) AS lst_count
 FROM $input
-    FLATTEN LIST BY
-        lst
+    FLATTEN LIST BY lst
 WHERE lst != 1
 GROUP BY
     GROUPING SETS (

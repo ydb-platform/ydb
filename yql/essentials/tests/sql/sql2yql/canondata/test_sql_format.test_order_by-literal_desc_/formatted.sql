@@ -9,7 +9,6 @@ FROM (
     SELECT
         ListFromRange(0, 100) AS x
 )
-    FLATTEN BY
-        x
+    FLATTEN BY x
 ORDER BY
     x DESC;

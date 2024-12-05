@@ -12,7 +12,6 @@ $data = (
 SELECT
     *
 FROM $data
-    FLATTEN BY
-        lv AS iv
+    FLATTEN BY lv AS iv
 ORDER BY
     iv;

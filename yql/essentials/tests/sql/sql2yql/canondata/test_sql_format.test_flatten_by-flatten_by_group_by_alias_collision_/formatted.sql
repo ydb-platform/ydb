@@ -5,8 +5,7 @@ SELECT
     subkey,
     COUNT(key) AS cnt
 FROM AS_TABLE($data)
-    FLATTEN LIST BY
-        subkeys AS subkey
+    FLATTEN LIST BY subkeys AS subkey
 GROUP BY
     CAST(subkey AS String) AS subkey
 ORDER BY

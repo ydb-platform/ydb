@@ -9,8 +9,7 @@ FROM (
     SELECT
         ListMap(ListFromRange(1, 100), ($x) -> (Unwrap(CAST($x AS String)))) AS key
 )
-    FLATTEN LIST BY
-        key
+    FLATTEN LIST BY key
 ORDER BY
     key;
 COMMIT;

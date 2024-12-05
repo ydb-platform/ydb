@@ -8,8 +8,7 @@ END DEFINE;
 SELECT
     key
 FROM $bar()
-    FLATTEN LIST BY
-        ks AS key
+    FLATTEN LIST BY ks AS key
 ORDER BY
     key;
 

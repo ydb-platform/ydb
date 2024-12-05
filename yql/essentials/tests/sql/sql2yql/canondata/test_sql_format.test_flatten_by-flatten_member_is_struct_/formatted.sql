@@ -11,8 +11,6 @@ FROM (
         keyitem.kk AS kkstr
     FROM Input
         AS d
-        FLATTEN BY
-            key AS keyitem
+        FLATTEN BY key AS keyitem
 )
-    FLATTEN BY
-        kkstr AS kkstritem;
+    FLATTEN BY kkstr AS kkstritem;

@@ -59,8 +59,7 @@ $target_events = (
         SELECT
             *
         FROM $target_events
-            FLATTEN LIST BY
-                segments
+            FLATTEN LIST BY segments
     )
         FLATTEN COLUMNS
 );

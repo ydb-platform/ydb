@@ -8,8 +8,7 @@ $list = (
         SELECT
             AsList('foo', 'bar', 'baz', 'quux', 'bat') AS `list`
     )
-        FLATTEN BY
-            `list` AS item
+        FLATTEN BY `list` AS item
 );
 
 --INSERT INTO Output

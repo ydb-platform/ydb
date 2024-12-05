@@ -7,8 +7,7 @@ $flatten = (
         bc_type_tuple
     FROM Input
         AS a
-        FLATTEN BY
-            parsed_answers_and_clicks AS answer_and_clicks
+        FLATTEN BY parsed_answers_and_clicks AS answer_and_clicks
     WHERE answer_and_clicks.1 == 1
 );
 
@@ -24,5 +23,4 @@ FROM (
     FROM $flatten
         AS a
 )
-    FLATTEN LIST BY
-        bc_type;
+    FLATTEN LIST BY bc_type;

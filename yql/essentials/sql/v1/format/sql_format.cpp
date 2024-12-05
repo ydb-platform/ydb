@@ -2047,10 +2047,7 @@ private:
         switch (msg.Alt_case()) {
         case TRule_flatten_by_arg::kAltFlattenByArg1: {
             const auto& alt = msg.GetAlt_flatten_by_arg1();
-            NewLine();
-            PushCurrentIndent();
             Visit(alt);
-            PopCurrentIndent();
             break;
         }
         case TRule_flatten_by_arg::kAltFlattenByArg2: {

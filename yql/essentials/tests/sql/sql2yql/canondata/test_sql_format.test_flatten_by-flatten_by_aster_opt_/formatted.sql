@@ -9,5 +9,4 @@ FROM (
     FROM plato.Input
         AS d
 )
-    FLATTEN BY
-        ok;
+    FLATTEN BY ok;

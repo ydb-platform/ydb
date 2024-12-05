@@ -15,8 +15,7 @@ SELECT
     j.key
 FROM $data
     AS d
-    FLATTEN BY
-        lv
+    FLATTEN BY lv
 JOIN plato.Input
     AS j
 ON d.mod == CAST(j.key AS uint32) / 10 % 10

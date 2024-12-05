@@ -98,6 +98,81 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLs(runtime, "/MyRoot/DirA/DirB/OlapStore", false, NLs::PathExist);
     }
 
+    Y_UNIT_TEST(CreateTableWithNullableKeysNotAllowed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto& appData = runtime.GetAppData();
+        appData.ColumnShardConfig.SetAllowNullableColumnsInPK(false);
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "MyStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "key1" Type: "Uint32" }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: [ "timestamp", "key1" ]
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(CreateTableWithNullableKeys) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto& appData = runtime.GetAppData();
+        appData.ColumnShardConfig.SetAllowNullableColumnsInPK(true);
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "MyStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "key1" Type: "Uint32" }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: [ "timestamp", "key1" ]
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyStore", false, NLs::PathExist);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir", false, NLs::PathExist);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", R"(
+            Name: "MyTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key1" Type: "Uint32" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: [ "timestamp", "key1" ]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLsPathId(runtime, 4, NLs::PathStringEqual("/MyRoot/MyDir/MyTable"));
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "MyTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/MyTable", false, NLs::PathNotExist);
+        TestLsPathId(runtime, 4, NLs::PathStringEqual(""));
+    }
+
     Y_UNIT_TEST(CreateTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

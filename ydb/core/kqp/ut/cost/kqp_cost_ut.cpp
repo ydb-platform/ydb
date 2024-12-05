@@ -16,6 +16,7 @@ static NKikimrConfig::TAppConfig GetAppConfig(bool scanSourceRead = false, bool 
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(scanSourceRead);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(streamLookup);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(streamLookupJoin);
+    app.MutableTableServiceConfig()->SetEnableOlapSink(true);
     return app;
 }
 
@@ -25,6 +26,11 @@ static NYdb::NTable::TExecDataQuerySettings GetDataQuerySettings() {
     return execSettings;
 }
 
+static NYdb::NQuery::TExecuteQuerySettings GetQuerySettings() {
+    NYdb::NQuery::TExecuteQuerySettings execSettings;
+    execSettings.StatsMode(NYdb::NQuery::EStatsMode::Basic);
+    return execSettings;
+}
 
 static void CreateSampleTables(TSession session) {
     UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
@@ -117,7 +123,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 PRIMARY KEY (Key),
                 INDEX Index GLOBAL ON (Fk)
             );
-
         )").GetValueSync();
 
         session.ExecuteDataQuery(R"(
@@ -486,6 +491,120 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         CompareYson(Expected, res.ResultSetYson);
     }
 
+    void CreateColumnTestTable(auto session) {
+        UNIT_ASSERT(session.ExecuteQuery(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/ColumnTest` (
+                Group Uint32 not null,
+                Name String not null,
+                Amount Uint64,
+                Comment String,
+                PRIMARY KEY (Group, Name)
+            ) WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );
+
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
+
+        auto result = session.ExecuteQuery(R"(
+            REPLACE INTO `/Root/ColumnTest` (Group, Name, Amount, Comment) VALUES
+                    (1u, "Anna", 3500ul, "None"),
+                    (1u, "Paul", 300ul, "None"),
+                    (2u, "Tony", 7200ul, "None");
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(OlapPointLookup) {
+        TKikimrRunner kikimr(GetAppConfig(false, false));
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateColumnTestTable(session);
+
+        auto query = Q_(R"(
+            SELECT * FROM `/Root/ColumnTest` WHERE Group = 1u AND Name = "Anna";
+        )");
+
+        auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+        auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        CompareYson(R"(
+            [
+                [[3500u];["None"];
+                1u;"Anna"]
+            ]
+        )", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+        Cerr << stats.query_phases().size() << Endl;
+        size_t phase = stats.query_phases_size() - 1;
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().bytes(), 36);
+    }
+
+    Y_UNIT_TEST(OlapRange) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateColumnTestTable(session);
+
+        auto query = Q_(R"(
+            SELECT * FROM `/Root/ColumnTest` WHERE Group < 2u ORDER BY Group, Name;
+        )");
+
+        auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+        auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        CompareYson(R"(
+            [
+                [[3500u];["None"];1u;"Anna"];
+                [[300u];["None"];1u;"Paul"]
+            ]
+        )", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        size_t phase = stats.query_phases_size() - 1;
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().bytes(), 72);
+    }
+
+    Y_UNIT_TEST(OlapRangeFullScan) {
+        TKikimrRunner kikimr(GetAppConfig());
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateColumnTestTable(session);
+
+        auto query = Q_(R"(
+            SELECT * FROM `/Root/ColumnTest` WHERE Amount < 5000ul ORDER BY Group, Name LIMIT 1;
+        )");
+
+        auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+        auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        CompareYson(R"(
+            [
+                [[3500u];["None"];1u;"Anna"]
+            ]
+        )", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+        Cerr << stats.DebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2); // Limit???
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 72);
+    }
 }
 
 }

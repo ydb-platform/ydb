@@ -87,24 +87,8 @@ public:
 
     void Bootstrap() {
         Become(&TInputTransformStreamLookupBase::StateFunc);
-        NDq::IDqAsyncIoFactory::TLookupSourceArguments lookupSourceArgs {
-            .Alloc = Alloc,
-            .KeyTypeHelper = KeyTypeHelper,
-            .ParentId = SelfId(),
-            .TaskCounters = TaskCounters,
-            .LookupSource = Settings.GetRightSource().GetLookupSource(),
-            .KeyType = LookupKeyType,
-            .PayloadType = LookupPayloadType,
-            .TypeEnv = TypeEnv,
-            .HolderFactory = HolderFactory,
-            .MaxKeysInRequest = 1000 // TODO configure me
-        };
-        auto guard = Guard(*Alloc);
-        auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
-        MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
-        LookupSourceId = RegisterWithSameMailbox(lookupSourceActor);
-        KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
     }
+
 protected:
     virtual NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) = 0;
     virtual void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) = 0;
@@ -195,6 +179,7 @@ private: //IDqComputeActorAsyncInput
     }
 
     void PassAway() final {
+        InputFlowFetchStatus = NUdf::EFetchStatus::Finish;
         Send(LookupSourceId, new NActors::TEvents::TEvPoison{});
         Free();
     }
@@ -222,13 +207,31 @@ private: //IDqComputeActorAsyncInput
         auto startCycleCount = GetCycleCountFast();
         auto guard = BindAllocator();
 
-        if (!KeysForLookup) { // Before Bootstrap or after PassAway()
-            return 0;
+        if (!KeysForLookup) {
+            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
         }
 
         DrainReadyQueue(batch);
 
         if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && KeysForLookup->empty()) {
+            if (!LookupSourceId) {
+                Y_ENSURE(SelfId());
+                NDq::IDqAsyncIoFactory::TLookupSourceArguments lookupSourceArgs {
+                    .Alloc = Alloc,
+                    .KeyTypeHelper = KeyTypeHelper,
+                    .ParentId = SelfId(),
+                    .TaskCounters = TaskCounters,
+                    .LookupSource = Settings.GetRightSource().GetLookupSource(),
+                    .KeyType = LookupKeyType,
+                    .PayloadType = LookupPayloadType,
+                    .TypeEnv = TypeEnv,
+                    .HolderFactory = HolderFactory,
+                    .MaxKeysInRequest = 1000 // TODO configure me
+                };
+                auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
+                MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
+                LookupSourceId = RegisterWithSameMailbox(lookupSourceActor);
+            }
             Y_DEBUG_ABORT_UNLESS(AwaitingQueue.empty());
             NUdf::TUnboxedValue* inputRowItems;
             NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);

@@ -293,4 +293,22 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
             .Build()
         );
     }
+
+    Y_UNIT_TEST(RepeatedEscaping) {
+        CommonTestBuildList(
+            "col1,escaped2,col3,escaped4,col5",
+            {
+                "aa,\"text2.1 \"\"text2.2 escaped\"\" text2.3\",bb,\"text4.1 \"\"text4.2 escaped\"\" text4.3\",5"
+            },
+            TValueBuilder().BeginList()
+                .AddListItem().BeginStruct()
+                    .AddMember("col1").Utf8("aa")
+                    .AddMember("escaped2").Utf8("text2.1 \"text2.2 escaped\" text2.3")
+                    .AddMember("col3").Utf8("bb")
+                    .AddMember("escaped4").Utf8("text4.1 \"text4.2 escaped\" text4.3")
+                    .AddMember("col5").Uint8(6)
+                    .EndStruct()
+                .EndList().Build());
+        // TODO: same tests for BuildParams and BuildValue when NCsvFormat::CsvSplitter will be fixed
+    }
 }

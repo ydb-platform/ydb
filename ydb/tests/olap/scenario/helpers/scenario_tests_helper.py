@@ -92,8 +92,7 @@ class ScenarioTestHelper:
 
         def to_yql(self) -> str:
             """Convert to YQL"""
-            nl = '\n'
-            return f'FAMILY {self._name}{nl}    (COMPRESSION = "{self._compression.name}"{",{nl}    COMPRESSION_LEVEL = " + str(self._compression_level) if self._compression_level != None else ""}{nl})'
+            return f'FAMILY {self._name} (COMPRESSION = "{self._compression.name}"{", COMPRESSION_LEVEL = " + str(self._compression_level) if self._compression_level != None else ""})'
 
         @property
         def name(self) -> str:
@@ -722,4 +721,3 @@ class ScenarioTestHelper:
             raw_bytes += row["RawBytes"]
             bytes += row["BlobRangeSize"]
         return raw_bytes, bytes
-

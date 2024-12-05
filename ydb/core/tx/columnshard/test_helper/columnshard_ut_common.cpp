@@ -379,8 +379,12 @@ THashMap<TString, NColumnShard::NTiers::TTierConfig> TTestSchema::BuildSnapshot(
     for (auto&& tier : specials.Tiers) {
         {
             NKikimrSchemeOp::TCompressionOptions compressionProto;
-            compressionProto.SetCodec(tier.GetCodecId());
-            compressionProto.SetLevel(*tier.CompressionLevel);
+            if (tier.Codec) {
+                compressionProto.SetCodec(tier.GetCodecId());
+            }
+            if (tier.CompressionLevel) {
+                compressionProto.SetLevel(*tier.CompressionLevel);
+            }
             NColumnShard::NTiers::TTierConfig tConfig(tier.S3, compressionProto);
             tiers.emplace(tier.Name, tConfig);
         }

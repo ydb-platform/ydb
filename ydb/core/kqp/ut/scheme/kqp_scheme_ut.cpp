@@ -5479,8 +5479,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
             auto ttl = desc.GetTableDescription().GetTtlSettings();
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "tier1");
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(ttl->GetTiers()[0].GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "/Root/tier1");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlDeleteAction>(ttl->GetTiers()[0].GetAction()).GetApplyAfter(), TDuration::Seconds(10));
         }
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
@@ -5496,7 +5496,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto ttl = desc.GetTableDescription().GetTtlSettings();
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "/Root/tier");
-            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers()[0].GetApplyAfter(), TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlDeleteAction>(ttl->GetTiers()[0].GetAction()).GetApplyAfter(), TDuration::Seconds(10));
         }
 
         auto query3 = TStringBuilder() << R"(
@@ -5527,7 +5527,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto ttl = desc.GetTableDescription().GetTtlSettings();
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "/Root/tier1");
-            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers()[0].GetApplyAfter(), TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlDeleteAction>(ttl->GetTiers()[0].GetAction()).GetApplyAfter(), TDuration::Seconds(10));
         }
 
         auto query5 = TStringBuilder() << R"(
@@ -8525,7 +8525,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto evictTier = ttl->GetTiers()[0];
             UNIT_ASSERT(std::holds_alternative<TTtlEvictToExternalStorageAction>(evictTier.GetAction()));
             UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(evictTier.GetAction()).GetStorage(), "/Root/tier1");
-            UNIT_ASSERT_VALUES_EQUAL(evictTier.GetApplyAfter(), TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlDeleteAction>(evictTier.GetAction()).GetApplyAfter(), TDuration::Seconds(10));
             auto deleteTier = ttl->GetTiers()[1];
             UNIT_ASSERT(std::holds_alternative<TTtlDeleteAction>(deleteTier.GetAction()));
             UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(deleteTier.GetExpression()).GetExpireAfter(), TDuration::Hours(1));

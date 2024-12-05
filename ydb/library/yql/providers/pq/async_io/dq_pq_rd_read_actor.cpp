@@ -558,7 +558,11 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
 
     auto& nextOffset = NextOffsetFromRD[partitionId];
     if (nextOffset) {
-        YQL_ENSURE(nextOffset <= ev->Get()->Record.GetNextMessageOffset(), "Wrong NextMessageOffset in TEvStatistics, current " << nextOffset << " received " << ev->Get()->Record.GetNextMessageOffset());
+        if (ev->Get()->Record.GetNextMessageOffset() < nextOffset) {
+            auto str = TStringBuilder() << "Wrong NextMessageOffset in TEvStatistics, current " << nextOffset << " received " << ev->Get()->Record.GetNextMessageOffset();
+            SRC_LOG_E(str);
+            Stop(str);
+        }
     }
     nextOffset = ev->Get()->Record.GetNextMessageOffset();
 
@@ -728,16 +732,15 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     Counters.Undelivered++;
     
     auto sessionIt = Sessions.find(ev->Sender);
-    if (sessionIt == Sessions.end()) {
-        SRC_LOG_W("No session");
-        return;
-    }
-    auto& sessionInfo = sessionIt->second;
-    if (sessionInfo.EventsQueue.HandleUndelivered(ev) == NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
-        if (sessionInfo.Generation == ev->Cookie) {
-            Sessions.erase(ev->Sender);
-            ReadActorByEventQueueId.erase(sessionInfo.EventQueueId);
-            ReInit("Reset session state");
+    if (sessionIt != Sessions.end()) {
+        auto& sessionInfo = sessionIt->second;
+        if (sessionInfo.EventsQueue.HandleUndelivered(ev) == NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
+            if (sessionInfo.Generation == ev->Cookie) {
+                SRC_LOG_D("Erase session to " << ev->Sender.ToString());
+                Sessions.erase(ev->Sender);
+                ReadActorByEventQueueId.erase(sessionInfo.EventQueueId);
+                ReInit("Reset session state");
+            }
         }
     }
 
@@ -823,7 +826,7 @@ void TDqPqRdReadActor::PrintInternalState() {
 
 TString TDqPqRdReadActor::GetInternalState() {
     TStringStream str;
-    str << "State: used buffer size " << ReadyBufferSizeBytes << " ready buffer event size " << ReadyBuffer.size() << " InFlyAsyncInputData " << InFlyAsyncInputData << "\n";
+    str << LogPrefix << " State: used buffer size " << ReadyBufferSizeBytes << " ready buffer event size " << ReadyBuffer.size() << " InFlyAsyncInputData " << InFlyAsyncInputData << "\n";
     str << "Counters: GetAsyncInputData " << Counters.GetAsyncInputData << " CoordinatorChanged " << Counters.CoordinatorChanged << " CoordinatorResult " << Counters.CoordinatorResult
         << " MessageBatch " << Counters.MessageBatch << " StartSessionAck " << Counters.StartSessionAck << " NewDataArrived " << Counters.NewDataArrived
         << " SessionError " << Counters.SessionError << " Statistics " << Counters.Statistics << " NodeDisconnected " << Counters.NodeDisconnected
@@ -853,16 +856,13 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvProcessState::TPtr&) {
 }
 
 void TDqPqRdReadActor::TrySendGetNextBatch(TSession& sessionInfo) {
-    SRC_LOG_W("TrySendGetNextBatch");
     if (ReadyBufferSizeBytes > MaxBufferSize) {
-        SRC_LOG_W("TrySendGetNextBatch 1");
         return;
     }
     // TODO : random?
     for (auto& [partitionId, partition] : sessionInfo.Partitions) {
-        SRC_LOG_W("TrySendGetNextBatch partitionId " << partitionId);
         if (!partition.HasPendingData) {
-            return;
+            continue;
         }
         Metrics.InFlyGetNextBatch->Inc();
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();

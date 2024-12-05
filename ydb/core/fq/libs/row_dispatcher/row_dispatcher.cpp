@@ -641,16 +641,25 @@ TString TRowDispatcher::GetInternalState() {
                     << " arr " << leftPad(consumer->Counters.NewDataArrived) << " btc " << leftPad(consumer->Counters.MessageBatch) 
                     << " pend get " <<  leftPad(partition.PendingGetNextBatch) << " pend new " << leftPad(partition.PendingNewDataArrived)
                     << " waiting " <<  consumer->Stat.IsWaiting << " read lag " << leftPad(consumer->Stat.ReadLagMessages) 
-                    << " conn id " <<  consumer->Generation << " ";
-                str << " retry queue: ";
-                consumer->EventsQueue.PrintInternalState(str);
-
+                    << " conn id " <<  consumer->Generation << "\n";
                 maxInitialOffset = std::max(maxInitialOffset, consumer->Stat.InitialOffset);
                 minInitialOffset = std::min(minInitialOffset, consumer->Stat.InitialOffset);
             }
             str << "    initial offset max " << leftPad(maxInitialOffset) << " min " << leftPad(minInitialOffset) << "\n";;
         }
     }
+
+    str << "Consumers:\n";
+    for (auto& [readActorId, consumer] : Consumers) {
+        str << "  " << consumer->QueryId << " " << LeftPad(readActorId, 32) << "\n";
+        str << "    partitions: "; 
+        for (const auto& [partitionId, info] : consumer->Partitions) {
+            str << partitionId << ","; 
+        }
+        str << "\n    retry queue: ";
+        consumer->EventsQueue.PrintInternalState(str);
+    }
+
     return str.Str();
 }
 

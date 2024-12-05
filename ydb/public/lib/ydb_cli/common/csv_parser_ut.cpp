@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
                     .AddMember("escaped2").Utf8("text2.1 \"text2.2 escaped\" text2.3")
                     .AddMember("col3").Utf8("bb")
                     .AddMember("escaped4").Utf8("text4.1 \"text4.2 escaped\" text4.3")
-                    .AddMember("col5").Uint8(6)
+                    .AddMember("col5").Uint8(5)
                     .EndStruct()
                 .EndList().Build());
         // TODO: same tests for BuildParams and BuildValue when NCsvFormat::CsvSplitter will be fixed

@@ -1451,6 +1451,17 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 200 }];
+        optional uint64 UseNoopSchedulerHDD = 3 [(ControlOptions) = {
+            Description: "Enables noop scheduler for HDD disks only",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 UseNoopSchedulerSSD = 4 [(ControlOptions) = {
+            Description: "Enables noop scheduler for SSD, NVME",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+
     }
 
     message TBlobStorageControllerControls {

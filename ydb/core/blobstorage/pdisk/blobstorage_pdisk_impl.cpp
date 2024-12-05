@@ -2228,7 +2228,7 @@ void TPDisk::ProcessChunkWriteQueue() {
         }
         delete piece;
     }
-    LWTRACK(PDiskProcessChunkWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkWrites.size());
+    //LWTRACK(PDiskProcessChunkWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkWrites.size());
     JointChunkWrites.clear();
 }
 
@@ -2275,7 +2275,7 @@ void TPDisk::ProcessChunkReadQueue() {
             P_LOG(PRI_DEBUG, BPD37, "enqueued all TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
         }
     }
-    LWTRACK(PDiskProcessChunkReadQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkReads.size());
+    //LWTRACK(PDiskProcessChunkReadQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkReads.size());
     JointChunkReads.clear();
 }
 

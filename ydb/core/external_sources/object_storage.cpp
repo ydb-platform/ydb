@@ -60,7 +60,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 for (const auto& column: json.GetArray()) {
                     *objectStorage.add_partitioned_by() = column;
                 }
-            } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "csv_delimiter"sv}, lowerKey)) {
+            } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "data.date.format"sv, "csv_delimiter"sv}, lowerKey)) {
                 objectStorage.mutable_format_setting()->insert({lowerKey, value});
             } else {
                 ythrow TExternalSourceException() << "Unknown attribute " << key;
@@ -188,7 +188,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 continue;
             }
 
-            if (IsIn({ "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv}, key)) {
+            if (IsIn({ "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "data.date.format"sv}, key)) {
                 continue;
             }
 
@@ -246,6 +246,10 @@ struct TObjectStorageExternalSource : public IExternalSource {
                     issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "Don't use data.timestamp.format_name and data.timestamp.format together"));
                 }
                 conflictingKeys.insert("data.timestamp.format");
+                continue;
+            }
+
+            if (key == "data.date.format"sv) {
                 continue;
             }
 

@@ -1902,13 +1902,7 @@ ui64 AsyncAlterRestoreIncrementalBackup(
         const TString& srcTableName,
         const TString& dstTablePath)
 {
-    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups, workingDir);
-
-    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableRestoreMultipleIncrementalBackups();
-    desc.AddSrcTableNames(srcTableName);
-    desc.SetDstTablePath(dstTablePath);
-
-    return RunSchemeTx(*server->GetRuntime(), std::move(request));
+    return AsyncAlterRestoreMultipleIncrementalBackups(server, workingDir, {srcTableName}, dstTablePath);
 }
 
 ui64 AsyncAlterRestoreMultipleIncrementalBackups(

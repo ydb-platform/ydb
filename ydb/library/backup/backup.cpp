@@ -473,7 +473,7 @@ void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& p
 }
 
 TString CreateChageefeedBackupFileName(const TString& changefeedName) {
-    return TStringBuilder() << CHANGEFEED_FILE_NAME << "_" << changefeedName;
+    return TStringBuilder() << CHANGEFEED_FILE_NAME << "_" << changefeedName << ".pb";
 }
 
 void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {

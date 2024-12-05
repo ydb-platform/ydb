@@ -4007,18 +4007,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
-
     Y_UNIT_TEST(CheckItemProgress) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
-        )");
         env.TestWaitNotification(runtime, txId);
 
         const auto data = GenerateTestData(R"(
@@ -4031,7 +4024,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               type { optional_type { item { type_id: UTF8 } } }
             }
             primary_key: "key"
-        )", {{"a", 1}}, permissions);
+        )", {{"a", 1}});
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

@@ -226,6 +226,5 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
     return MakeHolder<TEvIndexBuilder::TEvCancelRequest>(ui64(indexBuildId), domainPath.PathString(), ui64(indexBuildId));
 }
 
-
 } // NSchemeShard
 } // NKikimr

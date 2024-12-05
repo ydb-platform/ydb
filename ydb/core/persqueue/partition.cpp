@@ -3009,7 +3009,7 @@ void TPartition::SchedulePartitionConfigChanged()
 void TPartition::ScheduleDeletePartitionDone()
 {
     Replies.emplace_back(Tablet,
-                         MakeHolder<TEvPQ::TEvDeletePartitionDone>(Partition, TabletCounters).Release());
+                         MakeHolder<TEvPQ::TEvDeletePartitionDone>(Partition).Release());
 }
 
 void TPartition::AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,

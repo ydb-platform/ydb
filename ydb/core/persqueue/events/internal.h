@@ -1161,14 +1161,12 @@ struct TEvPQ {
     };
 
     struct TEvDeletePartitionDone : TEventLocal<TEvDeletePartitionDone, EvDeletePartitionDone> {
-        TEvDeletePartitionDone(const NPQ::TPartitionId& partitionId, const TTabletCountersBase& counters) :
+        explicit TEvDeletePartitionDone(const NPQ::TPartitionId& partitionId) :
             PartitionId(partitionId)
         {
-            Counters.Populate(counters);
         }
 
         NPQ::TPartitionId PartitionId;
-        TTabletCountersBase Counters;
     };
 
     struct TEvTransactionCompleted : TEventLocal<TEvTransactionCompleted, EvTransactionCompleted> {

@@ -536,10 +536,6 @@ private:
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
 
     void UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const;
-
-    void AccountPartitionCounters(const TPartitionId& partitionId,
-                                  const TTabletCountersBase& counters,
-                                  const TActorContext& ctx);
 };
 
 

@@ -410,10 +410,6 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
 
     TStringStream str;
     LOG_ROW_DISPATCHER_INFO("TEvCoordinatorRequest from " << ev->Sender.ToString() << ", " << source.GetTopicPath() << ", partIds: " << JoinSeq(", ", ev->Get()->Record.GetPartitionId()));
-    // for (auto& partitionId : ev->Get()->Record.GetPartitionId()) {
-    //     str << partitionId << ", ";
-    // }
- //   LOG_ROW_DISPATCHER_DEBUG(str.Str());
     Metrics.IncomingRequests->Inc();
 
     TCoordinatorRequest request = {.Cookie = ev->Cookie, .Record = ev->Get()->Record};

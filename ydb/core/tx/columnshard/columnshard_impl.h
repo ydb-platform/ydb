@@ -567,8 +567,6 @@ private:
     std::optional<TPathId> WatchingSubDomainPathId;
     bool SubDomainOutOfSpace = false;
 
-    static TDuration GetMaxReadStaleness();
-
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
     void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TInsertWriteId>&& writesToAbort);

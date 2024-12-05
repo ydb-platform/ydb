@@ -1,5 +1,6 @@
 from devtools.yamaker.modules import Linkable, Switch
-from devtools.yamaker.platform_macros import LLVM_VERSION
+
+# from devtools.yamaker.platform_macros import LLVM_VERSION
 from devtools.yamaker.project import CMakeNinjaNixProject
 
 
@@ -46,13 +47,15 @@ def post_install(self):
 
 
 llvm_libfuzzer = CMakeNinjaNixProject(
-    owners=["g:cpp-contrib"],
-    nixattr=f"llvmPackages_{LLVM_VERSION}.compiler-rt",
+    nixattr="llvmPackages_14.compiler-rt",
     arcdir="contrib/libs/libfuzzer",
-    build_targets=["clang_rt.fuzzer-x86_64", "libfuzzer-afl.so"],
     copy_sources=[
         "include/fuzzer/FuzzedDataProvider.h",
         "lib/fuzzer/standalone/StandaloneFuzzTargetMain.c",
+    ],
+    install_targets=[
+        "clang_rt.fuzzer-x86_64",
+        "fuzzer-afl",
     ],
     put={
         "clang_rt.fuzzer-x86_64": ".",

@@ -140,9 +140,25 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         loginConnection.Stop();
     }
 
+    Y_UNIT_TEST(NoConnectRights) {
+        TLoginClientConnection loginConnection;
+        loginConnection.CreateUser(User, Password);
+
+        auto factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});
+        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        TString token;
+        UNIT_ASSERT_NO_EXCEPTION(token = loginProvider->GetAuthInfo());
+        UNIT_ASSERT(!token.empty());
+        
+        loginConnection.Ls(token, "Access denied");
+
+        loginConnection.Stop();
+    }
+
     Y_UNIT_TEST(NoDescribeRights) {
         TLoginClientConnection loginConnection;
         loginConnection.CreateUser(User, Password);
+        loginConnection.ModifyACL(true, User, NACLib::EAccessRights::ConnectDatabase);
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());

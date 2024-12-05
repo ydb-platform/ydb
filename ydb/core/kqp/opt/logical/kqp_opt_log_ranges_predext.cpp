@@ -186,9 +186,8 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(index.Name)).first->Name);
 
                     bool uselessIndex = true;
-                    for (size_t i = 0; i < tableDesc.Metadata->KeyColumnNames.size(); ++i) {
-                        if (i >= mainTableDesc.Metadata->KeyColumnNames.size()) {
-                            uselessIndex = false;
+                    for (size_t i = 0; i < mainTableDesc.Metadata->KeyColumnNames.size(); ++i) {
+                        if (i >= tableDesc.Metadata->KeyColumnNames.size()) {
                             break;
                         }
                         if (mainTableDesc.Metadata->KeyColumnNames[i] != tableDesc.Metadata->KeyColumnNames[i]) {

@@ -442,8 +442,8 @@ private:
     std::shared_ptr<IMetadataAccessorResultProcessor> Processor;
     TColumnEngineForLogs& Engine;
 
-    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& /*guard*/) override {
-        Processor->ApplyResult(std::move(result), Engine);
+    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
+        Processor->ApplyResult(std::move(result), Engine, std::move(guard));
     }
 
 public:

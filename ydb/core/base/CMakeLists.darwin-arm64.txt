@@ -46,6 +46,7 @@ target_link_libraries(ydb-core-base PUBLIC
   ydb-core-debug
   ydb-core-erasure
   core-graph-api
+  ydb-core-jaeger_tracing
   ydb-core-protos
   core-protos-out
   ydb-library-aclib
@@ -68,6 +69,7 @@ target_sources(ydb-core-base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/board_publish.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/board_replica.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/blobstorage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/counters.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/domain.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/event_filter.cpp
@@ -93,7 +95,7 @@ target_sources(ydb-core-base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/tablet_status_checker.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/traceid.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/tx_processing.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/wilson_tracing_control.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/appdata.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/backtrace.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/blobstorage.h

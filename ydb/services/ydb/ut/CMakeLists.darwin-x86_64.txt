@@ -85,6 +85,7 @@ target_sources(ydb-services-ydb-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_monitoring_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_query_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_ldap_login_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_login_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_object_storage_ut.cpp
 )
 

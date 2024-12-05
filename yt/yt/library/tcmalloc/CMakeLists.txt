@@ -12,40 +12,25 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(yt-library-program)
+add_library(yt-library-tcmalloc)
 
 
-target_compile_options(yt-library-program PRIVATE
+target_compile_options(yt-library-tcmalloc PRIVATE
   -Wdeprecated-this-capture
 )
 
-target_link_libraries(yt-library-program PUBLIC
+target_link_libraries(yt-library-tcmalloc PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   yt-yt-core
-  core-service_discovery-yp
-  yt-library-monitoring
   yt-library-oom
-  library-profiling-solomon
-  library-profiling-tcmalloc
-  library-profiling-perf
-  yt-library-ytprof
-  yt-library-tcmalloc
-  library-tracing-jaeger
-  cpp-yt-mlock
-  cpp-yt-stockpile
-  cpp-yt-string
-  cpp-getopt-small
+  library-profiling-resource_tracker
+  libs-tcmalloc-malloc_extension
 )
 
-target_sources(yt-library-program PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/program/build_attributes.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/program/config.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/program/helpers.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/program/program.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/program/program_config_mixin.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/program/program_pdeathsig_mixin.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/program/program_setsid_mixin.cpp
+target_sources(yt-library-tcmalloc PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/tcmalloc/config.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/tcmalloc/tcmalloc_manager.cpp
 )
 

@@ -481,6 +481,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS32, StreamLookupJoin, ColumnStore) {
+        //ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds32.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds32.sql", "", StreamLookupJoin, ColumnStore);       
+    }
+
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS34, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds34.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);       
     }

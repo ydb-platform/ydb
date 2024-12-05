@@ -9,7 +9,7 @@ SRCS(
 
 PEERDIR(
     yt/yt/core
-    yt/yt/library/oom
+    yt/yt/library/ytprof
     yt/yt/library/profiling/resource_tracker
     contrib/libs/tcmalloc/malloc_extension
 )

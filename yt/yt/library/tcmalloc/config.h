@@ -12,21 +12,27 @@ struct THeapSizeLimitConfig
     : public NYTree::TYsonStruct
 {
     //! Limit program memory in terms of container memory.
-    // If program heap size exceeds the limit tcmalloc is instructed to release memory to the kernel.
+    //! If program heap size exceeds the limit tcmalloc is instructed to release memory to the kernel.
     std::optional<double> ContainerMemoryRatio;
 
     //! Similar to #ContainerMemoryRatio, but is set in terms of absolute difference from
     //! the container memory limit.
     //! For example, if ContainerMemoryLimit=200Gb and ContainerMemoryMargin=1Gb
-    // then tcmalloc limit will be 199Gb.
-    std::optional<double> ContainerMemoryMargin;
+    //! then tcmalloc limit will be 199Gb.
+    std::optional<i64> ContainerMemoryMargin;
 
     //! If true tcmalloc crashes when system allocates more memory than #ContainerMemoryRatio/#ContainerMemoryMargin.
     bool Hard;
 
     bool DumpMemoryProfileOnViolation;
-    TDuration DumpMemoryProfileTimeout;
-    TString DumpMemoryProfilePath;
+
+    TDuration MemoryProfileDumpTimeout;
+
+    //! Filenames are as follows:
+    //! $(MemoryProfileDumpPath)/$(Name)_$(MemoryProfileDumpFilenameSuffix)_$(Timestamp).$(Ext) or
+    //! $(MemoryProfileDumpPath)/$(Name)_$(Timestamp).$(Ext) (if MemoryProfileDumpFilenameSuffix is missing)
+    std::optional<TString> MemoryProfileDumpPath;
+    std::optional<TString> MemoryProfileDumpFilenameSuffix;
 
     REGISTER_YSON_STRUCT(THeapSizeLimitConfig);
 

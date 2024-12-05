@@ -366,6 +366,25 @@ class TRealBlockDevice : public IBlockDevice {
             }
         }
 
+        void ExecuteOrScheduleCompletion(TCompletionAction *action) {
+            if (action->ShouldBeExecutedInCompletionThread) {
+                Device.CompletionThread->Schedule(action);
+            } else {
+                if (action->CanHandleResult()) {
+                    action->Exec(Device.ActorSystem);
+                } else {
+                    TString errorReason = action->ErrorReason;
+
+                    action->Release(Device.ActorSystem);
+
+                    if (!Device.QuitCounter.IsBlocked()) {
+                        Device.BecomeErrorState(TStringBuilder()
+                                << " CompletionAction error, operation info# " << errorReason);
+                    }
+                }
+            }
+        }
+
         void Exec(TAsyncIoOperationResult *event) {
             IAsyncIoOperation *op = event->Operation;
             // Add up the execution time of all the events
@@ -423,7 +442,7 @@ class TRealBlockDevice : public IBlockDevice {
                     WaitingNoops[idx % MaxWaitingNoops] = completionAction->FlushAction;
                     completionAction->FlushAction = nullptr;
                 }
-                Device.CompletionThread->Schedule(completionAction);
+                ExecuteOrScheduleCompletion(completionAction);
                 auto seqnoL6 = AtomicGetAndIncrement(Device.Mon.SeqnoL6);
                 Device.Mon.L6.Set(duration > Device.Reordering, seqnoL6);
             }
@@ -441,7 +460,7 @@ class TRealBlockDevice : public IBlockDevice {
                     LWTRACK(PDiskDeviceGetFromWaiting, WaitingNoops[i]->Orbit);
                     double durationMs = HPMilliSecondsFloat(HPNow() - WaitingNoops[i]->GetTime);
                     Device.Mon.DeviceFlushDuration.Increment(durationMs);
-                    Device.CompletionThread->Schedule(WaitingNoops[i]);
+                    ExecuteOrScheduleCompletion(WaitingNoops[i]);
                     WaitingNoops[i] = nullptr;
                 }
                 ++NextPossibleNoop;

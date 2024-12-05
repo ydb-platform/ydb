@@ -85,7 +85,7 @@ protected:
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
 
-    virtual TDuration DoGetPingCheckPeriod(const TDuration defaultValue) const {
+    virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
         return defaultValue;
     }
     virtual TDuration DoGetOverridenGCPeriod(const TDuration defaultValue) const {
@@ -109,7 +109,7 @@ protected:
     virtual ui64 DoGetSmallPortionSizeDetector(const ui64 defaultValue) const {
         return defaultValue;
     }
-    virtual TDuration DoGetReadTimeoutClean(const TDuration defaultValue) const {
+    virtual TDuration DoGetMaxReadStaleness(const TDuration defaultValue) const {
         return defaultValue;
     }
     virtual TDuration DoGetGuaranteeIndexationInterval(const TDuration defaultValue) const {
@@ -157,11 +157,6 @@ public:
         return DoGetMemoryLimitScanPortion(GetConfig().GetMemoryLimitScanPortion());
     }
     virtual bool CheckPortionForEvict(const NOlap::TPortionInfo& portion) const;
-
-    TDuration GetPingCheckPeriod() const {
-        const TDuration defaultValue = 0.6 * GetReadTimeoutClean();
-        return DoGetPingCheckPeriod(defaultValue);
-    }
 
     virtual bool IsBackgroundEnabled(const EBackground /*id*/) const {
         return true;
@@ -261,9 +256,16 @@ public:
     }
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
-    TDuration GetReadTimeoutClean() const {
+    TDuration GetMaxReadStaleness() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetMaxReadStaleness_ms());
-        return DoGetReadTimeoutClean(defaultValue);
+        return DoGetMaxReadStaleness(defaultValue);
+    }
+    TDuration GetMaxReadStalenessInMem() const {
+        return 0.9 * GetMaxReadStaleness();
+    }
+    TDuration GetUsedSnapshotLivetime() const {
+        const TDuration defaultValue = 0.6 * GetMaxReadStaleness();
+        return DoGetUsedSnapshotLivetime(defaultValue);
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
         return EOptimizerCompactionWeightControl::Force;

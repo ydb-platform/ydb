@@ -552,7 +552,7 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
 void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString codec = "") {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-    csControllerGuard->SetOverrideReadTimeoutClean(TDuration::Max());
+    csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 

@@ -1,19 +1,16 @@
 #include "gateway_spec.h"
 
-#include <ydb/library/yql/tools/yqlrun/http/yql_server.h>
-
-#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <yql/tools/yqlrun/http/yql_server.h>
 
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider_impl.h>
+#include <yql/essentials/core/cbo/simple/cbo_simple.h>
 #include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
-#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
-#include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -46,8 +43,6 @@
 #include <yql/essentials/public/result_format/yql_result_format_response.h>
 #include <yql/essentials/public/result_format/yql_result_format_type.h>
 #include <yql/essentials/public/result_format/yql_result_format_data.h>
-
-#include <ydb/core/util/pb.h>
 
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/svnversion/svnversion.h>
@@ -512,10 +507,10 @@ int Main(int argc, const char *argv[])
     NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
     NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
     if (!pgExtConfig.empty()) {
-        NProto::TPgExtensions config;
-        Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
+        auto config = ParseProtoConfig<NProto::TPgExtensions>(pgExtConfig);
+        Y_ABORT_UNLESS(config);
         TVector<NPg::TExtensionDesc> extensions;
-        PgExtensionsFromProto(config, extensions);
+        PgExtensionsFromProto(*config, extensions);
         NPg::RegisterExtensions(extensions, false,
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
@@ -618,9 +613,9 @@ int Main(int argc, const char *argv[])
     IModuleResolver::TPtr moduleResolver;
     if (!mountConfig.empty()) {
         TModulesTable modules;
-        NYqlMountConfig::TMountConfig mount;
-        Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(mountConfig, &mount));
-        FillUserDataTableFromFileSystem(mount, filesMapping);
+        auto mount = ParseProtoConfig<NYqlMountConfig::TMountConfig>(mountConfig);
+        Y_ABORT_UNLESS(mount);
+        FillUserDataTableFromFileSystem(*mount, filesMapping);
 
         if (!CompileLibraries(filesMapping, ctx, modules)) {
             *errStream << "Errors on compile libraries:" << Endl;
@@ -688,14 +683,6 @@ int Main(int argc, const char *argv[])
     TAutoPtr<IThreadPool> ytExecutionQueue;
     TVector<TDataProviderInitializer> dataProvidersInit;
 
-    auto dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory({
-        NKikimr::NMiniKQL::GetYqlFactory(),
-        NYql::GetPgFactory()
-    });
-
-    dataProvidersInit.push_back(GetDqDataProviderInitializer([](const TDqStatePtr&){
-       return new TNullTransformer;
-    }, {}, dqCompFactory, {}, fileStorage));
     dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     bool emulateOutputForMultirun = false;
@@ -703,7 +690,7 @@ int Main(int argc, const char *argv[])
         if (gatewayTypes.contains(YtProviderName) || res.Has("opt-collision")) {
             auto yqlNativeServices = NFile::TYtFileServices::Make(funcRegistry.Get(), tablesMapping, fileStorage, tmpDir, res.Has("keep-temp"), tablesDirMapping);
             auto ytNativeGateway = CreateYtFileGateway(yqlNativeServices, &emulateOutputForMultirun);
-            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
+            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, MakeSimpleCBOOptimizerFactory(), {}));
         }
     }
 
@@ -982,10 +969,10 @@ int RunUI(int argc, const char* argv[])
     NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
     NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
     if (!pgExtConfig.empty()) {
-        NProto::TPgExtensions config;
-        Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
+        auto config = ParseProtoConfig<NProto::TPgExtensions>(pgExtConfig);
+        Y_ABORT_UNLESS(config);
         TVector<NPg::TExtensionDesc> extensions;
-        PgExtensionsFromProto(config, extensions);
+        PgExtensionsFromProto(*config, extensions);
         NPg::RegisterExtensions(extensions, false,
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
@@ -1028,9 +1015,9 @@ int RunUI(int argc, const char* argv[])
     IModuleResolver::TPtr moduleResolver;
     if (!mountConfig.empty()) {
         TModulesTable modules;
-        NYqlMountConfig::TMountConfig mount;
-        Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(mountConfig, &mount));
-        FillUserDataTableFromFileSystem(mount, userData);
+        auto mount = ParseProtoConfig<NYqlMountConfig::TMountConfig>(mountConfig);
+        Y_ABORT_UNLESS(mount);
+        FillUserDataTableFromFileSystem(*mount, userData);
 
         if (!CompileLibraries(userData, ctx, modules)) {
             Cerr << "Errors on compile libraries:" << Endl;

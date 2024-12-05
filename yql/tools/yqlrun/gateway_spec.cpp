@@ -1,4 +1,4 @@
-#include <ydb/library/yql/tools/yqlrun/gateway_spec.h>
+#include <yql/tools/yqlrun/gateway_spec.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 

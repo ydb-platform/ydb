@@ -1,5 +1,6 @@
-#include "mkql_wide_combine.h"
+#include "mkql_counters.h"
 #include "mkql_rh_hash.h"
+#include "mkql_wide_combine.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
@@ -343,6 +344,7 @@ public:
             return nullptr;
         }
         NUdf::TUnboxedValuePod* result = ExtractIt->GetValuePtr();
+        CounterOutputRows_.Inc();
         return result;
     }
 
@@ -350,6 +352,7 @@ public:
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
     i64 StoredDataSize = 0;
+    NYql::NUdf::TCounter CounterOutputRows_;
 
 private:
     std::optional<TStorageIterator> ExtractIt;
@@ -427,6 +430,11 @@ public:
         BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
         Tongue = InMemoryProcessingState.Tongue;
         Throat = InMemoryProcessingState.Throat;
+        if (ctx.CountersProvider) {
+            // id will be assigned externally in future versions
+            TString id = TString(Operator_Aggregation) + "0";
+            CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+        }
     }
 
     EUpdateResult Update() {
@@ -518,7 +526,11 @@ public:
         NUdf::TUnboxedValue* value = nullptr;
         if (GetMode() == EOperatingMode::InMemory) {
             value = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract());
-            if (!value) IsEverythingExtracted = true;
+            if (value) {
+                CounterOutputRows_.Inc();
+            } else {
+                IsEverythingExtracted = true;
+            }
             return value;
         }
 
@@ -526,7 +538,9 @@ public:
         MKQL_ENSURE(SpilledBuckets.size() > 0, "Internal logic error");
 
         value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets.front().InMemoryProcessingState->Extract());
-        if (!value) {
+        if (value) {
+            CounterOutputRows_.Inc();
+        } else {
             SpilledBuckets.front().InMemoryProcessingState->ReadMore<false>();
             SpilledBuckets.pop_front();
             if (SpilledBuckets.empty()) IsEverythingExtracted = true;
@@ -917,6 +931,7 @@ private:
     const bool AllowSpilling;
 
     TComputationContext& Ctx;
+    NYql::NUdf::TCounter CounterOutputRows_;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1375,6 +1390,12 @@ private:
             ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes))
         );
 #endif
+        if (ctx.CountersProvider) {
+            const auto ptr = static_cast<TState*>(state.AsBoxed().Get());
+            // id will be assigned externally in future versions
+            TString id = TString(Operator_Aggregation) + "0";
+            ptr->CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+        }
     }
 
     void RegisterDependencies() const final {

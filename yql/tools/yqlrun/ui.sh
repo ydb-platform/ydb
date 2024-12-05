@@ -8,10 +8,10 @@
 #
 
 SCRIPT_DIR="$(dirname $(readlink -f "$0"))"
-UDFS_DIR="${SCRIPT_DIR}/../../udfs;${SCRIPT_DIR}/../../../../../../yql/essentials/udfs;${SCRIPT_DIR}/../../../../../../yql/udfs"
+UDFS_DIR="${SCRIPT_DIR}/../../udfs;${SCRIPT_DIR}/../../essentials/udfs;${SCRIPT_DIR}/../../../contrib/ydb/library/yql/udfs"
 ASSETS_DIR=${SCRIPT_DIR}/http/www
 MOUNTS_CFG=${SCRIPT_DIR}/mounts.txt
-GATEWAYS_CFG=${SCRIPT_DIR}/../../../../../../yql/essentials/cfg/tests/gateways.conf
+GATEWAYS_CFG=${SCRIPT_DIR}/../../essentials/cfg/tests/gateways.conf
 
 PORT=${1:-3000}
 
@@ -22,7 +22,7 @@ fi
 if [ -z "${ARC_BUILD_DIR}" ]; then
     PGM=${SCRIPT_DIR}/yqlrun
 else
-    PGM=${ARC_BUILD_DIR}/contrib/ydb/library/yql/tools/yqlrun/yqlrun
+    PGM=${ARC_BUILD_DIR}/yql/tools/yqlrun/yqlrun
 fi
 
 ${GDB} ${PGM} ui \

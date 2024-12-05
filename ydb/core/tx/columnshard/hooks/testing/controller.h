@@ -13,6 +13,7 @@ class TController: public TReadOnlyController {
 private:
     using TBase = TReadOnlyController;
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideUsedSnapshotLivetime);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideStalenessLivetimePing);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideLagForCompactionBeforeTierings);
     YDB_ACCESSOR(std::optional<TDuration>, OverrideGuaranteeIndexationInterval, TDuration::Zero());
     YDB_ACCESSOR(std::optional<TDuration>, OverridePeriodicWakeupActivationPeriod, std::nullopt);
@@ -145,7 +146,9 @@ protected:
     virtual TDuration DoGetUsedSnapshotLivetime(const TDuration def) const override {
         return OverrideUsedSnapshotLivetime.value_or(def);
     }
-
+    virtual std::optional<TDuration> DoGetStalenessLivetimePing() const {
+        return OverrideStalenessLivetimePing;
+    }
     virtual TDuration DoGetCompactionActualizationLag(const TDuration def) const override {
         return OverrideCompactionActualizationLag.value_or(def);
     }

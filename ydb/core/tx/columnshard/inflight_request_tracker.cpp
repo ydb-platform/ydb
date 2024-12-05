@@ -102,7 +102,7 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
                 snapshotsToFreeInDB.emplace(i.first);
             }
             snapshotsToFreeInMem.emplace(i.first);
-        } else if (i.second.CheckToLock(stalenessInMem, now)) {
+        } else if (i.second.CheckToLock(stalenessInMem, usedSnapshotLivetime, now)) {
             Counters->OnSnapshotLocked();
             snapshotsToSave.emplace(i.first);
         }

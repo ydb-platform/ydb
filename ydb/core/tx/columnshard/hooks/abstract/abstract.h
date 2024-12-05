@@ -61,6 +61,9 @@ public:
     };
 
 protected:
+    virtual std::optional<TDuration> DoGetStalenessLivetimePing() const {
+        return {};
+    }
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
         return;
     }
@@ -157,6 +160,15 @@ public:
         return DoGetMemoryLimitScanPortion(GetConfig().GetMemoryLimitScanPortion());
     }
     virtual bool CheckPortionForEvict(const NOlap::TPortionInfo& portion) const;
+
+    TDuration GetStalenessLivetimePing(const TDuration defValue) const {
+        const auto val = DoGetStalenessLivetimePing();
+        if (!val || defValue < *val) {
+            return defValue;
+        } else {
+            return *val;
+        }
+    }
 
     virtual bool IsBackgroundEnabled(const EBackground /*id*/) const {
         return true;

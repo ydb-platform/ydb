@@ -31,8 +31,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
                 AskAccumulatorsScript->AddStep<TAllocateMemoryStep>(size, EStageFeaturesIndexes::Accessors);
             }
             AskAccumulatorsScript->AddStep<TPortionAccessorFetchingStep>();
+            AskAccumulatorsScript->AddStep<TDetectInMem>(*FFColumns);
         }
-        AskAccumulatorsScript->AddStep<TDetectInMem>(*FFColumns);
         return AskAccumulatorsScript;
     }
     const bool partialUsageByPK = [&]() {

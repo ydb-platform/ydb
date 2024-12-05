@@ -36,11 +36,11 @@ jobs:
         prevsha=$(git rev-parse HEAD)
         
         conflicts_file=$(mktemp)
-        git merge main --no-commit --no-ff main | true > $conflicts_file
+        git merge main --no-commit --no-ff main > $conflicts_file
         git reset HEAD --hard > /dev/null
         git clean -fd > /dev/null
-        if [ ! -s $conflicts_file ];then
-          echo Conflicts detected, trying to remove referenced CMakeLists* files
+        if [ -s $conflicts_file ];then
+          echo "Conflicts detected, trying to remove referenced CMakeLists* files"
           grep -E -o '\s\S*CMakeLists\S*\s' $conflicts_file | xargs rm
           git add .
           git commit -m "Remove conflicted CMakeLists"

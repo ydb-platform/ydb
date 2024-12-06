@@ -22,7 +22,7 @@ namespace builtins
       long rstart = end - suffix.size();
       return rstart >= start && s.compare(rstart, suffix.size(), suffix) == 0;
     }
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

@@ -16,7 +16,7 @@
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 #include <util/string/join.h>
 
 #include <vector>

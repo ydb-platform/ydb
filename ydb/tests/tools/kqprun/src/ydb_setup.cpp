@@ -9,7 +9,7 @@
 #include <ydb/core/testlib/test_client.h>
 
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 
 namespace NKqpRun {

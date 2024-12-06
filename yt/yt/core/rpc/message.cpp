@@ -181,6 +181,8 @@ TSharedRefArray CreateErrorResponseMessage(
 {
     NProto::TResponseHeader header;
     ToProto(header.mutable_request_id(), requestId);
+    // NB: We do not propagate service and method fields here because they are not necessary
+    // as this response message is empty and light anyway.
     if (!error.IsOK()) {
         ToProto(header.mutable_error(), error);
     }

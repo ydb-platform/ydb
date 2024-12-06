@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Sort",
+                                        "Node Type": "TopSort-Aggregate-Sort",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -40,6 +40,14 @@
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
                                                 "TopSortBy": "argument._yql_RowNumber0"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "Aggregate"
                                             },
                                             {
                                                 "Inputs": [

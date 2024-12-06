@@ -352,8 +352,8 @@ private:
                         return transaction->Commit();
                     }))
                     .Apply(BIND([this, this_ = MakeStrong(this)] (const TTransactionCommitResult&) {
-                        if (Options_.AcknowledgmentCallback) {
-                            Options_.AcknowledgmentCallback(LastSequenceNumber_);
+                        if (Options_.AckCallback) {
+                            Options_.AckCallback(LastSequenceNumber_);
                         }
                     }));
             })).AsVoid();

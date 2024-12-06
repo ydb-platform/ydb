@@ -7,18 +7,18 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
 
-    ydb/library/yql/parser/pg_wrapper
-    ydb/library/yql/providers/yt/gateway/file
-    ydb/library/yql/sql/pg
+    yql/essentials/parser/pg_wrapper
+    yt/yql/providers/yt/gateway/file
+    yql/essentials/sql/pg
 
     ydb/tests/tools/kqprun/src
 )
 
 PEERDIR(
-    ydb/library/yql/udfs/common/datetime2
-    ydb/library/yql/udfs/common/re2
-    ydb/library/yql/udfs/common/string
-    ydb/library/yql/udfs/common/yson2
+    yql/essentials/udfs/common/datetime2
+    yql/essentials/udfs/common/re2
+    yql/essentials/udfs/common/string
+    yql/essentials/udfs/common/yson2
 )
 
 YQL_LAST_ABI_VERSION()

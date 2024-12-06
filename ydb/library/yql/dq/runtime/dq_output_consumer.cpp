@@ -1,17 +1,17 @@
 #include "dq_output_consumer.h"
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
-#include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/computation/mkql_block_builder.h>
+#include <yql/essentials/minikql/computation/mkql_block_reader.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 
-#include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
-#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
+#include <yql/essentials/public/udf/arrow/args_dechunker.h>
+#include <yql/essentials/public/udf/arrow/memory_pool.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NDq {
 

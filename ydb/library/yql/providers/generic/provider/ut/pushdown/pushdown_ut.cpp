@@ -3,24 +3,24 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 
-#include <ydb/library/yql/ast/yql_ast.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/core/services/yql_out_transformers.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
-#include <ydb/library/yql/sql/sql.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/result/provider/yql_result_provider.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -162,7 +162,7 @@ public:
         UNIT_ASSERT(genericDataSource != Types->DataSourceMap.end());
         auto dqIntegration = genericDataSource->second->GetDqIntegration();
         UNIT_ASSERT(dqIntegration);
-        auto newRead = dqIntegration->WrapRead(TDqSettings(), input.Ptr(), ctx);
+        auto newRead = dqIntegration->WrapRead(input.Ptr(), ctx, IDqIntegration::TWrapReadSettings{});
         BuildSettings(newRead, dqIntegration, ctx);
         return newRead;
     }

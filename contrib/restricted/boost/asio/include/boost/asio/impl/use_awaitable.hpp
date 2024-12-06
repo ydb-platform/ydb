@@ -2,7 +2,7 @@
 // impl/use_awaitable.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -259,7 +259,7 @@ class async_result<use_awaitable_t<Executor>, R(Args...)>
 {
 public:
   typedef typename detail::awaitable_handler<
-      Executor, typename decay<Args>::type...> handler_type;
+      Executor, decay_t<Args>...> handler_type;
   typedef typename handler_type::awaitable_type return_type;
 
   template <typename Initiation, typename... InitArgs>

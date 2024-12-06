@@ -2,8 +2,9 @@
 
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
 
-#include <ydb/library/actors/util/rope.h>
 #include <ydb/library/actors/core/event_local.h>
+
+#include <yql/essentials/utils/chunked_buffer.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/buffer.h>
@@ -13,10 +14,10 @@ namespace NYql::NDq {
 struct TEvDqSpilling {
     struct TEvWrite : public NActors::TEventLocal<TEvWrite, TDqSpillingEvents::EvWrite> {
         ui64 BlobId;
-        TRope Blob;
+        NYql::TChunkedBuffer Blob;
         TMaybe<TDuration> Timeout;
 
-        TEvWrite(ui64 blobId, TRope&& blob, TMaybe<TDuration> timeout = {})
+        TEvWrite(ui64 blobId, NYql::TChunkedBuffer&& blob, TMaybe<TDuration> timeout = {})
             : BlobId(blobId), Blob(std::move(blob)), Timeout(timeout) {}
     };
 

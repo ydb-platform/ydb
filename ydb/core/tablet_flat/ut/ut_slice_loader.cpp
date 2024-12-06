@@ -158,7 +158,7 @@ namespace {
                     auto* page = part->Store->GetPage(0, pageId);
                     UNIT_ASSERT_C(page, "TLoader wants a missing page " << pageId);
 
-                    env.Save(fetch->Cookie, { pageId, TSharedPageRef::MakePrivate(*page) });
+                    env.Save(fetch->Cookie, { pageId, NSharedCache::TSharedPageRef::MakePrivate(*page) });
                 }
             } else {
                 UNIT_ASSERT_C(false, "TKeysLoader was stalled");

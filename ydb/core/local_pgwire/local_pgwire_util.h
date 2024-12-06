@@ -4,7 +4,7 @@
 #include <ydb/core/pgproxy/pg_proxy_types.h>
 #include <ydb/core/pgproxy/pg_proxy_events.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 #define INCLUDE_YDB_INTERNAL_H

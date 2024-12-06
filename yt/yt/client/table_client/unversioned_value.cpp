@@ -9,9 +9,9 @@
 
 #include <yt/yt/core/ytree/convert.h>
 
-#endif
+#include <library/cpp/yt/misc/compare.h>
 
-#include <yt/yt/library/numeric/util.h>
+#endif
 
 namespace NYT::NTableClient {
 
@@ -191,7 +191,7 @@ size_t TBitwiseUnversionedValueHash::operator()(const TUnversionedValue& value) 
             HashCombine(result, value.Data.Uint64);
             break;
         case EValueType::Double:
-            HashCombine(result, value.Data.Double);
+            HashCombine(result, NaNSafeHash(value.Data.Double));
             break;
         case EValueType::Boolean:
             HashCombine(result, value.Data.Boolean);
@@ -224,7 +224,7 @@ bool TBitwiseUnversionedValueEqual::operator()(const TUnversionedValue& lhs, con
         case EValueType::Uint64:
             return lhs.Data.Uint64 == rhs.Data.Uint64;
         case EValueType::Double:
-            return lhs.Data.Double == rhs.Data.Double;
+            return NaNSafeTernaryCompare(lhs.Data.Double, rhs.Data.Double) == 0;
         case EValueType::Boolean:
             return lhs.Data.Boolean == rhs.Data.Boolean;
         case EValueType::String:

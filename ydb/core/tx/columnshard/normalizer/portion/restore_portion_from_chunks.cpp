@@ -72,7 +72,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(), 0);
+    TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr), 0);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TChunksNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
@@ -129,7 +129,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
 
     for (auto&& [_, chunkWithPortionData] : portionsToWrite) {
         package.emplace_back(
-            tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetSchema(chunkWithPortionData.GetMinSnapshotDeprecated())->GetVersion(),
+            tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetSchemaVerified(chunkWithPortionData.GetMinSnapshotDeprecated())->GetVersion(),
             std::move(chunkWithPortionData));
         if (package.size() == 100) {
             std::vector<TPatchItem> local;

@@ -107,7 +107,8 @@
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "IsRefresh == 0 And DontCountHits == 0"
+                                                                                        "Predicate": "IsRefresh == 0 AND DontCountHits == 0",
+                                                                                        "Pushdown": "True"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],

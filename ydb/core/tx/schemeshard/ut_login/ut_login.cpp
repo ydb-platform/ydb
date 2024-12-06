@@ -2,37 +2,25 @@
 
 #include <ydb/library/login/login.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/testlib/service_mocks/ldap_mock/ldap_simple_server.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/login_page.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-namespace NSchemeShardUT_Private {
-
-// convert into generic test helper?
-void TestCreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& password, const TVector<TExpectedResult>& expectedResults) {
-    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> modifyTx(CreateAlterLoginCreateUser(txId, user, password));
-    //TODO: move setting of TModifyScheme.WorkingDir into CreateAlterLoginCreateUser()
-    //NOTE: TModifyScheme.Name isn't set, intentionally
-    modifyTx->Record.MutableTransaction(0)->SetWorkingDir(database);
-    AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
-    // AlterLoginCreateUser is synchronous in nature, result is returned immediately
-    TestModificationResults(runtime, txId, expectedResults);
-}
-
-}  // namespace NSchemeShardUT_Private
-
 Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
+
     Y_UNIT_TEST(BasicLogin) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -53,7 +41,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         runtime.GetAppData().AuthConfig.SetEnableLoginAuthentication(false);
         ui64 txId = 100;
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed}});
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Login authentication is disabled");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
@@ -62,68 +50,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
         UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
         UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0);
-    }
-
-    Y_UNIT_TEST(AuditLogLoginSuccess) {
-        TTestBasicRuntime runtime;
-        std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
-        TTestEnv env(runtime);
-
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
-
-        ui64 txId = 100;
-
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);   // +user creation
-
-        // test body
-        {
-            auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_C(resultLogin.error().empty(), resultLogin);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);   // +user login
-
-        auto last = FindAuditLine(lines, "operation=LOGIN");
-        UNIT_ASSERT_STRING_CONTAINS(last, "component=schemeshard");
-        UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=");  // can't check the value
-        UNIT_ASSERT_STRING_CONTAINS(last, "database=/MyRoot");
-        UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
-        UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
-        UNIT_ASSERT(!last.contains("reason"));
-        UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1");
-        UNIT_ASSERT_STRING_CONTAINS(last, "login_auth_domain={none}");
-    }
-
-    Y_UNIT_TEST(AuditLogLoginFailure) {
-        TTestBasicRuntime runtime;
-        std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
-        TTestEnv env(runtime);
-
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
-
-        ui64 txId = 100;
-
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);   // +user creation
-
-        // test body
-        {
-            auto resultLogin = Login(runtime, "user1", "bad_password");
-            UNIT_ASSERT_C(!resultLogin.error().empty(), resultLogin);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);   // +user login
-
-        auto last = FindAuditLine(lines, "operation=LOGIN");
-        UNIT_ASSERT_STRING_CONTAINS(last, "component=schemeshard");
-        UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=");  // can't check the value
-        UNIT_ASSERT_STRING_CONTAINS(last, "database=/MyRoot");
-        UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
-        UNIT_ASSERT_STRING_CONTAINS(last, "status=ERROR");
-        UNIT_ASSERT_STRING_CONTAINS(last, "reason=Invalid password");
-        UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1");
-        UNIT_ASSERT_STRING_CONTAINS(last, "login_auth_domain={none}");
     }
 }
 
@@ -177,7 +103,474 @@ NHttp::THttpIncomingRequestPtr MakeLogoutRequest(const TString& cookieName, cons
 
 Y_UNIT_TEST_SUITE(TWebLoginService) {
 
-    Y_UNIT_TEST(Logout) {
+    Y_UNIT_TEST(AuditLogLoginSuccess) {
+        TTestBasicRuntime runtime;
+        std::vector<std::string> lines;
+        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        TTestEnv env(runtime);
+
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
+
+        ui64 txId = 100;
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);   // +user creation
+
+        // test body
+        const auto target = runtime.Register(CreateWebLoginService());
+        const auto edge = runtime.AllocateEdgeActor();
+
+        {
+            runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+                MakeLoginRequest("user1", "password1")
+            )));
+
+            TAutoPtr<IEventHandle> handle;
+            auto responseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "200");
+            NHttp::THeaders headers(responseEv->Response->Headers);
+            NHttp::TCookies cookies(headers["Set-Cookie"]);
+            UNIT_ASSERT(!cookies["ydb_session_id"].empty());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);  // +user login
+
+        auto last = FindAuditLine(lines, "operation=LOGIN");
+        UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
+        UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=localhost");
+        UNIT_ASSERT_STRING_CONTAINS(last, "database=/MyRoot");
+        UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
+        UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
+        UNIT_ASSERT(!last.contains("reason"));
+        UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
+        UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
+    }
+
+    Y_UNIT_TEST(AuditLogLoginBadPassword) {
+        TTestBasicRuntime runtime;
+        std::vector<std::string> lines;
+        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        TTestEnv env(runtime);
+
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
+
+        ui64 txId = 100;
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);   // +user creation
+
+        // test body
+        const auto target = runtime.Register(CreateWebLoginService());
+        const auto edge = runtime.AllocateEdgeActor();
+
+        TString ydbSessionId;
+        {
+            runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+                MakeLoginRequest("user1", "bad_password")
+            )));
+
+            TAutoPtr<IEventHandle> handle;
+            auto responseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "403");
+            NJson::TJsonValue body(responseEv->Response->Body);
+            UNIT_ASSERT_STRINGS_EQUAL(body.GetStringRobust(), "{\"error\":\"Invalid password\"}");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);  // +user login
+
+        auto last = FindAuditLine(lines, "operation=LOGIN");
+        UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
+        UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=localhost");
+        UNIT_ASSERT_STRING_CONTAINS(last, "database=/MyRoot");
+        UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
+        UNIT_ASSERT_STRING_CONTAINS(last, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(last, "reason=Invalid password");
+        UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
+    }
+
+    Y_UNIT_TEST(AuditLogLdapLoginSuccess) {
+        TTestBasicRuntime runtime;
+        std::vector<std::string> lines;
+        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        // Enable and configure ldap auth
+        runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
+        TTestEnv env(runtime);
+
+        // configure ldap auth
+        auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
+        {
+            auto& appData = runtime.GetAppData();
+            appData.AuthConfig.SetUseBlackBox(false);
+            appData.AuthConfig.SetUseLoginProvider(true);
+            auto& ldapSettings = *appData.AuthConfig.MutableLdapAuthentication();
+            ldapSettings.MutableUseTls()->SetCertRequire(NKikimrProto::TLdapAuthentication::TUseTls::NEVER);
+            ldapSettings.SetPort(ldapPort);
+            ldapSettings.AddHosts("localhost");
+            ldapSettings.SetBaseDn("dc=search,dc=yandex,dc=net");
+            ldapSettings.SetBindDn("cn=robouser,dc=search,dc=yandex,dc=net");
+            ldapSettings.SetBindPassword("robouserPassword");
+            ldapSettings.SetSearchFilter("uid=$username");
+        }
+
+        // start ldap auth provider service
+        {
+            IActor* ldapAuthProvider = NKikimr::CreateLdapAuthProvider(runtime.GetAppData().AuthConfig.GetLdapAuthentication());
+            TActorId ldapAuthProviderId = runtime.Register(ldapAuthProvider);
+            runtime.RegisterService(MakeLdapAuthProviderID(), ldapAuthProviderId);
+        }
+
+        // start mock ldap server with predefined responses
+        auto ldapResponses = [](const TString& login, const TString& password) -> LdapMock::TLdapMockResponses {
+            return LdapMock::TLdapMockResponses{
+                .BindResponses = {
+                    {
+                        {{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}},
+                        {.Status = LdapMock::EStatus::SUCCESS}
+                    },
+                    {
+                        {{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}},
+                        {.Status = LdapMock::EStatus::SUCCESS}
+                    },
+                },
+                .SearchResponses = {
+                    {
+                        {{
+                            .BaseDn = "dc=search,dc=yandex,dc=net",
+                            .Scope = 2,
+                            .DerefAliases = 0,
+                            .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
+                            .Attributes = {"1.1"},
+                        }},
+                        {
+                            .ResponseEntries = {{.Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net"}},
+                            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+                        }
+                    },
+                },
+            };
+        };
+        LdapMock::TLdapSimpleServer ldapServer(ldapPort, ldapResponses("user1", "password1"));
+
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
+
+        // test body
+        const auto target = runtime.Register(CreateWebLoginService());
+        const auto edge = runtime.AllocateEdgeActor();
+
+        {
+            runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+                MakeLoginRequest("user1@ldap", "password1")
+            )));
+
+            TAutoPtr<IEventHandle> handle;
+            auto responseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_STRINGS_EQUAL_C(responseEv->Response->Status, "200", responseEv->Response->Body);
+            NHttp::THeaders headers(responseEv->Response->Headers);
+            NHttp::TCookies cookies(headers["Set-Cookie"]);
+            UNIT_ASSERT(!cookies["ydb_session_id"].empty());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user login
+
+        auto last = FindAuditLine(lines, "operation=LOGIN");
+        UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
+        UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=localhost");
+        UNIT_ASSERT_STRING_CONTAINS(last, "database=/MyRoot");
+        UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
+        UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
+        UNIT_ASSERT(!last.contains("detailed_status"));
+        UNIT_ASSERT(!last.contains("reason"));
+        UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
+        UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
+    }
+
+    Y_UNIT_TEST(AuditLogLdapLoginBadPassword) {
+        TTestBasicRuntime runtime;
+        std::vector<std::string> lines;
+        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        // Enable and configure ldap auth
+        runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
+        TTestEnv env(runtime);
+
+        // configure ldap auth
+        auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
+        {
+            auto& appData = runtime.GetAppData();
+            appData.AuthConfig.SetUseBlackBox(false);
+            appData.AuthConfig.SetUseLoginProvider(true);
+            auto& ldapSettings = *appData.AuthConfig.MutableLdapAuthentication();
+            ldapSettings.MutableUseTls()->SetCertRequire(NKikimrProto::TLdapAuthentication::TUseTls::NEVER);
+            ldapSettings.SetPort(ldapPort);
+            ldapSettings.AddHosts("localhost");
+            ldapSettings.SetBaseDn("dc=search,dc=yandex,dc=net");
+            ldapSettings.SetBindDn("cn=robouser,dc=search,dc=yandex,dc=net");
+            ldapSettings.SetBindPassword("robouserPassword");
+            ldapSettings.SetSearchFilter("uid=$username");
+        }
+
+        // start ldap auth provider service
+        {
+            IActor* ldapAuthProvider = NKikimr::CreateLdapAuthProvider(runtime.GetAppData().AuthConfig.GetLdapAuthentication());
+            TActorId ldapAuthProviderId = runtime.Register(ldapAuthProvider);
+            runtime.RegisterService(MakeLdapAuthProviderID(), ldapAuthProviderId);
+        }
+
+        // start mock ldap server with predefined responses
+        auto ldapResponses = [](const TString& login, const TString& password) -> LdapMock::TLdapMockResponses {
+            return LdapMock::TLdapMockResponses{
+                .BindResponses = {
+                    {
+                        {{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}},
+                        {.Status = LdapMock::EStatus::SUCCESS}
+                    },
+                    {
+                        {{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}},
+                        {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}
+                    },
+                },
+                .SearchResponses = {
+                    {
+                        {{
+                            .BaseDn = "dc=search,dc=yandex,dc=net",
+                            .Scope = 2,
+                            .DerefAliases = 0,
+                            .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
+                            .Attributes = {"1.1"},
+                        }},
+                        {
+                            .ResponseEntries = {{.Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net"}},
+                            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+                        }
+                    },
+                },
+            };
+        };
+        LdapMock::TLdapSimpleServer ldapServer(ldapPort, ldapResponses("user1", "bad_password"));
+
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
+
+        // test body
+        const auto target = runtime.Register(CreateWebLoginService());
+        const auto edge = runtime.AllocateEdgeActor();
+
+        {
+            runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+                MakeLoginRequest("user1@ldap", "bad_password")
+            )));
+
+            TAutoPtr<IEventHandle> handle;
+            auto responseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_STRINGS_EQUAL_C(responseEv->Response->Status, "403", responseEv->Response->Body);
+            NHttp::THeaders headers(responseEv->Response->Headers);
+            NHttp::TCookies cookies(headers["Set-Cookie"]);
+            UNIT_ASSERT(cookies["ydb_session_id"].empty());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user login
+
+        auto last = FindAuditLine(lines, "operation=LOGIN");
+        UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
+        UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=localhost");
+        UNIT_ASSERT_STRING_CONTAINS(last, "database=/MyRoot");
+        UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
+        UNIT_ASSERT_STRING_CONTAINS(last, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=UNAUTHORIZED");
+        UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: LDAP login failed for user uid=user1,dc=search,dc=yandex,dc=net on server ldap://localhost:");
+        UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
+    }
+
+    Y_UNIT_TEST(AuditLogLdapLoginBadUser) {
+        TTestBasicRuntime runtime;
+        std::vector<std::string> lines;
+        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        // Enable and configure ldap auth
+        runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
+        TTestEnv env(runtime);
+
+        // configure ldap auth
+        auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
+        {
+            auto& appData = runtime.GetAppData();
+            appData.AuthConfig.SetUseBlackBox(false);
+            appData.AuthConfig.SetUseLoginProvider(true);
+            auto& ldapSettings = *appData.AuthConfig.MutableLdapAuthentication();
+            ldapSettings.MutableUseTls()->SetCertRequire(NKikimrProto::TLdapAuthentication::TUseTls::NEVER);
+            ldapSettings.SetPort(ldapPort);
+            ldapSettings.AddHosts("localhost");
+            ldapSettings.SetBaseDn("dc=search,dc=yandex,dc=net");
+            ldapSettings.SetBindDn("cn=robouser,dc=search,dc=yandex,dc=net");
+            ldapSettings.SetBindPassword("robouserPassword");
+            ldapSettings.SetSearchFilter("uid=$username");
+        }
+
+        // start ldap auth provider service
+        {
+            IActor* ldapAuthProvider = NKikimr::CreateLdapAuthProvider(runtime.GetAppData().AuthConfig.GetLdapAuthentication());
+            TActorId ldapAuthProviderId = runtime.Register(ldapAuthProvider);
+            runtime.RegisterService(MakeLdapAuthProviderID(), ldapAuthProviderId);
+        }
+
+        // start mock ldap server with predefined responses
+        auto ldapResponses = [](const TString& login, const TString& password) -> LdapMock::TLdapMockResponses {
+            return LdapMock::TLdapMockResponses{
+                .BindResponses = {
+                    {
+                        {{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}},
+                        {.Status = LdapMock::EStatus::SUCCESS}
+                    },
+                    {
+                        {{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}},
+                        {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}
+                    },
+                },
+                .SearchResponses = {
+                    {
+                        {{
+                            .BaseDn = "dc=search,dc=yandex,dc=net",
+                            .Scope = 2,
+                            .DerefAliases = 0,
+                            .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
+                            .Attributes = {"1.1"},
+                        }},
+                        {
+                            .ResponseEntries = {},
+                            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+                        }
+                    },
+                },
+            };
+        };
+        LdapMock::TLdapSimpleServer ldapServer(ldapPort, ldapResponses("bad_user", "password1"));
+
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
+
+        // test body
+        const auto target = runtime.Register(CreateWebLoginService());
+        const auto edge = runtime.AllocateEdgeActor();
+
+        {
+            runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+                MakeLoginRequest("bad_user@ldap", "password1")
+            )));
+
+            TAutoPtr<IEventHandle> handle;
+            auto responseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_STRINGS_EQUAL_C(responseEv->Response->Status, "403", responseEv->Response->Body);
+            NHttp::THeaders headers(responseEv->Response->Headers);
+            NHttp::TCookies cookies(headers["Set-Cookie"]);
+            UNIT_ASSERT(cookies["ydb_session_id"].empty());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user login
+
+        auto last = FindAuditLine(lines, "operation=LOGIN");
+        UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
+        UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=localhost");
+        UNIT_ASSERT_STRING_CONTAINS(last, "database=/MyRoot");
+        UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
+        UNIT_ASSERT_STRING_CONTAINS(last, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=UNAUTHORIZED");
+        UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: LDAP user bad_user does not exist. LDAP search for filter uid=bad_user on server ldap://localhost:");
+        UNIT_ASSERT_STRING_CONTAINS(last, "login_user=bad_user@ldap");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
+    }
+
+    // LDAP responses to bad BindDn or bad BindPassword are the same, so this test covers the both cases.
+    Y_UNIT_TEST(AuditLogLdapLoginBadBind) {
+        TTestBasicRuntime runtime;
+        std::vector<std::string> lines;
+        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        // Enable and configure ldap auth
+        runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
+        TTestEnv env(runtime);
+
+        // configure ldap auth
+        auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
+        {
+            auto& appData = runtime.GetAppData();
+            appData.AuthConfig.SetUseBlackBox(false);
+            appData.AuthConfig.SetUseLoginProvider(true);
+            auto& ldapSettings = *appData.AuthConfig.MutableLdapAuthentication();
+            ldapSettings.MutableUseTls()->SetCertRequire(NKikimrProto::TLdapAuthentication::TUseTls::NEVER);
+            ldapSettings.SetPort(ldapPort);
+            ldapSettings.AddHosts("localhost");
+            ldapSettings.SetBaseDn("dc=search,dc=yandex,dc=net");
+            ldapSettings.SetBindDn("cn=robouser,dc=search,dc=yandex,dc=net");
+            ldapSettings.SetBindPassword("robouserPassword");
+            ldapSettings.SetSearchFilter("uid=$username");
+        }
+
+        // start ldap auth provider service
+        {
+            IActor* ldapAuthProvider = NKikimr::CreateLdapAuthProvider(runtime.GetAppData().AuthConfig.GetLdapAuthentication());
+            TActorId ldapAuthProviderId = runtime.Register(ldapAuthProvider);
+            runtime.RegisterService(MakeLdapAuthProviderID(), ldapAuthProviderId);
+        }
+
+        // start mock ldap server with predefined responses
+        auto ldapResponses = [](const TString& login, const TString& password) -> LdapMock::TLdapMockResponses {
+            return LdapMock::TLdapMockResponses{
+                .BindResponses = {
+                    {
+                        {{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}},
+                        {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}
+                    },
+                    {
+                        {{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}},
+                        {.Status = LdapMock::EStatus::SUCCESS}
+                    },
+                },
+                .SearchResponses = {
+                    {
+                        {{
+                            .BaseDn = "dc=search,dc=yandex,dc=net",
+                            .Scope = 2,
+                            .DerefAliases = 0,
+                            .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
+                            .Attributes = {"1.1"},
+                        }},
+                        {
+                            .ResponseEntries = {{.Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net"}},
+                            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+                        }
+                    },
+                },
+            };
+        };
+        LdapMock::TLdapSimpleServer ldapServer(ldapPort, ldapResponses("user1", "password1"));
+
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
+
+        // test body
+        const auto target = runtime.Register(CreateWebLoginService());
+        const auto edge = runtime.AllocateEdgeActor();
+
+        {
+            runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+                MakeLoginRequest("user1@ldap", "password1")
+            )));
+
+            TAutoPtr<IEventHandle> handle;
+            auto responseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_STRINGS_EQUAL_C(responseEv->Response->Status, "403", responseEv->Response->Body);
+            NHttp::THeaders headers(responseEv->Response->Headers);
+            NHttp::TCookies cookies(headers["Set-Cookie"]);
+            UNIT_ASSERT(cookies["ydb_session_id"].empty());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user login
+
+        auto last = FindAuditLine(lines, "operation=LOGIN");
+        UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
+        UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=localhost");
+        UNIT_ASSERT_STRING_CONTAINS(last, "database=/MyRoot");
+        UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
+        UNIT_ASSERT_STRING_CONTAINS(last, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=UNAUTHORIZED");
+        UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: Could not perform initial LDAP bind for dn cn=robouser,dc=search,dc=yandex,dc=net on server ldap://localhost:");
+        UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
+    }
+
+    Y_UNIT_TEST(AuditLogLogout) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
         runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
@@ -198,7 +591,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
 
         ui64 txId = 100;
 
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user creation
 
         // test body
@@ -264,6 +657,10 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             TAutoPtr<IEventHandle> handle;
             auto responseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
             UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "200");
+            {
+                NHttp::THeaders headers(responseEv->Response->Headers);
+                UNIT_ASSERT_STRINGS_EQUAL(headers["Set-Cookie"], "ydb_session_id=; Max-Age=0");
+            }
 
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);  // +user web logout
 
@@ -273,6 +670,8 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             UNIT_ASSERT_STRING_CONTAINS(last, "subject=user1");
             UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGOUT");
             UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
+            UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
         }
     }
 }

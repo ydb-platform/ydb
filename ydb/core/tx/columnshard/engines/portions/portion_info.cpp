@@ -1,5 +1,5 @@
 #include "column_record.h"
-#include "constructor.h"
+#include "constructor_portion.h"
 #include "data_accessor.h"
 #include "portion_info.h"
 
@@ -47,12 +47,11 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
 }
 
 ui64 TPortionInfo::GetMetadataMemorySize() const {
-    return sizeof(TPortionInfo) + Records.size() * (sizeof(TColumnRecord) + 8) + Indexes.size() * sizeof(TIndexChunk) +
-           - sizeof(TPortionMeta) + Meta.GetMetadataMemorySize();
+    return sizeof(TPortionInfo) - sizeof(TPortionMeta) + Meta.GetMetadataMemorySize();
 }
 
-ui64 TPortionInfo::GetTxVolume() const {
-    return 1024 + Records.size() * 256 + Indexes.size() * 256;
+ui64 TPortionInfo::GetApproxChunksCount(const ui32 schemaColumnsCount) const {
+    return schemaColumnsCount * (GetRecordsCount() / 10000 + 1);
 }
 
 void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
@@ -83,20 +82,6 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
             return parse;
         }
     }
-    for (auto&& i : proto.GetRecords()) {
-        auto parse = TColumnRecord::BuildFromProto(i);
-        if (!parse) {
-            return parse;
-        }
-        Records.emplace_back(std::move(parse.DetachResult()));
-    }
-    for (auto&& i : proto.GetIndexes()) {
-        auto parse = TIndexChunk::BuildFromProto(i);
-        if (!parse) {
-            return parse;
-        }
-        Indexes.emplace_back(std::move(parse.DetachResult()));
-    }
     return TConclusionStatus::Success();
 }
 
@@ -124,11 +109,11 @@ const TString& TPortionInfo::GetIndexStorageId(const ui32 indexId, const TIndexI
 ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
     AFL_VERIFY(SchemaVersion);
     if (SchemaVersion) {
-        auto schema = index.GetSchema(SchemaVersion.value());
+        auto schema = index.GetSchemaVerified(SchemaVersion.value());
         AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());
         return schema;
     }
-    return index.GetSchema(MinSnapshotDeprecated);
+    return index.GetSchemaVerified(MinSnapshotDeprecated);
 }
 
 ISnapshotSchema::TPtr TPortionInfo::TSchemaCursor::GetSchema(const TPortionInfoConstructor& portion) {

@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <library/cpp/json/writer/json.h>
 

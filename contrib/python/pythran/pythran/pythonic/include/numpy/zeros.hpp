@@ -2,16 +2,15 @@
 #define PYTHONIC_INCLUDE_NUMPY_ZEROS_HPP
 
 #include "pythonic/include/numpy/float64.hpp"
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/ndarray.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
 namespace numpy
 {
   template <class dtype = functor::float64>
-  typename dtype::type
-  zeros(std::tuple<> const &shape, dtype d = dtype());
+  typename dtype::type zeros(std::tuple<> const &shape, dtype d = dtype());
 
   template <class pS, class dtype = functor::float64>
   types::ndarray<typename dtype::type, sutils::shape_t<pS>>
@@ -27,7 +26,7 @@ namespace numpy
   zeros(std::integral_constant<long, N>, dtype d = dtype());
 
   DEFINE_FUNCTOR(pythonic::numpy, zeros);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

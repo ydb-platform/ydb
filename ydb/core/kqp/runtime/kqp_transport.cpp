@@ -5,9 +5,9 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NKikimr {
 namespace NKqp {

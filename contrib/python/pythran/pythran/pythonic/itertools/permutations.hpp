@@ -37,7 +37,8 @@ namespace itertools
     return res;
   }
   template <class T, size_t N>
-  types::array<T, N> init_permut_from(size_t n, types::array<T, N> *)
+  types::array_tuple<T, N> init_permut_from(size_t n,
+                                            types::array_tuple<T, N> *)
   {
     assert(N == n && "consistent init");
     return {};
@@ -60,9 +61,10 @@ namespace itertools
     return {begin, end};
   }
   template <class T, size_t N, class I>
-  types::array<T, N> init_permut_from(I begin, I end, types::array<T, N> *)
+  types::array_tuple<T, N> init_permut_from(I begin, I end,
+                                            types::array_tuple<T, N> *)
   {
-    types::array<T, N> res;
+    types::array_tuple<T, N> res;
     std::copy(begin, end, res.begin());
     return res;
   }
@@ -167,7 +169,7 @@ namespace itertools
   }
 
   template <typename T, long N>
-  _permutations<T, types::array<typename T::value_type, (size_t)N>>
+  _permutations<T, types::array_tuple<typename T::value_type, (size_t)N>>
   permutations(T iter, std::integral_constant<long, N>)
   {
     return {iter, N};

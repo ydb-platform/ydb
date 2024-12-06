@@ -143,6 +143,7 @@ DEFINE_ENUM(EAbortReason,
     ((InterruptionFailed)              ( 55))
     ((OperationIncarnationChanged)     ( 56))
     ((AddressResolveFailed)            ( 57))
+    ((UnexpectedNodeJobPhase)          ( 58))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))
@@ -154,6 +155,8 @@ DEFINE_ENUM(EAbortReason,
     ((SchedulingLast)                  (199))
 );
 
+DEFINE_ENUM_UNKNOWN_VALUE(EAbortReason, Unknown);
+
 DEFINE_ENUM(EInterruptReason,
     ((None)               (0))
     ((Preemption)         (1))
@@ -162,6 +165,8 @@ DEFINE_ENUM(EInterruptReason,
     ((Unknown)            (4))
     ((JobsDisabledOnNode) (5))
 );
+
+DEFINE_ENUM_UNKNOWN_VALUE(EInterruptReason, Unknown);
 
 DEFINE_ENUM(EAutoMergeMode,
     (Disabled)

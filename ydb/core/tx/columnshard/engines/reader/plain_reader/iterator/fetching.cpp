@@ -6,7 +6,7 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
-#include <ydb/library/yql/minikql/mkql_terminator.h>
+#include <yql/essentials/minikql/mkql_terminator.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -31,6 +31,13 @@ TConclusionStatus TStepAction::DoExecuteImpl() {
         FinishedFlag = true;
     }
     return TConclusionStatus::Success();
+}
+
+TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId)
+    : TBase(ownerActorId)
+    , Source(source)
+    , Cursor(std::move(cursor))
+    , CountersGuard(Source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard()) {
 }
 
 TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
@@ -122,7 +129,6 @@ TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataS
 }
 
 TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    source->SetSourceInMemory(true);
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
         columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), Count));
@@ -175,7 +181,11 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
         guard->Release();
         return false;
     }
-    data->RegisterAllocationGuard(std::move(guard));
+    if (StageIndex == EStageFeaturesIndexes::Accessors) {
+        data->MutableStageData().SetAccessorsGuard(std::move(guard));
+    } else {
+        data->RegisterAllocationGuard(std::move(guard));
+    }
     Step.Next();
     auto task = std::make_shared<TStepAction>(data, std::move(Step), data->GetContext()->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
@@ -183,17 +193,24 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
 }
 
 TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(
-    const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step)
+    const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step, const EStageFeaturesIndexes stageIndex)
     : TBase(mem)
     , Source(source)
     , Step(step)
-    , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard()) {
+    , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
+    , StageIndex(stageIndex) {
 }
 
-TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
+    auto sourcePtr = Source.lock();
+    if (sourcePtr) {
+        sourcePtr->GetContext()->GetCommonContext()->AbortWithError(
+            "cannot allocate memory for step " + Step.GetName() + ": '" + errorMessage + "'");
+    }
+}
 
-    ui64 size = 0;
+TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    ui64 size = PredefinedSize.value_or(0);
     for (auto&& i : Packs) {
         ui32 sizeLocal = source->GetColumnsVolume(i.GetColumns().GetColumnIds(), i.GetMemType());
         if (source->GetStageData().GetUseFilter() && source->GetContext()->GetReadMetadata()->Limit && i.GetMemType() != EMemType::Blob) {
@@ -206,8 +223,7 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(
         size += sizeLocal;
     }
 
-
-    auto allocation = std::make_shared<TFetchingStepAllocation>(source, size, step);
+    auto allocation = std::make_shared<TFetchingStepAllocation>(source, size, step, StageIndex);
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),
         source->GetContext()->GetCommonContext()->GetScanId(), source->GetFirstIntervalId(), { allocation }, (ui32)StageIndex);
     return false;
@@ -281,13 +297,19 @@ TConclusion<bool> TPortionAccessorFetchingStep::DoExecuteInplace(
 }
 
 TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    AFL_VERIFY(source->GetExclusiveIntervalOnly());
-    if (source->GetColumnRawBytes(Columns.GetColumnIds()) > 1e+8) {
-        source->SetSourceInMemory(false);
+    if (Columns.GetColumnsCount()) {
+        source->SetSourceInMemory(
+            source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
         source->SetSourceInMemory(true);
     }
-    return true;
+    AFL_VERIFY(!source->NeedAccessorsFetching());
+    auto plan = source->GetContext()->GetColumnsFetchingPlan(source);
+    source->InitFetchingPlan(plan);
+    TFetchingScriptCursor cursor(plan, 0);
+    auto task = std::make_shared<TStepAction>(source, std::move(cursor), source->GetContext()->GetCommonContext()->GetScanActorId());
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+    return false;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

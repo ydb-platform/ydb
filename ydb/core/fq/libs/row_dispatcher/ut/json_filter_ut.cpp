@@ -3,14 +3,15 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 
+#include <ydb/core/fq/libs/row_dispatcher/common.h>
 #include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
+#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/public/purecalc/common/interface.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -23,10 +24,11 @@ class TFixture : public NUnitTest::TBaseFixture {
 
 public:
     TFixture()
-        : PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions()))
-        , Runtime(true)
+        : Runtime(true)
         , Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false)
-    {}
+    {
+        Alloc.Ref().UseRefLocking = true;
+    }
 
     static void SegmentationFaultHandler(int) {
         Cerr << "segmentation fault call stack:" << Endl;
@@ -41,6 +43,9 @@ public:
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
+        Runtime.SetDispatchTimeout(TDuration::Seconds(5));
+
+        CompileServiceActorId = Runtime.Register(NRowDispatcher::CreatePurecalcCompileService());
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
@@ -65,10 +70,22 @@ public:
             types,
             whereFilter,
             callback,
-            PureCalcProgramFactory);
+            {.EnabledLLVM = false});
+
+        const auto edgeActor = Runtime.AllocateEdgeActor();
+        Runtime.Send(CompileServiceActorId, edgeActor, Filter->GetCompileRequest().release());
+        auto response = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvPurecalcCompileResponse>(edgeActor, TDuration::Seconds(5));
+
+        UNIT_ASSERT_C(response, "Failed to get compile response");
+        UNIT_ASSERT_C(response->Get()->ProgramHolder, "Failed to compile program, error: " << response->Get()->Error);
+        Filter->OnCompileResponse(std::move(response));
     }
 
-    const NKikimr::NMiniKQL::TUnboxedValueVector* MakeVector(size_t size, std::function<NYql::NUdf::TUnboxedValuePod(size_t)> valueCreator) {
+    void Push(const TVector<ui64>& offsets, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values) {
+        Filter->Push(offsets, values, 0, values.front()->size());
+    }
+
+    const TVector<NYql::NUdf::TUnboxedValue>* MakeVector(size_t size, std::function<NYql::NUdf::TUnboxedValuePod(size_t)> valueCreator) {
         with_lock (Alloc) {
             Holders.emplace_front();
             for (size_t i = 0; i < size; ++i) {
@@ -80,33 +97,33 @@ public:
     }
 
     template <typename TValue>
-    const NKikimr::NMiniKQL::TUnboxedValueVector* MakeVector(const TVector<TValue>& values, bool optional = false) {
+    const TVector<NYql::NUdf::TUnboxedValue>* MakeVector(const TVector<TValue>& values, bool optional = false) {
         return MakeVector(values.size(), [&](size_t i) {
             NYql::NUdf::TUnboxedValuePod unboxedValue = NYql::NUdf::TUnboxedValuePod(values[i]);
             return optional ? unboxedValue.MakeOptional() : unboxedValue;
         });
     }
 
-    const NKikimr::NMiniKQL::TUnboxedValueVector* MakeStringVector(const TVector<TString>& values, bool optional = false) {
+    const TVector<NYql::NUdf::TUnboxedValue>* MakeStringVector(const TVector<TString>& values, bool optional = false) {
         return MakeVector(values.size(), [&](size_t i) {
             NYql::NUdf::TUnboxedValuePod stringValue = NKikimr::NMiniKQL::MakeString(values[i]);
             return optional ? stringValue.MakeOptional() : stringValue;
         });
     }
 
-    const NKikimr::NMiniKQL::TUnboxedValueVector* MakeEmptyVector(size_t size) {
+    const TVector<NYql::NUdf::TUnboxedValue>* MakeEmptyVector(size_t size) {
         return MakeVector(size, [&](size_t) {
             return NYql::NUdf::TUnboxedValuePod();
         });
     }
 
-    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
     TActorSystemStub ActorSystemStub;
+    TActorId CompileServiceActorId;
     std::unique_ptr<NFq::TJsonFilter> Filter;
 
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
-    TList<NKikimr::NMiniKQL::TUnboxedValueVector> Holders;
+    TList<TVector<NYql::NUdf::TUnboxedValue>> Holders;
 };
 
 Y_UNIT_TEST_SUITE(TJsonFilterTests) {
@@ -119,8 +136,8 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
             [&](ui64 offset, const TString& json) {
                 result[offset] = json;
             });
-        Filter->Push({5}, {MakeStringVector({"hello1"}), MakeVector<ui64>({99}), MakeStringVector({"zapuskaem"}, true)});
-        Filter->Push({6}, {MakeStringVector({"hello2"}), MakeVector<ui64>({101}), MakeStringVector({"gusya"}, true)});
+        Push({5}, {MakeStringVector({"hello1"}), MakeVector<ui64>({99}), MakeStringVector({"zapuskaem"}, true)});
+        Push({6}, {MakeStringVector({"hello2"}), MakeVector<ui64>({101}), MakeStringVector({"gusya"}, true)});
         UNIT_ASSERT_VALUES_EQUAL(1, result.size());
         UNIT_ASSERT_VALUES_EQUAL(R"({"a1":"hello2","a2":101,"a@3":"gusya"})", result[6]);
     }
@@ -134,8 +151,8 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
             [&](ui64 offset, const TString& json) {
                 result[offset] = json;
             });
-        Filter->Push({5}, {MakeVector<ui64>({99}), MakeStringVector({"hello1"})});
-        Filter->Push({6}, {MakeVector<ui64>({101}), MakeStringVector({"hello2"})});
+        Push({5}, {MakeVector<ui64>({99}), MakeStringVector({"hello1"})});
+        Push({6}, {MakeVector<ui64>({101}), MakeStringVector({"hello2"})});
         UNIT_ASSERT_VALUES_EQUAL(1, result.size());
         UNIT_ASSERT_VALUES_EQUAL(R"({"a1":"hello2","a2":101})", result[6]);
     }
@@ -151,7 +168,7 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
             });
         const TString largeString = "abcdefghjkl1234567890+abcdefghjkl1234567890";
         for (ui64 i = 0; i < 5; ++i) {
-            Filter->Push({2 * i, 2 * i + 1}, {MakeStringVector({"hello1", "hello2"}), MakeVector<ui64>({99, 101}), MakeStringVector({largeString, largeString})});
+            Push({2 * i, 2 * i + 1}, {MakeStringVector({"hello1", "hello2"}), MakeVector<ui64>({99, 101}), MakeStringVector({largeString, largeString})});
             UNIT_ASSERT_VALUES_EQUAL_C(i + 1, result.size(), i);
             UNIT_ASSERT_VALUES_EQUAL_C(TStringBuilder() << "{\"a1\":\"hello2\",\"a2\":101,\"a3\":\"" << largeString << "\"}", result[2 * i + 1], i);
         }
@@ -166,9 +183,23 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
             [&](ui64 offset, const TString& json) {
                 result[offset] = json;
             });
-        Filter->Push({5}, {MakeEmptyVector(1), MakeStringVector({"str"})});
+        Push({5}, {MakeEmptyVector(1), MakeStringVector({"str"})});
         UNIT_ASSERT_VALUES_EQUAL(1, result.size());
         UNIT_ASSERT_VALUES_EQUAL(R"({"a1":null,"a2":"str"})", result[5]);
+    }
+
+    Y_UNIT_TEST_F(PartialPush, TFixture) {
+        TMap<ui64, TString> result;
+        MakeFilter(
+            {"a1", "a2", "a@3"},
+            {"[DataType; String]", "[DataType; Uint64]", "[OptionalType; [DataType; String]]"},
+            "where a2 > 50",
+            [&](ui64 offset, const TString& json) {
+                result[offset] = json;
+            });
+        Filter->Push({5, 6, 7}, {MakeStringVector({"hello1", "hello2"}), MakeVector<ui64>({99, 101}), MakeStringVector({"zapuskaem", "gusya"}, true)}, 1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+        UNIT_ASSERT_VALUES_EQUAL(R"({"a1":"hello1","a2":99,"a@3":"zapuskaem"})", result[6]);
     }
 }
 

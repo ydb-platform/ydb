@@ -95,3 +95,11 @@ LIBURING_2.6 {
 
 LIBURING_2.7 {
 } LIBURING_2.6;
+
+LIBURING_2.8 {
+	global:
+		io_uring_register_clock;
+		io_uring_submit_and_wait_min_timeout;
+		io_uring_wait_cqes_min_timeout;
+		io_uring_clone_buffers;
+} LIBURING_2.7;

@@ -96,7 +96,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.b > item.c And item.a > item.b And item.a != 0"
+                                                "Predicate": "item.b > item.c AND item.a > item.b AND item.a != 0"
                                             }
                                         ],
                                         "PlanNodeId": 2,

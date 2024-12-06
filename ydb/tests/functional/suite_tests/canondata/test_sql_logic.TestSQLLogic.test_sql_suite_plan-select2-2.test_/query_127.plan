@@ -143,7 +143,7 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Filter",
-                                                                "Predicate": "item.e + item.d >= item.a + item.b - 10 And item.e + item.d <= item.c + 130 And Exist(item.b) And item.e > item.a And item.e < item.b"
+                                                                "Predicate": "item.e + item.d >= item.a + item.b - 10 AND item.e + item.d <= item.c + 130 AND Exist(item.b) AND item.e > item.a AND item.e < item.b"
                                                             }
                                                         ],
                                                         "PlanNodeId": 10,

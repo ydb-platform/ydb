@@ -57,11 +57,15 @@ void TColumnShard::BecomeBroken(const TActorContext& ctx) {
 void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     {
         const TLogContextGuard gLogging =
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId())("process", "SwitchToWork");
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
 
-        for (auto&& i : TablesManager.GetTables()) {
-            ActivateTiering(i.first, i.second.GetTieringUsage());
+        for (const auto& [pathId, tiering] : TablesManager.GetTtl()) {
+            THashSet<TString> tiers;
+            for (const auto& [name, config] : tiering.GetTierByName()) {
+                tiers.emplace(name);
+            }
+            ActivateTiering(pathId, tiers);
         }
 
         Become(&TThis::StateWork);
@@ -109,7 +113,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
     DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
-    DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId),
+    DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId, SelfId()),
 
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();
     Execute(CreateTxInitSchema(), ctx);
@@ -196,11 +200,16 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const TActorContext& ctx) {
-    if (auto writeTx =
-            InFlightReadsTracker.Ping(this, NYDBTest::TControllers::GetColumnShardController()->GetPingCheckPeriod(), TInstant::Now())) {
+    const TDuration stalenessLivetime = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness();
+    const TDuration stalenessInMem = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStalenessInMem();
+    const TDuration usedLivetime = NYDBTest::TControllers::GetColumnShardController()->GetUsedSnapshotLivetime();
+    AFL_VERIFY(usedLivetime < stalenessInMem || (stalenessInMem == usedLivetime && usedLivetime == TDuration::Zero()))("used", usedLivetime)(
+                                                "staleness", stalenessInMem);
+    const TDuration ping = 0.3 * std::min(stalenessInMem - usedLivetime, stalenessLivetime - stalenessInMem);
+    if (auto writeTx = InFlightReadsTracker.Ping(this, stalenessInMem, usedLivetime, TInstant::Now())) {
         Execute(writeTx.release(), ctx);
     }
-    ctx.Schedule(0.3 * GetMaxReadStaleness(), new TEvPrivate::TEvPingSnapshotsUsage());
+    ctx.Schedule(NYDBTest::TControllers::GetColumnShardController()->GetStalenessLivetimePing(ping), new TEvPrivate::TEvPingSnapshotsUsage());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {

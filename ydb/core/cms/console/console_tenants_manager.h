@@ -19,7 +19,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 
@@ -537,6 +537,8 @@ public:
 
         TMaybe<Ydb::Cms::SchemaOperationQuotas> SchemaOperationQuotas;
         TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
+        TMaybe<Ydb::Cms::ScaleRecommenderPolicies> ScaleRecommenderPolicies;
+        TActorId ScaleRecommenderPoliciesWorker;
         TString CreateIdempotencyKey;
         TString AlterIdempotencyKey;
     };
@@ -799,6 +801,7 @@ public:
     void RequestTenantSlotsState(TTenant::TPtr tenant, const TActorContext &ctx);
     void RequestTenantSlotsStats(const TActorContext &ctx);
     void RetryResourcesRequests(const TActorContext &ctx);
+    void CongifureScaleRecommender(TTenant::TPtr tenant, const TActorContext &ctx);
 
     void FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status);
     void FillTenantAllocatedSlots(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status,
@@ -914,6 +917,10 @@ public:
                                 const Ydb::Cms::DatabaseQuotas &quotas,
                                 TTransactionContext &txc,
                                 const TActorContext &ctx);
+    void DbUpdateScaleRecommenderPolicies(TTenant::TPtr tenant,
+                                          const Ydb::Cms::ScaleRecommenderPolicies &policies,
+                                          TTransactionContext &txc,
+                                          const TActorContext &ctx);
 
     void Handle(TEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvCreateTenantRequest::TPtr &ev, const TActorContext &ctx);

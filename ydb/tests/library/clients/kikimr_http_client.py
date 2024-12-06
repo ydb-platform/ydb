@@ -146,7 +146,7 @@ class SwaggerClient(object):
         return self.__hive_info(tablet_type=int(tablet_type))
 
     def hive_info_all(self):
-        return self.__hive_info()
+        return self.__hive_info(followers="true")
 
     def __hive_info(self, **kwargs):
         return self.__http_get_and_parse_json(

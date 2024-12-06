@@ -14,7 +14,7 @@
 
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
@@ -41,6 +41,11 @@ using namespace NKMeans;
 // Which UPLOAD* will be used depends on that will client of this scan request (see UploadState)
 //
 // NTable::IScan::Seek used to switch from current state to the next one.
+
+// If less than 1% of vectors are reassigned to new clusters we want to stop
+// TODO(mbkkt) 1% is choosed by common sense and should be adjusted in future
+static constexpr double MinVectorsNeedsReassigned = 0.01;
+
 class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
@@ -77,6 +82,7 @@ protected:
 
     std::vector<TProbability> MaxRows;
     std::vector<TString> Clusters;
+    std::vector<ui64> ClusterSizes;
 
     // Upload
     std::shared_ptr<NTxProxy::TUploadTypes> TargetTypes;
@@ -335,7 +341,7 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
 
     struct TAggregatedCluster {
         TEmbedding Cluster;
-        ui64 Count = 0;
+        ui64 Size = 0;
     };
     std::vector<TAggregatedCluster> AggregatedClusters;
 
@@ -385,8 +391,7 @@ public:
         }
 
         Y_ASSERT(State == EState::KMEANS);
-        RecomputeClusters(Round >= MaxRounds);
-        if (Round >= MaxRounds) {
+        if (RecomputeClusters()) {
             lead = std::move(Lead);
             lead.SetTags(UploadScan);
 
@@ -436,6 +441,7 @@ private:
             Clusters.resize(K);
         }
         Y_ASSERT(Clusters.size() == K);
+        ClusterSizes.resize(K, 0);
         AggregatedClusters.resize(K);
         for (auto& aggregate : AggregatedClusters) {
             aggregate.Cluster.resize(this->Dimensions, 0);
@@ -453,28 +459,53 @@ private:
         for (auto coord : this->GetCoords(embedding)) {
             *coords++ += coord;
         }
-        ++aggregate.Count;
+        ++aggregate.Size;
     }
 
-    void RecomputeClusters(bool last)
+    bool RecomputeClusters()
     {
-        auto r = Clusters.begin();
-        auto w = r;
-        for (auto& aggregate : AggregatedClusters) {
-            if (aggregate.Count != 0) {
-                auto& cluster = *r;
-                this->Fill(cluster, aggregate.Cluster.data(), aggregate.Count);
-                if (w != r) {
-                    Y_ASSERT(w < r);
-                    *w = std::move(*r);
-                }
-                ++w;
-            } else if (!last) {
+        Y_ASSERT(K >= 1);
+        ui64 vectorCount = 0;
+        ui64 reassignedCount = 0;
+        for (size_t i = 0; auto& aggregate : AggregatedClusters) {
+            vectorCount += aggregate.Size;
+
+            auto& clusterSize = ClusterSizes[i];
+            reassignedCount += clusterSize < aggregate.Size ? aggregate.Size - clusterSize : 0;
+            clusterSize = aggregate.Size;
+
+            if (aggregate.Size != 0) {
+                this->Fill(Clusters[i], aggregate.Cluster.data(), aggregate.Size);
+                Y_ASSERT(aggregate.Size == 0);
+            }
+            ++i;
+        }
+        Y_ASSERT(vectorCount >= K);
+        Y_ASSERT(reassignedCount <= vectorCount);
+        if (K == 1) {
+            return true;
+        }
+
+        bool last = Round >= MaxRounds;
+        if (!last && Round > 1) {
+            const auto changes = static_cast<double>(reassignedCount) / static_cast<double>(vectorCount);
+            last = changes < MinVectorsNeedsReassigned;
+        }
+        if (!last) {
+            return false;
+        }
+
+        size_t w = 0;
+        for (size_t r = 0; r < ClusterSizes.size(); ++r) {
+            if (ClusterSizes[r] != 0) {
+                ClusterSizes[w] = ClusterSizes[r];
+                Clusters[w] = std::move(Clusters[r]);
                 ++w;
             }
-            ++r;
         }
-        Clusters.erase(w, Clusters.end());
+        ClusterSizes.erase(ClusterSizes.begin() + w, ClusterSizes.end());
+        Clusters.erase(Clusters.begin() + w, Clusters.end());
+        return true;
     }
 
     EScan FeedSample(const TRow& row) noexcept

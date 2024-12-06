@@ -1,16 +1,16 @@
 #include "yql_pq_provider_impl.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
@@ -30,7 +30,17 @@ namespace {
             : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
         {
             using EFlag = NPushdown::TSettings::EFeatureFlag;
-            Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator | EFlag::JustPassthroughOperators);
+            Enable(
+                // Operator features
+                EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
+                EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
+                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | DivisionExpressions | EFlag::CastExpression |
+                EFlag::ToBytesFromStringExpressions | EFlag::FlatMapOverOptionals |
+
+                // Split features
+                EFlag::SplitOrOperator
+            );
+            EnableFunction("Re2.Grep");  // For REGEXP pushdown
         }
     };
 
@@ -258,19 +268,14 @@ public:
             return node;
         }
 
-        auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
-        if (!newFilterLambda) {
-            return node;
-        }
-
-        auto predicate = newFilterLambda.Cast();
-        if (NYql::IsEmptyFilterPredicate(predicate)) {
+        NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
+        if (predicate.IsEmpty()) {
             return node;
         }
 
         TStringBuilder err;
         NYql::NConnector::NApi::TPredicate predicateProto;
-        if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
+        if (!NYql::SerializeFilterPredicate(predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
             ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
             return node;
         }

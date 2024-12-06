@@ -17,7 +17,7 @@ namespace numpy
            types::str const &sep = {}, long offset = 0);
 
   DEFINE_FUNCTOR(pythonic::numpy, fromfile);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

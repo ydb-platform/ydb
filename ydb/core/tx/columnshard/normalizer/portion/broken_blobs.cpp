@@ -2,11 +2,12 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
+
+#include <util/string/vector.h>
 
 namespace NKikimr::NOlap::NNormalizer::NBrokenBlobs {
 
@@ -34,17 +35,8 @@ public:
             copy.SaveMetaToDatabase(db);
         }
         if (BrokenPortions.size()) {
-            TStringBuilder sb;
-            ui64 recordsCount = 0;
-            sb << "path_ids:[";
-            for (auto&& [_, p] : BrokenPortions) {
-                sb << p.GetPortionInfo().GetPathId() << ",";
-                recordsCount += p.GetPortionInfo().GetRecordsCount();
-            }
-            sb << "];";
-            sb << "records_count:" << recordsCount;
             NIceDb::TNiceDb db(txc.DB);
-            normController.AddNormalizerEvent(db, "REMOVE_PORTIONS", sb);
+            normController.AddNormalizerEvent(db, "REMOVE_PORTIONS", DebugString());
         }
         return true;
     }
@@ -54,6 +46,19 @@ public:
 
     ui64 GetSize() const override {
         return BrokenPortions.size();
+    }
+
+    TString DebugString() const override {
+        TStringBuilder sb;
+        ui64 recordsCount = 0;
+        sb << "path_ids=[";
+        for (auto&& [_, p] : BrokenPortions) {
+            sb << p.GetPortionInfo().GetPathId() << ",";
+            recordsCount += p.GetPortionInfo().GetRecordsCount();
+        }
+        sb << "]";
+        sb << ";records_count=" << recordsCount;
+        return sb;
     }
 };
 

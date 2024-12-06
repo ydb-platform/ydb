@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/parser/lexer_common/lexer.h>
+#include <yql/essentials/parser/lexer_common/lexer.h>
 
 #include <util/system/types.h>
 #include <util/generic/string.h>

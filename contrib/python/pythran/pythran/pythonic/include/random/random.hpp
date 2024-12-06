@@ -14,7 +14,7 @@ namespace random
   double random();
 
   DEFINE_FUNCTOR(pythonic::random, random);
-}
+} // namespace random
 PYTHONIC_NS_END
 
 #endif

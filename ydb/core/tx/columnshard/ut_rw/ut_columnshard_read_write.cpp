@@ -40,7 +40,7 @@ using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
 template <typename TKey = ui64>
 bool DataHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::pair<ui64, ui64> range, bool requireUniq = false,
-    const std::string& columnName = "timestamp") {
+    const std::string& columnName = "timestamp", const bool inverseCheck = false) {
     static constexpr const bool isStrKey = std::is_same_v<TKey, std::string>;
 
     THashMap<TKey, ui32> keys;
@@ -81,18 +81,19 @@ bool DataHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, st
         }
     }
 
+    bool problems = false;
     for (auto& [key, count] : keys) {
-        if (!count) {
+        if (!count && !inverseCheck) {
             Cerr << "No key: " << key << "\n";
-            return false;
+            problems = true;
         }
         if (requireUniq && count > 1) {
             Cerr << "Not unique key: " << key << " (count: " << count << ")\n";
-            return false;
+            problems = true;
         }
     }
 
-    return true;
+    return !problems;
 }
 
 template <typename TKey = ui64>
@@ -105,6 +106,11 @@ bool DataHas(const std::vector<TString>& blobs, const TString& srtSchema, std::p
     }
 
     return DataHas<TKey>(batches, range, requireUniq, columnName);
+}
+
+bool DataNotHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::pair<ui64, ui64> range, bool requireUniq = false,
+    const std::string& columnName = "timestamp") {
+    return DataHas<ui64>(batches, range, requireUniq, columnName, true);
 }
 
 template <typename TKey = ui64>
@@ -424,7 +430,7 @@ void TestWrite(const TestTableDescription& table) {
     UNIT_ASSERT(bigData.size() > NColumnShard::TLimits::GetMaxBlobSize());
     UNIT_ASSERT(bigData.size() < NColumnShard::TLimits::GetMaxBlobSize() + 2 * 1024 * 1024);
     ok = WriteData(runtime, sender, writeId++, tableId, bigData, ydbSchema);
-    UNIT_ASSERT(!ok);
+    UNIT_ASSERT(ok);
 }
 
 void TestWriteOverload(const TestTableDescription& table) {
@@ -482,11 +488,11 @@ void TestWriteOverload(const TestTableDescription& table) {
         UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testBlob, table.Schema, false));
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrTxColumnShard::EResultStatus::OVERLOADED);
+    UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
 
     while (capturedWrites.size()) {
         resendOneCaptured();
-        UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrTxColumnShard::EResultStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
     }
 
     UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testBlob, table.Schema));   // OK after overload
@@ -524,8 +530,9 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
         TSet<ui64> txIds;
         for (ui32 i = 0; i <= 5; ++i) {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds));
-            ProposeCommit(runtime, sender, ++txId, writeIds);
+            ++txId;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Upsert, txId));
+            ProposeCommit(runtime, sender, txId, writeIds, txId);
             txIds.insert(txId);
         }
         PlanCommit(runtime, sender, planStep, txIds);
@@ -542,73 +549,10 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
     }
 }
 
-void TestWriteReadLongTxDup() {
-    TTestBasicRuntime runtime;
-    TTester::Setup(runtime);
-    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-
-    TActorId sender = runtime.AllocateEdgeActor();
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    runtime.DispatchEvents(options);
-
-    //
-
-    ui64 tableId = 1;
-    auto ydbSchema = TTestSchema::YdbSchema();
-    SetupSchema(runtime, sender, tableId);
-
-    constexpr ui32 numRows = 10;
-    std::pair<ui64, ui64> portion = { 10, 10 + numRows };
-
-    NLongTxService::TLongTxId longTxId;
-    UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
-
-    ui64 txId = 0;
-    ui64 planStep = 100;
-    std::optional<ui64> writeId;
-
-    // Only the first blob with dedup pair {longTx, dedupId} should be inserted
-    // Others should return OK (write retries emulation)
-    for (ui32 i = 0; i < 4; ++i) {
-        auto data = MakeTestBlob({ portion.first + i, portion.second + i }, ydbSchema);
-        UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
-
-        auto writeIdOpt = WriteData(runtime, sender, longTxId, tableId, 1, data, ydbSchema);
-        UNIT_ASSERT(writeIdOpt);
-        if (!i) {
-            writeId = *writeIdOpt;
-        }
-        UNIT_ASSERT_EQUAL(*writeIdOpt, *writeId);
-    }
-
-    ProposeCommit(runtime, sender, ++txId, { *writeId });
-    TSet<ui64> txIds = { txId };
-    PlanCommit(runtime, sender, planStep, txIds);
-
-    // read
-    TAutoPtr<IEventHandle> handle;
-    {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
-        reader.SetReplyColumns(TTestSchema::ExtractNames(ydbSchema));
-        auto rb = reader.ReadAll();
-        UNIT_ASSERT(reader.IsCorrectlyFinished());
-        UNIT_ASSERT(rb);
-        UNIT_ASSERT(rb->num_rows());
-        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
-        UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
-        UNIT_ASSERT(CheckOrdered(rb));
-        UNIT_ASSERT(DataHas({ rb }, portion, true));
-        UNIT_ASSERT(DataHasOnly({ rb }, portion));
-    }
-}
-
 void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString codec = "") {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-    csControllerGuard->SetOverrideReadTimeoutClean(TDuration::Max());
+    csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -787,8 +731,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
         UNIT_ASSERT(DataHas({ rb }, portion[0]));
-        UNIT_ASSERT(!DataHas({ rb }, portion[1]));
-        UNIT_ASSERT(!DataHas({ rb }, portion[2]));
+        UNIT_ASSERT(DataNotHas({ rb }, portion[1]));
+        UNIT_ASSERT(DataNotHas({ rb }, portion[2]));
     }
 
     // read 8, planstep 22 (full index)
@@ -805,7 +749,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         UNIT_ASSERT(CheckOrdered(rb));
         UNIT_ASSERT(DataHas({ rb }, portion[0]));
         UNIT_ASSERT(DataHas({ rb }, portion[1]));
-        UNIT_ASSERT(!DataHas({ rb }, portion[2]));
+        UNIT_ASSERT(DataNotHas({ rb }, portion[2]));
     }
 
     // commit 3: ins:0, cmt:1, idx:1
@@ -836,7 +780,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         UNIT_ASSERT(DataHas({ rb }, portion[0]));
         UNIT_ASSERT(DataHas({ rb }, portion[1]));
         UNIT_ASSERT(DataHas({ rb }, portion[2]));
-        UNIT_ASSERT(!DataHas({ rb }, portion[3]));
+        UNIT_ASSERT(DataNotHas({ rb }, portion[3]));
     }
 
     // commit 4: ins:0, cmt:2, idx:1 (with duplicates in PK)
@@ -862,7 +806,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         UNIT_ASSERT(DataHas({ rb }, portion[1]));
         UNIT_ASSERT(DataHas({ rb }, portion[2]));
         UNIT_ASSERT(DataHas({ rb }, portion[3]));
-        UNIT_ASSERT(DataHas({ rb }, { 0, 500 }, true));
+        UNIT_ASSERT(DataHas({ rb }, { 0, 500 }, false));
 
         const ui64 compactedBytes = reader.GetReadStat("compacted_bytes");
         const ui64 insertedBytes = reader.GetReadStat("inserted_bytes");
@@ -1730,7 +1674,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(WriteReadDuplicate) {
         TestWriteReadDup();
-        TestWriteReadLongTxDup();
     }
 
     Y_UNIT_TEST(WriteReadModifications) {
@@ -2711,7 +2654,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             PlanCommit(runtime, sender, planStep, txId);
         }
         UNIT_ASSERT_EQUAL(cleanupsHappened, 0);
-        csDefaultControllerGuard->SetOverrideRequestsTracePingCheckPeriod(TDuration::Zero());
+        csDefaultControllerGuard->SetOverrideStalenessLivetimePing(TDuration::Zero());
+        csDefaultControllerGuard->SetOverrideUsedSnapshotLivetime(TDuration::Zero());
         {
             auto read = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());

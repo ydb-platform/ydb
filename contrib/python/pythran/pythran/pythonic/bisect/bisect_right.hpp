@@ -22,7 +22,7 @@ namespace bisect
   {
     return bisect(x, a, lo, hi);
   }
-}
+} // namespace bisect
 PYTHONIC_NS_END
 
 #endif

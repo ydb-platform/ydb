@@ -91,7 +91,7 @@ PEERDIR(
     library/python/svn_version
     library/python/testing/yatest_common
     ydb/core/protos
-    ydb/library/yql/providers/common/proto
+    yql/essentials/providers/common/proto
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos

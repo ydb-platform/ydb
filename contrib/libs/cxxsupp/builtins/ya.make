@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(16.0.6)
+VERSION(19.1.4)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/compiler-rt-16.0.6.src.tar.xz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.4/compiler-rt-19.1.4.src.tar.xz)
 
 NO_COMPILER_WARNINGS()
 
@@ -64,6 +64,10 @@ IF (ARCH_AARCH64)
     SRCS(
         aarch64/chkstk.S
         aarch64/fp_mode.c
+        aarch64/sme-abi-init.c
+        aarch64/sme-abi-vg.c
+        aarch64/sme-abi.S
+        aarch64/sme-libc-mem-routines.S
         absvdi2.c
         absvsi2.c
         absvti2.c
@@ -96,7 +100,7 @@ IF (ARCH_AARCH64)
         comparedf2.c
         comparesf2.c
         comparetf2.c
-        cpu_model.c
+        cpu_model/aarch64.c
         ctzdi2.c
         ctzsi2.c
         ctzti2.c
@@ -112,10 +116,10 @@ IF (ARCH_AARCH64)
         divtc3.c
         divtf3.c
         divti3.c
-        divxc3.c
         emutls.c
         enable_execute_stack.c
         eprintf.c
+        extendbfsf2.c
         extenddftf2.c
         extendhfsf2.c
         extendhftf2.c
@@ -142,33 +146,24 @@ IF (ARCH_AARCH64)
         fixunstfdi.c
         fixunstfsi.c
         fixunstfti.c
-        fixunsxfdi.c
-        fixunsxfsi.c
-        fixunsxfti.c
-        fixxfdi.c
-        fixxfti.c
         floatdidf.c
         floatdisf.c
         floatditf.c
-        floatdixf.c
         floatsidf.c
         floatsisf.c
         floatsitf.c
         floattidf.c
         floattisf.c
         floattitf.c
-        floattixf.c
         floatundidf.c
         floatundisf.c
         floatunditf.c
-        floatundixf.c
         floatunsidf.c
         floatunsisf.c
         floatunsitf.c
         floatuntidf.c
         floatuntisf.c
         floatuntitf.c
-        floatuntixf.c
         gcc_personality_v0.c
         int_util.c
         lshrdi3.c
@@ -190,7 +185,6 @@ IF (ARCH_AARCH64)
         mulvdi3.c
         mulvsi3.c
         mulvti3.c
-        mulxc3.c
         negdf2.c
         negdi2.c
         negsf2.c
@@ -208,7 +202,6 @@ IF (ARCH_AARCH64)
         powidf2.c
         powisf2.c
         powitf2.c
-        powixf2.c
         subdf3.c
         subsf3.c
         subtf3.c
@@ -236,6 +229,11 @@ IF (ARCH_AARCH64)
         umodsi3.c
         umodti3.c
     )
+    IF (NOT OS_DARWIN)
+        SRCS(
+            aarch64/sme-libc-routines.c
+        )
+    ENDIF()
 ELSEIF (ARCH_X86_64)
     SRCS(
         absvdi2.c
@@ -270,7 +268,7 @@ ELSEIF (ARCH_X86_64)
         comparedf2.c
         comparesf2.c
         comparetf2.c
-        cpu_model.c
+        cpu_model/x86.c
         ctzdi2.c
         ctzsi2.c
         ctzti2.c
@@ -286,10 +284,10 @@ ELSEIF (ARCH_X86_64)
         divtc3.c
         divtf3.c
         divti3.c
-        divxc3.c
         emutls.c
         enable_execute_stack.c
         eprintf.c
+        extendbfsf2.c
         extenddftf2.c
         extendhfsf2.c
         extendhftf2.c
@@ -316,11 +314,6 @@ ELSEIF (ARCH_X86_64)
         fixunstfdi.c
         fixunstfsi.c
         fixunstfti.c
-        fixunsxfdi.c
-        fixunsxfsi.c
-        fixunsxfti.c
-        fixxfdi.c
-        fixxfti.c
         floatditf.c
         floatsidf.c
         floatsisf.c
@@ -328,7 +321,6 @@ ELSEIF (ARCH_X86_64)
         floattidf.c
         floattisf.c
         floattitf.c
-        floattixf.c
         floatunditf.c
         floatunsidf.c
         floatunsisf.c
@@ -336,7 +328,6 @@ ELSEIF (ARCH_X86_64)
         floatuntidf.c
         floatuntisf.c
         floatuntitf.c
-        floatuntixf.c
         fp_mode.c
         gcc_personality_v0.c
         int_util.c
@@ -359,7 +350,6 @@ ELSEIF (ARCH_X86_64)
         mulvdi3.c
         mulvsi3.c
         mulvti3.c
-        mulxc3.c
         negdf2.c
         negdi2.c
         negsf2.c
@@ -377,7 +367,6 @@ ELSEIF (ARCH_X86_64)
         powidf2.c
         powisf2.c
         powitf2.c
-        powixf2.c
         subdf3.c
         subsf3.c
         subtf3.c
@@ -405,14 +394,31 @@ ELSEIF (ARCH_X86_64)
         umodsi3.c
         umodti3.c
         x86_64/chkstk.S
-        x86_64/chkstk2.S
         x86_64/floatdidf.c
         x86_64/floatdisf.c
-        x86_64/floatdixf.c
         x86_64/floatundidf.S
         x86_64/floatundisf.S
         x86_64/floatundixf.S
     )
+    IF (NOT OS_WINDOWS)
+        SRCS(
+            x86_64/floatdixf.c
+            divxc3.c
+            extendxftf2.c
+            fixunsxfdi.c
+            fixunsxfsi.c
+            fixunsxfti.c
+            fixxfdi.c
+            fixxfti.c
+            floatdixf.c
+            floattixf.c
+            floatundixf.c
+            floatuntixf.c
+            mulxc3.c
+            powixf2.c
+            trunctfxf2.c
+        )
+    ENDIF()
 ELSE()
     SRCS(
         absvdi2.c
@@ -447,7 +453,6 @@ ELSE()
         comparedf2.c
         comparesf2.c
         comparetf2.c
-        cpu_model.c
         ctzdi2.c
         ctzsi2.c
         ctzti2.c
@@ -463,10 +468,10 @@ ELSE()
         divtc3.c
         divtf3.c
         divti3.c
-        divxc3.c
         emutls.c
         enable_execute_stack.c
         eprintf.c
+        extendbfsf2.c
         extenddftf2.c
         extendhfsf2.c
         extendhftf2.c
@@ -493,33 +498,24 @@ ELSE()
         fixunstfdi.c
         fixunstfsi.c
         fixunstfti.c
-        fixunsxfdi.c
-        fixunsxfsi.c
-        fixunsxfti.c
-        fixxfdi.c
-        fixxfti.c
         floatdidf.c
         floatdisf.c
         floatditf.c
-        floatdixf.c
         floatsidf.c
         floatsisf.c
         floatsitf.c
         floattidf.c
         floattisf.c
         floattitf.c
-        floattixf.c
         floatundidf.c
         floatundisf.c
         floatunditf.c
-        floatundixf.c
         floatunsidf.c
         floatunsisf.c
         floatunsitf.c
         floatuntidf.c
         floatuntisf.c
         floatuntitf.c
-        floatuntixf.c
         fp_mode.c
         gcc_personality_v0.c
         int_util.c
@@ -542,7 +538,6 @@ ELSE()
         mulvdi3.c
         mulvsi3.c
         mulvti3.c
-        mulxc3.c
         negdf2.c
         negdi2.c
         negsf2.c
@@ -560,7 +555,6 @@ ELSE()
         powidf2.c
         powisf2.c
         powitf2.c
-        powixf2.c
         subdf3.c
         subsf3.c
         subtf3.c
@@ -587,6 +581,13 @@ ELSE()
         umoddi3.c
         umodsi3.c
         umodti3.c
+    )
+ENDIF()
+
+IF (OS_LINUX)
+    SRCS(
+        crtbegin.c
+        crtend.c
     )
 ENDIF()
 

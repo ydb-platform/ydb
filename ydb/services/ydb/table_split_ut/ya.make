@@ -4,11 +4,9 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(7)
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(300)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -26,8 +24,8 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/grpc_services/base
     ydb/core/testlib
-    ydb/library/yql/minikql/dom
-    ydb/library/yql/minikql/jsonpath
+    yql/essentials/minikql/dom
+    yql/essentials/minikql/jsonpath
     ydb/public/lib/experimental
     ydb/public/lib/json_value
     ydb/public/lib/yson_value

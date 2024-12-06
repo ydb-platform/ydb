@@ -22,7 +22,7 @@ PEERDIR(
     ydb/core/kqp/gateway/behaviour/view
     ydb/core/kqp/gateway/utils
     ydb/core/statistics/service    
-    ydb/library/yql/providers/result/expr_nodes
+    yql/essentials/providers/result/expr_nodes
 )
 
 YQL_LAST_ABI_VERSION()

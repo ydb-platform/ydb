@@ -126,16 +126,19 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
             if (!table.IsDropped()) {
                 auto& ttlSettings = versionInfo.GetTtlSettings();
-                if (ttlSettings.HasEnabled()) {
-                    auto vIt = lastVersion.find(pathId);
-                    if (vIt == lastVersion.end()) {
-                        vIt = lastVersion.emplace(pathId, version).first;
+                auto vIt = lastVersion.find(pathId);
+                if (vIt == lastVersion.end()) {
+                    vIt = lastVersion.emplace(pathId, version).first;
+                }
+                if (vIt->second <= version) {
+                    if (ttlSettings.HasEnabled()) {
+                        NOlap::TTiering deserializedTtl;
+                        AFL_VERIFY(deserializedTtl.DeserializeFromProto(ttlSettings.GetEnabled()).IsSuccess());
+                        Ttl[pathId] = std::move(deserializedTtl);
+                    } else {
+                        Ttl.erase(pathId);
                     }
-                    if (vIt->second <= version) {
-                        TTtl::TDescription description(ttlSettings.GetEnabled());
-                        Ttl.SetPathTtl(pathId, std::move(description));
-                        vIt->second = version;
-                    }
+                    vIt->second = version;
                 }
             }
             table.AddVersion(version);
@@ -228,7 +231,7 @@ const TTableInfo& TTablesManager::GetTable(const ui64 pathId) const {
 }
 
 ui64 TTablesManager::GetMemoryUsage() const {
-    ui64 memory = Tables.size() * sizeof(TTableInfo) + PathsToDrop.size() * sizeof(ui64) + Ttl.PathsCount() * sizeof(TTtl::TDescription);
+    ui64 memory = Tables.size() * sizeof(TTableInfo) + PathsToDrop.size() * sizeof(ui64) + Ttl.size() * sizeof(NOlap::TTiering);
     if (PrimaryIndex) {
         memory += PrimaryIndex->MemoryUsage();
     }
@@ -240,7 +243,7 @@ void TTablesManager::DropTable(const ui64 pathId, const NOlap::TSnapshot& versio
     auto& table = Tables[pathId];
     table.SetDropVersion(version);
     PathsToDrop.insert(pathId);
-    Ttl.DropPathTtl(pathId);
+    Ttl.erase(pathId);
     Schema::SaveTableDropVersion(db, pathId, version.GetPlanStep(), version.GetTxId());
 }
 
@@ -254,7 +257,7 @@ void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
     Y_ABORT_UNLESS(!HasTable(table.GetPathId()));
     Y_ABORT_UNLESS(table.IsEmpty());
 
-    Schema::SaveTableInfo(db, table.GetPathId(), table.GetTieringUsage());
+    Schema::SaveTableInfo(db, table.GetPathId());
     const ui64 pathId = table.GetPathId();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "RegisterTable")("path_id", pathId);
     AFL_VERIFY(Tables.emplace(pathId, std::move(table)).second)("path_id", pathId)("size", Tables.size());
@@ -298,7 +301,7 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
             PrimaryIndex->RegisterTable(i.first);
         }
         if (manager->IsReady()) {
-            PrimaryIndex->OnTieringModified(manager, Ttl, {});
+            PrimaryIndex->OnTieringModified(Ttl);
         }
     } else {
         PrimaryIndex->RegisterSchemaVersion(version, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
@@ -317,6 +320,19 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
     AFL_VERIFY(it != Tables.end());
     auto& table = it->second;
 
+    bool isTtlModified = false;
+    if (versionInfo.HasTtlSettings()) {
+        isTtlModified = true;
+        const auto& ttlSettings = versionInfo.GetTtlSettings();
+        if (ttlSettings.HasEnabled()) {
+            NOlap::TTiering deserializedTtl;
+            AFL_VERIFY(deserializedTtl.DeserializeFromProto(ttlSettings.GetEnabled()).IsSuccess());
+            Ttl[pathId] = std::move(deserializedTtl);
+        } else {
+            Ttl.erase(pathId);
+        }
+    }
+
     if (versionInfo.HasSchemaPresetId()) {
         AFL_VERIFY(!schema);
         Y_ABORT_UNLESS(SchemaPresetsIds.contains(versionInfo.GetSchemaPresetId()));
@@ -330,15 +346,13 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
         AddSchemaVersion(fakePreset.GetId(), version, *schema, db, manager);
     }
 
-    if (versionInfo.HasTtlSettings()) {
-        const auto& ttlSettings = versionInfo.GetTtlSettings();
-        if (ttlSettings.HasEnabled()) {
-            Ttl.SetPathTtl(pathId, TTtl::TDescription(ttlSettings.GetEnabled()));
-        } else {
-            Ttl.DropPathTtl(pathId);
-        }
+    if (isTtlModified) {
         if (PrimaryIndex && manager->IsReady()) {
-            PrimaryIndex->OnTieringModified(manager, Ttl, pathId);
+            if (auto findTtl = Ttl.FindPtr(pathId)) {
+                PrimaryIndex->OnTieringModified(*findTtl, pathId);
+            } else {
+                PrimaryIndex->OnTieringModified({}, pathId);
+            }
         }
     }
     Schema::SaveTableVersionInfo(db, pathId, version, versionInfo);

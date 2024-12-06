@@ -55,8 +55,6 @@ public:
 
 };
 
-class TLoadTimeSignals;
-
 class TLoadTimeSignals: public TCommonCountersOwner {
 public:
     class TLoadTimer : public TNonCopyable {
@@ -79,6 +77,29 @@ public:
         ~TLoadTimer();
     };
 
+    class TSignalsRegistry {
+    private:
+        TRWMutex Mutex;
+        THashMap<TString, TLoadTimeSignals> Signals;
+        TLoadTimeSignals GetSignalImpl(const TString& name) {
+            TReadGuard rg(Mutex);
+            auto it = Signals.find(name);
+            if (it == Signals.end()) {
+                rg.Release();
+                TWriteGuard wg(Mutex);
+                it = Signals.emplace(name, TLoadTimeSignals(name)).first;
+                return it->second;
+            } else {
+                return it->second;
+            }
+        }
+
+    public:
+        static TLoadTimeSignals GetSignal(const TString& name) {
+            return Singleton<TSignalsRegistry>()->GetSignalImpl(name);
+        }
+    };
+
 private:
     using TBase = TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr LoadingTimeCounter;
@@ -86,16 +107,15 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr LoadingFailCounter;
     TString Type;
 
-public:
     TLoadTimeSignals(const TString& type)
         : TBase("Startup")
-        , Type(type)
-    {
-        LoadingTimeCounter = TBase::GetValue("Startup/" + type + "LoadingTime");
-        FailedLoadingTimeCounter = TBase::GetValue("Startup/" + type + "FailedLoadingTime");
-        LoadingFailCounter = TBase::GetValue("Startup/" + type + "LoadingFailCount");
+        , Type(type) {
+        LoadingTimeCounter = TBase::GetValue("Startup/" + type + "/LoadingTime");
+        FailedLoadingTimeCounter = TBase::GetValue("Startup/" + type + "/FailedLoadingTime");
+        LoadingFailCounter = TBase::GetValue("Startup/" + type + "/LoadingFailCount");
     }
 
+public:
     TLoadTimer StartGuard() const {
         return TLoadTimer(*this, Type + "LoadingTime");
     }
@@ -124,12 +144,11 @@ public:
 
 public:
     TTableLoadTimeCounters()
-    : TableLoadTimeCounters("Tables")
-    , SchemaPresetLoadTimeCounters("SchemaPreset")
-    , TableVersionsLoadTimeCounters("TableVersionss")
-    , SchemaPresetVersionsLoadTimeCounters("SchemaPresetVersions")
-    , PrechargeTimeCounters("Precharge")
-    {
+        : TableLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("Tables"))
+        , SchemaPresetLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("SchemaPreset"))
+        , TableVersionsLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("TableVersionss"))
+        , SchemaPresetVersionsLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("SchemaPresetVersions"))
+        , PrechargeTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("Precharge")) {
     }
 };
 

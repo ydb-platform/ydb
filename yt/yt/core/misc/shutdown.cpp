@@ -104,11 +104,12 @@ public:
             ::TThread::SetCurrentThreadName("ShutdownWD");
             if (!shutdownCompleteEvent.Wait(options.GraceTimeout)) {
                 if (options.AbortOnHang) {
-                    ::fprintf(stderr, "*** Shutdown hung, aborting\n");
                     YT_ABORT();
                 } else {
-                    ::fprintf(stderr, "*** Shutdown hung, exiting\n");
-                    AbortProcess(options.HungExitCode);
+                    AbortProcessDramatically(
+                        options.HungExitCode,
+                        /*exitCodeStr*/ TStringBuf(),
+                        "Shutdown hung");
                 }
             }
         });

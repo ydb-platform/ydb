@@ -2,21 +2,24 @@
 
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_schema_ut.pb.h>
 
+#include <yt/yt/core/yson/config.h>
 #include <yt/yt/core/yson/protobuf_interop.h>
 #include <yt/yt/core/yson/writer.h>
 
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/ypath_client.h>
 
+#include <util/generic/scope.h>
 #include <util/stream/str.h>
-
 
 namespace NYT::NYson {
 namespace {
 
+using namespace NYTree;
+
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TProtobufYsonSchemaTest, GetMessageSchema)
+TEST(TProtobufYsonSchemaTest, WriteMessageSchema)
 {
     TStringStream outputStream;
     TYsonWriter ysonWriter(&outputStream, EYsonFormat::Text);
@@ -48,12 +51,65 @@ TEST(TProtobufYsonSchemaTest, GetMessageSchema)
         ];
     })";
 
-    auto expectedNode = NYTree::ConvertToNode(TYsonStringBuf(expected), NYTree::GetEphemeralNodeFactory());
-    auto actualNode = NYTree::ConvertToNode(TYsonStringBuf(outputStream.Str()), NYTree::GetEphemeralNodeFactory());
+    auto expectedNode = ConvertToNode(TYsonStringBuf(expected), GetEphemeralNodeFactory());
+    auto actualNode = ConvertToNode(TYsonStringBuf(outputStream.Str()), GetEphemeralNodeFactory());
 
-    EXPECT_TRUE(NYTree::AreNodesEqual(actualNode, expectedNode))
-        << "Expected: " << ConvertToYsonString(expectedNode, EYsonFormat::Text, 4).AsStringBuf() << "\n\n"
-        << "Actual: " << ConvertToYsonString(actualNode, EYsonFormat::Text, 4).AsStringBuf() << "\n\n";
+    EXPECT_TRUE(AreNodesEqual(actualNode, expectedNode))
+        << "Expected: " << ConvertToYsonString(expectedNode, EYsonFormat::Pretty).AsStringBuf() << "\n\n"
+        << "Actual: " << ConvertToYsonString(actualNode, EYsonFormat::Text).AsStringBuf() << "\n\n";
+}
+
+TEST(TProtobufYsonSchemaTest, CamelCaseNames)
+{
+    TStringStream outputStream;
+    TYsonWriter ysonWriter(&outputStream, EYsonFormat::Text);
+
+    WriteSchema(ReflectProtobufMessageType<NProto::TCamelCaseStyleTestSchemaMessage1>(), &ysonWriter);
+    TStringBuf expected = R"({
+        type_name="struct";
+        members=[
+            {name="SomeField";type="int32";};
+            {name="EnumField";type={type_name="enum";enum_name="EEnum";"values"=["VALUE_NONE";"VALUE_FIRST";];};};
+        ];
+    })";
+
+    auto expectedNode = ConvertToNode(TYsonStringBuf(expected), GetEphemeralNodeFactory());
+    auto actualNode = ConvertToNode(TYsonStringBuf(outputStream.Str()), GetEphemeralNodeFactory());
+
+    EXPECT_TRUE(AreNodesEqual(actualNode, expectedNode))
+        << "Expected: " << ConvertToYsonString(expectedNode, EYsonFormat::Pretty).AsStringBuf() << "\n\n"
+        << "Actual: " << ConvertToYsonString(actualNode, EYsonFormat::Pretty).AsStringBuf() << "\n\n";
+}
+
+TEST(TProtobufYsonSchemaTest, ForceSnakeCaseNames)
+{
+    auto oldConfig = GetProtobufInteropConfig();
+    Y_DEFER {
+        SetProtobufInteropConfig(oldConfig);
+    };
+
+    auto newConfig = CloneYsonStruct(oldConfig);
+    newConfig->ForceSnakeCaseNames = true;
+    SetProtobufInteropConfig(newConfig);
+
+    TStringStream outputStream;
+    TYsonWriter ysonWriter(&outputStream, EYsonFormat::Text);
+
+    WriteSchema(ReflectProtobufMessageType<NProto::TCamelCaseStyleTestSchemaMessage2>(), &ysonWriter);
+    TStringBuf expected = R"({
+        type_name="struct";
+        members=[
+            {name="some_field";type="int32";};
+            {name="enum_field";type={type_name="enum";enum_name="EEnum";"values"=["value_none";"value_first";];};};
+        ];
+    })";
+
+    auto expectedNode = ConvertToNode(TYsonStringBuf(expected), GetEphemeralNodeFactory());
+    auto actualNode = ConvertToNode(TYsonStringBuf(outputStream.Str()), GetEphemeralNodeFactory());
+
+    EXPECT_TRUE(AreNodesEqual(actualNode, expectedNode))
+        << "Expected: " << ConvertToYsonString(expectedNode, EYsonFormat::Pretty).AsStringBuf() << "\n\n"
+        << "Actual: " << ConvertToYsonString(actualNode, EYsonFormat::Pretty).AsStringBuf() << "\n\n";
 }
 
 ////////////////////////////////////////////////////////////////////////////////

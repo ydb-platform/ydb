@@ -8,8 +8,8 @@
 
 #include <ydb/core/protos/console_config.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <google/protobuf/text_format.h>
 #include <library/cpp/yson/writer.h>
 

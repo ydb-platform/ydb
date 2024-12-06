@@ -537,6 +537,41 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
+            Restart: true
+            SetVal {
+                NextValue: 77
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 77);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Increment: 0
+        )", {{NKikimrScheme::StatusInvalidParameter, "INCREMENT must not be zero"}});
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Restart: true
+            SetVal {
+                NextValue: 650000
+            }
+        )", {{NKikimrScheme::StatusInvalidParameter, "RESTART value (650000) cannot be greater than MAXVALUE (32767)"}});
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Restart: true
+            StartValue: 305
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 305);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
             Increment: 650000
         )");
         env.TestWaitNotification(runtime, txId);

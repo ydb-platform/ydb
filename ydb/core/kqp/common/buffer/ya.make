@@ -6,7 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/common/simple
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

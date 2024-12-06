@@ -1,0 +1,1346 @@
+====================Apache-2.0====================
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+    TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+    1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+    2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+    3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+    4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+    5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+    6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+    7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+    8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+    9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+    END OF TERMS AND CONDITIONS
+
+    APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+    Copyright [yyyy] [name of copyright owner]
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+ * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+ * See https://llvm.org/LICENSE.txt for license information.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+ * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+---- LLVM Exceptions to the Apache 2.0 License ----
+
+As an exception, if, as a result of your compiling your source code, portions
+of this Software are embedded into an Object form of such source code, you
+may redistribute such embedded portions in such Object form without complying
+with the conditions of Sections 4(a), 4(b) and 4(d) of the License.
+
+In addition, if you combine or link compiled forms of this Software with
+software that is licensed under the GPLv2 ("Combined Software") and if a
+court of competent jurisdiction determines that the patent provision (Section
+3), the indemnity provision (Section 9) or other Section of the License
+conflicts with the conditions of the GPLv2, you may retroactively and
+prospectively choose to deem waived or otherwise exclude such Section(s) of
+the License, but only in their entirety and only with respect to the Combined
+Software.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:
+
+
+====================BSL-1.0====================
+// Boost Software License - Version 1.0 - August 17th, 2003
+
+// Permission is hereby granted, free of charge, to any person or organization
+// obtaining a copy of the software and accompanying documentation covered by
+// this license (the "Software") to use, reproduce, display, distribute,
+// execute, and transmit the Software, and to prepare derivative works of the
+// Software, and to permit third-parties to whom the Software is furnished to
+// do so, all subject to the following:
+
+// The copyright notices in the Software and this entire statement, including
+// the above license grant, this restriction and the following disclaimer,
+// must be included in all copies of the Software, in whole or in part, and
+// all derivative works of the Software, unless such copies or derivative
+// works are solely in the form of machine-executable object code generated by
+// a source language processor.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT
+// SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
+// FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
+
+====================COPYRIGHT====================
+//       Copyright (2022) National Technology & Engineering
+//               Solutions of Sandia, LLC (NTESS).
+
+
+====================COPYRIGHT====================
+// Copyright (c) 1991-2022 Unicode, Inc. All rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (c) Microsoft Corporation.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+
+====================COPYRIGHT====================
+// Copyright 2018 Ulf Adams
+// Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright (c) 2009-2014 by the contributors listed in CREDITS.TXT
+
+
+====================COPYRIGHT====================
+Copyright (c) 2009-2019 by the contributors listed in CREDITS.TXT
+
+
+====================File: CREDITS.TXT====================
+This file is a partial list of people who have contributed to the LLVM/libc++
+project.  If you have contributed a patch or made some other contribution to
+LLVM/libc++, please submit a patch to this file to add yourself, and it will be
+done!
+
+The list is sorted by surname and formatted to allow easy grepping and
+beautification by scripts.  The fields are: name (N), email (E), web-address
+(W), PGP key ID and fingerprint (P), description (D), and snail-mail address
+(S).
+
+N: Saleem Abdulrasool
+E: compnerd@compnerd.org
+D: Minor patches and Linux fixes.
+
+N: Ulf Adams
+D: Invented the Ryu and Ryu Printf algorithms used in floating-point to_chars, and wrote the initial code.
+
+N: Muiez Ahmed
+E: muiez@ibm.com
+D: z/OS port.
+
+N: Dan Albert
+E: danalbert@google.com
+D: Android support and test runner improvements.
+
+N: Dimitry Andric
+E: dimitry@andric.com
+D: Visibility fixes, minor FreeBSD portability patches.
+
+N: Holger Arnold
+E: holgerar@gmail.com
+D: Minor fix.
+
+N: Jorg Brown
+D: Ported floating-point to_chars from MSVC to libc++.
+
+N: David Chisnall
+E: theraven at theravensnest dot org
+D: FreeBSD and Solaris ports, libcxxrt support, some atomics work.
+
+N: Marshall Clow
+E: mclow.lists@gmail.com
+E: marshall@idio.com
+D: C++14 support, patches and bug fixes.
+
+N: Jonathan B Coe
+E: jbcoe@me.com
+D: Implementation of propagate_const.
+
+N: Matthew Dempsky
+E: matthew@dempsky.org
+D: Minor patches and bug fixes.
+
+N: Christopher Di Bella
+E: cjdb@google.com
+E: cjdb.ns@gmail.com
+D: Library concepts.
+
+N: Glen Joseph Fernandes
+E: glenjofe@gmail.com
+D: Implementation of to_address.
+
+N: Eric Fiselier
+E: eric@efcs.ca
+D: LFTS support, patches and bug fixes.
+
+N: Bill Fisher
+E: william.w.fisher@gmail.com
+D: Regex bug fixes.
+
+N: Google Inc.
+D: Copyright owner and contributor of the CityHash algorithm
+
+N: Howard Hinnant
+E: hhinnant@apple.com
+D: Architect and primary author of libc++
+
+N: Sergej Jaskiewicz
+E: jaskiewiczs@icloud.com
+D: Minor improvements in the testing infrastructure
+
+N: Hyeon-bin Jeong
+E: tuhertz@gmail.com
+D: Minor patches and bug fixes.
+
+N: Argyrios Kyrtzidis
+E: kyrtzidis@apple.com
+D: Bug fixes.
+
+N: Stephan T. Lavavej
+E: stl@microsoft.com
+E: stl@nuwen.net
+D: Implemented floating-point to_chars.
+
+N: Damien Lebrun-Grandie
+E: dalg24@gmail.com
+E: lebrungrandt@ornl.gov
+D: Implementation of mdspan.
+
+N: Microsoft Corporation
+D: Contributed floating-point to_chars.
+
+N: Bruce Mitchener, Jr.
+E: bruce.mitchener@gmail.com
+D: Emscripten-related changes.
+
+N: Michel Morin
+E: mimomorin@gmail.com
+D: Minor patches to is_convertible.
+
+N: Andrew Morrow
+E: andrew.c.morrow@gmail.com
+D: Minor patches and Linux fixes.
+
+N: Michael Park
+E: mcypark@gmail.com
+D: Implementation of <variant>.
+
+N: Arvid Picciani
+E: aep at exys dot org
+D: Minor patches and musl port.
+
+N: Bjorn Reese
+E: breese@users.sourceforge.net
+D: Initial regex prototype
+
+N: Nico Rieck
+E: nico.rieck@gmail.com
+D: Windows fixes
+
+N: Jon Roelofs
+E: jroelofS@jroelofs.com
+D: Remote testing, Newlib port, baremetal/single-threaded support.
+
+N: Kent Ross
+E: k@mad.cash
+D: Patches for operator<=> support
+
+N: Jonathan Sauer
+D: Minor patches, mostly related to constexpr
+
+N: Craig Silverstein
+E: csilvers@google.com
+D: Implemented Cityhash as the string hash function on 64-bit machines
+
+N: Richard Smith
+D: Minor patches.
+
+N: Joerg Sonnenberger
+E: joerg@NetBSD.org
+D: NetBSD port.
+
+N: Stephan Tolksdorf
+E: st@quanttec.com
+D: Minor <atomic> fix
+
+N: Christian Trott
+E: crtrott@sandia.gov
+D: Implementation of mdspan.
+
+N: Ruben Van Boxem
+E: vanboxem dot ruben at gmail dot com
+D: Initial Windows patches.
+
+N: Michael van der Westhuizen
+E: r1mikey at gmail dot com
+
+N: Larisse Voufo
+D: Minor patches.
+
+N: Klaas de Vries
+E: klaas at klaasgaaf dot nl
+D: Minor bug fix.
+
+N: Mark de Wever
+E: koraq at xs4all dot nl
+D: Format library support.
+D: Finalized the porting of MSVC's to_chars to libc++.
+
+N: Zhang Xiongpang
+E: zhangxiongpang@gmail.com
+D: Minor patches and bug fixes.
+
+N: Xing Xue
+E: xingxue@ca.ibm.com
+D: AIX port
+
+N: Jeffrey Yasskin
+E: jyasskin@gmail.com
+E: jyasskin@google.com
+D: Linux fixes.
+
+N: Zhihao Yuan
+E: lichray@gmail.com
+D: Standard compatibility fixes.
+
+
+====================File: include/any====================
+// -*- C++ -*-
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef _LIBCPP_ANY
+#define _LIBCPP_ANY
+
+/*
+   any synopsis
+
+namespace std {
+
+  class bad_any_cast : public bad_cast
+  {
+  public:
+    virtual const char* what() const noexcept;
+  };
+
+  class any
+  {
+  public:
+
+    // 6.3.1 any construct/destruct
+    any() noexcept;
+
+    any(const any& other);
+    any(any&& other) noexcept;
+
+    template <class ValueType>
+      any(ValueType&& value);
+
+    ~any();
+
+    // 6.3.2 any assignments
+    any& operator=(const any& rhs);
+    any& operator=(any&& rhs) noexcept;
+
+    template <class ValueType>
+      any& operator=(ValueType&& rhs);
+
+    // 6.3.3 any modifiers
+    template <class ValueType, class... Args>
+      decay_t<ValueType>& emplace(Args&&... args);
+    template <class ValueType, class U, class... Args>
+      decay_t<ValueType>& emplace(initializer_list<U>, Args&&...);
+    void reset() noexcept;
+    void swap(any& rhs) noexcept;
+
+    // 6.3.4 any observers
+    bool has_value() const noexcept;
+    const type_info& type() const noexcept;
+  };
+
+   // 6.4 Non-member functions
+  void swap(any& x, any& y) noexcept;
+
+  template <class T, class ...Args>
+    any make_any(Args&& ...args);
+  template <class T, class U, class ...Args>
+    any make_any(initializer_list<U>, Args&& ...args);
+
+  template<class ValueType>
+    ValueType any_cast(const any& operand);
+  template<class ValueType>
+    ValueType any_cast(any& operand);
+  template<class ValueType>
+    ValueType any_cast(any&& operand);
+
+  template<class ValueType>
+    const ValueType* any_cast(const any* operand) noexcept;
+  template<class ValueType>
+    ValueType* any_cast(any* operand) noexcept;
+
+} // namespace std
+
+*/
+
+#include <__assert> // all public C++ headers provide the assertion handler
+#include <__availability>
+#include <__config>
+#include <__memory/allocator.h>
+#include <__memory/allocator_destructor.h>
+#include <__memory/allocator_traits.h>
+#include <__memory/unique_ptr.h>
+#include <__type_traits/add_const.h>
+#include <__type_traits/add_pointer.h>
+#include <__type_traits/aligned_storage.h>
+#include <__type_traits/alignment_of.h>
+#include <__type_traits/conditional.h>
+#include <__type_traits/decay.h>
+#include <__type_traits/is_constructible.h>
+#include <__type_traits/is_copy_constructible.h>
+#include <__type_traits/is_function.h>
+#include <__type_traits/is_nothrow_move_constructible.h>
+#include <__type_traits/is_reference.h>
+#include <__type_traits/is_same.h>
+#include <__type_traits/remove_cv.h>
+#include <__type_traits/remove_cvref.h>
+#include <__type_traits/remove_reference.h>
+#include <__utility/forward.h>
+#include <__utility/in_place.h>
+#include <__utility/move.h>
+#include <__utility/unreachable.h>
+#include <__verbose_abort>
+#include <initializer_list>
+#include <typeinfo>
+#include <version>
+
+#if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+#  pragma GCC system_header
+#endif
+
+_LIBCPP_PUSH_MACROS
+#include <__undef_macros>
+
+namespace std {
+class _LIBCPP_EXPORTED_FROM_ABI _LIBCPP_AVAILABILITY_BAD_ANY_CAST bad_any_cast : public bad_cast
+{
+public:
+    const char* what() const _NOEXCEPT override;
+};
+} // namespace std
+
+_LIBCPP_BEGIN_NAMESPACE_STD
+
+#if _LIBCPP_STD_VER >= 17
+
+_LIBCPP_NORETURN inline _LIBCPP_INLINE_VISIBILITY
+_LIBCPP_AVAILABILITY_THROW_BAD_ANY_CAST
+void __throw_bad_any_cast()
+{
+#ifndef _LIBCPP_HAS_NO_EXCEPTIONS
+    throw bad_any_cast();
+#else
+    _LIBCPP_VERBOSE_ABORT("bad_any_cast was thrown in -fno-exceptions mode");
+#endif
+}
+
+// Forward declarations
+class _LIBCPP_TEMPLATE_VIS any;
+
+template <class _ValueType>
+_LIBCPP_INLINE_VISIBILITY
+add_pointer_t<add_const_t<_ValueType>>
+any_cast(any const *) _NOEXCEPT;
+
+template <class _ValueType>
+_LIBCPP_INLINE_VISIBILITY
+add_pointer_t<_ValueType> any_cast(any *) _NOEXCEPT;
+
+namespace __any_imp
+{
+  _LIBCPP_SUPPRESS_DEPRECATED_PUSH
+  using _Buffer = aligned_storage_t<3*sizeof(void*), alignment_of<void*>::value>;
+  _LIBCPP_SUPPRESS_DEPRECATED_POP
+
+  template <class _Tp>
+  using _IsSmallObject = integral_constant<bool
+        , sizeof(_Tp) <= sizeof(_Buffer)
+          && alignment_of<_Buffer>::value
+             % alignment_of<_Tp>::value == 0
+          && is_nothrow_move_constructible<_Tp>::value
+        >;
+
+  enum class _Action {
+    _Destroy,
+    _Copy,
+    _Move,
+    _Get,
+    _TypeInfo
+  };
+
+  template <class _Tp> struct _SmallHandler;
+  template <class _Tp> struct _LargeHandler;
+
+  template <class _Tp>
+  struct  _LIBCPP_TEMPLATE_VIS __unique_typeinfo { static constexpr int __id = 0; };
+  template <class _Tp> constexpr int __unique_typeinfo<_Tp>::__id;
+
+  template <class _Tp>
+  inline _LIBCPP_INLINE_VISIBILITY
+  constexpr const void* __get_fallback_typeid() {
+      return &__unique_typeinfo<remove_cv_t<remove_reference_t<_Tp>>>::__id;
+  }
+
+  template <class _Tp>
+  inline _LIBCPP_INLINE_VISIBILITY
+  bool __compare_typeid(type_info const* __id, const void* __fallback_id)
+  {
+#if !defined(_LIBCPP_HAS_NO_RTTI)
+      if (__id && *__id == typeid(_Tp))
+          return true;
+#endif
+      if (!__id && __fallback_id == __any_imp::__get_fallback_typeid<_Tp>())
+          return true;
+      return false;
+  }
+
+  template <class _Tp>
+  using _Handler = conditional_t<
+    _IsSmallObject<_Tp>::value, _SmallHandler<_Tp>, _LargeHandler<_Tp>>;
+
+} // namespace __any_imp
+
+class _LIBCPP_TEMPLATE_VIS any
+{
+public:
+  // construct/destruct
+  _LIBCPP_INLINE_VISIBILITY
+  constexpr any() _NOEXCEPT : __h_(nullptr) {}
+
+  _LIBCPP_INLINE_VISIBILITY
+  any(any const & __other) : __h_(nullptr)
+  {
+    if (__other.__h_) __other.__call(_Action::_Copy, this);
+  }
+
+  _LIBCPP_INLINE_VISIBILITY
+  any(any && __other) _NOEXCEPT : __h_(nullptr)
+  {
+    if (__other.__h_) __other.__call(_Action::_Move, this);
+  }
+
+  template <
+      class _ValueType
+    , class _Tp = decay_t<_ValueType>
+    , class = enable_if_t<
+        !is_same<_Tp, any>::value &&
+        !__is_inplace_type<_ValueType>::value &&
+        is_copy_constructible<_Tp>::value>
+    >
+  _LIBCPP_INLINE_VISIBILITY
+  any(_ValueType && __value);
+
+  template <class _ValueType, class ..._Args,
+    class _Tp = decay_t<_ValueType>,
+    class = enable_if_t<
+        is_constructible<_Tp, _Args...>::value &&
+        is_copy_constructible<_Tp>::value
+    >
+  >
+  _LIBCPP_INLINE_VISIBILITY
+  explicit any(in_place_type_t<_ValueType>, _Args&&... __args);
+
+  template <class _ValueType, class _Up, class ..._Args,
+    class _Tp = decay_t<_ValueType>,
+    class = enable_if_t<
+        is_constructible<_Tp, initializer_list<_Up>&, _Args...>::value &&
+        is_copy_constructible<_Tp>::value>
+  >
+  _LIBCPP_INLINE_VISIBILITY
+  explicit any(in_place_type_t<_ValueType>, initializer_list<_Up>, _Args&&... __args);
+
+  _LIBCPP_INLINE_VISIBILITY
+  ~any() { this->reset(); }
+
+  // assignments
+  _LIBCPP_INLINE_VISIBILITY
+  any & operator=(any const & __rhs) {
+    any(__rhs).swap(*this);
+    return *this;
+  }
+
+  _LIBCPP_INLINE_VISIBILITY
+  any & operator=(any && __rhs) _NOEXCEPT {
+    any(_VSTD::move(__rhs)).swap(*this);
+    return *this;
+  }
+
+  template <
+      class _ValueType
+    , class _Tp = decay_t<_ValueType>
+    , class = enable_if_t<
+          !is_same<_Tp, any>::value
+          && is_copy_constructible<_Tp>::value>
+    >
+  _LIBCPP_INLINE_VISIBILITY
+  any & operator=(_ValueType && __rhs);
+
+  template <class _ValueType, class ..._Args,
+    class _Tp = decay_t<_ValueType>,
+    class = enable_if_t<
+        is_constructible<_Tp, _Args...>::value &&
+        is_copy_constructible<_Tp>::value>
+    >
+  _LIBCPP_INLINE_VISIBILITY
+  _Tp& emplace(_Args&&...);
+
+  template <class _ValueType, class _Up, class ..._Args,
+    class _Tp = decay_t<_ValueType>,
+    class = enable_if_t<
+        is_constructible<_Tp, initializer_list<_Up>&, _Args...>::value &&
+        is_copy_constructible<_Tp>::value>
+  >
+  _LIBCPP_INLINE_VISIBILITY
+  _Tp& emplace(initializer_list<_Up>, _Args&&...);
+
+  // 6.3.3 any modifiers
+  _LIBCPP_INLINE_VISIBILITY
+  void reset() _NOEXCEPT { if (__h_) this->__call(_Action::_Destroy); }
+
+  _LIBCPP_INLINE_VISIBILITY
+  void swap(any & __rhs) _NOEXCEPT;
+
+  // 6.3.4 any observers
+  _LIBCPP_INLINE_VISIBILITY
+  bool has_value() const _NOEXCEPT { return __h_ != nullptr; }
+
+#if !defined(_LIBCPP_HAS_NO_RTTI)
+  _LIBCPP_INLINE_VISIBILITY
+  const type_info & type() const _NOEXCEPT {
+    if (__h_) {
+        return *static_cast<type_info const *>(this->__call(_Action::_TypeInfo));
+    } else {
+        return typeid(void);
+    }
+  }
+#endif
+
+private:
+    typedef __any_imp::_Action _Action;
+    using _HandleFuncPtr =  void* (*)(_Action, any const *, any *, const type_info *,
+      const void* __fallback_info);
+
+    union _Storage {
+        _LIBCPP_HIDE_FROM_ABI constexpr _Storage() : __ptr(nullptr) {}
+        void *  __ptr;
+        __any_imp::_Buffer __buf;
+    };
+
+    _LIBCPP_INLINE_VISIBILITY
+    void * __call(_Action __a, any * __other = nullptr,
+                  type_info const * __info = nullptr,
+                   const void* __fallback_info = nullptr) const
+    {
+        return __h_(__a, this, __other, __info, __fallback_info);
+    }
+
+    _LIBCPP_INLINE_VISIBILITY
+    void * __call(_Action __a, any * __other = nullptr,
+                  type_info const * __info = nullptr,
+                  const void* __fallback_info = nullptr)
+    {
+        return __h_(__a, this, __other, __info, __fallback_info);
+    }
+
+    template <class>
+    friend struct __any_imp::_SmallHandler;
+    template <class>
+    friend struct __any_imp::_LargeHandler;
+
+    template <class _ValueType>
+    friend add_pointer_t<add_const_t<_ValueType>>
+    any_cast(any const *) _NOEXCEPT;
+
+    template <class _ValueType>
+    friend add_pointer_t<_ValueType>
+    any_cast(any *) _NOEXCEPT;
+
+    _HandleFuncPtr __h_ = nullptr;
+    _Storage __s_;
+};
+
+namespace __any_imp
+{
+  template <class _Tp>
+  struct _LIBCPP_TEMPLATE_VIS _SmallHandler
+  {
+     _LIBCPP_INLINE_VISIBILITY
+     static void* __handle(_Action __act, any const * __this, any * __other,
+                           type_info const * __info, const void* __fallback_info)
+     {
+        switch (__act)
+        {
+        case _Action::_Destroy:
+          __destroy(const_cast<any &>(*__this));
+          return nullptr;
+        case _Action::_Copy:
+            __copy(*__this, *__other);
+            return nullptr;
+        case _Action::_Move:
+          __move(const_cast<any &>(*__this), *__other);
+          return nullptr;
+        case _Action::_Get:
+            return __get(const_cast<any &>(*__this), __info, __fallback_info);
+        case _Action::_TypeInfo:
+          return __type_info();
+        }
+        __libcpp_unreachable();
+    }
+
+    template <class ..._Args>
+    _LIBCPP_INLINE_VISIBILITY
+    static _Tp& __create(any & __dest, _Args&&... __args) {
+        typedef allocator<_Tp> _Alloc;
+        typedef allocator_traits<_Alloc> _ATraits;
+        _Alloc __a;
+        _Tp * __ret = static_cast<_Tp*>(static_cast<void*>(&__dest.__s_.__buf));
+        _ATraits::construct(__a, __ret, _VSTD::forward<_Args>(__args)...);
+        __dest.__h_ = &_SmallHandler::__handle;
+        return *__ret;
+    }
+
+  private:
+    _LIBCPP_INLINE_VISIBILITY
+    static void __destroy(any & __this) {
+        typedef allocator<_Tp> _Alloc;
+        typedef allocator_traits<_Alloc> _ATraits;
+        _Alloc __a;
+        _Tp * __p = static_cast<_Tp *>(static_cast<void*>(&__this.__s_.__buf));
+        _ATraits::destroy(__a, __p);
+        __this.__h_ = nullptr;
+    }
+
+    _LIBCPP_INLINE_VISIBILITY
+    static void __copy(any const & __this, any & __dest) {
+        _SmallHandler::__create(__dest, *static_cast<_Tp const *>(
+            static_cast<void const *>(&__this.__s_.__buf)));
+    }
+
+    _LIBCPP_INLINE_VISIBILITY
+    static void __move(any & __this, any & __dest) {
+        _SmallHandler::__create(__dest, _VSTD::move(
+            *static_cast<_Tp*>(static_cast<void*>(&__this.__s_.__buf))));
+        __destroy(__this);
+    }
+
+    _LIBCPP_INLINE_VISIBILITY
+    static void* __get(any & __this,
+                       type_info const * __info,
+                       const void* __fallback_id)
+    {
+        if (__any_imp::__compare_typeid<_Tp>(__info, __fallback_id))
+            return static_cast<void*>(&__this.__s_.__buf);
+        return nullptr;
+    }
+
+    _LIBCPP_INLINE_VISIBILITY
+    static void* __type_info()
+    {
+#if !defined(_LIBCPP_HAS_NO_RTTI)
+        return const_cast<void*>(static_cast<void const *>(&typeid(_Tp)));
+#else
+        return nullptr;
+#endif
+    }
+  };
+
+  template <class _Tp>
+  struct _LIBCPP_TEMPLATE_VIS _LargeHandler
+  {
+    _LIBCPP_INLINE_VISIBILITY
+    static void* __handle(_Action __act, any const * __this,
+                          any * __other, type_info const * __info,
+                          void const* __fallback_info)
+    {
+        switch (__act)
+        {
+        case _Action::_Destroy:
+          __destroy(const_cast<any &>(*__this));
+          return nullptr;
+        case _Action::_Copy:
+          __copy(*__this, *__other);
+          return nullptr;
+        case _Action::_Move:
+          __move(const_cast<any &>(*__this), *__other);
+          return nullptr;
+        case _Action::_Get:
+            return __get(const_cast<any &>(*__this), __info, __fallback_info);
+        case _Action::_TypeInfo:
+          return __type_info();
+        }
+        __libcpp_unreachable();
+    }
+
+    template <class ..._Args>
+    _LIBCPP_INLINE_VISIBILITY
+    static _Tp& __create(any & __dest, _Args&&... __args) {
+        typedef allocator<_Tp> _Alloc;
+        typedef allocator_traits<_Alloc> _ATraits;
+        typedef __allocator_destructor<_Alloc> _Dp;
+        _Alloc __a;
+        unique_ptr<_Tp, _Dp> __hold(_ATraits::allocate(__a, 1), _Dp(__a, 1));
+        _Tp * __ret = __hold.get();
+        _ATraits::construct(__a, __ret, _VSTD::forward<_Args>(__args)...);
+        __dest.__s_.__ptr = __hold.release();
+        __dest.__h_ = &_LargeHandler::__handle;
+        return *__ret;
+    }
+
+  private:
+
+    _LIBCPP_INLINE_VISIBILITY
+    static void __destroy(any & __this){
+        typedef allocator<_Tp> _Alloc;
+        typedef allocator_traits<_Alloc> _ATraits;
+        _Alloc __a;
+        _Tp * __p = static_cast<_Tp *>(__this.__s_.__ptr);
+        _ATraits::destroy(__a, __p);
+        _ATraits::deallocate(__a, __p, 1);
+        __this.__h_ = nullptr;
+    }
+
+    _LIBCPP_INLINE_VISIBILITY
+    static void __copy(any const & __this, any & __dest) {
+        _LargeHandler::__create(__dest, *static_cast<_Tp const *>(__this.__s_.__ptr));
+    }
+
+    _LIBCPP_INLINE_VISIBILITY
+    static void __move(any & __this, any & __dest) {
+      __dest.__s_.__ptr = __this.__s_.__ptr;
+      __dest.__h_ = &_LargeHandler::__handle;
+      __this.__h_ = nullptr;
+    }
+
+    _LIBCPP_INLINE_VISIBILITY
+    static void* __get(any & __this, type_info const * __info,
+                       void const* __fallback_info)
+    {
+        if (__any_imp::__compare_typeid<_Tp>(__info, __fallback_info))
+            return static_cast<void*>(__this.__s_.__ptr);
+        return nullptr;
+
+    }
+
+    _LIBCPP_INLINE_VISIBILITY
+    static void* __type_info()
+    {
+#if !defined(_LIBCPP_HAS_NO_RTTI)
+        return const_cast<void*>(static_cast<void const *>(&typeid(_Tp)));
+#else
+        return nullptr;
+#endif
+    }
+  };
+
+} // namespace __any_imp
+
+
+template <class _ValueType, class _Tp, class>
+any::any(_ValueType && __v) : __h_(nullptr)
+{
+  __any_imp::_Handler<_Tp>::__create(*this, _VSTD::forward<_ValueType>(__v));
+}
+
+template <class _ValueType, class ..._Args, class _Tp, class>
+any::any(in_place_type_t<_ValueType>, _Args&&... __args) {
+  __any_imp::_Handler<_Tp>::__create(*this, _VSTD::forward<_Args>(__args)...);
+}
+
+template <class _ValueType, class _Up, class ..._Args, class _Tp, class>
+any::any(in_place_type_t<_ValueType>, initializer_list<_Up> __il, _Args&&... __args) {
+  __any_imp::_Handler<_Tp>::__create(*this, __il, _VSTD::forward<_Args>(__args)...);
+}
+
+template <class _ValueType, class, class>
+inline _LIBCPP_INLINE_VISIBILITY
+any & any::operator=(_ValueType && __v)
+{
+  any(_VSTD::forward<_ValueType>(__v)).swap(*this);
+  return *this;
+}
+
+template <class _ValueType, class ..._Args, class _Tp, class>
+inline _LIBCPP_INLINE_VISIBILITY
+_Tp& any::emplace(_Args&&... __args) {
+  reset();
+  return __any_imp::_Handler<_Tp>::__create(*this, _VSTD::forward<_Args>(__args)...);
+}
+
+template <class _ValueType, class _Up, class ..._Args, class _Tp, class>
+inline _LIBCPP_INLINE_VISIBILITY
+_Tp& any::emplace(initializer_list<_Up> __il, _Args&&... __args) {
+  reset();
+  return __any_imp::_Handler<_Tp>::__create(*this, __il, _VSTD::forward<_Args>(__args)...);
+}
+
+inline _LIBCPP_INLINE_VISIBILITY
+void any::swap(any & __rhs) _NOEXCEPT
+{
+    if (this == &__rhs)
+      return;
+    if (__h_ && __rhs.__h_) {
+        any __tmp;
+        __rhs.__call(_Action::_Move, &__tmp);
+        this->__call(_Action::_Move, &__rhs);
+        __tmp.__call(_Action::_Move, this);
+    }
+    else if (__h_) {
+        this->__call(_Action::_Move, &__rhs);
+    }
+    else if (__rhs.__h_) {
+        __rhs.__call(_Action::_Move, this);
+    }
+}
+
+// 6.4 Non-member functions
+
+inline _LIBCPP_INLINE_VISIBILITY
+void swap(any & __lhs, any & __rhs) _NOEXCEPT
+{
+    __lhs.swap(__rhs);
+}
+
+template <class _Tp, class ..._Args>
+inline _LIBCPP_INLINE_VISIBILITY
+any make_any(_Args&&... __args) {
+    return any(in_place_type<_Tp>, _VSTD::forward<_Args>(__args)...);
+}
+
+template <class _Tp, class _Up, class ..._Args>
+inline _LIBCPP_INLINE_VISIBILITY
+any make_any(initializer_list<_Up> __il, _Args&&... __args) {
+    return any(in_place_type<_Tp>, __il, _VSTD::forward<_Args>(__args)...);
+}
+
+template <class _ValueType>
+inline _LIBCPP_INLINE_VISIBILITY
+_LIBCPP_AVAILABILITY_THROW_BAD_ANY_CAST
+_ValueType any_cast(any const & __v)
+{
+    using _RawValueType = __remove_cvref_t<_ValueType>;
+    static_assert(is_constructible<_ValueType, _RawValueType const &>::value,
+                  "ValueType is required to be a const lvalue reference "
+                  "or a CopyConstructible type");
+    auto __tmp = _VSTD::any_cast<add_const_t<_RawValueType>>(&__v);
+    if (__tmp == nullptr)
+        __throw_bad_any_cast();
+    return static_cast<_ValueType>(*__tmp);
+}
+
+template <class _ValueType>
+inline _LIBCPP_INLINE_VISIBILITY
+_LIBCPP_AVAILABILITY_THROW_BAD_ANY_CAST
+_ValueType any_cast(any & __v)
+{
+    using _RawValueType = __remove_cvref_t<_ValueType>;
+    static_assert(is_constructible<_ValueType, _RawValueType &>::value,
+                  "ValueType is required to be an lvalue reference "
+                  "or a CopyConstructible type");
+    auto __tmp = _VSTD::any_cast<_RawValueType>(&__v);
+    if (__tmp == nullptr)
+        __throw_bad_any_cast();
+    return static_cast<_ValueType>(*__tmp);
+}
+
+template <class _ValueType>
+inline _LIBCPP_INLINE_VISIBILITY
+_LIBCPP_AVAILABILITY_THROW_BAD_ANY_CAST
+_ValueType any_cast(any && __v)
+{
+    using _RawValueType = __remove_cvref_t<_ValueType>;
+    static_assert(is_constructible<_ValueType, _RawValueType>::value,
+                  "ValueType is required to be an rvalue reference "
+                  "or a CopyConstructible type");
+    auto __tmp = _VSTD::any_cast<_RawValueType>(&__v);
+    if (__tmp == nullptr)
+        __throw_bad_any_cast();
+    return static_cast<_ValueType>(_VSTD::move(*__tmp));
+}
+
+template <class _ValueType>
+inline _LIBCPP_INLINE_VISIBILITY
+add_pointer_t<add_const_t<_ValueType>>
+any_cast(any const * __any) _NOEXCEPT
+{
+    static_assert(!is_reference<_ValueType>::value,
+                  "_ValueType may not be a reference.");
+    return _VSTD::any_cast<_ValueType>(const_cast<any *>(__any));
+}
+
+template <class _RetType>
+inline _LIBCPP_INLINE_VISIBILITY
+_RetType __pointer_or_func_cast(void* __p, /*IsFunction*/false_type) noexcept {
+  return static_cast<_RetType>(__p);
+}
+
+template <class _RetType>
+inline _LIBCPP_INLINE_VISIBILITY
+_RetType __pointer_or_func_cast(void*, /*IsFunction*/true_type) noexcept {
+  return nullptr;
+}
+
+template <class _ValueType>
+_LIBCPP_HIDE_FROM_ABI
+add_pointer_t<_ValueType>
+any_cast(any * __any) _NOEXCEPT
+{
+    using __any_imp::_Action;
+    static_assert(!is_reference<_ValueType>::value,
+                  "_ValueType may not be a reference.");
+    typedef add_pointer_t<_ValueType> _ReturnType;
+    if (__any && __any->__h_) {
+      void *__p = __any->__call(_Action::_Get, nullptr,
+#if !defined(_LIBCPP_HAS_NO_RTTI)
+                          &typeid(_ValueType),
+#else
+                          nullptr,
+#endif
+                          __any_imp::__get_fallback_typeid<_ValueType>());
+        return _VSTD::__pointer_or_func_cast<_ReturnType>(
+            __p, is_function<_ValueType>{});
+    }
+    return nullptr;
+}
+
+#endif // _LIBCPP_STD_VER >= 17
+
+_LIBCPP_END_NAMESPACE_STD
+
+_LIBCPP_POP_MACROS
+
+#if !defined(_LIBCPP_REMOVE_TRANSITIVE_INCLUDES) && _LIBCPP_STD_VER <= 17
+#  include <chrono>
+#endif
+
+#if !defined(_LIBCPP_REMOVE_TRANSITIVE_INCLUDES) && _LIBCPP_STD_VER <= 20
+#  include <atomic>
+#  include <concepts>
+#  include <cstdlib>
+#  include <iosfwd>
+#  include <iterator>
+#  include <memory>
+#  include <stdexcept>
+#  include <type_traits>
+#  include <variant>
+#endif
+
+#endif // _LIBCPP_ANY
+
+
+====================MIT====================
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+====================NCSA====================
+Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy):
+
+
+====================NCSA====================
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal with
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimers.
+
+    * Redistributions in binary form must reproduce the above copyright notice,
+      this list of conditions and the following disclaimers in the
+      documentation and/or other materials provided with the distribution.
+
+    * Neither the names of the LLVM Team, University of Illinois at
+      Urbana-Champaign, nor the names of its contributors may be used to
+      endorse or promote products derived from this Software without specific
+      prior written permission.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE
+SOFTWARE.
+
+
+====================NCSA====================
+University of Illinois/NCSA
+Open Source License
+
+
+====================NCSA AND MIT====================
+The libc++ library is dual licensed under both the University of Illinois
+"BSD-Like" license and the MIT license.  As a user of this code you may choose
+to use it under either license.  As a contributor, you agree to allow your code
+to be used under both.
+
+Full text of the relevant licenses is included below.
+
+
+====================Public-Domain====================
+// These files can be found at https://data.iana.org/time-zones/ and are in the
+// public domain. Information regarding the input can be found at
+
+
+====================Unicode====================
+// Distributed under the Terms of Use in https://www.unicode.org/copyright.html.
+//
+// Permission is hereby granted, free of charge, to any person obtaining
+// a copy of the Unicode data files and any associated documentation
+// (the "Data Files") or Unicode software and any associated documentation
+// (the "Software") to deal in the Data Files or Software
+// without restriction, including without limitation the rights to use,
+// copy, modify, merge, publish, distribute, and/or sell copies of
+// the Data Files or Software, and to permit persons to whom the Data Files
+// or Software are furnished to do so, provided that either
+// (a) this copyright and permission notice appear with all copies
+// of the Data Files or Software, or
+// (b) this copyright and permission notice appear in associated
+// Documentation.
+//
+// THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF
+// ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+// WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT OF THIRD PARTY RIGHTS.
+// IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS
+// NOTICE BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL
+// DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
+// DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+// TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+// PERFORMANCE OF THE DATA FILES OR SOFTWARE.
+//
+// Except as contained in this notice, the name of a copyright holder
+// shall not be used in advertising or otherwise to promote the sale,
+// use or other dealings in these Data Files or Software without prior
+// written authorization of the copyright holder.
+
+
+====================Unicode====================
+// NOTICE TO USER: Carefully read the following legal agreement.
+// BY DOWNLOADING, INSTALLING, COPYING OR OTHERWISE USING UNICODE INC.'S
+// DATA FILES ("DATA FILES"), AND/OR SOFTWARE ("SOFTWARE"),
+// YOU UNEQUIVOCALLY ACCEPT, AND AGREE TO BE BOUND BY, ALL OF THE
+// TERMS AND CONDITIONS OF THIS AGREEMENT.
+// IF YOU DO NOT AGREE, DO NOT DOWNLOAD, INSTALL, COPY, DISTRIBUTE OR USE
+// THE DATA FILES OR SOFTWARE.
+//
+// COPYRIGHT AND PERMISSION NOTICE

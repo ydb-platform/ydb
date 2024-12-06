@@ -1,12 +1,12 @@
 #include "dq_input_transform_lookup.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/computation/mkql_key_payload_value_lru_cache.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/computation/mkql_key_payload_value_lru_cache.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -69,6 +69,7 @@ public:
         , MaxDelayedRows(maxDelayedRows)
         , CacheTtl(cacheTtl)
         , ReadyQueue(OutputRowType)
+        , LastLruSize(0)
     {
         Y_ABORT_UNLESS(Alloc);
         for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
@@ -172,11 +173,14 @@ private: //events
             LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
         }
         KeysForLookup->clear();
+        auto deltaLruSize = (i64)LruCache->Size() - LastLruSize;
         auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;
         if (CpuTimeUs) {
+            LruSize->Add(deltaLruSize); // Note: there can be several streamlookup tied to same counter, so Add instead of Set
             CpuTimeUs->Add(deltaTime.MicroSeconds());
         }
+        LastLruSize += deltaLruSize;
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
     }
 
@@ -200,6 +204,10 @@ private: //IDqComputeActorAsyncInput
     }
 
     void Free() {
+        if (LruSize && LastLruSize) {
+            LruSize->Add(-LastLruSize);
+            LastLruSize = 0;
+        }
         auto guard = BindAllocator();
         //All resources, held by this class, that have been created with mkql allocator, must be deallocated here
         KeysForLookup.reset();
@@ -290,6 +298,7 @@ private: //IDqComputeActorAsyncInput
         auto component = taskCounters->GetSubgroup("component", "Lookup");
         LruHits = component->GetCounter("Hits", true);
         LruMiss = component->GetCounter("Miss", true);
+        LruSize = component->GetCounter("Size");
         CpuTimeUs = component->GetCounter("CpuUs", true);
         Batches = component->GetCounter("Batches", true);
     }
@@ -358,9 +367,11 @@ protected:
     NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
     NYql::NDq::TDqAsyncStats IngressStats;
     std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> KeysForLookup;
+    i64 LastLruSize;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr LruHits;
     ::NMonitoring::TDynamicCounters::TCounterPtr LruMiss;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LruSize;
     ::NMonitoring::TDynamicCounters::TCounterPtr CpuTimeUs;
     ::NMonitoring::TDynamicCounters::TCounterPtr Batches;
     TDuration CpuTime;

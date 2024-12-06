@@ -58,7 +58,7 @@ namespace builtins
       return res;
     }
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

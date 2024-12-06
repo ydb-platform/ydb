@@ -16,7 +16,7 @@ TEST(TAllocationTagsTest, GetSetAllocationTags)
     ASSERT_EQ(traceContext->FindAllocationTag<std::string>("a"), std::nullopt);
 
     traceContext->SetAllocationTags({{"user", "first"}, {"sometag", "my"}});
-    ASSERT_EQ(traceContext->FindAllocationTag<TMemoryTag>("memory_tag"), std::nullopt);
+    ASSERT_EQ(traceContext->FindAllocationTag<int>("memory_tag"), std::nullopt);
     ASSERT_EQ(traceContext->FindAllocationTag<std::string>("user"),  "first");
     ASSERT_EQ(traceContext->FindAllocationTag<std::string>("sometag"),  "my");
     ASSERT_EQ(traceContext->FindAllocationTag<std::string>("other"),  std::nullopt);
@@ -35,8 +35,8 @@ TEST(TAllocationTagsTest, GetSetAllocationTags)
     ASSERT_EQ(traceContext->FindAllocationTag<std::string>("sometag"),  std::nullopt);
     ASSERT_TRUE(traceContext->GetAllocationTags().empty());
 
-    traceContext->SetAllocationTag<TMemoryTag>("memory_tag", TMemoryTag{1});
-    ASSERT_EQ(traceContext->FindAllocationTag<TMemoryTag>("memory_tag"),  TMemoryTag{1});
+    traceContext->SetAllocationTag<int>("memory_tag", 1);
+    ASSERT_EQ(traceContext->FindAllocationTag<int>("memory_tag"),  1);
     ASSERT_FALSE(traceContext->GetAllocationTags().empty());
 }
 

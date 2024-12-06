@@ -101,7 +101,7 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Filter",
-                                                                "Predicate": "item.c > item.d And item.b > item.c"
+                                                                "Predicate": "item.c > item.d AND item.b > item.c"
                                                             }
                                                         ],
                                                         "PlanNodeId": 10,

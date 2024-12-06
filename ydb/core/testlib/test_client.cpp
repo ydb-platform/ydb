@@ -69,6 +69,7 @@
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -94,9 +95,9 @@
 #include <ydb/core/mind/node_broker.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 
@@ -267,6 +268,7 @@ namespace Tests {
             appData.HiveConfig.MergeFrom(Settings->AppConfig->GetHiveConfig());
             appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
             appData.SqsConfig.MergeFrom(Settings->AppConfig->GetSqsConfig());
+            appData.SharedCacheConfig.MergeFrom(Settings->AppConfig->GetSharedCacheConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -276,7 +278,10 @@ namespace Tests {
         });
 
         const bool mockDisk = (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode;
-        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, Settings->CacheParams, Settings->EnableForceFollowers);
+        if (!Settings->AppConfig->HasSharedCacheConfig()) {
+            Settings->AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(32_MB);
+        }
+        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, &Settings->AppConfig->GetSharedCacheConfig(), Settings->EnableForceFollowers);
 
         // WARNING: must be careful about modifying app data after actor system starts
 
@@ -342,6 +347,9 @@ namespace Tests {
     }
 
     void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId) {
+        GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto& counters = GRpcServerRootCounters;
+
         GRpcServer.reset(new NYdbGrpc::TGRpcServer(options));
         auto grpcService = new NGRpcProxy::TGRpcService();
 
@@ -356,26 +364,21 @@ namespace Tests {
         grpcRequestProxies.reserve(proxyCount);
 
         auto& appData = Runtime->GetAppData(grpcServiceNodeId);
-        NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator(appData.TimeProvider, appData.RandomProvider);
-
         for (size_t i = 0; i < proxyCount; ++i) {
-            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig, tracingConfigurator.GetControl());
+            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig);
             auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled, appData.UserPoolId);
             system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
             grpcRequestProxies.push_back(grpcRequestProxyId);
         }
 
         system->Register(
-            NConsole::CreateJaegerTracingConfigurator(std::move(tracingConfigurator), Settings->AppConfig->GetTracingConfig()),
+            NConsole::CreateJaegerTracingConfigurator(appData.TracingConfigurator, Settings->AppConfig->GetTracingConfig()),
             TMailboxType::ReadAsFilled,
             appData.UserPoolId
         );
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled, appData.UserPoolId);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
-
-        GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-        auto& counters = GRpcServerRootCounters;
 
         // Setup discovery for typically used services on the node
         {

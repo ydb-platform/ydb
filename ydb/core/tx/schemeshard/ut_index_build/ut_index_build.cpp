@@ -1,4 +1,5 @@
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>

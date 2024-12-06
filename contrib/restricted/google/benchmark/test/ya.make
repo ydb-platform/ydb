@@ -4,7 +4,7 @@ GTEST(benchmark_gtest)
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(1.9.0)
+VERSION(1.9.1)
 
 LICENSE(Apache-2.0)
 

@@ -27,7 +27,7 @@ NApi::IClientPtr CreateClient(const NApi::NRpcProxy::TConnectionConfigPtr& confi
 NApi::IClientPtr CreateClient(TStringBuf clusterUrl);
 
 //! Allows to specify proxyRole as dedicated option.
-NApi::IClientPtr CreateClient(TStringBuf cluster, TStringBuf proxyRole);
+NApi::IClientPtr CreateClient(TStringBuf cluster, std::optional<TStringBuf> proxyRole);
 
 //! Shortcut to create client with default config and options from env variables (use env:YT_PROXY as serverName).
 NApi::IClientPtr CreateClient();

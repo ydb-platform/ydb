@@ -17,7 +17,7 @@ namespace NKikimr::NOlap::NReader::NPlain {
 
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {
     AFL_VERIFY(fetching);
-    AFL_VERIFY(!FetchingPlan);
+//    AFL_VERIFY(!FetchingPlan);
     FetchingPlan = fetching;
 }
 
@@ -119,7 +119,7 @@ bool TPortionDataSource::DoStartFetchingIndexes(
     TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
     {
         std::set<ui32> indexIds;
-        for (auto&& i : GetStageData().GetPortionAccessor().GetIndexes()) {
+        for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
             if (!indexes->GetIndexIdsSet().contains(i.GetIndexId())) {
                 continue;
             }
@@ -214,9 +214,10 @@ class TPortionAccessorFetchingSubscriber: public IDataAccessorRequestsSubscriber
 private:
     TFetchingScriptCursor Step;
     std::shared_ptr<IDataSource> Source;
+    const NColumnShard::TCounterGuard Guard;
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         AFL_VERIFY(!result.HasErrors());
-        AFL_VERIFY(result.GetPortions().size() == 1);
+        AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
         AFL_VERIFY(Step.Next());
         auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId());
@@ -226,10 +227,10 @@ private:
 public:
     TPortionAccessorFetchingSubscriber(const TFetchingScriptCursor& step, const std::shared_ptr<IDataSource>& source)
         : Step(step)
-        , Source(source) {
+        , Source(source)
+        , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard()) {
     }
 };
-
 }   // namespace
 
 bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {

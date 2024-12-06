@@ -3,8 +3,8 @@
 
 #include "pythonic/include/cmath/cos.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/complex.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #include <cmath>
 
@@ -23,7 +23,7 @@ namespace cmath
   {
     return std::cos(v);
   }
-}
+} // namespace cmath
 PYTHONIC_NS_END
 
 #endif

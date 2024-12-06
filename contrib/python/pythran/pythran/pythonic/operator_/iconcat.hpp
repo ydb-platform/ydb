@@ -3,10 +3,10 @@
 
 #include "pythonic/include/operator_/iconcat.hpp"
 
-#include "pythonic/utils/functor.hpp"
+#include "pythonic/types/dict.hpp"
 #include "pythonic/types/list.hpp"
 #include "pythonic/types/set.hpp"
-#include "pythonic/types/dict.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -35,7 +35,7 @@ namespace operator_
   {
     return b;
   }
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

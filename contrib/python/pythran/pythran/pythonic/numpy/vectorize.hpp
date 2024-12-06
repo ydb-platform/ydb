@@ -12,9 +12,10 @@ namespace numpy
 {
   template <typename F>
   template <typename... T>
-  auto vectorized<F>::operator()(T &&...args) const -> typename std::enable_if<
-      !types::valid_numexpr_parameters<typename std::decay<T>::type...>::value,
-      decltype(F{}(std::forward<T>(args)...))>::type
+  auto vectorized<F>::operator()(T &&...args) const ->
+      typename std::enable_if<!types::valid_numexpr_parameters<
+                                  typename std::decay<T>::type...>::value,
+                              decltype(F{}(std::forward<T>(args)...))>::type
   {
     return F{}(std::forward<T>(args)...);
   }

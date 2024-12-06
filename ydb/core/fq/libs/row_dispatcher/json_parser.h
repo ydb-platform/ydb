@@ -1,14 +1,33 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h>
+
+#include <yql/essentials/public/udf/udf_value.h>
 
 namespace NFq {
 
+class TJsonParserError: public yexception {
+public:
+    TJsonParserError() = default;
+    TJsonParserError(const std::string& fieldName)
+        : FieldName(fieldName)
+    {}
+
+    TMaybe<TString> GetField() const noexcept {
+        return FieldName;
+    }
+
+private:
+    TMaybe<TString> FieldName;
+};
+
+
 class TJsonParser {
 public:
-    TJsonParser(const TVector<TString>& columns, const TVector<TString>& types, ui64 batchSize, TDuration batchCreationTimeout);
+    using TCallback = std::function<void(ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues)>;
+
+public:
+    TJsonParser(const TVector<TString>& columns, const TVector<TString>& types, TCallback parseCallback, ui64 batchSize, TDuration batchCreationTimeout, ui64 bufferCellCount);
     ~TJsonParser();
 
     bool IsReady() const;
@@ -17,7 +36,7 @@ public:
     const TVector<ui64>& GetOffsets() const;
 
     void AddMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
-    const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& Parse();
+    void Parse();
 
     TString GetDescription() const;
 
@@ -26,6 +45,6 @@ private:
     const std::unique_ptr<TImpl> Impl;
 };
 
-std::unique_ptr<TJsonParser> NewJsonParser(const TVector<TString>& columns, const TVector<TString>& types, ui64 batchSize, TDuration batchCreationTimeout);
+std::unique_ptr<TJsonParser> NewJsonParser(const TVector<TString>& columns, const TVector<TString>& types, TJsonParser::TCallback parseCallback, ui64 batchSize, TDuration batchCreationTimeout, ui64 bufferCellCount);
 
 } // namespace NFq

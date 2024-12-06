@@ -12,12 +12,14 @@ SRCS(
     rpc_long_tx.cpp
     snapshotreq.cpp
     commitreq.cpp
+    upload_rows_counters.cpp
     upload_rows_common_impl.cpp
     upload_rows.cpp
     global.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(read_table_impl.h)
+GENERATE_ENUM_SERIALIZATION(upload_rows_counters.h)
 
 PEERDIR(
     ydb/library/actors/core

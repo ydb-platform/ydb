@@ -2,12 +2,12 @@
 #include "mkql_engine_flat_impl.h"
 #include "mkql_keys.h"
 #include <ydb/core/kqp/common/kqp_types.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders_codegen.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+#include <yql/essentials/minikql/computation/mkql_custom_list.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 
 #include <util/generic/cast.h>
 
@@ -28,7 +28,7 @@ namespace {
         }
 
         const auto literal = AS_VALUE(TDataLiteral, data);
-        // TODO: support pg types
+        // no need to support pg types in the deprecated minikql engine
         auto typeInfo = NScheme::TTypeInfo(literal->GetType()->GetSchemeType());
         return MakeCell(typeInfo, literal->AsValue(), env, false);
     }
@@ -638,14 +638,14 @@ namespace {
                 keyColumnsCount = partKeyColumnsCount;
                 for (ui32 i = 0; i < partKeyColumnsCount; ++i) {
                     auto partType = ReadUnaligned<NUdf::TDataTypeId>(partTypes + i * sizeof(NUdf::TDataTypeId));
-                    // TODO: support pg types
+                    // no need to support pg types in the deprecated minikql engine
                     types.push_back(NScheme::TTypeInfo(partType));
                 }
             } else {
                 MKQL_ENSURE(keyColumnsCount == partKeyColumnsCount, "Mismatch of key columns count");
                 for (ui32 i = 0; i < keyColumnsCount; ++i) {
                     auto partType = ReadUnaligned<NUdf::TDataTypeId>(partTypes + i * sizeof(NUdf::TDataTypeId));
-                    // TODO: support pg types
+                    // no need to support pg types in the deprecated minikql engine
                     MKQL_ENSURE(partType == types[i].GetTypeId(), "Mismatch of key columns type");
                 }
             }

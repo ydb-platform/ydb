@@ -24,7 +24,7 @@ void TStatsIterator::AppendStats(
     auto& entityStorages = EntityStorageNames[portion.GetMeta().GetTierName()];
     {
         std::vector<const TColumnRecord*> records;
-        for (auto&& r : portionPtr.GetRecords()) {
+        for (auto&& r : portionPtr.GetRecordsVerified()) {
             records.emplace_back(&r);
         }
         if (Reverse) {
@@ -85,7 +85,7 @@ void TStatsIterator::AppendStats(
     }
     {
         std::vector<const TIndexChunk*> indexes;
-        for (auto&& r : portionPtr.GetIndexes()) {
+        for (auto&& r : portionPtr.GetIndexesVerified()) {
             indexes.emplace_back(&r);
         }
         if (Reverse) {
@@ -143,7 +143,7 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
         if (it == FetchedAccessors.end()) {
             break;
         }
-        recordsCount += it->second.GetRecords().size() + it->second.GetIndexes().size();
+        recordsCount += it->second.GetRecordsVerified().size() + it->second.GetIndexesVerified().size();
         AppendStats(builders, it->second);
         granule.PopFrontPortion();
         FetchedAccessors.erase(it);
@@ -161,7 +161,7 @@ ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& gran
         if (it == FetchedAccessors.end()) {
             break;
         }
-        recordsCount += it->second.GetRecords().size() + it->second.GetIndexes().size();
+        recordsCount += it->second.GetRecordsVerified().size() + it->second.GetIndexesVerified().size();
         if (recordsCount > 10000) {
             break;
         }
@@ -195,7 +195,12 @@ TStatsIterator::TFetchingAccessorAllocation::TFetchingAccessorAllocation(
     , AccessorsManager(context->GetDataAccessorsManager())
     , Request(request)
     , WaitingCountersGuard(context->GetCounters().GetFetcherAcessorsGuard())
-    , OwnerId(context->GetScanActorId()) {
+    , OwnerId(context->GetScanActorId())
+    , Context(context) {
+}
+
+void TStatsIterator::TFetchingAccessorAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
+    Context->AbortWithError("cannot allocate memory for take accessors info: " + errorMessage);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSysView::NChunks

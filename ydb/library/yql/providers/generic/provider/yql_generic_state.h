@@ -2,7 +2,7 @@
 
 #include "yql_generic_settings.h"
 
-#include <ydb/library/yql/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>

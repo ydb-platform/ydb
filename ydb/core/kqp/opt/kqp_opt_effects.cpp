@@ -1,7 +1,7 @@
 #include "kqp_opt_impl.h"
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 
 namespace NKikimr::NKqp::NOpt {
 

@@ -7,7 +7,8 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
+class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges,
+                                          public NColumnShard::TMonitoringObjectsCounter<TGeneralCompactColumnEngineChanges> {
 private:
     YDB_ACCESSOR(ui64, PortionExpectedSize, 1.5 * (1 << 20));
     using TBase = TCompactColumnEngineChanges;
@@ -50,6 +51,7 @@ public:
     class TMemoryPredictorChunkedPolicy: public IMemoryPredictor {
     private:
         ui64 SumMemoryFix = 0;
+        ui64 SumMemoryRaw = 0;
     public:
         virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) override;
     };

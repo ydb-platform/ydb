@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_FILL_DIAGONAL_HPP
 #define PYTHONIC_INCLUDE_NUMPY_FILL_DIAGONAL_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/NoneType.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -12,7 +12,7 @@ namespace numpy
   types::none_type fill_diagonal(E &&, typename std::decay<E>::type::dtype);
 
   DEFINE_FUNCTOR(pythonic::numpy, fill_diagonal)
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

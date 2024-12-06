@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
-#include <ydb/library/yql/core/issue/yql_issue.h>
+#include <yql/essentials/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
@@ -99,7 +99,6 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         exchangerSettings->SetMaxDelayMs(10);
         AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
         FeatureFlags.SetEnableSparsedColumns(true);
-        FeatureFlags.SetEnableImmediateWritingOnBulkUpsert(true);
         FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
         FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
@@ -358,7 +357,7 @@ inline void AssertSuccessResult(const NYdb::TStatus& result) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateTables = true);
+void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateTables = true, bool withPgTypes = false);
 
 void InitRoot(Tests::TServer::TPtr server, TActorId sender);
 

@@ -105,8 +105,7 @@ class TTestActorSystem {
         ui32 NextHint = 1;
     };
 
-    struct TMailboxInfo {
-        TMailboxHeader Header{TMailboxType::Simple};
+    struct TMailboxInfo : public TMailbox {
     };
 
     struct TAppDataInfo {
@@ -311,8 +310,8 @@ public:
             for (auto it = Mailboxes.begin(); it != Mailboxes.end(); ) {
                 if (from <= it->first && it->first < to) {
                     TMailboxInfo& mbox = it->second;
-                    mbox.Header.ForEach([&](ui64 /*actorId*/, IActor *actor) { ActorName.erase(actor); });
-                    mbox.Header.CleanupActors();
+                    mbox.ForEach([&](ui64 /*actorId*/, IActor *actor) { ActorName.erase(actor); });
+                    mbox.CleanupActors();
                     it = Mailboxes.erase(it);
                     found = true;
                 } else {
@@ -442,13 +441,13 @@ public:
         }
     }
 
-    IActor *GetActor(const TActorId& actorId, TMailboxHeader **header = nullptr) {
+    IActor *GetActor(const TActorId& actorId, TMailbox **mailbox = nullptr) {
         if (const auto it = Mailboxes.find(actorId); it != Mailboxes.end()) {
             TMailboxInfo& mbox = it->second;
-            if (header) {
-                *header = &mbox.Header;
+            if (mailbox) {
+                *mailbox = &mbox;
             }
-            return mbox.Header.FindActor(actorId.LocalId());
+            return mbox.FindActor(actorId.LocalId());
         } else {
             return nullptr;
         }
@@ -493,9 +492,13 @@ public:
         }
 
         // register actor in mailbox
-        const auto& it = Mailboxes.try_emplace(TMailboxId(nodeId, poolId, mboxId)).first;
+        auto [it, mboxInserted] = Mailboxes.try_emplace(TMailboxId(nodeId, poolId, mboxId));
         TMailboxInfo& mbox = it->second;
-        mbox.Header.AttachActor(ActorLocalId, actor);
+        mbox.Hint = mboxId;
+        if (mboxInserted) {
+            mbox.LockFromFree();
+        }
+        mbox.AttachActor(ActorLocalId, actor);
 
         // generate actor id
         const TActorId actorId(nodeId, poolId, ActorLocalId, mboxId);
@@ -595,7 +598,7 @@ public:
             return false;
         }
         TMailboxInfo& mbox = mboxIt->second;
-        if (IActor *actor = mbox.Header.FindActor(actorId.LocalId())) {
+        if (IActor *actor = mbox.FindActor(actorId.LocalId())) {
             // obtain node info for this actor
             TPerNodeInfo *info = GetNode(actorId.NodeId());
 
@@ -603,7 +606,7 @@ public:
             info->SchedulerThread->AdjustClock(Clock);
 
             // allocate context and store its reference in TLS
-            TActorContext ctx(mbox.Header, *info->ExecutorThread, GetCycleCountFast(), actorId);
+            TActorContext ctx(mbox, *info->ExecutorThread, GetCycleCountFast(), actorId);
             TlsActivationContext = &ctx;
             CurrentRecipient = actorId;
             CurrentNodeId = actorId.NodeId();
@@ -641,7 +644,7 @@ public:
             info->ExecutorThread->DropUnregistered();
 
             // drop the mailbox if no actors remain there
-            if (mbox.Header.IsEmpty()) {
+            if (mbox.IsEmpty()) {
                 Mailboxes.erase(mboxIt);
             }
             return true;
@@ -690,19 +693,19 @@ public:
         TMailboxInfo& mbox = it->second;
 
         // update stats
-        const auto nameIt = ActorName.find(mbox.Header.FindActor(actorId.LocalId()));
+        const auto nameIt = ActorName.find(mbox.FindActor(actorId.LocalId()));
         Y_ABORT_UNLESS(nameIt != ActorName.end());
         ++ActorStats[nameIt->second].Destroyed;
         ActorName.erase(nameIt);
 
         // unregister actor through the executor
-        info->ExecutorThread->UnregisterActor(&mbox.Header, actorId);
+        info->ExecutorThread->UnregisterActor(&mbox, actorId);
 
         // terminate unregistered actor
         info->ExecutorThread->DropUnregistered();
 
         // delete mailbox if empty
-        if (mbox.Header.IsEmpty()) {
+        if (mbox.IsEmpty()) {
             Mailboxes.erase(actorId);
         }
     }

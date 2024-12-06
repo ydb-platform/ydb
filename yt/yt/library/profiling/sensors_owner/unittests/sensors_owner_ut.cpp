@@ -51,7 +51,6 @@ TEST(TSensorsOwnerTest, Example)
 
     using TSharedSensorsPtr = NYT::TIntrusivePtr<TSharedSensors>;
 
-    owner.Inc(".my_simple_counter", 1);
     owner.Increment(".my_simple_counter", 1);
     owner.Get<TSensors>().OtherSensors.Get<TChildSensors>().Counter.Increment(1);
     owner.Get<TSharedSensorsPtr>()->Counter.Increment(1);

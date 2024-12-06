@@ -17,12 +17,12 @@ DEPENDS(
     ydb/library/benchmarks/runner/result_compare
     ydb/library/benchmarks/runner/runner
 
-    ydb/library/yql/udfs/common/set
-    ydb/library/yql/udfs/common/url_base
-    ydb/library/yql/udfs/common/datetime2
-    ydb/library/yql/udfs/common/re2
-    ydb/library/yql/udfs/common/math
-    ydb/library/yql/udfs/common/unicode_base
+    yql/essentials/udfs/common/set
+    yql/essentials/udfs/common/url_base
+    yql/essentials/udfs/common/datetime2
+    yql/essentials/udfs/common/re2
+    yql/essentials/udfs/common/math
+    yql/essentials/udfs/common/unicode_base
 )
 
 DATA_FILES(

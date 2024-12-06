@@ -239,7 +239,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         NIceDb::TNiceDb db(context.GetDB());
 

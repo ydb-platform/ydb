@@ -4,7 +4,6 @@
 #include "kqp_executer_stats.h"
 #include "kqp_planner.h"
 #include "kqp_partition_helper.h"
-#include "kqp_result_channel.h"
 #include "kqp_table_resolver.h"
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
@@ -18,6 +17,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
@@ -38,9 +38,9 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -299,7 +299,7 @@ protected:
             auto& batch = batches.front();
 
             batch.Proto = std::move(*computeData.Proto.MutableChannelData()->MutableData());
-            batch.Payload = std::move(computeData.Payload);
+            batch.Payload = NYql::MakeChunkedBuffer(std::move(computeData.Payload));
 
             if (!trailingResults) {
                 TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
@@ -334,7 +334,7 @@ protected:
         NYql::NDq::TDqSerializedBatch batch;
         batch.Proto = std::move(*record.MutableChannelData()->MutableData());
         if (batch.Proto.HasPayloadId()) {
-            batch.Payload = ev->Get()->GetPayload(batch.Proto.GetPayloadId());
+            batch.Payload = NYql::MakeChunkedBuffer(ev->Get()->GetPayload(batch.Proto.GetPayloadId()));
         }
 
         YQL_ENSURE(channel.DstTask == 0);
@@ -776,8 +776,7 @@ protected:
             }
 
             LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
-            bool sent = this->Send(computeActorId, channelsInfoEv.Release());
-            YQL_ENSURE(sent, "Failed to send event to " << computeActorId.ToString());
+            this->Send(computeActorId, channelsInfoEv.Release());
         }
     }
 
@@ -1062,14 +1061,12 @@ protected:
         }
 
         std::sort(std::begin(shardsRanges), std::end(shardsRanges), [&](const TShardRangesWithShardId& lhs, const TShardRangesWithShardId& rhs) {
-                // Special case for infinity
-                if (lhs.Ranges->GetRightBorder().first->GetCells().empty() || rhs.Ranges->GetRightBorder().first->GetCells().empty()) {
-                    return !lhs.Ranges->GetRightBorder().first->GetCells().empty();
-                }
-                return CompareTypedCellVectors(
-                    lhs.Ranges->GetRightBorder().first->GetCells().data(),
-                    rhs.Ranges->GetRightBorder().first->GetCells().data(),
-                    keyTypes.data(), keyTypes.size()) < 0;
+                return CompareBorders<false, false>(
+                    lhs.Ranges->GetRightBorder().first->GetCells(),
+                    rhs.Ranges->GetRightBorder().first->GetCells(),
+                    lhs.Ranges->GetRightBorder().second,
+                    rhs.Ranges->GetRightBorder().second,
+                    keyTypes) < 0;
             });
 
         // One shard (ranges set) can be assigned only to one task. Otherwise, we can break some optimizations like removing unnecessary shuffle.
@@ -1719,9 +1716,13 @@ protected:
 
 protected:
     void UnexpectedEvent(const TString& state, ui32 eventType) {
-        LOG_C("TKqpExecuter, unexpected event: " << eventType << ", at state:" << state << ", selfID: " << this->SelfId());
-        InternalError(TStringBuilder() << "Unexpected event at TKqpExecuter, state: " << state
-            << ", event: " << eventType);
+        if (eventType == TEvents::TEvPoison::EventType) {
+            LOG_D("TKqpExecuter, TEvPoison event at state:" << state << ", selfID: " << this->SelfId());
+            InternalError(TStringBuilder() << "TKqpExecuter got poisoned, state: " << state);
+        } else {
+            LOG_E("TKqpExecuter, unexpected event: " << eventType << ", at state:" << state << ", selfID: " << this->SelfId());
+            InternalError(TStringBuilder() << "Unexpected event at TKqpExecuter, state: " << state << ", event: " << eventType);
+        }
     }
 
     void InternalError(const NYql::TIssues& issues) {
@@ -1847,53 +1848,12 @@ protected:
         return true;
     }
 
-    void InitializeChannelProxies() {
-        // notice: forward all respones to executer if
-        // trailing results are allowed.
-        // temporary, will be removed in the next pr.
-        if (Request.IsTrailingResultsAllowed())
-            return;
-
-        for(const auto& channel: TasksGraph.GetChannels()) {
-            if (channel.DstTask) {
-                continue;
-            }
-
-            CreateChannelProxy(channel);
-        }
-    }
-
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
         return TasksGraph.GetMeta().Snapshot;
     }
 
     void SetSnapshot(ui64 step, ui64 txId) {
         TasksGraph.GetMeta().SetSnapshot(step, txId);
-    }
-
-    IActor* CreateChannelProxy(const NYql::NDq::TChannel& channel) {
-        auto channelIt = ResultChannelProxies.find(channel.Id);
-        if (channelIt != ResultChannelProxies.end()) {
-            return channelIt->second;
-        }
-
-        YQL_ENSURE(channel.DstInputIndex < ResponseEv->ResultsSize());
-        const auto& txResult = ResponseEv->TxResults[channel.DstInputIndex];
-
-        IActor* proxy;
-        if (txResult.IsStream && txResult.QueryResultIndex.Defined()) {
-            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, txResult.MkqlItemType,
-                txResult.ColumnOrder, txResult.ColumnHints, *txResult.QueryResultIndex, Target, this->SelfId(), StatementResultIndex);
-        } else {
-            proxy = CreateResultDataChannelProxy(TxId, channel.Id, this->SelfId(),
-                channel.DstInputIndex, ResponseEv.get());
-        }
-
-        this->RegisterWithSameMailbox(proxy);
-        ResultChannelProxies.emplace(std::make_pair(channel.Id, proxy));
-        TasksGraph.GetMeta().ResultChannelProxies.emplace(channel.Id, proxy->SelfId());
-
-        return proxy;
     }
 
 protected:

@@ -929,11 +929,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    void ExecuteDataQuery(NYdb::NTable::TSession& session, const TString& query ) {
-        const auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-    }
-
     ui64 GetBalancerTabletId(TTopicSdkTestSetup& setup, const TString& topicPath) {
         auto pathDescr = setup.GetServer().AnnoyingClient->Ls(topicPath)->Record.GetPathDescription().GetSelf();
         auto balancerTabletId = pathDescr.GetBalancerTabletID();
@@ -1016,125 +1011,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         WaitAndAssertPartitionCount(setup, "/Root/origin/feed", 3);
     }
 
-    void AssertMessageCountInTopic(TTopicClient client, const TString& topicPath, size_t expected, TDuration timeout = TDuration::Seconds(30)) {
-        TInstant deadlineTime = TInstant::Now() + timeout;
-
-        size_t count = 0;
-
-        auto reader = client.CreateReadSession(
-            TReadSessionSettings()
-                .AutoPartitioningSupport(true)
-                .AppendTopics(TTopicReadSettings(topicPath))
-                .ConsumerName("consumer-1"));
-        while(deadlineTime > TInstant::Now()) {
-            for (auto event : reader->GetEvents(false)) {
-                if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
-                    count += x->GetMessages().size();
-                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
-                    x->Confirm();
-                    Cerr << ">>>>> " << x->DebugString() << Endl << Flush;
-                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&event)) {
-                    Cerr << ">>>>> " << x->DebugString() << Endl << Flush;
-                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&event)) {
-                    Cerr << ">>>>> " << x->DebugString() << Endl << Flush;
-                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
-                    x->Confirm();
-                    Cerr << ">>>>> " << x->DebugString() << Endl << Flush;
-                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&event)) {
-                    Cerr << ">>>>> " << x->DebugString() << Endl << Flush;
-                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&event)) {
-                    x->Confirm();
-                    Cerr << ">>>>> " << x->DebugString() << Endl << Flush;
-                } else if (auto* sessionClosedEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
-                    x->Confirm();
-                    Cerr << ">>>>> " << x->DebugString() << Endl << Flush;
-                }
-
-                if (count == expected) {
-                    return;
-                }
-            }
-            Sleep(TDuration::MilliSeconds(250));
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(expected, count);
-    }
-
-    Y_UNIT_TEST(CDC_Write) {
-        TTopicSdkTestSetup setup = CreateSetup();
-        auto client = setup.MakeClient();
-        auto tableClient = setup.MakeTableClient();
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
-
-        ExecuteQuery(session, R"(
-            --!syntax_v1
-            CREATE TABLE `/Root/origin` (
-                id UInt64,
-                order UInt64,
-                value Text,
-                PRIMARY KEY (id, order)
-            ) WITH (
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64,
-                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 64,
-                UNIFORM_PARTITIONS = 64
-            );
-        )");
-
-        ExecuteQuery(session, R"(
-            --!syntax_v1
-            ALTER TABLE `/Root/origin`
-                ADD CHANGEFEED `feed` WITH (
-                    MODE = 'UPDATES',
-                    FORMAT = 'JSON',
-                    TOPIC_AUTO_PARTITIONING = 'ENABLED',
-                    TOPIC_MIN_ACTIVE_PARTITIONS = 2
-                );
-        )");
-
-        {
-            TAlterTopicSettings alterSettings;
-            alterSettings
-                .BeginAlterPartitioningSettings()
-                    .MinActivePartitions(1)
-                    .MaxActivePartitions(10000)
-                    .BeginAlterAutoPartitioningSettings()
-                        .Strategy(EAutoPartitioningStrategy::ScaleUp)
-                        .StabilizationWindow(TDuration::Seconds(1))
-                        .DownUtilizationPercent(1)
-                        .UpUtilizationPercent(2)
-                    .EndAlterAutoPartitioningSettings()
-                .EndAlterTopicPartitioningSettings()
-                .BeginAddConsumer()
-                    .ConsumerName("consumer-1")
-                .EndAddConsumer();
-            auto f = client.AlterTopic("/Root/origin/feed", alterSettings);
-            f.Wait();
-
-            auto v = f.GetValueSync();
-            UNIT_ASSERT_C(v.IsSuccess(),  "Error: " << v);
-        }
-
-        Cerr << ">>>>> " << TInstant::Now() << " Start table insert" << Endl << Flush;
-        ExecuteDataQuery(session, R"(
-            --!syntax_v1
-            $sample = AsList(
-                AsStruct(ListFromRange(0, 150000) AS v)
-            );
-
-            UPSERT INTO `/Root/origin` (id, order, value)
-            SELECT
-                RandomNumber(v) AS id,
-                v AS order,
-                CAST('0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF' AS Utf8?)  AS value
-            FROM as_table($sample)
-                FLATTEN BY (v);
-        )");
-
-        Cerr << ">>>>> " << TInstant::Now() << " Start read topic" << Endl << Flush;
-        AssertMessageCountInTopic(client, "/Root/origin/feed/streamImpl", 150000);
-        Cerr << ">>>>> " << TInstant::Now() << " End" << Endl << Flush;
-    }
-
     Y_UNIT_TEST(ControlPlane_CDC) {
         TTopicSdkTestSetup setup = CreateSetup();
         auto tableClient = setup.MakeTableClient();
@@ -1190,6 +1066,92 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_VALUES_EQUAL(s.GetAutoPartitioningSettings().GetStabilizationWindow(), TDuration::Seconds(3));
             UNIT_ASSERT_VALUES_EQUAL(s.GetAutoPartitioningSettings().GetDownUtilizationPercent(), 5);
             UNIT_ASSERT_VALUES_EQUAL(s.GetAutoPartitioningSettings().GetUpUtilizationPercent(), 7);
+        }
+    }
+
+    Y_UNIT_TEST(ControlPlane_CDC_Enable) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto client = setup.MakeClient();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/origin` (
+                id Uint64,
+                value Text,
+                PRIMARY KEY (id)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/origin`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON',
+                    TOPIC_AUTO_PARTITIONING = 'DISABLED'
+                );
+        )");
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(3)
+                    .MaxActivePartitions(107)
+                    .BeginAlterAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                    .EndAlterAutoPartitioningSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic("/Root/origin/feed", alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(!v.IsSuccess(),  "Error: " << v);
+        }
+    }
+
+    Y_UNIT_TEST(ControlPlane_CDC_Disable) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto client = setup.MakeClient();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/origin` (
+                id Uint64,
+                value Text,
+                PRIMARY KEY (id)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/origin`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON',
+                    TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                );
+        )");
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(3)
+                    .MaxActivePartitions(107)
+                    .BeginAlterAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::Disabled)
+                    .EndAlterAutoPartitioningSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic("/Root/origin/feed", alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(!v.IsSuccess(),  "Error: " << v);
         }
     }
 
@@ -1360,6 +1322,55 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "99 FF 7F");
         }
     }
+
+    void ReadFromTimestamp(SdkVersion sdk, bool autoscaleAwareSDK) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale();
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession1 = CreateWriteSession(client, "producer-1");
+        UNIT_ASSERT(writeSession1->Write(Msg("message_1.1", 1)));
+        Sleep(TDuration::Seconds(5));
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        UNIT_ASSERT(writeSession1->Write(Msg("message_2.1", 2)));
+        Sleep(TDuration::Seconds(1));
+
+
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 1, .AutoCommit = !autoscaleAwareSDK,
+            .AutoPartitioningSupport = autoscaleAwareSDK, .ReadLag = TDuration::Seconds(4) });
+        readSession->Run();
+
+        readSession->WaitAllMessages();
+
+        for(const auto& info : readSession->GetReceivedMessages()) {
+            if (info.Data == "message_2.1") {
+                UNIT_ASSERT_VALUES_EQUAL(2, info.PartitionId);
+                UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
+            } else {
+                UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
+            }
+        }
+
+        writeSession1->Close(TDuration::Seconds(1));
+        readSession->Close();
+    }
+
+    Y_UNIT_TEST(ReadFromTimestamp_BeforeAutoscaleAwareSDK) {
+        ReadFromTimestamp(SdkVersion::Topic, false);
+    }
+
+    Y_UNIT_TEST(ReadFromTimestamp_AutoscaleAwareSDK) {
+        ReadFromTimestamp(SdkVersion::Topic, true);
+    }
+
+    Y_UNIT_TEST(ReadFromTimestamp_PQv1) {
+        ReadFromTimestamp(SdkVersion::PQv1, false);
+    }
+
 }
 
 } // namespace NKikimr

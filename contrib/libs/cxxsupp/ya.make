@@ -14,6 +14,10 @@ IF (NOT USE_STL_SYSTEM)
         PEERDIR(
             contrib/libs/cxxsupp/libcxxmsvc
         )
+    ELSEIF (NVCC_STD_VER == "17" OR CUDA11)
+        PEERDIR(
+            contrib/libs/cxxsupp/libcxxcuda11
+        )
     ELSE()
         PEERDIR(
             contrib/libs/cxxsupp/libcxx

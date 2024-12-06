@@ -1,29 +1,31 @@
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
-#include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
+#include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/providers/yt/actors/yql_yt_provider_factories.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
-#include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
-#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
-#include <ydb/library/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
-#include <ydb/library/yql/providers/yt/lib/config_clusters/config_clusters.h>
+#include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <yt/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
+#include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
 #include <ydb/library/yql/providers/dq/local_gateway/yql_dq_gateway_local.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 
-#include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
-#include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
+#include <yql/essentials/utils/log/proto/logger_config.pb.h>
+#include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
 #include <ydb/library/yql/utils/actor_system/manager.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
-#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
@@ -44,41 +46,41 @@
 #include <ydb/library/yql/providers/solomon/async_io/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
-#include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
-#include <ydb/library/yql/providers/common/metrics/protos/metrics_registry.pb.h>
+#include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/providers/common/metrics/protos/metrics_registry.pb.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_utils.h>
-#include <ydb/library/yql/protos/yql_mount.pb.h>
-#include <ydb/library/yql/protos/pg_ext.pb.h>
-#include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
-#include <ydb/library/yql/core/file_storage/http_download/http_download.h>
-#include <ydb/library/yql/core/file_storage/file_storage.h>
-#include <ydb/library/yql/core/facade/yql_facade.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/core/services/yql_out_transformers.h>
-#include <ydb/library/yql/core/url_lister/url_lister_manager.h>
-#include <ydb/library/yql/core/yql_library_compiler.h>
-#include <ydb/library/yql/core/pg_ext/yql_pg_ext.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
-#include <ydb/library/yql/utils/log/tls_backend.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_utils.h>
+#include <yql/essentials/protos/yql_mount.pb.h>
+#include <yql/essentials/protos/pg_ext.pb.h>
+#include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
+#include <yql/essentials/core/file_storage/http_download/http_download.h>
+#include <yql/essentials/core/file_storage/file_storage.h>
+#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/core/url_lister/url_lister_manager.h>
+#include <yql/essentials/core/yql_library_compiler.h>
+#include <yql/essentials/core/pg_ext/yql_pg_ext.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
+#include <yql/essentials/utils/log/tls_backend.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/bindings/utils.h>
-#include <ydb/library/yql/core/qplayer/storage/file/yql_qstorage_file.h>
-#include <ydb/library/yql/public/result_format/yql_result_format_response.h>
-#include <ydb/library/yql/public/result_format/yql_result_format_type.h>
-#include <ydb/library/yql/public/result_format/yql_result_format_data.h>
+#include <yql/essentials/core/qplayer/storage/file/yql_qstorage_file.h>
+#include <yql/essentials/public/result_format/yql_result_format_response.h>
+#include <yql/essentials/public/result_format/yql_result_format_type.h>
+#include <yql/essentials/public/result_format/yql_result_format_data.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
@@ -296,7 +298,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
     NYql::NConnector::IClient::TPtr genericClient,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-    size_t HTTPmaxTimeSeconds, 
+    size_t HTTPmaxTimeSeconds,
     size_t maxRetriesCount,
     IPqGateway::TPtr pqGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
@@ -963,7 +965,7 @@ int RunMain(int argc, const char* argv[])
         factories.push_back(GetYtFileFactory(ytFileServices));
         clusters["plato"] = YtProviderName;
         auto ytNativeGateway = CreateYtFileGateway(ytFileServices, &emulateOutputForMultirun);
-        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
     } else if (gatewaysConfig.HasYt()) {
         TYtNativeServices ytServices;
         ytServices.FunctionRegistry = funcRegistry.Get();
@@ -974,14 +976,14 @@ int RunMain(int argc, const char* argv[])
         for (auto& cluster: gatewaysConfig.GetYt().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{YtProviderName});
         }
-        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
     }
 
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
 
     if (tokenAccessorEndpoint) {
         TVector<TString> ss = StringSplitter(tokenAccessorEndpoint).SplitByString("://");
-        YQL_ENSURE(ss.size() == 2, "Invalid tokenAccessorEndpoint: " << tokenAccessorEndpoint); 
+        YQL_ENSURE(ss.size() == 2, "Invalid tokenAccessorEndpoint: " << tokenAccessorEndpoint);
 
         credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(ss[1], ss[0] == "grpcs", "");
     }

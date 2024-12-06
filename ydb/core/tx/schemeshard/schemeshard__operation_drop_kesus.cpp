@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/kesus/tablet/events.h>
 
 namespace {
 

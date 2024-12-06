@@ -2,7 +2,7 @@
 // experimental/detail/channel_handler.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -30,9 +30,9 @@ template <typename Payload, typename Handler>
 class channel_handler
 {
 public:
-  channel_handler(BOOST_ASIO_MOVE_ARG(Payload) p, Handler& h)
-    : payload_(BOOST_ASIO_MOVE_CAST(Payload)(p)),
-      handler_(BOOST_ASIO_MOVE_CAST(Handler)(h))
+  channel_handler(Payload&& p, Handler& h)
+    : payload_(static_cast<Payload&&>(p)),
+      handler_(static_cast<Handler&&>(h))
   {
   }
 
@@ -57,8 +57,15 @@ struct associator<Associator,
   : Associator<Handler, DefaultCandidate>
 {
   static typename Associator<Handler, DefaultCandidate>::type get(
+      const experimental::detail::channel_handler<Payload, Handler>& h) noexcept
+  {
+    return Associator<Handler, DefaultCandidate>::get(h.handler_);
+  }
+
+  static auto get(
       const experimental::detail::channel_handler<Payload, Handler>& h,
-      const DefaultCandidate& c = DefaultCandidate()) BOOST_ASIO_NOEXCEPT
+      const DefaultCandidate& c) noexcept
+    -> decltype(Associator<Handler, DefaultCandidate>::get(h.handler_, c))
   {
     return Associator<Handler, DefaultCandidate>::get(h.handler_, c);
   }

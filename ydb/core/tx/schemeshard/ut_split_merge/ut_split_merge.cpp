@@ -1,7 +1,8 @@
 #include <ydb/core/tablet_flat/util_fmt_cell.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/protos/counters_schemeshard.pb.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -184,7 +185,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                         )");
         env.TestWaitNotification(runtime, txId);
 
-        TString valueString = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"; 
+        TString valueString = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
         for (ui64 key = 0; key < 1000; ++key) {
             auto pgKey = NPg::PgNativeBinaryFromNativeText(ToString(key * 1'000'000), NPg::TypeDescFromPgTypeName("pgint8")).Str;
             UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell(pgKey)}, {TCell(valueString)});

@@ -1,10 +1,10 @@
 RECURSE_ROOT_RELATIVE(
-    ydb/library/yql/minikql/benchmark
-    ydb/library/yql/minikql/jsonpath/benchmark
-    ydb/library/yql/minikql/perf/alloc
-    ydb/library/yql/minikql/perf/mt_param
-    ydb/library/yql/minikql/perf/packer
-    ydb/library/yql/minikql/perf/param
-    ydb/library/yql/minikql/perf/presort
-    ydb/library/yql/sql/v1/perf
+    yql/essentials/minikql/benchmark
+    yql/essentials/minikql/jsonpath/benchmark
+    yql/essentials/minikql/perf/alloc
+    yql/essentials/minikql/perf/mt_param
+    yql/essentials/minikql/perf/packer
+    yql/essentials/minikql/perf/param
+    yql/essentials/minikql/perf/presort
+    yql/essentials/sql/v1/perf
 )

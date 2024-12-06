@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/chunk_client/config.h>
 
+#include <yt/yt/client/tablet_client/table_mount_cache.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 
 namespace NYT::NDriver {

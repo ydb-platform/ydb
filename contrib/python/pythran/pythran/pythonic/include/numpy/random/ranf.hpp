@@ -11,7 +11,7 @@ namespace numpy
   {
     USING_FUNCTOR(ranf, random);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -22,6 +22,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
@@ -300,7 +301,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             CompareYson(result, R"([[20000u;]])");
         }
 
-        AFL_VERIFY(updatesCount + 3 /*tablets count*/ * 1 /*normalizers*/ ==
+        AFL_VERIFY(updatesCount + 6 ==
             (ui64)csController->GetActualizationRefreshSchemeCount().Val())(
                                                                                  "updates", updatesCount)("count",
                                                                                  csController->GetActualizationRefreshSchemeCount().Val());
@@ -322,6 +323,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         void Execute() const {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+            csController->SetOverrideMemoryLimitForPortionReading(1e+10);
             TLocalHelper(*Kikimr).CreateTestOlapTable();
             auto tableClient = Kikimr->GetTableClient();
 

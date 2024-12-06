@@ -15,13 +15,13 @@ namespace numpy
     types::ndarray<double, pS> poisson(double lam, pS const &shape);
 
     auto poisson(double lam, long size)
-        -> decltype(poisson(lam, types::array<long, 1>{{size}}));
+        -> decltype(poisson(lam, types::array_tuple<long, 1>{{size}}));
 
     double poisson(double lam = 1.0, types::none_type size = {});
 
     DEFINE_FUNCTOR(pythonic::numpy::random, poisson);
-  }
-}
+  } // namespace random
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

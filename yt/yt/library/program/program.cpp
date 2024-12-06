@@ -18,8 +18,6 @@
 
 #include <yt/yt/library/profiling/tcmalloc/profiler.h>
 
-#include <library/cpp/yt/mlock/mlock.h>
-
 #include <library/cpp/yt/stockpile/stockpile.h>
 
 #include <library/cpp/yt/system/exit.h>
@@ -331,8 +329,6 @@ void ConfigureExitZeroOnSigterm()
 
 void ConfigureAllocator(const TAllocatorOptions& options)
 {
-    NYT::MlockFileMappings();
-
 #ifdef _linux_
     NProfiling::EnableTCMallocProfiler();
 

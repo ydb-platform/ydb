@@ -7,4 +7,5 @@ $keys = AsTuple(AsAtom("x"));
 $pred = ($row) -> (($row.x < Decimal("-inf", 15, 10)) ?? FALSE);
 
 SELECT
-    YQL::RangeComputeFor($opt_type, $pred, $keys);
+    YQL::RangeComputeFor($opt_type, $pred, $keys)
+;

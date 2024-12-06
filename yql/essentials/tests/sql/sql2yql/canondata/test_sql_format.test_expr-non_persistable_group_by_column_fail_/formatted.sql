@@ -4,6 +4,8 @@ USE plato;
 
 SELECT
     COUNT(*)
-FROM Input
+FROM
+    Input
 GROUP BY
-    YQL::NewMTRand(length(value)) AS key;
+    YQL::NewMTRand(length(value)) AS key
+;

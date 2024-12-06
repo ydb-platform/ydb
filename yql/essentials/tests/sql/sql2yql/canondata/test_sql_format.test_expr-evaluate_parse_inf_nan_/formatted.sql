@@ -5,4 +5,5 @@ $foo =
     PROCESS Input;
 
 SELECT
-    ListSort(EvaluateExpr($foo), ($item) -> (AsTuple($item.key, $item.subkey)));
+    ListSort(EvaluateExpr($foo), ($item) -> (AsTuple($item.key, $item.subkey)))
+;

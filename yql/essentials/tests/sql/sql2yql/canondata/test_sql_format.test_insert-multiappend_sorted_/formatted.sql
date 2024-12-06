@@ -3,107 +3,135 @@
 INSERT INTO plato.Output WITH truncate
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key;
+    key
+;
 
 INSERT INTO plato.Output
 SELECT
     *
-FROM plato.Input;
+FROM
+    plato.Input
+;
 COMMIT;
 
 ----------------------------------------
 INSERT INTO plato.Output WITH truncate
 SELECT
     *
-FROM plato.Input;
+FROM
+    plato.Input
+;
 
 INSERT INTO plato.Output
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key;
+    key
+;
 COMMIT;
 
 ----------------------------------------
 INSERT INTO plato.Output WITH truncate
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
     key,
-    subkey;
+    subkey
+;
 
 INSERT INTO plato.Output
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
     key,
-    subkey;
+    subkey
+;
 COMMIT;
 
 ----------------------------------------
 INSERT INTO plato.Output WITH truncate
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key;
+    key
+;
 
 INSERT INTO plato.Output
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key DESC;
+    key DESC
+;
 COMMIT;
 
 ----------------------------------------
 INSERT INTO plato.Output WITH truncate
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key;
+    key
+;
 
 INSERT INTO plato.Output
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key || subkey;
+    key || subkey
+;
 COMMIT;
 
 ----------------------------------------
 INSERT INTO plato.Output WITH truncate
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key DESC;
+    key DESC
+;
 
 INSERT INTO plato.Output
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key DESC;
+    key DESC
+;
 COMMIT;
 
 ----------------------------------------
 INSERT INTO plato.Output WITH truncate
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key || subkey;
+    key || subkey
+;
 
 INSERT INTO plato.Output
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key || subkey;
+    key || subkey
+;

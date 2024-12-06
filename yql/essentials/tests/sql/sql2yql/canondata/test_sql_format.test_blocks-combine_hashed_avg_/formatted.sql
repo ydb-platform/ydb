@@ -6,8 +6,10 @@ SELECT
     avg(subkey),
     avg(1u),
     avg(1u / 0u)
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

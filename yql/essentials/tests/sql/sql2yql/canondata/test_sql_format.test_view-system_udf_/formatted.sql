@@ -7,5 +7,6 @@ SELECT
     k,
     s,
     v
-FROM Input
-    VIEW system_udf;
+FROM
+    Input VIEW system_udf
+;

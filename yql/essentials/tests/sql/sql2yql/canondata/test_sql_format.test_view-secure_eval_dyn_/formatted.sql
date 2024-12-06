@@ -6,5 +6,6 @@ SELECT
     k,
     s,
     v
-FROM Input
-    VIEW secure_eval_dynamic;
+FROM
+    Input VIEW secure_eval_dynamic
+;

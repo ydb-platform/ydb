@@ -5,7 +5,9 @@ PRAGMA OrderedColumns;
 
 SELECT DISTINCT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
     subkey,
-    key;
+    key
+;

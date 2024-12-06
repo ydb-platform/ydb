@@ -8,14 +8,16 @@ PRAGMA yt.MapJoinLimit = "10M";
 $sizes = (
     SELECT
         0 AS id
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
     d.key
-FROM Input
-    AS d
-CROSS JOIN $sizes
-    AS s
+FROM
+    Input AS d
+CROSS JOIN
+    $sizes AS s
 ORDER BY
-    d.key;
+    d.key
+;

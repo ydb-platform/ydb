@@ -13,4 +13,6 @@ REDUCE Input1
 ON
     key
 USING $udf(value)
-HAVING count > 4;
+HAVING
+    count > 4
+;

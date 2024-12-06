@@ -14,4 +14,6 @@ $callableT = $callable(Re2::Match('test.*')('testfets'));
 
 SELECT
     count(*) AS count
-FROM plato.filter(``, $callableT);
+FROM
+    plato.filter(``, $callableT)
+;

@@ -16,6 +16,8 @@ SELECT
     item,
     YQL::Concat('+', Lead(item, 1) OVER w),
     YQL::Concat("++", Lead(item, 2) OVER w)
-FROM $list
+FROM
+    $list
 WINDOW
-    w AS ();
+    w AS ()
+;

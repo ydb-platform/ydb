@@ -8,7 +8,9 @@ $d = "";
 
 SELECT
     count(*)
-FROM plato.regexp($a, $b, $c, $d);
+FROM
+    plato.regexp($a, $b, $c, $d)
+;
 USE plato;
 $a = "";
 $b = "Input";
@@ -17,4 +19,6 @@ $d = "";
 
 SELECT
     count(*)
-FROM regexp($a, $b, $c, $d);
+FROM
+    regexp($a, $b, $c, $d)
+;

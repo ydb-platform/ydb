@@ -17,5 +17,8 @@ COMMIT;
 
 SELECT
     *
-FROM Output
-WHERE f != Float("5.3");
+FROM
+    Output
+WHERE
+    f != Float("5.3")
+;

@@ -8,7 +8,8 @@ $udf = YQL::@@(lambda '(key stream) (AsStruct
 $in = (
     SELECT
         *
-    FROM Input
+    FROM
+        Input
     ASSUME ORDER BY
         key,
         subkey
@@ -23,6 +24,8 @@ $res = (
 
 SELECT
     *
-FROM $res
+FROM
+    $res
 ORDER BY
-    key;
+    key
+;

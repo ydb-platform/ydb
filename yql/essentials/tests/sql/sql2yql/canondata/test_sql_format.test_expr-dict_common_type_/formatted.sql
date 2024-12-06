@@ -10,7 +10,9 @@ $s1 = ToSet([1u]);
 $s2 = AsSet(2u);
 
 SELECT
-    AsList({100u: 100}, $d1, $d2, $d3, $d4);
+    AsList({100u: 100}, $d1, $d2, $d3, $d4)
+;
 
 SELECT
-    AsList({100}, $s1, $s2);
+    AsList({100}, $s1, $s2)
+;

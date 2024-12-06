@@ -10,4 +10,5 @@ FROM (
 )
     FLATTEN BY x
 ORDER BY
-    x;
+    x
+;

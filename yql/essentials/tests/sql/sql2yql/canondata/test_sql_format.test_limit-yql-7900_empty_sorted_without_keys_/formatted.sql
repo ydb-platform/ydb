@@ -4,14 +4,16 @@ USE plato;
 $cnt = (
     SELECT
         count(*)
-    FROM Input
+    FROM
+        Input
 );
 $offset = ($cnt + 10) ?? 0;
 
 $data_limited = (
     SELECT
         *
-    FROM Input
+    FROM
+        Input
     ORDER BY
         key || value
     LIMIT 1 OFFSET $offset
@@ -22,9 +24,12 @@ $result_top = (
         subkey,
         Length(key) AS l,
         key
-    FROM $data_limited
+    FROM
+        $data_limited
 );
 
 SELECT
     *
-FROM $result_top;
+FROM
+    $result_top
+;

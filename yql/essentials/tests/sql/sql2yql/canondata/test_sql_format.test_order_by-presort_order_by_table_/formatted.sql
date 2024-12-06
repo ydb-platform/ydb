@@ -13,11 +13,14 @@ FROM (
     SELECT
         $list AS x
 )
-    FLATTEN BY x;
+    FLATTEN BY x
+;
 COMMIT;
 
 SELECT
     *
-FROM @foo
+FROM
+    @foo
 ORDER BY
-    x ASC;
+    x ASC
+;

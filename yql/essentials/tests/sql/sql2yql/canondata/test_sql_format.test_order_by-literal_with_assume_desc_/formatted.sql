@@ -13,4 +13,5 @@ FROM (
 )
     FLATTEN BY x
 ASSUME ORDER BY
-    x DESC;
+    x DESC
+;

@@ -2,12 +2,15 @@ PRAGMA CompactNamedExprs;
 
 $src =
     SELECT
-        1;
+        1
+;
 
 DEFINE SUBQUERY $sub1() AS
     SELECT
         *
-    FROM $src;
+    FROM
+        $src
+    ;
 END DEFINE;
 $foo = 1 + 2;
 
@@ -16,28 +19,36 @@ DEFINE SUBQUERY $sub2($sub, $extra) AS
         a.*,
         $extra AS extra,
         $foo AS another
-    FROM $sub()
-        AS a
+    FROM
+        $sub() AS a
 END DEFINE;
 
 SELECT
     *
-FROM $sub1();
+FROM
+    $sub1()
+;
 
 SELECT
     *
-FROM $sub2($sub1, 1);
+FROM
+    $sub2($sub1, 1)
+;
 
 SELECT
     *
-FROM $sub2($sub1, "aaa");
+FROM
+    $sub2($sub1, "aaa")
+;
 
 DEFINE ACTION $hello_world($sub, $name, $suffix?) AS
     $name = $name ?? ($suffix ?? "world");
 
     SELECT
         "Hello, " || $name || "!"
-    FROM $sub();
+    FROM
+        $sub()
+    ;
 END DEFINE;
 DO
     EMPTY_ACTION()

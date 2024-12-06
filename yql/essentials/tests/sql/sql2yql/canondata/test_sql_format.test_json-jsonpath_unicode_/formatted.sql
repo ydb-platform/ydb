@@ -9,7 +9,8 @@ $json = CAST(
 
 SELECT
     JSON_EXISTS ($json, @@strict $."привет"@@),
-    JSON_VALUE ($json, @@strict $."привет"@@);
+    JSON_VALUE ($json, @@strict $."привет"@@)
+;
 $nested_json = CAST(
     @@{
     "привет": [1, 2, 3]
@@ -17,4 +18,5 @@ $nested_json = CAST(
 );
 
 SELECT
-    JSON_QUERY ($nested_json, @@strict $."привет"@@);
+    JSON_QUERY ($nested_json, @@strict $."привет"@@)
+;

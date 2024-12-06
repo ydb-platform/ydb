@@ -9,10 +9,11 @@ FROM (
             ELSE CAST(subkey AS int) / CAST(key AS int)
         END AS val,
         value
-    FROM plato.Input2
-)
-    AS res
+    FROM
+        plato.Input2
+) AS res
 GROUP BY
     value
 ORDER BY
-    value;
+    value
+;

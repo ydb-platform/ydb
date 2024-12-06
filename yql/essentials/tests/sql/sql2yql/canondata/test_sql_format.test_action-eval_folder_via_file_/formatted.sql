@@ -9,12 +9,16 @@ $list = (
     FROM (
         SELECT
             Path
-        FROM folder("")
-        WHERE Type == "table"
+        FROM
+            folder("")
+        WHERE
+            Type == "table"
         LIMIT 30
     )
 );
 
 SELECT
     count(*)
-FROM each($list);
+FROM
+    each($list)
+;

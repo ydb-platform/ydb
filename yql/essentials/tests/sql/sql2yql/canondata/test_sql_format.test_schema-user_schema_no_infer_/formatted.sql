@@ -4,5 +4,6 @@ PRAGMA yt.InferSchema;
 
 SELECT
     *
-FROM Input
-    WITH SCHEMA Struct<key: String>;
+FROM
+    Input WITH SCHEMA Struct<key: String>
+;

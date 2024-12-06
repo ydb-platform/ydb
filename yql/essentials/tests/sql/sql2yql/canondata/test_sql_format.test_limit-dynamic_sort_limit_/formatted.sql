@@ -11,7 +11,8 @@ $i = unwrap($callable("2"));
 SELECT
     key,
     SOME(value) AS value
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY

@@ -25,20 +25,23 @@ $data = (
     SELECT
         key AS Name,
         value AS Value
-    FROM plato.Input0
+    FROM
+        plato.Input0
 );
 $prefix = ">>";
 
 $p1 = (
     PROCESS $data
     USING $udf($prefix, TableRows(), "=")
-    WHERE Name != "foo"
+    WHERE
+        Name != "foo"
 );
 
 $p2 = (
     SELECT
         Result AS Data
-    FROM $p1
+    FROM
+        $p1
 );
 
 $p3 = (
@@ -49,9 +52,12 @@ $p3 = (
 $p4 = (
     SELECT
         Data AS FinalResult
-    FROM $p3
+    FROM
+        $p3
 );
 
 SELECT
     Avg(Length(FinalResult)) AS AvgResultLength
-FROM $p4;
+FROM
+    $p4
+;

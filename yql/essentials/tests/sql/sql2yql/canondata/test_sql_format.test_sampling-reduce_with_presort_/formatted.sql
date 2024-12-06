@@ -7,7 +7,7 @@ $udf = YQL::@@(lambda '(key stream) (AsStruct
 
 $res = (
     REDUCE Input
-        TABLESAMPLE BERNOULLI (30) REPEATABLE (1)
+    TABLESAMPLE BERNOULLI (30) REPEATABLE (1)
     PRESORT
         key || subkey
     ON
@@ -17,6 +17,8 @@ $res = (
 
 SELECT
     *
-FROM $res
+FROM
+    $res
 ORDER BY
-    key;
+    key
+;

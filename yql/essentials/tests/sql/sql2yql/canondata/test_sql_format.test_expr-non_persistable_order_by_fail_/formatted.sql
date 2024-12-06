@@ -5,6 +5,8 @@ USE plato;
 SELECT
     key,
     value
-FROM Input
+FROM
+    Input
 ORDER BY
-    YQL::NewMTRand(length(value));
+    YQL::NewMTRand(length(value))
+;

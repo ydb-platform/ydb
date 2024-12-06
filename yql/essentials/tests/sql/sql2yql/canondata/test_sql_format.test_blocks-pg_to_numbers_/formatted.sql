@@ -11,4 +11,6 @@ SELECT
     ToPg(ui64),
     ToPg(f4),
     ToPg(f8)
-FROM Input;
+FROM
+    Input
+;

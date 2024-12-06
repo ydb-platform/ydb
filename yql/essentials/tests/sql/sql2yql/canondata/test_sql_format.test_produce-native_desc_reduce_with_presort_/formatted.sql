@@ -18,7 +18,8 @@ FROM (
 )
 ORDER BY
     key,
-    summ;
+    summ
+;
 
 SELECT
     *
@@ -33,7 +34,8 @@ FROM (
 )
 ORDER BY
     key,
-    summ;
+    summ
+;
 
 SELECT
     *
@@ -48,7 +50,8 @@ FROM (
 )
 ORDER BY
     key,
-    summ;
+    summ
+;
 
 SELECT
     *
@@ -63,4 +66,5 @@ FROM (
 )
 ORDER BY
     key,
-    summ;
+    summ
+;

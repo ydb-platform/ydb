@@ -9,16 +9,19 @@ $unsorted = (
         key,
         CAST((CAST(subkey AS Int32) + 2) AS String) AS sk,
         value AS val
-    FROM Unsorted
+    FROM
+        Unsorted
 );
 
-FROM SortedBySubkeyValue
-    AS a
-JOIN $unsorted
-    AS b
-ON a.subkey == b.sk AND a.value == b.val
+FROM
+    SortedBySubkeyValue AS a
+JOIN
+    $unsorted AS b
+ON
+    a.subkey == b.sk AND a.value == b.val
 SELECT
     *
 ORDER BY
     a.key,
-    b.key;
+    b.key
+;

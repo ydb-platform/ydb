@@ -8,13 +8,15 @@ PRAGMA yt.TmpFolder = "//custom_tmp";
 $input = (
     SELECT
         CAST(a.key AS Uint64) AS key
-    FROM Input
-        AS a
-    CROSS JOIN Input
-        AS b
+    FROM
+        Input AS a
+    CROSS JOIN
+        Input AS b
 );
 
 -- ResFill with table content
 SELECT
     sum(key)
-FROM $input;
+FROM
+    $input
+;

@@ -30,17 +30,22 @@ $i, $j, $k = (
 INSERT INTO Output1
 SELECT
     *
-FROM $i;
+FROM
+    $i
+;
 
 INSERT INTO Output2
 SELECT
     *
-FROM $j
+FROM
+    $j
 LIMIT 2;
 
 INSERT INTO Output3
 SELECT
     *
-FROM $k
+FROM
+    $k
 ORDER BY
-    key;
+    key
+;

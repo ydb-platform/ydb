@@ -14,7 +14,8 @@ $data = (
         CAST(value AS uint32) ?? 0 AS kk,
         value AS ss,
         key AS val
-    FROM Input1
+    FROM
+        Input1
 );
 
 --insert into Output
@@ -28,6 +29,8 @@ $res = (
 
 SELECT
     *
-FROM $res
+FROM
+    $res
 ORDER BY
-    DictKeys(zuza);
+    DictKeys(zuza)
+;

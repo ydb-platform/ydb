@@ -4,9 +4,11 @@ USE plato;
 SELECT
     row,
     CAST(i AS interval64)
-FROM NarrowInterval
+FROM
+    NarrowInterval
 ORDER BY
-    row;
+    row
+;
 
 SELECT
     row,
@@ -22,9 +24,11 @@ SELECT
     CAST(ts AS date),
     CAST(ts AS datetime),
     CAST(ts AS timestamp)
-FROM NarrowDates
+FROM
+    NarrowDates
 ORDER BY
-    row;
+    row
+;
 
 SELECT
     row,
@@ -40,9 +44,11 @@ SELECT
     CAST(ts AS date32),
     CAST(ts AS datetime64),
     CAST(ts AS timestamp64)
-FROM NarrowDates
+FROM
+    NarrowDates
 ORDER BY
-    row;
+    row
+;
 
 SELECT
     row,
@@ -60,9 +66,11 @@ SELECT
     CAST(ts64 AS timestamp),
     4,
     CAST(i64 AS interval)
-FROM BigDates
+FROM
+    BigDates
 ORDER BY
-    row;
+    row
+;
 
 SELECT
     row,
@@ -75,6 +83,8 @@ SELECT
     3,
     CAST(ts64 AS date32),
     CAST(ts64 AS datetime64)
-FROM BigDates
+FROM
+    BigDates
 ORDER BY
-    row;
+    row
+;

@@ -12,7 +12,8 @@ SELECT
     ListTopSort($list, 2, $digit),
     ListTopSort(NULL, 2),
     ListTopSort(Just($list), 2),
-    ListTopSort($empty, 0);
+    ListTopSort($empty, 0)
+;
 
 SELECT
     ListTopSortAsc($list, 2),
@@ -21,7 +22,8 @@ SELECT
     ListTopSortAsc($list, 2, $digit),
     ListTopSortAsc(NULL, 2),
     ListTopSortAsc(Just($list), 2),
-    ListTopSortAsc($empty, 0);
+    ListTopSortAsc($empty, 0)
+;
 
 SELECT
     ListTopSortDesc($list, 2),
@@ -30,7 +32,8 @@ SELECT
     ListTopSortDesc($list, 2, $digit),
     ListTopSortDesc(NULL, 2),
     ListTopSortDesc(Just($list), 2),
-    ListTopSortDesc($empty, 0);
+    ListTopSortDesc($empty, 0)
+;
 
 SELECT
     ListSort(ListTop($list, 2)),
@@ -39,7 +42,8 @@ SELECT
     ListSort(ListTop($list, 2, $digit)),
     ListSort(ListTop(NULL, 2)),
     ListSort(ListTop(Just($list), 2)),
-    ListSort(ListTop($empty, 0));
+    ListSort(ListTop($empty, 0))
+;
 
 SELECT
     ListSort(ListTopAsc($list, 2)),
@@ -48,7 +52,8 @@ SELECT
     ListSort(ListTopAsc($list, 2, $digit)),
     ListSort(ListTopAsc(NULL, 2)),
     ListSort(ListTopAsc(Just($list), 2)),
-    ListSort(ListTopAsc($empty, 0));
+    ListSort(ListTopAsc($empty, 0))
+;
 
 SELECT
     ListSort(ListTopDesc($list, 2)),
@@ -57,4 +62,5 @@ SELECT
     ListSort(ListTopDesc($list, 2, $digit)),
     ListSort(ListTopDesc(NULL, 2)),
     ListSort(ListTopDesc(Just($list), 2)),
-    ListSort(ListTopDesc($empty, 0));
+    ListSort(ListTopDesc($empty, 0))
+;

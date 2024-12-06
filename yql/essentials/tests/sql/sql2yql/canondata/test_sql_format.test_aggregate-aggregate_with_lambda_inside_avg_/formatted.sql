@@ -8,4 +8,6 @@ $column_name = 'key';
 
 SELECT
     AVG($cast_to_double($column_name))
-FROM Input;
+FROM
+    Input
+;

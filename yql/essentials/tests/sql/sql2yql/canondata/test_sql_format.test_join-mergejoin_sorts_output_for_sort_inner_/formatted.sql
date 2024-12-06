@@ -5,11 +5,12 @@ PRAGMA yt.JoinMergeTablesLimit = "10";
 PRAGMA yt.JoinAllowColumnRenames = "true";
 
 $inner = (
-    FROM Input1
-        AS a
-    JOIN Input2
-        AS b
-    ON b.k2 == a.k1 AND a.v1 == b.v2
+    FROM
+        Input1 AS a
+    JOIN
+        Input2 AS b
+    ON
+        b.k2 == a.k1 AND a.v1 == b.v2
     SELECT
         b.k2 AS bk2,
         b.k2 AS bk2_extra,
@@ -19,34 +20,44 @@ $inner = (
 
 SELECT
     *
-FROM $inner
+FROM
+    $inner
 ORDER BY
     bv2,
-    bk2_extra;
+    bk2_extra
+;
 
 SELECT
     *
-FROM $inner
+FROM
+    $inner
 ORDER BY
     bk2,
     bk2_extra,
-    bv2;
+    bv2
+;
 
 SELECT
     *
-FROM $inner
+FROM
+    $inner
 ORDER BY
     bk2_extra,
-    bv2;
+    bv2
+;
 
 SELECT
     *
-FROM $inner
+FROM
+    $inner
 ORDER BY
-    bk2_extra;
+    bk2_extra
+;
 
 SELECT
     *
-FROM $inner
+FROM
+    $inner
 ORDER BY
-    ak1;
+    ak1
+;

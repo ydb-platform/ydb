@@ -6,5 +6,6 @@ SELECT
     k,
     s,
     v
-FROM Input
-    VIEW secure;
+FROM
+    Input VIEW secure
+;

@@ -99,4 +99,5 @@ SELECT
     ListFold1Map([], $lambdaInc, $lambdaTuple),
     ListFold1Map(Just($list), $lambdaInc, $lambdaTuple),
     ListFold1Map(Just([]), $lambdaInc, $lambdaTuple),
-    ListFold1Map(NULL, $lambdaInc, $lambdaTuple);
+    ListFold1Map(NULL, $lambdaInc, $lambdaTuple)
+;

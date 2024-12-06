@@ -49,19 +49,22 @@ REDUCE (
         key,
         subkey,
         TableRow() AS t1
-    FROM Input
+    FROM
+        Input
 ), (
     SELECT
         key,
         subkey,
         TableRow() AS t2
-    FROM Input
+    FROM
+        Input
 ), (
     SELECT
         key,
         subkey,
         TableRow() AS t3
-    FROM Input
+    FROM
+        Input
 )
 ON
     key,
@@ -69,4 +72,5 @@ ON
 USING $reducer(TableRow())
 ASSUME ORDER BY
     key,
-    subkey;
+    subkey
+;

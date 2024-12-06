@@ -9,7 +9,8 @@ INSERT INTO Output
 SELECT
     t.*,
     CAST(TableRecordIndex() AS UInt64) AS record_idx
-FROM Input
-    AS t
+FROM
+    Input AS t
 ORDER BY
-    record_idx;
+    record_idx
+;

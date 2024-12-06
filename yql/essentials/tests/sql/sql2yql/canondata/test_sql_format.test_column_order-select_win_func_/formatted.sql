@@ -14,8 +14,9 @@ SELECT
             subkey
     ) AS z,
     a.*
-FROM Input
-    AS a
+FROM
+    Input AS a
 ORDER BY
     key,
-    subkey;
+    subkey
+;

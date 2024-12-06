@@ -14,6 +14,8 @@ $res = (
 
 SELECT
     *
-FROM $res
+FROM
+    $res
 ORDER BY
-    key;
+    key
+;

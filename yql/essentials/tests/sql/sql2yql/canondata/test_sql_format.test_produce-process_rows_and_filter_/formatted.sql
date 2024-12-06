@@ -17,10 +17,13 @@ $data = (
     SELECT
         key AS Name,
         value AS Value
-    FROM plato.Input1
+    FROM
+        plato.Input1
 );
 $prefix = ">>";
 
 PROCESS $data
 USING $udf($prefix, TableRows(), "=")
-WHERE Name != "foo";
+WHERE
+    Name != "foo"
+;

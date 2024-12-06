@@ -19,12 +19,16 @@ $i, $j = (
 
 SELECT
     *
-FROM $i
+FROM
+    $i
 ORDER BY
-    sumByVal;
+    sumByVal
+;
 
 SELECT
     *
-FROM $j
+FROM
+    $j
 ORDER BY
-    sumByVal;
+    sumByVal
+;

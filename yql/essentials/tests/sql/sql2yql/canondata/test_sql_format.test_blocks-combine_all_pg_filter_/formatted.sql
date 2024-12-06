@@ -10,5 +10,8 @@ SELECT
     Pg::min(c),
     Pg::max(c),
     Pg::avg(c),
-FROM Input
-WHERE d == "aaa";
+FROM
+    Input
+WHERE
+    d == "aaa"
+;

@@ -108,4 +108,5 @@ $switch = ($x) -> {
 $expected = ListFromRange(1, 101);
 
 SELECT
-    ListMap(ListFromRange(0, 100), $switch) == $expected;
+    ListMap(ListFromRange(0, 100), $switch) == $expected
+;

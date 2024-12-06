@@ -33,7 +33,8 @@ $my_table =
         3 AS id,
         5 AS ts,
         2 AS value1,
-        7 AS value2;
+        7 AS value2
+;
 -- Эмуляция агрегационной функции COUNT
 $cnt_create = ($_item, $_parent) -> {
     RETURN 1ul
@@ -68,6 +69,8 @@ $cnt_udaf_factory = AggregationFactory(
 SELECT
     id,
     AGGREGATE_BY(value1, $cnt_udaf_factory) AS cnt1
-FROM $my_table
+FROM
+    $my_table
 GROUP BY
-    id;
+    id
+;

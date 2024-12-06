@@ -24,4 +24,5 @@ SELECT
     ListSampleN($list, 10ul, 6) AS result6,
     ListSampleN(Just($list), 10ul, 7) AS result7,
     ListSampleN($list, Just(10ul), 8) AS result8,
-    ListSampleN(Just($list), Just(10ul), 9) AS result9;
+    ListSampleN(Just($list), Just(10ul), 9) AS result9
+;

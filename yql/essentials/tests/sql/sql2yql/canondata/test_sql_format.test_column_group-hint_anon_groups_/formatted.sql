@@ -3,25 +3,34 @@ USE plato;
 $i =
     SELECT
         *
-    FROM Input
-    WHERE a > "a";
+    FROM
+        Input
+    WHERE
+        a > "a"
+;
 
 SELECT
     a,
     b,
     c,
     d
-FROM $i;
+FROM
+    $i
+;
 
 SELECT
     c,
     d,
     e,
     f
-FROM $i;
+FROM
+    $i
+;
 
 -- Forces specific group for $i
 INSERT INTO @tmp WITH column_groups = "{grp=[b;c;d]}"
 SELECT
     *
-FROM $i;
+FROM
+    $i
+;

@@ -9,6 +9,8 @@ INSERT INTO Output
 SELECT
     key || "a" AS key,
     subkey
-FROM Input
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;

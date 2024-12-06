@@ -6,4 +6,6 @@ $udf = Python::AppendNum(Callable<(String, Int32?) -> String>, $udfScript);
 
 SELECT
     $udf(value, CAST(subkey AS Int32)) AS value
-FROM Input;
+FROM
+    Input
+;

@@ -5,13 +5,17 @@ SELECT
     key,
     min(AsTuple(subkey, value)) AS min,
     max(AsTuple(subkey, value)) AS max,
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     min(AsTuple(subkey, value)) AS min,
     max(AsTuple(subkey, value)) AS max,
-FROM Input;
+FROM
+    Input
+;

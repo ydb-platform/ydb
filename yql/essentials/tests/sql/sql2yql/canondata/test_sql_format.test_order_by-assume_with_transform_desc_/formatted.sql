@@ -9,6 +9,8 @@ SELECT
     -(CAST(key AS Int32) ?? 0) AS key,
     subkey,
     value
-FROM Input
+FROM
+    Input
 ASSUME ORDER BY
-    key DESC;
+    key DESC
+;

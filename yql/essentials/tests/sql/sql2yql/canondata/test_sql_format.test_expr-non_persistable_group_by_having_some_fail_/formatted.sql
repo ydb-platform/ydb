@@ -4,7 +4,10 @@ USE plato;
 
 SELECT
     key
-FROM Input
+FROM
+    Input
 GROUP BY
     key
-HAVING Yql::NextMtRand(SOME(YQL::NewMTRand(1))).0 > 100;
+HAVING
+    Yql::NextMtRand(SOME(YQL::NewMTRand(1))).0 > 100
+;

@@ -7,4 +7,6 @@ PRAGMA yt.InferSchemaTableCountThreshold = "0";
 INSERT INTO Output WITH truncate
 SELECT
     *
-FROM Output;
+FROM
+    Output
+;

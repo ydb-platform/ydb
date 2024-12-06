@@ -6,7 +6,10 @@ USE yt: $foo;
 INSERT INTO Output
 SELECT
     *
-FROM Input
-WHERE key < "100"
+FROM
+    Input
+WHERE
+    key < "100"
 ORDER BY
-    key;
+    key
+;

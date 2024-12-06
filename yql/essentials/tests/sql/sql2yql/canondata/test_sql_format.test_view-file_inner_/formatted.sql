@@ -7,5 +7,6 @@ SELECT
     k,
     s,
     v
-FROM Input
-    VIEW file_inner;
+FROM
+    Input VIEW file_inner
+;

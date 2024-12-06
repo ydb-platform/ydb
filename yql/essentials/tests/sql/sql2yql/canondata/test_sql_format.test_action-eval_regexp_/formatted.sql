@@ -8,4 +8,6 @@ $arg4 = "" || "raw";
 
 SELECT
     count(*)
-FROM REGEXP($arg1, $arg2, $arg3, $arg4);
+FROM
+    REGEXP($arg1, $arg2, $arg3, $arg4)
+;

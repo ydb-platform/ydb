@@ -5,7 +5,8 @@ PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 $src = (
     SELECT
         CAST(key AS Int32)
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
@@ -13,4 +14,5 @@ SELECT
         ListFromRange(1, 100), ($i) -> {
             RETURN $i IN $src;
         }
-    );
+    )
+;

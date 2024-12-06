@@ -7,7 +7,8 @@ $data = (
         CAST(key AS uint32) AS age,
         CAST(subkey AS uint32) AS region,
         value AS name
-    FROM Input
+    FROM
+        Input
 );
 
 --insert into Output
@@ -19,8 +20,10 @@ SELECT
             ELSE 0u
         END
     ) AS max_age_at_range_intersect
-FROM $data
+FROM
+    $data
 GROUP BY
     region
 ORDER BY
-    region;
+    region
+;

@@ -9,7 +9,8 @@ $x = (
         key,
         subkey,
         value
-    FROM CONCAT(Input, Input)
+    FROM
+        CONCAT(Input, Input)
 );
 
 $y = (
@@ -17,21 +18,25 @@ $y = (
         t.path AS path,
         t.key AS key,
         info.value AS value
-    FROM $x
-        AS t
+    FROM
+        $x AS t
     INNER JOIN (
         SELECT
             key,
             subkey,
             value
-        FROM Input
-        WHERE key != ""
-    )
-        AS info
+        FROM
+            Input
+        WHERE
+            key != ""
+    ) AS info
     USING (key)
-    WHERE t.key IN ("023", "150")
+    WHERE
+        t.key IN ("023", "150")
 );
 
 SELECT DISTINCT
     path
-FROM $y;
+FROM
+    $y
+;

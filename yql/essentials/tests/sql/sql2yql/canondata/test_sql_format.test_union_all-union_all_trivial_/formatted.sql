@@ -1,7 +1,10 @@
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 UNION ALL
 SELECT
     *
-FROM plato.Input;
+FROM
+    plato.Input
+;

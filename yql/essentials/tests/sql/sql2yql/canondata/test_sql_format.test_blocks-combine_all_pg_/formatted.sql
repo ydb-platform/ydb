@@ -14,4 +14,6 @@ SELECT
     Pg::avg(PgCast(1p, pgint8)),
     Pg::avg(PgCast(1p, pgfloat8)),
     Pg::regr_count(1.0p, 1.0p)
-FROM Input;
+FROM
+    Input
+;

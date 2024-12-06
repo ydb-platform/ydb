@@ -8,4 +8,6 @@ $arg4 = "" || "raw";
 
 SELECT
     count(*)
-FROM LIKE($arg1, $arg2, $arg3, $arg4);
+FROM
+    LIKE($arg1, $arg2, $arg3, $arg4)
+;

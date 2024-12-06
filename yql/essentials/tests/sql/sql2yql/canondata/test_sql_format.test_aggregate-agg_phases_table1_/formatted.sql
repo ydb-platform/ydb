@@ -7,8 +7,10 @@ PRAGMA yt.UseAggPhases = "1";
 SELECT
     key,
     count(value)
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

@@ -5,16 +5,21 @@ PRAGMA yt.EvaluationTableSizeLimit = "1";
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 LIMIT 1;
 
 $tables = (
     SELECT
         aggregate_list(Path) AS dates
-    FROM folder("")
-    WHERE Path LIKE "Input%"
+    FROM
+        folder("")
+    WHERE
+        Path LIKE "Input%"
 );
 
 SELECT
     count(*)
-FROM each($tables);
+FROM
+    each($tables)
+;

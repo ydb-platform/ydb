@@ -5,7 +5,9 @@ $c = 5 < 6;
 $d = 7 > 8;
 
 SELECT
-    (($a OR $b) AND $a) == $a;
+    (($a OR $b) AND $a) == $a
+;
 
 SELECT
-    (($b OR $a) AND $c AND $b AND ($d OR $c)) == ($c AND $b);
+    (($b OR $a) AND $c AND $b AND ($d OR $c)) == ($c AND $b)
+;

@@ -9,8 +9,10 @@ $buckets = ASLIST(0, 1, 2, 3);
 $row_count = (
     SELECT
         Yson::LookupInt64(Attributes, "row_count")
-    FROM AS_TABLE($tableList)
-    WHERE Type == "table"
+    FROM
+        AS_TABLE($tableList)
+    WHERE
+        Type == "table"
 );
 $bucket_size = unwrap(CAST($row_count / ListLength($buckets) AS Uint64));
 
@@ -22,7 +24,8 @@ DEFINE ACTION $make_bucket($bucket_number) AS
     (
         SELECT
             *
-        FROM Input
+        FROM
+            Input
         ORDER BY
             key
         LIMIT $bucket_size OFFSET $offset

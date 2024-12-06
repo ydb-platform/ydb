@@ -9,8 +9,10 @@ PRAGMA yt.MapJoinShardCount = "10";
 
 SELECT
     *
-FROM Input1
-    AS a
-JOIN Input2
-    AS b
-ON a.key == b.key AND a.subkey == b.key;
+FROM
+    Input1 AS a
+JOIN
+    Input2 AS b
+ON
+    a.key == b.key AND a.subkey == b.key
+;

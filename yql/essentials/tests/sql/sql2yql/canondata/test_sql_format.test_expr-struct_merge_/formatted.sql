@@ -11,4 +11,5 @@ SELECT
     StructIntersection($left, $right),
     StructIntersection($left, $right, $merge),
     StructDifference($left, $right),
-    StructSymmetricDifference($left, $right);
+    StructSymmetricDifference($left, $right)
+;

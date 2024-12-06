@@ -19,6 +19,8 @@ $res = (
 
 SELECT
     *
-FROM $res
+FROM
+    $res
 ORDER BY
-    DictKeys(joined);
+    DictKeys(joined)
+;

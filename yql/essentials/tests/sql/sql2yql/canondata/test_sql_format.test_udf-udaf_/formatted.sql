@@ -47,4 +47,6 @@ SELECT
         $serialize,
         $deserialize
     )
-FROM plato.Input;
+FROM
+    plato.Input
+;

@@ -12,26 +12,32 @@ $d = ToSortedDict($l);
 SELECT
     ListSort(DictItems($d)),
     ListSort(DictKeys($d)),
-    ListSort(DictPayloads($d));
+    ListSort(DictPayloads($d))
+;
 
 SELECT
     DictLookup($d, $v1),
-    DictLookup($d, $v3);
+    DictLookup($d, $v3)
+;
 
 SELECT
     DictContains($d, $v1),
-    DictContains($d, $v3);
+    DictContains($d, $v3)
+;
 $d = ToSortedMultiDict($l);
 
 SELECT
     ListSort(DictItems($d)),
     ListSort(DictKeys($d)),
-    ListSort(DictPayloads($d));
+    ListSort(DictPayloads($d))
+;
 
 SELECT
     DictLookup($d, $v1),
-    DictLookup($d, $v3);
+    DictLookup($d, $v3)
+;
 
 SELECT
     DictContains($d, $v1),
-    DictContains($d, $v3);
+    DictContains($d, $v3)
+;

@@ -8,4 +8,6 @@ $func = ($x, $y) -> {
 --INSERT INTO Output
 SELECT
     $func(key, subkey) AS func
-FROM Input;
+FROM
+    Input
+;

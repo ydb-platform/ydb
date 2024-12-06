@@ -13,11 +13,12 @@ $hashes = (
 
 SELECT
     *
-FROM Input1
-    AS a
-CROSS JOIN $hashes
-    AS h
+FROM
+    Input1 AS a
+CROSS JOIN
+    $hashes AS h
 ORDER BY
     a.key,
     a.subkey,
-    h.hash;
+    h.hash
+;

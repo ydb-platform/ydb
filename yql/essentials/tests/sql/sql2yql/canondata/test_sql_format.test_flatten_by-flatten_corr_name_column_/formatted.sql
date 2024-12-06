@@ -11,58 +11,64 @@ $data =
     SELECT
         2 AS n,
         AsList(4, 5) AS l,
-        AsStruct(20 AS n, AsList(1, 2) AS l) AS s;
+        AsStruct(20 AS n, AsList(1, 2) AS l) AS s
+;
 
 SELECT
     n,
     l
-FROM $data
-    AS l
+FROM
+    $data AS l
     FLATTEN BY l
 ORDER BY
     n,
-    l;
+    l
+;
 
 SELECT
     n,
     l
-FROM $data
-    AS l
+FROM
+    $data AS l
     FLATTEN BY l.l
 ORDER BY
     n,
-    l;
+    l
+;
 
 SELECT
     n,
     l
-FROM $data
-    AS s
+FROM
+    $data AS s
     FLATTEN BY s.l
 ORDER BY
     n,
-    l;
+    l
+;
 
 SELECT
     n,
     newl
-FROM $data
-    AS s
+FROM
+    $data AS s
     FLATTEN BY (
         s.l AS newl
     )
 ORDER BY
     n,
-    newl;
+    newl
+;
 
 SELECT
     n,
     l
-FROM $data
-    AS s
+FROM
+    $data AS s
     FLATTEN BY (
         s.s.l AS l
     )
 ORDER BY
     n,
-    l;
+    l
+;

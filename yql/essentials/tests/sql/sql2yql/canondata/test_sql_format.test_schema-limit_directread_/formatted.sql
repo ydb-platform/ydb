@@ -4,5 +4,6 @@ PRAGMA directread;
 
 SELECT
     *
-FROM `Input`
+FROM
+    `Input`
 LIMIT 3;

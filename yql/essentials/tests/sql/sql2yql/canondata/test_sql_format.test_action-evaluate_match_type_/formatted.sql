@@ -11,5 +11,6 @@ SELECT
 FROM (
     SELECT
         $keep_only_last(TableRow())
-    FROM Input
+    FROM
+        Input
 );

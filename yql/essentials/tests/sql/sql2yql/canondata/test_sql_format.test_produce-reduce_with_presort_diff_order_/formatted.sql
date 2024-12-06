@@ -6,12 +6,14 @@ SELECT
     subkey,
     value AS value1,
     value AS value2
-FROM Input
+FROM
+    Input
 ORDER BY
     subkey,
     key,
     value1,
-    value2;
+    value2
+;
 
 INSERT INTO @skv2v1
 SELECT
@@ -19,12 +21,14 @@ SELECT
     subkey,
     value AS value1,
     value AS value2
-FROM Input
+FROM
+    Input
 ORDER BY
     subkey,
     key,
     value2,
-    value1;
+    value1
+;
 
 INSERT INTO @ksv1v2
 SELECT
@@ -32,12 +36,14 @@ SELECT
     subkey,
     value AS value1,
     value AS value2
-FROM Input
+FROM
+    Input
 ORDER BY
     key,
     subkey,
     value1,
-    value2;
+    value2
+;
 COMMIT;
 $udf = YQL::@@(lambda '(key stream) (AsStruct
   '('key key) '('summ (Collect (Condense stream (Nothing (OptionalType (DataType 'String))) (lambda '(item state) (Bool 'False)) (lambda '(item state) (Coalesce state (Just item))))))
@@ -57,7 +63,8 @@ FROM (
 )
 ORDER BY
     key,
-    summ;
+    summ
+;
 
 SELECT
     *
@@ -73,7 +80,8 @@ FROM (
 )
 ORDER BY
     key,
-    summ;
+    summ
+;
 
 SELECT
     *
@@ -89,7 +97,8 @@ FROM (
 )
 ORDER BY
     key,
-    summ;
+    summ
+;
 
 SELECT
     *
@@ -105,4 +114,5 @@ FROM (
 )
 ORDER BY
     key,
-    summ;
+    summ
+;

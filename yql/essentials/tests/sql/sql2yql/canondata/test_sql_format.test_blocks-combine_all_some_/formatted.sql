@@ -16,4 +16,6 @@ SELECT
     some(if(key == 10u, TRUE)),
     some(if(key == 100u, TRUE)),
     some(if(key >= 10u, TRUE)),
-FROM Input;
+FROM
+    Input
+;

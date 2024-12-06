@@ -12,12 +12,16 @@ $input = (
     SELECT
         $to_in_list(key) AS event_ids,
         $to_in_list(subkey) AS test_ids
-    FROM Input
-    WHERE value == "aaa"
+    FROM
+        Input
+    WHERE
+        value == "aaa"
 );
 
 SELECT
     event_id,
     test_ids
-FROM $input
-    FLATTEN BY event_ids AS event_id;
+FROM
+    $input
+    FLATTEN BY event_ids AS event_id
+;

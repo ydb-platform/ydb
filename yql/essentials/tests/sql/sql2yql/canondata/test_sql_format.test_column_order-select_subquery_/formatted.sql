@@ -8,9 +8,13 @@ DEFINE SUBQUERY $select_star($table) AS
         *
     WITHOUT
         subkey
-    FROM $table;
+    FROM
+        $table
+    ;
 END DEFINE;
 
 SELECT
     *
-FROM $select_star("Input");
+FROM
+    $select_star("Input")
+;

@@ -7,16 +7,21 @@ SELECT
 FROM (
     SELECT
         *
-    FROM plato.Input1
-    WHERE subkey != "bar"
-)
-    AS a
+    FROM
+        plato.Input1
+    WHERE
+        subkey != "bar"
+) AS a
 JOIN (
     SELECT
         *
-    FROM plato.Input1
-    WHERE subkey != "foo"
-)
-    AS b
-ON a.key == b.key
-WHERE a.key != "1" OR b.key != "2";
+    FROM
+        plato.Input1
+    WHERE
+        subkey != "foo"
+) AS b
+ON
+    a.key == b.key
+WHERE
+    a.key != "1" OR b.key != "2"
+;

@@ -16,10 +16,18 @@ SELECT
     InputB.val,
     InputC.v,
     InputD.value AS vald
-FROM InputA
-INNER JOIN InputD
-ON InputA.Key2 == InputD.k
-INNER JOIN InputB
-ON InputA.Fk1 == InputB.k
-INNER JOIN InputC
-ON InputA.Key1 == InputC.k;
+FROM
+    InputA
+INNER JOIN
+    InputD
+ON
+    InputA.Key2 == InputD.k
+INNER JOIN
+    InputB
+ON
+    InputA.Fk1 == InputB.k
+INNER JOIN
+    InputC
+ON
+    InputA.Key1 == InputC.k
+;

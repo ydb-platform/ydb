@@ -13,5 +13,8 @@ REDUCE Input1
 ON
     key
 USING $udf(value)
-WHERE CAST(value AS int) > 1
-HAVING total > 3;
+WHERE
+    CAST(value AS int) > 1
+HAVING
+    total > 3
+;

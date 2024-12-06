@@ -5,4 +5,6 @@ $n = ["foo"];
 
 SELECT
     *
-FROM $n;
+FROM
+    $n
+;

@@ -16,18 +16,22 @@ $t2 = AsList(
 INSERT INTO @t1
 SELECT
     *
-FROM as_table($t1);
+FROM
+    as_table($t1)
+;
 
 INSERT INTO @t2
 SELECT
     *
-FROM as_table($t2);
+FROM
+    as_table($t2)
+;
 COMMIT;
 
 SELECT
     *
-FROM @t1
-    AS a
-JOIN @t2
-    AS b
+FROM
+    @t1 AS a
+JOIN
+    @t2 AS b
 USING (Key);

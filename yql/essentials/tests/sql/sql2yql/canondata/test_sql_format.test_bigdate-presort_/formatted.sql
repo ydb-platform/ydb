@@ -18,4 +18,5 @@ SELECT
     CAST(ListSortDesc([(Yql::Ascending($wt1), $wt1), (Yql::Ascending($wt2), $wt2)]) AS List<Tuple<String, String>>),
     CAST(ListSortDesc([(Yql::Ascending($waz1), $waz1), (Yql::Ascending($waz2), $waz2)]) AS List<Tuple<String, String>>),
     CAST(ListSortDesc([(Yql::Ascending($wdz1), $wdz1), (Yql::Ascending($wdz2), $wdz2)]) AS List<Tuple<String, String>>),
-    CAST(ListSortDesc([(Yql::Ascending($wtz1), $wtz1), (Yql::Ascending($wtz2), $wtz2)]) AS List<Tuple<String, String>>);
+    CAST(ListSortDesc([(Yql::Ascending($wtz1), $wtz1), (Yql::Ascending($wtz2), $wtz2)]) AS List<Tuple<String, String>>)
+;

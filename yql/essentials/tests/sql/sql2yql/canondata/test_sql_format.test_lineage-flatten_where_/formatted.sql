@@ -7,7 +7,10 @@ FROM (
     SELECT
         [key, key] AS key2,
         value
-    FROM Input
-    WHERE value > ''
+    FROM
+        Input
+    WHERE
+        value > ''
 )
-    FLATTEN LIST BY key2;
+    FLATTEN LIST BY key2
+;

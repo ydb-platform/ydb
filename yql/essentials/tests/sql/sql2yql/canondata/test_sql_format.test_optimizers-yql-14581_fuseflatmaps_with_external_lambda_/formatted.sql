@@ -24,4 +24,5 @@ $names_intersection = ($org_names, $db_names) -> {
 };
 
 SELECT
-    $names_intersection(['1', '2'], ['nets']);
+    $names_intersection(['1', '2'], ['nets'])
+;

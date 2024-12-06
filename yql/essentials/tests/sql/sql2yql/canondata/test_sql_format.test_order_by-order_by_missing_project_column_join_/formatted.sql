@@ -21,36 +21,45 @@ $src1 = [
 $src =
     SELECT
         *
-    FROM as_table($src);
+    FROM
+        as_table($src)
+;
 
 $src1 =
     SELECT
         *
-    FROM as_table($src1);
+    FROM
+        as_table($src1)
+;
 
 SELECT
     a,
     b
-FROM $src
+FROM
+    $src
 ORDER BY
-    zz + 1;
+    zz + 1
+;
 
 SELECT
     x.a,
     b
-FROM $src
-    AS x
+FROM
+    $src AS x
 ORDER BY
-    x.zz + 1;
+    x.zz + 1
+;
 
 SELECT
     *
 WITHOUT
     b,
     a
-FROM $src
+FROM
+    $src
 ORDER BY
-    zz + 1;
+    zz + 1
+;
 
 SELECT
     *
@@ -58,19 +67,22 @@ WITHOUT
     b,
     a,
     zz
-FROM $src
+FROM
+    $src
 ORDER BY
-    zz + 1;
+    zz + 1
+;
 
 SELECT
     *
 WITHOUT
     x.b,
     x.a
-FROM $src
-    AS x
+FROM
+    $src AS x
 ORDER BY
-    zz + 1;
+    zz + 1
+;
 
 SELECT
     *
@@ -78,10 +90,11 @@ WITHOUT
     x.b,
     x.a,
     zz
-FROM $src
-    AS x
+FROM
+    $src AS x
 ORDER BY
-    zz + 1;
+    zz + 1
+;
 
 SELECT
     a,
@@ -90,10 +103,11 @@ SELECT
 WITHOUT
     b,
     a
-FROM $src
-    AS x
+FROM
+    $src AS x
 ORDER BY
-    zz + 1;
+    zz + 1
+;
 
 SELECT
     a,
@@ -103,10 +117,11 @@ WITHOUT
     b,
     a,
     x.zz
-FROM $src
-    AS x
+FROM
+    $src AS x
 ORDER BY
-    zz + 1;
+    zz + 1
+;
 
 SELECT
     a,
@@ -116,46 +131,53 @@ WITHOUT
     b,
     a,
     x.zz
-FROM $src
-    AS x
+FROM
+    $src AS x
 ORDER BY
-    x.zz + 1;
+    x.zz + 1
+;
 
 SELECT
     y.e,
     y.f
-FROM $src
-    AS x
-JOIN $src1
-    AS y
-ON x.a == y.e
+FROM
+    $src AS x
+JOIN
+    $src1 AS y
+ON
+    x.a == y.e
 ORDER BY
-    x.zz;
+    x.zz
+;
 
 SELECT
     *
 WITHOUT
     x.a,
     x.b,
-FROM $src
-    AS x
-JOIN $src1
-    AS y
-ON x.a == y.e
+FROM
+    $src AS x
+JOIN
+    $src1 AS y
+ON
+    x.a == y.e
 ORDER BY
-    zz;
+    zz
+;
 
 SELECT
     x.*
 WITHOUT
     x.zz
-FROM $src
-    AS x
-JOIN $src1
-    AS y
-ON x.a == y.e
+FROM
+    $src AS x
+JOIN
+    $src1 AS y
+ON
+    x.a == y.e
 ORDER BY
-    x.zz;
+    x.zz
+;
 
 SELECT
     x.*,
@@ -163,10 +185,11 @@ SELECT
 WITHOUT
     x.a,
     x.zz
-FROM $src
-    AS x
+FROM
+    $src AS x
 ORDER BY
-    zz;
+    zz
+;
 
 SELECT
     x.*,
@@ -174,13 +197,15 @@ SELECT
 WITHOUT
     x.a,
     x.zz
-FROM $src
-    AS x
-JOIN $src1
-    AS y
-ON x.a == y.e
+FROM
+    $src AS x
+JOIN
+    $src1 AS y
+ON
+    x.a == y.e
 ORDER BY
-    x.zz;
+    x.zz
+;
 
 SELECT
     x.*,
@@ -188,10 +213,12 @@ SELECT
 WITHOUT
     x.a,
     x.zz
-FROM $src
-    AS x
-JOIN $src1
-    AS y
-ON x.a == y.e
+FROM
+    $src AS x
+JOIN
+    $src1 AS y
+ON
+    x.a == y.e
 ORDER BY
-    zz;
+    zz
+;

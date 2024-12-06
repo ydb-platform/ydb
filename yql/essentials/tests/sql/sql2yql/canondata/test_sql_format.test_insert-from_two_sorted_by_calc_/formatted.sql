@@ -4,16 +4,20 @@ USE plato;
 INSERT INTO @f1
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
-    key || "1";
+    key || "1"
+;
 
 INSERT INTO @f2
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
-    key || "2";
+    key || "2"
+;
 COMMIT;
 
 INSERT INTO Output
@@ -22,9 +26,11 @@ SELECT
 FROM (
     SELECT
         *
-    FROM @f1
+    FROM
+        @f1
     UNION ALL
     SELECT
         *
-    FROM @f2
+    FROM
+        @f2
 );

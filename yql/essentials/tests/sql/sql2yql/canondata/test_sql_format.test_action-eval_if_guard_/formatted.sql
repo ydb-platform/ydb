@@ -6,7 +6,9 @@ $list = ListTake(AsList("Input"), 0);
 DEFINE ACTION $process() AS
     SELECT
         count(*)
-    FROM each($list);
+    FROM
+        each($list)
+    ;
 END DEFINE;
 
 EVALUATE IF ListLength($list) > 0 DO

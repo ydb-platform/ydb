@@ -3,7 +3,8 @@ USE plato;
 $sub = (
     SELECT
         key
-    FROM Input
+    FROM
+        Input
         FLATTEN LIST BY key
 );
 
@@ -14,6 +15,8 @@ SELECT
         [value],
         ($x) -> ($x IN $sub)
     ) AS f
-FROM Input
+FROM
+    Input
 ORDER BY
-    value;
+    value
+;

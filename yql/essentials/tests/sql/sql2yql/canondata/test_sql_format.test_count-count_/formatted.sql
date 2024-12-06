@@ -3,48 +3,58 @@ SELECT
     a,
     aggregate_list(b),
     count(*)
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     a
 ORDER BY
-    a;
+    a
+;
 
 SELECT
     b,
     aggregate_list(a),
     count(*)
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     b
 ORDER BY
-    b;
+    b
+;
 
 SELECT
     c,
     aggregate_list(a),
     count(*)
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     c
 ORDER BY
-    c;
+    c
+;
 
 SELECT
     d,
     aggregate_list(a),
     count(*)
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     d
 ORDER BY
-    d;
+    d
+;
 
 SELECT
     e,
     aggregate_list(a),
     count(*)
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     e
 ORDER BY
-    e;
+    e
+;

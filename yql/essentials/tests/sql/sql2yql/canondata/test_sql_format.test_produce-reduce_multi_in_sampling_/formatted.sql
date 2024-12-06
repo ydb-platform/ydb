@@ -19,8 +19,8 @@ $udf = YQL::@@
 
 $r = (
     REDUCE Input
-        SAMPLE (0.1), Input
-        SAMPLE (0.1)
+    SAMPLE (0.1), Input
+    SAMPLE (0.1)
     ON
         key
     USING $udf(TableRow())
@@ -30,8 +30,10 @@ SELECT
     key,
     src,
     cnt
-FROM $r
+FROM
+    $r
 ORDER BY
     key,
     src,
-    cnt;
+    cnt
+;

@@ -3,7 +3,8 @@ USE plato;
 $a =
     SELECT
         key
-    FROM Input
+    FROM
+        Input
     ORDER BY
         key
     LIMIT 1;
@@ -11,7 +12,8 @@ $a =
 $b =
     SELECT
         key
-    FROM Input
+    FROM
+        Input
     ORDER BY
         key
     LIMIT 1 OFFSET 1;
@@ -19,11 +21,17 @@ $b =
 INSERT INTO Output1
 SELECT
     *
-FROM Input
-WHERE key <= $a;
+FROM
+    Input
+WHERE
+    key <= $a
+;
 
 INSERT INTO Output2
 SELECT
     *
-FROM Input
-WHERE key >= $a AND key != $b;
+FROM
+    Input
+WHERE
+    key >= $a AND key != $b
+;

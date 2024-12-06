@@ -17,5 +17,8 @@ COMMIT;
 
 SELECT
     *
-FROM Output
-WHERE ToBytes(j) != "";
+FROM
+    Output
+WHERE
+    ToBytes(j) != ""
+;

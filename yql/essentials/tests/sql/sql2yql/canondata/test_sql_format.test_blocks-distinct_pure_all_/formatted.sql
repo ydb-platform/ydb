@@ -4,4 +4,6 @@ USE plato;
 SELECT
     sum(DISTINCT key),
     min(DISTINCT key)
-FROM Input;
+FROM
+    Input
+;

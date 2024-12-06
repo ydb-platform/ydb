@@ -7,6 +7,8 @@ $empty = ($list) -> {
 
 SELECT
     $empty(AGGREGATE_LIST(key))
-FROM Input
+FROM
+    Input
 GROUP BY
-    value;
+    value
+;

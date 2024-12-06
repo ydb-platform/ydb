@@ -10,4 +10,5 @@ SELECT
     ToPg(TzTimestamp("2001-02-03T04:05:06.789012,Europe/Moscow")),
     ToPg(TzDate32("1901-02-03,Europe/Moscow")),
     ToPg(TzDatetime64("1901-02-03T04:05:06,Europe/Moscow")),
-    ToPg(TzTimestamp64("1901-02-03T04:05:06.789012,Europe/Moscow"));
+    ToPg(TzTimestamp64("1901-02-03T04:05:06.789012,Europe/Moscow"))
+;

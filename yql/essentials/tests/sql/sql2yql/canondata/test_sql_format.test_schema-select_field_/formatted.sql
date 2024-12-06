@@ -1,3 +1,5 @@
 SELECT
     a
-FROM plato.Input;
+FROM
+    plato.Input
+;

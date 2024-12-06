@@ -3,10 +3,12 @@ USE plato;
 
 SELECT DISTINCT
     *
-FROM Input
+FROM
+    Input
 GROUP BY
     value,
     subkey,
     key
 ORDER BY
-    subkey;
+    subkey
+;

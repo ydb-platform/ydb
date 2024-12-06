@@ -7,7 +7,8 @@ $records = (
         key AS ip,
         subkey AS recordType,
         Url::GetHost(value) AS host
-    FROM spider_info
+    FROM
+        spider_info
 );
 
 $results = (
@@ -15,8 +16,10 @@ $results = (
         ip,
         host,
         count(*) AS request_count
-    FROM $records
-    WHERE host IS NOT NULL AND recordType == "RESULT"
+    FROM
+        $records
+    WHERE
+        host IS NOT NULL AND recordType == "RESULT"
     GROUP BY
         ip,
         host
@@ -27,8 +30,10 @@ $bans = (
         ip,
         host,
         count(*) AS fetcher_count
-    FROM $records
-    WHERE host IS NOT NULL AND recordType == "BAN_DETECTED"
+    FROM
+        $records
+    WHERE
+        host IS NOT NULL AND recordType == "BAN_DETECTED"
     GROUP BY
         ip,
         host
@@ -39,11 +44,13 @@ SELECT
     results.host AS host,
     results.request_count AS request_count,
     bans.fetcher_count AS fetcher_count
-FROM $results
-    AS results
-INNER JOIN $bans
-    AS bans
-ON bans.ip == results.ip
+FROM
+    $results AS results
+INNER JOIN
+    $bans AS bans
+ON
+    bans.ip == results.ip
     AND bans.host == results.host
 ORDER BY
-    fetcher_count DESC;
+    fetcher_count DESC
+;

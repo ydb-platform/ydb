@@ -16,4 +16,5 @@ FROM (
 )
 GROUP BY
     ()
-    WITH combine;
+    WITH combine
+;

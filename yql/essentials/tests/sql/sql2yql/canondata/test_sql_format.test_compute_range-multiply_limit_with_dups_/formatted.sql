@@ -30,4 +30,5 @@ SELECT
             AsAtom("a"),
             AsAtom("b"),
         )
-    );
+    )
+;

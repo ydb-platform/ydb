@@ -11,8 +11,10 @@ SELECT
     min(DISTINCT utf) AS dmins,
     min(DISTINCT s_opt) AS dmins_opt,
     max(DISTINCT s_opt) AS dmaxs_opt,
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

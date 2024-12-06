@@ -16,5 +16,6 @@ $linear = ($x, $z, $func) -> {
 SELECT
     t.*,
     $linear(CAST(key AS uint64), CAST(subkey AS uint64), $shiftSteps)
-FROM Input
-    AS t;
+FROM
+    Input AS t
+;

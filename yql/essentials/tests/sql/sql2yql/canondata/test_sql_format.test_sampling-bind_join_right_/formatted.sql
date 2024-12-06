@@ -8,18 +8,21 @@ PRAGMA DisableSimpleColumns;
 $a =
     SELECT
         *
-    FROM Input
-    WHERE key > "199" AND value != "bbb";
+    FROM
+        Input
+    WHERE
+        key > "199" AND value != "bbb"
+;
 
 SELECT
     *
 FROM (
     SELECT
         a.value
-    FROM Input
-        AS a
-    INNER JOIN $a
-        AS b
+    FROM
+        Input AS a
+    INNER JOIN
+        $a AS b
     USING (subkey)
 )
-    TABLESAMPLE BERNOULLI (40);
+TABLESAMPLE BERNOULLI (40);

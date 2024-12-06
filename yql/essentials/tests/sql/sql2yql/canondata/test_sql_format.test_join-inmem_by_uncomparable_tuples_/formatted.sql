@@ -11,76 +11,76 @@ $r = AsList(
 SELECT
     Lhs,
     Rhs
-FROM AS_TABLE($l)
-    AS l
-LEFT JOIN AS_TABLE($r)
-    AS r
+FROM
+    AS_TABLE($l) AS l
+LEFT JOIN
+    AS_TABLE($r) AS r
 USING (Key);
 
 SELECT
     Lhs
-FROM AS_TABLE($l)
-    AS l
-LEFT SEMI JOIN AS_TABLE($r)
-    AS r
+FROM
+    AS_TABLE($l) AS l
+LEFT SEMI JOIN
+    AS_TABLE($r) AS r
 USING (Key);
 
 SELECT
     Lhs
-FROM AS_TABLE($l)
-    AS l
-LEFT ONLY JOIN AS_TABLE($r)
-    AS r
+FROM
+    AS_TABLE($l) AS l
+LEFT ONLY JOIN
+    AS_TABLE($r) AS r
 USING (Key);
 
 SELECT
     Rhs,
     Lhs
-FROM AS_TABLE($l)
-    AS l
-RIGHT JOIN AS_TABLE($r)
-    AS r
+FROM
+    AS_TABLE($l) AS l
+RIGHT JOIN
+    AS_TABLE($r) AS r
 USING (Key);
 
 SELECT
     Rhs
-FROM AS_TABLE($l)
-    AS l
-RIGHT SEMI JOIN AS_TABLE($r)
-    AS r
+FROM
+    AS_TABLE($l) AS l
+RIGHT SEMI JOIN
+    AS_TABLE($r) AS r
 USING (Key);
 
 SELECT
     Rhs
-FROM AS_TABLE($l)
-    AS l
-RIGHT ONLY JOIN AS_TABLE($r)
-    AS r
-USING (Key);
-
-SELECT
-    Lhs,
-    Rhs
-FROM AS_TABLE($l)
-    AS l
-INNER JOIN AS_TABLE($r)
-    AS r
+FROM
+    AS_TABLE($l) AS l
+RIGHT ONLY JOIN
+    AS_TABLE($r) AS r
 USING (Key);
 
 SELECT
     Lhs,
     Rhs
-FROM AS_TABLE($l)
-    AS l
-FULL JOIN AS_TABLE($r)
-    AS r
+FROM
+    AS_TABLE($l) AS l
+INNER JOIN
+    AS_TABLE($r) AS r
 USING (Key);
 
 SELECT
     Lhs,
     Rhs
-FROM AS_TABLE($l)
-    AS l
-EXCLUSION JOIN AS_TABLE($r)
-    AS r
+FROM
+    AS_TABLE($l) AS l
+FULL JOIN
+    AS_TABLE($r) AS r
+USING (Key);
+
+SELECT
+    Lhs,
+    Rhs
+FROM
+    AS_TABLE($l) AS l
+EXCLUSION JOIN
+    AS_TABLE($r) AS r
 USING (Key);

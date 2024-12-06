@@ -4,7 +4,8 @@ USE plato;
 $a = (
     SELECT
         key
-    FROM Input
+    FROM
+        Input
     ORDER BY
         key
     LIMIT 1

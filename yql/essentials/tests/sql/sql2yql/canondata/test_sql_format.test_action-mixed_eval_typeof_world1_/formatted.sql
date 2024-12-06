@@ -32,8 +32,9 @@ DEFINE ACTION $func($input, $output) AS
     INSERT INTO @$jname WITH truncate
     SELECT
         *
-    FROM $input
-        AS input;
+    FROM
+        $input AS input
+    ;
     COMMIT;
 
     INSERT INTO $output WITH truncate
@@ -44,7 +45,9 @@ DEFINE ACTION $func($input, $output) AS
                 ['']
             )
         )
-    FROM @$jname;
+    FROM
+        @$jname
+    ;
     COMMIT;
 END DEFINE;
 $exps = [('Input', 'Output1'), ('Input', 'Output2'), ('Input', 'Output3')];

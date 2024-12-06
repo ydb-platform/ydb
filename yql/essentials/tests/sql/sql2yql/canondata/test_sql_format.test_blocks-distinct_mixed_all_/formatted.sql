@@ -5,4 +5,6 @@ SELECT
     count(*),
     sum(DISTINCT key),
     min(DISTINCT key)
-FROM Input;
+FROM
+    Input
+;

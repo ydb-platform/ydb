@@ -17,7 +17,8 @@ SELECT
     COUNT(1) OVER w AS session_len,
     SessionStart() OVER w AS session_start,
     SessionState() OVER w AS session_state,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w AS (
         PARTITION BY
@@ -28,4 +29,5 @@ WINDOW
     )
 ORDER BY
     user,
-    payload;
+    payload
+;

@@ -8,23 +8,25 @@ SELECT
 WITHOUT
     a.key,
     a.value
-FROM Input
-    AS a
-LEFT SEMI JOIN Input
-    AS b
+FROM
+    Input AS a
+LEFT SEMI JOIN
+    Input AS b
 USING (key)
 ORDER BY
-    subkey;
+    subkey
+;
 
 SELECT
     *
 WITHOUT
     a.key,
     a.value
-FROM Input
-    AS a
-LEFT SEMI JOIN Input
-    AS b
+FROM
+    Input AS a
+LEFT SEMI JOIN
+    Input AS b
 USING (key)
 ORDER BY
-    subkey;
+    subkey
+;

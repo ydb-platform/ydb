@@ -5,15 +5,19 @@ USE plato;
 INSERT INTO @a
 SELECT
     *
-FROM Input0
+FROM
+    Input0
 ORDER BY
     key ASC,
-    subkey ASC;
+    subkey ASC
+;
 COMMIT;
 
 SELECT
     *
-FROM @a
+FROM
+    @a
 ORDER BY
     key ASC,
-    subkey ASC;
+    subkey ASC
+;

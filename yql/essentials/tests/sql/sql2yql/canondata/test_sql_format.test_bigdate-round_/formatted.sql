@@ -94,7 +94,8 @@ SELECT
     Yql::RoundDown($timestamp64_max, date32),
     Yql::RoundUp($timestamp64_max, date32),
     Yql::RoundDown($timestamp64_max, datetime64),
-    Yql::RoundUp($timestamp64_max, datetime64);
+    Yql::RoundUp($timestamp64_max, datetime64)
+;
 
 -- bigdate to narrowdate
 SELECT
@@ -153,7 +154,8 @@ SELECT
     Yql::RoundDown($date32_plus1, datetime),
     Yql::RoundUp($date32_plus1, datetime),
     Yql::RoundDown($date32_plus1, timestamp),
-    Yql::RoundUp($date32_plus1, timestamp);
+    Yql::RoundUp($date32_plus1, timestamp)
+;
 
 -- from narrowdate
 SELECT
@@ -171,7 +173,8 @@ SELECT
     Yql::RoundDown($timestamp_max, datetime),
     Yql::RoundUp($timestamp_max, datetime),
     Yql::RoundDown($timestamp_max, datetime64),
-    Yql::RoundUp($timestamp_max, datetime64);
+    Yql::RoundUp($timestamp_max, datetime64)
+;
 
 SELECT
     0,
@@ -214,4 +217,5 @@ SELECT
     Yql::RoundUp($datetime64_max, timestamp64),
     15,
     Yql::RoundDown($timestamp64_min, timestamp64),
-    Yql::RoundUp($timestamp64_max, timestamp64);
+    Yql::RoundUp($timestamp64_max, timestamp64)
+;

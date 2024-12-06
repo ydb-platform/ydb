@@ -74,7 +74,9 @@ SELECT
     TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") - waz,
     TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") - wdz,
     TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") - wtz,
-FROM Dates;
+FROM
+    Dates
+;
 
 SELECT
     Date32("1900-01-01") - na,
@@ -149,7 +151,9 @@ SELECT
     TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") - waz,
     TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") - wdz,
     TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") - wtz
-FROM Dates;
+FROM
+    Dates
+;
 
 SELECT
     na - Date("2000-01-01"),
@@ -224,7 +228,9 @@ SELECT
     waz - TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow"),
     wdz - TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow"),
     wtz - TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow"),
-FROM Dates;
+FROM
+    Dates
+;
 
 SELECT
     na - Date32("1900-01-01"),
@@ -299,4 +305,6 @@ SELECT
     waz - TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
     wdz - TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
     wtz - TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow")
-FROM Dates;
+FROM
+    Dates
+;

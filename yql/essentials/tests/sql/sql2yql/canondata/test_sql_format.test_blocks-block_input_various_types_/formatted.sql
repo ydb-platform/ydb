@@ -3,5 +3,8 @@ PRAGMA yt.JobBlockInput;
 
 SELECT
     *
-FROM Input
-WHERE `int64` > 10;
+FROM
+    Input
+WHERE
+    `int64` > 10
+;

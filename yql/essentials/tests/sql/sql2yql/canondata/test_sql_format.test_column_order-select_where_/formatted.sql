@@ -5,5 +5,8 @@ PRAGMA OrderedColumns;
 
 SELECT
     *
-FROM Input
-WHERE key == "150";
+FROM
+    Input
+WHERE
+    key == "150"
+;

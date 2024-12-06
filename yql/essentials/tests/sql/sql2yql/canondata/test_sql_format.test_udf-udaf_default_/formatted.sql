@@ -34,7 +34,9 @@ $udaf_factory = AGGREGATION_FACTORY(
 );
 
 SELECT
-    ListAggregate(AsList(1, 2), $udaf_factory);
+    ListAggregate(AsList(1, 2), $udaf_factory)
+;
 
 SELECT
-    ListAggregate(ListCreate(Int32), $udaf_factory);
+    ListAggregate(ListCreate(Int32), $udaf_factory)
+;

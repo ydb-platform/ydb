@@ -9,7 +9,8 @@ $f = () -> {
 };
 
 SELECT
-    $f();
+    $f()
+;
 PRAGMA DisableWarnUntypedStringLiterals;
 PRAGMA DisableUnicodeLiterals;
 $g = () -> {
@@ -21,4 +22,5 @@ $g = () -> {
 };
 
 SELECT
-    $g();
+    $g()
+;

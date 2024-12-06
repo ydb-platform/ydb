@@ -45,13 +45,16 @@ SELECT
     [$timestamp64_val, $date32_val],
     [$timestamp64_val, $datetime64_val],
     7,
-    [$date_val, $datetime_val, $timestamp_val, $date32_val, $datetime64_val, $timestamp64_val];
+    [$date_val, $datetime_val, $timestamp_val, $date32_val, $datetime64_val, $timestamp64_val]
+;
 
 SELECT
-    [unwrap(CAST(1 AS interval)), unwrap(CAST(-1 AS interval64))];
+    [unwrap(CAST(1 AS interval)), unwrap(CAST(-1 AS interval64))]
+;
 $datetime_values = [$date_val, $date32_val, $datetime_val, $datetime64_val, $timestamp_val, $timestamp64_val];
 $interval_values = [$interval_val, $interval64_val];
 
 SELECT
     ListSort(DictKeys(ToSet($datetime_values))),
-    ListSort(DictKeys(ToSet($interval_values)));
+    ListSort(DictKeys(ToSet($interval_values)))
+;

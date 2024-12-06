@@ -7,7 +7,8 @@ FROM (
     SELECT
         Just(1) AS x
 )
-    FLATTEN OPTIONAL BY x;
+    FLATTEN OPTIONAL BY x
+;
 $lst = AsList(1, 2, 3);
 
 SELECT
@@ -18,7 +19,8 @@ FROM (
 )
     FLATTEN LIST BY x
 ORDER BY
-    x;
+    x
+;
 
 SELECT
     x
@@ -28,7 +30,8 @@ FROM (
 )
     FLATTEN LIST BY x
 ORDER BY
-    x;
+    x
+;
 
 SELECT
     *
@@ -38,7 +41,8 @@ FROM (
 )
     FLATTEN OPTIONAL BY x
 ORDER BY
-    x;
+    x
+;
 $dct = AsDict(AsTuple(1, "foo"), AsTuple(2, "bar"), AsTuple(3, "baz"));
 
 SELECT
@@ -49,7 +53,8 @@ FROM (
 )
     FLATTEN DICT BY x
 ORDER BY
-    x;
+    x
+;
 
 SELECT
     x
@@ -59,7 +64,8 @@ FROM (
 )
     FLATTEN DICT BY x
 ORDER BY
-    x;
+    x
+;
 
 SELECT
     ListSort(DictItems(x))
@@ -67,4 +73,5 @@ FROM (
     SELECT
         Just($dct) AS x
 )
-    FLATTEN OPTIONAL BY x;
+    FLATTEN OPTIONAL BY x
+;

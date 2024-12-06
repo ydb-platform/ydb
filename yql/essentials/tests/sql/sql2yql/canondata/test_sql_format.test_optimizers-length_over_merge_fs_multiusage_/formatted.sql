@@ -7,27 +7,33 @@ $input = (
         key,
         key || subkey AS subkey,
         value
-    FROM Input
+    FROM
+        Input
 );
 
 $total_count = (
     SELECT
         count(1)
-    FROM $input
+    FROM
+        $input
 );
 
 $filtered = (
     SELECT
         *
-    FROM $input
-    WHERE key IN ("023", "037", "075")
+    FROM
+        $input
+    WHERE
+        key IN ("023", "037", "075")
 );
 
 $filtered_cnt = (
     SELECT
         count(1)
-    FROM $filtered
+    FROM
+        $filtered
 );
 
 SELECT
-    $filtered_cnt / CAST($total_count AS Double) AS cnt;
+    $filtered_cnt / CAST($total_count AS Double) AS cnt
+;

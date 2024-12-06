@@ -14,17 +14,20 @@ SELECT
     one.b,
     ListSort(DictItems(two.c)) AS two_c,
     two.d
-FROM AS_TABLE($one)
-    AS one
-INNER JOIN AS_TABLE($two)
-    AS two
-ON one.a == two.c
-LEFT JOIN AS_TABLE($foo)
-    AS foo
-ON foo.e == two.c
-FULL JOIN AS_TABLE($bar)
-    AS bar
-ON bar.g == one.a
+FROM
+    AS_TABLE($one) AS one
+INNER JOIN
+    AS_TABLE($two) AS two
+ON
+    one.a == two.c
+LEFT JOIN
+    AS_TABLE($foo) AS foo
+ON
+    foo.e == two.c
+FULL JOIN
+    AS_TABLE($bar) AS bar
+ON
+    bar.g == one.a
 ORDER BY
     bar_g,
     bar.h,
@@ -33,4 +36,5 @@ ORDER BY
     one_a,
     one.b,
     two_c,
-    two.d;
+    two.d
+;

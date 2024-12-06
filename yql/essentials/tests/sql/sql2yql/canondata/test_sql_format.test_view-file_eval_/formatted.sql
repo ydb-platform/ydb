@@ -8,5 +8,6 @@ SELECT
     k,
     s,
     v
-FROM Input
-    VIEW file_eval;
+FROM
+    Input VIEW file_eval
+;

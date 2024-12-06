@@ -5,8 +5,10 @@ SELECT
     key,
     subkey + 0 AS subkey1,
     value
-FROM Input
+FROM
+    Input
 ORDER BY
     key ASC,
     subkey1 DESC,
-    value;
+    value
+;

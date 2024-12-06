@@ -5,5 +5,8 @@ PRAGMA yt.ColumnGroupMode = "perusage";
 INSERT INTO Output WITH column_groups = "{a=#}"
 SELECT
     *
-FROM Input
-WHERE a != "";
+FROM
+    Input
+WHERE
+    a != ""
+;

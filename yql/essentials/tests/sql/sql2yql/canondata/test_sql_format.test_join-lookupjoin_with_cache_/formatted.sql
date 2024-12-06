@@ -10,19 +10,24 @@ PRAGMA yt.QueryCacheUseForCalc = "true";
 INSERT INTO @tmp WITH truncate
 SELECT
     *
-FROM Input
-WHERE subkey == "bbb"
+FROM
+    Input
+WHERE
+    subkey == "bbb"
 ORDER BY
-    key;
+    key
+;
 COMMIT;
 
 SELECT
     *
-FROM Input
-    AS a
-INNER JOIN @tmp
-    AS b
-ON a.key == b.key
+FROM
+    Input AS a
+INNER JOIN
+    @tmp AS b
+ON
+    a.key == b.key
 ORDER BY
     a.key,
-    a.subkey;
+    a.subkey
+;

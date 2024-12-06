@@ -10,4 +10,6 @@ SELECT
     avg(if(key == 10u, key)),
     avg(if(key == 100u, key)),
     avg(key == 10u)
-FROM Input;
+FROM
+    Input
+;

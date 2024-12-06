@@ -4,8 +4,10 @@ $dict = AsDict(("800", "foo"));
 
 SELECT
     lookup_result
-FROM Input
+FROM
+    Input
 GROUP BY
     $dict[key] ?? "bar" AS lookup_result
 ORDER BY
-    lookup_result;
+    lookup_result
+;

@@ -14,4 +14,5 @@ SELECT
     CASE
         WHEN NULL THEN 'FOO3'
         ELSE 'BAR3'
-    END;
+    END
+;

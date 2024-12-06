@@ -24,4 +24,6 @@ SELECT
     cs_ext_list_price / 13,
     cs_ext_list_price % Just(13),
     cs_ext_list_price % 13,
-FROM Input;
+FROM
+    Input
+;

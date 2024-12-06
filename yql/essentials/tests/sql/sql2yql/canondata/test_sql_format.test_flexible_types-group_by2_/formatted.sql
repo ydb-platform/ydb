@@ -12,11 +12,14 @@ $groupsrc =
     UNION ALL
     SELECT
         "1" AS key,
-        "3" AS String;
+        "3" AS String
+;
 $foo = ($k, $t) -> (FormatType($t) || '_' || $k);
 
 SELECT
     $foo(key, String)
-FROM $groupsrc
+FROM
+    $groupsrc
 GROUP BY
-    key;
+    key
+;

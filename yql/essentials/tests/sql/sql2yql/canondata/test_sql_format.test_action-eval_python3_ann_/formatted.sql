@@ -13,4 +13,5 @@ def f(x:Int32, y:Int32)->Int32:
 $f = Python3::f($script);
 
 SELECT
-    $f(1, 2);
+    $f(1, 2)
+;

@@ -8,7 +8,8 @@ $foo =
         subkey,
         key,
         value AS v
-    FROM Input
+    FROM
+        Input
     ORDER BY
         subkey ASC,
         key DESC
@@ -18,4 +19,5 @@ $x =
     PROCESS $foo;
 
 SELECT
-    YQL::ConstraintsOf($x) AS constraints;
+    YQL::ConstraintsOf($x) AS constraints
+;

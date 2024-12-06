@@ -7,9 +7,11 @@ $values = ListMap(
 INSERT INTO @table
 SELECT
     *
-FROM AS_TABLE($values)
+FROM
+    AS_TABLE($values)
 ORDER BY
-    x DESC;
+    x DESC
+;
 COMMIT;
 $splitter = ($row) -> {
     $recordType = TypeOf($row);
@@ -29,20 +31,28 @@ $a, $b, $c, $d = (
 
 SELECT
     *
-FROM $a;
+FROM
+    $a
+;
 
 SELECT
     *
-FROM $b;
+FROM
+    $b
+;
 
 SELECT
     *
-FROM $c
+FROM
+    $c
 ORDER BY
-    x DESC;
+    x DESC
+;
 
 SELECT
     *
-FROM $d
+FROM
+    $d
 ORDER BY
-    x DESC;
+    x DESC
+;

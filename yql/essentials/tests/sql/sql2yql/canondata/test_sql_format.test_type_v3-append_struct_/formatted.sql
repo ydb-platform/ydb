@@ -8,22 +8,31 @@ PRAGMA yt.UseNativeYtTypes = "1";
 INSERT INTO Input
 SELECT
     "10" AS key,
-    <|a: "10", b: Just(10), c: "e"|> AS subkey;
+    <|a: "10", b: Just(10), c: "e"|> AS subkey
+;
 COMMIT;
 
 INSERT INTO Input
 SELECT
     *
-FROM Input
-WHERE key > "100";
+FROM
+    Input
+WHERE
+    key > "100"
+;
 
 INSERT INTO Input
 SELECT
     *
-FROM Input
-WHERE key <= "100";
+FROM
+    Input
+WHERE
+    key <= "100"
+;
 COMMIT;
 
 SELECT
     *
-FROM Input;
+FROM
+    Input
+;

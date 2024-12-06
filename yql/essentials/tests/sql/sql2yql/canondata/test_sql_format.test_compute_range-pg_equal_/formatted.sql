@@ -12,7 +12,8 @@ SELECT
         Struct<a: PgFloat8, b: PgText>,
         ($row) -> (FromPg(PgOp("<>", $row.a, 2.0pf8)) ?? FALSE),
         AsTuple(AsAtom("a"))
-    );
+    )
+;
 
 -- b == 'foo'
 SELECT
@@ -20,4 +21,5 @@ SELECT
         Struct<a: PgInt4, b: PgText>,
         ($row) -> (($row.b == 'foo'p) ?? FALSE),
         AsTuple(AsAtom("b"))
-    );
+    )
+;

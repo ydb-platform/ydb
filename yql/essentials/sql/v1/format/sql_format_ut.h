@@ -13,7 +13,7 @@ Y_UNIT_TEST(Pragma) {
 
 Y_UNIT_TEST(DotAfterDigits) {
     TCases cases = {
-        {"select a.1 .b from plato.foo;","SELECT\n\ta.1 .b\nFROM plato.foo;\n"},
+        {"select a.1 .b from plato.foo;","SELECT\n\ta.1 .b\nFROM\n\tplato.foo\n;\n"},
     };
 
     TSetup setup;
@@ -201,7 +201,7 @@ Y_UNIT_TEST(NamedNode) {
     TCases cases = {
         {"$x=1","$x = 1;\n"},
         {"$x,$y=(2,3)","$x, $y = (2, 3);\n"},
-        {"$a = select 1 union all select 2","$a =\n\tSELECT\n\t\t1\n\tUNION ALL\n\tSELECT\n\t\t2;\n"},
+        {"$a = select 1 union all select 2","$a =\n\tSELECT\n\t\t1\n\tUNION ALL\n\tSELECT\n\t\t2\n;\n"},
     };
 
     TSetup setup;
@@ -265,8 +265,8 @@ Y_UNIT_TEST(CreateTable) {
             "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo')\n);\n"},
         {"create table user(changefeed user with (user='foo',user='bar'))",
             "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo', user = 'bar')\n);\n"},
-        {"create table user(user) AS SELECT 1","CREATE TABLE user (\n\tuser\n)\nAS\nSELECT\n    1;\n"},
-        {"create table user(user) AS VALUES (1), (2)","CREATE TABLE user (\n\tuser\n)\nAS\nVALUES\n    (1),\n    (2);\n"},
+        {"create table user(user) AS SELECT 1","CREATE TABLE user (\n\tuser\n)\nAS\nSELECT\n\t1\n;\n"},
+        {"create table user(user) AS VALUES (1), (2)","CREATE TABLE user (\n\tuser\n)\nAS\nVALUES\n\t(1),\n\t(2);\n"},
         {"create table user(foo int32, bar bool ?) inherits (s3:$cluster.xxx) partition by hash(a,b,hash) with (inherits=interval('PT1D') ON logical_time) tablestore tablestore",
             "CREATE TABLE user (\n"
             "\tfoo int32,\n"
@@ -391,7 +391,7 @@ Y_UNIT_TEST(ExternalTableOperations) {
 Y_UNIT_TEST(TypeSelection) {
     TCases cases = {
         {"Select tYpe.* frOm Table tYpe",
-            "SELECT\n\ttYpe.*\nFROM Table\n\ttYpe;\n"}
+            "SELECT\n\ttYpe.*\nFROM\n\tTable tYpe\n;\n"}
     };
 
     TSetup setup;
@@ -555,7 +555,7 @@ Y_UNIT_TEST(DefineActionOrSubquery) {
             "end define",
             "DEFINE ACTION $a() AS\n\tDEFINE ACTION $b() AS\n\t\t"
             "VALUES\n\t\t\t(1);\n\tEND DEFINE;\n\n\t"
-            "DEFINE SUBQUERY $c() AS\n\t\tSELECT\n\t\t\t1;\n\t"
+            "DEFINE SUBQUERY $c() AS\n\t\tSELECT\n\t\t\t1\n\t\t;\n\t"
             "END DEFINE;\n\tDO\n\t\t$b()\n\t;\n\n\tPROCESS $c();\nEND DEFINE;\n"},
     };
 
@@ -570,10 +570,10 @@ Y_UNIT_TEST(If) {
         {"evaluate if 1=1 do $a() else do $b()",
             "EVALUATE IF 1 == 1 DO\n\t$a()\nELSE DO\n\t$b()\n;\n"},
         {"evaluate if 1=1 do begin select 1; end do",
-            "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1;\nEND DO;\n"},
+            "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1\n\t;\nEND DO;\n"},
         {"evaluate if 1=1 do begin select 1; end do else do begin select 2; end do",
-            "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1;\nEND DO "
-            "ELSE DO BEGIN\n\tSELECT\n\t\t2;\nEND DO;\n"},
+            "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1\n\t;\nEND DO "
+            "ELSE DO BEGIN\n\tSELECT\n\t\t2\n\t;\nEND DO;\n"},
     };
 
     TSetup setup;
@@ -587,9 +587,9 @@ Y_UNIT_TEST(For) {
         {"evaluate for $x in [] do $a($x) else do $b()",
             "EVALUATE FOR $x IN [] DO\n\t$a($x)\nELSE DO\n\t$b()\n;\n"},
         {"evaluate for $x in [] do begin select $x; end do",
-            "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x;\nEND DO;\n"},
+            "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x\n\t;\nEND DO;\n"},
         {"evaluate for $x in [] do begin select $x; end do else do begin select 2; end do",
-            "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x;\nEND DO ELSE DO BEGIN\n\tSELECT\n\t\t2;\nEND DO;\n"},
+            "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x\n\t;\nEND DO ELSE DO BEGIN\n\tSELECT\n\t\t2\n\t;\nEND DO;\n"},
         {"evaluate parallel for $x in [] do $a($x)",
             "EVALUATE PARALLEL FOR $x IN [] DO\n\t$a($x)\n;\n"},
     };
@@ -605,15 +605,15 @@ Y_UNIT_TEST(Update) {
         {"update user on values (1),(2)",
             "UPDATE user\nON\nVALUES\n\t(1),\n\t(2);\n"},
         {"update user on select 1 as x, 2 as y",
-            "UPDATE user\nON\nSELECT\n\t1 AS x,\n\t2 AS y;\n"},
+            "UPDATE user\nON\nSELECT\n\t1 AS x,\n\t2 AS y\n;\n"},
         {"update user on (x) values (1),(2),(3)",
             "UPDATE user\nON (\n\tx\n)\nVALUES\n\t(1),\n\t(2),\n\t(3);\n"},
         {"update user on (x,y) values (1,2),(2,3),(3,4)",
             "UPDATE user\nON (\n\tx,\n\ty\n)\nVALUES\n\t(1, 2),\n\t(2, 3),\n\t(3, 4);\n"},
         {"update user on (x) select 1",
-            "UPDATE user\nON (\n\tx\n)\nSELECT\n\t1;\n"},
+            "UPDATE user\nON (\n\tx\n)\nSELECT\n\t1\n;\n"},
         {"update user on (x,y) select 1,2",
-            "UPDATE user\nON (\n\tx,\n\ty\n)\nSELECT\n\t1,\n\t2;\n"},
+            "UPDATE user\nON (\n\tx,\n\ty\n)\nSELECT\n\t1,\n\t2\n;\n"},
         {"update user set x=1",
             "UPDATE user\nSET\n\tx = 1;\n"},
         {"update user set (x)=(1)",
@@ -637,7 +637,7 @@ Y_UNIT_TEST(Delete) {
         {"delete from user where 1=1",
             "DELETE FROM user\nWHERE 1 == 1;\n"},
         {"delete from user on select 1 as x, 2 as y",
-            "DELETE FROM user\nON\nSELECT\n\t1 AS x,\n\t2 AS y;\n"},
+            "DELETE FROM user\nON\nSELECT\n\t1 AS x,\n\t2 AS y\n;\n"},
         {"delete from user on (x) values (1)",
             "DELETE FROM user\nON (\n\tx\n)\nVALUES\n\t(1);\n"},
         {"delete from user on (x,y) values (1,2), (3,4)",
@@ -651,39 +651,39 @@ Y_UNIT_TEST(Delete) {
 Y_UNIT_TEST(Into) {
     TCases cases = {
         {"insert into user select 1 as x",
-            "INSERT INTO user\nSELECT\n\t1 AS x;\n"},
+            "INSERT INTO user\nSELECT\n\t1 AS x\n;\n"},
         {"insert or abort into user select 1 as x",
-            "INSERT OR ABORT INTO user\nSELECT\n\t1 AS x;\n"},
+            "INSERT OR ABORT INTO user\nSELECT\n\t1 AS x\n;\n"},
         {"insert or revert into user select 1 as x",
-            "INSERT OR REVERT INTO user\nSELECT\n\t1 AS x;\n"},
+            "INSERT OR REVERT INTO user\nSELECT\n\t1 AS x\n;\n"},
         {"insert or ignore into user select 1 as x",
-            "INSERT OR IGNORE INTO user\nSELECT\n\t1 AS x;\n"},
+            "INSERT OR IGNORE INTO user\nSELECT\n\t1 AS x\n;\n"},
         {"upsert into user select 1 as x",
-            "UPSERT INTO user\nSELECT\n\t1 AS x;\n"},
+            "UPSERT INTO user\nSELECT\n\t1 AS x\n;\n"},
         {"replace into user select 1 as x",
-            "REPLACE INTO user\nSELECT\n\t1 AS x;\n"},
+            "REPLACE INTO user\nSELECT\n\t1 AS x\n;\n"},
         {"insert into user(x) values (1)",
             "INSERT INTO user (\n\tx\n)\nVALUES\n\t(1);\n"},
         {"insert into user(x,y) values (1,2)",
             "INSERT INTO user (\n\tx,\n\ty\n)\nVALUES\n\t(1, 2);\n"},
         {"insert into plato.user select 1 as x",
-            "INSERT INTO plato.user\nSELECT\n\t1 AS x;\n"},
+            "INSERT INTO plato.user\nSELECT\n\t1 AS x\n;\n"},
         {"insert into @user select 1 as x",
-            "INSERT INTO @user\nSELECT\n\t1 AS x;\n"},
+            "INSERT INTO @user\nSELECT\n\t1 AS x\n;\n"},
         {"insert into $user select 1 as x",
-            "INSERT INTO $user\nSELECT\n\t1 AS x;\n"},
+            "INSERT INTO $user\nSELECT\n\t1 AS x\n;\n"},
         {"insert into @$user select 1 as x",
-            "INSERT INTO @$user\nSELECT\n\t1 AS x;\n"},
+            "INSERT INTO @$user\nSELECT\n\t1 AS x\n;\n"},
         {"upsert into user erase by (x,y) values (1)",
             "UPSERT INTO user\n\tERASE BY (\n\t\tx,\n\t\ty\n\t)\nVALUES\n\t(1);\n"},
         {"insert into user with truncate select 1 as x",
-            "INSERT INTO user WITH truncate\nSELECT\n\t1 AS x;\n"},
+            "INSERT INTO user WITH truncate\nSELECT\n\t1 AS x\n;\n"},
         {"insert into user with (truncate,inferscheme='1') select 1 as x",
-            "INSERT INTO user WITH (\n\ttruncate,\n\tinferscheme = '1'\n)\nSELECT\n\t1 AS x;\n"},
+            "INSERT INTO user WITH (\n\ttruncate,\n\tinferscheme = '1'\n)\nSELECT\n\t1 AS x\n;\n"},
         {"insert into user with schema Struct<user:int32> select 1 as user",
-            "INSERT INTO user WITH SCHEMA Struct<user: int32>\nSELECT\n\t1 AS user;\n"},
+            "INSERT INTO user WITH SCHEMA Struct<user: int32>\nSELECT\n\t1 AS user\n;\n"},
         {"insert into user with schema (int32 as user) select 1 as user",
-            "INSERT INTO user WITH SCHEMA (int32 AS user)\nSELECT\n\t1 AS user;\n"},
+            "INSERT INTO user WITH SCHEMA (int32 AS user)\nSELECT\n\t1 AS user\n;\n"},
     };
 
     TSetup setup;
@@ -699,7 +699,7 @@ Y_UNIT_TEST(Process) {
         {"process user,user using $f()",
             "PROCESS user, user\nUSING $f();\n"},
         {"process user using $f() where 1=1 having 1=1 assume order by user",
-            "PROCESS user\nUSING $f()\nWHERE 1 == 1\nHAVING 1 == 1\nASSUME ORDER BY\n\tuser;\n"},
+            "PROCESS user\nUSING $f()\nWHERE\n\t1 == 1\nHAVING\n\t1 == 1\nASSUME ORDER BY\n\tuser\n;\n"},
         {"process user using $f() union all process user using $f()",
             "PROCESS user\nUSING $f()\nUNION ALL\nPROCESS user\nUSING $f();\n"},
         {"process user using $f() with foo=bar",
@@ -733,7 +733,7 @@ Y_UNIT_TEST(Reduce) {
         {"reduce user on user,user using $f()",
             "REDUCE user\nON\n\tuser,\n\tuser\nUSING $f();\n"},
         {"reduce user on user using $f() where 1=1 having 1=1 assume order by user",
-            "REDUCE user\nON\n\tuser\nUSING $f()\nWHERE 1 == 1\nHAVING 1 == 1\nASSUME ORDER BY\n\tuser;\n"},
+            "REDUCE user\nON\n\tuser\nUSING $f()\nWHERE\n\t1 == 1\nHAVING\n\t1 == 1\nASSUME ORDER BY\n\tuser\n;\n"},
         {"reduce user presort user,user on user using $f();",
             "REDUCE user\nPRESORT\n\tuser,\n\tuser\nON\n\tuser\nUSING $f();\n"},
     };
@@ -745,111 +745,111 @@ Y_UNIT_TEST(Reduce) {
 Y_UNIT_TEST(Select) {
     TCases cases = {
         {"select 1",
-            "SELECT\n\t1;\n"},
+            "SELECT\n\t1\n;\n"},
         {"select 1,",
-            "SELECT\n\t1,;\n"},
+            "SELECT\n\t1,\n;\n"},
         {"select 1 as x",
-            "SELECT\n\t1 AS x;\n"},
+            "SELECT\n\t1 AS x\n;\n"},
         {"select *",
-            "SELECT\n\t*;\n"},
+            "SELECT\n\t*\n;\n"},
         {"select a.*",
-            "SELECT\n\ta.*;\n"},
+            "SELECT\n\ta.*\n;\n"},
         {"select * without a",
-            "SELECT\n\t*\nWITHOUT\n\ta;\n"},
+            "SELECT\n\t*\nWITHOUT\n\ta\n;\n"},
         {"select * without a,b",
-            "SELECT\n\t*\nWITHOUT\n\ta,\n\tb;\n"},
+            "SELECT\n\t*\nWITHOUT\n\ta,\n\tb\n;\n"},
         {"select * without a,",
-            "SELECT\n\t*\nWITHOUT\n\ta,;\n"},
+            "SELECT\n\t*\nWITHOUT\n\ta,\n;\n"},
         {"select 1 from user",
-            "SELECT\n\t1\nFROM user;\n"},
+            "SELECT\n\t1\nFROM\n\tuser\n;\n"},
         {"select 1 from plato.user",
-            "SELECT\n\t1\nFROM plato.user;\n"},
+            "SELECT\n\t1\nFROM\n\tplato.user\n;\n"},
         {"select 1 from $user",
-            "SELECT\n\t1\nFROM $user;\n"},
+            "SELECT\n\t1\nFROM\n\t$user\n;\n"},
         {"select 1 from @user",
-            "SELECT\n\t1\nFROM @user;\n"},
+            "SELECT\n\t1\nFROM\n\t@user\n;\n"},
         {"select 1 from @$user",
-            "SELECT\n\t1\nFROM @$user;\n"},
+            "SELECT\n\t1\nFROM\n\t@$user\n;\n"},
         {"select 1 from user view user",
-            "SELECT\n\t1\nFROM user\n\tVIEW user;\n"},
+            "SELECT\n\t1\nFROM\n\tuser VIEW user\n;\n"},
         {"select 1 from user as user",
-            "SELECT\n\t1\nFROM user\n\tAS user;\n"},
+            "SELECT\n\t1\nFROM\n\tuser AS user\n;\n"},
         {"select 1 from user as user(user)",
-            "SELECT\n\t1\nFROM user\n\tAS user (\n\t\tuser\n\t);\n"},
+            "SELECT\n\t1\nFROM\n\tuser AS user (\n\t\tuser\n\t)\n;\n"},
         {"select 1 from user as user(user, user)",
-            "SELECT\n\t1\nFROM user\n\tAS user (\n\t\tuser,\n\t\tuser\n\t);\n"},
+            "SELECT\n\t1\nFROM\n\tuser AS user (\n\t\tuser,\n\t\tuser\n\t)\n;\n"},
         {"select 1 from user with user=user",
-            "SELECT\n\t1\nFROM user\n\tWITH user = user;\n"},
+            "SELECT\n\t1\nFROM\n\tuser WITH user = user\n;\n"},
         {"select 1 from user with (user=user, user=user)",
-            "SELECT\n\t1\nFROM user\n\tWITH (\n\t\tuser = user,\n\t\tuser = user\n\t);\n"},
+            "SELECT\n\t1\nFROM\n\tuser WITH (\n\t\tuser = user,\n\t\tuser = user\n\t)\n;\n"},
         {"select 1 from user sample 0.1",
-            "SELECT\n\t1\nFROM user\n\tSAMPLE 0.1;\n"},
+            "SELECT\n\t1\nFROM\n\tuser\n\tSAMPLE 0.1\n;\n"},
         {"select 1 from user tablesample system(0.1)",
-            "SELECT\n\t1\nFROM user\n\tTABLESAMPLE SYSTEM (0.1);\n"},
+            "SELECT\n\t1\nFROM\n\tuser\n\tTABLESAMPLE SYSTEM (0.1)\n;\n"},
         {"select 1 from user tablesample bernoulli(0.1) repeatable(10)",
-            "SELECT\n\t1\nFROM user\n\tTABLESAMPLE BERNOULLI (0.1) REPEATABLE (10);\n"},
+            "SELECT\n\t1\nFROM\n\tuser\n\tTABLESAMPLE BERNOULLI (0.1) REPEATABLE (10)\n;\n"},
         {"select 1 from user flatten columns",
-            "SELECT\n\t1\nFROM user\n\tFLATTEN COLUMNS;\n"},
+            "SELECT\n\t1\nFROM\n\tuser\n\tFLATTEN COLUMNS\n;\n"},
         {"select 1 from user flatten list by user",
-            "SELECT\n\t1\nFROM user\n\tFLATTEN LIST BY user;\n"},
+            "SELECT\n\t1\nFROM\n\tuser\n\tFLATTEN LIST BY user\n;\n"},
         {"select 1 from user flatten list by (user,user)",
-            "SELECT\n\t1\nFROM user\n\tFLATTEN LIST BY (\n\t\tuser,\n\t\tuser\n\t);\n"},
+            "SELECT\n\t1\nFROM\n\tuser\n\tFLATTEN LIST BY (\n\t\tuser,\n\t\tuser\n\t)\n;\n"},
         {"select 1 from $user(1,2)",
-            "SELECT\n\t1\nFROM $user(1, 2);\n"},
+            "SELECT\n\t1\nFROM\n\t$user(1, 2)\n;\n"},
         {"select 1 from $user(1,2) view user",
-            "SELECT\n\t1\nFROM $user(1, 2)\n\tVIEW user;\n"},
+            "SELECT\n\t1\nFROM\n\t$user(1, 2) VIEW user\n;\n"},
         {"select 1 from range('a','b')",
-            "SELECT\n\t1\nFROM range('a', 'b');\n"},
+            "SELECT\n\t1\nFROM\n\trange('a', 'b')\n;\n"},
         {"from user select 1",
-            "FROM user\nSELECT\n\t1;\n"},
+            "FROM\n\tuser\nSELECT\n\t1\n;\n"},
         {"select * from user as a join user as b on a.x=b.y",
-            "SELECT\n\t*\nFROM user\n\tAS a\nJOIN user\n\tAS b\nON a.x == b.y;\n"},
+            "SELECT\n\t*\nFROM\n\tuser AS a\nJOIN\n\tuser AS b\nON\n\ta.x == b.y\n;\n"},
         {"select * from user as a join user as b using(x)",
-            "SELECT\n\t*\nFROM user\n\tAS a\nJOIN user\n\tAS b\nUSING (x);\n"},
+            "SELECT\n\t*\nFROM\n\tuser AS a\nJOIN\n\tuser AS b\nUSING (x);\n"},
         {"select * from any user as a full join user as b on a.x=b.y",
-            "SELECT\n\t*\nFROM ANY user\n\tAS a\nFULL JOIN user\n\tAS b\nON a.x == b.y;\n"},
+            "SELECT\n\t*\nFROM ANY\n\tuser AS a\nFULL JOIN\n\tuser AS b\nON\n\ta.x == b.y\n;\n"},
         {"select * from user as a left join any user as b on a.x=b.y",
-            "SELECT\n\t*\nFROM user\n\tAS a\nLEFT JOIN ANY user\n\tAS b\nON a.x == b.y;\n"},
+            "SELECT\n\t*\nFROM\n\tuser AS a\nLEFT JOIN ANY\n\tuser AS b\nON\n\ta.x == b.y\n;\n"},
         {"select * from any user as a right join any user as b on a.x=b.y",
-            "SELECT\n\t*\nFROM ANY user\n\tAS a\nRIGHT JOIN ANY user\n\tAS b\nON a.x == b.y;\n"},
+            "SELECT\n\t*\nFROM ANY\n\tuser AS a\nRIGHT JOIN ANY\n\tuser AS b\nON\n\ta.x == b.y\n;\n"},
         {"select * from user as a cross join user as b",
-            "SELECT\n\t*\nFROM user\n\tAS a\nCROSS JOIN user\n\tAS b;\n"},
+            "SELECT\n\t*\nFROM\n\tuser AS a\nCROSS JOIN\n\tuser AS b\n;\n"},
         {"select 1 from user where key = 1",
-            "SELECT\n\t1\nFROM user\nWHERE key == 1;\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nWHERE\n\tkey == 1\n;\n"},
         {"select 1 from user having count(*) = 1",
-            "SELECT\n\t1\nFROM user\nHAVING count(*) == 1;\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nHAVING\n\tcount(*) == 1\n;\n"},
         {"select 1 from user group by key",
-            "SELECT\n\t1\nFROM user\nGROUP BY\n\tkey;\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nGROUP BY\n\tkey\n;\n"},
         {"select 1 from user group compact by key, value as v",
-            "SELECT\n\t1\nFROM user\nGROUP COMPACT BY\n\tkey,\n\tvalue AS v;\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nGROUP COMPACT BY\n\tkey,\n\tvalue AS v\n;\n"},
         {"select 1 from user group by key with combine",
-            "SELECT\n\t1\nFROM user\nGROUP BY\n\tkey\n\tWITH combine;\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nGROUP BY\n\tkey\n\tWITH combine\n;\n"},
         {"select 1 from user order by key asc",
-            "SELECT\n\t1\nFROM user\nORDER BY\n\tkey ASC;\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nORDER BY\n\tkey ASC\n;\n"},
         {"select 1 from user order by key, value desc",
-            "SELECT\n\t1\nFROM user\nORDER BY\n\tkey,\n\tvalue DESC;\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nORDER BY\n\tkey,\n\tvalue DESC\n;\n"},
         {"select 1 from user assume order by key",
-            "SELECT\n\t1\nFROM user\nASSUME ORDER BY\n\tkey;\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nASSUME ORDER BY\n\tkey\n;\n"},
         {"select 1 from user window w1 as (), w2 as ()",
-            "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (),\n\tw2 AS ();\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nWINDOW\n\tw1 AS (),\n\tw2 AS ()\n;\n"},
         {"select 1 from user window w1 as (user)",
-            "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tuser\n\t);\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nWINDOW\n\tw1 AS (\n\t\tuser\n\t)\n;\n"},
         {"select 1 from user window w1 as (partition by user)",
-            "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tPARTITION BY\n\t\t\tuser\n\t);\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nWINDOW\n\tw1 AS (\n\t\tPARTITION BY\n\t\t\tuser\n\t)\n;\n"},
         {"select 1 from user window w1 as (partition by user, user)",
-            "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tPARTITION BY\n\t\t\tuser,\n\t\t\tuser\n\t);\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nWINDOW\n\tw1 AS (\n\t\tPARTITION BY\n\t\t\tuser,\n\t\t\tuser\n\t)\n;\n"},
         {"select 1 from user window w1 as (order by user asc)",
-            "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tORDER BY\n\t\t\tuser ASC\n\t);\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nWINDOW\n\tw1 AS (\n\t\tORDER BY\n\t\t\tuser ASC\n\t)\n;\n"},
         {"select 1 from user window w1 as (order by user, user desc)",
-            "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tORDER BY\n\t\t\tuser,\n\t\t\tuser DESC\n\t);\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nWINDOW\n\tw1 AS (\n\t\tORDER BY\n\t\t\tuser,\n\t\t\tuser DESC\n\t)\n;\n"},
         {"select 1 from user window w1 as (rows between 1 preceding and 1 following)",
-            "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING\n\t);\n"},
+            "SELECT\n\t1\nFROM\n\tuser\nWINDOW\n\tw1 AS (\n\t\tROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING\n\t)\n;\n"},
         {"select 1 limit 10",
             "SELECT\n\t1\nLIMIT 10;\n"},
         {"select 1 limit 10 offset 5",
             "SELECT\n\t1\nLIMIT 10 OFFSET 5;\n"},
         { "select 1 union all select 2",
-            "SELECT\n\t1\nUNION ALL\nSELECT\n\t2;\n" },
+            "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\n;\n" },
     };
 
     TSetup setup;
@@ -861,7 +861,7 @@ Y_UNIT_TEST(CompositeTypesAndQuestions) {
         {"declare $_x AS list<int32>??;declare $_y AS int32 ? ? ;select 1<>2, 1??2,"
             "formattype(list<int32>), formattype(resource<user>),formattype(tuple<>), formattype(tuple<  >), formattype(int32 ? ? )",
             "DECLARE $_x AS list<int32>??;\nDECLARE $_y AS int32??;\n\nSELECT\n\t1 != 2,\n\t1 ?? 2,\n\tformattype(list<int32>),"
-        "\n\tformattype(resource<user>),\n\tformattype(tuple<>),\n\tformattype(tuple< >),\n\tformattype(int32??" ");\n"
+        "\n\tformattype(resource<user>),\n\tformattype(tuple<>),\n\tformattype(tuple< >),\n\tformattype(int32??" ")\n;\n"
         },
     };
 
@@ -874,7 +874,7 @@ Y_UNIT_TEST(Lambda) {
         {"$f=($a,$b)->{$x=$a+$b;return $a*$x};$g=($a,$b?)->($a+$b??0);select $f(10,4),$g(1,2);",
             "$f = ($a, $b) -> {\n\t$x = $a + $b;\n\tRETURN $a * $x\n};\n"
             "$g = ($a, $b?) -> ($a + $b ?? 0);\n\n"
-        "SELECT\n\t$f(10, 4),\n\t$g(1, 2);\n"},
+        "SELECT\n\t$f(10, 4),\n\t$g(1, 2)\n;\n"},
     };
 
     TSetup setup;
@@ -884,15 +884,15 @@ Y_UNIT_TEST(Lambda) {
 Y_UNIT_TEST(NestedSelect) {
     TCases cases = {
         {"$x=select 1",
-            "$x =\n\tSELECT\n\t\t1;\n"},
+            "$x =\n\tSELECT\n\t\t1\n;\n"},
         {"$x=(select 1)",
             "$x = (\n\tSELECT\n\t\t1\n);\n"},
         {"select 1 in (select 1)",
-            "SELECT\n\t1 IN (\n\t\tSELECT\n\t\t\t1\n\t);\n"},
+            "SELECT\n\t1 IN (\n\t\tSELECT\n\t\t\t1\n\t)\n;\n"},
         {"select 1 in ((select 1))",
-            "SELECT\n\t1 IN (\n\t\t(\n\t\t\tSELECT\n\t\t\t\t1\n\t\t)\n\t);\n"},
+            "SELECT\n\t1 IN (\n\t\t(\n\t\t\tSELECT\n\t\t\t\t1\n\t\t)\n\t)\n;\n"},
         {"select 1 in (\nselect 1)",
-            "SELECT\n\t1 IN (\n\t\tSELECT\n\t\t\t1\n\t);\n"},
+            "SELECT\n\t1 IN (\n\t\tSELECT\n\t\t\t1\n\t)\n;\n"},
     };
 
     TSetup setup;
@@ -901,8 +901,8 @@ Y_UNIT_TEST(NestedSelect) {
 
 Y_UNIT_TEST(Cast) {
     TCases cases = {
-        {"select cast(1 as string)","SELECT\n\tCAST(1 AS string);\n"},
-        {"select bitcast(1 as int32)","SELECT\n\tBITCAST(1 AS int32);\n"},
+        {"select cast(1 as string)","SELECT\n\tCAST(1 AS string)\n;\n"},
+        {"select bitcast(1 as int32)","SELECT\n\tBITCAST(1 AS int32)\n;\n"},
     };
 
     TSetup setup;
@@ -911,9 +911,9 @@ Y_UNIT_TEST(Cast) {
 
 Y_UNIT_TEST(StructLiteral) {
     TCases cases = {
-        {"select <||>","SELECT\n\t<||>;\n"},
-        {"select <|a:1|>","SELECT\n\t<|a: 1|>;\n"},
-        {"select <|a:1,b:2|>","SELECT\n\t<|a: 1, b: 2|>;\n"},
+        {"select <||>","SELECT\n\t<||>\n;\n"},
+        {"select <|a:1|>","SELECT\n\t<|a: 1|>\n;\n"},
+        {"select <|a:1,b:2|>","SELECT\n\t<|a: 1, b: 2|>\n;\n"},
     };
 
     TSetup setup;
@@ -923,11 +923,11 @@ Y_UNIT_TEST(StructLiteral) {
 Y_UNIT_TEST(TableHints) {
     TCases cases = {
         {"select * from plato.T with schema(foo int32, bar list<string>) where key is not null",
-            "SELECT\n\t*\nFROM plato.T\n\tWITH SCHEMA (foo int32, bar list<string>)\nWHERE key IS NOT NULL;\n"},
+            "SELECT\n\t*\nFROM\n\tplato.T WITH SCHEMA (foo int32, bar list<string>)\nWHERE\n\tkey IS NOT NULL\n;\n"},
         {"select * from plato.T with schema struct<foo:integer, Bar:list<string?>> where key<0",
-            "SELECT\n\t*\nFROM plato.T\n\tWITH SCHEMA struct<foo: integer, Bar: list<string?>>\nWHERE key < 0;\n"},
+            "SELECT\n\t*\nFROM\n\tplato.T WITH SCHEMA struct<foo: integer, Bar: list<string?>>\nWHERE\n\tkey < 0\n;\n"},
         {"select * from plato.T with (foo=bar, x=$y, a=(a, b, c), u='aaa', schema (foo int32, bar list<string>))",
-            "SELECT\n\t*\nFROM plato.T\n\tWITH (\n\t\tfoo = bar,\n\t\tx = $y,\n\t\ta = (a, b, c),\n\t\tu = 'aaa',\n\t\tSCHEMA (foo int32, bar list<string>)\n\t);\n"},
+            "SELECT\n\t*\nFROM\n\tplato.T WITH (\n\t\tfoo = bar,\n\t\tx = $y,\n\t\ta = (a, b, c),\n\t\tu = 'aaa',\n\t\tSCHEMA (foo int32, bar list<string>)\n\t)\n;\n"},
     };
 
     TSetup setup;
@@ -937,7 +937,7 @@ Y_UNIT_TEST(TableHints) {
 Y_UNIT_TEST(BoolAsVariableName) {
     TCases cases = {
         {"$ False = True; select $ False;",
-            "$False = TRUE;\n\nSELECT\n\t$False;\n"},
+            "$False = TRUE;\n\nSELECT\n\t$False\n;\n"},
     };
 
     TSetup setup;
@@ -947,7 +947,7 @@ Y_UNIT_TEST(BoolAsVariableName) {
 Y_UNIT_TEST(WithSchemaEquals) {
     TCases cases = {
         {"select * from plato.T with (format= csv_with_names, schema=(year int32 Null, month String, day String not   null, a Utf8, b Uint16));",
-            "SELECT\n\t*\nFROM plato.T\n\tWITH (\n\t\tformat = csv_with_names,\n\t\tSCHEMA = (year int32 NULL, month String, day String NOT NULL, a Utf8, b Uint16)\n\t);\n"},
+            "SELECT\n\t*\nFROM\n\tplato.T WITH (\n\t\tformat = csv_with_names,\n\t\tSCHEMA = (year int32 NULL, month String, day String NOT NULL, a Utf8, b Uint16)\n\t)\n;\n"},
             };
 
     TSetup setup;
@@ -957,7 +957,7 @@ Y_UNIT_TEST(WithSchemaEquals) {
 Y_UNIT_TEST(SquareBrackets) {
     TCases cases = {
         {"select a[0]",
-            "SELECT\n\ta[0];\n"},
+            "SELECT\n\ta[0]\n;\n"},
     };
 
     TSetup setup;
@@ -967,23 +967,23 @@ Y_UNIT_TEST(SquareBrackets) {
 Y_UNIT_TEST(MultiLineList) {
     TCases cases = {
         {"select [\n]",
-            "SELECT\n\t[\n\t];\n"},
+            "SELECT\n\t[\n\t]\n;\n"},
         {"select [1\n]",
-            "SELECT\n\t[\n\t\t1\n\t];\n"},
+            "SELECT\n\t[\n\t\t1\n\t]\n;\n"},
         {"select [\n1]",
-            "SELECT\n\t[\n\t\t1\n\t];\n"},
+            "SELECT\n\t[\n\t\t1\n\t]\n;\n"},
         {"select [1,\n]",
-            "SELECT\n\t[\n\t\t1,\n\t];\n"},
+            "SELECT\n\t[\n\t\t1,\n\t]\n;\n"},
         {"select [1\n,]",
-            "SELECT\n\t[\n\t\t1,\n\t];\n"},
+            "SELECT\n\t[\n\t\t1,\n\t]\n;\n"},
         {"select [\n1,]",
-            "SELECT\n\t[\n\t\t1,\n\t];\n"},
+            "SELECT\n\t[\n\t\t1,\n\t]\n;\n"},
         {"select [1,2,\n3,4]",
-            "SELECT\n\t[\n\t\t1, 2,\n\t\t3, 4\n\t];\n"},
+            "SELECT\n\t[\n\t\t1, 2,\n\t\t3, 4\n\t]\n;\n"},
         {"select [1,2,\n3,4,]",
-            "SELECT\n\t[\n\t\t1, 2,\n\t\t3, 4,\n\t];\n"},
+            "SELECT\n\t[\n\t\t1, 2,\n\t\t3, 4,\n\t]\n;\n"},
         {"select [1,2\n,3,\n4\n,5]",
-            "SELECT\n\t[\n\t\t1, 2,\n\t\t3,\n\t\t4,\n\t\t5\n\t];\n"},
+            "SELECT\n\t[\n\t\t1, 2,\n\t\t3,\n\t\t4,\n\t\t5\n\t]\n;\n"},
     };
 
     TSetup setup;
@@ -993,17 +993,17 @@ Y_UNIT_TEST(MultiLineList) {
 Y_UNIT_TEST(MultiLineTuple) {
     TCases cases = {
         {"select (\n)",
-            "SELECT\n\t(\n\t);\n"},
+            "SELECT\n\t(\n\t)\n;\n"},
         {"select (1,\n)",
-            "SELECT\n\t(\n\t\t1,\n\t);\n"},
+            "SELECT\n\t(\n\t\t1,\n\t)\n;\n"},
         {"select (1\n,)",
-            "SELECT\n\t(\n\t\t1,\n\t);\n"},
+            "SELECT\n\t(\n\t\t1,\n\t)\n;\n"},
         {"select (\n1,)",
-            "SELECT\n\t(\n\t\t1,\n\t);\n"},
+            "SELECT\n\t(\n\t\t1,\n\t)\n;\n"},
         {"select (1,2,\n3,4)",
-            "SELECT\n\t(\n\t\t1, 2,\n\t\t3, 4\n\t);\n"},
+            "SELECT\n\t(\n\t\t1, 2,\n\t\t3, 4\n\t)\n;\n"},
         {"select (1,2,\n3,4,)",
-            "SELECT\n\t(\n\t\t1, 2,\n\t\t3, 4,\n\t);\n"},
+            "SELECT\n\t(\n\t\t1, 2,\n\t\t3, 4,\n\t)\n;\n"},
     };
 
     TSetup setup;
@@ -1013,21 +1013,21 @@ Y_UNIT_TEST(MultiLineTuple) {
 Y_UNIT_TEST(MultiLineSet) {
     TCases cases = {
         {"select {\n}",
-            "SELECT\n\t{\n\t};\n"},
+            "SELECT\n\t{\n\t}\n;\n"},
         {"select {1\n}",
-            "SELECT\n\t{\n\t\t1\n\t};\n"},
+            "SELECT\n\t{\n\t\t1\n\t}\n;\n"},
         {"select {\n1}",
-            "SELECT\n\t{\n\t\t1\n\t};\n"},
+            "SELECT\n\t{\n\t\t1\n\t}\n;\n"},
         {"select {1,\n}",
-            "SELECT\n\t{\n\t\t1,\n\t};\n"},
+            "SELECT\n\t{\n\t\t1,\n\t}\n;\n"},
         {"select {1\n,}",
-            "SELECT\n\t{\n\t\t1,\n\t};\n"},
+            "SELECT\n\t{\n\t\t1,\n\t}\n;\n"},
         {"select {\n1,}",
-            "SELECT\n\t{\n\t\t1,\n\t};\n"},
+            "SELECT\n\t{\n\t\t1,\n\t}\n;\n"},
         {"select {1,2,\n3,4}",
-            "SELECT\n\t{\n\t\t1, 2,\n\t\t3, 4\n\t};\n"},
+            "SELECT\n\t{\n\t\t1, 2,\n\t\t3, 4\n\t}\n;\n"},
         {"select {1,2,\n3,4,}",
-            "SELECT\n\t{\n\t\t1, 2,\n\t\t3, 4,\n\t};\n"},
+            "SELECT\n\t{\n\t\t1, 2,\n\t\t3, 4,\n\t}\n;\n"},
     };
 
     TSetup setup;
@@ -1037,19 +1037,19 @@ Y_UNIT_TEST(MultiLineSet) {
 Y_UNIT_TEST(MultiLineDict) {
     TCases cases = {
         {"select {0:1\n}",
-            "SELECT\n\t{\n\t\t0: 1\n\t};\n"},
+            "SELECT\n\t{\n\t\t0: 1\n\t}\n;\n"},
         {"select {\n0:1}",
-            "SELECT\n\t{\n\t\t0: 1\n\t};\n"},
+            "SELECT\n\t{\n\t\t0: 1\n\t}\n;\n"},
         {"select {0:1,\n}",
-            "SELECT\n\t{\n\t\t0: 1,\n\t};\n"},
+            "SELECT\n\t{\n\t\t0: 1,\n\t}\n;\n"},
         {"select {0:1\n,}",
-            "SELECT\n\t{\n\t\t0: 1,\n\t};\n"},
+            "SELECT\n\t{\n\t\t0: 1,\n\t}\n;\n"},
         {"select {\n0:1,}",
-            "SELECT\n\t{\n\t\t0: 1,\n\t};\n"},
+            "SELECT\n\t{\n\t\t0: 1,\n\t}\n;\n"},
         {"select {10:1,20:2,\n30:3,40:4}",
-            "SELECT\n\t{\n\t\t10: 1, 20: 2,\n\t\t30: 3, 40: 4\n\t};\n"},
+            "SELECT\n\t{\n\t\t10: 1, 20: 2,\n\t\t30: 3, 40: 4\n\t}\n;\n"},
         {"select {10:1,20:2,\n30:3,40:4,}",
-            "SELECT\n\t{\n\t\t10: 1, 20: 2,\n\t\t30: 3, 40: 4,\n\t};\n"},
+            "SELECT\n\t{\n\t\t10: 1, 20: 2,\n\t\t30: 3, 40: 4,\n\t}\n;\n"},
     };
 
     TSetup setup;
@@ -1059,21 +1059,21 @@ Y_UNIT_TEST(MultiLineDict) {
 Y_UNIT_TEST(MultiLineFuncCall) {
     TCases cases = {
         {"select f(\n)",
-            "SELECT\n\tf(\n\t);\n"},
+            "SELECT\n\tf(\n\t)\n;\n"},
         {"select f(1\n)",
-            "SELECT\n\tf(\n\t\t1\n\t);\n"},
+            "SELECT\n\tf(\n\t\t1\n\t)\n;\n"},
         {"select f(\n1)",
-            "SELECT\n\tf(\n\t\t1\n\t);\n"},
+            "SELECT\n\tf(\n\t\t1\n\t)\n;\n"},
         {"select f(1,\n)",
-            "SELECT\n\tf(\n\t\t1,\n\t);\n"},
+            "SELECT\n\tf(\n\t\t1,\n\t)\n;\n"},
         {"select f(1\n,)",
-            "SELECT\n\tf(\n\t\t1,\n\t);\n"},
+            "SELECT\n\tf(\n\t\t1,\n\t)\n;\n"},
         {"select f(\n1,)",
-            "SELECT\n\tf(\n\t\t1,\n\t);\n"},
+            "SELECT\n\tf(\n\t\t1,\n\t)\n;\n"},
         {"select f(1,2,\n3,4)",
-            "SELECT\n\tf(\n\t\t1, 2,\n\t\t3, 4\n\t);\n"},
+            "SELECT\n\tf(\n\t\t1, 2,\n\t\t3, 4\n\t)\n;\n"},
         {"select f(1,2,\n3,4,)",
-            "SELECT\n\tf(\n\t\t1, 2,\n\t\t3, 4,\n\t);\n"},
+            "SELECT\n\tf(\n\t\t1, 2,\n\t\t3, 4,\n\t)\n;\n"},
     };
 
     TSetup setup;
@@ -1083,21 +1083,21 @@ Y_UNIT_TEST(MultiLineFuncCall) {
 Y_UNIT_TEST(MultiLineStruct) {
     TCases cases = {
         {"select <|\n|>",
-            "SELECT\n\t<|\n\t|>;\n"},
+            "SELECT\n\t<|\n\t|>\n;\n"},
         {"select <|a:1\n|>",
-            "SELECT\n\t<|\n\t\ta: 1\n\t|>;\n"},
+            "SELECT\n\t<|\n\t\ta: 1\n\t|>\n;\n"},
         {"select <|\na:1|>",
-            "SELECT\n\t<|\n\t\ta: 1\n\t|>;\n"},
+            "SELECT\n\t<|\n\t\ta: 1\n\t|>\n;\n"},
         {"select <|a:1,\n|>",
-            "SELECT\n\t<|\n\t\ta: 1,\n\t|>;\n"},
+            "SELECT\n\t<|\n\t\ta: 1,\n\t|>\n;\n"},
         {"select <|a:1\n,|>",
-            "SELECT\n\t<|\n\t\ta: 1,\n\t|>;\n"},
+            "SELECT\n\t<|\n\t\ta: 1,\n\t|>\n;\n"},
         {"select <|\na:1,|>",
-            "SELECT\n\t<|\n\t\ta: 1,\n\t|>;\n"},
+            "SELECT\n\t<|\n\t\ta: 1,\n\t|>\n;\n"},
         {"select <|a:1,b:2,\nc:3,d:4|>",
-            "SELECT\n\t<|\n\t\ta: 1, b: 2,\n\t\tc: 3, d: 4\n\t|>;\n"},
+            "SELECT\n\t<|\n\t\ta: 1, b: 2,\n\t\tc: 3, d: 4\n\t|>\n;\n"},
         {"select <|a:1,b:2,\nc:3,d:4,|>",
-            "SELECT\n\t<|\n\t\ta: 1, b: 2,\n\t\tc: 3, d: 4,\n\t|>;\n"},
+            "SELECT\n\t<|\n\t\ta: 1, b: 2,\n\t\tc: 3, d: 4,\n\t|>\n;\n"},
     };
 
     TSetup setup;
@@ -1107,9 +1107,9 @@ Y_UNIT_TEST(MultiLineStruct) {
 Y_UNIT_TEST(MultiLineListType) {
     TCases cases = {
         {"select list<int32\n>",
-            "SELECT\n\tlist<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\tlist<\n\t\tint32\n\t>\n;\n"},
         {"select list<\nint32>",
-            "SELECT\n\tlist<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\tlist<\n\t\tint32\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1119,9 +1119,9 @@ Y_UNIT_TEST(MultiLineListType) {
 Y_UNIT_TEST(MultiLineOptionalType) {
     TCases cases = {
         {"select optional<int32\n>",
-            "SELECT\n\toptional<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\toptional<\n\t\tint32\n\t>\n;\n"},
         {"select optional<\nint32>",
-            "SELECT\n\toptional<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\toptional<\n\t\tint32\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1131,9 +1131,9 @@ Y_UNIT_TEST(MultiLineOptionalType) {
 Y_UNIT_TEST(MultiLineStreamType) {
     TCases cases = {
         {"select stream<int32\n>",
-            "SELECT\n\tstream<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\tstream<\n\t\tint32\n\t>\n;\n"},
         {"select stream<\nint32>",
-            "SELECT\n\tstream<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\tstream<\n\t\tint32\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1143,9 +1143,9 @@ Y_UNIT_TEST(MultiLineStreamType) {
 Y_UNIT_TEST(MultiLineFlowType) {
     TCases cases = {
         {"select flow<int32\n>",
-            "SELECT\n\tflow<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\tflow<\n\t\tint32\n\t>\n;\n"},
         {"select flow<\nint32>",
-            "SELECT\n\tflow<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\tflow<\n\t\tint32\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1155,9 +1155,9 @@ Y_UNIT_TEST(MultiLineFlowType) {
 Y_UNIT_TEST(MultiLineSetType) {
     TCases cases = {
         {"select set<int32\n>",
-            "SELECT\n\tset<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\tset<\n\t\tint32\n\t>\n;\n"},
         {"select set<\nint32>",
-            "SELECT\n\tset<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\tset<\n\t\tint32\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1167,21 +1167,21 @@ Y_UNIT_TEST(MultiLineSetType) {
 Y_UNIT_TEST(MultiLineTupleType) {
     TCases cases = {
         {"select tuple<\n>",
-            "SELECT\n\ttuple<\n\t\t \n\t>;\n"},
+            "SELECT\n\ttuple<\n\t\t \n\t>\n;\n"},
         {"select tuple<int32\n>",
-            "SELECT\n\ttuple<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\ttuple<\n\t\tint32\n\t>\n;\n"},
         {"select tuple<\nint32>",
-            "SELECT\n\ttuple<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\ttuple<\n\t\tint32\n\t>\n;\n"},
         {"select tuple<int32,\n>",
-            "SELECT\n\ttuple<\n\t\tint32,\n\t>;\n"},
+            "SELECT\n\ttuple<\n\t\tint32,\n\t>\n;\n"},
         {"select tuple<int32\n,>",
-            "SELECT\n\ttuple<\n\t\tint32,\n\t>;\n"},
+            "SELECT\n\ttuple<\n\t\tint32,\n\t>\n;\n"},
         {"select tuple<\nint32,>",
-            "SELECT\n\ttuple<\n\t\tint32,\n\t>;\n"},
+            "SELECT\n\ttuple<\n\t\tint32,\n\t>\n;\n"},
         {"select tuple<\nint32,string,\ndouble,bool>",
-            "SELECT\n\ttuple<\n\t\tint32, string,\n\t\tdouble, bool\n\t>;\n"},
+            "SELECT\n\ttuple<\n\t\tint32, string,\n\t\tdouble, bool\n\t>\n;\n"},
         {"select tuple<\nint32,string,\ndouble,bool,>",
-            "SELECT\n\ttuple<\n\t\tint32, string,\n\t\tdouble, bool,\n\t>;\n"},
+            "SELECT\n\ttuple<\n\t\tint32, string,\n\t\tdouble, bool,\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1191,21 +1191,21 @@ Y_UNIT_TEST(MultiLineTupleType) {
 Y_UNIT_TEST(MultiLineStructType) {
     TCases cases = {
         {"select struct<\n>",
-            "SELECT\n\tstruct<\n\t\t \n\t>;\n"},
+            "SELECT\n\tstruct<\n\t\t \n\t>\n;\n"},
         {"select struct<a:int32\n>",
-            "SELECT\n\tstruct<\n\t\ta: int32\n\t>;\n"},
+            "SELECT\n\tstruct<\n\t\ta: int32\n\t>\n;\n"},
         {"select struct<\na:int32>",
-            "SELECT\n\tstruct<\n\t\ta: int32\n\t>;\n"},
+            "SELECT\n\tstruct<\n\t\ta: int32\n\t>\n;\n"},
         {"select struct<a:int32,\n>",
-            "SELECT\n\tstruct<\n\t\ta: int32,\n\t>;\n"},
+            "SELECT\n\tstruct<\n\t\ta: int32,\n\t>\n;\n"},
         {"select struct<a:int32\n,>",
-            "SELECT\n\tstruct<\n\t\ta: int32,\n\t>;\n"},
+            "SELECT\n\tstruct<\n\t\ta: int32,\n\t>\n;\n"},
         {"select struct<\na:int32,>",
-            "SELECT\n\tstruct<\n\t\ta: int32,\n\t>;\n"},
+            "SELECT\n\tstruct<\n\t\ta: int32,\n\t>\n;\n"},
         {"select struct<\na:int32,b:string,\nc:double,d:bool>",
-            "SELECT\n\tstruct<\n\t\ta: int32, b: string,\n\t\tc: double, d: bool\n\t>;\n"},
+            "SELECT\n\tstruct<\n\t\ta: int32, b: string,\n\t\tc: double, d: bool\n\t>\n;\n"},
         {"select struct<\na:int32,b:string,\nc:double,d:bool,>",
-            "SELECT\n\tstruct<\n\t\ta: int32, b: string,\n\t\tc: double, d: bool,\n\t>;\n"},
+            "SELECT\n\tstruct<\n\t\ta: int32, b: string,\n\t\tc: double, d: bool,\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1215,19 +1215,19 @@ Y_UNIT_TEST(MultiLineStructType) {
 Y_UNIT_TEST(MultiLineVariantOverTupleType) {
     TCases cases = {
         {"select variant<int32\n>",
-            "SELECT\n\tvariant<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\tint32\n\t>\n;\n"},
         {"select variant<\nint32>",
-            "SELECT\n\tvariant<\n\t\tint32\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\tint32\n\t>\n;\n"},
         {"select variant<int32,\n>",
-            "SELECT\n\tvariant<\n\t\tint32,\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\tint32,\n\t>\n;\n"},
         {"select variant<int32\n,>",
-            "SELECT\n\tvariant<\n\t\tint32,\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\tint32,\n\t>\n;\n"},
         {"select variant<\nint32,>",
-            "SELECT\n\tvariant<\n\t\tint32,\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\tint32,\n\t>\n;\n"},
         {"select variant<\nint32,string,\ndouble,bool>",
-            "SELECT\n\tvariant<\n\t\tint32, string,\n\t\tdouble, bool\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\tint32, string,\n\t\tdouble, bool\n\t>\n;\n"},
         {"select variant<\nint32,string,\ndouble,bool,>",
-            "SELECT\n\tvariant<\n\t\tint32, string,\n\t\tdouble, bool,\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\tint32, string,\n\t\tdouble, bool,\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1237,19 +1237,19 @@ Y_UNIT_TEST(MultiLineVariantOverTupleType) {
 Y_UNIT_TEST(MultiLineVariantOverStructType) {
     TCases cases = {
         {"select variant<a:int32\n>",
-            "SELECT\n\tvariant<\n\t\ta: int32\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\ta: int32\n\t>\n;\n"},
         {"select variant<\na:int32>",
-            "SELECT\n\tvariant<\n\t\ta: int32\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\ta: int32\n\t>\n;\n"},
         {"select variant<a:int32,\n>",
-            "SELECT\n\tvariant<\n\t\ta: int32,\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\ta: int32,\n\t>\n;\n"},
         {"select variant<a:int32\n,>",
-            "SELECT\n\tvariant<\n\t\ta: int32,\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\ta: int32,\n\t>\n;\n"},
         {"select variant<\na:int32,>",
-            "SELECT\n\tvariant<\n\t\ta: int32,\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\ta: int32,\n\t>\n;\n"},
         {"select variant<\na:int32,b:string,\nc:double,d:bool>",
-            "SELECT\n\tvariant<\n\t\ta: int32, b: string,\n\t\tc: double, d: bool\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\ta: int32, b: string,\n\t\tc: double, d: bool\n\t>\n;\n"},
         {"select variant<\na:int32,b:string,\nc:double,d:bool,>",
-            "SELECT\n\tvariant<\n\t\ta: int32, b: string,\n\t\tc: double, d: bool,\n\t>;\n"},
+            "SELECT\n\tvariant<\n\t\ta: int32, b: string,\n\t\tc: double, d: bool,\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1259,19 +1259,19 @@ Y_UNIT_TEST(MultiLineVariantOverStructType) {
 Y_UNIT_TEST(MultiLineEnum) {
     TCases cases = {
         {"select enum<a\n>",
-            "SELECT\n\tenum<\n\t\ta\n\t>;\n"},
+            "SELECT\n\tenum<\n\t\ta\n\t>\n;\n"},
         {"select enum<\na>",
-            "SELECT\n\tenum<\n\t\ta\n\t>;\n"},
+            "SELECT\n\tenum<\n\t\ta\n\t>\n;\n"},
         {"select enum<a,\n>",
-            "SELECT\n\tenum<\n\t\ta,\n\t>;\n"},
+            "SELECT\n\tenum<\n\t\ta,\n\t>\n;\n"},
         {"select enum<a\n,>",
-            "SELECT\n\tenum<\n\t\ta,\n\t>;\n"},
+            "SELECT\n\tenum<\n\t\ta,\n\t>\n;\n"},
         {"select enum<\na,>",
-            "SELECT\n\tenum<\n\t\ta,\n\t>;\n"},
+            "SELECT\n\tenum<\n\t\ta,\n\t>\n;\n"},
         {"select enum<\na,b,\nc,d>",
-            "SELECT\n\tenum<\n\t\ta, b,\n\t\tc, d\n\t>;\n"},
+            "SELECT\n\tenum<\n\t\ta, b,\n\t\tc, d\n\t>\n;\n"},
         {"select enum<\na,b,\nc,d,>",
-            "SELECT\n\tenum<\n\t\ta, b,\n\t\tc, d,\n\t>;\n"},
+            "SELECT\n\tenum<\n\t\ta, b,\n\t\tc, d,\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1281,9 +1281,9 @@ Y_UNIT_TEST(MultiLineEnum) {
 Y_UNIT_TEST(MultiLineResourceType) {
     TCases cases = {
         {"select resource<foo\n>",
-            "SELECT\n\tresource<\n\t\tfoo\n\t>;\n"},
+            "SELECT\n\tresource<\n\t\tfoo\n\t>\n;\n"},
         {"select resource<\nfoo>",
-            "SELECT\n\tresource<\n\t\tfoo\n\t>;\n"},
+            "SELECT\n\tresource<\n\t\tfoo\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1293,13 +1293,13 @@ Y_UNIT_TEST(MultiLineResourceType) {
 Y_UNIT_TEST(MultiLineTaggedType) {
     TCases cases = {
         {"select tagged<int32,foo\n>",
-            "SELECT\n\ttagged<\n\t\tint32, foo\n\t>;\n"},
+            "SELECT\n\ttagged<\n\t\tint32, foo\n\t>\n;\n"},
         {"select tagged<int32,\nfoo>",
-            "SELECT\n\ttagged<\n\t\tint32,\n\t\tfoo\n\t>;\n"},
+            "SELECT\n\ttagged<\n\t\tint32,\n\t\tfoo\n\t>\n;\n"},
         {"select tagged<int32\n,foo>",
-            "SELECT\n\ttagged<\n\t\tint32,\n\t\tfoo\n\t>;\n"},
+            "SELECT\n\ttagged<\n\t\tint32,\n\t\tfoo\n\t>\n;\n"},
         {"select tagged<\nint32,foo>",
-            "SELECT\n\ttagged<\n\t\tint32, foo\n\t>;\n"},
+            "SELECT\n\ttagged<\n\t\tint32, foo\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1309,13 +1309,13 @@ Y_UNIT_TEST(MultiLineTaggedType) {
 Y_UNIT_TEST(MultiLineDictType) {
     TCases cases = {
         {"select dict<int32,string\n>",
-            "SELECT\n\tdict<\n\t\tint32, string\n\t>;\n"},
+            "SELECT\n\tdict<\n\t\tint32, string\n\t>\n;\n"},
         {"select dict<int32,\nstring>",
-            "SELECT\n\tdict<\n\t\tint32,\n\t\tstring\n\t>;\n"},
+            "SELECT\n\tdict<\n\t\tint32,\n\t\tstring\n\t>\n;\n"},
         {"select dict<int32\n,string>",
-            "SELECT\n\tdict<\n\t\tint32,\n\t\tstring\n\t>;\n"},
+            "SELECT\n\tdict<\n\t\tint32,\n\t\tstring\n\t>\n;\n"},
         {"select dict<\nint32,string>",
-            "SELECT\n\tdict<\n\t\tint32, string\n\t>;\n"},
+            "SELECT\n\tdict<\n\t\tint32, string\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1325,15 +1325,15 @@ Y_UNIT_TEST(MultiLineDictType) {
 Y_UNIT_TEST(MultiLineCallableType) {
     TCases cases = {
         {"select callable<()->int32\n>",
-            "SELECT\n\tcallable<\n\t\t() -> int32\n\t>;\n"},
+            "SELECT\n\tcallable<\n\t\t() -> int32\n\t>\n;\n"},
         {"select callable<\n()->int32>",
-            "SELECT\n\tcallable<\n\t\t() -> int32\n\t>;\n"},
+            "SELECT\n\tcallable<\n\t\t() -> int32\n\t>\n;\n"},
         {"select callable<\n(int32)->int32>",
-            "SELECT\n\tcallable<\n\t\t(int32) -> int32\n\t>;\n"},
+            "SELECT\n\tcallable<\n\t\t(int32) -> int32\n\t>\n;\n"},
         {"select callable<\n(int32,\ndouble)->int32>",
-            "SELECT\n\tcallable<\n\t\t(\n\t\t\tint32,\n\t\t\tdouble\n\t\t) -> int32\n\t>;\n"},
+            "SELECT\n\tcallable<\n\t\t(\n\t\t\tint32,\n\t\t\tdouble\n\t\t) -> int32\n\t>\n;\n"},
         {"select callable<\n(int32\n,double)->int32>",
-            "SELECT\n\tcallable<\n\t\t(\n\t\t\tint32,\n\t\t\tdouble\n\t\t) -> int32\n\t>;\n"},
+            "SELECT\n\tcallable<\n\t\t(\n\t\t\tint32,\n\t\t\tdouble\n\t\t) -> int32\n\t>\n;\n"},
     };
 
     TSetup setup;
@@ -1343,7 +1343,7 @@ Y_UNIT_TEST(MultiLineCallableType) {
 Y_UNIT_TEST(UnaryOp) {
     TCases cases = {
         {"select -x,+x,~x,-1,-1.0,+1,+1.0,~1u",
-            "SELECT\n\t-x,\n\t+x,\n\t~x,\n\t-1,\n\t-1.0,\n\t+1,\n\t+1.0,\n\t~1u;\n"},
+            "SELECT\n\t-x,\n\t+x,\n\t~x,\n\t-1,\n\t-1.0,\n\t+1,\n\t+1.0,\n\t~1u\n;\n"},
     };
 
     TSetup setup;
@@ -1366,7 +1366,9 @@ USE plato;
 
 SELECT
     *
-FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
+FROM
+    Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A)
+;
 )"
     }};
     TSetup setup;
@@ -1387,7 +1389,7 @@ Y_UNIT_TEST(CreateTableTrailingComma) {
 Y_UNIT_TEST(Union) {
     TCases cases = {
         {"select 1 union all select 2 union select 3 union all select 4 union select 5",
-            "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION ALL\nSELECT\n\t4\nUNION\nSELECT\n\t5;\n"},
+            "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION ALL\nSELECT\n\t4\nUNION\nSELECT\n\t5\n;\n"},
             };
 
     TSetup setup;
@@ -1399,11 +1401,13 @@ Y_UNIT_TEST(CommentAfterLastSelect) {
         {"SELECT 1--comment\n",
             "SELECT\n\t1 --comment\n;\n"},
         {"SELECT 1\n\n--comment\n",
-            "SELECT\n\t1 --comment\n;\n"},
+            "SELECT\n\t1\n\n--comment\n;\n"},
         {"SELECT 1\n\n--comment",
-            "SELECT\n\t1 --comment\n;\n"},
+            "SELECT\n\t1\n\n--comment\n;\n"},
+        {"SELECT * FROM Input /* comment */\n\n\n",
+            "SELECT\n\t*\nFROM\n\tInput /* comment */\n;\n"},
         {"SELECT * FROM Input\n\n\n\n/* comment */\n\n\n",
-            "SELECT\n\t*\nFROM Input /* comment */;\n"},
+            "SELECT\n\t*\nFROM\n\tInput\n\n/* comment */;\n"},
     };
 
     TSetup setup;
@@ -1413,11 +1417,11 @@ Y_UNIT_TEST(CommentAfterLastSelect) {
 Y_UNIT_TEST(WindowFunctionInsideExpr) {
     TCases cases = {
         {"SELECT CAST(ROW_NUMBER() OVER () AS String) AS x,\nFROM Input;",
-            "SELECT\n\tCAST(ROW_NUMBER() OVER () AS String) AS x,\nFROM Input;\n"},
+            "SELECT\n\tCAST(ROW_NUMBER() OVER () AS String) AS x,\nFROM\n\tInput\n;\n"},
         {"SELECT CAST(ROW_NUMBER() OVER (PARTITION BY key) AS String) AS x,\nFROM Input;",
-            "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tPARTITION BY\n\t\t\t\tkey\n\t\t) AS String\n\t) AS x,\nFROM Input;\n"},
+            "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tPARTITION BY\n\t\t\t\tkey\n\t\t) AS String\n\t) AS x,\nFROM\n\tInput\n;\n"},
         {"SELECT CAST(ROW_NUMBER() OVER (users) AS String) AS x,\nFROM Input;",
-            "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tusers\n\t\t) AS String\n\t) AS x,\nFROM Input;\n"},
+            "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tusers\n\t\t) AS String\n\t) AS x,\nFROM\n\tInput\n;\n"},
     };
 
     TSetup setup;
@@ -1427,9 +1431,9 @@ Y_UNIT_TEST(WindowFunctionInsideExpr) {
 Y_UNIT_TEST(ExistsExpr) {
     TCases cases = {
         {"SELECT EXISTS (SELECT 1);",
-            "SELECT\n\tEXISTS (\n\t\tSELECT\n\t\t\t1\n\t);\n"},
+            "SELECT\n\tEXISTS (\n\t\tSELECT\n\t\t\t1\n\t)\n;\n"},
         {"SELECT CAST(EXISTS(SELECT 1) AS Int) AS x,\nFROM Input;",
-            "SELECT\n\tCAST(\n\t\tEXISTS (\n\t\t\tSELECT\n\t\t\t\t1\n\t\t) AS Int\n\t) AS x,\nFROM Input;\n"},
+            "SELECT\n\tCAST(\n\t\tEXISTS (\n\t\t\tSELECT\n\t\t\t\t1\n\t\t) AS Int\n\t) AS x,\nFROM\n\tInput\n;\n"},
     };
 
     TSetup setup;
@@ -1439,7 +1443,7 @@ Y_UNIT_TEST(ExistsExpr) {
 Y_UNIT_TEST(LambdaInsideExpr) {
     TCases cases = {
         {"SELECT ListMap(AsList(1,2),($x)->{return $x+1});",
-            "SELECT\n\tListMap(\n\t\tAsList(1, 2), ($x) -> {\n\t\t\tRETURN $x + 1\n\t\t}\n\t);\n"},
+            "SELECT\n\tListMap(\n\t\tAsList(1, 2), ($x) -> {\n\t\t\tRETURN $x + 1\n\t\t}\n\t)\n;\n"},
     };
 
     TSetup setup;
@@ -1449,11 +1453,11 @@ Y_UNIT_TEST(LambdaInsideExpr) {
 Y_UNIT_TEST(CaseExpr) {
     TCases cases = {
         {"SELECT CASE WHEN 1 == 2 THEN 3 WHEN 4 == 5 THEN 6 WHEN 7 == 8 THEN 9 ELSE 10 END;",
-            "SELECT\n\tCASE\n\t\tWHEN 1 == 2 THEN 3\n\t\tWHEN 4 == 5 THEN 6\n\t\tWHEN 7 == 8 THEN 9\n\t\tELSE 10\n\tEND;\n"},
+            "SELECT\n\tCASE\n\t\tWHEN 1 == 2 THEN 3\n\t\tWHEN 4 == 5 THEN 6\n\t\tWHEN 7 == 8 THEN 9\n\t\tELSE 10\n\tEND\n;\n"},
         {"SELECT CAST(CASE WHEN 1 == 2 THEN 3 WHEN 4 == 5 THEN 6 ELSE 10 END AS String);",
-            "SELECT\n\tCAST(\n\t\tCASE\n\t\t\tWHEN 1 == 2 THEN 3\n\t\t\tWHEN 4 == 5 THEN 6\n\t\t\tELSE 10\n\t\tEND AS String\n\t);\n"},
+            "SELECT\n\tCAST(\n\t\tCASE\n\t\t\tWHEN 1 == 2 THEN 3\n\t\t\tWHEN 4 == 5 THEN 6\n\t\t\tELSE 10\n\t\tEND AS String\n\t)\n;\n"},
         {"SELECT CASE x WHEN 1 THEN 2 WHEN 3 THEN 4 WHEN 5 THEN 6 ELSE 10 END;",
-            "SELECT\n\tCASE x\n\t\tWHEN 1 THEN 2\n\t\tWHEN 3 THEN 4\n\t\tWHEN 5 THEN 6\n\t\tELSE 10\n\tEND;\n"},
+            "SELECT\n\tCASE x\n\t\tWHEN 1 THEN 2\n\t\tWHEN 3 THEN 4\n\t\tWHEN 5 THEN 6\n\t\tELSE 10\n\tEND\n;\n"},
     };
 
     TSetup setup;
@@ -1511,29 +1515,29 @@ Y_UNIT_TEST(OperatorNewlines) {
 Y_UNIT_TEST(ObfuscateSelect) {
     TCases cases = {
         {"select 1;",
-            "SELECT\n\t0;\n"},
+            "SELECT\n\t0\n;\n"},
         {"select true;",
-            "SELECT\n\tFALSE;\n"},
+            "SELECT\n\tFALSE\n;\n"},
         {"select 'foo';",
-            "SELECT\n\t'str';\n"},
+            "SELECT\n\t'str'\n;\n"},
         {"select 3.0;",
-            "SELECT\n\t0.0;\n"},
+            "SELECT\n\t0.0\n;\n"},
         {"select col;",
-            "SELECT\n\tid;\n"},
+            "SELECT\n\tid\n;\n"},
         {"select * from tab;",
-            "SELECT\n\t*\nFROM id;\n"},
+            "SELECT\n\t*\nFROM\n\tid\n;\n"},
         {"select cast(col as int32);",
-            "SELECT\n\tCAST(id AS int32);\n"},
+            "SELECT\n\tCAST(id AS int32)\n;\n"},
         {"select func(col);",
-            "SELECT\n\tfunc(id);\n"},
+            "SELECT\n\tfunc(id)\n;\n"},
         {"select mod::func(col);",
-            "SELECT\n\tmod::func(id);\n"},
+            "SELECT\n\tmod::func(id)\n;\n"},
         {"declare $a as int32;",
             "DECLARE $id AS int32;\n"},
         {"select * from `logs/of/bob` where pwd='foo';",
-            "SELECT\n\t*\nFROM id\nWHERE id == 'str';\n"},
+            "SELECT\n\t*\nFROM\n\tid\nWHERE\n\tid == 'str'\n;\n"},
         {"select $f();",
-            "SELECT\n\t$id();\n"},
+            "SELECT\n\t$id()\n;\n"},
     };
 
     TSetup setup;
@@ -1561,13 +1565,13 @@ Y_UNIT_TEST(ObfuscatePragma) {
 Y_UNIT_TEST(CreateView) {
     TCases cases = {{
             "creAte vIEw TheView As SELect 1",
-            "CREATE VIEW TheView AS\nSELECT\n\t1;\n"
+            "CREATE VIEW TheView AS\nSELECT\n\t1\n;\n"
         }, {
             "creAte vIEw If Not ExIsTs TheView As SELect 1",
-            "CREATE VIEW IF NOT EXISTS TheView AS\nSELECT\n\t1;\n"
+            "CREATE VIEW IF NOT EXISTS TheView AS\nSELECT\n\t1\n;\n"
         }, {
             "creAte vIEw TheView wiTh (option = tRuE) As SELect 1",
-            "CREATE VIEW TheView WITH (option = TRUE) AS\nSELECT\n\t1;\n"
+            "CREATE VIEW TheView WITH (option = TRUE) AS\nSELECT\n\t1\n;\n"
         }
     };
 

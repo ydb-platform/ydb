@@ -10,9 +10,9 @@ SELECT
 FROM (
     SELECT
         *
-    FROM Input
-)
-    AS x
+    FROM
+        Input
+) AS x
 ORDER BY
     key,
     subkey

@@ -5,10 +5,12 @@ $t = [<|"key1": "1", "subkey1": "a", "key": "1", "subkey": "a", "value": "value2
 
 SELECT
     *
-FROM Input
-    AS A
-LEFT SEMI JOIN AS_TABLE($t)
-    AS B
-ON AsTuple(A.subkey, AsTuple(A.subkey1, AsTuple(CAST(A.key AS Int64), CAST(A.key1 AS Uint64)))) == AsTuple(B.subkey, AsTuple(B.subkey1, AsTuple(CAST(B.key AS Uint64), CAST(B.key1 AS Int64))))
+FROM
+    Input AS A
+LEFT SEMI JOIN
+    AS_TABLE($t) AS B
+ON
+    AsTuple(A.subkey, AsTuple(A.subkey1, AsTuple(CAST(A.key AS Int64), CAST(A.key1 AS Uint64)))) == AsTuple(B.subkey, AsTuple(B.subkey1, AsTuple(CAST(B.key AS Uint64), CAST(B.key1 AS Int64))))
 ORDER BY
-    `key`;
+    `key`
+;

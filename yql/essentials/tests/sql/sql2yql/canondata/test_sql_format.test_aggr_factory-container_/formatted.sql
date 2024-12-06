@@ -3,29 +3,37 @@
 $factory = AGGREGATION_FACTORY("sum");
 
 SELECT
-    ListAggregate(ListCreate(Int32), $factory);
+    ListAggregate(ListCreate(Int32), $factory)
+;
 
 SELECT
-    ListAggregate(AsList(1, 2, 3), $factory);
+    ListAggregate(AsList(1, 2, 3), $factory)
+;
 
 SELECT
-    ListAggregate(Just(AsList(1, 2, 3)), $factory);
+    ListAggregate(Just(AsList(1, 2, 3)), $factory)
+;
 
 SELECT
-    ListAggregate(Nothing(ParseType("List<Int32>?")), $factory);
+    ListAggregate(Nothing(ParseType("List<Int32>?")), $factory)
+;
 $factory = AGGREGATION_FACTORY("count");
 
 SELECT
-    ListAggregate(ListCreate(Int32), $factory);
+    ListAggregate(ListCreate(Int32), $factory)
+;
 
 SELECT
-    ListAggregate(AsList(1, 2, 3), $factory);
+    ListAggregate(AsList(1, 2, 3), $factory)
+;
 
 SELECT
-    ListAggregate(Just(AsList(1, 2, 3)), $factory);
+    ListAggregate(Just(AsList(1, 2, 3)), $factory)
+;
 
 SELECT
-    ListAggregate(Nothing(ParseType("List<Int32>?")), $factory);
+    ListAggregate(Nothing(ParseType("List<Int32>?")), $factory)
+;
 $factory = AGGREGATION_FACTORY("sum");
 
 SELECT
@@ -36,7 +44,8 @@ SELECT
                 $factory
             )
         )
-    );
+    )
+;
 
 SELECT
     ListSort(
@@ -48,7 +57,8 @@ SELECT
                 ), $factory
             )
         )
-    );
+    )
+;
 
 SELECT
     ListSort(
@@ -62,7 +72,8 @@ SELECT
                 ), $factory
             )
         )
-    );
+    )
+;
 
 SELECT
     ListSort(
@@ -72,7 +83,8 @@ SELECT
                 $factory
             )
         )
-    );
+    )
+;
 $factory = AGGREGATION_FACTORY("count");
 
 SELECT
@@ -83,7 +95,8 @@ SELECT
                 $factory
             )
         )
-    );
+    )
+;
 
 SELECT
     ListSort(
@@ -95,7 +108,8 @@ SELECT
                 ), $factory
             )
         )
-    );
+    )
+;
 
 SELECT
     ListSort(
@@ -109,7 +123,8 @@ SELECT
                 ), $factory
             )
         )
-    );
+    )
+;
 
 SELECT
     ListSort(
@@ -119,4 +134,5 @@ SELECT
                 $factory
             )
         )
-    );
+    )
+;

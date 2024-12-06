@@ -7,15 +7,15 @@ FROM (
     SELECT
         Unwrap(CAST(key AS Int32)) AS key,
         value
-    FROM Input2
-)
-    AS a
+    FROM
+        Input2
+) AS a
 JOIN (
     SELECT
         Just(1ul) AS key,
         123 AS subkey
-)
-    AS b
+) AS b
 USING (key)
 ORDER BY
-    value;
+    value
+;

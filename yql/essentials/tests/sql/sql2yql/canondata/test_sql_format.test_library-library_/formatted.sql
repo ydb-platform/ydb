@@ -5,4 +5,5 @@ PRAGMA library("lib2.sql");
 IMPORT lib1 SYMBOLS $sqr;
 
 SELECT
-    $sqr(10);
+    $sqr(10)
+;

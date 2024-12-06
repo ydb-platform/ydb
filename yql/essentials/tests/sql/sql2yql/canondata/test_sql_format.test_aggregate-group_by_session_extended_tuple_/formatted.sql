@@ -55,10 +55,12 @@ SELECT
     vsid,
     session_start,
     COUNT(*) AS session_size
-FROM as_table($source)
+FROM
+    as_table($source)
 GROUP BY
     vsid,
     SessionWindow(unixtime, $init, $update, $calculate) AS session_start
 ORDER BY
     vsid,
-    session_start;
+    session_start
+;

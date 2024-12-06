@@ -10,11 +10,15 @@ SELECT
     key,
     subkey,
     value
-FROM plato.Input;
+FROM
+    plato.Input
+;
 COMMIT;
 
 SELECT
     coalesce(key, ""),
     coalesce(subkey, ""),
     coalesce(value, "")
-FROM plato.Output;
+FROM
+    plato.Output
+;

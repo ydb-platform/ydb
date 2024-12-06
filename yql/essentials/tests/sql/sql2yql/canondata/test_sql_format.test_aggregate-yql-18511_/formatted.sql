@@ -53,8 +53,8 @@ SELECT
     if(GROUPING(user_cards_segm) == 1, -300, user_cards_segm) AS __user_cards_segm__,
     GROUPING(user_cards_segm) AS grouping_user_cards_segm,
     COUNT(DISTINCT user_id) AS all_user_qty,
-FROM $data
-    AS t
+FROM
+    $data AS t
 GROUP BY
     GROUPING SETS (
         -- day grouping
@@ -67,4 +67,6 @@ GROUP BY
 
         -- -- month grouping
         (month),
-        (month, user_cards_segm));
+        (month, user_cards_segm)
+    )
+;

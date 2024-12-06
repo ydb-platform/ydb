@@ -17,32 +17,41 @@ $lottery_data = AsList(
 INSERT INTO @campaigns
 SELECT
     *
-FROM AS_TABLE($campaigns_data)
+FROM
+    AS_TABLE($campaigns_data)
 ORDER BY
-    id;
+    id
+;
 
 INSERT INTO @strategies
 SELECT
     *
-FROM AS_TABLE($strategies_data)
+FROM
+    AS_TABLE($strategies_data)
 ORDER BY
-    id;
+    id
+;
 
 INSERT INTO @lottery
 SELECT
     *
-FROM AS_TABLE($lottery_data)
+FROM
+    AS_TABLE($lottery_data)
 ORDER BY
-    id;
+    id
+;
 COMMIT;
 
 SELECT
     lottery.id AS lottery_id
-FROM @lottery
-    AS lottery
-JOIN @campaigns
-    AS campaigns
-ON lottery.campaign_id == campaigns.id
-JOIN @strategies
-    AS strategies
-ON lottery.strategy_id == strategies.id;
+FROM
+    @lottery AS lottery
+JOIN
+    @campaigns AS campaigns
+ON
+    lottery.campaign_id == campaigns.id
+JOIN
+    @strategies AS strategies
+ON
+    lottery.strategy_id == strategies.id
+;

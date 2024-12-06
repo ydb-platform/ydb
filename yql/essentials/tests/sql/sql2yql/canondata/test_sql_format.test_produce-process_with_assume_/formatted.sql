@@ -11,4 +11,5 @@ INSERT INTO Output WITH truncate
 PROCESS plato.Input
 USING $udf(TableRows())
 ASSUME ORDER BY
-    key;
+    key
+;

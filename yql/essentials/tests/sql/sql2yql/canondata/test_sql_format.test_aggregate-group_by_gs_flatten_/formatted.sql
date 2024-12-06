@@ -6,20 +6,25 @@ $input =
     SELECT
         a.*,
         [1, 2] AS lst
-    FROM Input
-        AS a;
+    FROM
+        Input AS a
+;
 
 SELECT
     key,
     subkey,
     some(lst) AS lst_count
-FROM $input
+FROM
+    $input
     FLATTEN LIST BY lst
-WHERE lst != 1
+WHERE
+    lst != 1
 GROUP BY
     GROUPING SETS (
         (key),
-        (key, subkey))
+        (key, subkey)
+    )
 ORDER BY
     key,
-    subkey;
+    subkey
+;

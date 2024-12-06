@@ -5,10 +5,11 @@ PRAGMA yt.JoinMergeUnsortedFactor = "0";
 
 SELECT
     a.key AS key
-FROM InputSorted
-    AS a
-JOIN Input
-    AS b
+FROM
+    InputSorted AS a
+JOIN
+    Input AS b
 USING (key)
 ORDER BY
-    key;
+    key
+;

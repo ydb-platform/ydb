@@ -9,5 +9,6 @@ SELECT
     k,
     s,
     v
-FROM Input
-    VIEW file_outer_library;
+FROM
+    Input VIEW file_outer_library
+;

@@ -10,4 +10,6 @@ SELECT
     key,
     subkey,
     value
-FROM Input;
+FROM
+    Input
+;

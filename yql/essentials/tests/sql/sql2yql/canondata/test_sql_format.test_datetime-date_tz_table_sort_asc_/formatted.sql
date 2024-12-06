@@ -5,11 +5,15 @@ USE plato;
 INSERT INTO Output WITH truncate
 SELECT
     CAST(value AS tzdatetime) AS x
-FROM Input
+FROM
+    Input
 ORDER BY
-    x ASC;
+    x ASC
+;
 COMMIT;
 
 SELECT
     *
-FROM Output;
+FROM
+    Output
+;

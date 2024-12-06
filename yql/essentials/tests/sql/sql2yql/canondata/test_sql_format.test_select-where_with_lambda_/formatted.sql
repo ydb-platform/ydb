@@ -7,5 +7,8 @@ $field = "field";
 
 SELECT
     *
-FROM Input
-WHERE $predicate($field);
+FROM
+    Input
+WHERE
+    $predicate($field)
+;

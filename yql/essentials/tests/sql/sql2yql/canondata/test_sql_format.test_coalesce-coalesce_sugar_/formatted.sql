@@ -3,7 +3,8 @@ $data = (
     SELECT
         key,
         CAST(key AS Int64) / 100 AS eval
-    FROM plato.Input
+    FROM
+        plato.Input
 );
 
 SELECT
@@ -12,4 +13,6 @@ SELECT
         ELSE CAST(NULL AS Int64)
     END ?? -1,
     key
-FROM $data;
+FROM
+    $data
+;

@@ -9,4 +9,6 @@ INSERT INTO Output
 SELECT
     key,
     value
-FROM concat(Input, Input, Input, Input);
+FROM
+    concat(Input, Input, Input, Input)
+;

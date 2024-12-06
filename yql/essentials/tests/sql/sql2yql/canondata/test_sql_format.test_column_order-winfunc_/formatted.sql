@@ -11,7 +11,8 @@ SELECT
         ORDER BY
             subkey
     ) AS min_k
-FROM Input
-    AS a
+FROM
+    Input AS a
 ORDER BY
-    subkey;
+    subkey
+;

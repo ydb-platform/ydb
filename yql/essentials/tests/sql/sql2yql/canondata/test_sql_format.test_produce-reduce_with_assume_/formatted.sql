@@ -12,4 +12,5 @@ ON
     key
 USING $udf(CAST(subkey AS uint32) ?? 0)
 ASSUME ORDER BY
-    key;
+    key
+;

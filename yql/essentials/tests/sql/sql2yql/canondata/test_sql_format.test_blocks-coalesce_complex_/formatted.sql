@@ -15,26 +15,34 @@ $tuples = [
 INSERT INTO @strings
 SELECT
     *
-FROM as_table($strings);
+FROM
+    as_table($strings)
+;
 
 INSERT INTO @tuples
 SELECT
     *
-FROM as_table($tuples);
+FROM
+    as_table($tuples)
+;
 COMMIT;
 
 SELECT
     value,
     key ?? subkey,
     subkey ?? "xxx",
-FROM @strings
+FROM
+    @strings
 ORDER BY
-    value;
+    value
+;
 
 SELECT
     value,
     key ?? subkey,
     subkey ?? AsTuple(100, 500),
-FROM @tuples
+FROM
+    @tuples
 ORDER BY
-    value;
+    value
+;

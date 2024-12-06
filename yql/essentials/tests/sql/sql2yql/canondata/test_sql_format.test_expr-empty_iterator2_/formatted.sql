@@ -6,11 +6,14 @@ $train =
     SELECT
         key,
         value
-    FROM Input
+    FROM
+        Input
     GROUP BY
         key,
         value
-    HAVING key > "900";
+    HAVING
+        key > "900"
+;
 $method = ($stream) -> {
     $func = CALLABLE (
         CallableType(0, TypeOf($stream), TypeOf($stream)),
@@ -27,4 +30,6 @@ $prediction =
 
 SELECT
     *
-FROM $prediction;
+FROM
+    $prediction
+;

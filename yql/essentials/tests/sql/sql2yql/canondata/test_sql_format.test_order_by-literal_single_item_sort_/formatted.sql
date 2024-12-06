@@ -9,6 +9,8 @@ $t = AsList(
 INSERT INTO Output
 SELECT
     *
-FROM as_table($t)
+FROM
+    as_table($t)
 ORDER BY
-    key;
+    key
+;

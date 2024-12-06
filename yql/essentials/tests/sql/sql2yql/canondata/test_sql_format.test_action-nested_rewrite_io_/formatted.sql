@@ -3,12 +3,15 @@ USE plato;
 $input =
     SELECT
         *
-    FROM AS_TABLE([<|a: "foo", b: "123"|>]);
+    FROM
+        AS_TABLE([<|a: "foo", b: "123"|>])
+;
 
 $mapping =
     SELECT
         {"a": "String", "b": "Int32"}
-    FROM Input
+    FROM
+        Input
     LIMIT 1;
 $transformer = ($type) -> {
     $t = EvaluateType(ParseTypeHandle($type));
@@ -40,6 +43,8 @@ SELECT
 FROM (
     SELECT
         $converter(TableRow())
-    FROM $input
+    FROM
+        $input
 )
-    FLATTEN COLUMNS;
+    FLATTEN COLUMNS
+;

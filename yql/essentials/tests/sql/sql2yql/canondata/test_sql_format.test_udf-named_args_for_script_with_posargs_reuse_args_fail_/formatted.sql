@@ -16,10 +16,13 @@ $data = (
         CAST(key AS int32) AS age,
         CAST(subkey AS int32) AS region,
         value AS name
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
     $udf(name, age, age AS age) AS val
-FROM $data;
+FROM
+    $data
+;
 -- age is reused as named after positional

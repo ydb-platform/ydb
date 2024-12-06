@@ -6,7 +6,9 @@ SELECT
     CAST(key AS int) AS key,
     subkey,
     value
-FROM Input;
+FROM
+    Input
+;
 COMMIT;
 
 SELECT
@@ -15,14 +17,16 @@ FROM (
     SELECT
         key,
         '' AS value
-    FROM @ttt
+    FROM
+        @ttt
     UNION ALL
     SELECT
         0 AS key,
         value
-    FROM @ttt
-)
-    AS x
+    FROM
+        @ttt
+) AS x
 ORDER BY
     key,
-    value;
+    value
+;

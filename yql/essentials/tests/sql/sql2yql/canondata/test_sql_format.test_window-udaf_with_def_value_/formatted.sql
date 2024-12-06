@@ -29,7 +29,8 @@ $my_table =
     SELECT
         3 AS id,
         10 AS ts,
-        40 AS value1;
+        40 AS value1
+;
 $cnt_create = ($_item, $_parent) -> {
     RETURN 1ul
 };
@@ -71,7 +72,8 @@ SELECT
     AGGREGATE_BY(ts, $cnt_udaf_factory) OVER generic AS generic,
     AGGREGATE_BY(value1, $cnt_udaf_factory) OVER empty AS empty_opt,
     AGGREGATE_BY(ts, $cnt_udaf_factory) OVER empty AS empty
-FROM $my_table
+FROM
+    $my_table
 WINDOW
     lagging AS (
         ORDER BY
@@ -93,4 +95,5 @@ WINDOW
     )
 ORDER BY
     ts,
-    id;
+    id
+;

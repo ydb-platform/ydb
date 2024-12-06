@@ -5,4 +5,6 @@ $x = "Input";
 
 SELECT
     count(*)
-FROM $x;
+FROM
+    $x
+;

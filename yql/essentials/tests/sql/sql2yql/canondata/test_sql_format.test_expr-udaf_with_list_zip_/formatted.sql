@@ -12,11 +12,13 @@ $perelement_sum = AGGREGATION_FACTORY(
 
 SELECT
     AGGREGATE_BY(list_col, $perelement_sum) AS cnt1,
-FROM AS_TABLE([
-    <|"list_col": [4, 5, 6]|>,
-    <|"list_col": [4, 5, 6]|>,
-    <|"list_col": [4, 5, 6]|>,
-    <|"list_col": [4, 5, 6]|>,
-    <|"list_col": [4, 5, 6]|>,
-    <|"list_col": [4, 5, 6]|>
-]);
+FROM
+    AS_TABLE([
+        <|"list_col": [4, 5, 6]|>,
+        <|"list_col": [4, 5, 6]|>,
+        <|"list_col": [4, 5, 6]|>,
+        <|"list_col": [4, 5, 6]|>,
+        <|"list_col": [4, 5, 6]|>,
+        <|"list_col": [4, 5, 6]|>
+    ])
+;

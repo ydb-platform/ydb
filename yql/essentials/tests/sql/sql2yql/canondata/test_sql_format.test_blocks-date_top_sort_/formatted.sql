@@ -7,9 +7,9 @@ SELECT
 FROM (
     SELECT
         *
-    FROM concat(Dates, Dates)
-)
-    AS t
+    FROM
+        concat(Dates, Dates)
+) AS t
 ORDER BY
     na,
     wa,

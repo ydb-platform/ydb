@@ -38,4 +38,5 @@ SELECT
     14,
     ListFromRange($timestamp64_min, $timestamp64_max, interval64("P53375808D")),
     15,
-    ListFromRange($interval64_min, $interval64_max, interval64("P53375808D"));
+    ListFromRange($interval64_min, $interval64_max, interval64("P53375808D"))
+;

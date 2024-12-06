@@ -6,5 +6,6 @@ SELECT
     ListSort(DictItems(_other)) AS _other,
     key,
     subkey
-FROM Input
-    WITH COLUMNS Struct<key: Utf8, subkey: String?>;
+FROM
+    Input WITH COLUMNS Struct<key: Utf8, subkey: String?>
+;

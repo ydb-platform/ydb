@@ -38,15 +38,18 @@ SELECT
             )
         )
     ),
-    ListSort(DictPayloads($d));
+    ListSort(DictPayloads($d))
+;
 
 SELECT
     DictLookup($d, $i),
-    DictLookup($d, $k);
+    DictLookup($d, $k)
+;
 
 SELECT
     DictContains($d, $i),
-    DictContains($d, $k);
+    DictContains($d, $k)
+;
 $d = ToMultiDict($l);
 
 SELECT
@@ -72,15 +75,18 @@ SELECT
             )
         )
     ),
-    ListSort(DictPayloads($d));
+    ListSort(DictPayloads($d))
+;
 
 SELECT
     DictLookup($d, $i),
-    DictLookup($d, $k);
+    DictLookup($d, $k)
+;
 
 SELECT
     DictContains($d, $i),
-    DictContains($d, $k);
+    DictContains($d, $k)
+;
 $d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("One")));
 
 SELECT
@@ -106,15 +112,18 @@ SELECT
             )
         )
     ),
-    ListSort(DictPayloads($d));
+    ListSort(DictPayloads($d))
+;
 
 SELECT
     DictLookup($d, $i),
-    DictLookup($d, $k);
+    DictLookup($d, $k)
+;
 
 SELECT
     DictContains($d, $i),
-    DictContains($d, $k);
+    DictContains($d, $k)
+;
 $d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("Many")));
 
 SELECT
@@ -140,8 +149,10 @@ SELECT
             )
         )
     ),
-    ListSort(DictPayloads($d));
+    ListSort(DictPayloads($d))
+;
 
 SELECT
     DictLookup($d, $i),
-    DictLookup($d, $k);
+    DictLookup($d, $k)
+;

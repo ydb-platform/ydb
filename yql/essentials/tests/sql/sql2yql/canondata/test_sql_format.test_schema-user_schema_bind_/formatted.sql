@@ -4,5 +4,6 @@ $table = "In" || "put";
 
 SELECT
     *
-FROM $table
-    WITH SCHEMA Struct<a: Int64?>;
+FROM
+    $table WITH SCHEMA Struct<a: Int64?>
+;

@@ -6,8 +6,10 @@ SELECT
     key,
     min(WeakField(subkey, "Int64")),
     max(WeakField(value, "String"))
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

@@ -9,7 +9,9 @@ $a =
         v1,
         u1,
         1 AS t1
-    FROM Input1;
+    FROM
+        Input1
+;
 
 $b =
     SELECT
@@ -17,7 +19,9 @@ $b =
         v2,
         u2,
         2 AS t2
-    FROM Input2;
+    FROM
+        Input2
+;
 
 $c =
     SELECT
@@ -25,17 +29,22 @@ $c =
         v3,
         u3,
         3 AS t3
-    FROM Input3;
+    FROM
+        Input3
+;
 
-FROM $a
-    AS a
-LEFT SEMI JOIN $b
-    AS b
-ON a.k1 == b.k2
-LEFT ONLY JOIN $c
-    AS c
-ON a.k1 == c.k3
+FROM
+    $a AS a
+LEFT SEMI JOIN
+    $b AS b
+ON
+    a.k1 == b.k2
+LEFT ONLY JOIN
+    $c AS c
+ON
+    a.k1 == c.k3
 SELECT
     *
 ORDER BY
-    u1;
+    u1
+;

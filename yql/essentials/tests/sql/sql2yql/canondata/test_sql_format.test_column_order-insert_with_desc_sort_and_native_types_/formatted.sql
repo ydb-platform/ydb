@@ -9,7 +9,10 @@ SELECT
     key,
     AsList(subkey),
     value
-FROM Input
-WHERE key > '000'
+FROM
+    Input
+WHERE
+    key > '000'
 ORDER BY
-    value DESC;
+    value DESC
+;

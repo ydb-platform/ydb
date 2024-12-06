@@ -4,6 +4,8 @@ USE plato;
 
 SELECT
     SOME(YQL::NewMTRand(1))
-FROM Input
+FROM
+    Input
 GROUP BY
-    key;
+    key
+;

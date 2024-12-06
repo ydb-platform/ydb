@@ -7,4 +7,6 @@ PRAGMA config.flags("ValidateUdf", "None");
 
 SELECT
     *
-FROM $processed;
+FROM
+    $processed
+;

@@ -14,7 +14,8 @@ SELECT
                 )
             )
         )
-    );
+    )
+;
 $f = AGGREGATION_FACTORY("hll", 4);
 
 SELECT
@@ -28,19 +29,26 @@ SELECT
                 )
             )
         )
-    );
+    )
+;
 USE plato;
 
 INSERT INTO @a
 SELECT
     *
-FROM as_table($t);
+FROM
+    as_table($t)
+;
 COMMIT;
 
 SELECT
     AGGREGATE_BY(a, $f)
-FROM @a;
+FROM
+    @a
+;
 
 SELECT
     AGGREGATE_BY(DISTINCT a, $f)
-FROM @a;
+FROM
+    @a
+;

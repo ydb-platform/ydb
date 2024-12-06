@@ -14,15 +14,19 @@ $join = (
     FROM (
         SELECT
             *
-        FROM Input
-        WHERE value > "bbb"
-    )
-        AS a
-    LEFT JOIN Input
-        AS b
-    ON a.key == b.key
+        FROM
+            Input
+        WHERE
+            value > "bbb"
+    ) AS a
+    LEFT JOIN
+        Input AS b
+    ON
+        a.key == b.key
 );
 
 SELECT
     count(*)
-FROM $join;
+FROM
+    $join
+;

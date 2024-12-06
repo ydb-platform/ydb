@@ -6,6 +6,8 @@ USE plato;
 INSERT INTO Output
 SELECT
     *
-FROM Input
+FROM
+    Input
 ASSUME ORDER BY
-    key;
+    key
+;

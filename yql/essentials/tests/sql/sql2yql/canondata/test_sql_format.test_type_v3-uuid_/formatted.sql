@@ -27,4 +27,6 @@ COMMIT;
 
 SELECT
     *
-FROM Output;
+FROM
+    Output
+;

@@ -11,4 +11,6 @@ $result =
 
 SELECT
     *
-FROM AS_TABLE($result.0);
+FROM
+    AS_TABLE($result.0)
+;

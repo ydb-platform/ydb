@@ -11,10 +11,14 @@ FROM (
 )
     FLATTEN BY x
 ORDER BY
-    x;
+    x
+;
 COMMIT;
 
 SELECT
     *
-FROM Output
-WHERE x == 50;
+FROM
+    Output
+WHERE
+    x == 50
+;

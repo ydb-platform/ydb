@@ -5,4 +5,5 @@ $type1 = TypeOf(10);
 
 SELECT
     FormatType(list<$type1>),
-    FormatType($struct);
+    FormatType($struct)
+;

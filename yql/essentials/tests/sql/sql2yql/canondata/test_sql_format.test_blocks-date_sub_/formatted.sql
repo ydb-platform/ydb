@@ -74,10 +74,11 @@ SELECT
     a.ntz - b.waz,
     a.ntz - b.wdz,
     a.ntz - b.wtz
-FROM Dates
-    AS a
-CROSS JOIN Dates
-    AS b;
+FROM
+    Dates AS a
+CROSS JOIN
+    Dates AS b
+;
 
 SELECT
     a.wa - b.na,
@@ -152,7 +153,8 @@ SELECT
     a.wtz - b.waz,
     a.wtz - b.wdz,
     a.wtz - b.wtz,
-FROM Dates
-    AS a
-CROSS JOIN Dates
-    AS b;
+FROM
+    Dates AS a
+CROSS JOIN
+    Dates AS b
+;

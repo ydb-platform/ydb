@@ -48,20 +48,24 @@ REDUCE (
     SELECT
         key,
         TableRow() AS t1
-    FROM Input
+    FROM
+        Input
 ), (
     SELECT
         key,
         TableRow() AS t2
-    FROM Input
+    FROM
+        Input
 ), (
     SELECT
         key,
         TableRow() AS t3
-    FROM Input
+    FROM
+        Input
 )
 ON
     key
 USING $reducer(TableRow())
 ASSUME ORDER BY
-    key;
+    key
+;

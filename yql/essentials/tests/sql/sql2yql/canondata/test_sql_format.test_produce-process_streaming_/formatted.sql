@@ -4,7 +4,8 @@
 $input = (
     SELECT
         String::JoinFromList(AsList(key, subkey, value), ",") AS Data
-    FROM plato.Input1
+    FROM
+        plato.Input1
 );
 
 $processed = (
@@ -15,12 +16,14 @@ $processed = (
 $list = (
     SELECT
         String::SplitToList(Data, ',') AS DataList
-    FROM $processed
+    FROM
+        $processed
 );
 
 SELECT
     input.DataList[0] AS key,
     input.DataList[1] AS subkey,
     input.DataList[2] AS value
-FROM $list
-    AS input;
+FROM
+    $list AS input
+;

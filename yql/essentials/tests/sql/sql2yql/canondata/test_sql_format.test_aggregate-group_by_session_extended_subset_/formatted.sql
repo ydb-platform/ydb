@@ -13,14 +13,17 @@ $src =
     SELECT
         t.*,
         (ts ?? 0, payload) AS sort_col
-    FROM plato.Input
-        AS t;
+    FROM
+        plato.Input AS t
+;
 
 SELECT
     COUNT(1) AS session_len,
-FROM $src
+FROM
+    $src
 GROUP BY
     user,
     SessionWindow(sort_col, $init, $update, $calculate)
 ORDER BY
-    session_len;
+    session_len
+;

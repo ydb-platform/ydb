@@ -21,7 +21,8 @@ SELECT
     3,
     CAST($datetime64_minus1 AS timestamp64),
     CAST($datetime64_min AS timestamp64),
-    CAST($datetime64_max AS timestamp64);
+    CAST($datetime64_max AS timestamp64)
+;
 
 -- scale down
 SELECT
@@ -36,7 +37,8 @@ SELECT
     3,
     CAST($datetime64_minus1 AS date32),
     CAST($datetime64_min AS date32),
-    CAST($datetime64_max AS date32);
+    CAST($datetime64_max AS date32)
+;
 $date_max_value = 49673l;
 $date_max = unwrap(CAST($date_max_value - 1 AS date));
 $datetime_max = unwrap(CAST($date_max_value * 86400 - 1 AS datetime));
@@ -60,7 +62,8 @@ SELECT
     CAST($timestamp_max AS timestamp64),
     4,
     CAST($interval_min AS interval64),
-    CAST($interval_max AS interval64);
+    CAST($interval_max AS interval64)
+;
 $date32_val = unwrap(CAST($date_max_value - 1 AS date32));
 $datetime64_val = unwrap(CAST($date_max_value * 86400 - 1 AS datetime64));
 $timestamp64_val = unwrap(CAST($date_max_value * 86400 * 1000000 - 1 AS timestamp64));
@@ -83,7 +86,8 @@ SELECT
     CAST($timestamp64_val AS timestamp),
     4,
     CAST($interval64_val_min AS interval),
-    CAST($interval64_val_max AS interval);
+    CAST($interval64_val_max AS interval)
+;
 
 SELECT
     1,
@@ -97,7 +101,8 @@ SELECT
     3,
     CAST($timestamp64_minus1 AS date),
     CAST($timestamp64_minus1 AS datetime),
-    CAST($timestamp64_minus1 AS timestamp);
+    CAST($timestamp64_minus1 AS timestamp)
+;
 -- bigdate to narrow out of range
 $date32_big_val = unwrap(CAST($date_max_value AS date32));
 $datetime64_big_val = unwrap(CAST($date_max_value * 86400 AS datetime64));
@@ -120,4 +125,5 @@ SELECT
     CAST($timestamp64_big_val AS timestamp),
     4,
     CAST($interval64_big_val_min AS interval),
-    CAST($interval64_big_val_max AS interval);
+    CAST($interval64_big_val_max AS interval)
+;

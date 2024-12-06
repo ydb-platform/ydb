@@ -16,4 +16,5 @@ WINDOW
     w AS (
         ORDER BY
             y
-    );
+    )
+;

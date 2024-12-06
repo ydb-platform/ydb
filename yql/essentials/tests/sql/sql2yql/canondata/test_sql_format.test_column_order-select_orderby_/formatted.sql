@@ -5,6 +5,8 @@ PRAGMA OrderedColumns;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;

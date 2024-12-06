@@ -19,6 +19,8 @@ $res = (
 
 SELECT
     *
-FROM $res
+FROM
+    $res
 ORDER BY
-    Yql::ToOptional(Yql::DictKeys(joined));
+    Yql::ToOptional(Yql::DictKeys(joined))
+;

@@ -7,7 +7,8 @@ SELECT
     key,
     subkey,
     COUNT(*) OVER w AS cnt
-FROM Input4
+FROM
+    Input4
 WINDOW
     w AS (
         ORDER BY
@@ -17,4 +18,5 @@ WINDOW
     )
 ORDER BY
     key,
-    subkey;
+    subkey
+;

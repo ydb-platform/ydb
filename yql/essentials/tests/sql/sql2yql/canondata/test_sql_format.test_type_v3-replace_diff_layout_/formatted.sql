@@ -33,7 +33,9 @@ INSERT INTO Output1 WITH (
 )
 SELECT
     *
-FROM $i;
+FROM
+    $i
+;
 
 INSERT INTO Output2 WITH (
     truncate,
@@ -41,7 +43,8 @@ INSERT INTO Output2 WITH (
 )
 SELECT
     *
-FROM $j
+FROM
+    $j
 LIMIT 2;
 
 INSERT INTO Output3 WITH (
@@ -50,4 +53,6 @@ INSERT INTO Output3 WITH (
 )
 SELECT
     *
-FROM $k;
+FROM
+    $k
+;

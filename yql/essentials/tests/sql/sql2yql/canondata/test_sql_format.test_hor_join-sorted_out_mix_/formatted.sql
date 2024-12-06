@@ -7,21 +7,24 @@ $i1 = (
     SELECT
         key,
         value || "a" AS value1
-    FROM plato.Input1
+    FROM
+        plato.Input1
 );
 
 $i2 = (
     SELECT
         key,
         "1" AS value2
-    FROM plato.Input2
+    FROM
+        plato.Input2
 );
 
 $i3 = (
     SELECT
         key,
         "2" AS value3
-    FROM plato.Input3
+    FROM
+        plato.Input3
 );
 $udf = ($x) -> {
     RETURN AsStruct(
@@ -47,4 +50,5 @@ FROM (
     USING $udf(TableRow())
 )
 ORDER BY
-    key;
+    key
+;

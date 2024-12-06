@@ -4,7 +4,8 @@ USE plato;
 SELECT DISTINCT
     AGGREGATE_LIST(value) OVER w AS values,
     key
-FROM Input2
+FROM
+    Input2
 WINDOW
     w AS (
         PARTITION BY
@@ -14,4 +15,5 @@ WINDOW
         ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
     )
 ORDER BY
-    key;
+    key
+;

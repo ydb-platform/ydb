@@ -12,4 +12,5 @@ $pred3 = ($row) -> (($row.x > 0 OR $row.z == "test") ?? FALSE);
 SELECT
     $range_for($pred1) IS NULL,
     $range_for($pred2) IS NULL,
-    $range_for($pred3) IS NULL,;
+    $range_for($pred3) IS NULL,
+;

@@ -5,10 +5,14 @@ USE plato;
 INSERT INTO @tmp
 SELECT
     *
-FROM Input
-    TABLESAMPLE BERNOULLI (30) REPEATABLE (1);
+FROM
+    Input
+    TABLESAMPLE BERNOULLI (30) REPEATABLE (1)
+;
 COMMIT;
 
 SELECT
     *
-FROM @tmp;
+FROM
+    @tmp
+;

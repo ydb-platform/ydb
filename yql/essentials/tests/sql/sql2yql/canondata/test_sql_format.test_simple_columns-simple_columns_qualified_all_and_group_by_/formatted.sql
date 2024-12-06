@@ -10,11 +10,11 @@ FROM (
     SELECT
         data.key AS dkey,
         data.*
-    FROM Input
-        AS data
-)
-    AS middle
+    FROM
+        Input AS data
+) AS middle
 GROUP BY
     CAST(middle.dkey AS uint32) / 100 AS hundred_keys
 ORDER BY
-    hundred_keys;
+    hundred_keys
+;

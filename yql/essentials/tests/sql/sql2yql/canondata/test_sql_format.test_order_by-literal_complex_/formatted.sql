@@ -6,8 +6,10 @@ $list = AsList(AsStruct(1 AS a, "2" AS b, "3" AS c), AsStruct(4 AS a, "5" AS b, 
 INSERT INTO Output
 SELECT
     *
-FROM as_table($list)
+FROM
+    as_table($list)
 ORDER BY
     a DESC,
     b,
-    c DESC;
+    c DESC
+;

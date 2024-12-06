@@ -10,7 +10,9 @@ $d = "";
 
 SELECT
     count(*)
-FROM plato.filter_strict($a, $b, $c, $d);
+FROM
+    plato.filter_strict($a, $b, $c, $d)
+;
 $a = "";
 $b = ($_item) -> {
     RETURN TRUE;
@@ -20,7 +22,9 @@ $d = "raw";
 
 SELECT
     count(*)
-FROM plato.filter_strict($a, $b, $c, $d);
+FROM
+    plato.filter_strict($a, $b, $c, $d)
+;
 USE plato;
 $a = "";
 $b = ($_item) -> {
@@ -31,7 +35,9 @@ $d = "";
 
 SELECT
     count(*)
-FROM filter_strict($a, $b, $c, $d);
+FROM
+    filter_strict($a, $b, $c, $d)
+;
 $a = "";
 $b = ($_item) -> {
     RETURN TRUE;
@@ -41,4 +47,6 @@ $d = "raw";
 
 SELECT
     count(*)
-FROM filter_strict($a, $b, $c, $d);
+FROM
+    filter_strict($a, $b, $c, $d)
+;

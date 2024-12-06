@@ -5,10 +5,11 @@ $flatten = (
     SELECT
         answer_and_clicks.0 AS permalink,
         bc_type_tuple
-    FROM Input
-        AS a
+    FROM
+        Input AS a
         FLATTEN BY parsed_answers_and_clicks AS answer_and_clicks
-    WHERE answer_and_clicks.1 == 1
+    WHERE
+        answer_and_clicks.1 == 1
 );
 
 SELECT
@@ -20,7 +21,8 @@ FROM (
         a.*
     WITHOUT
         bc_type_tuple
-    FROM $flatten
-        AS a
+    FROM
+        $flatten AS a
 )
-    FLATTEN LIST BY bc_type;
+    FLATTEN LIST BY bc_type
+;

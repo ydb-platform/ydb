@@ -19,8 +19,7 @@ FROM (
             x,
             y
         )
-)
-    AS a
+) AS a
 JOIN (
     SELECT
         *
@@ -33,9 +32,10 @@ JOIN (
             x,
             y
         )
-)
-    AS b
-ON a.x == b.x AND a.y == b.y;
+) AS b
+ON
+    a.x == b.x AND a.y == b.y
+;
 
 SELECT
     *
@@ -53,8 +53,7 @@ FROM (
             x,
             y
         )
-)
-    AS a
+) AS a
 JOIN (
     SELECT
         *
@@ -67,6 +66,7 @@ JOIN (
             x,
             y
         )
-)
-    AS b
-ON a.x == b.x AND a.y == b.y;
+) AS b
+ON
+    a.x == b.x AND a.y == b.y
+;

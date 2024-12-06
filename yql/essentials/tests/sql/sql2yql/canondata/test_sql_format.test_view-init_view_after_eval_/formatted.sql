@@ -4,7 +4,9 @@ USE plato;
 $i =
     SELECT
         *
-    FROM Input;
+    FROM
+        Input
+;
 
 $i =
     PROCESS $i;
@@ -21,5 +23,6 @@ $filteredMembers = ListFilter(
 
 SELECT
     ChooseMembers(TableRow(), $filteredMembers)
-FROM Input
-    VIEW raw;
+FROM
+    Input VIEW raw
+;

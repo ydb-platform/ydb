@@ -6,4 +6,6 @@ $a = "Output";
 INSERT INTO $a
 SELECT
     count(*)
-FROM Input;
+FROM
+    Input
+;

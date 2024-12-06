@@ -9,4 +9,6 @@ SELECT
 
     /* XXX: <RemoveMember> callable always expands to <AsStruct>. */
     RemoveMember(val, "x") AS wox,
-FROM Input;
+FROM
+    Input
+;

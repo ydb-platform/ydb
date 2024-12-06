@@ -5,4 +5,6 @@ SELECT
         WHEN subkey THEN "WAT"
         ELSE value
     END AS value
-FROM plato.Input;
+FROM
+    plato.Input
+;

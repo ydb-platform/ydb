@@ -4,7 +4,9 @@ $b = 3 < 4;
 $c = 5 < 6;
 
 SELECT
-    ($a AND $b OR $b) == $b;
+    ($a AND $b OR $b) == $b
+;
 
 SELECT
-    ($c AND ($b OR $a) OR $a OR $b) == ($a OR $b);
+    ($c AND ($b OR $a) OR $a OR $b) == ($a OR $b)
+;

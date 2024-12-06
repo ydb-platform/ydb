@@ -13,6 +13,8 @@ $res =
 
 SELECT
     *
-FROM $res
+FROM
+    $res
 ORDER BY
-    value;
+    value
+;

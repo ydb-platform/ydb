@@ -4,8 +4,10 @@ PRAGMA DqEngine = "disable";
 DEFINE SUBQUERY $sample($product_type) AS
     SELECT
         *
-    FROM Input
-    WHERE subkey == $product_type
+    FROM
+        Input
+    WHERE
+        subkey == $product_type
     ORDER BY
         key
     LIMIT 10;
@@ -19,4 +21,6 @@ $concated =
 INSERT INTO Output
 SELECT
     *
-FROM $concated;
+FROM
+    $concated
+;

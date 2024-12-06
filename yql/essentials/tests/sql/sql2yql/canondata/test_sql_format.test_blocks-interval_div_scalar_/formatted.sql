@@ -17,7 +17,9 @@ SELECT
     wi / Int64("16"),
     ni / Uint64("17"),
     wi / Uint64("17"),
-FROM Dates;
+FROM
+    Dates
+;
 
 SELECT
     Interval("P1D") / i8,
@@ -36,4 +38,6 @@ SELECT
     Interval64("P1D") / i64,
     Interval("P1D") / u64,
     Interval64("P1D") / u64
-FROM Dates;
+FROM
+    Dates
+;

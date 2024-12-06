@@ -8,11 +8,13 @@ $sub = (
         key,
         value,
         Grouping(key, value) AS grouping
-    FROM Input
+    FROM
+        Input
     GROUP BY
         GROUPING SETS (
             (key),
-            (value))
+            (value)
+        )
 );
 
 --INSERT INTO Output
@@ -21,8 +23,9 @@ SELECT
     t.key,
     t.value,
     t.grouping
-FROM $sub
-    AS t
+FROM
+    $sub AS t
 ORDER BY
     t.key,
-    t.value;
+    t.value
+;

@@ -4,7 +4,8 @@ PRAGMA yt.UseNativeDescSort;
 SELECT
     subkey + 0 AS subkey1,
     value
-FROM Input
+FROM
+    Input
 ORDER BY
     subkey1 DESC,
     value

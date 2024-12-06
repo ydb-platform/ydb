@@ -6,9 +6,11 @@ $transform = ($value) -> {
 
 SELECT
     *
-FROM AS_TABLE(Yql::PgIterateAll($init, $transform))
+FROM
+    AS_TABLE(Yql::PgIterateAll($init, $transform))
 ORDER BY
-    n;
+    n
+;
 $init = [<|n: 1|>];
 $transform = ($value) -> {
     RETURN ListMap(ListFilter($value, ($r) -> ($r.n < 5)), ($r) -> (<|n: $r.n + 1|>));
@@ -16,9 +18,11 @@ $transform = ($value) -> {
 
 SELECT
     *
-FROM AS_TABLE(Yql::PgIterateAll($init, $transform))
+FROM
+    AS_TABLE(Yql::PgIterateAll($init, $transform))
 ORDER BY
-    n;
+    n
+;
 $init = [<|n: 1|>, <|n: 1|>, <|n: 2|>];
 $transform = ($value) -> {
     RETURN ListFlatMap($value, ($_r) -> ([<|n: 1|>, <|n: 2|>, <|n: 2|>]));
@@ -26,6 +30,8 @@ $transform = ($value) -> {
 
 SELECT
     *
-FROM AS_TABLE(Yql::PgIterate($init, $transform))
+FROM
+    AS_TABLE(Yql::PgIterate($init, $transform))
 ORDER BY
-    n;
+    n
+;

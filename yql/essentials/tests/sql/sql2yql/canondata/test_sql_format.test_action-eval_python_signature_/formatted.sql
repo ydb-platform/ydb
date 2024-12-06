@@ -14,4 +14,5 @@ def f(x, y):
 $f = Python::f($script);
 
 SELECT
-    $f(1, 2);
+    $f(1, 2)
+;

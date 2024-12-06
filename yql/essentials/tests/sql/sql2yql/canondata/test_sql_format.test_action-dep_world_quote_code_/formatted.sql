@@ -20,19 +20,24 @@ DEFINE ACTION $aaa($z) AS
     $k = (
         SELECT
             count(*)
-        FROM $z
+        FROM
+            $z
     );
 
     DEFINE SUBQUERY $sub($n) AS
         SELECT
             $n + $k
-        FROM $z;
+        FROM
+            $z
+        ;
     END DEFINE;
     $fullQuery = $combineQueries($sub, ListFromRange(0, 10));
 
     SELECT
         *
-    FROM $fullQuery();
+    FROM
+        $fullQuery()
+    ;
 END DEFINE;
 
 EVALUATE FOR $z IN AsList("Input") DO

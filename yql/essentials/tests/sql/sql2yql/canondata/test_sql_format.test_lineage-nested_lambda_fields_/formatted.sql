@@ -10,4 +10,6 @@ INSERT INTO Output WITH truncate
 SELECT
     $k(key) AS k,
     $v(value) AS v
-FROM Input;
+FROM
+    Input
+;

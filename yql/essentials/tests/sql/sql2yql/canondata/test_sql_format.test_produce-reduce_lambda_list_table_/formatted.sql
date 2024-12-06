@@ -10,7 +10,8 @@ $res = (
         SELECT
             AsList(key) AS key,
             value
-        FROM Input1
+        FROM
+            Input1
     )
     ON
         key
@@ -19,6 +20,8 @@ $res = (
 
 SELECT
     *
-FROM $res
+FROM
+    $res
 ORDER BY
-    key;
+    key
+;

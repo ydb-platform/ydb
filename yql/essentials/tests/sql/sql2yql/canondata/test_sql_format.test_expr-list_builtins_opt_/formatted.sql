@@ -23,4 +23,5 @@ SELECT
     ListConcat($list_empty3) AS list_empty3,
     ListConcat($list_null0) AS list_null0,
     ListConcat($list_null1) AS list_null1,
-    ListMin($list_min) AS list_min;
+    ListMin($list_min) AS list_min
+;

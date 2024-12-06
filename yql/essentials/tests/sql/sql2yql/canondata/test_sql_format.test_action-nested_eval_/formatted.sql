@@ -30,4 +30,5 @@ $struct = AsStruct(
 );
 
 SELECT
-    FormatType(EvaluateType($struct.IntHandle));
+    FormatType(EvaluateType($struct.IntHandle))
+;

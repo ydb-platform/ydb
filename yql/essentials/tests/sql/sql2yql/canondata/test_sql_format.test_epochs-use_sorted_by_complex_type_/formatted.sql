@@ -6,15 +6,20 @@ INSERT INTO Output
 SELECT
     key AS key,
     aggr_list(subkey) AS lst
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
     key,
-    lst;
+    lst
+;
 COMMIT;
 
 SELECT
     *
-FROM Output
-WHERE key > "150";
+FROM
+    Output
+WHERE
+    key > "150"
+;

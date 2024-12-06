@@ -32,9 +32,14 @@ COMMIT;
 
 SELECT
     *
-FROM @a
-WHERE d3 != Decimal("5.3", 3, 2);
+FROM
+    @a
+WHERE
+    d3 != Decimal("5.3", 3, 2)
+;
 
 SELECT
     *
-FROM Input;
+FROM
+    Input
+;

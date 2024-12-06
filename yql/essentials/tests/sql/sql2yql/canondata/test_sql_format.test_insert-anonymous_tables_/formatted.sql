@@ -5,22 +5,28 @@ PRAGMA yt.MapJoinLimit = "1M";
 INSERT INTO @a
 SELECT
     *
-FROM Input;
+FROM
+    Input
+;
 COMMIT;
 
 SELECT
     count(*)
-FROM @a;
+FROM
+    @a
+;
 
 SELECT
     *
-FROM @a
+FROM
+    @a
 LIMIT 2;
 
 SELECT
     count(*)
-FROM @a
-    AS a
-CROSS JOIN @a
-    AS b;
+FROM
+    @a AS a
+CROSS JOIN
+    @a AS b
+;
 COMMIT;

@@ -61,20 +61,24 @@ $data = (
             girls ?? FALSE AS girls,
             min_age ?? 0.f AS min_age,
             max_age ?? 18.f AS max_age
-        FROM AS_TABLE([
-            <|puid: 1, ts: 123, boys: TRUE, girls: FALSE, min_age: 1.f, max_age: 2.f|>,
-            <|puid: 2, ts: 123, boys: TRUE, girls: FALSE, min_age: NULL, max_age: NULL|>,
-            <|puid: 3, ts: 123, boys: NULL, girls: NULL, min_age: 1.f, max_age: 2.f|>,
-            <|puid: 4, ts: 123, boys: TRUE, girls: TRUE, min_age: 1.f, max_age: 2.f|>,
-            <|puid: 5, ts: 123, boys: TRUE, girls: TRUE, min_age: 1.f, max_age: 5.f|>,
-            <|puid: 6, ts: 123, boys: TRUE, girls: FALSE, min_age: 1.f, max_age: 2.f|>,
-        ])
+        FROM
+            AS_TABLE([
+                <|puid: 1, ts: 123, boys: TRUE, girls: FALSE, min_age: 1.f, max_age: 2.f|>,
+                <|puid: 2, ts: 123, boys: TRUE, girls: FALSE, min_age: NULL, max_age: NULL|>,
+                <|puid: 3, ts: 123, boys: NULL, girls: NULL, min_age: 1.f, max_age: 2.f|>,
+                <|puid: 4, ts: 123, boys: TRUE, girls: TRUE, min_age: 1.f, max_age: 2.f|>,
+                <|puid: 5, ts: 123, boys: TRUE, girls: TRUE, min_age: 1.f, max_age: 5.f|>,
+                <|puid: 6, ts: 123, boys: TRUE, girls: FALSE, min_age: 1.f, max_age: 2.f|>,
+            ])
     )
-    WHERE boys OR girls OR min_age > 0.f OR max_age < 18.f
+    WHERE
+        boys OR girls OR min_age > 0.f OR max_age < 18.f
 );
 
 SELECT
     puid,
     $age_suffixes(<|begin: min_age, end: max_age|>, $ages) AS age_suffixes,
     <|begin: min_age, end: max_age|> AS interval
-FROM $data;
+FROM
+    $data
+;

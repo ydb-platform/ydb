@@ -6,8 +6,8 @@ $bar = [<|"x": 1, "y": NULL|>];
 INSERT INTO Output
 SELECT
     *
-FROM AS_TABLE($foo)
-    AS a
-LEFT JOIN AS_TABLE($bar)
-    AS b
+FROM
+    AS_TABLE($foo) AS a
+LEFT JOIN
+    AS_TABLE($bar) AS b
 USING (x);

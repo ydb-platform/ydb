@@ -5,12 +5,16 @@ PRAGMA ResultRowsLimit = "2";
 
 SELECT
     key || "a" AS key
-FROM Input
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     key || "b" AS key
-FROM Input
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;

@@ -5,17 +5,22 @@ PRAGMA AnsiOrderByLimitInUnionAll;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 UNION ALL
 SELECT
     *
-FROM Input
+FROM
+    Input
 INTO RESULT aaa;
 
 DISCARD SELECT
     *
-FROM Input
+FROM
+    Input
 UNION ALL
 SELECT
     *
-FROM Input;
+FROM
+    Input
+;

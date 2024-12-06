@@ -32,9 +32,11 @@ SELECT
         ORDER BY
             key DESC
     ) AS cnt2_desc,
-FROM AS_TABLE($input)
+FROM
+    AS_TABLE($input)
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     key,
@@ -46,6 +48,8 @@ SELECT
         PARTITION BY
             subkey
     ) AS cnt,
-FROM AS_TABLE($input)
+FROM
+    AS_TABLE($input)
 ORDER BY
-    key;
+    key
+;

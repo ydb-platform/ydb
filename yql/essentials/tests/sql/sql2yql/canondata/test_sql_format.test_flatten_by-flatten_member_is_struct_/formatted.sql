@@ -9,8 +9,9 @@ SELECT
 FROM (
     SELECT
         keyitem.kk AS kkstr
-    FROM Input
-        AS d
+    FROM
+        Input AS d
         FLATTEN BY key AS keyitem
 )
-    FLATTEN BY kkstr AS kkstritem;
+    FLATTEN BY kkstr AS kkstritem
+;

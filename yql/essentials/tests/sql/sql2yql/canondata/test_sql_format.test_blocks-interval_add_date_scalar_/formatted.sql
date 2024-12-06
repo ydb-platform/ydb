@@ -26,7 +26,9 @@ SELECT
     wi + TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
     ni + TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
     wi + TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
-FROM Dates;
+FROM
+    Dates
+;
 
 SELECT
     Interval("P1D") + na,
@@ -53,4 +55,6 @@ SELECT
     Interval64("P1D") + wdz,
     Interval("P1D") + wtz,
     Interval64("P1D") + wtz
-FROM Dates;
+FROM
+    Dates
+;

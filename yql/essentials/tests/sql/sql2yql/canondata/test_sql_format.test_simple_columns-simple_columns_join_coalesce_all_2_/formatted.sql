@@ -6,19 +6,23 @@ PRAGMA CoalesceJoinKeysOnQualifiedAll;
 $foo =
     SELECT
         1 AS key,
-        1 AS value1;
+        1 AS value1
+;
 
 $bar =
     SELECT
         1l AS key,
-        2 AS value2;
+        2 AS value2
+;
 
 SELECT
     *
-FROM $foo
-    AS foo
-JOIN $bar
-    AS bar
-ON foo.key == bar.key;
+FROM
+    $foo AS foo
+JOIN
+    $bar AS bar
+ON
+    foo.key == bar.key
+;
 -- output key has type Int64
 

@@ -6,4 +6,6 @@ SELECT
         WHEN "foo" THEN "FOO"
         ELSE value
     END AS value
-FROM plato.Input;
+FROM
+    plato.Input
+;

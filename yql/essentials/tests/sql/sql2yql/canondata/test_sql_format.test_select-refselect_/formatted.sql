@@ -6,4 +6,6 @@ SELECT
     key,
     subkey,
     value
-FROM `test_table_src`;
+FROM
+    `test_table_src`
+;

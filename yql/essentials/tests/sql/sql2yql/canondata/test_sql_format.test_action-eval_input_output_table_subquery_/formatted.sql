@@ -19,7 +19,10 @@ SELECT
     key AS key,
     "" AS subkey,
     "value:" || value AS value
-FROM $b
-WHERE key < "100"
+FROM
+    $b
+WHERE
+    key < "100"
 ORDER BY
-    key;
+    key
+;

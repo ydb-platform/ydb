@@ -8,6 +8,8 @@ $keys = ($key) -> {
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
-    $keys(value);
+    $keys(value)
+;

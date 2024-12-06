@@ -5,5 +5,7 @@ PRAGMA OrderedColumns;
 
 SELECT
     *
-FROM Input
-    TABLESAMPLE BERNOULLI (100.0);
+FROM
+    Input
+    TABLESAMPLE BERNOULLI (100.0)
+;

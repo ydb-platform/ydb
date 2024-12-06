@@ -28,4 +28,5 @@ SELECT
     ListSample($list, 0.1, 10) AS result10,
     ListSample(Just($list), 0.1, 11) AS result11,
     ListSample($list, Just(0.1), 12) AS result12,
-    ListSample(Just($list), Just(0.1), 13) AS result13;
+    ListSample(Just($list), Just(0.1), 13) AS result13
+;

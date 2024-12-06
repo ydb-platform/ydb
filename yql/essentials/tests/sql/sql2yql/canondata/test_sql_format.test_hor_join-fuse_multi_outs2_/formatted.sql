@@ -33,18 +33,26 @@ $i, $j = (
 SELECT
     key,
     value
-FROM $i
-WHERE key > "100"
+FROM
+    $i
+WHERE
+    key > "100"
 ORDER BY
-    key;
+    key
+;
 
 INSERT INTO @a
 SELECT
     *
-FROM $j;
+FROM
+    $j
+;
 
 INSERT INTO @b
 SELECT
     key
-FROM $j
-WHERE key > "200";
+FROM
+    $j
+WHERE
+    key > "200"
+;

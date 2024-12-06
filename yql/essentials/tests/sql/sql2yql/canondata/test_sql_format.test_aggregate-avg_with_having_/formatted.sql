@@ -2,9 +2,12 @@
 SELECT
     value,
     avg(CAST(key AS int)) + 0.3 AS key
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     value
-HAVING value > "foo"
+HAVING
+    value > "foo"
 ORDER BY
-    key;
+    key
+;

@@ -21,16 +21,19 @@ COMMIT;
 
 SELECT
     A.*
-FROM @A
-    AS A
-LEFT ONLY JOIN @B
-    AS B
-ON A.key == B.key
+FROM
+    @A AS A
+LEFT ONLY JOIN
+    @B AS B
+ON
+    A.key == B.key
 UNION ALL
 SELECT
     B.*
-FROM @A
-    AS A
-RIGHT ONLY JOIN @B
-    AS B
-ON A.key == B.key;
+FROM
+    @A AS A
+RIGHT ONLY JOIN
+    @B AS B
+ON
+    A.key == B.key
+;

@@ -8,4 +8,5 @@ SELECT
     $waz AS waz,
     $wdz AS wdz,
     $wtz AS wtz,
-    ($waz, $wdz, $waz) AS tup;
+    ($waz, $wdz, $waz) AS tup
+;

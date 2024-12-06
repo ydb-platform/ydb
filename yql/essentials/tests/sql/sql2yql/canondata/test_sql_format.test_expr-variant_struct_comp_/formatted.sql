@@ -18,7 +18,8 @@ SELECT
         VARIANT (1, "b", $vt1) == VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) == VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) == VARIANT ($id(1u), "b", $vt2)
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -28,7 +29,8 @@ SELECT
         VARIANT (1, "b", $vt1) != VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) != VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) != VARIANT ($id(1u), "b", $vt2)
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -38,7 +40,8 @@ SELECT
         VARIANT (1, "b", $vt1) < VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) < VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) < VARIANT ($id(1u), "b", $vt2)
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -48,7 +51,8 @@ SELECT
         VARIANT (1, "b", $vt1) <= VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) <= VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) <= VARIANT ($id(1u), "b", $vt2)
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -58,7 +62,8 @@ SELECT
         VARIANT (1, "b", $vt1) > VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) > VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) > VARIANT ($id(1u), "b", $vt2)
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -68,4 +73,5 @@ SELECT
         VARIANT (1, "b", $vt1) >= VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) >= VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) >= VARIANT ($id(1u), "b", $vt2)
-    );
+    )
+;

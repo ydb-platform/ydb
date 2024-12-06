@@ -15,4 +15,5 @@ SELECT
     $test(3) AS result3,
     $test(4) AS result4,
     ListShuffle($list, 5) AS result5,
-    ListShuffle(Just($list), 6) AS result6;
+    ListShuffle(Just($list), 6) AS result6
+;

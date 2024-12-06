@@ -33,4 +33,5 @@ $test_data = AsList(AsList(1, 2), AsList(3, 2), AsList(3, 3), AsList(1, 3), AsLi
 
 SELECT
     ListSort(DictItems(ListAggregate(AsList(1, 2, 3, 2, 3, 3), $count_values))) AS count_values,
-    ListSort(DictItems(ListAggregate($test_data, $count_list_values))) AS count_list_values,;
+    ListSort(DictItems(ListAggregate($test_data, $count_list_values))) AS count_list_values,
+;

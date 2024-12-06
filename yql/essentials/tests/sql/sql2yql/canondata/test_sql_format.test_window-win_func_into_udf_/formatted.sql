@@ -2,7 +2,8 @@
 SELECT
     key,
     Math::Sqrt(CAST(row_number() OVER w AS double)) AS sq
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w AS (
         PARTITION BY
@@ -12,4 +13,5 @@ WINDOW
     )
 ORDER BY
     key,
-    sq;
+    sq
+;

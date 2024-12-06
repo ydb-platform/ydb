@@ -3,7 +3,9 @@
 DEFINE SUBQUERY $t() AS
     SELECT
         *
-    FROM as_table([<|key: "0"|>, <|key: "1"|>]);
+    FROM
+        as_table([<|key: "0"|>, <|key: "1"|>])
+    ;
 END DEFINE;
 
 DEFINE SUBQUERY $split_formula_log($in) AS
@@ -32,8 +34,12 @@ $a, $b = (
 
 SELECT
     *
-FROM $a;
+FROM
+    $a
+;
 
 SELECT
     *
-FROM $b;
+FROM
+    $b
+;

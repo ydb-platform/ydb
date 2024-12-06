@@ -7,7 +7,8 @@ $foo =
         subkey,
         key,
         value AS v
-    FROM Input
+    FROM
+        Input
     ORDER BY
         subkey ASC,
         key DESC
@@ -17,4 +18,5 @@ $x =
     PROCESS $foo;
 
 SELECT
-    YQL::CostsOf($x) AS costs;
+    YQL::CostsOf($x) AS costs
+;

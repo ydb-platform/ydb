@@ -27,27 +27,33 @@ SELECT
 FROM (
     SELECT
         *
-    FROM $r1
+    FROM
+        $r1
         FLATTEN LIST BY arg_0
 )
     FLATTEN COLUMNS
 ORDER BY
     key,
-    subkey;
+    subkey
+;
 
 SELECT
     arg_0 AS key,
     ListSort(YQL::Collect(arg_1)) AS values
-FROM $r2
+FROM
+    $r2
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     FormatType(TypeOf(TableRow()))
-FROM $r1
+FROM
+    $r1
 LIMIT 1;
 
 SELECT
     FormatType(TypeOf(TableRow()))
-FROM $r3
+FROM
+    $r3
 LIMIT 1;

@@ -3,9 +3,11 @@
 -- Null handling
 SELECT
     JSON_QUERY (NULL, "strict $.key"),
-    JSON_QUERY (Nothing(Json?), "strict $.key");
+    JSON_QUERY (Nothing(Json?), "strict $.key")
+;
 -- Casual select
 $json = CAST(@@{"key": [1, 2, 3]}@@ AS Json);
 
 SELECT
-    JSON_QUERY ($json, "strict $.key");
+    JSON_QUERY ($json, "strict $.key")
+;

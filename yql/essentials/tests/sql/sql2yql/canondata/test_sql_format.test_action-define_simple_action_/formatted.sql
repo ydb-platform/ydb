@@ -4,13 +4,16 @@ DEFINE ACTION $action($b, $c) AS
     $d = $b + $c;
 
     SELECT
-        $b;
+        $b
+    ;
 
     SELECT
-        $c;
+        $c
+    ;
 
     SELECT
-        $d;
+        $d
+    ;
 END DEFINE;
 DO
     $action(1, 2)

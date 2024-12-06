@@ -8,8 +8,10 @@ SELECT
     key,
     count(value),
     count(DISTINCT value)
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

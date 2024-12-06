@@ -9,55 +9,71 @@ $t = [<|k: 1, v: 2|>];
 $src =
     SELECT
         k
-    FROM as_table($t)
+    FROM
+        as_table($t)
     ORDER BY
-        x;
+        x
+;
 
 SELECT
     *
-FROM $src;
+FROM
+    $src
+;
 
 $src =
     SELECT
         a.k AS key
-    FROM as_table($t)
-        AS a
-    JOIN as_table($t)
-        AS b
-    ON a.k == b.k
+    FROM
+        as_table($t) AS a
+    JOIN
+        as_table($t) AS b
+    ON
+        a.k == b.k
     ORDER BY
-        b.u;
+        b.u
+;
 
 SELECT
     *
-FROM $src;
+FROM
+    $src
+;
 
 $src =
     SELECT
         a.k AS key
-    FROM as_table($t)
-        AS a
-    JOIN as_table($t)
-        AS b
-    ON a.k == b.k
+    FROM
+        as_table($t) AS a
+    JOIN
+        as_table($t) AS b
+    ON
+        a.k == b.k
     ORDER BY
-        v;
+        v
+;
 
 SELECT
     *
-FROM $src;
+FROM
+    $src
+;
 
 $src =
     SELECT
         a.k AS key
-    FROM as_table($t)
-        AS a
-    JOIN as_table($t)
-        AS b
-    ON a.k == b.k
+    FROM
+        as_table($t) AS a
+    JOIN
+        as_table($t) AS b
+    ON
+        a.k == b.k
     ORDER BY
-        z;
+        z
+;
 
 SELECT
     *
-FROM $src;
+FROM
+    $src
+;

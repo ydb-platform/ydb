@@ -12,7 +12,8 @@ SELECT
         Struct<a: PgInt4, b: PgText>,
         ($row) -> (StartsWith(FromPg($row.b), 'aaaa') ?? FALSE),
         AsTuple(AsAtom("b"))
-    );
+    )
+;
 
 -- not like 'aaaa'
 SELECT
@@ -20,7 +21,8 @@ SELECT
         Struct<a: PgInt4, b: PgText>,
         ($row) -> (NOT (StartsWith(FromPg($row.b), 'aaaa') ?? TRUE)),
         AsTuple(AsAtom("b"))
-    );
+    )
+;
 
 -- like <invalid utf8>
 SELECT
@@ -28,7 +30,8 @@ SELECT
         Struct<a: PgInt4, b: PgText>,
         ($row) -> (StartsWith(FromPg($row.b), 'a\xf5') ?? FALSE),
         AsTuple(AsAtom("b"))
-    );
+    )
+;
 
 -- not like <invalid utf8>
 SELECT
@@ -36,4 +39,5 @@ SELECT
         Struct<a: PgInt4, b: PgText>,
         ($row) -> (NOT (StartsWith(FromPg($row.b), 'a\xf5') ?? TRUE)),
         AsTuple(AsAtom("b"))
-    );
+    )
+;

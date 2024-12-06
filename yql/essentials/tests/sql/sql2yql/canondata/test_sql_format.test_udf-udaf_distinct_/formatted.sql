@@ -50,5 +50,6 @@ SELECT
 FROM (
     SELECT
         CAST(LENGTH(value) AS Int64) AS item
-    FROM plato.Input
+    FROM
+        plato.Input
 );

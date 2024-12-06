@@ -5,4 +5,6 @@ DECLARE $n AS List<String>?;
 
 SELECT
     *
-FROM $n;
+FROM
+    $n
+;

@@ -9,4 +9,5 @@ SELECT
     ListConcat($list, Just(", ")),
     ListConcat($list, NULL),
     ListConcat($list, Nothing(String?)),
-    ListConcat(["single"], "tail");
+    ListConcat(["single"], "tail")
+;

@@ -5,10 +5,12 @@ $t = [<|"key1": "1", "subkey1": "a", "key": "1", "subkey": "a", "value": "value2
 
 SELECT
     *
-FROM Input
-    AS A
-LEFT ONLY JOIN AS_TABLE($t)
-    AS B
-ON AsTuple(A.key, AsTuple(A.subkey, A.subkey1)) == AsTuple(B.key, AsTuple(B.subkey, B.subkey1))
+FROM
+    Input AS A
+LEFT ONLY JOIN
+    AS_TABLE($t) AS B
+ON
+    AsTuple(A.key, AsTuple(A.subkey, A.subkey1)) == AsTuple(B.key, AsTuple(B.subkey, B.subkey1))
 ORDER BY
-    `key`;
+    `key`
+;

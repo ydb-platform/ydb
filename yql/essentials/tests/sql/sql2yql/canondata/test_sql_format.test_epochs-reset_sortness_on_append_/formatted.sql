@@ -17,12 +17,17 @@ COMMIT;
 INSERT INTO Output
 SELECT
     *
-FROM Output
+FROM
+    Output
 ORDER BY
-    a;
+    a
+;
 COMMIT;
 
 SELECT
     *
-FROM Output
-WHERE a > '11';
+FROM
+    Output
+WHERE
+    a > '11'
+;

@@ -19,7 +19,9 @@ FROM (
                 ELSE NULL
             END
         ) AS value
-    FROM plato.Input
+    FROM
+        plato.Input
 )
 GROUP BY
-    key;
+    key
+;

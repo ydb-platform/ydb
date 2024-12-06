@@ -7,7 +7,8 @@ USE plato;
 INSERT INTO @a
 SELECT
     "1" AS Text,
-    ["a", "b"] AS Attachments;
+    ["a", "b"] AS Attachments
+;
 COMMIT;
 
 SELECT
@@ -17,5 +18,6 @@ SELECT
 WITHOUT
     x.Text,
     x.Attachments
-FROM @a
-    AS x;
+FROM
+    @a AS x
+;

@@ -6,7 +6,8 @@ $data = (
         value AS attr,
         key AS urlBase,
         CAST(subkey AS int32) AS dupsCount
-    FROM Input0
+    FROM
+        Input0
 );
 
 SELECT
@@ -18,7 +19,8 @@ FROM (
         urlBase,
         attr,
         count(*) AS dupsCount
-    FROM $data
+    FROM
+        $data
     GROUP BY
         urlBase,
         attr
@@ -26,4 +28,5 @@ FROM (
 GROUP BY
     urlBase
 ORDER BY
-    urlBase;
+    urlBase
+;

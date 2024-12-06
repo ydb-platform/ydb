@@ -7,5 +7,8 @@ SELECT
     WeakField(key, "String", "funny"),
     WeakField(subkey, "String", "bunny"),
     WeakField(value, "String", "boom")
-FROM RANGE(``, ``, ``) --FROM Concat(Input1, Input2)
+FROM
+    RANGE(``, ``, ``)
+
+--FROM Concat(Input1, Input2)
 ;

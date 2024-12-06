@@ -6,36 +6,44 @@ PRAGMA AnsiOrderByLimitInUnionAll;
 $foo =
     SELECT
         *
-    FROM Input
+    FROM
+        Input
     UNION ALL
     SELECT
         *
-    FROM Input
+    FROM
+        Input
     LIMIT 2;
 
 $bar =
     SELECT
         *
-    FROM Input
+    FROM
+        Input
     UNION ALL
     (
         SELECT
             *
-        FROM Input
+        FROM
+            Input
         LIMIT 2
     );
 
 SELECT
     *
-FROM $foo
+FROM
+    $foo
 ORDER BY
-    subkey;
+    subkey
+;
 
 SELECT
     *
-FROM $bar
+FROM
+    $bar
 ORDER BY
-    subkey;
+    subkey
+;
 
 SELECT
     1 AS key
@@ -52,4 +60,5 @@ UNION ALL
 SELECT
     2 AS key
 ASSUME ORDER BY
-    key;
+    key
+;

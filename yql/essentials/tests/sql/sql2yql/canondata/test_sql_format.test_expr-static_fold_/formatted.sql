@@ -14,10 +14,12 @@ SELECT
     StaticFold($st_many, "->", $concat),
     StaticFold($st_single, "->", $concat),
     CAST(StaticFold($st_empty, "->", $concat) AS Optional<String>),
-    StaticFold($tup, "->", $concat);
+    StaticFold($tup, "->", $concat)
+;
 
 SELECT
     StaticFold1($st_many, $start, $concat),
     StaticFold1($st_single, $start, $concat),
     CAST(StaticFold1($st_empty, $start, $concat) AS Optional<String>),
-    StaticFold1($tup, $start, $concat);
+    StaticFold1($tup, $start, $concat)
+;

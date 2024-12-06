@@ -5,6 +5,8 @@ IMPORT multiaggr_subq SYMBOLS $multiaggr_win;
 
 SELECT
     *
-FROM $multiaggr_win()
+FROM
+    $multiaggr_win()
 ORDER BY
-    rn;
+    rn
+;

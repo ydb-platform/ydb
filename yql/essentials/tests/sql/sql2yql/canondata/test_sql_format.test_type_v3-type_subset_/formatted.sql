@@ -9,5 +9,8 @@ PRAGMA yt.MaxInputTables = "2";
 INSERT INTO Output WITH truncate
 SELECT
     key
-FROM range("")
-WHERE key > "000";
+FROM
+    range("")
+WHERE
+    key > "000"
+;

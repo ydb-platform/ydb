@@ -11,9 +11,13 @@ $udf = Python::AsIs(Callable<(String) -> String>, $udfScript);
 
 SELECT
     TablePath() AS path
-FROM Input
+FROM
+    Input
 UNION ALL
 SELECT
     TablePath() AS path
-FROM Input
-WHERE $udf(key) > "080";
+FROM
+    Input
+WHERE
+    $udf(key) > "080"
+;

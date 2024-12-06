@@ -14,7 +14,8 @@ $data = (
         key AS Name,
         value AS Value,
         subkey AS Tag
-    FROM plato.Input0
+    FROM
+        plato.Input0
 );
 $separator = "|";
 

@@ -32,4 +32,6 @@ $myAddSuffix = ($row, $value) -> {
 
 SELECT
     $myAddSuffix(TableRow(), "*")
-FROM Input;
+FROM
+    Input
+;

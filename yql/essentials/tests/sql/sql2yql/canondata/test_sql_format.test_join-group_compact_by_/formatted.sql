@@ -12,19 +12,23 @@ FROM (
     FROM (
         SELECT
             *
-        FROM Input
-        WHERE subkey != "bar"
-    )
-        AS a
+        FROM
+            Input
+        WHERE
+            subkey != "bar"
+    ) AS a
     JOIN (
         SELECT
             *
-        FROM Input
-        WHERE subkey != "foo"
-    )
-        AS b
-    ON a.key == b.key AND a.subkey == b.subkey
+        FROM
+            Input
+        WHERE
+            subkey != "foo"
+    ) AS b
+    ON
+        a.key == b.key AND a.subkey == b.subkey
 )
 GROUP COMPACT BY
     key1,
-    subkey1;
+    subkey1
+;

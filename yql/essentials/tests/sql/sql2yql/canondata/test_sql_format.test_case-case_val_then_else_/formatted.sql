@@ -3,4 +3,6 @@ SELECT
         WHEN key THEN subkey
         ELSE value
     END
-FROM plato.Input;
+FROM
+    plato.Input
+;

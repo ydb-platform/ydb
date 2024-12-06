@@ -10,5 +10,6 @@ SELECT
         PARTITION BY
             subkey
     ) AS cnt
-FROM Input
-    AS a;
+FROM
+    Input AS a
+;

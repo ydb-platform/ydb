@@ -30,8 +30,10 @@ SELECT
     key,
     src,
     cnt
-FROM $r
+FROM
+    $r
 ORDER BY
     key,
     src,
-    cnt;
+    cnt
+;

@@ -8,13 +8,16 @@ $data = (
         unwrap(CAST(subkey AS uint32)) AS subkey,
         value,
         value || value AS unused
-    FROM Input4
+    FROM
+        Input4
 );
 
 INSERT INTO @data
 SELECT
     *
-FROM $data;
+FROM
+    $data
+;
 COMMIT;
 
 SELECT
@@ -25,7 +28,8 @@ SELECT
     LAST_VALUE(value) OVER w3 AS w3_last_value,
     SUM(key) OVER w4 AS w4_sum_key,
     LEAD(value) OVER w5 AS w5_next_value,
-FROM @data
+FROM
+    @data
 WINDOW
     w1 AS (
         PARTITION BY
@@ -64,4 +68,5 @@ WINDOW
     ) -- = w1
 ORDER BY
     key,
-    subkey;
+    subkey
+;

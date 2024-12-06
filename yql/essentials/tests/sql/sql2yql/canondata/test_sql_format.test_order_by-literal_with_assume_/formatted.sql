@@ -13,6 +13,8 @@ $t = AsList(
 INSERT INTO Output
 SELECT
     *
-FROM as_table($t)
+FROM
+    as_table($t)
 ASSUME ORDER BY
-    key;
+    key
+;

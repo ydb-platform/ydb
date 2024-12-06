@@ -5,11 +5,16 @@ PRAGMA yt.MapJoinLimit = "1m";
 $l1 =
     SELECT
         key
-    FROM `Input`;
+    FROM
+        `Input`
+;
 
 SELECT
     *
-FROM Input
-WHERE TRUE
+FROM
+    Input
+WHERE
+    TRUE
     AND value != ""
-    AND key IN $l1;
+    AND key IN $l1
+;

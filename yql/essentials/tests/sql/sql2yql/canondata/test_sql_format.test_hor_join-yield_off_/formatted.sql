@@ -19,9 +19,9 @@ FROM (
     UNION ALL
     PROCESS Input
     USING $f(TableRows(), 2)
-)
-    AS x
+) AS x
 ORDER BY
     key,
     subkey,
-    value;
+    value
+;

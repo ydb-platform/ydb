@@ -6,14 +6,16 @@ $req = (
     SELECT
         100500 AS magic,
         t.*
-    FROM Input
-        AS t
+    FROM
+        Input AS t
 );
 
 --INSERT INTO Output
 SELECT
     `t.subkey` AS sk,
     `t.value` AS val
-FROM $req
+FROM
+    $req
 ORDER BY
-    sk;
+    sk
+;

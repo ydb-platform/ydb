@@ -19,54 +19,66 @@ $d = ToDict($l);
 SELECT
     DictKeys($d),
     DictPayloads($d),
-    DictItems($d);
+    DictItems($d)
+;
 
 SELECT
     DictLookup($d, $v1),
-    DictLookup($d, $v3);
+    DictLookup($d, $v3)
+;
 
 SELECT
     DictContains($d, $v1),
-    DictContains($d, $v3);
+    DictContains($d, $v3)
+;
 $d = ToMultiDict($l);
 
 SELECT
     DictKeys($d),
     DictPayloads($d),
-    DictItems($d);
+    DictItems($d)
+;
 
 SELECT
     DictLookup($d, $v1),
-    DictLookup($d, $v3);
+    DictLookup($d, $v3)
+;
 
 SELECT
     DictContains($d, $v1),
-    DictContains($d, $v3);
+    DictContains($d, $v3)
+;
 $d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("One")));
 
 SELECT
     DictKeys($d),
     DictPayloads($d),
-    DictItems($d);
+    DictItems($d)
+;
 
 SELECT
     DictLookup($d, $v1),
-    DictLookup($d, $v3);
+    DictLookup($d, $v3)
+;
 
 SELECT
     DictContains($d, $v1),
-    DictContains($d, $v3);
+    DictContains($d, $v3)
+;
 $d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("Many")));
 
 SELECT
     DictKeys($d),
     DictPayloads($d),
-    DictItems($d);
+    DictItems($d)
+;
 
 SELECT
     DictLookup($d, $v1),
-    DictLookup($d, $v3);
+    DictLookup($d, $v3)
+;
 
 SELECT
     DictContains($d, $v1),
-    DictContains($d, $v3);
+    DictContains($d, $v3)
+;

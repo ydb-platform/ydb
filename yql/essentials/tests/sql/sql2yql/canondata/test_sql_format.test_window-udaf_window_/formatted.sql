@@ -47,9 +47,11 @@ SELECT
         $serialize,
         $deserialize
     ) OVER w
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w AS (
         ORDER BY
             value
-    );
+    )
+;

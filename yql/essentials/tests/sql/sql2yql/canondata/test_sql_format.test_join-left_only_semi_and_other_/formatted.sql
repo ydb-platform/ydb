@@ -7,7 +7,8 @@ $data1 = (
         CAST(key AS uint32) AS key,
         subkey,
         value
-    FROM Input1
+    FROM
+        Input1
 );
 
 $data2 = (
@@ -15,22 +16,27 @@ $data2 = (
         CAST(key AS uint32) % 100u AS key,
         subkey,
         value
-    FROM Input3
+    FROM
+        Input3
 );
 
 --INSERT INTO Output
 SELECT
     i1.*
-FROM $data1
-    AS i1
-LEFT ONLY JOIN $data2
-    AS i2
-ON i1.key == i2.key
-LEFT SEMI JOIN $data1
-    AS i3
-ON i1.key == i3.key
-LEFT OUTER JOIN $data1
-    AS i4
-ON i1.key == i4.key
+FROM
+    $data1 AS i1
+LEFT ONLY JOIN
+    $data2 AS i2
+ON
+    i1.key == i2.key
+LEFT SEMI JOIN
+    $data1 AS i3
+ON
+    i1.key == i3.key
+LEFT OUTER JOIN
+    $data1 AS i4
+ON
+    i1.key == i4.key
 ORDER BY
-    i1.key;
+    i1.key
+;

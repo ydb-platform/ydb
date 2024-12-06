@@ -6,9 +6,11 @@ PRAGMA DisableSimpleColumns;
 
 SELECT
     *
-FROM plato.Input
-    AS a
+FROM
+    plato.Input AS a
     SAMPLE 0.3
-INNER JOIN plato.Input
-    AS b
-ON a.key == b.key;
+INNER JOIN
+    plato.Input AS b
+ON
+    a.key == b.key
+;

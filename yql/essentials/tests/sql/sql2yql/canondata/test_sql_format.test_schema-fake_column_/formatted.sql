@@ -8,9 +8,12 @@ FROM (
     SELECT
         <||> AS a
 )
-    FLATTEN COLUMNS;
+    FLATTEN COLUMNS
+;
 COMMIT;
 
 SELECT
     1 AS a
-FROM @tmp;
+FROM
+    @tmp
+;

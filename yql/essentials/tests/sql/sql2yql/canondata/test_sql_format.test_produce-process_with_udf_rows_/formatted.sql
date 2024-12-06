@@ -14,7 +14,8 @@ $users = (
     SELECT
         `key` AS age,
         `value` AS name
-    FROM plato.Input0
+    FROM
+        plato.Input0
 );
 
 PROCESS $users

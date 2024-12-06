@@ -14,7 +14,8 @@ DO
 
 DEFINE ACTION $sel_foo() AS
     SELECT
-        "foo";
+        "foo"
+    ;
 END DEFINE;
 DO
     $dup($sel_foo)

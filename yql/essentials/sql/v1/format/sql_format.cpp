@@ -1726,12 +1726,24 @@ private:
 
             if (block5.HasBlock5()) {
                 NewLine();
-                Visit(block5.GetBlock5());
+                const auto& whereBlock = block5.GetBlock5();
+                Visit(whereBlock.GetToken1());
+                NewLine();
+                PushCurrentIndent();
+                Visit(whereBlock.GetRule_expr2());
+                PopCurrentIndent();
+                NewLine();
             }
 
             if (block5.HasBlock6()) {
                 NewLine();
-                Visit(block5.GetBlock6());
+                const auto& havingBlock = block5.GetBlock6();
+                Visit(havingBlock.GetToken1());
+                NewLine();
+                PushCurrentIndent();
+                Visit(havingBlock.GetRule_expr2());
+                PopCurrentIndent();
+                NewLine();
             }
 
             if (block5.HasBlock7()) {
@@ -1781,12 +1793,24 @@ private:
 
         if (msg.HasBlock11()) {
             NewLine();
-            Visit(msg.GetBlock11());
+            const auto& whereBlock = msg.GetBlock11();
+            Visit(whereBlock.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(whereBlock.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
         }
 
         if (msg.HasBlock12()) {
             NewLine();
-            Visit(msg.GetBlock12());
+            const auto& havingBlock = msg.GetBlock12();
+            Visit(havingBlock.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(havingBlock.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
         }
 
         if (msg.HasBlock13()) {
@@ -1806,6 +1830,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitSelectCore(const TRule_select_core& msg) {
@@ -1834,6 +1859,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
 
         if (msg.HasBlock8()) {
             NewLine();
@@ -1847,7 +1873,13 @@ private:
 
         if (msg.HasBlock10()) {
             NewLine();
-            Visit(msg.GetBlock10());
+            const auto& whereBlock = msg.GetBlock10();
+            Visit(whereBlock.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(whereBlock.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
         }
 
         if (msg.HasBlock11()) {
@@ -1857,7 +1889,13 @@ private:
 
         if (msg.HasBlock12()) {
             NewLine();
-            Visit(msg.GetBlock12());
+            const auto& havingBlock = msg.GetBlock12();
+            Visit(havingBlock.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(havingBlock.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
         }
 
         if (msg.HasBlock13()) {
@@ -1889,6 +1927,20 @@ private:
                 NewLine();
                 Visit(block.GetBlock4());
             }
+        }
+    }
+
+    void VisitJoinConstraint(const TRule_join_constraint& msg) {
+        if (msg.Alt_case() == TRule_join_constraint::kAltJoinConstraint1) {
+            const auto& alt = msg.GetAlt_join_constraint1();
+            Visit(alt.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(alt.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
+        } else {
+            VisitAllFields(TRule_join_constraint::GetDescriptor(), msg);
         }
     }
 
@@ -1925,12 +1977,25 @@ private:
     }
 
     void VisitFlattenSource(const TRule_flatten_source& msg) {
-        Visit(msg.GetRule_named_single_source1());
-        if (msg.HasBlock2()) {
-            PushCurrentIndent();
+        const auto& namedSingleSource = msg.GetRule_named_single_source1();
+        bool indentBeforeSource = namedSingleSource.GetRule_single_source1().Alt_case() == TRule_single_source::kAltSingleSource1;
+
+        if (indentBeforeSource) {
             NewLine();
+            PushCurrentIndent();
+        }
+        Visit(namedSingleSource);
+        if (indentBeforeSource) {
+            PopCurrentIndent();
+            NewLine();
+        }
+
+        if (msg.HasBlock2()) {
+            NewLine();
+            PushCurrentIndent();
             Visit(msg.GetBlock2());
             PopCurrentIndent();
+            NewLine();
         }
     }
 
@@ -1943,8 +2008,6 @@ private:
             Visit(matchRecognize);
         }
         if (msg.HasBlock3()) {
-            NewLine();
-            PushCurrentIndent();
             const auto& block3 = msg.GetBlock3();
             Visit(block3.GetBlock1());
             if (block3.HasBlock2()) {
@@ -1963,15 +2026,11 @@ private:
                 PopCurrentIndent();
                 Visit(columns.GetToken4());
             }
-
-            PopCurrentIndent();
         }
 
         if (msg.HasBlock4()) {
             NewLine();
-            PushCurrentIndent();
             Visit(msg.GetBlock4());
-            PopCurrentIndent();
         }
     }
 
@@ -2092,6 +2151,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitTableRef(const TRule_table_ref& msg) {
@@ -2109,12 +2169,7 @@ private:
             const auto& alt = block3.GetAlt1();
             const auto& key = alt.GetRule_table_key1();
             Visit(key.GetRule_id_table_or_type1());
-            if (key.HasBlock2()) {
-                NewLine();
-                PushCurrentIndent();
-                Visit(key.GetBlock2());
-                PopCurrentIndent();
-            }
+            Visit(key.GetBlock2());
 
             break;
         }
@@ -2139,10 +2194,7 @@ private:
             }
 
             if (alt.HasBlock3()) {
-                NewLine();
-                PushCurrentIndent();
                 Visit(alt.GetBlock3());
-                PopCurrentIndent();
             }
 
             break;
@@ -2152,10 +2204,7 @@ private:
         }
 
         if (msg.HasBlock4()) {
-            NewLine();
-            PushCurrentIndent();
             Visit(msg.GetBlock4());
-            PopCurrentIndent();
         }
     }
 
@@ -2170,6 +2219,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitGroupByClause(const TRule_group_by_clause& msg) {
@@ -2186,6 +2236,7 @@ private:
             PushCurrentIndent();
             Visit(msg.GetBlock6());
             PopCurrentIndent();
+            NewLine();
         }
     }
 
@@ -2201,6 +2252,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitWindowSpecification(const TRule_window_specification& msg) {
@@ -2745,6 +2797,7 @@ TStaticData::TStaticData()
         {TRule_sort_specification_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSortSpecificationList)},
         {TRule_select_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectCore)},
         {TRule_join_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinSource)},
+        {TRule_join_constraint::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinConstraint)},
         {TRule_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSingleSource)},
         {TRule_flatten_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFlattenSource)},
         {TRule_named_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedSingleSource)},

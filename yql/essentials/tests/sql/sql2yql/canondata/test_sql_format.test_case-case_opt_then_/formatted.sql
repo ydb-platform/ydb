@@ -14,4 +14,5 @@ SELECT
     CASE
         WHEN FALSE THEN NULL
         ELSE 100503
-    END;
+    END
+;

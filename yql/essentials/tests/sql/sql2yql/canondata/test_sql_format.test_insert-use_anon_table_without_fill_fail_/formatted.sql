@@ -4,4 +4,6 @@ USE plato;
 
 SELECT
     *
-FROM @a;
+FROM
+    @a
+;

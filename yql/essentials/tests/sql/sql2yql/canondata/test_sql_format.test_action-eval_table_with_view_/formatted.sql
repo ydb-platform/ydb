@@ -5,6 +5,6 @@ $x = "Input";
 
 SELECT
     *
-FROM $x
-    VIEW raw
+FROM
+    $x VIEW raw
 LIMIT 1;

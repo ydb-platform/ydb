@@ -6,6 +6,7 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -34,10 +35,11 @@ namespace NYdb::NBackup {
 
 static constexpr const char *SCHEME_FILE_NAME = "scheme.pb";
 static constexpr const char *PERMISSIONS_FILE_NAME = "permissions.pb";
+static constexpr const char *CHANGEFEED_DESCRIPTION_FILE_NAME = "changefeed_description.pb";
+static constexpr const char *TOPIC_DESCRIPTION_FILE_NAME = "topic_description.pb";
 static constexpr const char *INCOMPLETE_DATA_FILE_NAME = "incomplete.csv";
 static constexpr const char *INCOMPLETE_FILE_NAME = "incomplete";
 static constexpr const char *EMPTY_FILE_NAME = "empty_dir";
-static constexpr const char *CHANGEFEED_FILE_NAME = "changefeed";
 
 static constexpr size_t IO_BUFFER_SIZE = 2 << 20; // 2 MiB
 static constexpr i64 FILE_SPLIT_THRESHOLD = 128 << 20; // 128 MiB
@@ -472,25 +474,53 @@ void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& p
     outFile.Write(permissionsStr.data(), permissionsStr.size());
 }
 
-TString CreateChageefeedBackupFileName(const TString& changefeedName) {
-    return TStringBuilder() << CHANGEFEED_FILE_NAME << "_" << changefeedName << ".pb";
+TString CreateChageefeedBackupFolderName(const TString& changefeedName) {
+    return TStringBuilder() << changefeedName << ".pb";
+}
+
+TFsPath CreateDirectory(const TFsPath& folderPath, const TString& name) {
+    TFsPath childFolderPath = folderPath.Child(CreateChageefeedBackupFolderName(name));
+    LOG_D("Process " << childFolderPath.GetPath().Quote());
+    childFolderPath.MkDir();
+    return childFolderPath;
+}
+
+Ydb::Table::ChangefeedDescription ProtoFromChangefeedDesc(const NTable::TChangefeedDescription& changefeedDesc) {
+    Ydb::Table::ChangefeedDescription protoChangeFeedDesc;
+    changefeedDesc.SerializeTo(protoChangeFeedDesc);
+    return protoChangeFeedDesc;
+}
+
+const NTopic::TTopicDescription& GetTopicDescription(TDriver driver, const TString& path) {
+    NYdb::NTopic::TTopicClient client(driver);
+    auto result =
+        client.DescribeTopic(path).GetValueSync();
+    return result.GetTopicDescription();
+}
+
+void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& folderPath, const TString& fileName) {
+    TString changefeedStr;
+    google::protobuf::TextFormat::PrintToString(proto, &changefeedStr);
+    LOG_D("Write changefeed into " << folderPath.Child(fileName).GetPath().Quote());
+    TFile outFile(folderPath.Child(fileName), CreateAlways | WrOnly);
+    outFile.Write(changefeedStr.data(), changefeedStr.size());
 }
 
 void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
 
-    const auto fullPath = JoinDatabasePath(dbPrefix, path);
-    auto desc = DescribeTable(driver, fullPath);
+    const auto dirPath = JoinDatabasePath(dbPrefix, path);
+    auto desc = DescribeTable(driver, dirPath);
 
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
-        Ydb::Table::Changefeed proto;
-        changefeedDesc.SerializeTo(proto);
+        const auto changeefeedDirName = CreateChageefeedBackupFolderName(changefeedDesc.GetName());
+        TFsPath changefeedDirPath = CreateDirectory(folderPath, changeefeedDirName);
 
-        TString changefeedStr;
-        google::protobuf::TextFormat::PrintToString(proto, &changefeedStr);
-        const auto fileName = CreateChageefeedBackupFileName(changefeedDesc.GetName());
-        LOG_D("Write changefeed into " << folderPath.Child(fileName).GetPath().Quote());
-        TFile outFile(folderPath.Child(fileName), CreateAlways | WrOnly);
-        outFile.Write(changefeedStr.data(), changefeedStr.size());
+        auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
+        const auto& topicDescription = GetTopicDescription(driver, path);
+        const auto& protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
+
+        WriteProtoToFile(protoChangeFeedDesc, changefeedDirPath, CHANGEFEED_DESCRIPTION_FILE_NAME);
+        WriteProtoToFile(protoTopicDescription, changefeedDirPath, TOPIC_DESCRIPTION_FILE_NAME);
     }
 }
 

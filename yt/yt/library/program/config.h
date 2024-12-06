@@ -61,7 +61,6 @@ class TSingletonsConfig
     : public virtual NYTree::TYsonStruct
 {
 public:
-    TDuration SpinWaitSlowPathLoggingThreshold;
     NConcurrency::TFiberManagerConfigPtr FiberManager;
     NNet::TAddressResolverConfigPtr AddressResolver;
     NBus::TTcpDispatcherConfigPtr TcpDispatcher;
@@ -92,7 +91,6 @@ class TSingletonsDynamicConfig
     : public virtual NYTree::TYsonStruct
 {
 public:
-    std::optional<TDuration> SpinWaitSlowPathLoggingThreshold;
     NConcurrency::TFiberManagerDynamicConfigPtr FiberManager;
     NBus::TTcpDispatcherDynamicConfigPtr TcpDispatcher;
     NPipes::TIODispatcherConfigPtr IODispatcher;

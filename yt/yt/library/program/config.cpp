@@ -20,8 +20,6 @@ void THeapProfilerConfig::Register(TRegistrar registrar)
 
 void TSingletonsConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("spin_wait_slow_path_logging_threshold", &TThis::SpinWaitSlowPathLoggingThreshold)
-        .Default(TDuration::MicroSeconds(100));
     registrar.Parameter("fiber_manager", &TThis::FiberManager)
         .DefaultNew();
     registrar.Parameter("address_resolver", &TThis::AddressResolver)
@@ -61,8 +59,6 @@ void TSingletonsConfig::Register(TRegistrar registrar)
 
 void TSingletonsDynamicConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("spin_lock_slow_path_logging_threshold", &TThis::SpinWaitSlowPathLoggingThreshold)
-        .Optional();
     registrar.Parameter("fiber_manager", &TThis::FiberManager)
         .DefaultNew();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)

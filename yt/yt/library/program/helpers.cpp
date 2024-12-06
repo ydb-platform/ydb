@@ -33,8 +33,6 @@
 
 #include <yt/yt/core/service_discovery/yp/service_discovery.h>
 
-#include <yt/yt/core/threading/spin_wait_slow_path_logger.h>
-
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
 #include <util/string/split.h>
@@ -53,8 +51,6 @@ using namespace NTCMalloc;
 
 void ConfigureSingletons(const TSingletonsConfigPtr& config)
 {
-    SetSpinWaitSlowPathLoggingThreshold(config->SpinWaitSlowPathLoggingThreshold);
-
     TFiberManager::Configure(config->FiberManager);
 
     NLogging::TLogManager::Get()->EnableReopenOnSighup();
@@ -101,8 +97,6 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
 
 void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletonsDynamicConfigPtr& dynamicConfig)
 {
-    SetSpinWaitSlowPathLoggingThreshold(dynamicConfig->SpinWaitSlowPathLoggingThreshold.value_or(config->SpinWaitSlowPathLoggingThreshold));
-
     TFiberManager::Configure(config->FiberManager->ApplyDynamic(dynamicConfig->FiberManager));
 
     if (!NLogging::TLogManager::Get()->IsConfiguredFromEnv()) {

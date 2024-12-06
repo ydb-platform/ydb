@@ -616,18 +616,23 @@ public:
                 break;
             }
 
-            auto hasNulls = [](const TOwnedCellVec& cellVec) {
+            auto isKeyAllowed = [&](const TOwnedCellVec& cellVec) {
+                if (Settings.HasAllowNullKeys() && Settings.GetAllowNullKeys()) {
+                    return true;
+                }
+
+                // otherwise we can't use nulls as lookup keys
                 for (const auto& cell : cellVec) {
                     if (cell.IsNull()) {
-                        return true;
+                        return false;
                     }
                 }
 
-                return false;
+                return true;
             };
 
             UnprocessedRows.pop_front();
-            if (!hasNulls(joinKey)) {  // don't use nulls as lookup keys, because null != null
+            if (isKeyAllowed(joinKey)) {
                 std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
                 if (joinKey.size() < KeyColumns.size()) {
                     // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])

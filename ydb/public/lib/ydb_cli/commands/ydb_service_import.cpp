@@ -218,7 +218,7 @@ void TCommandImportFileBase::Config(TConfig& config) {
         .RequiredArgument("VAL").StoreResult(&OperationTimeout).DefaultValue(TDuration::Seconds(5 * 60));
 
     config.Opts->AddLongOption('p', "path", "Database path to table")
-        .Required().RequiredArgument("STRING").StoreResult(&Path);
+        .RequiredArgument("STRING").StoreResult(&Path);
     config.Opts->AddLongOption('i', "input-file").AppendTo(&FilePaths).Hidden();
 
     const TImportFileSettings defaults;
@@ -235,7 +235,10 @@ void TCommandImportFileBase::Config(TConfig& config) {
 
 void TCommandImportFileBase::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
-    AdjustPath(config);
+    RelativeTablePath = Path;
+    if (!SuggestCreateTable || Path) {
+        AdjustPath(config);
+    }
 
     if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) {
         if (bytesPerRequest > TImportFileSettings::MaxBytesPerRequest) {
@@ -262,6 +265,10 @@ void TCommandImportFileBase::Parse(TConfig& config) {
     if (FilePaths.empty() || !IsStdinInteractive()) {
         FilePaths.push_back("");
     }
+
+    if (Path.empty() && !SuggestCreateTable) {
+        throw TMisuseException() << "Path to table is not specified with --path option";
+    }
 }
 
 /// Import CSV
@@ -281,6 +288,13 @@ void TCommandImportFromCsv::Config(TConfig& config) {
     config.Opts->AddLongOption("newline-delimited",
             "No newline characters inside records, enables some import optimizations (see docs)")
         .StoreTrue(&NewlineDelimited);
+    config.Opts->AddLongOption("suggest-create-table",
+            "Parse input file(s) and suggest CREATE TABLE request to create a table the data could be imported to."
+            " No data will be actually imported with this option.")
+        .StoreTrue(&SuggestCreateTable);
+    config.Opts->AddLongOption("rows-to-analyze",
+            "Number of rows to read for CREATE TABLE request suggestion. By default all rows in a file are analyzed")
+        .RequiredArgument("NUM").StoreResult(&RowsToAnalyze);
     if (InputFormat == EDataFormat::Csv) {
         config.Opts->AddLongOption("delimiter", "Field delimiter in rows")
             .RequiredArgument("STRING").StoreResult(&Delimiter).DefaultValue(Delimiter);
@@ -304,6 +318,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     settings.HeaderRow(HeaderRow);
     settings.NullValue(NullValue);
     settings.Verbose(config.IsVerbose());
+    settings.RowsToAnalyze(RowsToAnalyze);
 
     if (Delimiter.size() != 1) {
         throw TMisuseException()
@@ -313,7 +328,11 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     }
 
     TImportFileClient client(CreateDriver(config), config, settings);
-    ThrowOnError(client.Import(FilePaths, Path));
+    if (SuggestCreateTable) {
+        ThrowOnError(client.SuggestCreateTableRequest(FilePaths, RelativeTablePath));
+    } else {
+        ThrowOnError(client.Import(FilePaths, Path));
+    }
 
     return EXIT_SUCCESS;
 }

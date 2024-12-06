@@ -11,8 +11,7 @@
 - Go
 
     ```go
-    err := db.Coordination().CreateNode(
-        ctx,
+    err := db.Coordination().CreateNode(ctx,
         "/path/to/mynode",
     )
     ```
@@ -55,8 +54,7 @@
 - Go
 
     ```go
-    session, err := db.Coordination().CreateSession(
-        ctx,
+    session, err := db.Coordination().CreateSession(ctx,
         "/path/to/mynode", // имя Coordination Node в базе
     )
     ```
@@ -155,7 +153,7 @@
 
     ```go
     lease, err := session.AcquireSemaphore(ctx,
-        "mySemaphore",  // semaphore name
+        "my-semaphore",  // semaphore name
         5,              // value to increase semaphore by
     )
     ```
@@ -202,6 +200,15 @@
 
 {% list tabs %}
 
+- Go
+
+    ```go
+    err := session.UpdateSemaphore(
+        "my-semaphore",                                                          // semaphore name
+        options.WithUpdateData([]byte("updated-data")),   // new semaphore data
+    )
+    ```
+
 - C++
 
     ```cpp
@@ -221,6 +228,16 @@
 ### Получение данных семафора {#describe-semaphore}
 
 {% list tabs %}
+
+- Go
+
+    ```go
+    description, err := session.DescribeSemaphore(
+        "my-semaphore"                                // semaphore name
+        options.WithDescribeOwners(true), // to get list of owners
+        options.WithDescribeWaiters(true), // to get list of waiters
+    )
+    ```
 
 - C++
 

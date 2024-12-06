@@ -15,8 +15,7 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
     - Go
 
         ```go
-        err := db.Coordination().CreateNode(
-            ctx,
+        err := db.Coordination().CreateNode(ctx,
             "/path/to/mynode",
         )
         ```
@@ -61,8 +60,7 @@ To start working with coordination nodes, a client must establish a session with
 - Go
 
     ```go
-    session, err := db.Coordination().CreateSession(
-        ctx,
+    session, err := db.Coordination().CreateSession(ctx,
         "/path/to/mynode", // Coordination Node name in the database
     )
     ```
@@ -161,7 +159,7 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
 
     ```go
     lease, err := session.AcquireSemaphore(ctx,
-        "mySemaphore",  // semaphore name
+        "my-semaphore",  // semaphore name
         5,              // value to increase semaphore by
     )
     ```
@@ -210,6 +208,14 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
 
 {% list tabs %}
 
+- Go
+    ```go
+    err := session.UpdateSemaphore(
+        "my-semaphore",                                                          // semaphore name
+        options.WithUpdateData([]byte("updated-data")),   // new semaphore data
+    )
+    ```
+
 - C++
 
     ```cpp
@@ -229,6 +235,16 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
 ### Getting semaphore data {#describe-semaphore}
 
 {% list tabs %}
+
+- Go
+
+    ```go
+    description, err := session.DescribeSemaphore(
+        "my-semaphore"                                // semaphore name
+        options.WithDescribeOwners(true), // to get list of owners
+        options.WithDescribeWaiters(true), // to get list of waiters
+    )
+    ```
 
 - C++
 

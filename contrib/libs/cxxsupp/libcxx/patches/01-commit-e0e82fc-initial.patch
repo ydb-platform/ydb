@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index 65ce6d6..ab696fb 100644
+index 7f66042..ac4a6d8 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -131,7 +131,12 @@
+@@ -127,7 +127,12 @@
  // Previously libc++ used "unsigned int" exclusively.
  #    define _LIBCPP_ABI_VARIANT_INDEX_TYPE_OPTIMIZATION
  // Unstable attempt to provide a more optimized std::function
@@ -16,10 +16,10 @@ index 65ce6d6..ab696fb 100644
  #    define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
  // Re-worked external template instantiations for std::string with a focus on
 diff --git a/include/typeinfo b/include/typeinfo
-index 59bc291..eb3dc59 100644
+index e8b7573..265e322 100644
 --- a/include/typeinfo
 +++ b/include/typeinfo
-@@ -104,6 +104,11 @@ public:
+@@ -103,6 +103,11 @@ public:
  
      size_t hash_code() const _NOEXCEPT;
  
@@ -28,7 +28,7 @@ index 59bc291..eb3dc59 100644
 +    // https://github.com/emscripten-core/emscripten/issues/13330
 +    __attribute__((always_inline))
 +#endif
-     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_SINCE_CXX23
+     _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX23
      bool operator==(const type_info& __arg) const _NOEXCEPT {
        // When evaluated in a constant expression, both type infos simply can't come
 diff --git a/src/filesystem/operations.cpp b/src/filesystem/operations.cpp

@@ -298,6 +298,8 @@ enum EServiceKikimr {
     S3_WRAPPER = 803;
     CONTINUOUS_BACKUP = 804;
 
+    TX_COLUMNSHARD_ACTUALIZATION = 850;
+
     // System views
     SYSTEM_VIEWS = 900;
 

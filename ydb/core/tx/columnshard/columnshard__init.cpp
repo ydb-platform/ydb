@@ -1,7 +1,6 @@
 #include "columnshard_impl.h"
 #include "columnshard_private_events.h"
 #include "columnshard_schema.h"
-#include "columnshard_ttl.h"
 
 #include "bg_tasks/adapter/adapter.h"
 #include "bg_tasks/manager/manager.h"

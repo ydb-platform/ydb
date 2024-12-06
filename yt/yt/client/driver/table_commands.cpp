@@ -34,6 +34,7 @@ namespace NYT::NDriver {
 using namespace NApi;
 using namespace NChaosClient;
 using namespace NChunkClient;
+using namespace NCodegen;
 using namespace NConcurrency;
 using namespace NFormats;
 using namespace NHiveClient;
@@ -824,7 +825,7 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<NApi::EExecutionBackend>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<EExecutionBackend>>(
         "execution_backend",
         [] (TThis* command) -> auto& {
             return command->Options.ExecutionBackend;

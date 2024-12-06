@@ -26,7 +26,6 @@ jobs:
             threads_count: 20
             timeout: 420
 
-
     steps:
     - name: Checkout
       uses: actions/checkout@v4

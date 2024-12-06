@@ -80,6 +80,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvRunWorker, Handle);
         HFunc(TEvService::TEvWorkerDataEnd, Handle);
         HFunc(TEvService::TEvGetTxId, Handle);
+        HFunc(TEvService::TEvHeartbeat, Handle);
         HFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
     default:
@@ -774,6 +775,22 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
     }
 
     RunTxAssignTxId(ctx);
+}
+
+void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    const auto nodeId = ev->Sender.NodeId();
+    if (!Sessions.contains(nodeId)) {
+        return;
+    }
+
+    const auto& record = ev->Get()->Record;
+    const auto id = TWorkerId::Parse(record.GetWorker());
+    const auto version = TRowVersion::Parse(record.GetVersion());
+    PendingHeartbeats[id] = version;
+
+    RunTxHeartbeat(ctx);
 }
 
 void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) {

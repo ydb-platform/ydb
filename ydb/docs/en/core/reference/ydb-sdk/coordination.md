@@ -203,9 +203,10 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
 {% list tabs %}
 
 - Go
+
     ```go
     err := session.UpdateSemaphore(
-        "my-semaphore",                                                          // semaphore name
+        "my-semaphore",                                   // semaphore name
         options.WithUpdateData([]byte("updated-data")),   // new semaphore data
     )
     ```

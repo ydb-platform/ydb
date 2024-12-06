@@ -225,9 +225,6 @@
   - varargs.h
   - vm/vm_param.h
   #endif
-  #if defined(_MSC_VER)
-  - crtassem.h
-  #endif
   #if defined(_unix_) && TODO
   - bits/types/mbstate_t.h
   - sys/atomic.h

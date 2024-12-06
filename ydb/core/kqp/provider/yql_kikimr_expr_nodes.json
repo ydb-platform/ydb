@@ -584,6 +584,17 @@
                 {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"}
             ]
+        },
+        {
+            "Name": "TKiRestore",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiRestore!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"}
+            ]
         }
     ]
 }

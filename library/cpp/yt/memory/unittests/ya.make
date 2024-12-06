@@ -15,6 +15,7 @@ SRCS(
     weak_ptr_ut.cpp
     ref_ut.cpp
     range_protobuf_repeated_field_ut.cpp
+    type_erasure_ut.cpp
 )
 
 IF (NOT OS_WINDOWS)

@@ -351,8 +351,7 @@ protected:
         if (requestHeader.has_response_format()) {
             auto format = TryCheckedEnumCast<EMessageFormat>(requestHeader.response_format());
             if (!format) {
-                THROW_ERROR_EXCEPTION(
-                    EErrorCode::ProtocolError,
+                THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError,
                     "Message format %v is not supported",
                     requestHeader.response_format());
             }
@@ -492,38 +491,21 @@ TRequestQueuePtr CreateRequestQueue(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TValue>
 class TDynamicConcurrencyLimit
 {
 public:
     DEFINE_SIGNAL(void(), Updated);
 
-    void Reconfigure(int limit);
-    int GetLimitFromConfiguration() const;
+    void Reconfigure(TValue limit);
+    TValue GetLimitFromConfiguration() const;
 
-    int GetDynamicLimit() const;
-    void SetDynamicLimit(std::optional<int> dynamicLimit);
-
-private:
-    std::atomic<int> ConfigLimit_ = 0;
-    std::atomic<int> DynamicLimit_ = 0;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TDynamicConcurrencyByteLimit
-{
-public:
-    DEFINE_SIGNAL(void(), Updated);
-
-    void Reconfigure(i64 limit);
-    i64 GetByteLimitFromConfiguration() const;
-
-    i64 GetDynamicByteLimit() const;
-    void SetDynamicByteLimit(std::optional<i64> dynamicLimit);
+    TValue GetDynamicLimit() const;
+    void SetDynamicLimit(std::optional<TValue> dynamicLimit);
 
 private:
-    std::atomic<i64> ConfigByteLimit_ = 0;
-    std::atomic<i64> DynamicByteLimit_ = 0;
+    std::atomic<TValue> ConfigLimit_{};
+    std::atomic<TValue> DynamicLimit_{};
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -772,8 +754,8 @@ protected:
         std::atomic<int> QueueSizeLimit = 0;
         std::atomic<i64> QueueByteSizeLimit = 0;
 
-        TDynamicConcurrencyLimit ConcurrencyLimit;
-        TDynamicConcurrencyByteLimit ConcurrencyByteLimit;
+        TDynamicConcurrencyLimit<int> ConcurrencyLimit;
+        TDynamicConcurrencyLimit<i64> ConcurrencyByteLimit;
         std::atomic<double> WaitingTimeoutFraction = 0;
 
         NProfiling::TCounter RequestQueueSizeLimitErrorCounter;
@@ -1128,7 +1110,7 @@ public:
     int GetConcurrency() const;
     i64 GetConcurrencyByte() const;
 
-    void OnRequestArrived(const TServiceBase::TServiceContextPtr& context);
+    void OnRequestArrived(TServiceBase::TServiceContextPtr context);
     void OnRequestFinished(i64 requestTotalSize);
 
     void ConfigureWeightThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
@@ -1169,10 +1151,10 @@ private:
     void ScheduleRequestsFromQueue();
     void RunRequest(TServiceBase::TServiceContextPtr context);
 
-    void IncrementQueueSize(const TServiceBase::TServiceContextPtr& context);
-    void DecrementQueueSize(const TServiceBase::TServiceContextPtr& context);
+    void IncrementQueueSize(i64 requestTotalSize);
+    void DecrementQueueSize(i64 requestTotalSize);
 
-    bool IncrementConcurrency(const TServiceBase::TServiceContextPtr& context);
+    bool IncrementConcurrency(i64 requestTotalSize);
     void DecrementConcurrency(i64 requestTotalSize);
 
     bool AreThrottlersOverdrafted() const;

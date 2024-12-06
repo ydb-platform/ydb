@@ -105,16 +105,6 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
         if (name == "columnName") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
             settings.ColumnName = field.Value().Cast<TCoAtom>().StringValue();
-        } else if (name == "expireAfter") {
-            // TODO (yentsovsemyon): remove this clause after extending TTL syntax in YQL
-            YQL_ENSURE(field.Value().Maybe<TCoInterval>());
-            auto value = FromString<i64>(field.Value().Cast<TCoInterval>().Literal().Value());
-            if (value < 0) {
-                error = "Interval value cannot be negative";
-                return false;
-            }
-
-            settings.ExpireAfter = TDuration::FromValue(value);
         } else if (name == "tiers") {
             YQL_ENSURE(field.Value().Maybe<TExprList>());
             auto listNode = field.Value().Cast<TExprList>();
@@ -122,12 +112,14 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
             for (size_t i = 0; i < listNode.Size(); ++i) {
                 auto tierNode = listNode.Item(i);
 
+                std::optional<TString> storageName;
+                TDuration evictionDelay;
                 YQL_ENSURE(tierNode.Maybe<TCoNameValueTupleList>());
                 for (const auto& tierField : tierNode.Cast<TCoNameValueTupleList>()) {
                     auto tierFieldName = tierField.Name().Value();
                     if (tierFieldName == "storageName") {
-                        error = "TTL cannot contain tiered storage: tiering in TTL syntax is not supported";
-                        return false;
+                        YQL_ENSURE(tierField.Value().Maybe<TCoAtom>());
+                        storageName = tierField.Value().Cast<TCoAtom>().StringValue();
                     } else if (tierFieldName == "evictionDelay") {
                         YQL_ENSURE(tierField.Value().Maybe<TCoInterval>());
                         auto value = FromString<i64>(tierField.Value().Cast<TCoInterval>().Literal().Value());
@@ -135,12 +127,14 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
                             error = "Interval value cannot be negative";
                             return false;
                         }
-                        settings.ExpireAfter = TDuration::FromValue(value);
+                        evictionDelay = TDuration::FromValue(value);
                     } else {
                         error = TStringBuilder() << "Unknown field: " << tierFieldName;
                         return false;
                     }
                 }
+
+                settings.Tiers.emplace_back(evictionDelay, storageName);
             }
         } else if (name == "columnUnit") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
@@ -322,9 +316,15 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
         opts.set_column_name(settings.ColumnName);
         opts.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
     }
-    auto* deleteTier = proto.add_tiers();
-    deleteTier->set_apply_after_seconds(settings.ExpireAfter.Seconds());
-    deleteTier->mutable_delete_();
+    for (const auto& tier : settings.Tiers) {
+        auto* tierProto = proto.add_tiers();
+        tierProto->set_apply_after_seconds(tier.ApplyAfter.Seconds());
+        if (tier.StorageName) {
+            tierProto->mutable_evict_to_external_storage()->set_storage_name(*tier.StorageName);
+        } else {
+            tierProto->mutable_delete_();
+        }
+    }
 }
 
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) {

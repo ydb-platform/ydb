@@ -14,7 +14,7 @@ except BaseException:
     SQLRUN_PATH = None
 
 try:
-    YQLRUN_PATH = yatest.common.binary_path('contrib/ydb/library/yql/tools/yqlrun/yqlrun')
+    YQLRUN_PATH = yatest.common.binary_path('yql/tools/yqlrun/yqlrun')
 except BaseException:
     YQLRUN_PATH = None
 

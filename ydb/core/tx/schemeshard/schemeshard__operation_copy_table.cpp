@@ -717,6 +717,18 @@ public:
         dstPath.Base()->IncShardsInside(shardsToCreate);
         parent.Base()->IncAliveChildren(1, isBackup);
 
+        LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TCopyTable Propose creating new table"
+                << " opId# " << OperationId
+                << " srcPath# " << srcPath.PathString()
+                << " srcPathId# " << srcPath.Base()->PathId
+                << " path# " << dstPath.PathString()
+                << " pathId# " << newTable->PathId
+                << " withNewCdc# " << (Transaction.HasCreateCdcStream() ? "true" : "false")
+                << " schemeshard# " << ssId
+                << " tx# " << Transaction.DebugString()
+                );
+
         SetState(NextState());
         return result;
     }

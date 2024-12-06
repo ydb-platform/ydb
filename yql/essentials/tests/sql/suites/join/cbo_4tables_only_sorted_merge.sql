@@ -1,3 +1,4 @@
+/* ytfile can not */
 USE plato;
 pragma warning("disable", "8001"); -- CBO_MISSING_TABLE_STATS
 

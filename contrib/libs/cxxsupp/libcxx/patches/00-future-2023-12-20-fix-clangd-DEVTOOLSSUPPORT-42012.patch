@@ -1,5 +1,5 @@
 diff --git a/include/__numeric/midpoint.h b/include/__numeric/midpoint.h
-index 5325f5e..e7db992 100644
+index c92e450..57f19a3 100644
 --- a/include/__numeric/midpoint.h
 +++ b/include/__numeric/midpoint.h
 @@ -52,13 +52,8 @@ _LIBCPP_DISABLE_UBSAN_UNSIGNED_INTEGER_CHECK
@@ -7,7 +7,7 @@ index 5325f5e..e7db992 100644
  
  
 -template <class _TPtr>
--_LIBCPP_INLINE_VISIBILITY constexpr
+-_LIBCPP_HIDE_FROM_ABI constexpr
 -enable_if_t<is_pointer_v<_TPtr>
 -             && is_object_v<remove_pointer_t<_TPtr>>
 -             && ! is_void_v<remove_pointer_t<_TPtr>>
@@ -16,5 +16,5 @@ index 5325f5e..e7db992 100644
 +template <class _Tp, enable_if_t<is_object_v<_Tp> && !is_void_v<_Tp> && (sizeof(_Tp) > 0), int> = 0>
 +_LIBCPP_HIDE_FROM_ABI constexpr _Tp* midpoint(_Tp* __a, _Tp* __b) noexcept
  {
-     return __a + _VSTD::midpoint(ptrdiff_t(0), __b - __a);
+     return __a + std::midpoint(ptrdiff_t(0), __b - __a);
  }

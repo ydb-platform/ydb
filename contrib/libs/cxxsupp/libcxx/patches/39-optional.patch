@@ -1,11 +1,11 @@
 diff --git a/include/optional b/include/optional
-index fc172c7..4048fa2 100644
+index 3f505b2..8721997 100644
 --- a/include/optional
 +++ b/include/optional
 @@ -301,7 +301,7 @@ struct __optional_destruct_base<_Tp, false>
      bool __engaged_;
  
-     _LIBCPP_INLINE_VISIBILITY
+     _LIBCPP_HIDE_FROM_ABI
 -    _LIBCPP_CONSTEXPR_SINCE_CXX20 ~__optional_destruct_base()
 +    ~__optional_destruct_base()
      {

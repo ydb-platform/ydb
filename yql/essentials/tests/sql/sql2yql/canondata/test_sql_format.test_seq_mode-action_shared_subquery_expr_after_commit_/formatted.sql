@@ -20,4 +20,6 @@ DEFINE ACTION $a() AS
         *
     FROM $r;
 END DEFINE;
-DO $a();
+DO
+    $a()
+;

@@ -116,6 +116,7 @@ constexpr auto InvalidChunkLocationUuid = TChunkLocationUuid(-1, -1);
 constexpr int MinReplicationFactor = 1;
 constexpr int MaxReplicationFactor = 20;
 constexpr int DefaultReplicationFactor = 3;
+constexpr int DefaultIntermediateDataReplicationFactor = 2;
 
 constexpr int MaxMediumCount = 120; // leave some room for sentinels
 

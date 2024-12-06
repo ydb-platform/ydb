@@ -477,7 +477,6 @@ void TDirectReadSessionActor::HandleDestroyPartitionSession(TEvPQProxy::TEvDirec
     stop->set_status(ConvertPersQueueInternalCodeToStatus(ev->Get()->Code));
     FillIssue(stop->add_issues(), ev->Get()->Code, ev->Get()->Reason);
     WriteToStreamOrDie(ActorContext(), std::move(result));
-
 }
 
 void TDirectReadSessionActor::HandleSessionKilled(TEvPQProxy::TEvDirectReadCloseSession::TPtr& ev) {

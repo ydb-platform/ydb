@@ -226,18 +226,6 @@
   - vm/vm_param.h
   #endif
   #if defined(_MSC_VER)
-  - comdef.h
-  - comutil.h
-  - concrt.h
-  - crtdefs.h
-  - crtversion.h
-  - eh.h
-  - excpt.h
-  - ppl.h
-  - ppltasks.h
-  - rtcapi.h
-  - vadefs.h
-  - varargs.h
   - crtassem.h
   #endif
   #if defined(_unix_) && TODO

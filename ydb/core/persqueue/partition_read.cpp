@@ -425,14 +425,16 @@ TReadAnswer TReadInfo::FormAnswer(
                 size -= lastBlobSize;
             }
             lastBlobSize = 0;
-            return (size >= Size || cnt >= Count);
+            return cnt >= Count;
         }
-        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (size >= Size || cnt >= Count);
+        // For backward compatibility, we keep the behavior for older clients for non-FirstClassCitizen
+        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && cnt >= Count;
     };
 
     Y_ABORT_UNLESS(blobs.size() == Blobs.size());
     response->Check();
-    for (ui32 pos = 0; pos < blobs.size() && cnt < Count && size < Size; ++pos) {
+    bool needStop = false;
+    for (ui32 pos = 0; pos < blobs.size() && !needStop && size < Size; ++pos) {
         Y_ABORT_UNLESS(Blobs[pos].Offset == blobs[pos].Offset, "Mismatch %" PRIu64 " vs %" PRIu64, Blobs[pos].Offset, blobs[pos].Offset);
         Y_ABORT_UNLESS(Blobs[pos].Count == blobs[pos].Count, "Mismatch %" PRIu32 " vs %" PRIu32, Blobs[pos].Count, blobs[pos].Count);
 
@@ -469,7 +471,7 @@ TReadAnswer TReadInfo::FormAnswer(
         Y_ABORT_UNLESS(offset < Offset || partNo <= PartNo);
         TKey key(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount, false);
         ui64 firstHeaderOffset = GetFirstHeaderOffset(key, blobValue);
-        for (TBlobIterator it(key, blobValue); it.IsValid() && cnt < Count; it.Next()) {
+        for (TBlobIterator it(key, blobValue); it.IsValid() && !needStop; it.Next()) {
             TBatch batch = it.GetBatch();
             auto& header = batch.Header;
             batch.Unpack();
@@ -488,10 +490,10 @@ TReadAnswer TReadInfo::FormAnswer(
                 continue;
 
 
-            PQ_LOG_D("FormAnswer processing batch offset "
-                << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount() << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
+            PQ_LOG_D("FormAnswer processing batch offset " << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount() 
+                    << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
 
-            for (size_t i = pos; i < batch.Blobs.size() && cnt < Count; ++i) {
+            for (size_t i = pos; i < batch.Blobs.size(); ++i) {
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 
@@ -513,12 +515,15 @@ TReadAnswer TReadInfo::FormAnswer(
                     ++PartNo;
                 }
 
-                updateUsage(res);
+                if (updateUsage(res)) {
+                    needStop = true;
+                    break;
+                }
             }
         }
     }
 
-    if (cnt < Count && size < Size) { // body blobs are fully processed and need to take more data
+    if (!needStop && cnt < Count && size < Size) { // body blobs are fully processed and need to take more data
         if (CachedOffset > Offset) {
             lastBlobSize = 0;
             Offset = CachedOffset;

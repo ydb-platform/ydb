@@ -1161,14 +1161,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         ui32 totalMsg = 0;
         ui64 nextReadId = 1;
         Sleep(TDuration::Seconds(3));
-        Cerr << ">>>>> 1" << Endl << Flush;
         setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 50);
 
         Cerr << "First read\n";
-        setup.DoRead(assignId, nextReadId, totalMsg, 40);
+        setup.DoRead(assignId, nextReadId, totalMsg, 43);
         setup.DoRead(assignId, nextReadId, totalMsg, 42);
 
-        Cerr << ">>>>> 3" << Endl << Flush;
         Topic::StreamReadMessage::FromClient req;
         req.mutable_read_request()->set_bytes_size(40_MB);
         if (!setup.ControlStream->Write(req)) {
@@ -1177,14 +1175,11 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << "Second read\n";
         setup.DoRead(assignId, nextReadId, totalMsg, 50);
 
-        Cerr << ">>>>> 5" << Endl << Flush;
         Sleep(TDuration::Seconds(1));
-        Cerr << ">>>>> 6" << Endl << Flush;
         auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.StagedReads.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.Reads.size(), 0);
-        Cerr << ">>>>> 7" << Endl << Flush;
     }
 
     Y_UNIT_TEST(DirectReadBadCases) {

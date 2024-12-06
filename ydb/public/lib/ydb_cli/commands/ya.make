@@ -24,6 +24,7 @@ SRCS(
     ydb_service_topic.cpp
     ydb_service_table.cpp
     ydb_sql.cpp
+    ydb_storage_config.cpp
     ydb_tools.cpp
     ydb_workload.cpp
     ydb_workload_import.cpp
@@ -52,6 +53,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/import
     ydb/public/lib/ydb_cli/topic
     ydb/public/sdk/cpp/client/draft
+    ydb/public/sdk/cpp/client/ydb_bsconfig
     ydb/public/sdk/cpp/client/ydb_coordination
     ydb/public/sdk/cpp/client/ydb_debug
     ydb/public/sdk/cpp/client/ydb_export

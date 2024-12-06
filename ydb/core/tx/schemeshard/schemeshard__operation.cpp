@@ -1668,13 +1668,18 @@ void TOperation::RegisterRelationByTabletId(TSubTxId partId, TTabletId tablet, c
     if (RelationsByTabletId.contains(tablet)) {
         if (RelationsByTabletId.at(tablet) != partId) {
             // it is Ok if Hive otherwise it is error
+            TSubTxId prevPartId = RelationsByTabletId.at(tablet);
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "TOperation RegisterRelationByTabletId"
                             << " collision in routes has found"
-                            << ", TxId: " << TxId
-                            << ", partId: " << partId
-                            << ", prev tablet: " << RelationsByTabletId.at(tablet)
-                            << ", new tablet: " << tablet);
+                            << ", TxId# " << TxId
+                            << ", partId# " << partId
+                            << ", prevPartId# " << prevPartId
+                            << ", tablet# " << tablet
+                            << ", guessDefaultRootHive# " << (tablet == TTabletId(72057594037968897) ? "yes" : "no")
+                            << ", prevTx# " << (prevPartId < Parts.size() ? Parts[prevPartId]->GetTransaction().ShortDebugString() : TString("unknown"))
+                            << ", newTx# " << (partId < Parts.size() ? Parts[partId]->GetTransaction().ShortDebugString() : TString("unknown"))
+                            );
 
             RelationsByTabletId.erase(tablet);
         }

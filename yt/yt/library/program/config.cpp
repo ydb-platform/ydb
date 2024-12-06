@@ -49,20 +49,12 @@ void TSingletonsConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("enable_ref_counted_tracker_profiling", &TThis::EnableRefCountedTrackerProfiling)
         .Default(true);
-    registrar.Parameter("enable_resource_tracker", &TThis::EnableResourceTracker)
-        .Default(true);
-    registrar.Parameter("resource_tracker_vcpu_factor", &TThis::ResourceTrackerVCpuFactor)
-        .Optional();
+    registrar.Parameter("resource_tracker", &TThis::ResourceTracker)
+        .DefaultNew();
     registrar.Parameter("heap_profiler", &TThis::HeapProfiler)
         .DefaultNew();
     registrar.Parameter("protobuf_interop", &TThis::ProtobufInterop)
         .DefaultNew();
-
-    registrar.Postprocessor([] (TThis* config) {
-        if (config->ResourceTrackerVCpuFactor && !config->EnableResourceTracker) {
-            THROW_ERROR_EXCEPTION("Option \"resource_tracker_vcpu_factor\" can be specified only if resource tracker is enabled");
-        }
-    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

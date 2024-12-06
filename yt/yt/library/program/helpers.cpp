@@ -94,12 +94,7 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
         EnableRefCountedTrackerProfiling();
     }
 
-    if (config->EnableResourceTracker) {
-        NProfiling::TResourceTracker::Enable();
-        if (config->ResourceTrackerVCpuFactor.has_value()) {
-            NProfiling::TResourceTracker::SetVCpuFactor(config->ResourceTrackerVCpuFactor.value());
-        }
-    }
+    NProfiling::TResourceTracker::Configure(config->ResourceTracker);
 
     NYson::SetProtobufInteropConfig(config->ProtobufInterop);
 }

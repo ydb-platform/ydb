@@ -25,6 +25,8 @@
 
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
+#include <yt/yt/library/profiling/resource_tracker/config.h>
+
 #include <yt/yt/library/tcmalloc/config.h>
 
 #include <yt/yt/library/stockpile/config.h>
@@ -71,8 +73,7 @@ public:
     NTCMalloc::TTCMallocConfigPtr TCMalloc;
     TStockpileConfigPtr Stockpile;
     bool EnableRefCountedTrackerProfiling;
-    bool EnableResourceTracker;
-    std::optional<double> ResourceTrackerVCpuFactor;
+    NProfiling::TResourceTrackerConfigPtr ResourceTracker;
     THeapProfilerConfigPtr HeapProfiler;
     NYson::TProtobufInteropConfigPtr ProtobufInterop;
 

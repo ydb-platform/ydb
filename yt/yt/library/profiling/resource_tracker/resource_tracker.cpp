@@ -1,5 +1,7 @@
 #include "resource_tracker.h"
 
+#include "config.h"
+
 #include <yt/yt/core/logging/log.h>
 
 #include <yt/yt/core/misc/fs.h>
@@ -242,13 +244,22 @@ public:
         return MemoryCgroupTracker_->GetAnonymousMemoryLimit();
     }
 
-    void SetVCpuFactor(double factor)
+    void SetCpuToVCpuFactor(double factor)
     {
         VCpuFactor_.store(factor);
     }
 
-private:
+    void Configure(const TResourceTrackerConfigPtr& config)
+    {
+        if (config->CpuToVCpuFactor) {
+            SetCpuToVCpuFactor(*config->CpuToVCpuFactor);
+        }
+        if (config->Enable) {
+            Enable();
+        }
+    }
 
+private:
     const TCpuCgroupTrackerPtr CpuCgroupTracker_ = New<TCpuCgroupTracker>();
     const TMemoryCgroupTrackerPtr MemoryCgroupTracker_ = New<TMemoryCgroupTracker>();
 
@@ -569,9 +580,14 @@ i64 TResourceTracker::GetAnonymousMemoryLimit()
     return TResourceTrackerImpl::Get()->GetAnonymousMemoryLimit();
 }
 
-void TResourceTracker::SetVCpuFactor(double factor)
+void TResourceTracker::SetCpuToVCpuFactor(double factor)
 {
-    TResourceTrackerImpl::Get()->SetVCpuFactor(factor);
+    TResourceTrackerImpl::Get()->SetCpuToVCpuFactor(factor);
+}
+
+void TResourceTracker::Configure(const TResourceTrackerConfigPtr& config)
+{
+    TResourceTrackerImpl::Get()->Configure(config);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

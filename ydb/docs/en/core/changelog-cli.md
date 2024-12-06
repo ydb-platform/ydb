@@ -1,5 +1,19 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.17.0 {#2-17-0}
+
+Released on December 4, 2024. To update to version **2.17.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+### Features
+
+* Improved performance of parallel [importing data from the file system](./reference/ydb-cli/export-import/tools-restore.md) using the `{{ ydb-cli }} tools restore` command.
+* Added the `{{ ydb-cli }} debug ping` command for performance and connection debugging.
+
+### Bug fixes
+
+* Fixed a bug in the table schema created by the command `{{ ydb-cli }} workload tpch` where the `partsupp` table contained an incorrect list of key columns.
+* Resolved an issue where the `{{ ydb-cli }} tools restore` command failed with the error "Too much data" if the maximum value of the `--upload-batchbytes` option (16 MB) was set.
+
 ## Version 2.16.0 {#2-16-0}
 
 Released on November 26, 2024. To update to version **2.16.0**, select the [Downloads](downloads/index.md#ydb-cli) section.

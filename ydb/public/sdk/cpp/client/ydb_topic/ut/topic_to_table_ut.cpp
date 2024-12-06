@@ -192,9 +192,9 @@ protected:
 
     NTable::TDataQueryResult ExecuteDataQuery(NTable::TSession session, const TString& query, const NTable::TTxControl& control);
 
-    void Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
-                                            const TString& consumerName,
-                                            size_t count);
+    TVector<TString> Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
+                                                        const TString& consumerName,
+                                                        size_t count);
 
     struct TAvgWriteBytes {
         ui64 PerSec = 0;
@@ -1069,18 +1069,22 @@ void TFixture::RestartLongTxService()
     }
 }
 
-void TFixture::Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
-                                                  const TString& consumerName,
-                                                  size_t limit)
+TVector<TString> TFixture::Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
+                                                              const TString& consumerName,
+                                                              size_t limit)
 {
-    size_t count = 0;
+    TVector<TString> result;
 
-    while (count < limit) {
+    while (result.size() < limit) {
         auto messages = ReadFromTopic(topicPath, consumerName, TDuration::Seconds(2));
-        count += messages.size();
+        for (auto& m : messages) {
+            result.push_back(std::move(m));
+        }
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(count, limit);
+    UNIT_ASSERT_VALUES_EQUAL(result.size(), limit);
+
+    return result;
 }
 
 auto TFixture::GetAvgWriteBytes(const TString& topicName,
@@ -1802,8 +1806,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_17, TFixture)
 
     //RestartPQTablet("topic_A", 0);
 
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 8);
+    auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 8);
     UNIT_ASSERT_VALUES_EQUAL(messages[0].size(), 22'000'000);
     UNIT_ASSERT_VALUES_EQUAL(messages[1].size(),        100);
     UNIT_ASSERT_VALUES_EQUAL(messages[2].size(),        200);

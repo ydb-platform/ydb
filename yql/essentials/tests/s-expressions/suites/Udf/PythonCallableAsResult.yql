@@ -19,7 +19,7 @@ def create_counter(start):
     return counter
 @@))
 
-(let udf (ScriptUdf 'Python 'create_counter udfType udfScript))
+(let udf (ScriptUdf 'Python3 'create_counter udfType udfScript))
 
 # call udf
 (let counter (Apply udf (Uint64 '1)))

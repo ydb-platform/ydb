@@ -166,27 +166,32 @@ NLogging::ELogLevel ToCoreLogLevel(ILogger::ELevel level)
     Y_ABORT();
 }
 
-void CommonInitialize(int, const char**)
+void CommonInitialize(TGuard<TMutex>& g)
 {
     auto logLevelStr = to_lower(TConfig::Get()->LogLevel);
     ILogger::ELevel logLevel;
 
     if (!TryFromString(logLevelStr, logLevel)) {
         Cerr << "Invalid log level: " << TConfig::Get()->LogLevel << Endl;
+        g.Release();
         exit(1);
     }
 
     auto logPath = TConfig::Get()->LogPath;
-    ILoggerPtr logger;
     if (logPath.empty()) {
-        logger = CreateStdErrLogger(logLevel);
+        if (TConfig::Get()->LogUseCore) {
+            auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
+            NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
+            SetUseCoreLog();
+        } else {
+            auto logger = CreateStdErrLogger(logLevel);
+            SetLogger(logger);
+        }
     } else {
-        logger = CreateFileLogger(logLevel, logPath);
-
         auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateLogFile(logPath, ToCoreLogLevel(logLevel));
         NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
+        SetUseCoreLog();
     }
-    SetLogger(logger);
 }
 
 void NonJobInitialize(const TInitializeOptions& options)
@@ -281,8 +286,7 @@ void JoblessInitialize(const TInitializeOptions& options)
 {
     auto g = Guard(InitializeLock);
 
-    static const char* fakeArgv[] = {"unknown..."};
-    NDetail::CommonInitialize(1, fakeArgv);
+    NDetail::CommonInitialize(g);
     NDetail::NonJobInitialize(options);
     NDetail::ElevateInitStatus(NDetail::EInitStatus::JoblessInitialization);
 }
@@ -291,7 +295,7 @@ void Initialize(int argc, const char* argv[], const TInitializeOptions& options)
 {
     auto g = Guard(InitializeLock);
 
-    NDetail::CommonInitialize(argc, argv);
+    NDetail::CommonInitialize(g);
 
     NDetail::ElevateInitStatus(NDetail::EInitStatus::FullInitialization);
 

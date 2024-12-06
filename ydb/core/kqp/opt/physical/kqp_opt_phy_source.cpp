@@ -3,7 +3,6 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 

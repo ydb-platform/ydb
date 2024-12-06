@@ -66,7 +66,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "Exist(item._equijoin_column_0) And Exist(item.hundred)"
+                                                "Predicate": "Exist(item._equijoin_column_0) AND Exist(item.hundred)"
                                             }
                                         ],
                                         "PlanNodeId": 16,

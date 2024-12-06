@@ -1,5 +1,8 @@
-#include "object.h"
 #include "behaviour.h"
+#include "object.h"
+
+#include <ydb/core/ydb_convert/table_settings.h>
+
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 #include <util/folder/path.h>
@@ -73,9 +76,14 @@ bool TObject::TryProvideTtl(const NKikimrSchemeOp::TColumnTableDescription& csDe
             return false;
         }
         if (cRequest) {
-            auto& newTtl = *cRequest->mutable_ttl_settings()->mutable_date_type_column();
-            newTtl.set_column_name("pk_" + ttl.GetColumnName());
-            newTtl.set_expire_after_seconds(ttl.GetExpireAfterSeconds());
+            auto newTtl = ttl;
+            newTtl.SetColumnName("pk_" + ttl.GetColumnName());
+
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!FillTtlSettings(*cRequest->mutable_ttl_settings(), newTtl, status, error)) {
+                return false;
+            }
         }
     }
     return true;

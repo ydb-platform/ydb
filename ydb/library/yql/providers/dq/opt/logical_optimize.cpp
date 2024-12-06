@@ -8,6 +8,8 @@
 #include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -261,15 +263,16 @@ protected:
                 YQL_CLOG(INFO, ProviderDq) << str;
             };
 
-            std::unique_ptr<IOptimizerNew> opt;
+            auto factory = MakeCBOOptimizerFactory();
+            std::shared_ptr<IOptimizerNew> opt;
             TDqCBOProviderContext pctx(TypesCtx, Config);
 
             switch (TypesCtx.CostBasedOptimizer) {
             case ECostBasedOptimizerType::Native:
-                opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(pctx, 100000));
+                opt = factory->MakeJoinCostBasedOptimizerNative(pctx, ctx, {.MaxDPhypDPTableSize = 100000});
                 break;
             case ECostBasedOptimizerType::PG:
-                opt = std::unique_ptr<IOptimizerNew>(MakePgOptimizerNew(pctx, ctx, log));
+                opt = factory->MakeJoinCostBasedOptimizerPG(pctx, ctx, {.Logger = log});
                 break;
             default:
                 YQL_ENSURE(false, "Unknown CBO type");

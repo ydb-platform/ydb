@@ -157,8 +157,8 @@ Y_UNIT_TEST(Rollback) {
 
 Y_UNIT_TEST(Export) {
     TCases cases = {
-        {"export $foo;","EXPORT $foo;\n"},
-        {"export $foo, $bar;","EXPORT $foo, $bar;\n"},
+        {"export $foo;","EXPORT\n\t$foo;\n"},
+        {"export $foo, $bar;","EXPORT\n\t$foo,\n\t$bar;\n"},
     };
 
     TSetup setup;
@@ -532,7 +532,7 @@ Y_UNIT_TEST(TopicExistsStatement) {
 Y_UNIT_TEST(Do) {
     TCases cases = {
         {"do $a(1,2,3)",
-            "DO $a(1, 2, 3);\n"},
+            "DO\n\t$a(1, 2, 3)\n;\n"},
         {"do begin values(1); end do;",
             "DO BEGIN\n\tVALUES\n\t\t(1);\nEND DO;\n"},
     };
@@ -556,7 +556,7 @@ Y_UNIT_TEST(DefineActionOrSubquery) {
             "DEFINE ACTION $a() AS\n\tDEFINE ACTION $b() AS\n\t\t"
             "VALUES\n\t\t\t(1);\n\tEND DEFINE;\n\n\t"
             "DEFINE SUBQUERY $c() AS\n\t\tSELECT\n\t\t\t1;\n\t"
-            "END DEFINE;\n\tDO $b();\n\n\tPROCESS $c();\nEND DEFINE;\n"},
+            "END DEFINE;\n\tDO\n\t\t$b()\n\t;\n\n\tPROCESS $c();\nEND DEFINE;\n"},
     };
 
     TSetup setup;
@@ -566,14 +566,14 @@ Y_UNIT_TEST(DefineActionOrSubquery) {
 Y_UNIT_TEST(If) {
     TCases cases = {
         {"evaluate if 1=1 do $a()",
-            "EVALUATE IF 1 = 1\n\tDO $a();\n"},
+            "EVALUATE IF 1 == 1 DO\n\t$a()\n;\n"},
         {"evaluate if 1=1 do $a() else do $b()",
-            "EVALUATE IF 1 = 1\n\tDO $a()\nELSE\n\tDO $b();\n"},
+            "EVALUATE IF 1 == 1 DO\n\t$a()\nELSE DO\n\t$b()\n;\n"},
         {"evaluate if 1=1 do begin select 1; end do",
-            "EVALUATE IF 1 = 1\n\tDO BEGIN\n\t\tSELECT\n\t\t\t1;\n\tEND DO;\n"},
+            "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1;\nEND DO;\n"},
         {"evaluate if 1=1 do begin select 1; end do else do begin select 2; end do",
-            "EVALUATE IF 1 = 1\n\tDO BEGIN\n\t\tSELECT\n\t\t\t1;\n\tEND DO\n"
-            "ELSE\n\tDO BEGIN\n\t\tSELECT\n\t\t\t2;\n\tEND DO;\n"},
+            "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1;\nEND DO "
+            "ELSE DO BEGIN\n\tSELECT\n\t\t2;\nEND DO;\n"},
     };
 
     TSetup setup;
@@ -583,15 +583,15 @@ Y_UNIT_TEST(If) {
 Y_UNIT_TEST(For) {
     TCases cases = {
         {"evaluate for $x in [] do $a($x)",
-            "EVALUATE FOR $x IN []\n\tDO $a($x);\n"},
+            "EVALUATE FOR $x IN [] DO\n\t$a($x)\n;\n"},
         {"evaluate for $x in [] do $a($x) else do $b()",
-            "EVALUATE FOR $x IN []\n\tDO $a($x)\nELSE\n\tDO $b();\n"},
+            "EVALUATE FOR $x IN [] DO\n\t$a($x)\nELSE DO\n\t$b()\n;\n"},
         {"evaluate for $x in [] do begin select $x; end do",
-            "EVALUATE FOR $x IN []\n\tDO BEGIN\n\t\tSELECT\n\t\t\t$x;\n\tEND DO;\n"},
+            "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x;\nEND DO;\n"},
         {"evaluate for $x in [] do begin select $x; end do else do begin select 2; end do",
-            "EVALUATE FOR $x IN []\n\tDO BEGIN\n\t\tSELECT\n\t\t\t$x;\n\tEND DO\nELSE\n\tDO BEGIN\n\t\tSELECT\n\t\t\t2;\n\tEND DO;\n"},
+            "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x;\nEND DO ELSE DO BEGIN\n\tSELECT\n\t\t2;\nEND DO;\n"},
         {"evaluate parallel for $x in [] do $a($x)",
-            "EVALUATE PARALLEL FOR $x IN []\n\tDO $a($x);\n"},
+            "EVALUATE PARALLEL FOR $x IN [] DO\n\t$a($x)\n;\n"},
     };
 
     TSetup setup;
@@ -623,7 +623,7 @@ Y_UNIT_TEST(Update) {
         {"update user set (x,y)=(select 1,2)",
             "UPDATE user\nSET\n(\n\tx,\n\ty\n) = (\n\tSELECT\n\t\t1,\n\t\t2\n);\n"},
         {"update user set x=1,y=2 where z=3",
-            "UPDATE user\nSET\n\tx = 1,\n\ty = 2\nWHERE z = 3;\n"},
+            "UPDATE user\nSET\n\tx = 1,\n\ty = 2\nWHERE z == 3;\n"},
     };
 
     TSetup setup;
@@ -635,7 +635,7 @@ Y_UNIT_TEST(Delete) {
         {"delete from user",
             "DELETE FROM user;\n"},
         {"delete from user where 1=1",
-            "DELETE FROM user\nWHERE 1 = 1;\n"},
+            "DELETE FROM user\nWHERE 1 == 1;\n"},
         {"delete from user on select 1 as x, 2 as y",
             "DELETE FROM user\nON\nSELECT\n\t1 AS x,\n\t2 AS y;\n"},
         {"delete from user on (x) values (1)",
@@ -677,13 +677,13 @@ Y_UNIT_TEST(Into) {
         {"upsert into user erase by (x,y) values (1)",
             "UPSERT INTO user\n\tERASE BY (\n\t\tx,\n\t\ty\n\t)\nVALUES\n\t(1);\n"},
         {"insert into user with truncate select 1 as x",
-            "INSERT INTO user\n\tWITH truncate\nSELECT\n\t1 AS x;\n"},
+            "INSERT INTO user WITH truncate\nSELECT\n\t1 AS x;\n"},
         {"insert into user with (truncate,inferscheme='1') select 1 as x",
-            "INSERT INTO user\n\tWITH (truncate, inferscheme = '1')\nSELECT\n\t1 AS x;\n"},
+            "INSERT INTO user WITH (\n\ttruncate,\n\tinferscheme = '1'\n)\nSELECT\n\t1 AS x;\n"},
         {"insert into user with schema Struct<user:int32> select 1 as user",
-            "INSERT INTO user\n\tWITH SCHEMA Struct<user: int32>\nSELECT\n\t1 AS user;\n"},
+            "INSERT INTO user WITH SCHEMA Struct<user: int32>\nSELECT\n\t1 AS user;\n"},
         {"insert into user with schema (int32 as user) select 1 as user",
-            "INSERT INTO user\n\tWITH SCHEMA (int32 AS user)\nSELECT\n\t1 AS user;\n"},
+            "INSERT INTO user WITH SCHEMA (int32 AS user)\nSELECT\n\t1 AS user;\n"},
     };
 
     TSetup setup;
@@ -699,7 +699,7 @@ Y_UNIT_TEST(Process) {
         {"process user,user using $f()",
             "PROCESS user, user\nUSING $f();\n"},
         {"process user using $f() where 1=1 having 1=1 assume order by user",
-            "PROCESS user\nUSING $f()\nWHERE 1 = 1\nHAVING 1 = 1\nASSUME ORDER BY\n\tuser;\n"},
+            "PROCESS user\nUSING $f()\nWHERE 1 == 1\nHAVING 1 == 1\nASSUME ORDER BY\n\tuser;\n"},
         {"process user using $f() union all process user using $f()",
             "PROCESS user\nUSING $f()\nUNION ALL\nPROCESS user\nUSING $f();\n"},
         {"process user using $f() with foo=bar",
@@ -733,7 +733,7 @@ Y_UNIT_TEST(Reduce) {
         {"reduce user on user,user using $f()",
             "REDUCE user\nON\n\tuser,\n\tuser\nUSING $f();\n"},
         {"reduce user on user using $f() where 1=1 having 1=1 assume order by user",
-            "REDUCE user\nON\n\tuser\nUSING $f()\nWHERE 1 = 1\nHAVING 1 = 1\nASSUME ORDER BY\n\tuser;\n"},
+            "REDUCE user\nON\n\tuser\nUSING $f()\nWHERE 1 == 1\nHAVING 1 == 1\nASSUME ORDER BY\n\tuser;\n"},
         {"reduce user presort user,user on user using $f();",
             "REDUCE user\nPRESORT\n\tuser,\n\tuser\nON\n\tuser\nUSING $f();\n"},
     };
@@ -755,11 +755,11 @@ Y_UNIT_TEST(Select) {
         {"select a.*",
             "SELECT\n\ta.*;\n"},
         {"select * without a",
-            "SELECT\n\t*\n\tWITHOUT\n\t\ta;\n"},
+            "SELECT\n\t*\nWITHOUT\n\ta;\n"},
         {"select * without a,b",
-            "SELECT\n\t*\n\tWITHOUT\n\t\ta,\n\t\tb;\n"},
+            "SELECT\n\t*\nWITHOUT\n\ta,\n\tb;\n"},
         {"select * without a,",
-            "SELECT\n\t*\n\tWITHOUT\n\t\ta,;\n"},
+            "SELECT\n\t*\nWITHOUT\n\ta,;\n"},
         {"select 1 from user",
             "SELECT\n\t1\nFROM user;\n"},
         {"select 1 from plato.user",
@@ -781,7 +781,7 @@ Y_UNIT_TEST(Select) {
         {"select 1 from user with user=user",
             "SELECT\n\t1\nFROM user\n\tWITH user = user;\n"},
         {"select 1 from user with (user=user, user=user)",
-            "SELECT\n\t1\nFROM user\n\tWITH (user = user, user = user);\n"},
+            "SELECT\n\t1\nFROM user\n\tWITH (\n\t\tuser = user,\n\t\tuser = user\n\t);\n"},
         {"select 1 from user sample 0.1",
             "SELECT\n\t1\nFROM user\n\tSAMPLE 0.1;\n"},
         {"select 1 from user tablesample system(0.1)",
@@ -803,21 +803,21 @@ Y_UNIT_TEST(Select) {
         {"from user select 1",
             "FROM user\nSELECT\n\t1;\n"},
         {"select * from user as a join user as b on a.x=b.y",
-            "SELECT\n\t*\nFROM user\n\tAS a\nJOIN user\n\tAS b\nON a.x = b.y;\n"},
+            "SELECT\n\t*\nFROM user\n\tAS a\nJOIN user\n\tAS b\nON a.x == b.y;\n"},
         {"select * from user as a join user as b using(x)",
             "SELECT\n\t*\nFROM user\n\tAS a\nJOIN user\n\tAS b\nUSING (x);\n"},
         {"select * from any user as a full join user as b on a.x=b.y",
-            "SELECT\n\t*\nFROM ANY user\n\tAS a\nFULL JOIN user\n\tAS b\nON a.x = b.y;\n"},
+            "SELECT\n\t*\nFROM ANY user\n\tAS a\nFULL JOIN user\n\tAS b\nON a.x == b.y;\n"},
         {"select * from user as a left join any user as b on a.x=b.y",
-            "SELECT\n\t*\nFROM user\n\tAS a\nLEFT JOIN ANY user\n\tAS b\nON a.x = b.y;\n"},
+            "SELECT\n\t*\nFROM user\n\tAS a\nLEFT JOIN ANY user\n\tAS b\nON a.x == b.y;\n"},
         {"select * from any user as a right join any user as b on a.x=b.y",
-            "SELECT\n\t*\nFROM ANY user\n\tAS a\nRIGHT JOIN ANY user\n\tAS b\nON a.x = b.y;\n"},
+            "SELECT\n\t*\nFROM ANY user\n\tAS a\nRIGHT JOIN ANY user\n\tAS b\nON a.x == b.y;\n"},
         {"select * from user as a cross join user as b",
             "SELECT\n\t*\nFROM user\n\tAS a\nCROSS JOIN user\n\tAS b;\n"},
         {"select 1 from user where key = 1",
-            "SELECT\n\t1\nFROM user\nWHERE key = 1;\n"},
+            "SELECT\n\t1\nFROM user\nWHERE key == 1;\n"},
         {"select 1 from user having count(*) = 1",
-            "SELECT\n\t1\nFROM user\nHAVING count(*) = 1;\n"},
+            "SELECT\n\t1\nFROM user\nHAVING count(*) == 1;\n"},
         {"select 1 from user group by key",
             "SELECT\n\t1\nFROM user\nGROUP BY\n\tkey;\n"},
         {"select 1 from user group compact by key, value as v",
@@ -860,7 +860,7 @@ Y_UNIT_TEST(CompositeTypesAndQuestions) {
     TCases cases = {
         {"declare $_x AS list<int32>??;declare $_y AS int32 ? ? ;select 1<>2, 1??2,"
             "formattype(list<int32>), formattype(resource<user>),formattype(tuple<>), formattype(tuple<  >), formattype(int32 ? ? )",
-            "DECLARE $_x AS list<int32>??;\nDECLARE $_y AS int32??;\n\nSELECT\n\t1 <> 2,\n\t1 ?? 2,\n\tformattype(list<int32>),"
+            "DECLARE $_x AS list<int32>??;\nDECLARE $_y AS int32??;\n\nSELECT\n\t1 != 2,\n\t1 ?? 2,\n\tformattype(list<int32>),"
         "\n\tformattype(resource<user>),\n\tformattype(tuple<>),\n\tformattype(tuple< >),\n\tformattype(int32??" ");\n"
         },
     };
@@ -927,7 +927,7 @@ Y_UNIT_TEST(TableHints) {
         {"select * from plato.T with schema struct<foo:integer, Bar:list<string?>> where key<0",
             "SELECT\n\t*\nFROM plato.T\n\tWITH SCHEMA struct<foo: integer, Bar: list<string?>>\nWHERE key < 0;\n"},
         {"select * from plato.T with (foo=bar, x=$y, a=(a, b, c), u='aaa', schema (foo int32, bar list<string>))",
-            "SELECT\n\t*\nFROM plato.T\n\tWITH (foo = bar, x = $y, a = (a, b, c), u = 'aaa', SCHEMA (foo int32, bar list<string>));\n"},
+            "SELECT\n\t*\nFROM plato.T\n\tWITH (\n\t\tfoo = bar,\n\t\tx = $y,\n\t\ta = (a, b, c),\n\t\tu = 'aaa',\n\t\tSCHEMA (foo int32, bar list<string>)\n\t);\n"},
     };
 
     TSetup setup;
@@ -947,7 +947,7 @@ Y_UNIT_TEST(BoolAsVariableName) {
 Y_UNIT_TEST(WithSchemaEquals) {
     TCases cases = {
         {"select * from plato.T with (format= csv_with_names, schema=(year int32 Null, month String, day String not   null, a Utf8, b Uint16));",
-            "SELECT\n\t*\nFROM plato.T\n\tWITH (format = csv_with_names, SCHEMA = (year int32 NULL, month String, day String NOT NULL, a Utf8, b Uint16));\n"},
+            "SELECT\n\t*\nFROM plato.T\n\tWITH (\n\t\tformat = csv_with_names,\n\t\tSCHEMA = (year int32 NULL, month String, day String NOT NULL, a Utf8, b Uint16)\n\t);\n"},
             };
 
     TSetup setup;
@@ -1397,13 +1397,13 @@ Y_UNIT_TEST(Union) {
 Y_UNIT_TEST(CommentAfterLastSelect) {
     TCases cases = {
         {"SELECT 1--comment\n",
-            "SELECT\n\t1--comment\n;\n"},
+            "SELECT\n\t1 --comment\n;\n"},
         {"SELECT 1\n\n--comment\n",
-            "SELECT\n\t1--comment\n;\n"},
+            "SELECT\n\t1 --comment\n;\n"},
         {"SELECT 1\n\n--comment",
-            "SELECT\n\t1--comment\n;\n"},
+            "SELECT\n\t1 --comment\n;\n"},
         {"SELECT * FROM Input\n\n\n\n/* comment */\n\n\n",
-            "SELECT\n\t*\nFROM Input/* comment */;\n"},
+            "SELECT\n\t*\nFROM Input /* comment */;\n"},
     };
 
     TSetup setup;
@@ -1417,7 +1417,7 @@ Y_UNIT_TEST(WindowFunctionInsideExpr) {
         {"SELECT CAST(ROW_NUMBER() OVER (PARTITION BY key) AS String) AS x,\nFROM Input;",
             "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tPARTITION BY\n\t\t\t\tkey\n\t\t) AS String\n\t) AS x,\nFROM Input;\n"},
         {"SELECT CAST(ROW_NUMBER() OVER (users) AS String) AS x,\nFROM Input;",
-        "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tusers\n\t\t) AS String\n\t) AS x,\nFROM Input;\n"},
+            "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tusers\n\t\t) AS String\n\t) AS x,\nFROM Input;\n"},
     };
 
     TSetup setup;
@@ -1464,12 +1464,12 @@ Y_UNIT_TEST(MultiTokenOperations) {
     TCases cases = {
         {"$x = 1 >>| 2;",
             "$x = 1 >>| 2;\n"},
-            {"$x = 1 >> 2;",
+        {"$x = 1 >> 2;",
             "$x = 1 >> 2;\n"},
-            {"$x = 1 ?? 2;",
+        {"$x = 1 ?? 2;",
             "$x = 1 ?? 2;\n"},
-            {"$x = 1 >  /*comment*/  >  /*comment*/  | 2;",
-            "$x = 1 >/*comment*/>/*comment*/| 2;\n"},
+        {"$x = 1 >  /*comment*/  >  /*comment*/  | 2;",
+            "$x = 1 > /*comment*/> /*comment*/| 2;\n"},
     };
 
     TSetup setup;
@@ -1481,27 +1481,27 @@ Y_UNIT_TEST(OperatorNewlines) {
         {"$x = TRUE\nOR\nFALSE;",
             "$x = TRUE\n\tOR\n\tFALSE;\n"},
         {"$x = TRUE OR\nFALSE;",
-            "$x = TRUE OR\n\tFALSE;\n"},
+            "$x = TRUE\n\tOR FALSE;\n"},
         {"$x = TRUE\nOR FALSE;",
-            "$x = TRUE OR\n\tFALSE;\n"},
-        {"$x = 1\n+2\n*3;",
-            "$x = 1 +\n\t2 *\n\t\t3;\n"},
+            "$x = TRUE\n\tOR FALSE;\n"},
+        {"$x = 1+\n2*\n3;",
+            "$x = 1\n\t+ 2\n\t* 3;\n"},
         {"$x = 1\n+\n2\n*3\n*5\n+\n4;",
-            "$x = 1\n\t+\n\t2 *\n\t\t3 *\n\t\t5\n\t+\n\t4;\n"},
+            "$x = 1\n\t+\n\t2\n\t* 3\n\t* 5\n\t+\n\t4;\n"},
         {"$x = 1\n+2+3+4\n+5+6+7+\n\n8+9+10;",
-            "$x = 1 +\n\t2 + 3 + 4 +\n\t5 + 6 + 7 +\n\t8 + 9 + 10;\n"},
+            "$x = 1\n\t+ 2 + 3 + 4\n\t+ 5 + 6 + 7\n\t+ 8 + 9 + 10;\n"},
         {"$x = TRUE\nAND\nTRUE OR\nFALSE\nAND TRUE\nOR FALSE\nAND TRUE\nOR FALSE;",
-            "$x = TRUE\n\tAND\n\tTRUE OR\n\tFALSE AND\n\t\tTRUE OR\n\tFALSE AND\n\t\tTRUE OR\n\tFALSE;\n"},
+            "$x = TRUE\n\tAND\n\tTRUE\n\tOR FALSE\n\tAND TRUE\n\tOR FALSE\n\tAND TRUE\n\tOR FALSE;\n"},
         {"$x = 1 -- comment\n+ 2;",
-            "$x = 1-- comment\n\t+\n\t2;\n"},
-            {"$x = 1 -- comment\n+ -- comment\n2;",
-            "$x = 1-- comment\n\t+-- comment\n\t2;\n"},
-            {"$x = 1 + -- comment\n2;",
-            "$x = 1 +-- comment\n\t2;\n"},
-            {"$x = 1\n>\n>\n|\n2;",
+            "$x = 1 -- comment\n\t+ 2;\n"},
+        {"$x = 1 -- comment\n+ -- comment\n2;",
+            "$x = 1 -- comment\n\t+ -- comment\n\t2;\n"},
+        {"$x = 1 + -- comment\n2;",
+            "$x = 1\n\t+ -- comment\n\t2;\n"},
+        {"$x = 1\n>\n>\n|\n2;",
             "$x = 1\n\t>>|\n\t2;\n"},
-            {"$x = 1\n?? 2 ??\n3\n??\n4 +\n5\n*\n6 +\n7 ??\n8;",
-            "$x = 1 ??\n\t2 ??\n\t3\n\t??\n\t4 +\n\t\t5\n\t\t\t*\n\t\t\t6 +\n\t\t7 ??\n\t8;\n"},
+        {"$x = 1\n?? 2 ??\n3\n??\n4 +\n5\n*\n6 +\n7 ??\n8;",
+            "$x = 1 ??\n\t2 ??\n\t3\n\t??\n\t4\n\t+ 5\n\t*\n\t6\n\t+ 7 ??\n\t8;\n"},
     };
 
     TSetup setup;
@@ -1531,7 +1531,7 @@ Y_UNIT_TEST(ObfuscateSelect) {
         {"declare $a as int32;",
             "DECLARE $id AS int32;\n"},
         {"select * from `logs/of/bob` where pwd='foo';",
-            "SELECT\n\t*\nFROM id\nWHERE id = 'str';\n"},
+            "SELECT\n\t*\nFROM id\nWHERE id == 'str';\n"},
         {"select $f();",
             "SELECT\n\t$id();\n"},
     };

@@ -2,6 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for PQGroupReserve
+
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/persqueue/events/global.h>
 

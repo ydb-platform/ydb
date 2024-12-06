@@ -21,7 +21,6 @@ subprojects {
 {%- set with_kotlin = target.with_kotlin -%}
 {%- set kotlin_version = target.kotlin_version -%}
 {%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
-{%- set errorprone_plugin_version = "4.0.0" -%}
 
 {%- if not target.required_jdk -%}
 {%-     set has_required_jdk = false -%}
@@ -29,12 +28,7 @@ subprojects {
 {%-     set required_jdk = '17' -%}
 {%- else -%}
 {%-     set has_required_jdk = true -%}
-{#-     Use JDK 23 instead 22 -#}
-{%-     if target.required_jdk == '22' -%}
-{%-         set required_jdk = '23' -%}
-{%-     else -%}
-{%-         set required_jdk = target.required_jdk -%}
-{%-     endif -%}
+{%-     set required_jdk = target.required_jdk -%}
 {%- endif %}
 
 plugins {
@@ -64,8 +58,11 @@ plugins {
 {%- endif -%}
 
 {#- errorprone plugin configuration -#}
-{%- if target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length %}
+{%- if errorprone -%}
+{%-     set errorprone_plugin_version = "4.0.0" -%}
+{%-     if target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length %}
     id("net.ltgt.errorprone") version "{{ errorprone_plugin_version }}"
+{%-     endif -%}
 {%- endif -%}
 
 {#- lombok plugin configuration -#}
@@ -310,10 +307,12 @@ sourceSets {
 
 dependencies {
 {%- for library in target.consumer if library.classpath -%}
-{%-     if library.prebuilt and (library.type != "contrib" or build_contribs) and ("contrib/java/com/google/errorprone/error_prone_annotations" in library.jar) -%}
-{%-         set errorprone_version = library.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
-{%-         set errorprone_parts = split(errorprone_version, '/', 2) %}
+{%-     if errorprone -%}
+{%-         if library.prebuilt and (library.type != "contrib" or build_contribs) and ("contrib/java/com/google/errorprone/error_prone_annotations" in library.jar) -%}
+{%-             set errorprone_version = library.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
+{%-             set errorprone_parts = split(errorprone_version, '/', 2) %}
     errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
+{%-         endif -%}
 {%-     endif -%}
 
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}

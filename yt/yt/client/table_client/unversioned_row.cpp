@@ -1274,7 +1274,9 @@ void ValidateReadTimestamp(TTimestamp timestamp)
         timestamp != AsyncLastCommittedTimestamp &&
         (timestamp < MinTimestamp || timestamp > MaxTimestamp))
     {
-        THROW_ERROR_EXCEPTION("Invalid read timestamp %x", timestamp);
+        THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::TimestampOutOfRange,
+            "Invalid read timestamp %x",
+            timestamp);
     }
 }
 

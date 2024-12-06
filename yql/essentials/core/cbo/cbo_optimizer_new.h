@@ -76,7 +76,7 @@ struct TCardinalityHints {
 
         double ApplyHint(double originalValue) {
             Applied = true;
-            
+
             switch (Operation) {
                 case Add:
                     return originalValue + Value;
@@ -122,7 +122,7 @@ struct TJoinOrderHints {
 
         virtual TVector<TString> Labels() = 0;
         bool IsRelation() { return Type == Relation; }
-        bool IsJoin() { return Type == Join; } 
+        bool IsJoin() { return Type == Join; }
         virtual ~ITreeNode() = default;
 
         ui32 Type;
@@ -136,7 +136,7 @@ struct TJoinOrderHints {
             this->Type = ITreeNode::Join;
         }
 
-        TVector<TString> Labels() override {     
+        TVector<TString> Labels() override {
             auto labels = Lhs->Labels();
             auto rhsLabels = Rhs->Labels();
             labels.insert(labels.end(), std::make_move_iterator(rhsLabels.begin()), std::make_move_iterator(rhsLabels.end()));
@@ -179,12 +179,12 @@ struct TOptimizerHints {
 
     TVector<TString> GetUnappliedString();
 
-    /* 
+    /*
      *   The function accepts string with three type of expressions: array of (JoinAlgo | Card | JoinOrder):
      *   1) JoinAlgo(t1 t2 ... tn Map | Grace | Lookup) to change join algo for join, where these labels take part
      *   2) Card(t1 t2 ... tn (*|/|+|-) Number) to change cardinality for join, where these labels take part or labels only
      *   3) JoinOrder( (t1 t2) (t3 (t4 ...)) ) - fixate this join subtree in the general join tree
-     */  
+     */
     static TOptimizerHints Parse(const TString&);
 };
 
@@ -299,14 +299,35 @@ struct TJoinOptimizerNode : public IBaseOptimizerNode {
 };
 
 struct IOptimizerNew {
+    using TPtr = std::shared_ptr<IOptimizerNew>;
     IProviderContext& Pctx;
 
     IOptimizerNew(IProviderContext& ctx) : Pctx(ctx) {}
     virtual ~IOptimizerNew() = default;
     virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(
-        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree,
         const TOptimizerHints& hints = {}
     ) = 0;
+};
+
+struct TExprContext;
+
+class IOptimizerFactory : private TNonCopyable {
+public:
+    using TPtr = std::shared_ptr<IOptimizerFactory>;
+    using TLogger = std::function<void(const TString&)>;
+
+    virtual ~IOptimizerFactory() = default;
+
+    struct TNativeSettings {
+        ui32 MaxDPhypDPTableSize = 100000;
+    };
+    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TNativeSettings& settings) const = 0;
+
+    struct TPGSettings {
+        TLogger Logger = [](const TString&){};
+    };
+    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerPG(IProviderContext& pctx, TExprContext& ctx, const TPGSettings& settings) const = 0;
 };
 
 } // namespace NYql

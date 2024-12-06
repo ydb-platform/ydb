@@ -305,7 +305,9 @@ public:
 
             DataAccessorsManager->AskData(request);
         }
-        
+        if (ActualizationIndex->IsStarted()) {
+            RefreshScheme();
+        }
     }
 
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;

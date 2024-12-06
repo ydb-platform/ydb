@@ -4,7 +4,6 @@ TEST_SRCS(
     test_stability.py
 )
 
-TIMEOUT(18000)
 SIZE(LARGE)
 TAG(ya:manual)
 

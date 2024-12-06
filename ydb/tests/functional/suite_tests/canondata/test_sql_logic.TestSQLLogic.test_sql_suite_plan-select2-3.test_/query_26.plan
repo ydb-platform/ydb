@@ -93,7 +93,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "Not Exist(item.a) Or item.b > item.c"
+                                                "Predicate": "NOT Exist(item.a) OR item.b > item.c"
                                             }
                                         ],
                                         "PlanNodeId": 2,

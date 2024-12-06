@@ -16,7 +16,7 @@ lambda_stmt:
   | import_stmt
 ;
 
-sql_stmt: (EXPLAIN (Q U E R Y PLAN)?)? sql_stmt_core;
+sql_stmt: (EXPLAIN (QUERY PLAN)?)? sql_stmt_core;
 
 sql_stmt_core:
     pragma_stmt
@@ -893,7 +893,7 @@ create_replication_stmt: CREATE ASYNC REPLICATION object_ref
 
 replication_target: object_ref AS object_ref;
 replication_settings: replication_settings_entry (COMMA replication_settings_entry)*;
-replication_settings_entry: an_id EQUALS STRING_VALUE;
+replication_settings_entry: an_id EQUALS expr;
 
 alter_replication_stmt: ALTER ASYNC REPLICATION object_ref alter_replication_action (COMMA alter_replication_action)*;
 alter_replication_action:
@@ -1206,7 +1206,6 @@ keyword_expr_uncompat:
   | JSON_EXISTS
   | JSON_VALUE
   | JSON_QUERY
-  | LOCAL
   | NOT
   | NULL
   | PROCESS
@@ -1338,6 +1337,7 @@ keyword_as_compat:
   | FOREIGN
   | FUNCTION
   | GLOB
+  | GLOBAL
   | GRANT
   | GROUP
   | GROUPING
@@ -1367,6 +1367,7 @@ keyword_as_compat:
   // | LEFT
   | LEGACY
   | LIKE
+  | LOCAL
   | MANAGE
   | MATCH
   | MATCHES
@@ -1409,7 +1410,7 @@ keyword_as_compat:
   // | PRESORT
   | PRIMARY
   | PRIVILEGES
-//  | QUERY
+  | QUERY
   | QUEUE
   | RAISE
 //  | READ
@@ -1560,6 +1561,7 @@ keyword_compat: (
   | FOREIGN
   | FUNCTION
   | GLOB
+  | GLOBAL
   | GRANT
   | GROUP
   | GROUPING
@@ -1589,6 +1591,7 @@ keyword_compat: (
   | LEFT
   | LEGACY
   | LIKE
+  | LOCAL
   | MANAGE
   | MATCH
   | MATCHES
@@ -1631,7 +1634,7 @@ keyword_compat: (
   | PRESORT
   | PRIMARY
   | PRIVILEGES
-//  | QUERY
+  | QUERY
   | QUEUE
   | RAISE
 //  | READ
@@ -1756,7 +1759,6 @@ RPAREN:        ')';
 QUESTION:      '?';
 COLON:         ':';
 COMMAT:        '@';
-DOUBLE_COMMAT: '@@';
 DOLLAR:        '$';
 LBRACE_CURLY:  '{';
 RBRACE_CURLY:  '}';
@@ -1770,6 +1772,7 @@ fragment BACKSLASH:     '\\';
 fragment QUOTE_DOUBLE:  '"';
 fragment QUOTE_SINGLE:  '\'';
 fragment BACKTICK:      '`';
+fragment DOUBLE_COMMAT: '@@';
 
 // http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
 fragment A:('a'|'A');
@@ -1992,7 +1995,7 @@ PRESORT: P R E S O R T;
 PRIMARY: P R I M A R Y;
 PRIVILEGES: P R I V I L E G E S;
 PROCESS: P R O C E S S;
-//QUERY: Q U E R Y;
+QUERY: Q U E R Y;
 QUEUE: Q U E U E;
 RAISE: R A I S E;
 RANGE: R A N G E;

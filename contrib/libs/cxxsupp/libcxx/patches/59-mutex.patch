@@ -1,18 +1,8 @@
-diff --git a/src/mutex.cpp b/src/mutex.cpp
-index b165b1b..e8637f9 100644
---- a/src/mutex.cpp
-+++ b/src/mutex.cpp
-@@ -12,7 +12,9 @@
- #include <limits>
- #include <mutex>
- 
-+#if !defined(_LIBCPP_ABI_MICROSOFT)
- #include "include/atomic_support.h"
-+#endif
- 
- #ifndef _LIBCPP_HAS_NO_THREADS
- #  if defined(__ELF__) && defined(_LIBCPP_LINK_PTHREAD_LIB)
-@@ -202,8 +204,13 @@ static constinit __libcpp_mutex_t mut = _LIBCPP_MUTEX_INITIALIZER;
+diff --git a/src/call_once.cpp b/src/call_once.cpp
+index 352cdcc..a4fb1c3 100644
+--- a/src/call_once.cpp
++++ b/src/call_once.cpp
+@@ -28,8 +28,13 @@ static constinit __libcpp_mutex_t mut = _LIBCPP_MUTEX_INITIALIZER;
  static constinit __libcpp_condvar_t cv = _LIBCPP_CONDVAR_INITIALIZER;
  #endif
  
@@ -26,7 +16,7 @@ index b165b1b..e8637f9 100644
  {
  #if defined(_LIBCPP_HAS_NO_THREADS)
  
-@@ -223,16 +230,28 @@ void __call_once(volatile once_flag::_State_type& flag, void* arg,
+@@ -49,16 +54,28 @@ void __call_once(volatile once_flag::_State_type& flag, void* arg,
      if (flag == once_flag::_Unset) {
          auto guard = std::__make_exception_guard([&flag] {
              __libcpp_mutex_lock(&mut);
@@ -55,3 +45,17 @@ index b165b1b..e8637f9 100644
          __libcpp_mutex_unlock(&mut);
          __libcpp_condvar_broadcast(&cv);
          guard.__complete();
+diff --git a/src/mutex.cpp b/src/mutex.cpp
+index fe7a970..11f7be3 100644
+--- a/src/mutex.cpp
++++ b/src/mutex.cpp
+@@ -12,7 +12,9 @@
+ #include <limits>
+ #include <mutex>
+ 
++#if !defined(_LIBCPP_ABI_MICROSOFT)
+ #include "include/atomic_support.h"
++#endif
+ 
+ #if defined(__ELF__) && defined(_LIBCPP_LINK_PTHREAD_LIB)
+ #  pragma comment(lib, "pthread")

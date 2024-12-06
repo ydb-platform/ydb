@@ -71,6 +71,12 @@ enum class ERequestType: size_t {
     BSCONFIG_REPLACESTORAGECONFIG,
     BSCONFIG_FETCHSTORAGECONFIG,
 
+    PING_GRPC,
+    PING_PROXY,
+    PING_KQP,
+    PING_SCHEME_CACHE,
+    PING_TX_PROXY,
+
     REQUEST_TYPES_CNT, // Add new types above this line
 };
 

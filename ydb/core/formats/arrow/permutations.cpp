@@ -41,10 +41,14 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::s
     }
 
     if (haveNulls) {
-        std::sort(points.begin(), points.end());
+        std::sort(points.begin(), points.end(), [](const TRawReplaceKey& a, const TRawReplaceKey& b) {
+            auto cmp = a <=> b;
+            return cmp == std::partial_ordering::equivalent ? a.GetPosition() > b.GetPosition() : cmp == std::partial_ordering::less;
+        });
     } else {
         std::sort(points.begin(), points.end(), [](const TRawReplaceKey& a, const TRawReplaceKey& b) {
-            return a.CompareNotNull(b) == std::partial_ordering::less;
+            auto cmp = a.CompareNotNull(b);
+            return cmp == std::partial_ordering::equivalent ? a.GetPosition() > b.GetPosition() : cmp == std::partial_ordering::less;
         });
     }
 

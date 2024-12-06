@@ -20,8 +20,8 @@ IF (NOT OS_WINDOWS)
         ydb/library/yql/providers/yt/dq_task_preprocessor
         ydb/library/yql/providers/dq/global_worker_manager
         ydb/library/yql/providers/dq/actors/yt
-        ydb/library/yql/providers/yt/comp_nodes/llvm14
-        ydb/library/yql/providers/yt/codec/codegen
+        yt/yql/providers/yt/comp_nodes/llvm14
+        yt/yql/providers/yt/codec/codegen
         yt/yt/client
     )
 

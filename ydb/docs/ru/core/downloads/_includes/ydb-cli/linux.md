@@ -1,5 +1,6 @@
 Версия | Дата выпуска | Скачать | Список изменений
 :--- | :--- | :--- | :---
+v.2.16.0 | 26.11.24 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.16.0/linux/amd64/ydb) | [См. список](../../../changelog-cli.md#2-16-0)
 v.2.15.0 | 17.10.24 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.15.0/linux/amd64/ydb)
 v.2.14.0 | 03.10.24 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.14.0/linux/amd64/ydb)
 v.2.13.0 | 23.09.24 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.13.0/linux/amd64/ydb)

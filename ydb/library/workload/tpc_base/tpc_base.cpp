@@ -4,6 +4,7 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <library/cpp/resource/resource.h>
+#include <library/cpp/streams/factory/open_by_signature/factory.h>
 #include <util/stream/file.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -78,6 +79,10 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
             const auto key = resourcePrefix + "s" + ToString(Params.GetScale()) + "_canonical/q" + ToString(&query - queries.data()) + ".result";
             if (NResource::Has(key)) {
                 result.back().ExpectedResult = NResource::Find(key);
+            } else if (NResource::Has(key + ".gz")) {
+                const auto data = NResource::Find(key + ".gz");
+                auto input = OpenOwnedMaybeCompressedInput(MakeHolder<TStringInput>(data));
+                result.back().ExpectedResult = input->ReadAll();
             }
         }
     }

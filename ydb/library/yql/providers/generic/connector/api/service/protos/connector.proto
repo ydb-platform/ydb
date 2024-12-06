@@ -352,6 +352,12 @@ message TExpression {
         TExpression else_expression = 3;
     }
 
+    // CAST($value AS $type)
+    message TCast {
+        TExpression value = 1;
+        Ydb.Type type = 2;
+    }
+
     message TNull {
     }
 
@@ -368,6 +374,8 @@ message TExpression {
         TCoalesce coalesce = 5;
 
         TIf if = 6;
+
+        TCast cast = 7;
     }
 }
 

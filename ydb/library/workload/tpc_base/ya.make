@@ -11,6 +11,7 @@ RESOURCE(
 
 PEERDIR(
     library/cpp/resource
+    library/cpp/streams/factory/open_by_signature
     ydb/library/accessor
     ydb/library/workload/benchmark_base
     ydb/public/lib/scheme_types

@@ -45,12 +45,12 @@ DEFINE_REFCOUNTED_TYPE(TActionQueue)
 IInvokerPtr CreateSerializedInvoker(
     IInvokerPtr underlyingInvoker,
     const TString& invokerName = "default",
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 IInvokerPtr CreateSerializedInvoker(
     IInvokerPtr underlyingInvoker,
     const NProfiling::TTagSet& tagSet,
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -61,12 +61,12 @@ IInvokerPtr CreateSerializedInvoker(
 IPrioritizedInvokerPtr CreatePrioritizedInvoker(
     IInvokerPtr underlyingInvoker,
     const TString& invokerName = "default",
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 IPrioritizedInvokerPtr CreatePrioritizedInvoker(
     IInvokerPtr underlyingInvoker,
     const NProfiling::TTagSet& tagSet,
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 //! Creates a wrapper around IInvoker that implements IPrioritizedInvoker but
 //! does not perform any actual reordering. Priorities passed to #IPrioritizedInvoker::Invoke

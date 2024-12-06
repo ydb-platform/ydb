@@ -1,5 +1,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_utils.h"  // for TransactionTemplate
 #include "schemeshard_path.h"
 
 #include <ydb/core/base/hive.h>
@@ -77,31 +78,31 @@ TString ISubOperationState::DebugReply(const TEvPtr& ev) {
 
 
 static TString LogMessage(const TString& ev, TOperationContext& context, bool ignore) {
-    return TStringBuilder() << (ignore ? "Unexpected" : "Ignore") << " message"
+    return TStringBuilder() << (ignore ? "Ignore" : "Unexpected") << " message"
         << ": tablet# " << context.SS->SelfTabletId()
         << ", ev# " << ev;
 }
 
 #define DefaultHandleReply(NS, TEvType, ...) \
     bool ISubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
-        const auto msg = LogMessage(DebugReply(ev), context, false);                      \
-        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, msg);               \
-        Y_FAIL_S(msg);                                                                    \
+        const auto msg = LogMessage(DebugReply(ev), context, false); \
+        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg); \
+        Y_FAIL_S(msg); \
     } \
     \
     bool TSubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
-        const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType);                     \
-        const auto msg = LogMessage(DebugReply(ev), context, ignore);                     \
-        if (ignore) {                                                                     \
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, msg);           \
-            return false;                                                                 \
-        }                                                                                 \
-        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, msg);               \
-        Y_FAIL_S(msg);                                                                    \
+        const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType); \
+        const auto msg = LogMessage(DebugReply(ev), context, ignore); \
+        if (ignore) { \
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg); \
+            return false; \
+        } \
+        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg); \
+        Y_FAIL_S(msg); \
     } \
     \
     bool TSubOperation::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
-        return Progress(context, &ISubOperationState::HandleReply, ev);     \
+        return Progress(context, &ISubOperationState::HandleReply, ev); \
     }
 
     SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
@@ -164,7 +165,7 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
         }
 
         for (auto& [implName, implPathId] : child.Base()->GetChildren()) {
-            Y_ABORT_UNLESS(NTableIndex::IsImplTable(implName) 
+            Y_ABORT_UNLESS(NTableIndex::IsImplTable(implName)
                         || implName == "streamImpl"
                 , "unexpected name %s", implName.c_str());
 

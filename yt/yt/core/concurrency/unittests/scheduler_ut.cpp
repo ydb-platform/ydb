@@ -1042,31 +1042,6 @@ TEST_W(TSchedulerTest, CancelDelayedFuture)
     EXPECT_EQ(NYT::EErrorCode::Generic, error.InnerErrors()[0].GetCode());
 }
 
-class TVerifyingMemoryTagGuard
-{
-public:
-    explicit TVerifyingMemoryTagGuard(TMemoryTag tag)
-        : Tag_(tag)
-        , SavedTag_(GetCurrentMemoryTag())
-    {
-        SetCurrentMemoryTag(Tag_);
-    }
-
-    ~TVerifyingMemoryTagGuard()
-    {
-        auto tag = GetCurrentMemoryTag();
-        EXPECT_EQ(tag, Tag_);
-        SetCurrentMemoryTag(SavedTag_);
-    }
-
-    TVerifyingMemoryTagGuard(const TVerifyingMemoryTagGuard& other) = delete;
-    TVerifyingMemoryTagGuard(TVerifyingMemoryTagGuard&& other) = delete;
-
-private:
-    const TMemoryTag Tag_;
-    const TMemoryTag SavedTag_;
-};
-
 class TWrappingInvoker
     : public TInvokerWrapper<false>
 {
@@ -1093,44 +1068,6 @@ public:
 
     void virtual DoRunCallback(TClosure callback) = 0;
 };
-
-class TVerifyingMemoryTaggingInvoker
-    : public TWrappingInvoker
-{
-public:
-    TVerifyingMemoryTaggingInvoker(IInvokerPtr invoker, TMemoryTag memoryTag)
-        : TWrappingInvoker(std::move(invoker))
-        , MemoryTag_(memoryTag)
-    { }
-
-private:
-    const TMemoryTag MemoryTag_;
-
-    void DoRunCallback(TClosure callback) override
-    {
-        TVerifyingMemoryTagGuard memoryTagGuard(MemoryTag_);
-        callback();
-    }
-};
-
-TEST_W(TSchedulerTest, MemoryTagAndResumer)
-{
-    auto actionQueue = New<TActionQueue>();
-
-    auto invoker1 = New<TVerifyingMemoryTaggingInvoker>(actionQueue->GetInvoker(), 1);
-    auto invoker2 = New<TVerifyingMemoryTaggingInvoker>(actionQueue->GetInvoker(), 2);
-
-    auto asyncResult = BIND([=] {
-        EXPECT_EQ(GetCurrentMemoryTag(), 1u);
-        SwitchTo(invoker2);
-        EXPECT_EQ(GetCurrentMemoryTag(), 1u);
-    })
-        .AsyncVia(invoker1)
-        .Run();
-
-    WaitFor(asyncResult)
-        .ThrowOnError();
-}
 
 void CheckTraceContextTime(const NTracing::TTraceContextPtr& traceContext, TDuration lo, TDuration hi)
 {

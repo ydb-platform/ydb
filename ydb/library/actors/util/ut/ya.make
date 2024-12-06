@@ -1,7 +1,6 @@
 UNITTEST_FOR(ydb/library/actors/util)
 
 IF (WITH_VALGRIND)
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

@@ -2,12 +2,13 @@
 
 #include "defs.h"
 
-#include <util/generic/vector.h>
-
 #include <arrow/compute/api.h>
 #include <arrow/datum.h>
 #include <arrow/memory_pool.h>
 #include <arrow/util/bit_util.h>
+
+#include <util/generic/maybe.h>
+#include <util/generic/vector.h>
 
 #include <functional>
 
@@ -137,9 +138,11 @@ class TTypedBufferBuilder {
 
     using TArrowBuffer = std::conditional_t<std::is_trivially_destructible_v<T>, TResizeableBuffer, TResizableManagedBuffer<T>>;
 public:
-    explicit TTypedBufferBuilder(arrow::MemoryPool* pool)
-        : Pool(pool)
+    explicit TTypedBufferBuilder(arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage = {})
+        : MinFillPercentage(minFillPercentage)
+        , Pool(pool)
     {
+        Y_ENSURE(!MinFillPercentage || *MinFillPercentage <= 100);
     }
 
     inline void Reserve(size_t size) {
@@ -201,7 +204,7 @@ public:
     }
 
     inline std::shared_ptr<arrow::Buffer> Finish() {
-        bool shrinkToFit = false;
+        bool shrinkToFit = MinFillPercentage ? Buffer->size() <= Buffer->capacity() / 100 * *MinFillPercentage: false;
         ARROW_OK(Buffer->Resize(Len * sizeof(T), shrinkToFit));
         std::shared_ptr<arrow::ResizableBuffer> result;
         std::swap(result, Buffer);
@@ -209,6 +212,7 @@ public:
         return result;
     }
 private:
+    const TMaybe<ui8> MinFillPercentage;
     arrow::MemoryPool* const Pool;
     std::shared_ptr<arrow::ResizableBuffer> Buffer;
     size_t Len = 0;
@@ -226,5 +230,5 @@ inline void ZeroMemoryContext(void* ptr) {
     SetMemoryContext(ptr, nullptr);
 }
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

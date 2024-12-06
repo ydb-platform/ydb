@@ -2,6 +2,7 @@
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
 
+#include <util/charset/utf8.h>
 #include <util/string/vector.h>
 
 #include <regex>
@@ -186,11 +187,11 @@ TString LogicOpToStr(const TExprBase& op) {
         }
     }
 
-    return JoinStrings(std::move(args), TStringBuilder() << " " << op.Ref().Content() << " ");
+    return JoinStrings(std::move(args), TStringBuilder() << " " << ToUpperUTF8(op.Ref().Content()) << " ");
 }
 
 TString NotToStr(const TCoNot& notOp) {
-    return TStringBuilder() << "Not " << PrettyExprStr(notOp.Value());
+    return TStringBuilder() << "NOT " << PrettyExprStr(notOp.Value());
 }
 
 TString PrettyExprStr(const TExprBase& expr) {

@@ -45,9 +45,8 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             while (mock.Chunks[EChunkState::COMMITTED].size() > 0) {
                 auto it = mock.Chunks[EChunkState::COMMITTED].begin();
                 for (ui32 i = 0; i < inflight; ++i) {
-                    TString dataCopy = data;
                     testCtx.Send(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
-                        *it, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), nullptr, false, 0));
+                        *it, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(data)), nullptr, false, 0));
                 }
                 NPDisk::TCommitRecord rec;
                 rec.DeleteChunks.push_back(*it);
@@ -112,9 +111,8 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
 
             auto sendManyWrites = [&](TVDiskMock& mock, TChunkIdx chunk, ui32 number, ui64& cookie) {
                 for (ui32 i = 0; i < number; ++i) {
-                    TString dataCopy = data;
                     testCtx.Send(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
-                        chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), (void*)(cookie++), false, 0));
+                        chunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(data)), (void*)(cookie++), false, 0));
                 }
             };
 
@@ -128,9 +126,8 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             {
                 auto& chunkIds = mock.Chunks[EChunkState::COMMITTED];
                 for (auto it = chunkIds.begin(); it != chunkIds.end(); ++it) {
-                    TString dataCopy = data;
                     testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
-                        *it, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), (void*)10, false, 0),
+                        *it, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(data)), (void*)10, false, 0),
                         NKikimrProto::OK);
                 }
             }
@@ -216,9 +213,8 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             while (mock.Chunks[EChunkState::COMMITTED].size() > 0) {
                 auto it = mock.Chunks[EChunkState::COMMITTED].begin();
                 for (ui32 i = 0; i < inflight; ++i) {
-                    TString dataCopy = data;
                     testCtx.Send(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
-                        *it, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), nullptr, false, 0));
+                        *it, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(data)), nullptr, false, 0));
                 }
                 NPDisk::TCommitRecord rec;
                 rec.DeleteChunks.push_back(*it);

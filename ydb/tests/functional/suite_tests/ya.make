@@ -10,7 +10,6 @@ IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
         test_stream_query.py
     )
 
-    TIMEOUT(600)
     SIZE(MEDIUM)
 
     DEPENDS(

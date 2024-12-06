@@ -599,8 +599,18 @@ std::vector<TSharedRef> CompressAttachments(
     if (codecId == NCompression::ECodec::None) {
         return attachments.ToVector();
     }
-    return NConcurrency::WaitFor(AsyncCompressAttachments(attachments, codecId))
-        .ValueOrThrow();
+
+    auto* codec = NCompression::GetCodec(codecId);
+    std::vector<TSharedRef> result;
+    result.reserve(std::ssize(attachments));
+    std::transform(
+        attachments.begin(),
+        attachments.end(),
+        std::back_inserter(result),
+        [=] (const TSharedRef& attachment) {
+            return codec->Compress(attachment);
+        });
+    return result;
 }
 
 std::vector<TSharedRef> DecompressAttachments(
@@ -610,8 +620,18 @@ std::vector<TSharedRef> DecompressAttachments(
     if (codecId == NCompression::ECodec::None) {
         return attachments.ToVector();
     }
-    return NConcurrency::WaitFor(AsyncDecompressAttachments(attachments, codecId))
-        .ValueOrThrow();
+
+    auto* codec = NCompression::GetCodec(codecId);
+    std::vector<TSharedRef> result;
+    result.reserve(std::ssize(attachments));
+    std::transform(
+        attachments.begin(),
+        attachments.end(),
+        std::back_inserter(result),
+        [=] (const TSharedRef& compressedAttachment) {
+            return codec->Decompress(compressedAttachment);
+        });
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

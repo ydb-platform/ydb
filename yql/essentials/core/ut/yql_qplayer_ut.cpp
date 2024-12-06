@@ -1,7 +1,8 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <contrib/ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yql/essentials/core/cbo/simple/cbo_simple.h>
 #include <yql/essentials/core/facade/yql_facade.h>
 #include <yql/essentials/core/qplayer/storage/memory/yql_qstorage_memory.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
@@ -82,7 +83,7 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
     auto ytGateway = CreateYtFileGateway(yqlNativeServices);
 
     TVector<TDataProviderInitializer> dataProvidersInit;
-    dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway));
+    dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway, MakeSimpleCBOOptimizerFactory(), {}));
 
     TExprContext modulesCtx;
     IModuleResolver::TPtr moduleResolver;
@@ -113,7 +114,7 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
         for (const auto& x : runSettings.Credentials) {
             credentials->AddCredential(x.first, x.second);
         }
-        
+
         factory.SetCredentials(credentials);
     }
 

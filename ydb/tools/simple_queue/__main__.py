@@ -80,35 +80,27 @@ class EventKind(object):
         )
 
 
-def get_table_description():
-    return (
-        ydb.TableDescription()
-        .with_primary_keys('key')
-        .with_key_bloom_filter(ydb.FeatureFlag.ENABLED)
-        .with_read_replicas_settings(ydb.ReadReplicasSettings().with_any_az_read_replicas_count(1))
-        .with_column_families(
-            ydb.ColumnFamily()
-            .with_compression(ydb.Compression.LZ4)
-            .with_name('lz4_family')
+def get_table_description(table_name):
+    return """
+        CREATE TABLE `{table_name}` (
+            key Uint64 NOT NULL,
+            `timestamp` Timestamp NOT NULL,
+            value Utf8 FAMILY lz4_family NOT NULL,
+            PRIMARY KEY (key),
+            FAMILY lz4_family (
+                COMPRESSION = "lz4"
+            ),
+            INDEX by_timestamp GLOBAL ON (`timestamp`)
         )
-        .with_indexes(
-            ydb.TableIndex('by_timestamp').with_index_columns('timestamp')
-        )
-        .with_ttl(
-            ydb.TtlSettings().with_date_type_column('timestamp', expire_after_seconds=240)
-        )
-        .with_partitioning_settings(
-            ydb.PartitioningSettings()
-            .with_partition_size_mb(128)
-            .with_partitioning_by_load(ydb.FeatureFlag.ENABLED)
-            .with_partitioning_by_size(ydb.FeatureFlag.ENABLED)
-        )
-        .with_columns(
-            ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Uint64)),
-            ydb.Column('timestamp', ydb.OptionalType(ydb.PrimitiveType.Timestamp)),
-            ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8), family='lz4_family'),
-        )
-    )
+        WITH (
+            TTL = Interval("PT240S") ON `timestamp`,
+            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+            AUTO_PARTITIONING_BY_LOAD = ENABLED,
+            AUTO_PARTITIONING_PARTITION_SIZE_MB = 128,
+            READ_REPLICAS_SETTINGS = "PER_AZ:1",
+            KEY_BLOOM_FILTER = ENABLED
+        );
+    """.format(table_name=table_name)
 
 
 def timestamp():
@@ -220,7 +212,7 @@ class YdbQueue(object):
     def prepare_new_queue(self, table_name=None):
         session = self.pool.acquire()
         table_name = self.table_name_with_timestamp() if table_name is None else table_name
-        f = session.async_create_table(table_name, get_table_description(), settings=self.ops)
+        f = session.async_execute_scheme(get_table_description(table_name), settings=self.ops)
         f.add_done_callback(lambda x: self.on_received_response(session, x, 'create'))
         return f
 
@@ -377,18 +369,17 @@ class YdbQueue(object):
         )
 
     def move_iterator(self, it, callback):
-        try:
-            next_f = next(it)
-            next_f.add_done_callback(lambda x: callback(it, x))
-        except StopIteration:
-            return
+        next_f = next(it)
+        next_f.add_done_callback(lambda x: callback(it, x))
 
     def on_read_table_chunk(self, it, f):
         try:
             f.result()
             self.stats.save_event(EventKind.READ_TABLE_CHUNK)
         except ydb.Error as e:
-            self.stats.save_event(EventKind.READ_TABLE_CHUNK, e)
+            self.stats.save_event(EventKind.READ_TABLE_CHUNK, e.status)
+        except StopIteration:
+            return
         self.move_iterator(it, self.on_read_table_chunk)
 
     def on_scan_query_chunk(self, it, f):
@@ -396,7 +387,9 @@ class YdbQueue(object):
             f.result()
             self.stats.save_event(EventKind.SCAN_QUERY_CHUNK)
         except ydb.Error as e:
-            self.stats.save_event(EventKind.SCAN_QUERY_CHUNK, e)
+            self.stats.save_event(EventKind.SCAN_QUERY_CHUNK, e.status)
+        except StopIteration:
+            return
 
         self.move_iterator(it, self.on_scan_query_chunk)
 

@@ -98,7 +98,8 @@
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "IsRefresh == 0 And DontCountHits == 0 And URLHash == 2868770270353813622"
+                                                                                        "Predicate": "IsRefresh == 0 AND DontCountHits == 0 AND URLHash == 2868770270353813622",
+                                                                                        "Pushdown": "True"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],

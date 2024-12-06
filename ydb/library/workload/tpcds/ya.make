@@ -45,6 +45,8 @@ RESOURCE(
 ALL_RESOURCE_FILES_FROM_DIRS(
     PREFIX tpcds/
     s1_canonical
+    s10_canonical
+    s100_canonical
 )
 
 PEERDIR(

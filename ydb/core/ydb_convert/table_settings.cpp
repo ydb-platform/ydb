@@ -228,10 +228,6 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         }
     }
 
-    if (proto.tiering().size()) {
-        tableDesc.MutableTTLSettings()->SetUseTiering(proto.tiering());
-    }
-
     if (proto.has_storage_settings()) {
         TColumnFamilyManager families(tableDesc.MutablePartitionConfig());
         if (!families.ApplyStorageSettings(proto.storage_settings(), &code, &error)) {
@@ -391,12 +387,6 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         tableDesc.MutableTTLSettings()->MutableDisabled();
     }
 
-    if (proto.has_set_tiering()) {
-        tableDesc.MutableTTLSettings()->SetUseTiering(proto.set_tiering());
-    } else if (proto.has_drop_tiering()) {
-        tableDesc.MutableTTLSettings()->SetUseTiering("");
-    }
-
     if (!changed && !hadPartitionConfig) {
         tableDesc.ClearPartitionConfig();
     }
@@ -458,6 +448,88 @@ bool FillIndexTablePartitioning(
     }
 
     return true;
+}
+
+template <typename TTtl>
+bool FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb::StatusIds::StatusCode& code, TString& error) {
+    std::optional<ui32> fillLegacyExpireAfterSeconds;
+    if (!in.TiersSize()) {
+        // handle legacy input format for backwards-compatibility
+        fillLegacyExpireAfterSeconds = in.GetExpireAfterSeconds();
+    } else if (in.TiersSize() == 1 && in.GetTiers(0).HasDelete()) {
+        // convert delete-only TTL to legacy mode for backwards-compatibility
+        fillLegacyExpireAfterSeconds = in.GetTiers(0).GetApplyAfterSeconds();
+    } else {
+        for (const auto& inTier : in.GetTiers()) {
+            auto* outTier = out.add_tiers();
+            outTier->set_apply_after_seconds(inTier.GetApplyAfterSeconds());
+            switch (inTier.GetActionCase()) {
+                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kDelete:
+                    outTier->mutable_delete_();
+                    break;
+                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
+                    outTier->mutable_evict_to_external_storage()->set_storage_name(inTier.GetEvictToExternalStorage().GetStorageName());
+                    break;
+                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = "Undefined tier action";
+                    return false;
+            }
+        }
+    }
+
+    switch (in.GetColumnUnit()) {
+    case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
+        if (fillLegacyExpireAfterSeconds) {
+            auto& outTTL = *out.mutable_date_type_column();
+            outTTL.set_column_name(in.GetColumnName());
+            outTTL.set_expire_after_seconds(*fillLegacyExpireAfterSeconds);
+        } else {
+            auto& outTTL = *out.mutable_date_type_column_v1();
+            outTTL.set_column_name(in.GetColumnName());
+        }
+        break;
+    }
+
+    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
+    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
+    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
+    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
+        const auto unit = static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(in.GetColumnUnit());
+        if (fillLegacyExpireAfterSeconds) {
+            auto& outTTL = *out.mutable_value_since_unix_epoch();
+            outTTL.set_column_name(in.GetColumnName());
+            outTTL.set_column_unit(unit);
+            outTTL.set_expire_after_seconds(*fillLegacyExpireAfterSeconds);
+        } else {
+            auto& outTTL = *out.mutable_value_since_unix_epoch_v1();
+            outTTL.set_column_name(in.GetColumnName());
+            outTTL.set_column_unit(unit);
+        }
+        break;
+    }
+
+    default:
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Undefined column unit";
+        return false;
+    }
+
+    if constexpr (std::is_same_v<TTtl, NKikimrSchemeOp::TTTLSettings::TEnabled>) {
+        if (in.HasSysSettings() && in.GetSysSettings().HasRunInterval()) {
+            out.set_run_interval_seconds(TDuration::FromValue(in.GetSysSettings().GetRunInterval()).Seconds());
+        }
+    }
+
+    return true;
+}
+
+bool FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TTTLSettings::TEnabled& in, Ydb::StatusIds::StatusCode& code, TString& error) {
+    return FillTtlSettingsImpl(out, in, code, error);
+}
+
+bool FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& in, Ydb::StatusIds::StatusCode& code, TString& error) {
+    return FillTtlSettingsImpl(out, in, code, error);
 }
 
 } // namespace NKikimr

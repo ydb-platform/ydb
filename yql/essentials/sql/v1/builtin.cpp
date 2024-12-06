@@ -1907,6 +1907,10 @@ public:
         return new TTableRow<Join>(Pos, ArgsCount);
     }
 
+    bool IsTableRow() const final {
+        return true;
+    }
+
 private:
     const size_t ArgsCount;
     TNodePtr Node;

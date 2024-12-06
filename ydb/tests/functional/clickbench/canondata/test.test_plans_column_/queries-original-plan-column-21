@@ -68,7 +68,8 @@
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",
-                                                                        "Predicate": "string_contains"
+                                                                        "Predicate": "(SearchPhrase != \"\") AND (URL LIKE \"%google%\")",
+                                                                        "Pushdown": "True"
                                                                     },
                                                                     {
                                                                         "Inputs": [],

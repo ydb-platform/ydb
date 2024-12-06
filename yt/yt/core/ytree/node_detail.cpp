@@ -313,13 +313,16 @@ void TMapNodeMixin::ListSelf(
         ? FromProto<TAttributeFilter>(request->attributes())
         : TAttributeFilter();
 
-    auto limit = request->has_limit()
-        ? std::make_optional(request->limit())
-        : std::nullopt;
+    auto limit = YT_PROTO_OPTIONAL(*request, limit);
 
     context->SetRequestInfo("Limit: %v, AttributeFilter: %v",
         limit,
         attributeFilter);
+
+    if (limit && limit < 0) {
+        THROW_ERROR_EXCEPTION("Limit is negative")
+            << TErrorAttribute("limit", limit);
+    }
 
     TAsyncYsonWriter writer;
 
@@ -559,7 +562,7 @@ void TListNodeMixin::SetChild(
 void TSupportsSetSelfMixin::SetSelf(
     TReqSet* request,
     TRspSet* /*response*/,
-    const TCtxSetPtr &context)
+    const TCtxSetPtr& context)
 {
     bool force = request->force();
     context->SetRequestInfo("Force: %v", force);

@@ -45,6 +45,7 @@ private:
     std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
+    std::shared_ptr<IScanCursor> ScanCursor;
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
     }
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {
@@ -66,6 +67,10 @@ public:
 
     ui64 GetTxId() const {
         return TxId;
+    }
+
+    const std::shared_ptr<IScanCursor>& GetScanCursor() const {
+        return ScanCursor;
     }
 
     std::optional<ui64> GetLockId() const {
@@ -107,6 +112,7 @@ public:
     }
 
     ISnapshotSchema::TPtr GetResultSchema() const {
+        AFL_VERIFY(ResultIndexSchema);
         return ResultIndexSchema;
     }
 
@@ -117,12 +123,13 @@ public:
     ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
 
     const std::shared_ptr<NArrow::TSchemaLite>& GetBlobSchema(const ui64 version) const {
-        return GetIndexVersions().GetSchema(version)->GetIndexInfo().ArrowSchema();
+        return GetIndexVersions().GetSchemaVerified(version)->GetIndexInfo().ArrowSchema();
     }
 
     const TIndexInfo& GetIndexInfo(const std::optional<TSnapshot>& version = {}) const {
+        AFL_VERIFY(ResultIndexSchema);
         if (version && version < RequestSnapshot) {
-            return GetIndexVersions().GetSchema(*version)->GetIndexInfo();
+            return GetIndexVersions().GetSchemaVerified(*version)->GetIndexInfo();
         }
         return ResultIndexSchema->GetIndexInfo();
     }
@@ -133,12 +140,14 @@ public:
     }
 
     TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
-        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
+        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot, const std::shared_ptr<IScanCursor>& scanCursor)
         : Sorting(sorting)
         , Program(ssaProgram)
         , IndexVersionsPointer(index)
         , RequestSnapshot(requestSnapshot)
-        , ResultIndexSchema(schema) {
+        , ScanCursor(scanCursor)
+        , ResultIndexSchema(schema)
+    {
     }
     virtual ~TReadMetadataBase() = default;
 
@@ -150,6 +159,7 @@ public:
     }
 
     std::set<ui32> GetProcessingColumnIds() const {
+        AFL_VERIFY(ResultIndexSchema);
         std::set<ui32> result;
         for (auto&& i : GetProgram().GetProcessingColumns()) {
             result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnIdVerified(i));
@@ -184,6 +194,7 @@ public:
     }
 
     std::shared_ptr<arrow::Schema> GetReplaceKey() const {
+        AFL_VERIFY(ResultIndexSchema);
         return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
     }
 

@@ -1,7 +1,7 @@
 #include "yql_issue.h"
 #include "yql_issue_id.h"
 
-#include <contrib/ydb/library/yql/utils/utf8.h>
+#include <yql/essentials/utils/utf8.h>
 
 #include <library/cpp/colorizer/output.h>
 

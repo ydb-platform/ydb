@@ -52,11 +52,11 @@ $wr_items =
 -- start query 1 in stream 0 using template query83.tpl and seed 1930872976
   select  sr_items.item_id
        ,sr_item_qty
-       ,sr_item_qty/(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 * 100 sr_dev
+       ,cast(sr_item_qty as double)/(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 * 100 sr_dev
        ,cr_item_qty
-       ,cr_item_qty/(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 * 100 cr_dev
+       ,cast(cr_item_qty as double)/(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 * 100 cr_dev
        ,wr_item_qty
-       ,wr_item_qty/(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 * 100 wr_dev
+       ,cast(wr_item_qty as double)/(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 * 100 wr_dev
        ,(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 average
  from $sr_items sr_items
       cross join $cr_items cr_items

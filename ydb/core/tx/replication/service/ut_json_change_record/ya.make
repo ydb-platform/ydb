@@ -4,11 +4,9 @@ FORK_SUBTESTS()
 
 SIZE(SMALL)
 
-TIMEOUT(60)
-
 PEERDIR(
     ydb/core/testlib/pg
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
     library/cpp/testing/unittest
 )
 

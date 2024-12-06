@@ -196,7 +196,7 @@ select
  	and cs_ship_mode_sk = sm_ship_mode_sk
         and d_year = 2001
  	and t_time between 30838 AND 30838+28800
- 	and sm_carrier in ('MSC','BARIAN')
+ 	and sm_carrier in ('DHL','BARIAN')
      group by
         w_warehouse_name
  	,w_warehouse_sq_ft

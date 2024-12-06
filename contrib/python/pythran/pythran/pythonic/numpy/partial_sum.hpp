@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/partial_sum.hpp"
 
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/builtins/ValueError.hpp"
+#include "pythonic/types/ndarray.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -70,7 +70,7 @@ namespace numpy
         return acc;
       }
     };
-  }
+  } // namespace
 
   template <class Op, class E, class dtype>
   types::ndarray<typename dtype::type, types::pshape<long>>
@@ -109,13 +109,13 @@ namespace numpy
     } else {
       std::transform(
           expr.begin(), expr.end(), the_partial_sum.begin(),
-          [axis, d](
-              typename std::iterator_traits<typename E::iterator>::value_type
+          [axis,
+           d](typename std::iterator_traits<typename E::iterator>::value_type
                   other) { return partial_sum<Op>(other, axis - 1, d); });
     }
     return the_partial_sum;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

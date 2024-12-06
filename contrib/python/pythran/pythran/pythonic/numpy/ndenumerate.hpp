@@ -21,10 +21,10 @@ namespace numpy
   }
 
   template <class E>
-  std::tuple<types::array<long, E::value>, typename E::dtype>
-      ndenumerate_iterator<E>::operator*() const
+  std::tuple<types::array_tuple<long, E::value>, typename E::dtype>
+  ndenumerate_iterator<E>::operator*() const
   {
-    types::array<long, E::value> out;
+    types::array_tuple<long, E::value> out;
     auto shape = sutils::getshape(expr);
     long mult = 1;
     for (long j = E::value - 1; j > 0; j--) {
@@ -32,8 +32,8 @@ namespace numpy
       mult *= shape[j];
     }
     out[0] = index / mult;
-    return std::tuple<types::array<long, E::value>, typename E::dtype>{out,
-                                                                       *iter};
+    return std::tuple<types::array_tuple<long, E::value>, typename E::dtype>{
+        out, *iter};
   }
 
   template <class E>
@@ -51,22 +51,22 @@ namespace numpy
   }
 
   template <class E>
-  bool ndenumerate_iterator<E>::
-  operator!=(ndenumerate_iterator<E> const &other) const
+  bool ndenumerate_iterator<E>::operator!=(
+      ndenumerate_iterator<E> const &other) const
   {
     return index != other.index;
   }
 
   template <class E>
-  bool ndenumerate_iterator<E>::
-  operator<(ndenumerate_iterator<E> const &other) const
+  bool
+  ndenumerate_iterator<E>::operator<(ndenumerate_iterator<E> const &other) const
   {
     return index < other.index;
   }
 
   template <class E>
-  long ndenumerate_iterator<E>::
-  operator-(ndenumerate_iterator<E> const &other) const
+  long
+  ndenumerate_iterator<E>::operator-(ndenumerate_iterator<E> const &other) const
   {
     return index - other.index;
   }
@@ -109,7 +109,7 @@ namespace numpy
   }
 
   NUMPY_EXPR_TO_NDARRAY0_IMPL(ndenumerate);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

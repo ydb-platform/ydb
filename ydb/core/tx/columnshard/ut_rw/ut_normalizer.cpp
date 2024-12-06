@@ -1,5 +1,4 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
@@ -38,7 +37,9 @@ public:
     }
 
     virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& /*columnShardConfig*/) const {
+    }
 
+    virtual void CorrectFeatureFlagsOnStart(TFeatureFlags& /*featuresFlags*/) const {
     }
 
     virtual ui64 RecordsCountAfterReboot(const ui64 initialRecodsCount) const {
@@ -255,6 +256,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TTester::Setup(runtime);
 
         checker.CorrectConfigurationOnStart(runtime.GetAppData().ColumnShardConfig); 
+        checker.CorrectFeatureFlagsOnStart(runtime.GetAppData().FeatureFlags); 
 
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
@@ -293,12 +295,36 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     }
 
     Y_UNIT_TEST(PortionsNormalizer) {
-        TestNormalizerImpl<TPortionsCleaner>();
+        class TLocalNormalizerChecker: public TNormalizerChecker {
+        public:
+            virtual ui64 RecordsCountAfterReboot(const ui64 /*initialRecodsCount*/) const override {
+                return 0;
+            }
+            virtual void CorrectFeatureFlagsOnStart(TFeatureFlags & featuresFlags) const override{
+                featuresFlags.SetEnableWritePortionsOnInsert(true);
+            }
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                {
+                    auto* repair = columnShardConfig.MutableRepairs()->Add();
+                    repair->SetClassName("EmptyPortionsCleaner");
+                    repair->SetDescription("Removing unsync portions");
+                }
+                {
+                    auto* repair = columnShardConfig.MutableRepairs()->Add();
+                    repair->SetClassName("LeakedBlobsNormalizer");
+                    repair->SetDescription("Removing leaked blobs");
+                }
+            }
+        };
+        TestNormalizerImpl<TPortionsCleaner>(TLocalNormalizerChecker());
     }
 
     Y_UNIT_TEST(SchemaVersionsNormalizer) {
         class TLocalNormalizerChecker: public TNormalizerChecker {
         public:
+            virtual void CorrectFeatureFlagsOnStart(TFeatureFlags& featuresFlags) const override {
+                featuresFlags.SetEnableWritePortionsOnInsert(true);
+            }
             virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
                 auto* repair = columnShardConfig.MutableRepairs()->Add();
                 repair->SetClassName("SchemaVersionCleaner");
@@ -309,7 +335,15 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     }
 
     Y_UNIT_TEST(CleanEmptyPortionsNormalizer) {
-        TestNormalizerImpl<TEmptyPortionsCleaner>();
+        class TLocalNormalizerChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("EmptyPortionsCleaner");
+                repair->SetDescription("Removing unsync portions");
+            }
+        };
+        TestNormalizerImpl<TEmptyPortionsCleaner>(TLocalNormalizerChecker());
     }
 
 

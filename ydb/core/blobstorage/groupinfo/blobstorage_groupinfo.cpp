@@ -10,8 +10,6 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 
-#include <library/cpp/pop_count/popcount.h>
-
 #include <library/cpp/digest/crc32c/crc32c.h>
 
 #include <util/string/printf.h>
@@ -22,6 +20,8 @@
 #include <util/string/vector.h>
 #include <util/string/type.h>
 #include <util/string/cast.h>
+
+#include <bit>
 
 namespace NKikimr {
 
@@ -287,7 +287,7 @@ quitIter:   ;
             return 0; // we already have a part
         }
         // filter out only parts on their respective disks to filter out possibly incorrectly written parts
-        const ui32 numDisksWithPartInMyRing = PopCount((disksWithPart >> myRing) & 0x49); // binary stencil 001001001
+        const ui32 numDisksWithPartInMyRing = std::popcount((disksWithPart >> myRing) & 0x49); // binary stencil 001001001
         // resurrect matching part if there are less than 2 parts in our datacenter
         return numDisksWithPartInMyRing < 2 ? 1 << myRing : 0;
     }

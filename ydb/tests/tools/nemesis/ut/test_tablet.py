@@ -8,7 +8,7 @@ from ydb.tests.library.common.types import Erasure, TabletTypes, TabletStates
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.tools.nemesis.library.tablet import BulkChangeTabletGroupNemesis
 from ydb.tests.tools.nemesis.library.tablet import KillHiveNemesis, KillBsControllerNemesis
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.matchers.tablets import all_tablets_are_created
 
@@ -27,7 +27,7 @@ class TestMassiveKills(object):
                 'BS_CONTROLLER': LogLevels.DEBUG,
             }
         )
-        cls.cluster = kikimr_cluster_factory(configurator=cls.configurator)
+        cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
 
     @classmethod

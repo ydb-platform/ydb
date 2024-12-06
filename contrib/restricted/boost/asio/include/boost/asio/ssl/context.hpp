@@ -2,7 +2,7 @@
 // ssl/context.hpp
 // ~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -47,7 +47,6 @@ public:
   /// Construct to take ownership of a native handle.
   BOOST_ASIO_DECL explicit context(native_handle_type native_handle);
 
-#if defined(BOOST_ASIO_HAS_MOVE) || defined(GENERATING_DOCUMENTATION)
   /// Move-construct a context from another.
   /**
    * This constructor moves an SSL context from one object to another.
@@ -73,7 +72,6 @@ public:
    * @li As a target for move-assignment.
    */
   BOOST_ASIO_DECL context& operator=(context&& other);
-#endif // defined(BOOST_ASIO_HAS_MOVE) || defined(GENERATING_DOCUMENTATION)
 
   /// Destructor.
   BOOST_ASIO_DECL ~context();
@@ -741,6 +739,9 @@ private:
 
   // Helper function to make a BIO from a memory buffer.
   BOOST_ASIO_DECL BIO* make_buffer_bio(const const_buffer& b);
+
+  // Translate an SSL error into an error code.
+  BOOST_ASIO_DECL static boost::system::error_code translate_error(long error);
 
   // The underlying native implementation.
   native_handle_type handle_;

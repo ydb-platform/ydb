@@ -2,7 +2,7 @@
 // detail/select_reactor.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -95,12 +95,29 @@ public:
       per_descriptor_data& descriptor_data, reactor_op* op);
 
   // Post a reactor operation for immediate completion.
-  void post_immediate_completion(reactor_op* op, bool is_continuation);
+  void post_immediate_completion(operation* op, bool is_continuation) const;
+
+  // Post a reactor operation for immediate completion.
+  BOOST_ASIO_DECL static void call_post_immediate_completion(
+      operation* op, bool is_continuation, const void* self);
 
   // Start a new operation. The reactor operation will be performed when the
   // given descriptor is flagged as ready, or an error has occurred.
   BOOST_ASIO_DECL void start_op(int op_type, socket_type descriptor,
-      per_descriptor_data&, reactor_op* op, bool is_continuation, bool);
+      per_descriptor_data&, reactor_op* op, bool is_continuation, bool,
+      void (*on_immediate)(operation*, bool, const void*),
+      const void* immediate_arg);
+
+  // Start a new operation. The reactor operation will be performed when the
+  // given descriptor is flagged as ready, or an error has occurred.
+  void start_op(int op_type, socket_type descriptor,
+      per_descriptor_data& descriptor_data, reactor_op* op,
+      bool is_continuation, bool allow_speculative)
+  {
+    start_op(op_type, descriptor, descriptor_data,
+        op, is_continuation, allow_speculative,
+        &select_reactor::call_post_immediate_completion, this);
+  }
 
   // Cancel all operations associated with the given descriptor. The
   // handlers associated with the descriptor will be invoked with the
@@ -228,6 +245,28 @@ private:
 
   // The thread that is running the reactor loop.
   boost::asio::detail::thread* thread_;
+
+  // Helper class to join and restart the reactor thread.
+  class restart_reactor : public operation
+  {
+  public:
+    restart_reactor(select_reactor* r)
+      : operation(&restart_reactor::do_complete),
+        reactor_(r)
+    {
+    }
+
+    BOOST_ASIO_DECL static void do_complete(void* owner, operation* base,
+        const boost::system::error_code& ec, std::size_t bytes_transferred);
+
+  private:
+    select_reactor* reactor_;
+  };
+
+  friend class restart_reactor;
+
+  // Operation used to join and restart the reactor thread.
+  restart_reactor restart_reactor_;
 #endif // defined(BOOST_ASIO_HAS_IOCP)
 
   // Whether the service has been shut down.

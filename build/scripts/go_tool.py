@@ -283,6 +283,7 @@ def gen_vet_info(args):
         'Compiler': 'gc',
         'Dir': os.path.join(args.source_root, get_source_path(args)),
         'ImportPath': import_path,
+        'GoVersion': ('go%s' % args.goversion),
         'GoFiles': [x for x in args.go_srcs if x.endswith('.go')],
         'NonGoFiles': [x for x in args.go_srcs if not x.endswith('.go')],
         'ImportMap': import_map,

@@ -10,8 +10,8 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/protos/query_stats.pb.h>
 
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {

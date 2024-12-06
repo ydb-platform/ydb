@@ -1,8 +1,8 @@
 diff --git a/include/string b/include/string
-index 57624c7..6550f5b 100644
+index 4c2d43b..fb603e1 100644
 --- a/include/string
 +++ b/include/string
-@@ -730,9 +730,14 @@ public:
+@@ -747,9 +747,14 @@ public:
                    "[allocator.requirements] states that rebinding an allocator to the same type should result in the "
                    "original allocator");
  
@@ -17,15 +17,15 @@ index 57624c7..6550f5b 100644
      typedef std::reverse_iterator<iterator>              reverse_iterator;
      typedef std::reverse_iterator<const_iterator>        const_reverse_iterator;
  
-@@ -1131,6 +1136,7 @@ public:
+@@ -1163,6 +1168,7 @@ public:
  #endif
-     _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(value_type __c);
+     _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_STRING_INTERNAL_MEMORY_ACCESS basic_string& operator=(value_type __c);
  
 +#ifndef _YNDX_LIBCPP_MAKE_STRING_ITERATOR_POINTERS == 1
      _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
      iterator begin() _NOEXCEPT
          {return __make_iterator(__get_pointer());}
-@@ -1143,6 +1149,22 @@ public:
+@@ -1175,6 +1181,22 @@ public:
      _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
      const_iterator end() const _NOEXCEPT
          {return __make_const_iterator(__get_pointer() + size());}

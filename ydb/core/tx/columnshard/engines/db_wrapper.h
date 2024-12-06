@@ -43,20 +43,23 @@ public:
     virtual void EraseInserted(const TInsertedData& data) = 0;
     virtual void EraseCommitted(const TCommittedData& data) = 0;
     virtual void EraseAborted(const TInsertedData& data) = 0;
+    virtual void WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) = 0;
 
     virtual bool Load(TInsertTableAccessor& insertTable, const TInstant& loadTime) = 0;
 
     virtual void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) = 0;
     virtual void EraseColumn(const TPortionInfo& portion, const TColumnRecord& row) = 0;
-    virtual bool LoadColumns(const std::function<void(const TColumnChunkLoadContextV1&)>& callback) = 0;
+    virtual bool LoadColumns(const std::optional<ui64> pathId, const std::function<void(TColumnChunkLoadContextV1&&)>& callback) = 0;
 
     virtual void WritePortion(const NOlap::TPortionInfo& portion) = 0;
     virtual void ErasePortion(const NOlap::TPortionInfo& portion) = 0;
-    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) = 0;
+    virtual bool LoadPortions(const std::optional<ui64> pathId,
+        const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) = 0;
 
     virtual void WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) = 0;
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) = 0;
-    virtual bool LoadIndexes(const std::function<void(const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext&)>& callback) = 0;
+    virtual bool LoadIndexes(const std::optional<ui64> pathId,
+        const std::function<void(const ui64 pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback) = 0;
 
     virtual void WriteCounter(ui32 counterId, ui64 value) = 0;
     virtual bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) = 0;
@@ -81,15 +84,17 @@ public:
 
     void WritePortion(const NOlap::TPortionInfo& portion) override;
     void ErasePortion(const NOlap::TPortionInfo& portion) override;
-    bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override;
+    bool LoadPortions(const std::optional<ui64> pathId, const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override;
 
     void WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override;
+    void WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) override;
     void EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
-    bool LoadColumns(const std::function<void(const TColumnChunkLoadContextV1&)>& callback) override;
+    bool LoadColumns(const std::optional<ui64> pathId, const std::function<void(TColumnChunkLoadContextV1&&)>& callback) override;
 
     virtual void WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) override;
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) override;
-    virtual bool LoadIndexes(const std::function<void(const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext&)>& callback) override;
+    virtual bool LoadIndexes(const std::optional<ui64> pathId,
+        const std::function<void(const ui64 pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback) override;
 
     void WriteCounter(ui32 counterId, ui64 value) override;
     bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) override;

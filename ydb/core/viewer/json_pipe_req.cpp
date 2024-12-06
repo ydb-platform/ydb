@@ -254,6 +254,15 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
             case NKikimrViewer::TEvViewerRequest::kSystemRequest:
                 response.Span.Attribute("request_type", "SystemRequest");
                 break;
+            case NKikimrViewer::TEvViewerRequest::kPDiskRequest:
+                response.Span.Attribute("request_type", "PDiskRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kVDiskRequest:
+                response.Span.Attribute("request_type", "VDiskRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kNodeRequest:
+                response.Span.Attribute("request_type", "NodeRequest");
+                break;
             case NKikimrViewer::TEvViewerRequest::kQueryRequest:
                 response.Span.Attribute("request_type", "QueryRequest");
                 break;
@@ -564,6 +573,9 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
 void TViewerPipeClient::RequestTxProxyDescribe(const TString& path) {
     THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
     request->Record.MutableDescribePath()->SetPath(path);
+    if (!Event->Get()->UserToken.empty()) {
+        request->Record.SetUserToken(Event->Get()->UserToken);
+    }
     SendRequest(MakeTxProxyID(), request.Release());
 }
 
@@ -754,13 +766,15 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
             SharedDatabase = CanonizePath(entry.Path);
             if (SharedDatabase == AppData()->TenantName) {
                 Direct = true;
-                return Bootstrap(); // retry bootstrap without redirect this time
+                Bootstrap(); // retry bootstrap without redirect this time
+            } else {
+                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
             }
-            DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
         } else {
-            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"));
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"));
         }
     }
+    RequestDone();
 }
 
 void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -771,24 +785,27 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
             if (entry.DomainInfo && entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                 ResourceNavigateResponse = MakeRequestSchemeCacheNavigate(TPathId(entry.DomainInfo->ResourcesDomainKey));
                 Become(&TViewerPipeClient::StateResolveResource);
-                return;
+            } else {
+                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(CanonizePath(entry.Path));
             }
-            DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(CanonizePath(entry.Path));
         } else {
-            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"));
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"));
         }
     }
+    RequestDone();
 }
 
 void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
     if (DatabaseBoardInfoResponse) {
         DatabaseBoardInfoResponse->Set(std::move(ev));
         if (DatabaseBoardInfoResponse->IsOk()) {
-            ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
+            return ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
         } else {
-            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - no nodes found"));
+            Direct = true;
+            Bootstrap(); // retry bootstrap without redirect this time
         }
     }
+    RequestDone();
 }
 
 void TViewerPipeClient::HandleTimeout() {

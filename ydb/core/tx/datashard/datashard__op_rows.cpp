@@ -220,6 +220,11 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
         UpdateProposeQueueSize();
         return;
     }
+    if (Pipeline.HasProposeDelayers()) {
+        DelayedProposeQueue.emplace_back().Reset(ev.Release());
+        UpdateProposeQueueSize();
+        return;
+    }
     if (IsReplicated()) {
         return Reject<TEvDataShard::TEvUploadRowsResponse>(this, ev, "bulk upsert",
             ERejectReasons::WrongState, "Can't execute bulk upsert at replicated table", &ReadOnly, ctx, TDataShard::ELogThrottlerType::UploadRows_Reject);
@@ -234,6 +239,11 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
 void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx) {
     if (MediatorStateWaiting) {
         MediatorStateWaitingMsgs.emplace_back(ev.Release());
+        UpdateProposeQueueSize();
+        return;
+    }
+    if (Pipeline.HasProposeDelayers()) {
+        DelayedProposeQueue.emplace_back().Reset(ev.Release());
         UpdateProposeQueueSize();
         return;
     }

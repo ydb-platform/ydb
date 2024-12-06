@@ -2,7 +2,7 @@
 
 #include "backup.h"
 
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 

@@ -98,7 +98,8 @@
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "IsRefresh == 0 And TraficSourceID == -1 Or TraficSourceID == 6 And RefererHash == 3594120000172545465"
+                                                                                        "Predicate": "IsRefresh == 0 AND TraficSourceID == -1 OR TraficSourceID == 6 AND RefererHash == 3594120000172545465",
+                                                                                        "Pushdown": "True"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],

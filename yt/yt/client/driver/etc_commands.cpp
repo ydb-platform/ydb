@@ -96,6 +96,9 @@ void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
     for (auto staticFeature : StaticFeatures) {
         features->AddChild(TString(staticFeature.first), BuildYsonNodeFluently().Value(staticFeature.second));
     }
+    features->AddChild(
+        "require_password_in_authentication_commands",
+        BuildYsonNodeFluently().Value(context->GetConfig()->RequirePasswordInAuthenticationCommands));
     context->ProduceOutputValue(BuildYsonStringFluently()
         .BeginMap()
             .Item("features").Value(features)

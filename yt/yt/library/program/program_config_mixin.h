@@ -114,7 +114,7 @@ protected:
                 config->WriteSchema(&writer);
                 Cout << Endl;
             } else {
-                THROW_ERROR_EXCEPTION("Unknown schema format %v", format);
+                THROW_ERROR_EXCEPTION("Unknown schema format %Qv", format);
             }
         };
         if (!ConfigSchema_.empty()) {

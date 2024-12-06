@@ -3,7 +3,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 namespace NKikimr {
 namespace NKqp {

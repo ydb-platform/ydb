@@ -45,7 +45,7 @@ class IAuditCtx;
 // AuditContextAppend() specializations extract specific info from request (and result) protos.
 //
 
-void AuditContextStart(IAuditCtx* ctx, const TString& database, const TString& userSID, const std::vector<std::pair<TString, TString>>& databaseAttrs);
+void AuditContextStart(IAuditCtx* ctx, const TString& database, const TString& userSID, const TString& sanitizedToken, const std::vector<std::pair<TString, TString>>& databaseAttrs);
 void AuditContextEnd(IAuditCtx* ctx);
 
 template <class TProtoRequest>

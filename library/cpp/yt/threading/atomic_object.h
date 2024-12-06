@@ -4,7 +4,7 @@
 
 #include <concepts>
 
-namespace NYT {
+namespace NYT::NThreading {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -56,7 +56,7 @@ void FromProto(TAtomicObject<TOriginal>* original, const TSerialized& serialized
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
+} // namespace NYT::NThreading
 
 #define ATOMIC_OBJECT_INL_H_
 #include "atomic_object-inl.h"

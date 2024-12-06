@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         endpoint << "localhost:" << grpcPort;
         std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());
         auto stub = Ydb::ObjectStorage::V1::ObjectStorageService::NewStub(channel);
-        
+
         TAutoPtr<Ydb::ObjectStorage::ListingRequest> request = new Ydb::ObjectStorage::ListingRequest();
         request->Setpath_column_prefix(pathPrefix);
         request->Settable_name(table);
@@ -427,7 +427,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         grpc::Status status = stub->List(&rcontext, *request, &response);
 
         UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
-        
+
         commonPrefixes.clear();
         contents.clear();
 
@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                 commonPrefixes.emplace_back(row);
             }
         }
-        
+
         if (response.has_contents()) {
             auto &files = response.contents();
             for (auto row : files.rows()) {
@@ -468,7 +468,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         TVector<TString> commonPrefixes;
         TVector<TString> contents;
-        DoS3Listing(GRPC_PORT, bucket, pathPrefix, pathDelimiter, startAfter, nullptr, columnsToReturn, maxKeys, commonPrefixes, contents);
+        DoS3Listing(GRPC_PORT, bucket, pathPrefix, pathDelimiter, startAfter, "", columnsToReturn, maxKeys, commonPrefixes, contents);
 
         UNIT_ASSERT_VALUES_EQUAL(expectedCommonPrefixes.size(), commonPrefixes.size());
         ui32 i = 0;
@@ -600,7 +600,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         return response;
     }
 
-    Ydb::ObjectStorage::ListingResponse TestS3ListingRequest(const TVector<TString>& prefixColumns, 
+    Ydb::ObjectStorage::ListingResponse TestS3ListingRequest(const TVector<TString>& prefixColumns,
                     const TString& pathPrefix, const TString& pathDelimiter,
                     const TString& startAfter, const TVector<TString>& columnsToReturn, ui32 maxKeys,
                     Ydb::StatusIds_StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
@@ -854,7 +854,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         TVector<TString> contents;
 
         auto continuationToken = DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", "", {}, 1, commonPrefixes, contents);
-        
+
         UNIT_ASSERT(continuationToken);
         UNIT_ASSERT_EQUAL(1, contents.size());
         UNIT_ASSERT_EQUAL(0, commonPrefixes.size());
@@ -947,7 +947,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         {
             TVector<TString> folders;
             TVector<TString> files;
-            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", nullptr, nullptr, {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL);
+            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", "", "", {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL);
 
             TVector<TString> expectedFolders = {"/Photos/games/", "/Photos/inner/", "/Photos/test/", "/Photos/test3/", "/Photos/test5/", "/Photos/test6/"};
             TVector<TString> expectedFiles = {"/Photos/a.jpg", "/Photos/c.jpg"};
@@ -959,11 +959,11 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         {
             TVector<TString> folders;
             TVector<TString> files;
-            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", nullptr, nullptr, {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_NOT_EQUAL);
+            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", "", "", {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_NOT_EQUAL);
 
             TVector<TString> expectedFolders = {"/Photos/folder/", "/Photos/inner/", "/Photos/test/", "/Photos/test2/", "/Photos/test3/", "/Photos/test4/", "/Photos/test5/", "/Photos/test6/"};
             TVector<TString> expectedFiles = {"/Photos/b.jpg"};
-            
+
             UNIT_ASSERT_VALUES_EQUAL(expectedFolders, folders);
             UNIT_ASSERT_VALUES_EQUAL(expectedFiles, files);
         }
@@ -1071,7 +1071,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(expectedFolders, folders);
         UNIT_ASSERT_VALUES_EQUAL(expectedFiles, files);
-        // Three partitions, second should be skipped, because it's next prefix of /Photos/ (/Photos0) exceeds 
+        // Three partitions, second should be skipped, because it's next prefix of /Photos/ (/Photos0) exceeds
         // the range of second partition. Third (last) partition will always be checked.
         UNIT_ASSERT_EQUAL(2, count);
     }
@@ -1142,7 +1142,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         UNIT_ASSERT_VALUES_EQUAL(resultSet.rows(0).items(2).low_128(), 975580256289238738);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.rows(0).items(2).high_128(), 192747);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.rows(0).items(3).low_128(), 123321000000);
-    }    
+    }
 }
 
 }}

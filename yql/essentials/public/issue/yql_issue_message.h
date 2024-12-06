@@ -31,7 +31,4 @@ void IssueToMessage(const TIssue& topIssue, TIssueMessage* message);
 template<typename TIssueMessage>
 void IssuesToMessage(const TIssues& issues, ::google::protobuf::RepeatedPtrField<TIssueMessage>* message);
 
-TString IssueToBinaryMessage(const TIssue& issue);
-TIssue IssueFromBinaryMessage(const TString& binaryMessage);
-
 }

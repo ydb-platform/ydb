@@ -3,6 +3,7 @@
 #include <util/string/join.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 
 
 #define LOG_D(s) \
@@ -104,7 +105,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
     TChannelDataOOB channelData;
     channelData.Proto = std::move(*record.MutableChannelData());
     if (channelData.Proto.GetData().HasPayloadId()) {
-        channelData.Payload = ev->Get()->GetPayload(channelData.Proto.GetData().GetPayloadId());
+        channelData.Payload = MakeChunkedBuffer(ev->Get()->GetPayload(channelData.Proto.GetData().GetPayloadId()));
     }
 
     ui64 channelId = channelData.Proto.GetChannelId();
@@ -249,8 +250,8 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr
         auto* data = retryEv->Record.MutableChannelData();
         data->CopyFrom(inFlight.second.Data.Proto);
         data->MutableData()->ClearPayloadId();
-        if (!inFlight.second.Data.Payload.IsEmpty()) {
-            data->MutableData()->SetPayloadId(retryEv->AddPayload(TRope(inFlight.second.Data.Payload)));
+        if (!inFlight.second.Data.Payload.Empty()) {
+            data->MutableData()->SetPayloadId(retryEv->AddPayload(MakeReadOnlyRope(inFlight.second.Data.Payload)));
         }
         data->SetChannelId(msg->ChannelId);
         data->SetFinished(inFlight.second.Finished);
@@ -568,8 +569,8 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
     *dataEv->Record.MutableChannelData() = channelData.Proto;
     if (channelData.Proto.HasData()) {
         dataEv->Record.MutableChannelData()->MutableData()->ClearPayloadId();
-        if (!channelData.Payload.IsEmpty()) {
-            dataEv->Record.MutableChannelData()->MutableData()->SetPayloadId(dataEv->AddPayload(TRope(channelData.Payload)));
+        if (!channelData.Payload.Empty()) {
+            dataEv->Record.MutableChannelData()->MutableData()->SetPayloadId(dataEv->AddPayload(MakeReadOnlyRope(channelData.Payload)));
         }
     }
 

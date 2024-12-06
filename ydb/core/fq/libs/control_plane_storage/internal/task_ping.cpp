@@ -8,7 +8,7 @@
 #include <ydb/core/metering/metering.h>
 
 #include <ydb/library/protobuf_printer/size_printer.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
 #include <google/protobuf/util/time_util.h>
 
@@ -180,7 +180,16 @@ TPingTaskParams ConstructHardPingTask(
                 policy = it->second;
             }
 
-            if (retryLimiter.UpdateOnRetry(Now(), policy)) {
+            auto now = TInstant::Now();
+            auto executionDeadline = TInstant::Max();
+
+            auto submittedAt = NProtoInterop::CastFromProto(query.meta().submitted_at());
+            auto executionTtl = NProtoInterop::CastFromProto(internal.execution_ttl());
+            if (submittedAt && executionTtl) {
+                executionDeadline = submittedAt + executionTtl;
+            }
+
+            if (retryLimiter.UpdateOnRetry(now, policy) && now < executionDeadline) {
                 queryStatus.Clear();
                 // failing query is throttled for backoff period
                 backoff = policy.BackoffPeriod * (retryLimiter.RetryRate + 1);
@@ -191,7 +200,7 @@ TPingTaskParams ConstructHardPingTask(
                 TStringBuilder builder;
                 builder << "Query failed with code " << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code())
                     << " and will be restarted (RetryCount: " << retryLimiter.RetryCount << ")"
-                    << " at " << Now();
+                    << " at " << now;
                 transientIssues->AddIssue(NYql::TIssue(builder));
             } else {
                 // failure query should be processed instantly
@@ -202,7 +211,7 @@ TPingTaskParams ConstructHardPingTask(
                 if (policy.RetryCount) {
                     builder << " (" << retryLimiter.LastError << ")";
                 }
-                builder << " at " << Now();
+                builder << " at " << now;
 
                 // in case of problems with finalization, do not change the issues
                 if (query.meta().status() == FederatedQuery::QueryMeta::FAILING || query.meta().status() == FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM || query.meta().status() == FederatedQuery::QueryMeta::ABORTING_BY_USER) {

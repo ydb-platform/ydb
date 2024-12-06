@@ -22,7 +22,7 @@ select c_last_name
     and (household_demographics.hd_buy_potential = '>10000' or
          household_demographics.hd_buy_potential = 'Unknown')
     and household_demographics.hd_vehicle_count > 0
-    and household_demographics.hd_dep_count / household_demographics.hd_vehicle_count > 1
+    and (case when household_demographics.hd_vehicle_count > 0 then cast(household_demographics.hd_dep_count as double)/ household_demographics.hd_vehicle_count else null end) > 1
     and date_dim.d_year in (1999,1999+1,1999+2)
     and store.s_county in ('Williamson County','Franklin County','Bronx County','Orange County')
     group by store_sales.ss_ticket_number,store_sales.ss_customer_sk) dj cross join {{customer}} as customer

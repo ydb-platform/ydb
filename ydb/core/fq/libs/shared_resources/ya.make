@@ -19,7 +19,7 @@ PEERDIR(
     ydb/library/db_pool
     ydb/library/logger
     ydb/library/security
-    ydb/library/yql/utils
+    yql/essentials/utils
     ydb/public/sdk/cpp/client/extensions/solomon_stats
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_extension

@@ -7,6 +7,8 @@
 
 #include <aws/common/common.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_run_command_result {
     /* return code from running the command. */
     int ret_code;
@@ -77,5 +79,6 @@ AWS_COMMON_API int aws_run_command(
     struct aws_run_command_result *result);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_PROCESS_H */

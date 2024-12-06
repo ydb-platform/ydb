@@ -69,7 +69,7 @@ def parse_args():
 
         args = override_parser.parse_args(argv, namespace=args)
 
-        udfs_prefix = args.ydb_root / "ydb" / "library" / "yql" / "udfs" / "common"
+        udfs_prefix = args.ydb_root / "yql" / "essentials" / "udfs" / "common"
         args.udfs_dir = [udfs_prefix / name for name in ["set", "url_base", "datetime2", "re2", "math", "unicode_base"]]
 
         return args

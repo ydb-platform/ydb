@@ -355,7 +355,7 @@ void FormatValue(TStringBuilderBase* builder, const TColumnSchema& schema, TStri
     }
 
     if (const auto& materialized = schema.Materialized()) {
-        builder->AppendFormat("; materialized=%Qv", *materialized);
+        builder->AppendFormat("; materialized=%v", *materialized);
     }
 
     if (const auto& aggregate = schema.Aggregate()) {
@@ -463,10 +463,10 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
     } else if (protoSchema.has_simple_logical_type()) {
         schema->SetLogicalType(
             MakeLogicalType(
-                CheckedEnumCast<ESimpleLogicalValueType>(protoSchema.simple_logical_type()),
+                FromProto<ESimpleLogicalValueType>(protoSchema.simple_logical_type()),
                 protoSchema.required()));
     } else {
-        auto physicalType = CheckedEnumCast<EValueType>(protoSchema.type());
+        auto physicalType = FromProto<EValueType>(protoSchema.type());
         schema->SetLogicalType(MakeLogicalType(GetLogicalType(physicalType), protoSchema.required()));
     }
 
@@ -474,7 +474,7 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
     schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
     schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
     schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
-    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, CheckedEnumCast<ESortOrder>));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, FromProto<ESortOrder>));
     schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
     schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
 }
@@ -1514,7 +1514,7 @@ void FromProto(TTableSchema* schema, const NProto::TTableSchemaExt& protoSchema)
         FromProto<std::vector<TColumnSchema>>(protoSchema.columns()),
         protoSchema.strict(),
         protoSchema.unique_keys(),
-        CheckedEnumCast<ETableSchemaModification>(protoSchema.schema_modification()),
+        FromProto<ETableSchemaModification>(protoSchema.schema_modification()),
         FromProto<std::vector<TDeletedColumn>>(protoSchema.deleted_columns()));
 }
 

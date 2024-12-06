@@ -7,7 +7,8 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
+class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges,
+                                          public NColumnShard::TMonitoringObjectsCounter<TGeneralCompactColumnEngineChanges> {
 private:
     YDB_ACCESSOR(ui64, PortionExpectedSize, 1.5 * (1 << 20));
     using TBase = TCompactColumnEngineChanges;
@@ -36,7 +37,7 @@ protected:
         auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : SwitchedPortions) {
-            result = predictor->AddPortion(p.GetPortionInfoPtr());
+            result = predictor->AddPortion(p);
         }
         return result;
     }
@@ -49,21 +50,8 @@ public:
 
     class TMemoryPredictorChunkedPolicy: public IMemoryPredictor {
     private:
-        ui64 SumMemoryDelta = 0;
         ui64 SumMemoryFix = 0;
-        ui32 PortionsCount = 0;
-        class TColumnInfo {
-        public:
-            const ui32 ColumnId;
-            ui64 MemoryUsage = 0;
-            TColumnInfo(const ui32 columnId)
-                : ColumnId(columnId)
-            {
-
-            }
-        };
-        std::list<TColumnInfo> MaxMemoryByColumnChunk;
-
+        ui64 SumMemoryRaw = 0;
     public:
         virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) override;
     };

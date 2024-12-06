@@ -20,7 +20,7 @@ class TJsonQuery : public TViewerPipeClient {
     using TThis = TJsonQuery;
     using TBase = TViewerPipeClient;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0;
+    ui32 Timeout = 60000;
     std::vector<std::vector<Ydb::ResultSet>> ResultSets;
     TString Query;
     TString Action;
@@ -65,7 +65,7 @@ public:
     void ParseCgiParameters(const TCgiParameters& params) {
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 60000);
+        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), Timeout);
         if (params.Has("query")) {
             Query = params.Get("query");
         }
@@ -107,6 +107,12 @@ public:
         NJson::TJsonValue requestData;
         bool success = NJson::ReadJsonTree(content, &JsonConfig, &requestData);
         if (success) {
+            if (requestData.Has("timeout")) {
+                Timeout = requestData["timeout"].GetUIntegerRobust();
+                if (Timeout == 0) {
+                    return false;
+                }
+            }
             if (requestData.Has("query")) {
                 Query = requestData["query"].GetStringRobust();
             }
@@ -195,7 +201,6 @@ public:
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
-            hFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, HandleReply);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -552,10 +557,6 @@ private:
         TBase::ReplyAndPassAway(GetHTTPOKJSON(stream.Str()));
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev) {
-        Y_UNUSED(ev);
-    }
-
     void HandleReply(NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev) {
         Y_UNUSED(ev);
     }
@@ -577,8 +578,7 @@ private:
             ResultSets[data.GetQueryResultIndex()].emplace_back() = std::move(*data.MutableResultSet());
         }
 
-        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         if (TotalRows >= LimitRows) {
             ack->Record.SetEnough(true);
         }
@@ -881,7 +881,7 @@ public:
                 in: query
                 description: resource pool in which the query will be executed
                 type: string
-                required: false 
+                required: false
             requestBody:
                 description: Executes SQL query
                 required: false

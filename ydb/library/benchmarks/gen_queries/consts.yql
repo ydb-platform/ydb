@@ -28,3 +28,5 @@ $scale_factor = 1;
 
 $round = ($x, $y) -> { return Math::Round($x, $y); };
 $upscale = ($x) -> { return $x; };
+
+$todecimal = ($x, $p, $s) -> { return cast($x as double); };

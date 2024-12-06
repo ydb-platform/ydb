@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/minikql/computation/llvm14
+    yql/essentials/minikql/computation/llvm14
     ydb/library/yql/providers/common/ut_helpers
     ydb/public/sdk/cpp/client/ydb_topic
 )

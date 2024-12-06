@@ -70,6 +70,11 @@ namespace NActors {
         ui32 PeerNodeId;
         TString PeerName;
         bool Connected;
+        // oneof {
+        bool SessionClosed = false;
+        bool SessionPendingConnection = false;
+        bool SessionConnected = false;
+        // }
         EFlag ConnectStatus;
         i64 ClockSkewUs;
         bool ReportClockSkew;

@@ -634,7 +634,7 @@ private:
         StartCompilation();
         Continue();
 
-        Schedule(TDuration::Seconds(300), new TEvents::TEvWakeup());
+        Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
         Become(&TThis::StateCompile);
     }
 

@@ -71,6 +71,10 @@ namespace NActors {
                 return serializer->WriteString(&Blob);
             }
 
+            virtual ui32 CalculateSerializedSize() const override {
+                return Blob.size();
+            }
+
             static IEventBase* Load(TEventSerializedData* bufs) noexcept {
                 return new TEvBlob(bufs->GetString());
             }

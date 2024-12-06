@@ -38,13 +38,13 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     const NActors::TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build()("tablet", Self->TabletID())("snapshot", snapshot.DebugString());
     TReadMetadataPtr readMetadataRange;
+    TScannerConstructorContext context(snapshot, 0, request.GetReverse());
     {
         TReadDescription read(snapshot, request.GetReverse());
         read.PathId = request.GetPathId();
         read.LockId = LockId;
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
-        std::unique_ptr<IScannerConstructor> scannerConstructor(
-            new NPlain::TIndexScannerConstructor(snapshot, request.GetItemsLimit(), request.GetReverse()));
+        std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
         read.ColumnNames = request.GetColumnNames();
         if (request.RangesFilter) {
@@ -80,10 +80,9 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     readMetadataRange->OnBeforeStartReading(*Self);
 
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
-    auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(), TComputeShardingPolicy(),
-        ScanId, LockId.value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
-        NKikimrDataEvents::FORMAT_ARROW,
-        Self->Counters.GetScanCounters()));
+    auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(), Self->DataAccessorsManager.GetObjectPtrVerified(),
+        TComputeShardingPolicy(), ScanId, LockId.value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
+        NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters()));
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);
 }

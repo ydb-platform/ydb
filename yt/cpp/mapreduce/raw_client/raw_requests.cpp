@@ -728,7 +728,6 @@ private:
     }
 
 private:
-    THttpRequest Request_;
     NHttpClient::IHttpResponsePtr Response_;
     IInputStream* ResponseStream_;
 };
@@ -877,7 +876,13 @@ TNode::TListType SkyShareTable(
         host = "skynet." + proxyName + ".yt.yandex.net";
     }
 
-    header.MergeParameters(SerializeParamsForSkyShareTable(proxyName, context.Config->Prefix, tablePaths, options));
+    TSkyShareTableOptions patchedOptions = options;
+
+    if (context.Config->Pool && !patchedOptions.Pool_) {
+        patchedOptions.Pool(context.Config->Pool);
+    }
+
+    header.MergeParameters(SerializeParamsForSkyShareTable(proxyName, context.Config->Prefix, tablePaths, patchedOptions));
     TClientContext skyApiHost({ .ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient() });
     TResponseInfo response = {};
 

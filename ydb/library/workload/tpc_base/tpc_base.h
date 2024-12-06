@@ -30,9 +30,6 @@ public:
     TQueryInfoList GetInitialData() override final;
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override final;
 
-protected:
-    virtual TVector<TString> GetTablesList() const = 0;
-
 private:
     const TTpcBaseWorkloadParams& Params;
     void PatchQuery(TString& query) const;
@@ -48,6 +45,8 @@ public:
     explicit TCsvItemWriter(IOutputStream& out)
         : Out(out)
     {}
+
+    virtual ~TCsvItemWriter() = default;
 
     void RegisterField(TStringBuf name, TWriteFunction writeFunc) {
         Fields.emplace_back(name, writeFunc);
@@ -67,11 +66,11 @@ public:
         HeaderWritten = true;
     }
 
-    void Write(const TItem& item) {
+    void Write(const TItem& item, size_t itemIndex) {
         WriteHeader();
-        for(const auto& field: Fields) {
-            field.WriteFunction(item, Out);
-            if (&field + 1 != Fields.end()) {
+        for(size_t field = 0; field < Fields.size(); ++field) {
+            WriteImpl(item, itemIndex, field);
+            if (field + 1 < Fields.size()) {
                 Out << TWorkloadGeneratorBase::PsvDelimiter;
             }
         }
@@ -80,18 +79,24 @@ public:
 
     template<class TContainer>
     void Write(const TContainer& items) {
+        size_t i = 0;
         for(const auto& item: items) {
-            Write(item);
+            Write(item, i++);
         }
     }
 
     void Write(const TItem* items, size_t count) {
         for(size_t i = 0; i < count; ++i) {
-            Write(items[i]);
+            Write(items[i], i);
         }
     }
 
-private:
+protected:
+    virtual void WriteImpl(const TItem& item, size_t itemIndex, const size_t fieldIndex) {
+        Y_UNUSED(itemIndex);
+        Fields[fieldIndex].WriteFunction(item, Out);
+    }
+
     struct TField {
         TField(TStringBuf name, TWriteFunction func)
             : Name(name)
@@ -104,13 +109,5 @@ private:
     IOutputStream& Out;
     bool HeaderWritten = false;
 };
-
-#define CSV_WRITER_REGISTER_FIELD(writer, column_name, record_field) \
-    writer.RegisterField(column_name, [](const decltype(writer)::TItem& item, IOutputStream& out) { \
-        out << item.record_field; \
-    });
-
-#define CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, column_name) \
-    CSV_WRITER_REGISTER_FIELD(writer, #column_name, column_name);
 
 } // namespace NYdbWorkload

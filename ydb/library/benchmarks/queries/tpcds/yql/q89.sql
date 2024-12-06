@@ -3,17 +3,13 @@
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query89.tpl and seed 1719819282
 
-$todecimal = ($x) -> {
-  return cast(cast($x as string?) as decimal(7,2))
-};
-
 select  *
 from(
 select item.i_category, item.i_class, item.i_brand,
        store.s_store_name s_store_name, store.s_company_name,
        date_dim.d_moy,
-       sum($todecimal(ss_sales_price)) sum_sales,
-       avg(sum($todecimal(ss_sales_price))) over
+       sum($todecimal(ss_sales_price, 7, 2)) sum_sales,
+       avg(sum($todecimal(ss_sales_price, 7, 2))) over
          (partition by item.i_category, item.i_brand, store.s_store_name, store.s_company_name)
          avg_monthly_sales
 from {{item}} as item
@@ -32,7 +28,7 @@ where ss_item_sk = i_item_sk and
         ))
 group by item.i_category, item.i_class, item.i_brand,
          store.s_store_name, store.s_company_name, date_dim.d_moy) tmp1
-where case when (avg_monthly_sales <> cast(0 as decimal(7,2))) then (abs(sum_sales - avg_monthly_sales) / avg_monthly_sales) else null end > cast("0.1" as decimal(7,2))
+where case when (avg_monthly_sales <> $todecimal(0,7,2)) then (abs(sum_sales - avg_monthly_sales) / avg_monthly_sales) else null end > $todecimal(0.1,7,2)
 order by sum_sales - avg_monthly_sales, s_store_name
 limit 100;
 

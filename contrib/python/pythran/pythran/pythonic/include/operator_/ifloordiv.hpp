@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_OPERATOR_IFLOORDIV_HPP
 #define PYTHONIC_INCLUDE_OPERATOR_IFLOORDIV_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/operator_/mod.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -15,7 +15,7 @@ namespace operator_
   auto ifloordiv(A const &a, B &&b) -> decltype((a - mod(a, b)) / b);
 
   DEFINE_FUNCTOR(pythonic::operator_, ifloordiv);
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

@@ -20,7 +20,7 @@ namespace types
 
     ReturnType operator()(ArgsType... args) const;
   };
-}
+} // namespace types
 PYTHONIC_NS_END
 
 #ifdef ENABLE_PYTHON_MODULE

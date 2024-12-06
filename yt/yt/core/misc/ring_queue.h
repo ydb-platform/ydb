@@ -366,7 +366,7 @@ public:
         : Container_(container)
     { }
 
-    using value_type = TContainer::value_type;
+    using value_type = typename TContainer::value_type;
 
 private:
     TContainer& Container_;

@@ -11,6 +11,8 @@
 
 namespace NActors {
 
+    class TMailbox;
+
     class IExecutorPool;
     struct TWorkerContext;
 
@@ -19,7 +21,7 @@ namespace NActors {
 
     struct TThreadContext {
         IExecutorPool *Pool = nullptr;
-        ui32 CapturedActivation = 0;
+        TMailbox* CapturedActivation = nullptr;
         ESendingType CapturedType = ESendingType::Lazy;
         ESendingType SendingType = ESendingType::Common;
         bool IsEnoughCpu = true;

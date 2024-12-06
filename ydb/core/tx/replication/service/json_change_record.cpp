@@ -91,7 +91,9 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
 void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TMemoryPool& pool) const {
     pool.Clear();
     record.SetSourceOffset(GetOrder());
-    // TODO: fill WriteTxId
+    if (WriteTxId) {
+        record.SetWriteTxId(WriteTxId);
+    }
 
     TString error;
 
@@ -153,6 +155,10 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
 
 void TChangeRecord::Accept(NChangeExchange::IVisitor& visitor) const {
     return visitor.Visit(*this);
+}
+
+void TChangeRecord::RewriteTxId(ui64 value) {
+    WriteTxId = value;
 }
 
 }

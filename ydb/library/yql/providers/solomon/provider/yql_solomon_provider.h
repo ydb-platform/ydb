@@ -3,7 +3,7 @@
 #include "yql_solomon_gateway.h"
 #include "yql_solomon_config.h"
 
-#include <ydb/library/yql/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_data_provider.h>
 
 namespace NYql {
 

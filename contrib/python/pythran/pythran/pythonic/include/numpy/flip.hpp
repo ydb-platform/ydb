@@ -12,8 +12,8 @@ namespace numpy
   namespace details
   {
     template <class E, class S, size_t... I>
-    auto flip(E const &expr, S const &slices, utils::index_sequence<I...>)
-        -> decltype(expr(slices[I]...));
+    auto flip(E const &expr, S const &slices,
+              utils::index_sequence<I...>) -> decltype(expr(slices[I]...));
   }
 
   template <class E>
@@ -22,7 +22,7 @@ namespace numpy
                                 utils::make_index_sequence<E::value>{}));
 
   DEFINE_FUNCTOR(pythonic::numpy, flip);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

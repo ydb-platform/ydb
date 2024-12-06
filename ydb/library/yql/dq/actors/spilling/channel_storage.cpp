@@ -2,7 +2,7 @@
 
 #include "channel_storage_actor.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -54,13 +54,13 @@ public:
         return WritingBlobs_.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsTotalSize_ > MAX_INFLIGHT_BLOBS_SIZE;
     }
 
-    void Put(ui64 blobId, TRope&& blob, ui64 cookie = 0) override {
+    void Put(ui64 blobId, TChunkedBuffer&& blob, ui64 cookie = 0) override {
         UpdateWriteStatus();
 
         auto promise = NThreading::NewPromise<void>();
         auto future = promise.GetFuture();
 
-        ui64 blobSize = blob.size();
+        ui64 blobSize = blob.Size();
 
         ActorSystem_->Send(ChannelStorageActorId_, new TEvDqChannelSpilling::TEvPut(blobId, std::move(blob), std::move(promise)), /*flags*/0, cookie);
 

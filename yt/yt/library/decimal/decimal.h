@@ -24,6 +24,7 @@ public:
     };
     static_assert(sizeof(TValue128) == 2 * sizeof(ui64));
 
+    //! Lower-endian representation of 256-bit decimal value.
     struct TValue256
     {
         std::array<ui32, 8> Parts;
@@ -64,6 +65,8 @@ public:
 
     // Writes either 32-bit, 64-bit or 128-bit binary value depending on precision, provided a TValue128.
     static TStringBuf WriteBinary128Variadic(int precision, TValue128 value, char* buffer, size_t bufferLength);
+    // Writes either 32-bit, 64-bit, 128-bit or 256-bit binary value depending on precision, provided a TValue256.
+    static TStringBuf WriteBinary256Variadic(int precision, TValue256 value, char* buffer, size_t bufferLength);
 
     static i32 ParseBinary32(int precision, TStringBuf buffer);
     static i64 ParseBinary64(int precision, TStringBuf buffer);

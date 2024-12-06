@@ -12,9 +12,8 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/colorizer
     library/cpp/resource
-    contrib/ydb/public/api/protos
     yql/essentials/public/issue/protos
-    contrib/ydb/library/yql/utils
+    yql/essentials/utils
 )
 
 GENERATE_ENUM_SERIALIZATION(yql_warning.h)

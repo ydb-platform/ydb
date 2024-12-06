@@ -352,6 +352,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
     auto encoded_token = token.sign(algorithm);
 
     response.Token = TString(encoded_token);
+    response.SanitizedToken = SanitizeJwtToken(response.Token);
 
     return response;
 }
@@ -389,12 +390,15 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
         auto keyId = FromStringWithDefault<ui64>(decoded_token.get_key_id());
         const TKeyRecord* key = FindKey(keyId);
         if (key != nullptr) {
+            static const size_t ISSUED_AT_LEEWAY_SEC = 2;
             auto verifier = jwt::verify()
-                .allow_algorithm(jwt::algorithm::ps256(key->PublicKey));
+                .allow_algorithm(jwt::algorithm::ps256(key->PublicKey))
+                .issued_at_leeway(ISSUED_AT_LEEWAY_SEC);
             if (Audience) {
                 // jwt.h require audience claim to be a set
                 verifier.with_audience(std::set<std::string>{Audience});
             }
+
             verifier.verify(decoded_token);
             response.User = decoded_token.get_subject();
             response.ExpiresAt = decoded_token.get_expires_at();
@@ -645,6 +649,14 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             }
         }
     }
+}
+
+TString TLoginProvider::SanitizeJwtToken(const TString& token) {
+    const size_t signaturePos = token.find_last_of('.');
+    if (signaturePos == TString::npos || signaturePos == token.size() - 1) {
+        return {};
+    }
+    return TStringBuilder() << TStringBuf(token).SubString(0, signaturePos) << ".**"; // <token>.**
 }
 
 }

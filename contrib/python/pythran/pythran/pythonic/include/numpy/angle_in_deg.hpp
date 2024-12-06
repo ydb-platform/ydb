@@ -22,11 +22,11 @@ namespace numpy
     {
       return angle_in_rad(t) * 180 / pi;
     }
-  }
+  } // namespace wrapper
 #define NUMPY_NARY_FUNC_NAME angle_in_deg
 #define NUMPY_NARY_FUNC_SYM wrapper::angle_in_deg
 #include "pythonic/include/types/numpy_nary_expr.hpp"
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

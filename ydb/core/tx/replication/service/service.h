@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/common/sensitive_event_pb.h>
 #include <ydb/core/tx/replication/common/worker_id.h>
@@ -18,6 +19,9 @@ struct TEvService {
         EvStopWorker,
         EvWorkerStatus,
         EvWorkerDataEnd,
+        EvGetTxId,
+        EvTxIdResult,
+        EvHeartbeat,
 
         EvEnd,
     };
@@ -77,6 +81,34 @@ struct TEvService {
         TEvWorkerDataEnd() = default;
     };
 
+    struct TEvGetTxId: public TEventPB<TEvGetTxId, NKikimrReplication::TEvGetTxId, EvGetTxId> {
+        TEvGetTxId() = default;
+
+        template <typename TContainer>
+        explicit TEvGetTxId(const TContainer& container) {
+            Record.MutableVersions()->Reserve(container.size());
+            for (const auto& v : container) {
+                v.Serialize(*Record.AddVersions());
+            }
+        }
+    };
+
+    struct TEvTxIdResult: public TEventPB<TEvTxIdResult, NKikimrReplication::TEvTxIdResult, EvTxIdResult> {
+        TEvTxIdResult() = default;
+
+        explicit TEvTxIdResult(ui64 tabletId, ui64 generation) {
+            Record.MutableController()->SetTabletId(tabletId);
+            Record.MutableController()->SetGeneration(generation);
+        }
+    };
+
+    struct TEvHeartbeat: public TEventPB<TEvHeartbeat, NKikimrReplication::TEvHeartbeat, EvHeartbeat> {
+        TEvHeartbeat() = default;
+
+        explicit TEvHeartbeat(const TRowVersion& version) {
+            version.Serialize(*Record.MutableVersion());
+        }
+    };
 };
 
 namespace NService {

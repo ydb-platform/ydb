@@ -25,7 +25,7 @@ namespace builtins
                                                  U const &other);
 
     DEFINE_FUNCTOR(pythonic::builtins::set, symmetric_difference_update);
-  }
-}
+  } // namespace set
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

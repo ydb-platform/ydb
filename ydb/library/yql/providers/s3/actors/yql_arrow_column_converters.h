@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
+#include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatSettings.h>
 

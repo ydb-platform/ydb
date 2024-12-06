@@ -11,6 +11,6 @@ namespace builtins
   {
     USING_FUNCTOR(count, pythonic::__dispatch__::functor::count);
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

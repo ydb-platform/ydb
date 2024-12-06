@@ -208,7 +208,7 @@ namespace NKikimr {
         Y_ABORT_UNLESS(Topology);
         Sessions->QueueConnectUpdate(Topology->GetOrderNumber(msg->VDiskId), msg->QueueId, msg->IsConnected,
             msg->ExtraBlockChecksSupport, msg->CostModel, *Topology);
-        MinREALHugeBlobInBytes = Sessions->GetMinREALHugeBlobInBytes();
+        MinHugeBlobInBytes = Sessions->GetMinHugeBlobInBytes();
         if (msg->IsConnected && (CurrentStateFunc() == &TThis::StateEstablishingSessions ||
                 CurrentStateFunc() == &TThis::StateEstablishingSessionsTimeout)) {
             SwitchToWorkWhenGoodToGo();
@@ -216,7 +216,7 @@ namespace NKikimr {
             SetStateEstablishingSessions();
         }
 
-        Y_DEBUG_ABORT_UNLESS(CurrentStateFunc() != &TThis::StateWork || MinREALHugeBlobInBytes);
+        Y_DEBUG_ABORT_UNLESS(CurrentStateFunc() != &TThis::StateWork || MinHugeBlobInBytes);
 
         if (const ui32 prev = std::exchange(NumUnconnectedDisks, Sessions->GetNumUnconnectedDisks()); prev != NumUnconnectedDisks) {
             NodeMon->IncNumUnconnected(NumUnconnectedDisks);
@@ -323,12 +323,28 @@ namespace NKikimr {
         Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr));
     }
 
+#define SELECT_CONTROL_BY_DEVICE_TYPE(prefix, info) \
+([&](NPDisk::EDeviceType deviceType) -> i64 {       \
+    TInstant now = TActivationContext::Now();       \
+    switch (deviceType) {                           \
+    case NPDisk::DEVICE_TYPE_ROT:                   \
+        return Controls.prefix##HDD.Update(now);    \
+    case NPDisk::DEVICE_TYPE_SSD:                   \
+    case NPDisk::DEVICE_TYPE_NVME:                  \
+        return Controls.prefix##SSD.Update(now);    \
+    default:                                        \
+        return Controls.prefix.Update(now);         \
+    }                                               \
+})(info ? info->GetDeviceType() : NPDisk::DEVICE_TYPE_UNKNOWN)
+
     TAccelerationParams TBlobStorageGroupProxy::GetAccelerationParams() {
         return TAccelerationParams{
-            .SlowDiskThreshold = .001f * SlowDiskThreshold.Update(TActivationContext::Now()),
-            .PredictedDelayMultiplier = .001f * PredictedDelayMultiplier.Update(TActivationContext::Now()),
-            .MaxNumOfSlowDisks = (ui32)MaxNumOfSlowDisks.Update(TActivationContext::Now()),
+            .SlowDiskThreshold = .001f * SELECT_CONTROL_BY_DEVICE_TYPE(SlowDiskThreshold, Info),
+            .PredictedDelayMultiplier = .001f * SELECT_CONTROL_BY_DEVICE_TYPE(PredictedDelayMultiplier, Info),
+            .MaxNumOfSlowDisks = static_cast<ui32>(SELECT_CONTROL_BY_DEVICE_TYPE(MaxNumOfSlowDisks, Info)),
         };
     }
+
+#undef SELECT_CONTROL_BY_DEVICE_TYPE
 
 } // NKikimr

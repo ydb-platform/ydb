@@ -22,7 +22,7 @@
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
 
 #include <ydb/library/folder_service/folder_service.h>
-#include <ydb/library/yql/providers/common/metrics/service_counters.h>
+#include <yql/essentials/providers/common/metrics/service_counters.h>
 
 #include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/protobuf/json/json2proto.h>
@@ -35,8 +35,8 @@
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
@@ -204,7 +204,8 @@ void Init(
             credentialsFactory,
             tenant,
             yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
-            CreatePqNativeGateway(pqServices));
+            CreatePqNativeGateway(pqServices),
+            appData->Mon);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
     }
 
@@ -224,7 +225,7 @@ void Init(
             appData->FunctionRegistry
         );
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, NYql::CreatePqNativeGateway(std::move(pqServices)), 
-            yqCounters->GetSubgroup("subsystem", "DqSourceTracker"));
+            yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), protoConfig.GetCommon().GetPqReconnectPeriod());
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"), protoConfig.GetGateways().GetS3().GetAllowLocalFiles());

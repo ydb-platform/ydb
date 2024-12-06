@@ -51,7 +51,7 @@ void FqConvert(const T& src, ::google::protobuf::Empty& dst) {
 }
 
 TString RemapSeverity(int severity) {
-    // values from ydb/library/yql/public/issue/protos/issue_severity.proto
+    // values from yql/essentials/public/issue/protos/issue_severity.proto
     switch (severity) {
     case 0:
         return "FATAL";

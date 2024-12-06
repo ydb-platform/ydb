@@ -4,8 +4,8 @@
 #include "pythonic/include/builtins/list/sort.hpp"
 
 #include "pythonic/builtins/None.hpp"
-#include "pythonic/types/list.hpp"
 #include "pythonic/types/NoneType.hpp"
+#include "pythonic/types/list.hpp"
 #include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/pdqsort.hpp"
 
@@ -32,7 +32,7 @@ namespace builtins
       });
       return builtins::None;
     }
-  }
-}
+  } // namespace list
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

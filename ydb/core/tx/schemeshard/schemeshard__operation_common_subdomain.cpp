@@ -1,4 +1,5 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 #include "schemeshard__operation_common_subdomain.h"
 
 #include <ydb/core/base/hive.h>
@@ -299,7 +300,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "NSubDomainState::TPropose HandleReply TEvOperationPlan"
                     << ", operationId " << OperationId
-                    << ", at tablet " << ssId);
+                    << ", at tablet# " << ssId);
 
     TTxState* txState = context.SS->FindTx(OperationId);
     if (!txState) {
@@ -358,7 +359,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "NSubDomainState::TPropose HandleReply TEvOperationPlan"
                     << ", operationId " << OperationId
-                    << ", at tablet " << ssId);
+                    << ", at tablet# " << ssId);
 
     return true;
 }
@@ -385,7 +386,7 @@ bool TPropose::ProgressState(TOperationContext& context) {
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "NSubDomainState::TPropose ProgressState leave"
                     << ", operationId " << OperationId
-                    << ", at tablet " << ssId);
+                    << ", at tablet# " << ssId);
 
     return false;
 }

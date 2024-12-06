@@ -1,0 +1,27 @@
+diff --git a/include/__split_buffer b/include/__split_buffer
+index da73f4c..7131932 100644
+--- a/include/__split_buffer
++++ b/include/__split_buffer
+@@ -156,7 +156,7 @@ public:
+ 
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void pop_front() { __destruct_at_begin(__begin_ + 1); }
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void pop_back() { __destruct_at_end(__end_ - 1); }
+-
++  void __uninitialized_at_end(size_type __n);
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __construct_at_end(size_type __n);
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __construct_at_end(size_type __n, const_reference __x);
+ 
+@@ -246,6 +246,13 @@ __split_buffer<_Tp, _Allocator>::__invariants() const
+     return true;
+ }
+ 
++template <class _Tp, class _Allocator>
++void
++__split_buffer<_Tp, _Allocator>::__uninitialized_at_end(size_type __n)
++{
++    this->__end_ += __n;
++}
++
+ //  Default constructs __n objects starting at __end_
+ //  throws if construction throws
+ //  Precondition:  __n > 0

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: MarkupSafe
-Version: 3.0.1
+Version: 3.0.2
 Summary: Safely add untrusted strings to HTML/XML markup.
 Maintainer-email: Pallets <contact@palletsprojects.com>
 License: Copyright 2010 Pallets

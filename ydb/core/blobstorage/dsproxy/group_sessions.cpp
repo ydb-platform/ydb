@@ -188,8 +188,8 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
     }
 }
 
-ui32 TGroupSessions::GetMinREALHugeBlobInBytes() const {
-    return GroupQueues->CostModel ? GroupQueues->CostModel->MinREALHugeBlobInBytes : 0;
+ui32 TGroupSessions::GetMinHugeBlobInBytes() const {
+    return GroupQueues->CostModel ? GroupQueues->CostModel->MinHugeBlobInBytes : 0;
 }
 
 ui32 TGroupSessions::GetNumUnconnectedDisks() {

@@ -9,8 +9,6 @@
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/shutdown.h>
 
-#include <yt/yt/core/ytalloc/bindings.h>
-
 #include <yt/yt/core/yson/writer.h>
 #include <yt/yt/core/yson/null_consumer.h>
 
@@ -20,9 +18,8 @@
 
 #include <yt/yt/library/profiling/tcmalloc/profiler.h>
 
-#include <library/cpp/ytalloc/api/ytalloc.h>
-
 #include <library/cpp/yt/mlock/mlock.h>
+
 #include <library/cpp/yt/stockpile/stockpile.h>
 
 #include <library/cpp/yt/system/exit.h>
@@ -156,7 +153,7 @@ int TProgram::Run(int argc, const char** argv)
 void TProgram::Abort(int code) noexcept
 {
     NLogging::TLogManager::Get()->Shutdown();
-    AbortProcess(code);
+    AbortProcessSilently(code);
 }
 
 void TProgram::Exit(int code) noexcept
@@ -169,7 +166,7 @@ void TProgram::Exit(int code) noexcept
     // cf. the comment section for NYT::Shutdown.
     Shutdown({
         .AbortOnHang = ShouldAbortOnHungShutdown(),
-        .HungExitCode = code
+        .HungExitCode = code,
     });
 
     ::exit(code);
@@ -320,7 +317,7 @@ void ExitZero(int /*unused*/)
     // TODO(babenko): replace with pure "exit" some day.
     // Currently this causes some RPC requests to master to be replied with "Promise abandoned" error,
     // which is not retriable.
-    AbortProcess(ToUnderlying(EProcessExitCode::OK));
+    AbortProcessSilently(EProcessExitCode::OK);
 }
 
 } // namespace
@@ -337,11 +334,6 @@ void ConfigureAllocator(const TAllocatorOptions& options)
     NYT::MlockFileMappings();
 
 #ifdef _linux_
-    NYTAlloc::EnableYTLogging();
-    NYTAlloc::EnableYTProfiling();
-    NYTAlloc::InitializeLibunwindInterop();
-    NYTAlloc::SetEnableEagerMemoryRelease(options.YTAllocEagerMemoryRelease);
-
     if (tcmalloc::MallocExtension::NeedsProcessBackgroundActions()) {
         std::thread backgroundThread([] {
             TThread::SetCurrentThreadName("TCAllocBack");

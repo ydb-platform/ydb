@@ -68,7 +68,8 @@
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",
-                                                                        "Predicate": "DontCountHits == 0 And IsRefresh == 0 And Title != "
+                                                                        "Predicate": "DontCountHits == 0 AND IsRefresh == 0 AND Title != \"\"",
+                                                                        "Pushdown": "True"
                                                                     },
                                                                     {
                                                                         "Inputs": [],

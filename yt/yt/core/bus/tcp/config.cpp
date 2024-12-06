@@ -15,6 +15,20 @@ void TMultiplexingBandConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("network_to_tos_level", &TThis::NetworkToTosLevel)
         .Default();
+
+    registrar.Parameter("min_multiplexing_parallelism", &TThis::MinMultiplexingParallelism)
+        .GreaterThanOrEqual(1)
+        .Default(DefaultMinMultiplexingParallelism);
+
+    registrar.Parameter("max_multiplexing_parallelism", &TThis::MaxMultiplexingParallelism)
+        .GreaterThanOrEqual(1)
+        .Default(DefaultMaxMultiplexingParallelism);
+
+    registrar.Postprocessor([] (TThis* config) {
+        THROW_ERROR_EXCEPTION_UNLESS(
+            config->MinMultiplexingParallelism <= config->MaxMultiplexingParallelism,
+            "\"min_multiplexing_parallelism\" exceeds \"max_multiplexing_parallelism\"");
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

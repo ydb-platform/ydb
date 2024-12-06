@@ -4,9 +4,9 @@
 #include "pythonic/include/itertools/common.hpp"
 #include "pythonic/include/types/NoneType.hpp"
 #include "pythonic/include/types/tuple.hpp"
+#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/utils/int_.hpp"
 #include "pythonic/include/utils/iterator.hpp"
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/utils/seq.hpp"
 
 #include <utility>
@@ -21,15 +21,15 @@ namespace builtins
 
     template <class Operator, class... Iters>
     struct map_res {
-      using type = decltype(
-          std::declval<Operator>()(std::declval<typename std::iterator_traits<
+      using type = decltype(std::declval<Operator>()(
+          std::declval<typename std::iterator_traits<
               typename Iters::iterator>::value_type>()...));
     };
 
     template <class... Iters>
     struct map_res<types::none_type, Iters...> {
-      using type =
-          decltype(types::make_tuple(std::declval<typename std::iterator_traits<
+      using type = decltype(types::make_tuple(
+          std::declval<typename std::iterator_traits<
               typename Iters::iterator>::value_type>()...));
     };
 
@@ -98,23 +98,24 @@ namespace builtins
       map() = default;
       // Use an extra template to enable forwarding
       template <class... Types>
-      map(Operator const &_op, Types &&... _iters);
+      map(Operator const &_op, Types &&..._iters);
 
       iterator &begin();
       iterator const &begin() const;
       iterator const &end() const;
     };
-  }
+  } // namespace details
 
   template <typename Operator, typename... Iter>
-  auto map(Operator &&_op, Iter &&... iters) -> details::map<
-      typename std::remove_cv<
-          typename std::remove_reference<Operator>::type>::type,
-      typename types::iterator<typename std::remove_cv<
-          typename std::remove_reference<Iter>::type>::type>::type...>;
+  auto map(Operator &&_op, Iter &&...iters)
+      -> details::map<
+          typename std::remove_cv<
+              typename std::remove_reference<Operator>::type>::type,
+          typename types::iterator<typename std::remove_cv<
+              typename std::remove_reference<Iter>::type>::type>::type...>;
 
   DEFINE_FUNCTOR(pythonic::builtins, map);
-}
+} // namespace builtins
 
 namespace types
 {
@@ -135,7 +136,7 @@ namespace types
     // selected
     static constexpr long value = (_head < _tail ? _head : _tail);
   };
-}
+} // namespace types
 PYTHONIC_NS_END
 
 /* type inference stuff  {*/

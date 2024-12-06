@@ -173,10 +173,6 @@ SANDBOX_RUN_TEST_YT_TOKEN_VALUE_NAME = 'YA_MAKE_SANDBOX_RUN_TEST_YT_TOKEN'
 # global resources
 ANDROID_AVD_ROOT = 'ANDROID_AVD_RESOURCE_GLOBAL'
 ANDROID_SDK_ROOT = 'ANDROID_SDK_RESOURCE_GLOBAL'
-COVERAGE_PUSH_TOOL_LOCAL = 'USE_SYSTEM_COVERAGE_PUSH_TOOL'
-COVERAGE_PUSH_TOOL_RESOURCE = 'COVERAGE_PUSH_TOOL_RESOURCE_GLOBAL'
-COVERAGE_PUSH_TOOL_LB_LOCAL = 'USE_SYSTEM_COVERAGE_PUSH_TOOL_LB'
-COVERAGE_PUSH_TOOL_LB_RESOURCE = 'COVERAGE_PUSH_TOOL_LB_RESOURCE_GLOBAL'
 FLAKE8_PY2_RESOURCE = 'FLAKE8_PY2_RESOURCE_GLOBAL'
 FLAKE8_PY3_RESOURCE = 'FLAKE8_PY3_RESOURCE_GLOBAL'
 GO_TOOLS_RESOURCE = 'GO_TOOLS_RESOURCE_GLOBAL'
@@ -184,6 +180,7 @@ JSTYLE_RUNNER_LIB = 'JSTYLE_LIB_RESOURCE_GLOBAL'
 NODEJS_RESOURCE = 'NODEJS_RESOURCE_GLOBAL'
 NYC_RESOURCE = 'NYC_RESOURCE_GLOBAL'
 RUFF_RESOURCE = 'RUFF_RESOURCE_GLOBAL'
+CLANG_FORMAT_RESOURCE = 'CLANG_FORMAT_RESOURCE_GLOBAL'
 
 # test_tool resource for host platform.
 # source - build/platform/test_tool/host.ya.make.inc.
@@ -436,23 +433,34 @@ class ServiceTags(Enum):
     AnyTag = "ya:anytag"
 
 
+# Linter names must match `NAME` set in `_ADD_*_LINTER_CHECK`
 class PythonLinterName(Enum):
-    Flake8 = "flake8"
-    Py2Flake8 = "py2_flake8"
     Black = "black"
     DummyLinter = "dummy_linter"
+    Flake8 = "flake8"
+    Py2Flake8 = "py2_flake8"
+    Ruff = "ruff"
 
 
 class CppLinterName(Enum):
     ClangFormat = "clang_format"
-    # kept for compatibility
-    # TODO delete along with the record in default_configs.json
-    DoNotUse = "clang-format"
 
 
 class DefaultLinterConfig(Enum):
-    Python = "build/config/tests/py_style/default_configs.json"
     Cpp = "build/config/tests/cpp_style/default_configs.json"
+    Python = "build/config/tests/py_style/default_configs.json"
+
+
+LINTER_CONFIG_TYPES = {
+    CppLinterName.ClangFormat: (".clang-format",),
+    PythonLinterName.Black: ("pyproject.toml",),
+    PythonLinterName.Ruff: ("pyproject.toml", "ruff.toml"),
+}
+
+AUTOINCLUDE_PATHS = (
+    'build/conf/autoincludes.json',
+    'build/internal/conf/autoincludes.json',
+)
 
 
 class Status(object):

@@ -10,7 +10,7 @@ PEERDIR(
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/common
     ydb/library/yql/dq/proto
-    ydb/library/yql/minikql/computation
+    yql/essentials/minikql/computation
     ydb/library/yql/utils/actors
     ydb/library/services
 )

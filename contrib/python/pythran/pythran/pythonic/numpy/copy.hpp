@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/copy.hpp"
 
+#include "pythonic/types/ndarray.hpp"
 #include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/numpy_conversion.hpp"
-#include "pythonic/types/ndarray.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -15,7 +15,8 @@ namespace numpy
   template <class E>
   typename std::enable_if<
       !types::is_array<E>::value && !types::is_dtype<E>::value,
-      types::ndarray<typename E::dtype, types::array<long, E::value>>>::type
+      types::ndarray<typename E::dtype,
+                     types::array_tuple<long, E::value>>>::type
   copy(E const &v)
   {
     return {v};
@@ -52,7 +53,7 @@ namespace numpy
   {
     return a.arg.copy();
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

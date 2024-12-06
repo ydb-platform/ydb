@@ -154,11 +154,12 @@ protected:
     DEFINE_RPC_SERVICE_METHOD(TSupports##method, method) \
     { \
         NYPath::TTokenizer tokenizer(GetRequestTargetYPath(context->RequestHeader())); \
-        if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) { \
+        tokenizer.Advance(); \
+        tokenizer.Skip(NYPath::ETokenType::Ampersand); \
+        if (tokenizer.GetType() == NYPath::ETokenType::EndOfStream) { \
             method##Self(request, response, context); \
             return; \
         } \
-        tokenizer.Skip(NYPath::ETokenType::Ampersand); \
         if (tokenizer.GetType() != NYPath::ETokenType::Slash) { \
             onPathError \
             return; \

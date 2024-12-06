@@ -2,10 +2,10 @@
 
 #include <ydb/library/mkql_proto/ut/helpers/helpers.h>
 
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 #include <google/protobuf/text_format.h>

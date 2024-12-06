@@ -35,8 +35,8 @@ import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tenant_pool.proto";
 import "ydb/core/protos/tenant_slot_broker.proto";
 import "ydb/library/actors/protos/interconnect.proto";
-import "ydb/library/yql/core/file_storage/proto/file_storage.proto";
-import "ydb/library/yql/providers/common/proto/gateways_config.proto";
+import "yql/essentials/core/file_storage/proto/file_storage.proto";
+import "yql/essentials/providers/common/proto/gateways_config.proto";
 
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
@@ -287,6 +287,7 @@ message TBlobStorageConfig {
 
         // some extra settings
         optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically
+        optional bool AutomaticBootstrap = 9; // whether bootstrap should be performed automatically; PROHIBITED for production
 
         // filled in by config parser, not by user; required for automatic static group creation
         repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 5;
@@ -538,6 +539,7 @@ message TMonitoringConfig {
     optional string MonitoringCertificateFile = 15;
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
+    optional string InactivityTimeout = 18 [default = "2m"];
 }
 
 message TRestartsCountConfig {
@@ -634,6 +636,7 @@ message TLimiterConfig {
 message TGroupedMemoryLimiterConfig {
     optional bool Enabled = 1 [default = true];
     optional uint64 MemoryLimit = 2;
+    optional uint64 HardMemoryLimit = 3;
 }
 
 message TExternalIndexConfig {
@@ -1362,6 +1365,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 300 }];
+        optional uint64 HugeDefragFreeSpaceBorderPerMille = 13 [(ControlOptions) = {
+            Description: "Huge garbage threshold = DefaultHugeGarbagePerMille * min((free space share) / (this param), 1)",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 260 }];
     }
 
     message TTabletControls {
@@ -1395,6 +1403,38 @@ message TImmediateControlsConfig {
             DefaultValue: 60000 }];
         optional uint64 MaxNumOfSlowDisks = 5 [(ControlOptions) = {
             Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations",
+            MinValue: 1,
+            MaxValue: 2,
+            DefaultValue: 2 }];
+
+        optional uint64 SlowDiskThresholdHDD = 6 [(ControlOptions) = {
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille, option for HDD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 2000 }];
+        optional uint64 PredictedDelayMultiplierHDD = 7 [(ControlOptions) = {
+            Description: "Predicted time of VDisk's response multiplier, promille, option for HDD",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+        optional uint64 MaxNumOfSlowDisksHDD = 8 [(ControlOptions) = {
+            Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations, option for HDD",
+            MinValue: 1,
+            MaxValue: 2,
+            DefaultValue: 2 }];
+
+        optional uint64 SlowDiskThresholdSSD = 9 [(ControlOptions) = {
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille, option for SSD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 2000 }];
+        optional uint64 PredictedDelayMultiplierSSD = 10 [(ControlOptions) = {
+            Description: "Predicted time of VDisk's response multiplier, promille, option for SSD",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+        optional uint64 MaxNumOfSlowDisksSSD = 11 [(ControlOptions) = {
+            Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations, option for SSD",
             MinValue: 1,
             MaxValue: 2,
             DefaultValue: 2 }];
@@ -1450,16 +1490,19 @@ message TAuditConfig {
 
     message TStderrBackend {
         optional EFormat Format = 1 [default = JSON];
+        optional string LogJsonEnvelope = 2; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
     message TFileBackend {
         optional EFormat Format = 1 [default = JSON];
         optional string FilePath = 2;
+        optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
     message TUnifiedAgentBackend {
         optional EFormat Format = 1 [default = JSON];
         optional string LogName = 2;
+        optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
     optional TStderrBackend StderrBackend = 1;
@@ -1623,7 +1666,7 @@ message TColumnShardConfig {
         }
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
-    optional bool DisabledOnSchemeShard = 2 [default = true];
+    optional bool DisabledOnSchemeShard = 2 [default = false];
     optional bool IndexationEnabled = 4 [default = true];
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
@@ -1644,6 +1687,7 @@ message TColumnShardConfig {
     message TRepairInfo {
         optional string ClassName = 1;
         optional string Description = 2;
+        optional bool DryRun = 3;
     }
     repeated TRepairInfo Repairs = 15;
 
@@ -1657,6 +1701,9 @@ message TColumnShardConfig {
     optional uint32 SmallPortionDetectSizeLimit = 24 [default = 1048576];  // 1 << 20
     optional bool ColumnChunksV0Usage = 25 [default = true];
     optional bool ColumnChunksV1Usage = 26 [default = true];
+    optional uint64 MemoryLimitScanPortion = 27 [default = 100000000];
+    optional string ReaderClassName = 28;
+    optional bool AllowNullableColumnsInPK = 29 [default = false];
 }
 
 message TSchemeShardConfig {

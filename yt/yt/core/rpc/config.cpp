@@ -223,7 +223,7 @@ void TServiceDiscoveryEndpointsConfig::Register(TRegistrar registrar)
     registrar.Parameter("use_ipv4", &TThis::UseIPv4)
         .Default(false);
     registrar.Parameter("use_ipv6", &TThis::UseIPv6)
-        .Default(false);
+        .Default(true);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->Cluster.has_value() == !config->Clusters.empty()) {

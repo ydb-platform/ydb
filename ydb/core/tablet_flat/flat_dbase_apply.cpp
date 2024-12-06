@@ -97,6 +97,9 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
 
         Y_ABORT_UNLESS(ui32(cache) <= 2, "Invalid pages cache policy value");
+        if (family.Cache != cache && cache == ECache::Ever) {
+            ChangeTableSetting(table, tableInfo.PendingCacheEnable, true);
+        }
         changes |= ChangeTableSetting(table, family.Cache, cache);
         changes |= ChangeTableSetting(table, family.Codec, codec);
         changes |= ChangeTableSetting(table, family.Small, small);
@@ -113,7 +116,17 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         auto &room = tableInfo.Rooms[delta.GetRoomId()];
 
         ui8 main = delta.HasMain() ? delta.GetMain() : room.Main;
-        ui8 blobs = delta.HasBlobs() ? delta.GetBlobs() : room.Blobs;
+        TVector<ui8> blobs;
+        if (delta.ExternalBlobsSize() > 0) {
+            for (auto blob : delta.GetExternalBlobs()) {
+                blobs.push_back(blob);
+            }
+        } else if (delta.HasBlobs()) {
+            // Fallback to old format
+            blobs = {static_cast<ui8>(delta.GetBlobs())};
+        } else {
+            blobs = room.Blobs;
+        }
         ui8 outer = delta.HasOuter() ? delta.GetOuter() : room.Outer;
 
         changes |= ChangeTableSetting(table, room.Main, main);

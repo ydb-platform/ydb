@@ -1,18 +1,18 @@
 #include <ydb/library/yql/providers/dq/actors/execution_helpers.h>
 #include <ydb/library/yql/providers/dq/runtime/task_command_executor.h>
 
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
-#include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
-#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/tools/dq/worker_job/dq_worker.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 

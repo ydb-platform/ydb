@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
@@ -53,7 +54,6 @@ private:
     const TActorId TabletActorId;
     std::function<void(const TActorContext& ctx)> ShardCallback;
     TActor* Actor = nullptr;
-    std::unordered_map<ui64, TString> PathIdTiering;
     TManagers Managers;
 
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
@@ -69,13 +69,10 @@ public:
     {
     }
     TActorId GetActorId() const;
-    THashMap<ui64, NOlap::TTiering> GetTiering() const;
     void TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshot, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
-    void EnablePathId(const ui64 pathId, const TString& tieringId) {
-        PathIdTiering.emplace(pathId, tieringId);
+    void EnablePathId(const ui64 /*pathId*/, const THashSet<TString>& /*usedTiers*/) {
     }
-    void DisablePathId(const ui64 pathId) {
-        PathIdTiering.erase(pathId);
+    void DisablePathId(const ui64 /*pathId*/) {
     }
 
     bool IsReady() const {

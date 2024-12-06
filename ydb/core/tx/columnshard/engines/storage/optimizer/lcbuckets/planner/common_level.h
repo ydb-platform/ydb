@@ -86,7 +86,7 @@ public:
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
         for (auto&& i : Portions) {
-            if (locksManager->IsLocked(*i.GetPortion())) {
+            if (locksManager->IsLocked(*i.GetPortion(), NDataLocks::ELockCategory::Compaction)) {
                 return true;
             }
         }

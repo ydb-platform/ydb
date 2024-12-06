@@ -37,16 +37,16 @@ namespace NActors {
     class TEventHolderPool {
         using TDestroyCallback = std::function<void(THolder<IEventBase>)>;
 
-        static constexpr size_t MaxFreeQueueItems = 32;
-        static constexpr size_t FreeQueueTrimThreshold = MaxFreeQueueItems * 2;
-        static constexpr ui64 MaxBytesPerMessage = 10 * 1024 * 1024;
-
         TIntrusivePtr<TInterconnectProxyCommon> Common;
         std::list<TEventHolder> Cache;
         THolder<TEvFreeItems> PendingFreeEvent;
         TDestroyCallback DestroyCallback;
 
     public:
+        static constexpr size_t MaxFreeQueueItems = 32;
+        static constexpr size_t FreeQueueTrimThreshold = MaxFreeQueueItems * 2;
+        static constexpr ui64 MaxBytesPerMessage = 10 * 1024 * 1024;
+
         TEventHolderPool(TIntrusivePtr<TInterconnectProxyCommon> common,
                 TDestroyCallback destroyCallback)
             : Common(std::move(common))

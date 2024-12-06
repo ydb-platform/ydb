@@ -25,8 +25,8 @@ namespace builtins
     types::none<V> setdefault(types::dict<K, V> &&d, W const &k);
 
     DEFINE_FUNCTOR(pythonic::builtins::dict, setdefault);
-  }
-}
+  } // namespace dict
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>
 
@@ -42,6 +43,7 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetRangeReadRows(tableStats.RangeReadRows);
 
     stats->SetPartCount(tableStats.PartCount);
+    stats->SetHasSchemaChanges(tableStats.HasSchemaChanges);
 
     auto* storagePoolsStats = stats->MutableStoragePools()->MutablePoolsUsage();
     for (const auto& [poolKind, stats] : tableStats.StoragePoolsStats) {

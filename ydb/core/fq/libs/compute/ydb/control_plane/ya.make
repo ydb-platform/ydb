@@ -21,8 +21,8 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/library/db_pool/protos
     ydb/library/grpc/actor_client
-    ydb/library/yql/public/issue
-    ydb/library/yql/utils
+    yql/essentials/public/issue
+    yql/essentials/utils
     ydb/library/yql/utils/actors
     ydb/public/api/grpc
     ydb/public/api/grpc/draft

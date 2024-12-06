@@ -2514,7 +2514,7 @@ public:
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
             node->SetDown(Down);
-            db.Table<Schema::Node>().Key(NodeId).Update(NIceDb::TUpdate<Schema::Node::Down>(Down));
+            db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(Down, false);
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
             jsonOperation["Down"] = Down;

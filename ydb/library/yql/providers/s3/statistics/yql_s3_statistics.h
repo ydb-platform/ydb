@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_statistics.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_statistics.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <map>
 

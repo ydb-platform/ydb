@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_FFT_FFT_HPP
 #define PYTHONIC_INCLUDE_NUMPY_FFT_FFT_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/ndarray.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -25,31 +25,34 @@ namespace numpy
   namespace fft
   {
 
-    template <class T, class pS, class N = types::none_type, class Norm = types::none_type>
+    template <class T, class pS, class N = types::none_type,
+              class Norm = types::none_type>
     types::ndarray<
         typename std::enable_if<types::is_complex<T>::value, T>::type,
-        types::array<long, std::tuple_size<pS>::value>>
-    fft(types::ndarray<T, pS> const &a, N const & n = {}, long axis = -1,
+        types::array_tuple<long, std::tuple_size<pS>::value>>
+    fft(types::ndarray<T, pS> const &a, N const &n = {}, long axis = -1,
         Norm const &norm = {});
 
-    template <class T, class pS, class N = types::none_type, class Norm = types::none_type>
+    template <class T, class pS, class N = types::none_type,
+              class Norm = types::none_type>
     types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
                                            std::complex<T>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
-    fft(types::ndarray<T, pS> const &a, N const & n = {}, long axis = -1,
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
+    fft(types::ndarray<T, pS> const &a, N const &n = {}, long axis = -1,
         Norm const &norm = {});
 
-    template <class T, class pS, class N = types::none_type, class Norm = types::none_type>
+    template <class T, class pS, class N = types::none_type,
+              class Norm = types::none_type>
     types::ndarray<typename std::enable_if<std::is_integral<T>::value,
                                            std::complex<double>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
-    fft(types::ndarray<T, pS> const &a, N const & n = {}, long axis = -1,
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
+    fft(types::ndarray<T, pS> const &a, N const &n = {}, long axis = -1,
         Norm const &norm = {});
 
     NUMPY_EXPR_TO_NDARRAY0_DECL(fft);
     DEFINE_FUNCTOR(pythonic::numpy::fft, fft);
-  }
-}
+  } // namespace fft
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

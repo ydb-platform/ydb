@@ -63,11 +63,12 @@ namespace numpy
                                     std::get<I>(from).end(), out_iter),
                1)...};
         } else {
-          types::array<typename A::value_type::const_iterator, sizeof...(I)>
+          types::array_tuple<typename A::value_type::const_iterator,
+                             sizeof...(I)>
               ifroms = {std::get<I>(from).begin()...};
 
           for (auto &&iout : out) {
-            types::array<
+            types::array_tuple<
                 typename std::iterator_traits<
                     typename A::value_type::const_iterator>::value_type,
                 sizeof...(I)>
@@ -134,11 +135,11 @@ namespace numpy
   } // namespace details
 
   template <class... Types>
-  auto
-  concatenate(std::tuple<Types...> const &args, long axis) -> types::ndarray<
-      typename __combined<typename std::decay<Types>::type::dtype...>::type,
-      types::array<long,
-                   std::tuple_element<0, std::tuple<Types...>>::type::value>>
+  auto concatenate(std::tuple<Types...> const &args, long axis)
+      -> types::ndarray<
+          typename __combined<typename std::decay<Types>::type::dtype...>::type,
+          types::array_tuple<
+              long, std::tuple_element<0, std::tuple<Types...>>::type::value>>
   {
     using T =
         typename __combined<typename std::decay<Types>::type::dtype...>::type;
@@ -149,8 +150,8 @@ namespace numpy
 
     types::ndarray<
         typename __combined<typename std::decay<Types>::type::dtype...>::type,
-        types::array<long,
-                     std::decay<decltype(std::get<0>(args))>::type::value>>
+        types::array_tuple<
+            long, std::decay<decltype(std::get<0>(args))>::type::value>>
         result{shape, types::none_type{}};
     details::concatenate_helper<N>()(
         result, args, axis, utils::make_index_sequence<sizeof...(Types)>{});
@@ -158,7 +159,7 @@ namespace numpy
   }
 
   template <class E, size_t M, class V>
-  types::ndarray<typename E::dtype, types::array<long, E::value>>
+  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>
   concatenate(types::array_base<E, M, V> const &args, long axis)
   {
     using T = typename E::dtype;
@@ -166,7 +167,7 @@ namespace numpy
     auto shape = sutils::getshape(std::get<0>(args));
     shape[axis] = details::concatenate_axis_size(
         args, axis, utils::make_index_sequence<M>{});
-    types::ndarray<typename E::dtype, types::array<long, E::value>> out(
+    types::ndarray<typename E::dtype, types::array_tuple<long, E::value>> out(
         shape, types::none_type{});
     details::concatenate_helper<N>()(out, args, axis,
                                      utils::make_index_sequence<M>{});
@@ -174,11 +175,11 @@ namespace numpy
   }
 
   template <class E>
-  types::ndarray<typename E::dtype, types::array<long, E::value>>
+  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>
   concatenate(types::list<E> const &ai, long axis)
   {
     using return_type =
-        types::ndarray<typename E::dtype, types::array<long, E::value>>;
+        types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>;
     using T = typename return_type::dtype;
     auto constexpr N = return_type::value;
     auto shape = sutils::getshape(ai[0]);

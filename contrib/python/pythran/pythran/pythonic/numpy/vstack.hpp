@@ -19,17 +19,18 @@ namespace numpy
   }
 
   template <class ArraySequence>
-  auto vstack(ArraySequence &&seq) -> typename std::enable_if<
-      (impl::vstack_helper<ArraySequence>::value == 1),
-      decltype(std::declval<impl::vstack_helper<ArraySequence>>().reshape(
-          std::declval<types::array<long, 2>>()))>::type
+  auto vstack(ArraySequence &&seq) ->
+      typename std::enable_if<
+          (impl::vstack_helper<ArraySequence>::value == 1),
+          decltype(std::declval<impl::vstack_helper<ArraySequence>>().reshape(
+              std::declval<types::array_tuple<long, 2>>()))>::type
   {
     auto &&temp = concatenate(std::forward<ArraySequence>(seq), 0);
     long const seq_size = seq.size(), temp_size = temp.size();
-    types::array<long, 2> new_shape{{seq_size, temp_size / seq_size}};
+    types::array_tuple<long, 2> new_shape{{seq_size, temp_size / seq_size}};
     return temp.reshape(new_shape);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

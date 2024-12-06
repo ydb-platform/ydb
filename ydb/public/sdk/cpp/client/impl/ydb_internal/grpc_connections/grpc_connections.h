@@ -15,7 +15,7 @@
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/client/ydb_extension/extension.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NYdb {
 

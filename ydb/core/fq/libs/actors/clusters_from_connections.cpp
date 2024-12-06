@@ -1,9 +1,9 @@
 #include "clusters_from_connections.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.h>
-#include <ydb/library/yql/utils/url_builder.h>
+#include <yql/essentials/utils/url_builder.h>
 #include <ydb/library/actors/http/http.h>
 
 #include <util/generic/hash.h>
@@ -41,7 +41,8 @@ void FillClusterAuth(TClusterConfig& clusterCfg,
 void FillPqClusterConfig(NYql::TPqClusterConfig& clusterConfig,
         const TString& name, bool useBearerForYdb,
         const TString& authToken, const THashMap<TString, TString>& accountIdSignatures,
-        const FederatedQuery::DataStreams& ds) {
+        const FederatedQuery::DataStreams& ds,
+        const TString& readGroup) {
     clusterConfig.SetName(name);
     if (ds.endpoint()) {
         clusterConfig.SetEndpoint(ds.endpoint());
@@ -52,6 +53,7 @@ void FillPqClusterConfig(NYql::TPqClusterConfig& clusterConfig,
     clusterConfig.SetAddBearerToToken(useBearerForYdb);
     clusterConfig.SetClusterType(TPqClusterConfig::CT_DATA_STREAMS);
     clusterConfig.SetSharedReading(ds.shared_reading());
+    clusterConfig.SetReadGroup(readGroup);
     FillClusterAuth(clusterConfig, ds.auth(), authToken, accountIdSignatures);
 }
 
@@ -177,13 +179,14 @@ void FillGenericClusterConfig<FederatedQuery::PostgreSQLCluster>(
 
 NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name,
         bool useBearerForYdb, const TString& authToken,
-        const TString& accountSignature, const FederatedQuery::DataStreams& ds) {
+        const TString& accountSignature, const FederatedQuery::DataStreams& ds,
+        const TString& readGroup) {
     NYql::TPqClusterConfig cluster;
     THashMap<TString, TString> accountIdSignatures;
     if (ds.auth().has_service_account()) {
         accountIdSignatures[ds.auth().service_account().id()] = accountSignature;
     }
-    FillPqClusterConfig(cluster, name, useBearerForYdb, authToken, accountIdSignatures, ds);
+    FillPqClusterConfig(cluster, name, useBearerForYdb, authToken, accountIdSignatures, ds, readGroup);
     return cluster;
 }
 
@@ -255,7 +258,7 @@ void AddClustersFromConnections(
         case FederatedQuery::ConnectionSetting::kDataStreams: {
             const auto& ds = conn.content().setting().data_streams();
             auto* clusterCfg = gatewaysConfig.MutablePq()->AddClusterMapping();
-            FillPqClusterConfig(*clusterCfg, connectionName, common.GetUseBearerForYdb(), authToken, accountIdSignatures, ds);
+            FillPqClusterConfig(*clusterCfg, connectionName, common.GetUseBearerForYdb(), authToken, accountIdSignatures, ds, conn.meta().id());
             clusters.emplace(connectionName, PqProviderName);
             break;
         }
@@ -299,6 +302,16 @@ void AddClustersFromConnections(
                 NYql::NConnector::NApi::EDataSourceKind::MYSQL,
                 authToken,
                 accountIdSignatures);
+            clusters.emplace(connectionName, GenericProviderName);
+            break;
+        }
+        case FederatedQuery::ConnectionSetting::kLogging: {
+            const auto& connection = conn.content().setting().logging();
+            auto* clusterCfg = gatewaysConfig.MutableGeneric()->AddClusterMapping();
+            clusterCfg->SetKind(NYql::NConnector::NApi::EDataSourceKind::LOGGING);
+            clusterCfg->SetName(connectionName);
+            clusterCfg->mutable_datasourceoptions()->insert({"folder_id", connection.folder_id()});
+            FillClusterAuth(*clusterCfg, connection.auth(), authToken, accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
             break;
         }

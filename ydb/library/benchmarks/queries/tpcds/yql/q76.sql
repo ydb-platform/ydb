@@ -7,7 +7,7 @@ select  channel, col_name, d_year, d_qoy, i_category, COUNT(*) sales_cnt, SUM(ex
          FROM {{store_sales}} as store_sales
          cross join {{item}} as item
          cross join {{date_dim}} as date_dim
-         WHERE ss_addr_sk IS NULL
+         WHERE ss_store_sk IS NULL
            AND ss_sold_date_sk=d_date_sk
            AND ss_item_sk=i_item_sk
         UNION ALL
@@ -15,7 +15,7 @@ select  channel, col_name, d_year, d_qoy, i_category, COUNT(*) sales_cnt, SUM(ex
          FROM {{web_sales}} as web_sales
          cross join {{item}} as item
          cross join {{date_dim}} as date_dim
-         WHERE ws_web_page_sk IS NULL
+         WHERE ws_ship_customer_sk IS NULL
            AND ws_sold_date_sk=d_date_sk
            AND ws_item_sk=i_item_sk
         UNION ALL
@@ -23,7 +23,7 @@ select  channel, col_name, d_year, d_qoy, i_category, COUNT(*) sales_cnt, SUM(ex
          FROM {{catalog_sales}} as catalog_sales
          cross join {{item}} as item
          cross join {{date_dim}} as date_dim
-         WHERE cs_warehouse_sk IS NULL
+         WHERE cs_ship_addr_sk IS NULL
            AND cs_sold_date_sk=d_date_sk
            AND cs_item_sk=i_item_sk) foo
 GROUP BY channel, col_name, d_year, d_qoy, i_category

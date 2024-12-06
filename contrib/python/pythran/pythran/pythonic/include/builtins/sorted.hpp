@@ -25,7 +25,7 @@ namespace builtins
   sorted(Iterable &&seq, types::none_type const &key, bool reverse = false);
 
   DEFINE_FUNCTOR(pythonic::builtins, sorted);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

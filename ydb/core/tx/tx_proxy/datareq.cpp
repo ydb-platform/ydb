@@ -24,9 +24,9 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/base/row_version.h>
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>

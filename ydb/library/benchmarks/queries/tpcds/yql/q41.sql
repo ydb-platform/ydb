@@ -12,7 +12,7 @@ $item_cnt_by_manufact = (select i_manufact, count(*) as item_cnt
         (i_category = 'Women' and
         (i_color = 'brown' or i_color = 'honeydew') and
         (i_units = 'Bunch' or i_units = 'Ton') and
-        (i_size = 'petite' or i_size = 'large')
+        (i_size = 'N/A' or i_size = 'small')
         ) or
         (i_category = 'Men' and
         (i_color = 'floral' or i_color = 'deep') and
@@ -33,7 +33,7 @@ $item_cnt_by_manufact = (select i_manufact, count(*) as item_cnt
         (i_category = 'Women' and
         (i_color = 'cyan' or i_color = 'papaya') and
         (i_units = 'Cup' or i_units = 'Dram') and
-        (i_size = 'petite' or i_size = 'large')
+        (i_size = 'N/A' or i_size = 'small')
         ) or
         (i_category = 'Men' and
         (i_color = 'orange' or i_color = 'frosted') and

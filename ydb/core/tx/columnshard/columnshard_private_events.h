@@ -58,10 +58,43 @@ struct TEvPrivate {
         EvWritePortionResult,
         EvStartCompaction,
 
+        EvRegisterGranuleDataAccessor,
+        EvUnregisterGranuleDataAccessor,
+        EvAskTabletDataAccessors,
+        EvAskServiceDataAccessors,
+        EvAddPortionDataAccessor,
+        EvRemovePortionDataAccessor,
+        EvMetadataAccessorsInfo,
+
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
+    private:
+        const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
+        const ui64 Generation;
+        NOlap::TDataAccessorsResult Result;
+
+    public:
+        const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& GetProcessor() const {
+            return Processor;
+        }
+        ui64 GetGeneration() const {
+            return Generation;
+        }
+        NOlap::TDataAccessorsResult ExtractResult() {
+            return std::move(Result);
+        }
+
+        TEvMetadataAccessorsInfo(
+            const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen, NOlap::TDataAccessorsResult&& result)
+            : Processor(processor)
+            , Generation(gen)
+            , Result(std::move(result)) {
+        }
+    };
 
     class TEvStartCompaction: public NActors::TEventLocal<TEvStartCompaction, EvStartCompaction> {
     private:

@@ -13,6 +13,6 @@ namespace builtins
   {
     USING_FUNCTOR(pop, pythonic::__dispatch__::functor::pop);
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

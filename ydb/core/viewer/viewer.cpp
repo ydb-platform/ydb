@@ -21,7 +21,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <util/system/hostname.h>
 #include <ydb/library/actors/core/mon.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 
 namespace NKikimr::NViewer {
@@ -458,11 +458,15 @@ private:
                 response << "HTTP/1.1 200 Ok\r\n";
                 response << "Content-Type: " << type << "\r\n";
                 response << "Content-Length: " << blob.size() << "\r\n";
-                response << "Date: " << TInstant::Now().ToRfc822String() << "\r\n";
-                if (lastModified) {
-                    response << "Last-Modified: " << lastModified << "\r\n";
+                if (name == "/monitoring/index.html") {
+                    response << "Cache-Control: no-store,max-age=0\r\n"; // do not cache
+                } else {
+                    response << "Date: " << TInstant::Now().ToRfc822String() << "\r\n";
+                    if (lastModified) {
+                        response << "Last-Modified: " << lastModified << "\r\n";
+                    }
+                    response << "Cache-Control: max-age=604800\r\n"; // one week
                 }
-                response << "Cache-Control: max-age=604800\r\n"; // one week
                 response << "\r\n";
                 response.Write(blob.data(), blob.size());
                 Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));

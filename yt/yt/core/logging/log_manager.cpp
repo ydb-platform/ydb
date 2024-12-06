@@ -83,7 +83,7 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
 
 static constexpr auto DiskProfilingPeriod = TDuration::Minutes(5);
 static constexpr auto AnchorProfilingPeriod = TDuration::Seconds(15);
@@ -410,8 +410,6 @@ public:
             return;
         }
 
-        EnsureStarted();
-
         TConfigEvent event{
             .Instant = GetCpuInstant(),
             .Config = std::move(config),
@@ -421,6 +419,7 @@ public:
         auto future = event.Promise.ToFuture();
 
         PushEvent(std::move(event));
+        EnsureStarted();
 
         DequeueExecutor_->ScheduleOutOfBand();
 

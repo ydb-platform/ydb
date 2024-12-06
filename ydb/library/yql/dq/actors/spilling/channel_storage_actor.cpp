@@ -3,7 +3,7 @@
 #include "spilling.h"
 #include "spilling_file.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -129,7 +129,7 @@ private:
 
         auto opBegin = TInstant::Now();
 
-        auto writingBlobInfo = TWritingBlobInfo{msg.Blob_.size(), std::move(msg.Promise_), opBegin};
+        auto writingBlobInfo = TWritingBlobInfo{msg.Blob_.Size(), std::move(msg.Promise_), opBegin};
         WritingBlobs_.emplace(msg.BlobId_, std::move(writingBlobInfo));
 
         SendInternal(SpillingActorId_, new TEvDqSpilling::TEvWrite(msg.BlobId_, std::move(msg.Blob_)));

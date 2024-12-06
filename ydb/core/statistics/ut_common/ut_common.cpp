@@ -106,7 +106,7 @@ TString CreateDatabase(TTestEnv& env, const TString& databaseName,
     return fullDbName;
 }
 
-TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName) {
+TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName, size_t nodeCount) {
     auto& runtime = *env.GetServer().GetRuntime();
     auto fullDbName = Sprintf("/Root/%s", databaseName.c_str());
 
@@ -124,7 +124,7 @@ TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, con
     UNIT_ASSERT(response.operation().ready());
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
-    env.GetTenants().Run(fullDbName, 0);
+    env.GetTenants().Run(fullDbName, nodeCount);
 
     if (!env.GetServer().GetSettings().UseRealThreads) {
         runtime.SimulateSleep(TDuration::Seconds(1));

@@ -8,7 +8,7 @@ TSensorsOwner может владеть другими TSensorsOwner. Имеет
 
 * Простейший пример использования:
 ```cpp
-sensorsOwner.Inc("/my_simple_counter", 1);
+sensorsOwner.Increment("/my_simple_counter", 1);
 ```
 Когда в конкретном месте нужно проинкрементить всего один счетчик.
 Объект счетчика в этом случае создатся один раз и будет храниться внутри sensorsOwner.

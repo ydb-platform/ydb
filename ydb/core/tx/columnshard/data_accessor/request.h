@@ -14,6 +14,7 @@ private:
     THashMap<ui64, std::vector<TPortionDataAccessor>> AccessorsByPathId;
     THashMap<ui64, TPortionDataAccessor> PortionsById;
     std::vector<TPortionDataAccessor> Portions;
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
 public:
     const std::vector<TPortionDataAccessor>& GetPortions() const {
@@ -60,6 +61,16 @@ public:
 
     bool HasErrors() const {
         return ErrorsByPathId.size();
+    }
+
+    void SetResourcesGuard(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) {
+        AFL_VERIFY(!ResourcesGuard);
+        AFL_VERIFY(guard);
+    }
+
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& ExtractResourcesGuard() {
+        AFL_VERIFY(ResourcesGuard);
+        return std::move(ResourcesGuard);
     }
 };
 

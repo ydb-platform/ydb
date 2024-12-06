@@ -944,8 +944,9 @@ private:
     const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
     const ui64 Generation;
     virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
+        result.SetResourcesGuard(std::move(guard));
         NActors::TActivationContext::Send(
-            TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation, std::move(result), std::move(guard)));
+            TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation, std::move(result)));
     }
 
 public:
@@ -1115,7 +1116,7 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActor
 void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
     ev->Get()->GetProcessor()->ApplyResult(
-        ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>(), ev->Get()->ExtractResourcesGuard());
+        ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
     SetupMetadata();
 }
 

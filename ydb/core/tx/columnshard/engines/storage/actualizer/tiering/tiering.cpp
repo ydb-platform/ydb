@@ -237,8 +237,7 @@ namespace {
 class TActualizationReply: public IMetadataAccessorResultProcessor {
 private:
     std::weak_ptr<TTieringActualizer> TieringActualizer;
-    virtual void DoApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& /*engine*/,
-        std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& /*resourcesGuard*/) override {
+    virtual void DoApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& /*engine*/) override {
         auto locked = TieringActualizer.lock();
         if (!locked) {
             return;

@@ -76,7 +76,6 @@ struct TEvPrivate {
         const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
         const ui64 Generation;
         NOlap::TDataAccessorsResult Result;
-        std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
     public:
         const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& GetProcessor() const {
@@ -88,18 +87,12 @@ struct TEvPrivate {
         NOlap::TDataAccessorsResult ExtractResult() {
             return std::move(Result);
         }
-        std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& ExtractResourcesGuard() {
-            AFL_VERIFY(ResourcesGuard);
-            return std::move(ResourcesGuard);
-        }
 
         TEvMetadataAccessorsInfo(const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen,
-            NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard)
+            NOlap::TDataAccessorsResult&& result)
             : Processor(processor)
             , Generation(gen)
-            , Result(std::move(result))
-            , ResourcesGuard(std::move(guard)) {
-            AFL_VERIFY(ResourcesGuard);
+            , Result(std::move(result)) {
         }
     };
 

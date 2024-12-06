@@ -2896,16 +2896,13 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             server.AnnoyingClient->WriteToPQ({secondTopic, 0, "source1", i}, mb);
         }
 
-        Cerr << ">>>>> 1" << Endl << Flush;
-        auto info1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 1, "user1"}, 7);
-        Cerr << ">>>>> 2" << Endl << Flush;
-        auto info2 = server.AnnoyingClient->ReadFromPQ({secondTopic, 0, 0, 1, "user1"}, 7);
-        Cerr << ">>>>> 3" << Endl << Flush;
+        auto info1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 1, "user1"}, 1);
+        auto info2 = server.AnnoyingClient->ReadFromPQ({secondTopic, 0, 0, 1, "user1"}, 1);
 
         UNIT_ASSERT_VALUES_EQUAL(info1.BlobsFromCache, 1);
         UNIT_ASSERT_VALUES_EQUAL(info2.BlobsFromCache, 1);
-        UNIT_ASSERT_VALUES_EQUAL(info1.Values.size(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(info2.Values.size(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(info1.Values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(info2.Values.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(info1.Values[0].size(), valueSize);
         UNIT_ASSERT_VALUES_EQUAL(info2.Values[0].size(), valueSize);
         UNIT_ASSERT(info1.Values[0] == value1);

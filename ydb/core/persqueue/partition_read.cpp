@@ -432,8 +432,7 @@ TReadAnswer TReadInfo::FormAnswer(
 
     Y_ABORT_UNLESS(blobs.size() == Blobs.size());
     response->Check();
-    bool needStop = false;
-    for (ui32 pos = 0; pos < blobs.size() && !needStop; ++pos) {
+    for (ui32 pos = 0; pos < blobs.size() && cnt < Count && size < Size; ++pos) {
         Y_ABORT_UNLESS(Blobs[pos].Offset == blobs[pos].Offset, "Mismatch %" PRIu64 " vs %" PRIu64, Blobs[pos].Offset, blobs[pos].Offset);
         Y_ABORT_UNLESS(Blobs[pos].Count == blobs[pos].Count, "Mismatch %" PRIu32 " vs %" PRIu32, Blobs[pos].Count, blobs[pos].Count);
 
@@ -470,7 +469,7 @@ TReadAnswer TReadInfo::FormAnswer(
         Y_ABORT_UNLESS(offset < Offset || partNo <= PartNo);
         TKey key(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount, false);
         ui64 firstHeaderOffset = GetFirstHeaderOffset(key, blobValue);
-        for (TBlobIterator it(key, blobValue); it.IsValid(); it.Next()) {
+        for (TBlobIterator it(key, blobValue); it.IsValid() && cnt < Count; it.Next()) {
             TBatch batch = it.GetBatch();
             auto& header = batch.Header;
             batch.Unpack();
@@ -492,7 +491,7 @@ TReadAnswer TReadInfo::FormAnswer(
             PQ_LOG_D("FormAnswer processing batch offset "
                 << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount() << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
 
-            for (size_t i = pos; i < batch.Blobs.size(); ++i) {
+            for (size_t i = pos; i < batch.Blobs.size() && cnt < Count; ++i) {
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 
@@ -514,12 +513,12 @@ TReadAnswer TReadInfo::FormAnswer(
                     ++PartNo;
                 }
 
-                needStop = updateUsage(res);
+                updateUsage(res);
             }
         }
     }
 
-    if (!needStop && cnt < Count && size < Size) { // body blobs are fully processed and need to take more data
+    if (cnt < Count && size < Size) { // body blobs are fully processed and need to take more data
         if (CachedOffset > Offset) {
             lastBlobSize = 0;
             Offset = CachedOffset;

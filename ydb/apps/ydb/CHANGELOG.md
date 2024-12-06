@@ -1,4 +1,4 @@
-* Made optional `--consumer` flag in `ydb topic read` CLI command. Now if you don't specify this flag, you will read in without-consumer mode. When reading without consumer, you need to provide `--partition-ids` flag also. 
+* Made `--consumer` flag in `ydb topic read` CLI command optional. Now if you don't specify this flag, you will read in without-consumer mode. When reading without consumer, you need to provide `--partition-ids` flag also. 
 * Fixed a bug in `ydb import file csv` where multiple columns with escaped quotes in the same row were parsed incorrectly
 * Truncate query results output in benchmarks
 

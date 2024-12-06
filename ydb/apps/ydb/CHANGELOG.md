@@ -1,3 +1,4 @@
+* Make avalibality to send benchmarks data throw parquet format when fill tables
 * Fixed a bug in `ydb import file csv` where multiple columns with escaped quotes in the same row were parsed incorrectly
 * Truncate query results output in benchmarks
 

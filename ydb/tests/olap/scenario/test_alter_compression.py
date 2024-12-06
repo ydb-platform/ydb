@@ -17,8 +17,8 @@ from ydb.tests.olap.scenario.helpers import (
 )
 
 from typing import List, Dict, Any
-from ydb import PrimitiveType, StatusCode
-from ydb.tests.olap.lib.utils import get_external_param, external_param_is_true
+from ydb import PrimitiveType
+from ydb.tests.olap.lib.utils import get_external_param
 from datetime import datetime, timedelta
 from string import ascii_lowercase
 

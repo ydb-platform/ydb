@@ -60,13 +60,12 @@ target_link_libraries(contrib-libs-opentelemetry-proto PUBLIC
 target_proto_messages(contrib-libs-opentelemetry-proto PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/logs/v1/logs_service.proto
   ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service.proto
-  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/profiles/v1experimental/profiles_service.proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/profiles/v1development/profiles_service.proto
   ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.proto
   ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.proto
   ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/logs/v1/logs.proto
   ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/metrics/v1/metrics.proto
-  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/profiles/v1experimental/pprofextended.proto
-  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/profiles/v1experimental/profiles.proto
+  ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/profiles/v1development/profiles.proto
   ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.proto
   ${PROJECT_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.proto
 )
@@ -76,8 +75,8 @@ target_sources(contrib-libs-opentelemetry-proto PRIVATE
   ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/logs/v1/logs_service.grpc.pb.h
   ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service.pb.h
   ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/profiles/v1experimental/profiles_service.pb.h
-  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/profiles/v1experimental/profiles_service.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/profiles/v1development/profiles_service.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/profiles/v1development/profiles_service.grpc.pb.h
   ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.pb.h
   ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h
   ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.pb.h
@@ -86,10 +85,8 @@ target_sources(contrib-libs-opentelemetry-proto PRIVATE
   ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/logs/v1/logs.grpc.pb.h
   ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/metrics/v1/metrics.pb.h
   ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/metrics/v1/metrics.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/profiles/v1experimental/pprofextended.pb.h
-  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/profiles/v1experimental/pprofextended.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/profiles/v1experimental/profiles.pb.h
-  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/profiles/v1experimental/profiles.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/profiles/v1development/profiles.pb.h
+  ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/profiles/v1development/profiles.grpc.pb.h
   ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.pb.h
   ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.grpc.pb.h
   ${PROJECT_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.pb.h

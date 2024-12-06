@@ -24,7 +24,7 @@ target_link_libraries(yt-library-tcmalloc PUBLIC
   contrib-libs-cxxsupp
   yutil
   yt-yt-core
-  yt-library-oom
+  yt-library-ytprof
   library-profiling-resource_tracker
   libs-tcmalloc-malloc_extension
 )

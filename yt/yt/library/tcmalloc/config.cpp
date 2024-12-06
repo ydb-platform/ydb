@@ -16,17 +16,25 @@ void THeapSizeLimitConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("dump_memory_profile_on_violation", &TThis::DumpMemoryProfileOnViolation)
         .Default(false);
-    registrar.Parameter("dump_memory_profile_timeout", &TThis::DumpMemoryProfileTimeout)
+    registrar.Parameter("memory_profile_dump_timeout", &TThis::MemoryProfileDumpTimeout)
         .Default(TDuration::Minutes(10));
-    registrar.Parameter("dump_memory_profile_path", &TThis::DumpMemoryProfilePath)
+    registrar.Parameter("memory_profile_dump_path", &TThis::MemoryProfileDumpPath)
         .Default();
+    registrar.Parameter("emory_profile_dump_filename_suffix", &TThis::MemoryProfileDumpFilenameSuffix)
+        .Default();
+
+    registrar.Postprocessor([] (THeapSizeLimitConfig* config) {
+        if (config->DumpMemoryProfileOnViolation && !config->MemoryProfileDumpPath) {
+            THROW_ERROR_EXCEPTION("\"memory_profile_dump_path\" must be set when \"dump_memory_profile_on_violation\" is true");
+        }
+    });
 }
 
 TTCMallocConfigPtr TTCMallocConfig::ApplyDynamic(const TTCMallocConfigPtr& dynamicConfig) const
 {
     // TODO(babenko): fix this mess
     auto mergedConfig = CloneYsonStruct(dynamicConfig);
-    mergedConfig->HeapSizeLimit->DumpMemoryProfilePath = HeapSizeLimit->DumpMemoryProfilePath;
+    mergedConfig->HeapSizeLimit->MemoryProfileDumpPath = HeapSizeLimit->MemoryProfileDumpPath;
     return mergedConfig;
 }
 

@@ -139,6 +139,56 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
+    Y_UNIT_TEST(RemoveLogin_Many) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+
+        auto stopwatch = TAppData::TimeProvider->Now();
+
+        THashSet<std::pair<TString, TString>> paths;
+        paths.emplace("", "MyRoot");
+        while (paths.size() < 1000) {
+            TString path = "/MyRoot";
+            ui32 index = RandomNumber<ui32>();
+            for (ui32 depth : xrange(15)) {
+                Y_UNUSED(depth);
+                TString dir = "Dir" + std::to_string(index % 3);
+                index /= 3;
+                if (paths.emplace(path, dir).second) {
+                    Cerr << "Create " << (path + "/" + dir) << Endl;
+                    AsyncMkDir(runtime, ++txId, path, dir);
+                    TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+                }
+
+                path += "/" + dir;
+            }
+        }
+
+        Cerr << "[STOPWATCH] Created " << paths.size() << " paths in " << (TAppData::TimeProvider->Now() - stopwatch).MilliSeconds() << "ms" << Endl;
+        stopwatch = TAppData::TimeProvider->Now();
+
+        for (auto& [path, dir] : paths) {
+            AsyncModifyACL(runtime, ++txId, path, dir, diffACL.SerializeAsString(), "");
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        }
+
+        Cerr << "[STOPWATCH] Added " << paths.size() << " acls in " << (TAppData::TimeProvider->Now() - stopwatch).MilliSeconds() << "ms" << Endl;
+        stopwatch = TAppData::TimeProvider->Now();
+
+        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
+
+        Cerr << "[STOPWATCH] Removed user in " << (TAppData::TimeProvider->Now() - stopwatch).MilliSeconds() << "ms" << Endl;
+    }
+
     Y_UNIT_TEST(DisableBuiltinAuthMechanism) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

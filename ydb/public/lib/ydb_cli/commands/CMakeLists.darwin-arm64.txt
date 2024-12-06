@@ -53,6 +53,7 @@ target_link_libraries(clicommands PUBLIC
   lib-ydb_cli-import
   topic
   cpp-client-draft
+  cpp-client-ydb_bsconfig
   cpp-client-ydb_coordination
   cpp-client-ydb_debug
   cpp-client-ydb_export
@@ -92,6 +93,7 @@ target_sources(clicommands PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_topic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_sql.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_storage_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_tools.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_workload.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_workload_import.cpp

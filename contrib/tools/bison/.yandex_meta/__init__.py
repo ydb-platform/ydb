@@ -211,6 +211,7 @@ bison = NixProject(
         "mbrtowc-impl.h",
         "lc-charset-dispatch.h",
         "unistring-notinline.h",
+        "vasprintf.h",
     ],
     post_install=post_install,
 )

@@ -184,6 +184,7 @@ m4 = NixProject(
         "sys/ps.h",
         "sys/single_threaded.h",
         "unistring-notinline.h",
+        "vasprintf.h",
     ],
     put={
         "libm4": "lib",

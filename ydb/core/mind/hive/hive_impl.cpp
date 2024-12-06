@@ -3560,7 +3560,7 @@ void THive::MakeScaleRecommendation() {
 
     if (CurrentConfig.GetDryRunTargetTrackingCPU() != 0) {
         ui32 dryRunRecommendedNodes = 1;
-        TTargetTrackingPolicy dryRunPolicy(CurrentConfig.GetDryRunTargetTrackingCPU(), avgCpuUsageHistory);
+        TTargetTrackingPolicy dryRunPolicy(CurrentConfig.GetDryRunTargetTrackingCPU(), avgCpuUsageHistory, TabletID(), true);
         dryRunRecommendedNodes = std::max(dryRunRecommendedNodes, dryRunPolicy.MakeScaleRecommendation(readyNodesCount, CurrentConfig));
         TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED_DRY_RUN].Set(dryRunRecommendedNodes);
         BLOG_TRACE("[MSR] Dry run recommended nodes: " << dryRunRecommendedNodes << ", current nodes: " << readyNodesCount);

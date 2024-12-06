@@ -131,7 +131,7 @@ void TDomainInfo::SetScaleRecommenderPolicies(const NKikimrHive::TScaleRecommend
                 switch (targetTracking.GetTargetCase()) {
                     case kAverageCpuUtilizationPercent: {
                         ui32 target = targetTracking.GetAverageCpuUtilizationPercent();
-                        auto convertedPolicy = std::make_shared<TTargetTrackingPolicy>(target / 100., AvgCpuUsageHistory);
+                        auto convertedPolicy = std::make_shared<TTargetTrackingPolicy>(target / 100., AvgCpuUsageHistory, HiveId);
                         ScaleRecommenderPolicies.push_back(convertedPolicy);
                         break;
                     }

@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -26,6 +27,7 @@ TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
 
     return {};
 }
+
 }
 
 namespace {
@@ -71,6 +73,10 @@ private:
 
         const TTypeAnnotationNode* sourceType = source->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         if (!EnsureStructType(source->Pos(), *sourceType, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!NS3Util::ValidateS3ReadWriteSchema(sourceType->Cast<TStructExprType>(), ctx)) {
             return TStatus::Error;
         }
 

@@ -339,6 +339,10 @@ public:
             desc.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken(BUILTIN_ACL_ROOT);
         }
 
+        if (desc.GetConfig().GetConsistencyCase() == NKikimrReplication::TReplicationConfig::CONSISTENCY_NOT_SET) {
+            desc.MutableConfig()->MutableWeakConsistency();
+        }
+
         desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));
         context.SS->Replications[path->PathId] = replication;

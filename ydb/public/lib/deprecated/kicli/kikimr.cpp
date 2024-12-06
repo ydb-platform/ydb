@@ -2,6 +2,7 @@
 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <util/string/builder.h>
 
 namespace NKikimr {

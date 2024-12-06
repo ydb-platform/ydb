@@ -581,15 +581,18 @@ class ScenarioTestHelper:
         """
 
         root_path = self.get_full_path('')
-        result = []
-        self_descr = YdbCluster._describe_path_impl(os.path.join(root_path, path))
-        if self_descr is not None:
-            self_descr.name = path
-            if self_descr.is_directory():
-                result = YdbCluster.list_directory(root_path, path)
-            result.append(self_descr)
-        allure.attach('\n'.join([f'{e.name}: {repr(e.type)}' for e in result]), 'result', allure.attachment_type.TEXT)
-        return result
+        try:
+            self_descr = YdbCluster._describe_path_impl(os.path.join(root_path, path))
+        except ydb.issues.SchemeError:
+            return []
+
+        if self_descr is None:
+            return []
+
+        if self_descr.is_directory():
+            return list(reversed(YdbCluster.list_directory(root_path, path))) + [self_descr]
+        else:
+            return self_descr
 
     @allure.step('Remove path {path}')
     def remove_path(self, path: str) -> None:

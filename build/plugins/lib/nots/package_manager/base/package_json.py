@@ -1,10 +1,11 @@
 import json
-import logging
 import os
 
 from six import iteritems
 
+import logging
 from .utils import build_pj_path
+
 
 logger = logging.getLogger(__name__)
 
@@ -247,3 +248,6 @@ class PackageJson(object):
             messages.extend([f"  - {key}" for key in missing_overrides])
 
         return (not messages, messages)
+
+    def get_pnpm_patched_dependencies(self) -> dict[str, str]:
+        return self.data.get("pnpm", {}).get("patchedDependencies", {})

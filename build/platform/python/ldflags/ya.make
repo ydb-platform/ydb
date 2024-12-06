@@ -1,7 +1,5 @@
 RESOURCES_LIBRARY()
 
-SUBSCRIBER(g:contrib)
-
 IF (USE_SYSTEM_PYTHON)
     IF (OS_LINUX)
         LDFLAGS("-L$EXTERNAL_PYTHON_RESOURCE_GLOBAL/python/lib/x86_64-linux-gnu -lpython${PY_VERSION}")

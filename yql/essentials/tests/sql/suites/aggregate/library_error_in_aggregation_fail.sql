@@ -1,5 +1,4 @@
-/* syntax version 1 */
-/* postgres can not */
+/* custom error:Unsupported column type: String*/
 
 USE plato;
 

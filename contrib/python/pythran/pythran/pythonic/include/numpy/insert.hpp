@@ -1,10 +1,10 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_INSERT_HPP
 #define PYTHONIC_INCLUDE_NUMPY_INSERT_HPP
 
-#include "pythonic/include/utils/functor.hpp"
+#include "pythonic/include/builtins/None.hpp"
 #include "pythonic/include/types/ndarray.hpp"
 #include "pythonic/include/types/traits.hpp"
-#include "pythonic/include/builtins/None.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 #include <algorithm>
 
@@ -45,7 +45,7 @@ namespace numpy
   E insert(E, Args const &...);
 
   DEFINE_FUNCTOR(pythonic::numpy, insert);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

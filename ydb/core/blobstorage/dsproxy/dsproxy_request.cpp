@@ -183,7 +183,8 @@ namespace NKikimr {
 
         TInstant now = TActivationContext::Now();
 
-        if (Controls.EnablePutBatching.Update(now) && partSize < MinHugeBlobInBytes && partSize <= MaxBatchedPutSize) {
+        if (Controls.EnablePutBatching.Update(now) && partSize < MinHugeBlobInBytes &&
+                partSize <= MaxBatchedPutSize) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
             Y_ABORT_UNLESS((ui64)handleClass <= PutHandleClassCount);

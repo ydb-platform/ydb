@@ -8,10 +8,10 @@
 (let udfScript (String '@@
 def g(input):
     def gen():
-        return (long(x + 42) for x in input)
+        return (int(x + 42) for x in input)
     return gen
 @@))
-(let udf (ScriptUdf 'Python 'g udfType udfScript))
+(let udf (ScriptUdf 'Python3 'g udfType udfScript))
 
 # call udf
 (let result (Apply udf (AsList (Int64 '1) (Int64 '2) (Int64 '3))))

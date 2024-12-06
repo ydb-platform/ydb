@@ -59,23 +59,38 @@ public:
 
     TInputChannelFormat GetFormat() {
         if (Width) {
-            if (InputType->IsStruct()) {
-                auto structType = static_cast<NKikimr::NMiniKQL::TStructType*>(InputType);
-                for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
-                    if (structType->GetMemberType(i)->IsBlock()) {
-                        return BLOCK_WIDE;
+            switch (InputType->GetKind()) {
+                case NKikimr::NMiniKQL::TTypeBase::EKind::Struct: {
+                    auto structType = static_cast<NKikimr::NMiniKQL::TStructType*>(InputType);
+                    for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
+                        if (structType->GetMemberType(i)->IsBlock()) {
+                            return BLOCK_WIDE;
+                        }
                     }
+                    break;
                 }
-            } else if (InputType->IsTuple()) {
-                auto tupleType= static_cast<NKikimr::NMiniKQL::TTupleType*>(InputType);
-                for (ui32 i = 0; i < tupleType->GetElementsCount(); i++) {
-                    if (tupleType->GetElementType(i)->IsBlock()) {
-                        return BLOCK_WIDE;
+                case NKikimr::NMiniKQL::TTypeBase::EKind::Tuple: {
+                    auto tupleType = static_cast<NKikimr::NMiniKQL::TTupleType*>(InputType);
+                    for (ui32 i = 0; i < tupleType->GetElementsCount(); i++) {
+                        if (tupleType->GetElementType(i)->IsBlock()) {
+                            return BLOCK_WIDE;
+                        }
                     }
+                    break;
                 }
-            } else {
-                return SIMPLE_WIDE;
+                case NKikimr::NMiniKQL::TTypeBase::EKind::Multi: {
+                    auto multiType = static_cast<NKikimr::NMiniKQL::TMultiType*>(InputType);
+                    for (ui32 i = 0; i < multiType->GetElementsCount(); i++) {
+                        if (multiType->GetElementType(i)->IsBlock()) {
+                            return BLOCK_WIDE;
+                        }
+                    }
+                    break;
+                }
+                default:
+                    break;
             }
+            return SIMPLE_WIDE;
         }
 
         if (InputType->IsStruct()) {

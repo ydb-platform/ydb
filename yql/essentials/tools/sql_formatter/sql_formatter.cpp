@@ -52,7 +52,7 @@ int RunFormat(int argc, char* argv[]) {
         ++errors;
         Cerr << "Error formatting query: " << issues.ToString() << Endl;
     } else {
-        out << frm_query << Endl;
+        out << frm_query;
     }
 
     return errors;

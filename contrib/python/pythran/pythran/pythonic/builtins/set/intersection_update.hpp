@@ -16,7 +16,7 @@ namespace builtins
 
     template <typename T, typename... Types>
     types::none_type intersection_update(types::set<T> &set,
-                                         Types const &... others)
+                                         Types const &...others)
     {
       set.intersection_update(others...);
       return {};
@@ -24,7 +24,7 @@ namespace builtins
 
     template <typename T, typename... Types>
     types::none_type intersection_update(types::set<T> &&set,
-                                         Types const &... others)
+                                         Types const &...others)
     {
       // If it is an rvalue, we don't really want to update
       return {};
@@ -32,13 +32,13 @@ namespace builtins
 
     template <typename... Types>
     types::none_type intersection_update(types::empty_set &&set,
-                                         Types const &... others)
+                                         Types const &...others)
     {
       // If it is an empty_set, it is ! really updated otherwise we have a
       // typing issue
       return {};
     }
-  }
-}
+  } // namespace set
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

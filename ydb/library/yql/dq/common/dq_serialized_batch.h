@@ -28,6 +28,10 @@ struct TDqSerializedBatch {
         return Proto.GetRows();
     }
 
+    ui32 ChunkCount() const {
+        return Proto.GetChunks();
+    }
+
     void Clear() {
         Payload.Clear();
         Proto.Clear();

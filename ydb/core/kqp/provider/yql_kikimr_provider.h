@@ -216,7 +216,7 @@ private:
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
 };
 
-enum class TYdbOperation : ui32 {
+enum class TYdbOperation : ui64 {
     CreateTable            = 1ull << 0,
     DropTable              = 1ull << 1,
     AlterTable             = 1ull << 2,
@@ -249,6 +249,8 @@ enum class TYdbOperation : ui32 {
     AlterBackupCollection  = 1ull << 29,
     DropBackupCollection   = 1ull << 30,
     Backup                 = 1ull << 31,
+    BackupIncremental      = 1ull << 32,
+    Restore                = 1ull << 33,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);

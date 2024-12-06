@@ -38,7 +38,9 @@ struct TSettings {
         // May be partially pushdowned as:
         // $A OR $C
         // In case of unsupported / complicated expressions $B and $D
-        SplitOrOperator = 1 << 22
+        SplitOrOperator = 1 << 22,
+        ToBytesFromStringExpressions = 1 << 23, // ToBytes(string like)
+        FlatMapOverOptionals = 1 << 24 // FlatMap(Optional<T>, Lmabda (T) -> Optional<U>)
     };
 
     explicit TSettings(NLog::EComponent logComponent)

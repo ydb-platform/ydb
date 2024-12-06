@@ -1,8 +1,10 @@
 #pragma once
 
+#include <semaphore>
 #include <thread>
 #include <functional>
 
+#include <util/thread/pool.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
@@ -46,7 +48,8 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     FLUENT_SETTING_DEFAULT(ui64, BytesPerRequest, 1_MB);
     FLUENT_SETTING_DEFAULT(ui64, FileBufferSize, 2_MB);
     FLUENT_SETTING_DEFAULT(ui64, MaxInFlightRequests, 100);
-    FLUENT_SETTING_DEFAULT(ui64, Threads, std::thread::hardware_concurrency());
+    // Main thread that reads input file is CPU intensive so make room for it too
+    FLUENT_SETTING_DEFAULT(ui64, Threads, std::thread::hardware_concurrency() > 1 ? std::thread::hardware_concurrency() - 1 : 1);
     // Settings below are for CSV format only
     FLUENT_SETTING_DEFAULT(ui32, SkipRows, 0);
     FLUENT_SETTING_DEFAULT(bool, Header, false);
@@ -59,55 +62,19 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
 
 class TImportFileClient {
 public:
-    explicit TImportFileClient(const TDriver& driver, const TClientCommand::TConfig& rootConfig);
+    explicit TImportFileClient(const TDriver& driver, const TClientCommand::TConfig& rootConfig,
+                               const TImportFileSettings& settings = {});
     TImportFileClient(const TImportFileClient&) = delete;
 
     // Ingest data from the input files to the database table.
     //   fsPaths: vector of paths to input files
     //   dbPath: full path to the database table, including the database path
     //   settings: input data format and operational settings
-    TStatus Import(const TVector<TString>& fsPaths, const TString& dbPath, const TImportFileSettings& settings = {});
+    TStatus Import(const TVector<TString>& filePaths, const TString& dbPath);
 
 private:
-    std::shared_ptr<NTable::TTableClient> TableClient;
-    std::shared_ptr<NScheme::TSchemeClient> SchemeClient;
-
-    NTable::TBulkUpsertSettings UpsertSettings;
-    NTable::TRetryOperationSettings RetrySettings;
-
-    std::unique_ptr<const NTable::TTableDescription> DbTableInfo;
-
-    std::atomic<ui64> CurrentFileCount;
-    std::atomic<ui64> TotalBytesRead = 0;
-
-    static constexpr ui32 VerboseModeStepSize = 1 << 27; // 128 MB
-
-    using ProgressCallbackFunc = std::function<void (ui64, ui64)>;
-
-    TStatus UpsertCsv(IInputStream& input,
-                      const TString& dbPath,
-                      const TImportFileSettings& settings,
-                      const TString& filePath,
-                      std::optional<ui64> inputSizeHint,
-                      ProgressCallbackFunc & progressCallback);
-
-    TStatus UpsertCsvByBlocks(const TString& filePath,
-                              const TString& dbPath,
-                              const TImportFileSettings& settings);
-
-    TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder);
-    TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValue&& rows);
-
-    TStatus UpsertJson(IInputStream &input, const TString &dbPath, const TImportFileSettings &settings,
-                    std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback);
-
-    TStatus UpsertParquet(const TString& filename, const TString& dbPath, const TImportFileSettings& settings,
-                    ProgressCallbackFunc & progressCallback);
-    TAsyncStatus UpsertParquetBuffer(const TString& dbPath, const TString& buffer, const TString& strSchema);
-
-    TType GetTableType();
-    std::map<TString, TType> GetColumnTypes();
-    void ValidateTValueUpsertTable();
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
 };
 
 }

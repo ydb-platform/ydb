@@ -11,10 +11,12 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/protos/counters_hive.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/tablet_impl.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -2897,6 +2899,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestReassignUseRelativeSpace) {
+        // TODO: Remove this code after issue https://github.com/ydb-platform/ydb/issues/12255 will be resolved
+        ui64 prevSeed = NActors::DefaultRandomSeed;
+        NActors::DefaultRandomSeed = 42;
+        Y_SCOPE_EXIT(prevSeed) {
+            NActors::DefaultRandomSeed = prevSeed;
+        };
+        // TODO: Remove this code after issue https://github.com/ydb-platform/ydb/issues/12255 will be resolved
+
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true, 5);
         const ui64 hiveTablet = MakeDefaultHiveID();
@@ -6153,13 +6163,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ActorIdToProto(owner, event->Record.MutableOwnerActor());
         }
         TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
+        Ctest << "Send UnlockTablet\n";
         runtime.SendToPipe(hiveTablet, senderB, event.Release(), nodeIndex, GetPipeConfigWithRetries());
 
         TAutoPtr<IEventHandle> handle;
         auto result = runtime.GrabEdgeEventRethrow<TEvHive::TEvUnlockTabletExecutionResult>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTabletID(), tabletId);
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), expectedStatus);
+        UNIT_ASSERT_C(result->Record.GetStatus() == expectedStatus, "Expected status " << expectedStatus << ", got reply " << result->Record.ShortDebugString());
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionBadUnlock) {
@@ -6234,6 +6245,44 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // Hive should notify the old owner on unlocking
         VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+    }
+
+    Y_UNIT_TEST(TestLockTabletExecutionLocalGone) {
+        TTestBasicRuntime runtime(3, false);
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        const TActorId senderA = runtime.AllocateEdgeActor(0);
+        runtime.EnableScheduleForActor(hiveActor);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        TActorId owner = runtime.AllocateEdgeActor(1);
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 100500);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        // Block events related to node disconnect
+        // TEvents::TEvUndelivered - actor system does not guarantee that this event will be sent
+        // TEvLocal::TEvStatus - we cannot expect that the disconnecting node will always be able to send this
+        // TEvInterconnect::TEvNodeDisconnected - we will send this one, but follow it up with NodeConnected
+        // This is simulating a case when a new host is using the old node id and that new host does not run Local
+        TBlockEvents<TEvents::TEvUndelivered> blockUndleivered(runtime, [](auto&& ev) { return ev->Get()->SourceType == TEvLocal::EvPing; });
+        TBlockEvents<TEvLocal::TEvStatus> blockStatus(runtime, [](auto&& ev) { return ev->Get()->Record.GetStatus() != NKikimrProto::OK; });
+        SendKillLocal(runtime, 0);
+        runtime.SendToPipe(hiveTablet, senderA, new TEvInterconnect::TEvNodeDisconnected(runtime.GetNodeId(0)), 0, GetPipeConfigWithRetries());
+        CreateLocal(runtime, 2);
+        runtime.Register(CreateTabletKiller(hiveTablet));
+        runtime.SendToPipe(hiveTablet, senderA, new TEvInterconnect::TEvNodeConnected(runtime.GetNodeId(0)), 0, GetPipeConfigWithRetries());
+
+        // Unlocking with the same owner should succeed and boot the tablet
+        SendUnlockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner);
+        WaitForTabletIsUp(runtime, tabletId, 0);
+
     }
 
     Y_UNIT_TEST(TestExternalBoot) {
@@ -7140,7 +7189,7 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
 
     void AssertScaleRecommencation(TTestBasicRuntime& runtime, NKikimrProto::EReplyStatus expectedStatus, ui32 expectedNodes = 0) {
         const auto sender = runtime.AllocateEdgeActor();
-        
+
         const auto hiveId = MakeDefaultHiveID();
         const TSubDomainKey subdomainKey(TTestTxConfig::SchemeShard, 1);
         runtime.SendToPipe(hiveId, sender, new TEvHive::TEvRequestScaleRecommendation(subdomainKey));

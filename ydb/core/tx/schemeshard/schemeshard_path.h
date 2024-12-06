@@ -106,6 +106,7 @@ public:
     };
 
 public:
+    struct TSplitChildTag {};
     explicit TPath(TSchemeShard* ss);
     TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss);
 
@@ -143,6 +144,7 @@ public:
     bool IsDomain() const;
     TPath& Dive(const TString& name);
     TPath Child(const TString& name) const;
+    TPath Child(const TString& name, TSplitChildTag) const;
     TPathElement::TPtr Base() const;
     TPathElement* operator->() const;
     bool IsDeleted() const;

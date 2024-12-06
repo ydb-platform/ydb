@@ -1,12 +1,13 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 
-#include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/actors/analyze_actor.h>
+#include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/local_rpc/helper.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 
 namespace NKikimr::NKqp {
@@ -374,6 +375,18 @@ public:
 
             case NKqpProto::TKqpSchemeOperation::kBackup: {
                 const auto& modifyScheme = schemeOp.GetBackup();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kBackupIncremental: {
+                const auto& modifyScheme = schemeOp.GetBackupIncremental();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kRestore: {
+                const auto& modifyScheme = schemeOp.GetRestore();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }

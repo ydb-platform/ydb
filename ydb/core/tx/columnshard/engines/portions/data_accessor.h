@@ -30,7 +30,7 @@ private:
                 entityId = i.GetEntityId();
                 chunkIdx = 0;
             } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1);
+                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunk", i.GetChunkIdx())("idx", chunkIdx);
                 chunkIdx = i.GetChunkIdx();
             }
         }
@@ -43,6 +43,61 @@ public:
     ui64 GetMetadataSize() const {
         return (Records ? (Records->size() * sizeof(TColumnRecord)) : 0) + 
             (Indexes ? (Indexes->size() * sizeof(TIndexChunk)) : 0);
+    }
+
+    class TExtractContext {
+    private:
+        YDB_ACCESSOR_DEF(std::optional<std::set<ui32>>, ColumnIds);
+        YDB_ACCESSOR_DEF(std::optional<std::set<ui32>>, IndexIds);
+
+    public:
+        TExtractContext() = default;
+    };
+
+    TPortionDataAccessor Extract(const std::optional<std::set<ui32>>& columnIds, const std::optional<std::set<ui32>>& indexIds) const {
+        return Extract(TExtractContext().SetColumnIds(columnIds).SetIndexIds(indexIds));
+    }
+
+    TPortionDataAccessor Extract(const TExtractContext& context) const {
+        AFL_VERIFY(Records);
+        std::vector<TColumnRecord> extractedRecords;
+        if (context.GetColumnIds()) {
+            auto itRec = Records->begin();
+            auto itExt = context.GetColumnIds()->begin();
+            while (itRec != Records->end() && itExt != context.GetColumnIds()->end()) {
+                if (itRec->GetEntityId() == *itExt) {
+                    extractedRecords.emplace_back(*itRec);
+                    ++itRec;
+                } else if (itRec->GetEntityId() < *itExt) {
+                    ++itRec;
+                } else {
+                    ++itExt;
+                }
+            }
+        } else {
+            extractedRecords = *Records;
+        }
+
+        AFL_VERIFY(Indexes);
+        std::vector<TIndexChunk> extractedIndexes;
+        if (context.GetIndexIds()) {
+            auto itIdx = Indexes->begin();
+            auto itExt = context.GetIndexIds()->begin();
+            while (itIdx != Indexes->end() && itExt != context.GetIndexIds()->end()) {
+                if (itIdx->GetEntityId() == *itExt) {
+                    extractedIndexes.emplace_back(*itIdx);
+                    ++itIdx;
+                } else if (itIdx->GetEntityId() < *itExt) {
+                    ++itIdx;
+                } else {
+                    ++itExt;
+                }
+            }
+        } else {
+            extractedIndexes = *Indexes;
+        }
+
+        return TPortionDataAccessor(PortionInfo, std::move(extractedRecords), std::move(extractedIndexes), false);
     }
 
     const std::vector<TColumnRecord>& TestGetRecords() const {
@@ -436,6 +491,23 @@ public:
 
     std::vector<TPage> BuildPages() const;
     ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
+
+    class TReadPage {
+    private:
+        YDB_READONLY(ui32, IndexStart, 0);
+        YDB_READONLY(ui32, RecordsCount, 0);
+        YDB_READONLY(ui64, MemoryUsage, 0);
+
+    public:
+        TReadPage(const ui32 indexStart, const ui32 recordsCount, const ui64 memoryUsage)
+            : IndexStart(indexStart)
+            , RecordsCount(recordsCount)
+            , MemoryUsage(memoryUsage) {
+            AFL_VERIFY(RecordsCount);
+        }
+    };
+
+    std::vector<TReadPage> BuildReadPages(const ui64 memoryLimit, const std::set<ui32>& entityIds) const;
 };
 
 }   // namespace NKikimr::NOlap

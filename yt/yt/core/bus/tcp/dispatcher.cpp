@@ -10,7 +10,7 @@ namespace NYT::NBus {
 TTcpDispatcher::TTcpDispatcher()
     : Impl_(New<TImpl>())
 {
-    BusProfiler.WithSparse().AddProducer("", Impl_);
+    BusProfiler().WithSparse().AddProducer("", Impl_);
 }
 
 TTcpDispatcher* TTcpDispatcher::Get()

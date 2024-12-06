@@ -3,8 +3,8 @@
 
 #include "pythonic/include/math/degrees.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/math/pi.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -16,7 +16,7 @@ namespace math
   {
     return (x * 360.) / (2. * pi);
   }
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

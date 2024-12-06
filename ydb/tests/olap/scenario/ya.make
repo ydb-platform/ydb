@@ -2,8 +2,6 @@ PY3TEST()
 
     TAG(ya:manual)
 
-    TIMEOUT(600)
-
     PY_SRCS (
         conftest.py
     )

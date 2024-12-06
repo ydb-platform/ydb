@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -96,12 +96,12 @@ bool IsLiteralNothing(TExprBase node) {
 
                 return (
                     NKikimr::NScheme::NTypeIds::IsYqlType(typeId)
-                    && NKikimr::NSchemeShard::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId))
+                    && NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId))
                 );
             }
             case ETypeAnnotationKind::Pg: {
                 auto pgTypeId = type->Cast<TPgExprType>()->GetId();
-                return NKikimr::NSchemeShard::IsAllowedKeyType(
+                return NKikimr::IsAllowedKeyType(
                     NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId))
                 );
             }
@@ -425,7 +425,7 @@ bool RequireLookupPrecomputeStage(const TKqlLookupTable& lookup) {
                     auto slot = tuple.Value().Ref().GetTypeAnn()->Cast<TDataExprType>()->GetSlot();
                     auto typeId = NUdf::GetDataTypeInfo(slot).TypeId;
                     auto typeInfo = NScheme::TTypeInfo(typeId);
-                    if (NScheme::NTypeIds::IsYqlType(typeId) && NSchemeShard::IsAllowedKeyType(typeInfo)) {
+                    if (NScheme::NTypeIds::IsYqlType(typeId) && NKikimr::IsAllowedKeyType(typeInfo)) {
                         // pass
                     } else {
                         return true;
@@ -434,7 +434,7 @@ bool RequireLookupPrecomputeStage(const TKqlLookupTable& lookup) {
                     Y_ENSURE(tuple.Value().Ref().GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg);
                     auto pgTypeId = tuple.Value().Ref().GetTypeAnn()->Cast<TPgExprType>()->GetId();
                     auto typeInfo = NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId));
-                    if (NKikimr::NSchemeShard::IsAllowedKeyType(typeInfo)) {
+                    if (NKikimr::IsAllowedKeyType(typeInfo)) {
                         // pass
                     } else {
                         return true;

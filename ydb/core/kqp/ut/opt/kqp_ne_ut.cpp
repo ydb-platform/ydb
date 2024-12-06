@@ -4095,8 +4095,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                     Key Int32,
                     Fk Int32,
                     Value String,
+                    Value2 String,
                     PRIMARY KEY (Key, Fk),
-                    INDEX Index GLOBAL ON (Value)
+                    INDEX Index GLOBAL ON (Value),
+                    INDEX ByPk GLOBAL ON (Key)
                 );
             )").GetValueSync());
 
@@ -4125,6 +4127,17 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
         AssertSuccessResult(result);
         AssertTableReads(result, "/Root/ComplexKey", 2);
+
+        result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            SELECT Key, Fk, Value FROM `/Root/ComplexKey`
+            WHERE Key = 2
+            ORDER BY Value DESC, Value2 DESC
+            LIMIT 1;
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
+        AssertSuccessResult(result);
+        AssertTableReads(result, "/Root/ComplexKey", 2);
+        AssertTableReads(result, "/Root/ComplexKey/ByPk/indexImplTable", 0);
     }
 
     Y_UNIT_TEST(MultipleBroadcastJoin) {

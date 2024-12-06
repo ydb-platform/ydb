@@ -45,6 +45,9 @@ public:
 
     bool ExpectStructuredInputInStructuredBatchCommands;
 
+    //! Controls whether authentication commands (SetUserPassword, IssueToken, ListUserTokens, etc.) require a correct password to be used.
+    bool RequirePasswordInAuthenticationCommands;
+
     REGISTER_YSON_STRUCT(TDriverConfig);
 
     static void Register(TRegistrar registrar);

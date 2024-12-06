@@ -2409,6 +2409,11 @@ message TReqListJobs
 
     optional bool with_monitoring_descriptor = 21;
 
+    optional uint64 from_time = 22; // TInstant
+    optional uint64 to_time = 23; // TInstant
+
+    optional string continuation_token = 24;
+
     optional TMasterReadOptions master_read_options = 102;
 }
 
@@ -3179,6 +3184,8 @@ message TListJobsResult
 
     required TListJobsStatistics statistics = 5;
     repeated NYT.NProto.TError errors = 6;
+
+    optional string continuation_token = 7;
 }
 
 message TJobTraceEvent
@@ -3464,6 +3471,8 @@ message TReqStartShuffle
     required string account = 1;
     required int32 partition_count = 2;
     required NYT.NProto.TGuid parent_transaction_id = 3;
+    optional string medium_name = 4;
+    optional int32 replication_factor = 5;
 }
 
 message TRspStartShuffle

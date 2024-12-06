@@ -64,7 +64,7 @@
 
 namespace NYdb::NTable {
     struct TGlobalIndexSettings;
-    struct TVectorIndexSettings;
+    struct TKMeansTreeSettings;
 }
 
 namespace NSchemeShardUT_Private {
@@ -300,6 +300,7 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropBackupCollection);
     DROP_BY_PATH_ID_HELPERS(DropBackupCollection);
     GENERIC_HELPERS(BackupBackupCollection);
+    GENERIC_HELPERS(BackupIncrementalBackupCollection);
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
@@ -374,7 +375,7 @@ namespace NSchemeShardUT_Private {
         TVector<TString> DataColumns;
         TVector<NYdb::NTable::TGlobalIndexSettings> GlobalIndexSettings = {};
         // implementation note: it was made a pointer, not optional, to enable forward declaration
-        std::unique_ptr<NYdb::NTable::TVectorIndexSettings> VectorIndexSettings = {};
+        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> KMeansTreeSettings = {};
     };
 
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal);
@@ -514,9 +515,20 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, ui64 schemeShard, ui64 tabletId,
         NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);
 
-    // Login
-    TEvTx* CreateAlterLoginCreateUser(ui64 txId, const TString& user, const TString& password);
-    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
+    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
+        const TString& user, const TString& password,
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
+    void AlterLoginAddGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
+        const TString& member, const TString& group, 
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
+    void AlterLoginRemoveGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
+        const TString& member, const TString& group, 
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
+    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, 
+        const TString& user, const TString& password);
 
     // Mimics data query to a single table with multiple partitions
     class TFakeDataReq {

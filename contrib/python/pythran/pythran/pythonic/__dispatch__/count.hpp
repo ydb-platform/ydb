@@ -11,12 +11,12 @@ namespace __dispatch__
 {
 
   template <class Any, class Value>
-  auto count(Any &&any, Value &&value)
-      -> decltype(any.count(std::forward<Value>(value)))
+  auto count(Any &&any,
+             Value &&value) -> decltype(any.count(std::forward<Value>(value)))
   {
     return any.count(std::forward<Value>(value));
   }
-}
+} // namespace __dispatch__
 PYTHONIC_NS_END
 
 #endif

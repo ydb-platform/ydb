@@ -1,4 +1,4 @@
-/* postgres can not */
+/* custom error:Expected tuple type of size: 2, but got: 3*/
 USE plato;
 
 $func = ($x, $y)->{

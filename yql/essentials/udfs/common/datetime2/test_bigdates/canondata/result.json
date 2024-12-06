@@ -1,4 +1,14 @@
 {
+    "test.test[BlockFrom]": [
+        {
+            "uri": "file://test.test_BlockFrom_/results.txt"
+        }
+    ],
+    "test.test[From]": [
+        {
+            "uri": "file://test.test_From_/results.txt"
+        }
+    ],
     "test.test[SplitMake]": [
         {
             "uri": "file://test.test_SplitMake_/results.txt"

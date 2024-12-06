@@ -193,6 +193,13 @@ namespace NActors {
         return std::nullopt;
     }
 
+    std::optional<double> TMailbox::GetElapsedSeconds() {
+        if (auto x = GetElapsedCycles()) {
+            return {NHPTimer::GetSeconds(*x)};
+        }
+        return std::nullopt;
+    }
+
     bool TMailbox::CleanupActors() noexcept {
         bool done = true;
 

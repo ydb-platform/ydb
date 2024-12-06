@@ -390,7 +390,7 @@ RECURSE(
     test_framework
 )
 
-IF (NOT OPENSOURCE)
+IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         benchmarks
         bus/benchmarks

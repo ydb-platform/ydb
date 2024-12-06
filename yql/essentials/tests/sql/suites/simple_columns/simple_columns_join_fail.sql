@@ -1,4 +1,4 @@
-/* postgres can not */
+/* custom error:Duplicated member: kk*/
 PRAGMA SimpleColumns;
 USE plato;
 

@@ -1,5 +1,4 @@
-/* syntax version 1 */
-/* postgres can not */
+/* custom error:Result is empty*/
 
 $json = CAST("{}" as Json);
 SELECT

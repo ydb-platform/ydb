@@ -18,7 +18,7 @@ namespace math
       res *= i;
     return res;
   }
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

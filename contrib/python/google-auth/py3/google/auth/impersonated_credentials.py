@@ -31,6 +31,7 @@ from datetime import datetime
 import http.client as http_client
 import json
 
+from google.auth import _exponential_backoff
 from google.auth import _helpers
 from google.auth import credentials
 from google.auth import exceptions
@@ -45,7 +46,12 @@ _DEFAULT_TOKEN_LIFETIME_SECS = 3600  # 1 hour in seconds
 
 
 def _make_iam_token_request(
-    request, principal, headers, body, iam_endpoint_override=None
+    request,
+    principal,
+    headers,
+    body,
+    universe_domain=credentials.DEFAULT_UNIVERSE_DOMAIN,
+    iam_endpoint_override=None,
 ):
     """Makes a request to the Google Cloud IAM service for an access token.
     Args:
@@ -66,7 +72,9 @@ def _make_iam_token_request(
             `iamcredentials.googleapis.com` is not enabled or the
             `Service Account Token Creator` is not assigned
     """
-    iam_endpoint = iam_endpoint_override or iam._IAM_ENDPOINT.format(principal)
+    iam_endpoint = iam_endpoint_override or iam._IAM_ENDPOINT.replace(
+        credentials.DEFAULT_UNIVERSE_DOMAIN, universe_domain
+    ).format(principal)
 
     body = json.dumps(body).encode("utf-8")
 
@@ -218,6 +226,8 @@ class Credentials(
                 and self._source_credentials._always_use_jwt_access
             ):
                 self._source_credentials._create_self_signed_jwt(None)
+
+        self._universe_domain = source_credentials.universe_domain
         self._target_principal = target_principal
         self._target_scopes = target_scopes
         self._delegates = delegates
@@ -270,13 +280,16 @@ class Credentials(
             principal=self._target_principal,
             headers=headers,
             body=body,
+            universe_domain=self.universe_domain,
             iam_endpoint_override=self._iam_endpoint_override,
         )
 
     def sign_bytes(self, message):
         from google.auth.transport.requests import AuthorizedSession
 
-        iam_sign_endpoint = iam._IAM_SIGN_ENDPOINT.format(self._target_principal)
+        iam_sign_endpoint = iam._IAM_SIGN_ENDPOINT.replace(
+            credentials.DEFAULT_UNIVERSE_DOMAIN, self.universe_domain
+        ).format(self._target_principal)
 
         body = {
             "payload": base64.b64encode(message).decode("utf-8"),
@@ -288,18 +301,22 @@ class Credentials(
         authed_session = AuthorizedSession(self._source_credentials)
 
         try:
-            response = authed_session.post(
-                url=iam_sign_endpoint, headers=headers, json=body
-            )
+            retries = _exponential_backoff.ExponentialBackoff()
+            for _ in retries:
+                response = authed_session.post(
+                    url=iam_sign_endpoint, headers=headers, json=body
+                )
+                if response.status_code in iam.IAM_RETRY_CODES:
+                    continue
+                if response.status_code != http_client.OK:
+                    raise exceptions.TransportError(
+                        "Error calling sign_bytes: {}".format(response.json())
+                    )
+
+                return base64.b64decode(response.json()["signedBlob"])
         finally:
             authed_session.close()
-
-        if response.status_code != http_client.OK:
-            raise exceptions.TransportError(
-                "Error calling sign_bytes: {}".format(response.json())
-            )
-
-        return base64.b64decode(response.json()["signedBlob"])
+        raise exceptions.TransportError("exhausted signBlob endpoint retries")
 
     @property
     def signer_email(self):
@@ -422,9 +439,10 @@ class IDTokenCredentials(credentials.CredentialsWithQuotaProject):
     def refresh(self, request):
         from google.auth.transport.requests import AuthorizedSession
 
-        iam_sign_endpoint = iam._IAM_IDTOKEN_ENDPOINT.format(
-            self._target_credentials.signer_email
-        )
+        iam_sign_endpoint = iam._IAM_IDTOKEN_ENDPOINT.replace(
+            credentials.DEFAULT_UNIVERSE_DOMAIN,
+            self._target_credentials.universe_domain,
+        ).format(self._target_credentials.signer_email)
 
         body = {
             "audience": self._target_audience,

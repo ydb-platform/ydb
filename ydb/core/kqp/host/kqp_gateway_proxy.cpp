@@ -276,16 +276,6 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         }
     }
 
-    if (const auto& tiering = metadata->TableSettings.Tiering) {
-        if (tiering.IsSet()) {
-            proto.set_tiering(tiering.GetValueSet());
-        } else {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = "Can't reset TIERING";
-            return false;
-        }
-    }
-
     if (metadata->TableSettings.StoreExternalBlobs) {
         auto& storageSettings = *proto.mutable_storage_settings();
         TString value = to_lower(metadata->TableSettings.StoreExternalBlobs.GetRef());
@@ -520,7 +510,15 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         const auto& inputSettings = metadata->TableSettings.TtlSettings.GetValueSet();
         auto& resultSettings = *tableDesc.MutableTtlSettings();
         resultSettings.MutableEnabled()->SetColumnName(inputSettings.ColumnName);
-        resultSettings.MutableEnabled()->SetExpireAfterSeconds(inputSettings.ExpireAfter.Seconds());
+        for (const auto& tier : inputSettings.Tiers) {
+            auto* tierProto = resultSettings.MutableEnabled()->AddTiers();
+            tierProto->SetApplyAfterSeconds(tier.ApplyAfter.Seconds());
+            if (tier.StorageName) {
+                tierProto->MutableEvictToExternalStorage()->SetStorageName(*tier.StorageName);
+            } else {
+                tierProto->MutableDelete();
+            }
+        }
         if (inputSettings.ColumnUnit) {
             resultSettings.MutableEnabled()->SetColumnUnit(static_cast<NKikimrSchemeOp::TTTLSettings::EUnit>(*inputSettings.ColumnUnit));
         }
@@ -1163,14 +1161,11 @@ public:
 
             const auto serializedDiffAcl = acl.SerializeAsString();
 
-            TVector<std::pair<const TString*, std::pair<TString, TString>>> pathPairs;
-            pathPairs.reserve(settings.Paths.size());
-            for (const auto& path : settings.Paths) {
-                pathPairs.push_back(std::make_pair(&path, NSchemeHelpers::SplitPathByDirAndBaseNames(path)));
-            }
-
-            for (const auto& path : pathPairs) {
-                const auto& [dirname, basename] = path.second;
+            for (const auto& currentPath : settings.Paths) {
+                auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(currentPath);
+                if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+                    dirname = JoinPath({GetDatabase(), dirname});
+                }
 
                 NKikimrSchemeOp::TModifyScheme schemeTx;
                 schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
@@ -1212,7 +1207,7 @@ public:
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(GetDatabase());
+            tx.SetWorkingDir(GetDatabase() ? GetDatabase() : GetDomainName().GetOrElse(TString{}));
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateBackupCollection);
 
             auto& op = *tx.MutableCreateBackupCollection();
@@ -1282,7 +1277,7 @@ public:
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(GetDatabase());
+            tx.SetWorkingDir(GetDatabase() ? GetDatabase() : GetDomainName().GetOrElse(TString{}));
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterBackupCollection);
 
             auto& op = *tx.MutableAlterBackupCollection();
@@ -1329,7 +1324,7 @@ public:
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(GetDatabase());
+            tx.SetWorkingDir(GetDatabase() ? GetDatabase() : GetDomainName().GetOrElse(TString{}));
             if (settings.Cascade) {
                 return MakeFuture(ResultFromError<TGenericResult>("Unimplemented"));
             } else {
@@ -1377,7 +1372,7 @@ public:
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(GetDatabase());
+            tx.SetWorkingDir(GetDatabase() ? GetDatabase() : GetDomainName().GetOrElse(TString{}));
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpBackupBackupCollection);
 
             auto& op = *tx.MutableBackupBackupCollection();
@@ -1388,6 +1383,92 @@ public:
                 auto& phyTx = *phyQuery.AddTransactions();
                 phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
                 phyTx.MutableSchemeOperation()->MutableBackup()->Swap(&tx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(tx));
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> BackupIncremental(const TString& cluster, const NYql::TBackupSettings& settings) override {
+        CHECK_PREPARED_DDL(BackupIncremental);
+
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            std::pair<TString, TString> pathPair;
+            if (settings.Name.StartsWith("/")) {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            } else {
+                pathPair.second = ".backups/collections/" + settings.Name;
+            }
+
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetWorkingDir(GetDatabase() ? GetDatabase() : GetDomainName().GetOrElse(TString{}));
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection);
+
+            auto& op = *tx.MutableBackupIncrementalBackupCollection();
+            op.SetName(pathPair.second);
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableBackupIncremental()->Swap(&tx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(tx));
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> Restore(const TString& cluster, const NYql::TBackupSettings& settings) override {
+        CHECK_PREPARED_DDL(Restore);
+
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            std::pair<TString, TString> pathPair;
+            if (settings.Name.StartsWith("/")) {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            } else {
+                pathPair.second = ".backups/collections/" + settings.Name;
+            }
+
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetWorkingDir(GetDatabase() ? GetDatabase() : *GetDomainName());
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreBackupCollection);
+
+            auto& op = *tx.MutableRestoreBackupCollection();
+            op.SetName(pathPair.second);
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableRestore()->Swap(&tx);
 
                 TGenericResult result;
                 result.SetSuccess();
@@ -2347,6 +2428,12 @@ public:
             }
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
+            }
+            if (settings.Settings.WeakConsistency) {
+                config.MutableWeakConsistency();
+            }
+            if (const auto& consistency = settings.Settings.StrongConsistency) {
+                consistency->Serialize(*config.MutableStrongConsistency());
             }
 
             auto& targets = *config.MutableSpecific();

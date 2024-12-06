@@ -6,27 +6,27 @@
 #include "pythonic/utils/functor.hpp"
 
 #include "pythonic/builtins/bool_.hpp"
-#include "pythonic/builtins/int_.hpp"
-#include "pythonic/builtins/float_.hpp"
 #include "pythonic/builtins/complex.hpp"
+#include "pythonic/builtins/dict.hpp"
+#include "pythonic/builtins/float_.hpp"
+#include "pythonic/builtins/int_.hpp"
+#include "pythonic/builtins/list.hpp"
 #include "pythonic/builtins/set.hpp"
 #include "pythonic/builtins/str.hpp"
-#include "pythonic/builtins/list.hpp"
-#include "pythonic/builtins/dict.hpp"
 #include "pythonic/builtins/tuple.hpp"
 #include "pythonic/numpy/array.hpp"
 #include "pythonic/numpy/byte.hpp"
-#include "pythonic/numpy/ubyte.hpp"
-#include "pythonic/numpy/short_.hpp"
-#include "pythonic/numpy/ushort.hpp"
-#include "pythonic/numpy/intc.hpp"
-#include "pythonic/numpy/uintc.hpp"
-#include "pythonic/numpy/int_.hpp"
-#include "pythonic/numpy/uint.hpp"
-#include "pythonic/numpy/longlong.hpp"
-#include "pythonic/numpy/ulonglong.hpp"
-#include "pythonic/numpy/float32.hpp"
 #include "pythonic/numpy/float128.hpp"
+#include "pythonic/numpy/float32.hpp"
+#include "pythonic/numpy/int_.hpp"
+#include "pythonic/numpy/intc.hpp"
+#include "pythonic/numpy/longlong.hpp"
+#include "pythonic/numpy/short_.hpp"
+#include "pythonic/numpy/ubyte.hpp"
+#include "pythonic/numpy/uint.hpp"
+#include "pythonic/numpy/uintc.hpp"
+#include "pythonic/numpy/ulonglong.hpp"
+#include "pythonic/numpy/ushort.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -81,7 +81,7 @@ namespace builtins
     using type = functor::tuple;
   };
   template <class T, size_t N>
-  struct type_functor<types::array<T, N>> {
+  struct type_functor<types::array_tuple<T, N>> {
     using type = functor::tuple;
   };
   template <class T, class pS>
@@ -142,7 +142,7 @@ namespace builtins
   {
     return {};
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

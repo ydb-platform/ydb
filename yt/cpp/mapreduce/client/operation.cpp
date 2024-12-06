@@ -760,10 +760,17 @@ void BuildUserJobFluently(
         .Item("redirect_stdout_to_stderr").Value(preparer.ShouldRedirectStdoutToStderr());
 }
 
-// Might return undefined value.
-TNode GetNirvanaBlockUrlFromContext()
+struct TNirvanaContext
 {
-    auto filePath = TString("/slot/sandbox/j/job_context.json");
+    TNode BlockUrl;
+    TNode Annotations;
+};
+
+// Try to detect if we are inside nirvana operation and reat nirvana job context.
+// Items of TNirvanaContext might be Undefined, if we are not inside nirvana context (or if nirvana context is unexpected)
+TNirvanaContext GetNirvanaContext()
+{
+    static const auto filePath = TString("/slot/sandbox/j/job_context.json");
     auto nvYtOperationId = GetEnv("NV_YT_OPERATION_ID");
     if (nvYtOperationId.empty()) {
         return {};
@@ -779,13 +786,20 @@ TNode GetNirvanaBlockUrlFromContext()
         YT_LOG_ERROR("Failed to load nirvana job context: %v", ex.what());
         return {};
     }
+
+    TNirvanaContext result;
+
     const auto* url = json.GetValueByPath("meta.blockURL");
-    if (!url || !url->IsString()) {
-        return {};
+    if (url && url->IsString()) {
+        result.BlockUrl = url->GetString();
+        result.BlockUrl.Attributes()["_type_tag"] = "url";
     }
 
-    TNode result = url->GetString();
-    result.Attributes()["_type_tag"] = "url";
+    const auto* annotations = json.GetValueByPath("meta.annotations");
+    if (annotations && annotations->IsMap()) {
+        result.Annotations = NodeFromJsonValue(*annotations);
+    }
+
     return result;
 }
 
@@ -804,13 +818,15 @@ void BuildCommonOperationPart(
     startedBySpec["user"] = properties->UserName;
     startedBySpec["wrapper_version"] = properties->ClientVersion;
 
-    startedBySpec["command"] = TNode::CreateList();
-    for (const auto& arg : properties->CensoredCommandLine) {
-        startedBySpec["command"].Add(arg);
+    startedBySpec["binary"] = properties->BinaryPath;
+    startedBySpec["binary_name"] = properties->BinaryName;
+    auto nirvanaContext = GetNirvanaContext();
+    if (!nirvanaContext.BlockUrl.IsUndefined()) {
+        startedBySpec["nirvana_block_url"] = nirvanaContext.BlockUrl;
     }
-    auto nirvanaBlockUrl = GetNirvanaBlockUrlFromContext();
-    if (!nirvanaBlockUrl.IsUndefined()) {
-        startedBySpec["nirvana_block_url"] = nirvanaBlockUrl;
+
+    if (!nirvanaContext.Annotations.IsUndefined()) {
+        MergeNodes((*specNode)["annotations"], nirvanaContext.Annotations);
     }
 
     TString pool;
@@ -977,12 +993,15 @@ void CreateOutputTable(
     const TRichYPath& path)
 {
     Y_ENSURE(path.Path_, "Output table is not set");
-    Create(
-        preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        preparer.GetContext(), preparer.GetTransactionId(), path.Path_, NT_TABLE,
-        TCreateOptions()
-            .IgnoreExisting(true)
-            .Recursive(true));
+    if (!path.Create_.Defined()) {
+        // If `create` attribute is defined
+        Create(
+            preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
+            preparer.GetContext(), preparer.GetTransactionId(), path.Path_, NT_TABLE,
+            TCreateOptions()
+                .IgnoreExisting(true)
+                .Recursive(true));
+    }
 }
 
 void CreateOutputTables(
@@ -1002,6 +1021,7 @@ void CheckInputTablesExist(
     for (auto& path : paths) {
         auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
         Y_ENSURE_EX(
+            path.Cluster_.Defined() ||
             Exists(
                 preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
                 preparer.GetContext(),

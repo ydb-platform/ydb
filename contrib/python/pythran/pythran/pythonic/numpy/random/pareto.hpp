@@ -30,10 +30,10 @@ namespace numpy
     }
 
     inline auto pareto(double a, long size)
-        -> decltype(pareto(a, types::array<long, 1>{{size}}))
+        -> decltype(pareto(a, types::array_tuple<long, 1>{{size}}))
     {
 
-      return pareto(a, types::array<long, 1>{{size}});
+      return pareto(a, types::array_tuple<long, 1>{{size}});
     }
 
     inline double pareto(double a, types::none_type d)

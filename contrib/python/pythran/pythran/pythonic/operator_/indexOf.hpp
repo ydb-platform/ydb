@@ -3,8 +3,8 @@
 
 #include "pythonic/include/operator_/indexOf.hpp"
 
-#include "pythonic/builtins/str.hpp"
 #include "pythonic/builtins/ValueError.hpp"
+#include "pythonic/builtins/str.hpp"
 #include "pythonic/utils/functor.hpp"
 
 #include <algorithm>
@@ -23,7 +23,7 @@ namespace operator_
                               " is not in this sequence");
     return where - a.begin();
   }
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

@@ -1,5 +1,6 @@
 --!syntax_pg
-select a.x + 1 as y, b.x + 1 as z from 
+/* custom error:Column reference is ambiguous: x*/
+select a.x + 1 as y, b.x + 1 as z from
     ((select 1 x) a
     join
     (select 1 x) b

@@ -80,6 +80,7 @@ SRCS(
     schemeshard__notify.cpp
     schemeshard__operation.cpp
     schemeshard__operation.h
+    schemeshard__op_traits.h
     schemeshard__operation_alter_bsv.cpp
     schemeshard__operation_alter_cdc_stream.cpp
     schemeshard__operation_alter_continuous_backup.cpp
@@ -101,6 +102,8 @@ SRCS(
     schemeshard__operation_apply_build_index.cpp
     schemeshard__operation_assign_bsv.cpp
     schemeshard__operation_backup_backup_collection.cpp
+    schemeshard__operation_backup_incremental_backup_collection.cpp
+    schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_blob_depot.cpp
     schemeshard__operation_cancel_tx.cpp
     schemeshard__operation_cansel_build_index.cpp
@@ -235,6 +238,10 @@ SRCS(
     schemeshard_path_element.cpp
     schemeshard_path_element.h
     schemeshard_schema.h
+    schemeshard_self_pinger.cpp
+    schemeshard_self_pinger.h
+    schemeshard_shard_deleter.cpp
+    schemeshard_shard_deleter.h
     schemeshard_svp_migration.cpp
     schemeshard_svp_migration.h
     schemeshard_tx_infly.h

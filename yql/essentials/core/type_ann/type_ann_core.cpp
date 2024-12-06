@@ -12594,6 +12594,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListTopSort"] = &ListTopSortWrapper;
         Functions["ListTopSortAsc"] = &ListTopSortWrapper;
         Functions["ListTopSortDesc"] = &ListTopSortWrapper;
+        Functions["ListSample"] = &ListSampleWrapper;
+        Functions["ListSampleN"] = &ListSampleNWrapper;
+        Functions["ListShuffle"] = &ListShuffleWrapper;
 
         Functions["ExpandMap"] = &ExpandMapWrapper;
         Functions["WideMap"] = &WideMapWrapper;
@@ -12738,6 +12741,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["AssumeColumnOrderPartial"] = &AssumeColumnOrderWrapper;
         ExtFunctions["UnionAllPositional"] = &UnionAllPositionalWrapper;
         ExtFunctions["UnionPositional"] = &UnionAllPositionalWrapper;
+        ExtFunctions["UnionMergePositional"] = &UnionAllPositionalWrapper;
         ExtFunctions["SafeCast"] = &CastWrapper<false>;
         ExtFunctions["StrictCast"] = &CastWrapper<true>;
         ExtFunctions["Version"] = &VersionWrapper;

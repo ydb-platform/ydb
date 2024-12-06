@@ -15,7 +15,7 @@ def NewPerson(name, age):
     (let str (DataType 'String))
     (let personType (StructType '('name str) '('age ui32)))
     (let udfType (CallableType '() '(personType) '(str) '(ui32)))
-    (let udf (ScriptUdf 'Python 'NewPerson udfType $udfScript))
+    (let udf (ScriptUdf 'Python3 'NewPerson udfType $udfScript))
     (return udf)
 ))@@;
 

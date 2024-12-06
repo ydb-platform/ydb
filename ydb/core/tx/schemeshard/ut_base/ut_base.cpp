@@ -1,10 +1,19 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
+
+#include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 
 #include <locale>
+
+namespace NKikimr::NSchemeShard {
+// defined in ydb/core/tx/schemeshard/schemeshard__table_stats_histogram.cpp
+TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, ui64 total, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes);
+}  // namespace NKikimr::NSchemeShard
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -11509,5 +11518,66 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // TODO: validate no index created
         // TODO: validate no stream created
+
+        if (WithIncremental) {
+            TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot", R"(
+                Name: ".backups/collections/MyCollection1"
+            )");
+
+            env.TestWaitNotification(runtime, txId);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1"), {
+                NLs::PathExist,
+                NLs::IsBackupCollection,
+                NLs::ChildrenCount(2),
+                NLs::Finished,
+            });
+
+            auto descr = DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1").GetPathDescription();
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetChildren().size(), 2);
+
+            const char* incrBackupDirName = nullptr;
+            for (auto& dir : descr.GetChildren()) {
+                if (dir.GetName().EndsWith("_incremental")) {
+                    incrBackupDirName = dir.GetName().c_str();
+                }
+            }
+
+            TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s", incrBackupDirName)), {
+                NLs::PathExist,
+                NLs::ChildrenCount(2),
+                NLs::Finished,
+            });
+
+            TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/Table1", incrBackupDirName)), {
+                NLs::PathExist,
+                NLs::IsTable,
+                NLs::Finished,
+            });
+
+            TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/DirA", incrBackupDirName)), {
+                NLs::PathExist,
+                NLs::ChildrenCount(2),
+                NLs::Finished,
+            });
+
+            TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/DirA/Table2", incrBackupDirName)), {
+                NLs::PathExist,
+                NLs::IsTable,
+                NLs::Finished,
+            });
+
+            TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/DirA/DirB", incrBackupDirName)), {
+                NLs::PathExist,
+                NLs::ChildrenCount(1),
+                NLs::Finished,
+            });
+
+            TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/DirA/DirB/Table3", incrBackupDirName)), {
+                NLs::PathExist,
+                NLs::IsTable,
+                NLs::Finished,
+            });
+        }
     }
 }

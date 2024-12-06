@@ -111,6 +111,9 @@ def validate_sql(sql_query):
     if 'library(' in sql_query.lower() or 'file(' in sql_query.lower() or 'filecontent(' in sql_query.lower():
         pytest.skip('Attaching files and libraries is not supported in KQP')
 
+    if 'Python' in sql_query or 'Javascript' in sql_query:
+        pytest.skip('ScriptUdf is not supported in KQP')
+
     # Unsupported pragmas
     if 'refselect' in sql_query.lower():
         pytest.skip('RefSelect mode isn\'t supported by provider: kikimr')

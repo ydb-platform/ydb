@@ -16,6 +16,7 @@ namespace NYT::NFormats {
 ISchemalessFormatWriterPtr CreateWriterForArrow(
     NTableClient::TNameTablePtr nameTable,
     const std::vector<NTableClient::TTableSchemaPtr>& schemas,
+    const std::vector<std::optional<std::vector<std::string>>>& columns,
     NConcurrency::IAsyncOutputStreamPtr output,
     bool enableContextSaving,
     TControlAttributesConfigPtr controlAttributesConfig,

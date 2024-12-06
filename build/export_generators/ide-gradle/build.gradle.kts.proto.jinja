@@ -1,4 +1,6 @@
 {%- set publish = target.publish -%}
+{%- set libraries = target.consumer|selectattr('type', 'eq', 'library') -%}
+
 import com.google.protobuf.gradle.*
 
 val baseBuildDir = "{{ export_root }}/gradle.build/"
@@ -7,7 +9,10 @@ subprojects {
     buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", "."))
 }
 
-val buildProtoDir = File("${buildDir}", "__proto__")
+val mainProtosDir = File(buildDir, "main_protos")
+{%- if libraries|length %}
+val mainExtractedIncludeProtosDir = File(buildDir, "extracted-include-protos/main")
+{%- endif %}
 
 plugins {
     id("java-library")
@@ -37,13 +42,22 @@ repositories {
     }
 }
 
+val project_root = "{{ arcadia_root }}"
+
 sourceSets {
     main {
-        java.srcDir("build/generated/source/proto")
+        java.srcDir("$buildDir/generated/sources/proto/main/java")
+{%- if target.proto_grpc %}
+        java.srcDir("$buildDir/generated/sources/proto/main/grpc")
+{%- endif %}
+    }
+    test {
+        java.srcDir("$buildDir/generated/sources/proto/test/java")
+{%- if target.proto_grpc %}
+        java.srcDir("$buildDir/generated/sources/proto/test/grpc")
+{%- endif %}
     }
 }
-
-val project_root = "{{ arcadia_root }}"
 
 java {
     withSourcesJar()
@@ -92,21 +106,24 @@ dependencies {
     }
 {%-         endif -%}
 {%-     endif -%}
-{%- endfor %}
+{%- endfor -%}
 
 {%- if target.proto_namespace %}
-    protobuf(files(File(buildProtoDir, "{{ target.proto_namespace }}")))
+    protobuf(files(File(mainProtosDir, "{{ target.proto_namespace }}")))
 {%- else %}
-    protobuf(files(buildProtoDir))
+    protobuf(files(mainProtosDir))
 {%- endif %}
 }
 
 protobuf {
+    generatedFilesBaseDir = "$buildDir/generated/sources/proto"
+
     protoc {
         // Download from repositories
         artifact = "com.google.protobuf:protoc:{%- if target.proto_compiler_version -%}{{ target.proto_compiler_version }}{%- else -%}3.22.5{%- endif -%}"
     }
-{%  if target.proto_grpc -%}
+{%- if target.proto_grpc %}
+
     plugins {
         id("grpc") {
             artifact = "io.grpc:protoc-gen-grpc-java:{%- if target.proto_grpc_version -%}{{ target.proto_grpc_version }}{%- else -%}1.45.0{%- endif -%}"
@@ -115,48 +132,57 @@ protobuf {
         id("grpckt") {
             artifact = "io.grpc:protoc-gen-grpc-kotlin:{%- if target.proto_kotlin_grpc_version -%}{{ target.proto_kotlin_grpc_version }}{%- else -%}1.3.1{%- endif -%}:jdk8@jar"
         }
-{%      endif -%}
+{%-     endif %}
     }
+
     generateProtoTasks {
         all().forEach {
             it.plugins {
                 id("grpc")
 {%-     if target.proto_kotlin_grpc %}
                 id("grpckt")
-{%      endif -%}
+{%-     endif %}
             }
 {%-     if target.proto_kotlin_grpc %}
             it.builtins {
                 create("kotlin")
             }
-{%      endif -%}
+{%-     endif %}
         }
     }
 {%- endif %}
 }
 
-val prepareProto = tasks.register<Copy>("prepareProto") {
-    from(rootDir) {
-{%- for proto in target.proto_files %}
+val prepareMainProtos = tasks.register<Copy>("prepareMainProtos") {
+    from("$project_root") {
+{#- list of all current project proto files -#}
+{%-     for proto in target.proto_files %}
         include("{{ proto }}")
-{%- endfor %}
-{# Mining proto-deps sources directories #}
-{%- for library in target.consumer if library.prebuilt -%}
-{%-     if library.type == "library" %}
-{%-         set proto_rep = library.classpath|replace('project(":','') %}
-{%-         set proto_rep = proto_rep|replace('")','') %}
-{%-         set proto_rep = proto_rep|replace(':','/') %}
-{%-         set proto = proto_rep + '/**' %}
-        include("{{ proto }}")
-{%-     endif -%}
-{%- endfor %}
+{%-     endfor %}
     }
-    into(buildProtoDir)
+    into(mainProtosDir)
 }
 
-afterEvaluate {
-    tasks.getByName("extractProto").dependsOn(prepareProto)
+{%  if libraries|length -%}
+val extractMainLibrariesProtos = tasks.register<Copy>("extractMainLibrariesProtos") {
+    from("$project_root") {
+{#- list of all library directories -#}
+{%-     for library in libraries -%}
+{%-         set path_and_jar = rsplit(library.jar, '/', 2) %}
+        include("{{ path_and_jar[0] }}/**/*.proto")
+{%-     endfor %}
+    }
+    into(mainExtractedIncludeProtosDir)
 }
+
+{% endif -%}
+afterEvaluate {
+    tasks.getByName("extractProto").dependsOn(prepareMainProtos)
+{%- if libraries|length %}
+    tasks.getByName("extractProto").dependsOn(extractMainLibrariesProtos)
+{%- endif %}
+}
+
 {# To avoid problems when build project with proto #}
 tasks.getByName("sourcesJar").dependsOn("generateProto")
 

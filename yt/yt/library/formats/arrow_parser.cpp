@@ -11,6 +11,8 @@
 
 #include <library/cpp/yt/memory/chunked_output_stream.h>
 
+#include <util/generic/buffer.h>
+
 #include <util/stream/buffer.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>

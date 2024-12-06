@@ -90,7 +90,8 @@
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "string_contains And Not string_contains"
+                                                                                        "Predicate": "(SearchPhrase != \"\") AND (Title LIKE \"%Google%\" AND NOT URL LIKE \"%.google.%\")",
+                                                                                        "Pushdown": "True"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],

@@ -25,8 +25,8 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
-#include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_factory.h>
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_dq_transform.h>

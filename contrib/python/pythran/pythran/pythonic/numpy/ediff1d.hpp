@@ -28,7 +28,7 @@ namespace numpy
   {
     return ediff1d(asarray(expr));
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

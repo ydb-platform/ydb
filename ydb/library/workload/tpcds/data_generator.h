@@ -66,12 +66,9 @@ public:
 
     private:
         TString GetFullTableName(const char* table) const;
-        struct TPositions {
-            ds_key_t FirstRow = 1;
-            ui64 Position = 0;
-            ds_key_t Count = 0;
-        };
-        static TPositions CalcCountToGenerate(const TTpcdsWorkloadDataInitializerGenerator& owner, int tableNum, bool useState);
+        ds_key_t FirstRow = 1;
+        ui64 StartPosition = 0;
+        TDataPortionPtr FirstPortion;
         const TTpcdsWorkloadDataInitializerGenerator& Owner;
     };
 };

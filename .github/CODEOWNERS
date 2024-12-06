@@ -27,6 +27,8 @@
 /ydb/library/yql/providers/pq @ydb-platform/fq
 /ydb/library/yql/providers/s3 @ydb-platform/fq
 /ydb/library/yql/providers/solomon @ydb-platform/fq
+/ydb/library/yql/tests/sql/solomon @ydb-platform/fq
+/ydb/library/yql/tests/sql/suites/solomon @ydb-platform/fq
 /ydb/library/yql/udfs/common/clickhouse/client @ydb-platform/fq
 
 /ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
@@ -46,4 +48,7 @@
 
 /ydb/core/formats/arrow @ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
+
+/ydb/apps/ydb @ydb-platform/cli
+/ydb/public/lib/ydb_cli @ydb-platform/cli
 

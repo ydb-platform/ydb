@@ -68,6 +68,7 @@ struct TEvHttpProxy {
         std::vector<TString> CompressContentTypes;
         ui32 MaxRequestsPerSecond = 0;
         ui32 MaxRecycledRequestsCount = DEFAULT_MAX_RECYCLED_REQUESTS_COUNT;
+        TDuration InactivityTimeout = TDuration::Minutes(2);
 
         TEvAddListeningPort() = default;
 
@@ -251,6 +252,7 @@ struct TPrivateEndpointInfo : THttpEndpointInfo {
     TActorId Owner;
     TSslHelpers::TSslHolder<SSL_CTX> SecureContext;
     TRateLimiter RateLimiter;
+    TDuration InactivityTimeout;
 
     TPrivateEndpointInfo(const std::vector<TString>& compressContentTypes)
         : THttpEndpointInfo(compressContentTypes)

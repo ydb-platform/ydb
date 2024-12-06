@@ -599,3 +599,26 @@ message TEvResponseScaleRecommendation {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional uint32 RecommendedNodes = 2;
 }
+
+message TScaleRecommenderPolicies {
+    message TScaleRecommenderPolicy {
+        message TTargetTrackingPolicy {
+            optional uint32 AverageCpuUtilizationPercent = 1; 
+        }
+
+        oneof Policy {
+            TTargetTrackingPolicy TargetTrackingPolicy = 1;
+        }
+    }
+
+    repeated TScaleRecommenderPolicy Policies = 1;
+}
+
+message TEvConfigureScaleRecommender {
+    optional NKikimrSubDomains.TDomainKey DomainKey = 1;
+    optional TScaleRecommenderPolicies Policies = 2;
+}
+
+message TEvConfigureScaleRecommenderReply {
+    optional NKikimrProto.EReplyStatus Status = 1;
+}

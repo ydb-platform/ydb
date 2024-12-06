@@ -26,6 +26,8 @@
 
 namespace NKikimr::NKqp {
 
+class TKqpQueryCache;
+
 // basically it's a state that holds all the context
 // about the specific query execution.
 // it holds the unique pointer to the query request, which may include
@@ -412,7 +414,7 @@ public:
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
-        if (TxCtx->CanDeferEffects()) { 
+        if (TxCtx->CanDeferEffects()) {
             // At current time sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
                 QueryData->CreateKqpValueMap(tx);
@@ -470,9 +472,17 @@ public:
     // execution.
     std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> BuildNavigateKeySet();
     // same the context of the compiled query to the query state.
+    bool SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr compileResult);
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
     bool SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev);
     bool SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev);
+
+    bool TryGetFromCache(
+        TKqpQueryCache& cache,
+        const TGUCSettings::TPtr& gUCSettingsPtr,
+        TIntrusivePtr<TKqpCounters>& counters,
+        const TActorId& sender);
+
     // build the compilation request.
     std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
     // TODO(gvit): get rid of code duplication in these requests,

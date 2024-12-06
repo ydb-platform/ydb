@@ -1,9 +1,9 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_ANY_HPP
 #define PYTHONIC_INCLUDE_NUMPY_ANY_HPP
 
-#include "pythonic/include/utils/functor.hpp"
-#include "pythonic/include/types/ndarray.hpp"
 #include "pythonic/include/numpy/add.hpp"
+#include "pythonic/include/types/ndarray.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -31,11 +31,12 @@ namespace numpy
   template <class E>
   typename std::enable_if<
       E::value != 1,
-      types::ndarray<typename E::dtype, types::array<long, E::value - 1>>>::type
+      types::ndarray<typename E::dtype,
+                     types::array_tuple<long, E::value - 1>>>::type
   any(E const &array, long axis);
 
   DEFINE_FUNCTOR(pythonic::numpy, any);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

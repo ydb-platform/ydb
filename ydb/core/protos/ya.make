@@ -157,26 +157,27 @@ GENERATE_ENUM_SERIALIZATION(datashard_load.pb.h)
 GENERATE_ENUM_SERIALIZATION(shared_cache.pb.h)
 
 PEERDIR(
-    ydb/library/actors/protos
     ydb/core/config/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/protos/schemeshard
     ydb/core/scheme/protos
+    ydb/core/tx/columnshard/common/protos
+    ydb/core/tx/columnshard/engines/protos
+    ydb/core/tx/columnshard/engines/scheme/defaults/protos
+    ydb/library/actors/protos
+    ydb/library/formats/arrow/protos
     ydb/library/login/protos
     ydb/library/mkql_proto/protos
+    ydb/library/services
+    ydb/library/ydb_issue/proto
+    ydb/library/yql/dq/actors/protos
+    ydb/library/yql/dq/proto
     ydb/public/api/protos
     yql/essentials/core/file_storage/proto
     yql/essentials/core/issue/protos
-    ydb/library/yql/dq/actors/protos
-    ydb/library/yql/dq/proto
     yql/essentials/providers/common/proto
     yql/essentials/public/issue/protos
     yql/essentials/public/types
-    ydb/library/services
-    ydb/library/ydb_issue/proto
-    ydb/core/tx/columnshard/engines/scheme/defaults/protos
-    ydb/core/tx/columnshard/engines/protos
-    ydb/library/formats/arrow/protos
-    ydb/core/tx/columnshard/common/protos
 )
 
 CPP_PROTO_PLUGIN0(config_proto_plugin ydb/core/config/tools/protobuf_plugin)

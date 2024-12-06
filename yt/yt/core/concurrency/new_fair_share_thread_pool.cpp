@@ -30,11 +30,11 @@ namespace NYT::NConcurrency {
 
 using namespace NProfiling;
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FairShareThreadPool");
-
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
+
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FairShareThreadPool");
 
 DECLARE_REFCOUNTED_CLASS(TBucketMapping)
 DECLARE_REFCOUNTED_CLASS(TTwoLevelFairShareQueue)
@@ -45,7 +45,7 @@ struct TExecutionPool;
 // High 16 bits is thread index and 48 bits for thread pool ptr.
 YT_DEFINE_THREAD_LOCAL(TPackedPtr, ThreadCookie, 0);
 
-static constexpr auto LogDurationThreshold = TDuration::Seconds(1);
+constexpr auto LogDurationThreshold = TDuration::Seconds(1);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -287,6 +287,7 @@ message TKqpPhyCnStreamLookup {
     bytes LookupKeysType = 4;
     bytes ResultType = 5;
     EStreamLookupStrategy LookupStrategy = 6;
+    bool KeepRowsOrder = 7;
 }
 
 message TKqpPhyCnSequencer {
@@ -479,6 +480,8 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme AlterBackupCollection = 46;
         NKikimrSchemeOp.TModifyScheme DropBackupCollection = 47;
         NKikimrSchemeOp.TModifyScheme Backup = 48;
+        NKikimrSchemeOp.TModifyScheme BackupIncremental = 49;
+        NKikimrSchemeOp.TModifyScheme Restore = 50;
     }
 }
 

@@ -419,10 +419,8 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockCoordinatorChanged(Coordinator2Id);
         auto req = ExpectCoordinatorRequest(Coordinator2Id);
 
-        CaSetup->Execute([&](TFakeActor& actor) {
-            auto event = new NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed(0);
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, LocalRowDispatcherId, event));
-        });
+        MockUndelivered();
+
         MockCoordinatorResult(RowDispatcher1, req->Cookie);
         MockCoordinatorResult(RowDispatcher1, req->Cookie);
         ExpectStartSession(2, RowDispatcher1, 2);

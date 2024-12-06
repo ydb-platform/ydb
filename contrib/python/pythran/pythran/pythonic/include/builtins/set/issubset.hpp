@@ -19,7 +19,7 @@ namespace builtins
     bool issubset(types::empty_set const &set, U const &other);
 
     DEFINE_FUNCTOR(pythonic::builtins::set, issubset);
-  }
-}
+  } // namespace set
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

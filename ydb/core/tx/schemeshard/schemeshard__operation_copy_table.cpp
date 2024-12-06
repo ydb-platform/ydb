@@ -4,6 +4,8 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_cdc_stream_common.h"
 
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/base/subdomain.h>
 
@@ -715,6 +717,18 @@ public:
         dstPath.Base()->IncShardsInside(shardsToCreate);
         parent.Base()->IncAliveChildren(1, isBackup);
 
+        LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TCopyTable Propose creating new table"
+                << " opId# " << OperationId
+                << " srcPath# " << srcPath.PathString()
+                << " srcPathId# " << srcPath.Base()->PathId
+                << " path# " << dstPath.PathString()
+                << " pathId# " << newTable->PathId
+                << " withNewCdc# " << (Transaction.HasCreateCdcStream() ? "true" : "false")
+                << " schemeshard# " << ssId
+                << " tx# " << Transaction.DebugString()
+                );
+
         SetState(NextState());
         return result;
     }
@@ -862,6 +876,10 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             auto operation = schema.MutableCreateTableIndex();
             operation->SetName(name);
             operation->SetType(indexInfo->Type);
+            if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                                     "Copy table doesn't support table with vector index")};
+            }
             for (const auto& keyName: indexInfo->IndexKeys) {
                 *operation->MutableKeyColumnNames()->Add() = keyName;
             }

@@ -2,6 +2,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #include <ydb/core/base/subdomain.h>
 
@@ -305,6 +306,30 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateExternalDataSource().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateExternalDataSource()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
+
 TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
                                                          const TTxTransaction& tx,
                                                          TOperationContext& context) {
@@ -349,6 +374,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
 
     return {MakeSubOperation<TCreateExternalDataSource>(id, tx)};
 }
+
 ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TCreateExternalDataSource>(id, state);

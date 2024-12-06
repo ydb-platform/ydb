@@ -27,7 +27,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Serialize");
+[[maybe_unused]] static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Serialize");
 
 struct TSerializedMessageTag
 { };
@@ -616,6 +616,46 @@ TProtobufOutputStreamAdaptor::TProtobufOutputStreamAdaptor(IOutputStream* stream
     : TProtobufOutputStream(stream)
     , CopyingOutputStreamAdaptor(this)
 { }
+
+TProtobufZeroCopyOutputStream::TProtobufZeroCopyOutputStream(IZeroCopyOutput* stream)
+    : Stream_(stream)
+{ }
+
+bool TProtobufZeroCopyOutputStream::Next(void** data, int* size)
+{
+    try {
+        size_t sizetSize = Stream_->Next(data);
+        constexpr int maxSize = std::numeric_limits<int>::max();
+        if (sizetSize > maxSize) {
+            Stream_->Undo(sizetSize - maxSize);
+            sizetSize = maxSize;
+        }
+        *size = sizetSize;
+    } catch (const std::exception&) {
+        Error_ = std::current_exception();
+        return false;
+    }
+    ByteCount_ += *size;
+    return true;
+}
+
+void TProtobufZeroCopyOutputStream::BackUp(int count)
+{
+    ByteCount_ -= count;
+    Stream_->Undo(count);
+}
+
+int64_t TProtobufZeroCopyOutputStream::ByteCount() const
+{
+    return ByteCount_;
+}
+
+void TProtobufZeroCopyOutputStream::ThrowOnError() const
+{
+    if (Error_) {
+        std::rethrow_exception(Error_);
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

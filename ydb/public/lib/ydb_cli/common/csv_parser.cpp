@@ -438,35 +438,30 @@ TValue TCsvParser::BuildList(std::vector<TString>& lines, const TString& filenam
     for (const TType* type : ResultLineTypesSorted) {
         columnTypeParsers.push_back(std::make_unique<TTypeParser>(*type));
     }
+    
     Ydb::Value listValue;
     auto* listItems = listValue.mutable_items();
     listItems->Reserve(lines.size());
     for (auto& line : lines) {
-        std::vector<TStringBuf> fields;
         NCsvFormat::CsvSplitter splitter(line, Delimeter);
         TParseMetadata meta {row, filename};
+        auto* structItems = listItems->Add()->mutable_items();
+        structItems->Reserve(ResultColumnCount);
         auto headerIt = Header.cbegin();
         auto skipIt = SkipBitMap.begin();
+        auto typeParserIt = columnTypeParsers.begin();
         do {
             if (headerIt == Header.cend()) { // SkipBitMap has same size as Header
                 throw FormatError(yexception() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << line << "\"", meta);
             }
             TStringBuf nextField = Consume(splitter, meta, *headerIt);
             if (!*skipIt) {
-                fields.emplace_back(nextField);
+                *structItems->Add() = FieldToValue(*typeParserIt->get(), nextField, NullValue, meta, *headerIt).GetProto();
+                ++typeParserIt;
             }
             ++headerIt;
             ++skipIt;
         } while (splitter.Step());
-        auto* structItems = listItems->Add()->mutable_items();
-        structItems->Reserve(ResultColumnCount);
-        auto typeParserIt = columnTypeParsers.begin();
-        auto fieldIt = fields.begin();
-        auto nameIt = ResultLineNamesSorted.begin();
-        // fields size equals columnTypeParsers size, no need for second end check
-        for (; typeParserIt != columnTypeParsers.end(); ++typeParserIt, ++fieldIt, ++nameIt) {
-            *structItems->Add() = FieldToValue(*typeParserIt->get(), *fieldIt, NullValue, meta, **nameIt).GetProto();
-        }
         if (row.has_value()) {
             ++row.value();
         }
@@ -483,8 +478,7 @@ void TCsvParser::BuildLineType() {
         auto findIt = DestinationTypes->find(colName);
         if (findIt != DestinationTypes->end()) {
             builder.AddMember(colName, findIt->second);
-            ResultLineTypesSorted.emplace_back(&findIt->second);
-            ResultLineNamesSorted.emplace_back(&colName);
+            ResultLineTypesSorted.push_back(&findIt->second);
             SkipBitMap.push_back(false);
             ++ResultColumnCount;
         } else {

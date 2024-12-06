@@ -17,7 +17,7 @@ namespace builtins
                   long end = -1);
 
     DEFINE_FUNCTOR(pythonic::builtins::str, endswith);
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

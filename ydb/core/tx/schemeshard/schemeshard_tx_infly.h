@@ -3,11 +3,12 @@
 #include "schemeshard_types.h"
 
 #include <ydb/core/protos/counters_schemeshard.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
-
 #include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/actors/core/actorid.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
@@ -275,6 +276,7 @@ struct TTxState {
 
     // TxCopy: Stores path for cdc stream to create in case of ContinuousBackup; uses ExtraData through proto
     TPathId CdcPathId = InvalidPathId;
+    ui64 LoopStep = 0;
 
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them
@@ -770,7 +772,6 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpDropContinuousBackup: return TxInvalid;
-            case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpCreateBackupCollection: return TxCreateBackupCollection;
             case NKikimrSchemeOp::ESchemeOpAlterBackupCollection: return TxAlterBackupCollection;
             case NKikimrSchemeOp::ESchemeOpDropBackupCollection: return TxDropBackupCollection;

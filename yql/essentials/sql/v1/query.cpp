@@ -240,7 +240,17 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
             auto opts = Y();
 
             opts = L(opts, Q(Y(Q("columnName"), BuildQuotedAtom(ttlSettings.ColumnName.Pos, ttlSettings.ColumnName.Name))));
-            opts = L(opts, Q(Y(Q("expireAfter"), ttlSettings.Expr)));
+
+            auto tiersDesc = Y();
+            for (const auto& tier : ttlSettings.Tiers) {
+                auto tierDesc = Y();
+                tierDesc = L(tierDesc, Q(Y(Q("evictionDelay"), tier.EvictionDelay)));
+                if (tier.StorageName) {
+                    tierDesc = L(tierDesc, Q(Y(Q("storageName"), BuildQuotedAtom(tier.StorageName->Pos, tier.StorageName->Name))));
+                }
+                tiersDesc = L(tiersDesc, Q(tierDesc));
+            }
+            opts = L(opts, Q(Y(Q("tiers"), Q(tiersDesc))));
 
             if (ttlSettings.ColumnUnit) {
                 opts = L(opts, Q(Y(Q("columnUnit"), Q(ToString(*ttlSettings.ColumnUnit)))));
@@ -2037,6 +2047,110 @@ private:
 
 TNodePtr BuildAlterUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TRoleParameters& params, TScopedStatePtr scoped) {
     return new TAlterUser(pos, service, cluster, name, params, scoped);
+}
+
+class TAlterSequence final: public TAstListNode {
+public:
+    TAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& id, const TSequenceParameters& params, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Service(service)
+        , Cluster(cluster)
+        , Id(id)
+        , Params(params)
+        , Scoped(scoped)
+    {
+        FakeSource = BuildFakeSource(pos);
+        scoped->UseCluster(service, cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(src);
+
+        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx);
+
+        if (!cluster->Init(ctx, FakeSource.Get())) {
+            return false;
+        }
+
+        auto options = Y();
+        TString mode = Params.MissingOk ? "alter_if_exists" : "alter";
+        options = L(options, Q(Y(Q("mode"), Q(mode))));
+
+        if (Params.IsRestart) {
+            if (Params.RestartValue) {
+                TString strValue = Params.RestartValue->Build()->GetLiteralValue();
+                ui64 value = FromString<ui64>(strValue);
+                ui64 maxValue = ui64(std::numeric_limits<i64>::max());
+                ui64 minValue = 1;
+                if (value > maxValue) {
+                    ctx.Error(Pos) << "Restart value: " << value << " cannot be greater than max value: " << maxValue;
+                    return false;
+                }
+                if (value < minValue) {
+                    ctx.Error(Pos) << "Restart value: " << value << " cannot be less than min value: " << minValue;
+                    return false;
+                }
+                options = L(options, Q(Y(Q("restart"), Q(ToString(value)))));
+            } else {
+                options = L(options, Q(Y(Q("restart"), Q(TString()))));
+            }
+        }
+        if (Params.StartValue) {
+            TString strValue = Params.StartValue->Build()->GetLiteralValue();
+            ui64 value = FromString<ui64>(strValue);
+            ui64 maxValue = ui64(std::numeric_limits<i64>::max());
+            ui64 minValue = 1;
+            if (value > maxValue) {
+                ctx.Error(Pos) << "Start value: " << value << " cannot be greater than max value: " << maxValue;
+                return false;
+            }
+            if (value < minValue) {
+                ctx.Error(Pos) << "Start value: " << value << " cannot be less than min value: " << minValue;
+                return false;
+            }
+            options = L(options, Q(Y(Q("start"), Q(ToString(value)))));
+        }
+
+        if (Params.Increment) {
+            TString strValue = Params.Increment->Build()->GetLiteralValue();
+            ui64 value = FromString<ui64>(strValue);
+            ui64 maxValue = ui64(std::numeric_limits<i64>::max());
+            if (value > maxValue) {
+                ctx.Error(Pos) << "Increment: " << value << " cannot be greater than max value: " << maxValue;
+                return false;
+            }
+            if (value == 0) {
+                ctx.Error(Pos) << "Increment must not be zero";
+                return false;
+            }
+            options = L(options, Q(Y(Q("increment"), Q(ToString(value)))));
+        }
+
+        Add("block", Q(Y(
+                Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, TString(KikimrProviderName)),
+                                   Scoped->WrapCluster(Cluster, ctx))),
+                Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("sequence"), Y("String", BuildQuotedAtom(Pos, Id))))), Y("Void"), Q(options))),
+                Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+        )));
+
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+private:
+    const TString Service;
+    TDeferredAtom Cluster;
+    TString Id;
+    const TSequenceParameters Params;
+
+    TScopedStatePtr Scoped;
+    TSourcePtr FakeSource;
+};
+
+TNodePtr BuildAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& id, const TSequenceParameters& params, TScopedStatePtr scoped) {
+    return new TAlterSequence(pos, service, cluster, id, params, scoped);
 }
 
 class TRenameRole final: public TAstListNode {

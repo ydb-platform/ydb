@@ -12,23 +12,6 @@ namespace NKikimr {
 namespace NTable {
 
     /**
-     * Allows performing reads in the context of a compaction strategy.
-     */
-    class ICompactionRead {
-    public:
-        virtual ~ICompactionRead() = default;
-
-        /**
-         * Execute is called with the environment that may be used to load
-         * pages from currently valid parts. Method may return false indicating
-         * it needs to wait for some missing pages, in which case it will
-         * be restarted at a later time. Method must return true when there
-         * is actually nothing for the backend to load.
-         */
-        virtual bool Execute(IPages* env) = 0;
-    };
-
-    /**
      * Compaction params specify which parts of the table to compact
      */
     class TCompactionParams {
@@ -203,21 +186,6 @@ namespace NTable {
          * Cancels compaction previously started with BeginCompaction
          */
         virtual bool CancelCompaction(ui64 compactionId) = 0;
-
-        /**
-         * Request backend to perform some page reads
-         *
-         * Note that the first Execute call may be performed before the return
-         * from BeginRead. The returned id may be used for cancelling a pending
-         * read, where a value of 0 is used to indicate the read has finished
-         * before the return from BeginRead.
-         */
-        virtual ui64 BeginRead(THolder<ICompactionRead> read) = 0;
-
-        /**
-         * Cancels a previously started BeginRead call
-         */
-        virtual bool CancelRead(ui64 readId) = 0;
 
         /**
          * Requests backend to call ApplyChanges for the specified table

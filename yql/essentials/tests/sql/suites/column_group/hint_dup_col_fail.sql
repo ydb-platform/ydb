@@ -1,3 +1,4 @@
+/* custom error:Duplicate column "a"*/
 USE plato;
 
 -- duplicate column

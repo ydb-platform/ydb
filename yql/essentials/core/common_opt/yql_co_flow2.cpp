@@ -31,16 +31,7 @@ bool AllowComplexFiltersOverAggregatePushdown(const TOptimizeContext& optCtx) {
            optCtx.Types->MaxAggPushdownPredicates > 0;
 }
 
-TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprContext& ctx, const TParentsMap& parentsMap) {
-    auto inputType = node.Input().Ref().GetTypeAnn();
-    auto structType = inputType->GetKind() == ETypeAnnotationKind::List
-        ? inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()
-        : inputType->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
-
-    if (structType->GetSize() == 0) {
-        return node.Ptr();
-    }
-
+THashSet<TStringBuf> GetAggregationInputKeys(const TCoAggregate& node) {
     TMaybe<TStringBuf> sessionColumn;
     const auto sessionSetting = GetSetting(node.Settings().Ref(), "session");
     if (sessionSetting) {
@@ -58,12 +49,27 @@ TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprCon
         }
     }
 
-    TSet<TStringBuf> usedFields;
+    THashSet<TStringBuf> result;
     for (const auto& x : node.Keys()) {
         if (x.Value() != sessionColumn && x.Value() != hoppingColumn) {
-            usedFields.insert(x.Value());
+            result.insert(x.Value());
         }
     }
+
+    return result;
+}
+
+TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprContext& ctx, const TParentsMap& parentsMap) {
+    auto inputType = node.Input().Ref().GetTypeAnn();
+    auto structType = inputType->GetKind() == ETypeAnnotationKind::List
+        ? inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()
+        : inputType->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    if (structType->GetSize() == 0) {
+        return node.Ptr();
+    }
+
+    THashSet<TStringBuf> usedFields = GetAggregationInputKeys(node);
 
     if (usedFields.size() == structType->GetSize()) {
         return node.Ptr();
@@ -96,7 +102,7 @@ TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprCon
         }
     }
 
-    if (hoppingSetting) {
+    if (auto hoppingSetting = GetSetting(node.Settings().Ref(), "hopping")) {
         auto traitsNode = hoppingSetting->ChildPtr(1);
         if (traitsNode->IsList()) {
             traitsNode = traitsNode->ChildPtr(1);
@@ -120,7 +126,7 @@ TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprCon
         }
     }
 
-    if (sessionSetting) {
+    if (auto sessionSetting = GetSetting(node.Settings().Ref(), "session")) {
         TCoSessionWindowTraits traits(sessionSetting->Child(1)->ChildPtr(1));
 
         auto usedType = traits.ListType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()->
@@ -1326,10 +1332,7 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
     TCoConditionalValueBase body = node.Lambda().Body().Cast<TCoConditionalValueBase>();
 
     const TCoAggregate agg = node.Input().Cast<TCoAggregate>();
-    THashSet<TStringBuf> keyColumns;
-    for (auto key : agg.Keys()) {
-        keyColumns.insert(key.Value());
-    }
+    const THashSet<TStringBuf> keyColumns = GetAggregationInputKeys(agg);
 
     TExprNodeList andComponents;
     if (auto maybeAnd = body.Predicate().Maybe<TCoAnd>()) {

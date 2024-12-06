@@ -1,5 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
+/* custom error: Table "Output" does not exist */
 USE plato;
 
 INSERT INTO Output

@@ -1,5 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
+/* custom error:Anonymous table "@Output1" must be materialized*/
 use plato;
 
 $force_remove_members = ($struct, $to_remove) -> {

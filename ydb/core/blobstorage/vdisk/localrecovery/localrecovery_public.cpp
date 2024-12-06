@@ -425,12 +425,6 @@ namespace NKikimr {
             const ui32 blocksInChunk = LocRecCtx->PDiskCtx->Dsk->ChunkSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
             Y_ABORT_UNLESS(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize);
 
-            ui32 MaxLogoBlobDataSizeInBlocks = Config->MaxLogoBlobDataSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
-            MaxLogoBlobDataSizeInBlocks += !!(Config->MaxLogoBlobDataSize -
-                    MaxLogoBlobDataSizeInBlocks * LocRecCtx->PDiskCtx->Dsk->AppendBlockSize);
-            const ui32 slotsInChunk = blocksInChunk / MaxLogoBlobDataSizeInBlocks;
-            Y_ABORT_UNLESS(slotsInChunk > 1);
-
             auto logFunc = [&] (const TString &msg) {
                 LOG_DEBUG(ctx, BS_HULLHUGE, msg);
             };
@@ -445,7 +439,7 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
-                            Config->MaxLogoBlobDataSize,
+                            Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
                             logFunc);
@@ -466,7 +460,7 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
-                            Config->MaxLogoBlobDataSize,
+                            Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
                             lsn, entryPoint, logFunc);

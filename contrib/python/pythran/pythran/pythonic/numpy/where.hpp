@@ -4,8 +4,8 @@
 #include "pythonic/include/numpy/where.hpp"
 
 #include "pythonic/numpy/asarray.hpp"
-#include "pythonic/numpy/nonzero.hpp"
 #include "pythonic/numpy/copy.hpp"
+#include "pythonic/numpy/nonzero.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -22,13 +22,13 @@ namespace numpy
       else
         return false_;
     }
-  }
+  } // namespace impl
 
 #define NUMPY_NARY_FUNC_NAME where
 #define NUMPY_NARY_FUNC_SYM impl::where
 #define NUMPY_NARY_RESHAPE_MODE reshape_type
 #include "pythonic/types/numpy_nary_expr.hpp"
-}
+} // namespace numpy
 
 namespace types
 {
@@ -65,7 +65,7 @@ namespace types
       return numpy::functor::where{}(*std::get<I>(iters)...);
     }
   };
-}
+} // namespace types
 PYTHONIC_NS_END
 
 #endif

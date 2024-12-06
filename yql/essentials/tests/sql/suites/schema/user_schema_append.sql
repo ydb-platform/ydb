@@ -1,4 +1,4 @@
-/* syntax version 1 */
+/* custom error:Table "Input" row type differs from the written row type: Struct<-subkey:String>*/
 USE plato;
 
 INSERT INTO Input

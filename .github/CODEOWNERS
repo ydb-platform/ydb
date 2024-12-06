@@ -51,4 +51,4 @@
 
 /ydb/apps/ydb @ydb-platform/cli
 /ydb/public/lib/ydb_cli @ydb-platform/cli
-
+/ydb/public/sdk/cpp @ydb-platform/cpp-sdk

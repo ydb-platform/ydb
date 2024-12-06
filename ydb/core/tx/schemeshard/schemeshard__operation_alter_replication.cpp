@@ -14,6 +14,25 @@ namespace NKikimr::NSchemeShard {
 
 namespace {
 
+struct IStrategy {
+    virtual void Check(const TPath::TChecker& checks) const = 0;
+};
+
+struct TReplicationStrategy : public IStrategy {
+    void Check(const TPath::TChecker& checks) const override {
+        checks.IsReplication();
+    };
+};
+
+struct TTransferStrategy : public IStrategy {
+    void Check(const TPath::TChecker& checks) const override {
+        checks.IsTransfer();
+    };
+};
+
+static constexpr TReplicationStrategy ReplicationStrategy;
+static constexpr TTransferStrategy TransferStrategy;
+
 class TConfigureParts: public TSubOperationState {
     TString DebugHint() const override {
         return TStringBuilder()
@@ -278,6 +297,18 @@ class TAlterReplication: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    explicit TAlterReplication(TOperationId id, const TTxTransaction& tx, const IStrategy* strategy)
+        : TSubOperation(id, tx)
+        , Strategy(strategy)
+    {
+    }
+
+    explicit TAlterReplication(TOperationId id, TTxState::ETxState state, const IStrategy* strategy)
+        : TSubOperation(id, state)
+        , Strategy(strategy)
+    {
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetAlterReplication();
@@ -309,8 +340,8 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsReplication()
                 .NotUnderOperation();
+            Strategy->Check(checks);
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -431,24 +462,27 @@ public:
         context.OnComplete.DoneOperation(OperationId);
     }
 
+private:
+    const IStrategy* Strategy;
+
 }; // TAlterReplication
 
 } // anonymous
 
 ISubOperation::TPtr CreateAlterReplication(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TAlterReplication>(id, tx);
+    return MakeSubOperation<TAlterReplication>(id, tx, &ReplicationStrategy);
 }
 
 ISubOperation::TPtr CreateAlterReplication(TOperationId id, TTxState::ETxState state) {
-    return MakeSubOperation<TAlterReplication>(id, state);
+    return MakeSubOperation<TAlterReplication>(id, state, &ReplicationStrategy);
 }
 
 ISubOperation::TPtr CreateAlterTransfer(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TAlterReplication>(id, tx);
+    return MakeSubOperation<TAlterReplication>(id, tx, &TransferStrategy);
 }
 
 ISubOperation::TPtr CreateAlterTransfer(TOperationId id, TTxState::ETxState state) {
-    return MakeSubOperation<TAlterReplication>(id, state);
+    return MakeSubOperation<TAlterReplication>(id, state, &TransferStrategy);
 }
 
 }

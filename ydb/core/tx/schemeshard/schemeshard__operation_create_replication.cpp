@@ -14,6 +14,34 @@ namespace NKikimr::NSchemeShard {
 
 namespace {
 
+struct IStrategy {
+    virtual TPathElement::EPathType GetPathType() const = 0;
+    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const = 0;
+};
+
+struct TReplicationStrategy : public IStrategy {
+    TPathElement::EPathType GetPathType() const override {
+        return TPathElement::EPathType::EPathTypeReplication;
+    };
+
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
+        return true;
+    }
+};
+
+struct TTransferStrategy : public IStrategy {
+    TPathElement::EPathType GetPathType() const override {
+        return TPathElement::EPathType::EPathTypeTransfer;
+    };
+
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
+        return true;
+    }
+};
+
+static constexpr TReplicationStrategy ReplicationStrategy;
+static constexpr TTransferStrategy TransferStrategy;
+
 class TConfigureParts: public TSubOperationState {
     TString DebugHint() const override {
         return TStringBuilder()
@@ -235,14 +263,16 @@ class TCreateReplication: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    explicit TCreateReplication(const TOperationId& id, TTxState::ETxState state, TPathElement::EPathType pathType)
+    explicit TCreateReplication(const TOperationId& id, TTxState::ETxState state, const IStrategy* strategy)
         : TSubOperation(id, state)
-        , PathType(pathType) {
+        , Strategy(strategy)
+    {
     }
 
-    explicit TCreateReplication(const TOperationId& id, const TTxTransaction& tx, TPathElement::EPathType pathType)
+    explicit TCreateReplication(const TOperationId& id, const TTxTransaction& tx, const IStrategy* strategy)
         : TSubOperation(id, tx)
-        , PathType(pathType) {
+        , Strategy(strategy)
+    {
     }
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
@@ -316,6 +346,10 @@ public:
             }
         }
 
+        if (Strategy->Validate(*result.Get(), desc)) {
+
+        }
+
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
@@ -338,7 +372,7 @@ public:
         path->CreateTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();
         path->PathState = TPathElement::EPathState::EPathStateCreate;
-        path->PathType = PathType;
+        path->PathType = Strategy->GetPathType();
         result->SetPathId(path->PathId.LocalPathId);
 
         context.SS->IncrementPathDbRefCount(path->PathId);
@@ -430,26 +464,26 @@ public:
     }
 
 private:
-    const TPathElement::EPathType PathType;
+    const IStrategy* Strategy;
 
 }; // TCreateReplication
 
 } // anonymous
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateReplication>(id, tx, TPathElement::EPathType::EPathTypeReplication);
+    return MakeSubOperation<TCreateReplication>(id, tx, &ReplicationStrategy);
 }
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state) {
-    return MakeSubOperation<TCreateReplication>(id, state, TPathElement::EPathType::EPathTypeReplication);
+    return MakeSubOperation<TCreateReplication>(id, state, &ReplicationStrategy);
 }
 
 ISubOperation::TPtr CreateNewTransfer(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateReplication>(id, tx, TPathElement::EPathType::EPathTypeTransfer);
+    return MakeSubOperation<TCreateReplication>(id, tx, &TransferStrategy);
 }
 
 ISubOperation::TPtr CreateNewTransfer(TOperationId id, TTxState::ETxState state) {
-    return MakeSubOperation<TCreateReplication>(id, state, TPathElement::EPathType::EPathTypeTransfer);
+    return MakeSubOperation<TCreateReplication>(id, state, &TransferStrategy);
 }
 
 }

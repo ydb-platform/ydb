@@ -4,11 +4,11 @@
 
 namespace NLogin {
 
-TPasswordComplexitySettings::TPasswordComplexitySettings()
+TPasswordComplexity::TPasswordComplexity()
     : SpecialChars(VALID_SPECIAL_CHARS.cbegin(), VALID_SPECIAL_CHARS.cend())
 {}
 
-TPasswordComplexitySettings::TPasswordComplexitySettings(const TInitializer& initializer)
+TPasswordComplexity::TPasswordComplexity(const TInitializer& initializer)
     : MinLength(initializer.MinLength)
     , MinLowerCaseCount(initializer.MinLowerCaseCount)
     , MinUpperCaseCount(initializer.MinUpperCaseCount)
@@ -24,14 +24,14 @@ TPasswordComplexitySettings::TPasswordComplexitySettings(const TInitializer& ini
     }
 }
 
-bool TPasswordComplexitySettings::IsSpecialCharValid(char ch) const {
+bool TPasswordComplexity::IsSpecialCharValid(char ch) const {
     return SpecialChars.contains(ch);
 }
 
-const TString TPasswordComplexitySettings::VALID_SPECIAL_CHARS = "!@#$%^&*()_+{}|<>?=";
+const TString TPasswordComplexity::VALID_SPECIAL_CHARS = "!@#$%^&*()_+{}|<>?=";
 
-TPasswordChecker::TComplexityState::TComplexityState(const TPasswordComplexitySettings& complexitySettings)
-    : ComplexitySettings(complexitySettings)
+TPasswordChecker::TComplexityState::TComplexityState(const TPasswordComplexity& passwordComplexity)
+    : PasswordComplexity(passwordComplexity)
 {}
 
 void TPasswordChecker::TComplexityState::IncLowerCaseCount() {
@@ -51,37 +51,37 @@ void TPasswordChecker::TComplexityState::IncSpecialCharsCount() {
 }
 
 bool TPasswordChecker::TComplexityState::CheckLowerCaseCount() const {
-    return LowerCaseCount >= ComplexitySettings.MinLowerCaseCount;
+    return LowerCaseCount >= PasswordComplexity.MinLowerCaseCount;
 }
 
 bool TPasswordChecker::TComplexityState::CheckUpperCaseCount() const {
-    return UpperCaseCount >= ComplexitySettings.MinUpperCaseCount;
+    return UpperCaseCount >= PasswordComplexity.MinUpperCaseCount;
 }
 
 bool TPasswordChecker::TComplexityState::CheckNumbersCount() const {
-    return NumbersCount >= ComplexitySettings.MinNumbersCount;
+    return NumbersCount >= PasswordComplexity.MinNumbersCount;
 }
 
 bool TPasswordChecker::TComplexityState::CheckSpecialCharsCount() const {
-    return SpecialCharsCount >= ComplexitySettings.MinSpecialCharsCount;
+    return SpecialCharsCount >= PasswordComplexity.MinSpecialCharsCount;
 }
 
-TPasswordChecker::TPasswordChecker(const TPasswordComplexitySettings& complexitySettings)
-    : ComplexitySettings(complexitySettings)
+TPasswordChecker::TPasswordChecker(const TPasswordComplexity& passwordComplexity)
+    : PasswordComplexity(passwordComplexity)
 {}
 
 TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const TString& password) const {
-    if (password.empty() && ComplexitySettings.MinLength == 0) {
+    if (password.empty() && PasswordComplexity.MinLength == 0) {
         return {.Success = true};
     }
-    if (password.length() < ComplexitySettings.MinLength) {
+    if (password.length() < PasswordComplexity.MinLength) {
         return {.Success = false, .Error = "Password is too short"};
     }
-    if (!ComplexitySettings.CanContainUsername && password.Contains(username)) {
+    if (!PasswordComplexity.CanContainUsername && password.Contains(username)) {
         return {.Success = false, .Error = "Password must not contain user name"};
     }
 
-    TComplexityState complexityState(ComplexitySettings);
+    TComplexityState complexityState(PasswordComplexity);
     for (const char& ch : password) {
         if (std::islower(static_cast<unsigned char>(ch))) {
             complexityState.IncLowerCaseCount();
@@ -89,7 +89,7 @@ TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const
             complexityState.IncUpperCaseCount();
         } else if (std::isdigit(static_cast<unsigned char>(ch))) {
             complexityState.IncNumbersCount();
-        } else if (ComplexitySettings.IsSpecialCharValid(ch)) {
+        } else if (PasswordComplexity.IsSpecialCharValid(ch)) {
             complexityState.IncSpecialCharsCount();
         } else {
             return {.Success = false, .Error = "Password contains unacceptable characters"};
@@ -100,28 +100,28 @@ TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const
     errorMessage << "Incorrect password format: ";
     bool hasError = false;
     if (!complexityState.CheckLowerCaseCount()) {
-        errorMessage << "should contain at least " << ComplexitySettings.MinLowerCaseCount << " lower case character";
+        errorMessage << "should contain at least " << PasswordComplexity.MinLowerCaseCount << " lower case character";
         hasError = true;
     }
     if (!complexityState.CheckUpperCaseCount()) {
         if (hasError) {
             errorMessage << ", ";
         }
-        errorMessage << "should contain at least " << ComplexitySettings.MinUpperCaseCount << " upper case character";
+        errorMessage << "should contain at least " << PasswordComplexity.MinUpperCaseCount << " upper case character";
         hasError = true;
     }
     if (!complexityState.CheckNumbersCount()) {
         if (hasError) {
             errorMessage << ", ";
         }
-        errorMessage << "should contain at least " << ComplexitySettings.MinNumbersCount << " number";
+        errorMessage << "should contain at least " << PasswordComplexity.MinNumbersCount << " number";
         hasError = true;
     }
     if (!complexityState.CheckSpecialCharsCount()) {
         if (hasError) {
             errorMessage << ", ";
         }
-        errorMessage << "should contain at least " << ComplexitySettings.MinSpecialCharsCount << " special character";
+        errorMessage << "should contain at least " << PasswordComplexity.MinSpecialCharsCount << " special character";
         hasError = true;
     }
 
@@ -131,8 +131,8 @@ TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const
     return {.Success = true};
 }
 
-void TPasswordChecker::Update(const TPasswordComplexitySettings& complexitySettings) {
-    ComplexitySettings = complexitySettings;
+void TPasswordChecker::Update(const TPasswordComplexity& passwordComplexity) {
+    PasswordComplexity = passwordComplexity;
 }
 
 } // NLogin

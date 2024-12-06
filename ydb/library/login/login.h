@@ -174,10 +174,10 @@ public:
     TRenameGroupResponse RenameGroup(const TRenameGroupRequest& request);
     TRemoveGroupResponse RemoveGroup(const TRemoveGroupRequest& request);
 
-    void UpdatePasswordCheckParameters(const TPasswordComplexitySettings& passwordComplexitySettings);
+    void UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity);
 
     TLoginProvider();
-    TLoginProvider(const TPasswordComplexitySettings& passwordComplexitySettings);
+    TLoginProvider(const TPasswordComplexity& passwordComplexity);
     ~TLoginProvider();
 
     std::vector<TString> GetGroupsMembership(const TString& member);

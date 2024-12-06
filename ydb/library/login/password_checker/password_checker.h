@@ -6,7 +6,7 @@
 
 namespace NLogin {
 
-class TPasswordComplexitySettings {
+class TPasswordComplexity {
 public:
     struct TInitializer {
         size_t MinLength = 0;
@@ -28,8 +28,8 @@ public:
     std::unordered_set<char> SpecialChars;
     bool CanContainUsername = false;
 
-    TPasswordComplexitySettings();
-    TPasswordComplexitySettings(const TInitializer& initializer);
+    TPasswordComplexity();
+    TPasswordComplexity(const TInitializer& initializer);
 
     bool IsSpecialCharValid(char ch) const;
 };
@@ -49,10 +49,10 @@ private:
         size_t NumbersCount = 0;
         size_t SpecialCharsCount = 0;
 
-        const TPasswordComplexitySettings& ComplexitySettings;
+        const TPasswordComplexity& PasswordComplexity;
 
     public:
-        TComplexityState(const TPasswordComplexitySettings& complexitySettings);
+        TComplexityState(const TPasswordComplexity& passwordComplexity);
 
         void IncLowerCaseCount();
         void IncUpperCaseCount();
@@ -66,12 +66,12 @@ private:
     };
 
 private:
-    TPasswordComplexitySettings ComplexitySettings;
+    TPasswordComplexity PasswordComplexity;
 
 public:
-    TPasswordChecker(const TPasswordComplexitySettings& complexitySettings);
+    TPasswordChecker(const TPasswordComplexity& passwordComplexity);
     TResult Check(const TString& username, const TString& password) const;
-    void Update(const TPasswordComplexitySettings& checkParameters);
+    void Update(const TPasswordComplexity& passwordComplexity);
 };
 
 } // NLogin

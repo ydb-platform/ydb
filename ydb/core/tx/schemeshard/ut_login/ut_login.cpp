@@ -17,18 +17,18 @@ using namespace NSchemeShardUT_Private;
 
 namespace NSchemeShardUT_Private {
 
-void SetPasswordCheckerParameters(TTestActorRuntime &runtime, ui64 schemeShard, const NLogin::TPasswordComplexitySettings::TInitializer& initializer) {
+void SetPasswordCheckerParameters(TTestActorRuntime &runtime, ui64 schemeShard, const NLogin::TPasswordComplexity::TInitializer& initializer) {
     auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 
-    ::NKikimrProto::TPasswordComplexitySettings passwordComplexitySettings;
-    passwordComplexitySettings.SetMinLength(initializer.MinLength);
-    passwordComplexitySettings.SetMinLowerCaseCount(initializer.MinLowerCaseCount);
-    passwordComplexitySettings.SetMinUpperCaseCount(initializer.MinUpperCaseCount);
-    passwordComplexitySettings.SetMinNumbersCount(initializer.MinNumbersCount);
-    passwordComplexitySettings.SetMinSpecialCharsCount(initializer.MinSpecialCharsCount);
-    passwordComplexitySettings.SetSpecialChars(initializer.SpecialChars);
-    passwordComplexitySettings.SetCanContainUsername(initializer.CanContainUsername);
-    *request->Record.MutableConfig()->MutableAuthConfig()->MutablePasswordComplexitySettings() = passwordComplexitySettings;
+    ::NKikimrProto::TPasswordComplexity passwordComplexity;
+    passwordComplexity.SetMinLength(initializer.MinLength);
+    passwordComplexity.SetMinLowerCaseCount(initializer.MinLowerCaseCount);
+    passwordComplexity.SetMinUpperCaseCount(initializer.MinUpperCaseCount);
+    passwordComplexity.SetMinNumbersCount(initializer.MinNumbersCount);
+    passwordComplexity.SetMinSpecialCharsCount(initializer.MinSpecialCharsCount);
+    passwordComplexity.SetSpecialChars(initializer.SpecialChars);
+    passwordComplexity.SetCanContainUsername(initializer.CanContainUsername);
+    *request->Record.MutableConfig()->MutableAuthConfig()->MutablePasswordComplexity() = passwordComplexity;
     SetConfig(runtime, schemeShard, std::move(request));
 }
 

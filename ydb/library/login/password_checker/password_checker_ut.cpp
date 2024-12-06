@@ -1,6 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/builder.h>
-#include <unordered_set>
 #include "password_checker.h"
 
 using namespace NLogin;
@@ -8,16 +7,16 @@ using namespace NLogin;
 Y_UNIT_TEST_SUITE(PasswordChecker) {
 
     Y_UNIT_TEST(CheckCorrectPasswordWithMaxComplexity) {
-        TPasswordComplexitySettings complexitySettings({
+        TPasswordComplexity passwordComplexity({
             .MinLength = 8,
             .MinLowerCaseCount = 2,
             .MinUpperCaseCount = 2,
             .MinNumbersCount = 2,
             .MinSpecialCharsCount = 2,
-            .SpecialChars = TPasswordComplexitySettings::VALID_SPECIAL_CHARS,
+            .SpecialChars = TPasswordComplexity::VALID_SPECIAL_CHARS,
             .CanContainUsername = false
         });
-        TPasswordChecker passwordChecker(complexitySettings);
+        TPasswordChecker passwordChecker(passwordComplexity);
         TString username = "testuser";
         TString password = "qwer%Bs7*S4";
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
@@ -26,8 +25,8 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(CannotAcceptTooShortPassword) {
-        TPasswordComplexitySettings complexitySettings({.MinLength = 8});
-        TPasswordChecker passwordChecker(complexitySettings);
+        TPasswordComplexity passwordComplexity({.MinLength = 8});
+        TPasswordChecker passwordChecker(passwordComplexity);
         TString username = "testuser";
         TString password = "abcd"; // Short password
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
@@ -36,8 +35,8 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(PasswordCannotContainUsername) {
-        TPasswordComplexitySettings complexitySettings({.CanContainUsername = false});
-        TPasswordChecker passwordChecker(complexitySettings);
+        TPasswordComplexity passwordComplexity({.CanContainUsername = false});
+        TPasswordChecker passwordChecker(passwordComplexity);
         TString username = "testuser";
         TString password = "123testuserqqq";
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
@@ -46,64 +45,64 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(CannotAcceptPasswordWithoutLowerCaseCharacters) {
-        TPasswordComplexitySettings complexitySettings({
+        TPasswordComplexity passwordComplexity({
             .MinLowerCaseCount = 4
         });
-        TPasswordChecker passwordChecker(complexitySettings);
+        TPasswordChecker passwordChecker(passwordComplexity);
         TString username = "testuser";
         TString password = "12345$*QWERTY";
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
         UNIT_ASSERT_C(!result.Success, "Must be error");
         UNIT_ASSERT_STRINGS_EQUAL(result.Error, TStringBuilder() << "Incorrect password format: should contain at least "
-                                                                 << complexitySettings.MinLowerCaseCount
+                                                                 << passwordComplexity.MinLowerCaseCount
                                                                  << " lower case character");
     }
 
     Y_UNIT_TEST(CannotAcceptPasswordWithoutUpperCaseCharacters) {
-        TPasswordComplexitySettings complexitySettings({
+        TPasswordComplexity passwordComplexity({
             .MinUpperCaseCount = 4
         });
-        TPasswordChecker passwordChecker(complexitySettings);
+        TPasswordChecker passwordChecker(passwordComplexity);
         TString username = "testuser";
         TString password = "12345$*qwerty";
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
         UNIT_ASSERT_C(!result.Success, "Must be error");
         UNIT_ASSERT_STRINGS_EQUAL(result.Error, TStringBuilder() << "Incorrect password format: should contain at least "
-                                                                 << complexitySettings.MinUpperCaseCount
+                                                                 << passwordComplexity.MinUpperCaseCount
                                                                  << " upper case character");
     }
 
     Y_UNIT_TEST(CannotAcceptPasswordWithoutNumbers) {
-        TPasswordComplexitySettings complexitySettings({
+        TPasswordComplexity passwordComplexity({
             .MinNumbersCount = 4
         });
-        TPasswordChecker passwordChecker(complexitySettings);
+        TPasswordChecker passwordChecker(passwordComplexity);
         TString username = "testuser";
         TString password = "ASDF$*qwerty";
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
         UNIT_ASSERT_C(!result.Success, "Must be error");
         UNIT_ASSERT_STRINGS_EQUAL(result.Error, TStringBuilder() << "Incorrect password format: should contain at least "
-                                                                 << complexitySettings.MinNumbersCount
+                                                                 << passwordComplexity.MinNumbersCount
                                                                  << " number");
     }
 
     Y_UNIT_TEST(CannotAcceptPasswordWithoutSpecialCharacters) {
-        TPasswordComplexitySettings complexitySettings({
+        TPasswordComplexity passwordComplexity({
             .MinSpecialCharsCount = 4
         });
-        TPasswordChecker passwordChecker(complexitySettings);
+        TPasswordChecker passwordChecker(passwordComplexity);
         TString username = "testuser";
         TString password = "ASDF42qwerty";
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
         UNIT_ASSERT_C(!result.Success, "Must be error");
         UNIT_ASSERT_STRINGS_EQUAL(result.Error, TStringBuilder() << "Incorrect password format: should contain at least "
-                                                                 << complexitySettings.MinSpecialCharsCount
+                                                                 << passwordComplexity.MinSpecialCharsCount
                                                                  << " special character");
     }
 
     Y_UNIT_TEST(CannotAcceptPasswordWithInvalidCharacters) {
-        TPasswordComplexitySettings complexitySettings;
-        TPasswordChecker passwordChecker(complexitySettings);
+        TPasswordComplexity passwordComplexity;
+        TPasswordChecker passwordChecker(passwordComplexity);
         TString username = "testuser";
         TString password = "ASDF42*qwerty~~"; // ~ is invalid character
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
@@ -112,28 +111,28 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(CannotAcceptPasswordWithoutLowerCaseAndSpecialCharacters) {
-        TPasswordComplexitySettings complexitySettings({
+        TPasswordComplexity passwordComplexity({
             .MinLowerCaseCount = 2, .MinSpecialCharsCount = 2
         });
-        TPasswordChecker passwordChecker(complexitySettings);
+        TPasswordChecker passwordChecker(passwordComplexity);
         TString username = "testuser";
         TString password = "ASDF42Q6S7D8";
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
         UNIT_ASSERT_C(!result.Success, "Must be error");
         UNIT_ASSERT_STRINGS_EQUAL(result.Error, TStringBuilder() << "Incorrect password format: should contain at least "
-                                                                 << complexitySettings.MinLowerCaseCount
+                                                                 << passwordComplexity.MinLowerCaseCount
                                                                  << " lower case character, should contain at least "
-                                                                 << complexitySettings.MinSpecialCharsCount
+                                                                 << passwordComplexity.MinSpecialCharsCount
                                                                  << " special character");
     }
 
     Y_UNIT_TEST(AcceptPasswordWithCustomSpecialCharactersList) {
         TString customSpecialCharacters = "!&*"; // Only 3 special symbols are accepted
-        TPasswordComplexitySettings complexitySettings({
+        TPasswordComplexity passwordComplexity({
             .MinSpecialCharsCount = 2,
             .SpecialChars = customSpecialCharacters
         });
-        TPasswordChecker passwordChecker(complexitySettings);
+        TPasswordChecker passwordChecker(passwordComplexity);
         TString username = "testuser";
         TString correctPassword = "pass45!WOR*d";
         TPasswordChecker::TResult result = passwordChecker.Check(username, correctPassword);
@@ -146,10 +145,10 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(AcceptEmptyPassword) {
-        TPasswordComplexitySettings complexitySettings({
+        TPasswordComplexity passwordComplexity({
             .MinLength = 0
         }); // Enable empty password by set MinLength as 0
-        TPasswordChecker passwordChecker(complexitySettings);
+        TPasswordChecker passwordChecker(passwordComplexity);
         TString username = "testuser";
         TString password = "";
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
@@ -158,10 +157,10 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(CannotAcceptEmptyPassword) {
-        TPasswordComplexitySettings complexitySettings({
+        TPasswordComplexity passwordComplexity({
             .MinLength = 8
         }); // Disable empty password, min length is 8
-        TPasswordChecker passwordChecker(complexitySettings);
+        TPasswordChecker passwordChecker(passwordComplexity);
         TString username = "testuser";
         TString password = "";
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);

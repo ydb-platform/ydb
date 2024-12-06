@@ -7,13 +7,13 @@
 namespace NKikimr::NConfig {
 namespace {
 
-EValidationResult ValidatePasswordComplexitySettings(const NKikimrProto::TPasswordComplexitySettings& passwordComplexitySettings, std::vector<TString>&msg) {
-    size_t minCountOfRequiredChars = passwordComplexitySettings.GetMinLowerCaseCount() +
-                                     passwordComplexitySettings.GetMinUpperCaseCount() +
-                                     passwordComplexitySettings.GetMinNumbersCount() +
-                                     passwordComplexitySettings.GetMinSpecialCharsCount();
-    if (passwordComplexitySettings.GetMinLength() < minCountOfRequiredChars) {
-        msg = std::vector<TString>{"password_complexity_settings: Min length of password cannot be less than "
+EValidationResult ValidatePasswordComplexity(const NKikimrProto::TPasswordComplexity& passwordComplexity, std::vector<TString>&msg) {
+    size_t minCountOfRequiredChars = passwordComplexity.GetMinLowerCaseCount() +
+                                     passwordComplexity.GetMinUpperCaseCount() +
+                                     passwordComplexity.GetMinNumbersCount() +
+                                     passwordComplexity.GetMinSpecialCharsCount();
+    if (passwordComplexity.GetMinLength() < minCountOfRequiredChars) {
+        msg = std::vector<TString>{"password_complexity: Min length of password cannot be less than "
                                    "total min counts of lower case chars, upper case chars, numbers and special chars"};
         return EValidationResult::Error;
     }
@@ -23,8 +23,8 @@ EValidationResult ValidatePasswordComplexitySettings(const NKikimrProto::TPasswo
 } // namespace
 
 EValidationResult ValidateAuthConfig(const NKikimrProto::TAuthConfig& authConfig, std::vector<TString>& msg) {
-    EValidationResult validatePasswordComplexitySettingsResult = ValidatePasswordComplexitySettings(authConfig.GetPasswordComplexitySettings(), msg);
-    if (validatePasswordComplexitySettingsResult == EValidationResult::Error) {
+    EValidationResult validatePasswordComplexityResult = ValidatePasswordComplexity(authConfig.GetPasswordComplexity(), msg);
+    if (validatePasswordComplexityResult == EValidationResult::Error) {
         return EValidationResult::Error;
     }
     if (msg.size() > 0) {

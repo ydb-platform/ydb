@@ -37,12 +37,12 @@ struct TLoginProvider::TImpl {
 
 TLoginProvider::TLoginProvider()
     : Impl(new TImpl())
-    , PasswordChecker(TPasswordComplexitySettings())
+    , PasswordChecker(TPasswordComplexity())
 {}
 
-TLoginProvider::TLoginProvider(const TPasswordComplexitySettings& passwordComplexitySettings)
+TLoginProvider::TLoginProvider(const TPasswordComplexity& passwordComplexity)
     : Impl(new TImpl())
-    , PasswordChecker(passwordComplexitySettings)
+    , PasswordChecker(passwordComplexity)
 {}
 
 TLoginProvider::~TLoginProvider()
@@ -680,8 +680,8 @@ TString TLoginProvider::SanitizeJwtToken(const TString& token) {
     return TStringBuilder() << TStringBuf(token).SubString(0, signaturePos) << ".**"; // <token>.**
 }
 
-void TLoginProvider::UpdatePasswordCheckParameters(const TPasswordComplexitySettings& passwordCheckParameters) {
-    PasswordChecker.Update(passwordCheckParameters);
+void TLoginProvider::UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity) {
+    PasswordChecker.Update(passwordComplexity);
 }
 
 }

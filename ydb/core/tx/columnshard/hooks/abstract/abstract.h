@@ -24,6 +24,7 @@ namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IBlobsGCAction;
 class TPortionInfo;
+class TDataAccessorsResult;
 namespace NIndexes {
 class TIndexMetaContainer;
 }
@@ -104,6 +105,9 @@ protected:
         return defaultValue;
     }
     virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 defaultValue) const {
+        return defaultValue;
+    }
+    virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 defaultValue) const {
         return defaultValue;
     }
     virtual ui64 DoGetReadSequentiallyBufferSize(const ui64 defaultValue) const {
@@ -208,6 +212,10 @@ public:
         const ui64 defaultValue = NOlap::TGlobalLimits::DefaultRejectMemoryIntervalLimit;
         return DoGetRejectMemoryIntervalLimit(defaultValue);
     }
+    ui64 GetMetadataRequestSoftMemoryLimit() const {
+        const ui64 defaultValue = 100 * (1 << 20);
+        return DoGetMetadataRequestSoftMemoryLimit(defaultValue);
+    }
     virtual bool NeedForceCompactionBacketsConstruction() const {
         return false;
     }
@@ -233,6 +241,8 @@ public:
     virtual void OnStatisticsUsage(const NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) {
     }
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) {
+    }
+    virtual void OnTieringMetadataActualized() {
     }
     virtual void OnMaxValueUsage() {
     }

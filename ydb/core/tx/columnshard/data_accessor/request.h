@@ -2,12 +2,13 @@
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 
 namespace NKikimr::NOlap {
 
 class TDataAccessorsRequest;
 
-class TDataAccessorsResult {
+class TDataAccessorsResult : private NNonCopyable::TMoveOnly {
 private:
     THashMap<ui64, TString> ErrorsByPathId;
     THashMap<ui64, std::vector<TPortionDataAccessor>> AccessorsByPathId;
@@ -314,6 +315,10 @@ public:
                 AddAccessor(std::move(a));
             }
         }
+    }
+
+    TString GetTaskId() const {
+        return TStringBuilder() << "data-accessor-request-" << RequestId;
     }
 };
 

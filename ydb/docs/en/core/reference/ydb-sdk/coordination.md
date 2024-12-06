@@ -10,17 +10,11 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
 
 - Go
 
-    {% list tabs group=lang %}
-
-    - Go
-
-        ```go
-        err := db.Coordination().CreateNode(ctx,
-            "/path/to/mynode",
-        )
-        ```
-
-    {% endlist %}
+    ```go
+    err := db.Coordination().CreateNode(ctx,
+        "/path/to/mynode",
+    )
+    ```
 
 - C++
 

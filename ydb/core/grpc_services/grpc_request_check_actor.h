@@ -170,10 +170,10 @@ public:
         }
 
         {
-            bool error = CheckConnectRight();
+            auto [error, issue] = CheckConnectRight();
             if (error) {
-                AuditLogAccessDenied(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
-                ReplyUnauthorizedAndDie();
+                AuditLogConnectDbAccessDenied(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
+                ReplyUnauthorizedAndDie(*issue);
                 return;
             }
         }
@@ -431,8 +431,8 @@ private:
     }
 
 private:
-    void ReplyUnauthorizedAndDie() {
-        GrpcRequestBaseCtx_->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED));
+    void ReplyUnauthorizedAndDie(const NYql::TIssue& issue) {
+        GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
         GrpcRequestBaseCtx_->FinishSpan();
         PassAway();
@@ -510,14 +510,14 @@ private:
         PassAway();
     }
 
-    bool CheckConnectRight() {
+    std::pair<bool, std::optional<NYql::TIssue>> CheckConnectRight() {
         if (SkipCheckConnectRights_) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
                         "Skip check permission connect db, AllowYdbRequestsWithoutDatabase is off, there is no db provided from user"
                         << ", database: " << CheckedDatabaseName_
                         << ", user: " << TBase::GetUserSID()
                         << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-            return false;
+            return {false, std::nullopt};
         }
 
         if (TBase::IsUserAdmin()) {
@@ -526,7 +526,7 @@ private:
                         << ", database: " << CheckedDatabaseName_
                         << ", user: " << TBase::GetUserSID()
                         << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-            return false;
+            return {false, std::nullopt};
         }
 
         if (!TBase::GetSecurityToken()) {
@@ -536,7 +536,7 @@ private:
                             << ", database: " << CheckedDatabaseName_
                             << ", user: " << TBase::GetUserSID()
                             << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-                return false;
+                return {false, std::nullopt};
             }
         }
 
@@ -546,22 +546,30 @@ private:
                         << ", database: " << CheckedDatabaseName_
                         << ", user: " << TBase::GetUserSID()
                         << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-            return false;
+            return {false, std::nullopt};
         }
 
         const ui32 access = NACLib::ConnectDatabase;
         const auto& parsedToken = TBase::GetParsedToken();
         if (parsedToken && SecurityObject_->CheckAccess(access, *parsedToken)) {
-            return false;
+            return {false, std::nullopt};
         }
 
         Counters_->IncDatabaseAccessDenyCounter();
 
         if (!AppData()->FeatureFlags.GetCheckDatabaseAccessPermission()) {
-            return false;
+            return {false, std::nullopt};
         }
 
-        return true;
+        const TString error = "No permission to connect to the database";
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER, "AUDIT: "
+            << error
+            << ", database: " << CheckedDatabaseName_
+            << ", user: " << TBase::GetUserSID()
+            << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName()
+        );
+
+        return {true, MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error)};;
     }
 
     const TActorId Owner_;

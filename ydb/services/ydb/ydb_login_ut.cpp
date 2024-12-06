@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         UNIT_ASSERT_NO_EXCEPTION(token = loginProvider->GetAuthInfo());
         UNIT_ASSERT(!token.empty());
         
-        loginConnection.TestConnectRight(token, "Access denied");
+        loginConnection.TestConnectRight(token, "No permission to connect to the database");
 
         loginConnection.Stop();
     }

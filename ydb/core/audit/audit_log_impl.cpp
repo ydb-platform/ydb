@@ -3,6 +3,7 @@
 #include <library/cpp/logger/record.h>
 #include <library/cpp/logger/backend.h>
 
+#include <ydb/core/base/events.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>

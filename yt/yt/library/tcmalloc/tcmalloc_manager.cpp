@@ -413,10 +413,13 @@ public:
 
     void Configure(const TTCMallocConfigPtr& config)
     {
+        tcmalloc::MallocExtension::SetProfileSamplingRate(config->ProfileSamplingRate);
+        tcmalloc::MallocExtension::SetMaxPerCpuCacheSize(config->MaxPerCpuCacheSize);
+        tcmalloc::MallocExtension::SetMaxTotalThreadCacheBytes(config->MaxTotalThreadCacheBytes);
         tcmalloc::MallocExtension::SetBackgroundReleaseRate(
             tcmalloc::MallocExtension::BytesPerSecond{static_cast<size_t>(config->BackgroundReleaseRate)});
 
-        tcmalloc::MallocExtension::SetMaxPerCpuCacheSize(config->MaxPerCpuCacheSize);
+        tcmalloc::MallocExtension::EnableForkSupport();
 
         if (config->GuardedSamplingRate) {
             tcmalloc::MallocExtension::SetGuardedSamplingRate(*config->GuardedSamplingRate);

@@ -128,9 +128,6 @@ void ConfigureExitZeroOnSigterm();
 
 struct TAllocatorOptions
 {
-    bool TCMallocOptimizeSize = false;
-    std::optional<i64> TCMallocGuardedSamplingRate = 128_MB;
-
     std::optional<TDuration> SnapshotUpdatePeriod;
 };
 

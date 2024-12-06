@@ -599,7 +599,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
-    SRC_LOG_D("TEvRetry");
+    SRC_LOG_T("TEvRetry, EventQueueId " << ev->Get()->EventQueueId);
     Counters.Retry++;
 
     auto readActorIt = ReadActorByEventQueueId.find(ev->Get()->EventQueueId);
@@ -836,15 +836,16 @@ TString TDqPqRdReadActor::GetInternalState() {
         << " NotifyCA " << Counters.NotifyCA << "\n";
     
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
-        str << "   " << rowDispatcherActorId << " status " << static_cast<ui64>(sessionInfo.Status)
+        str << " " << rowDispatcherActorId << " status " << static_cast<ui64>(sessionInfo.Status)
             << " is waiting ack " << sessionInfo.IsWaitingStartSessionAck << " connection id " << sessionInfo.Generation << " ";
         sessionInfo.EventsQueue.PrintInternalState(str);
         for (auto& [partitionId, partition] : sessionInfo.Partitions) {
             str << "   partId " << partitionId 
                 << " next offset " << NextOffsetFromRD[partitionId]
                 << " is waiting batch " << partition.IsWaitingMessageBatch
-                << " has pending data " << partition.HasPendingData;
+                << " has pending data " << partition.HasPendingData << "\n";
         }
+        str << "\n";
     }
     return str.Str();
 }

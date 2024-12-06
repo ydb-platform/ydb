@@ -581,6 +581,7 @@ TString TRowDispatcher::GetInternalState() {
     auto printDataRate = [&](NYql::TCounters::TEntry entry) {
         str << " (sum " << toHumanDR(entry.Sum) << "   max  " << toHumanDR(entry.Max) << "   min " << toHumanDR(entry.Min) << ")";
     };
+    str << "SelfId: " << SelfId().ToString() << "\n";
     str << "Consumers count: " << Consumers.size() << "\n";
     str << "TopicSessions count: " << TopicSessions.size() << "\n";
     str << "Max session buffer size: " << toHuman(MaxSessionBufferSizeBytes) << "\n";
@@ -651,7 +652,7 @@ TString TRowDispatcher::GetInternalState() {
 
     str << "Consumers:\n";
     for (auto& [readActorId, consumer] : Consumers) {
-        str << "  " << consumer->QueryId << " " << LeftPad(readActorId, 32) << "\n";
+        str << "  " << consumer->QueryId << " " << LeftPad(readActorId, 32) << " Generation " << consumer->Generation <<  "\n";
         str << "    partitions: "; 
         for (const auto& [partitionId, info] : consumer->Partitions) {
             str << partitionId << ","; 

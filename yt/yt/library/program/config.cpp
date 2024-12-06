@@ -22,8 +22,8 @@ void TSingletonsConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("spin_wait_slow_path_logging_threshold", &TThis::SpinWaitSlowPathLoggingThreshold)
         .Default(TDuration::MicroSeconds(100));
-    registrar.Parameter("fiber_stack_pool_sizes", &TThis::FiberStackPoolSizes)
-        .Default({});
+    registrar.Parameter("fiber_manager", &TThis::FiberManager)
+        .DefaultNew();
     registrar.Parameter("address_resolver", &TThis::AddressResolver)
         .DefaultNew();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)
@@ -63,8 +63,8 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("spin_lock_slow_path_logging_threshold", &TThis::SpinWaitSlowPathLoggingThreshold)
         .Optional();
-    registrar.Parameter("max_idle_fibers", &TThis::MaxIdleFibers)
-        .Default(NConcurrency::DefaultMaxIdleFibers);
+    registrar.Parameter("fiber_manager", &TThis::FiberManager)
+        .DefaultNew();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)
         .DefaultNew();
     registrar.Parameter("io_dispatcher", &TThis::IODispatcher)

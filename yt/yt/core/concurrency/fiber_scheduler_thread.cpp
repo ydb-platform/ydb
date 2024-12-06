@@ -1,6 +1,7 @@
 #include "fiber_scheduler_thread.h"
 
 #include "fiber.h"
+#include "fiber_manager.h"
 #include "moody_camel_concurrent_queue.h"
 #include "private.h"
 
@@ -384,14 +385,8 @@ public:
         return TFiber::CreateFiber();
     }
 
-    void UpdateMaxIdleFibers(int maxIdleFibers)
-    {
-        MaxIdleFibers_.store(maxIdleFibers, std::memory_order::relaxed);
-    }
-
 private:
     moodycamel::ConcurrentQueue<TFiber*> IdleFibers_;
-    std::atomic<int> MaxIdleFibers_ = DefaultMaxIdleFibers;
 
     // NB(arkady-e1ppa): Construct this last so that every other
     // field is initialized if this callback is ran concurrently.
@@ -453,11 +448,12 @@ private:
     {
         // NB: size_t to int conversion.
         int size = IdleFibers_.size_approx();
-        if (size <= MaxIdleFibers_.load(std::memory_order::relaxed)) {
+        int maxSize = TFiberManager::GetMaxIdleFibers();
+        if (size <= maxSize) {
             return;
         }
 
-        auto targetSize = std::max<size_t>(1, MaxIdleFibers_ / 2);
+        auto targetSize = std::max<size_t>(1, maxSize / 2);
 
         std::vector<TFiber*> fibers;
         DequeueFibersBulk(&fibers, size - targetSize);
@@ -1075,13 +1071,6 @@ void TFiberSchedulerThread::ThreadMain()
         YT_LOG_FATAL(ex, "Unhandled exception in thread main (Name: %v)",
             GetThreadName());
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void UpdateMaxIdleFibers(int maxIdleFibers)
-{
-    NDetail::TIdleFiberPool::Get()->UpdateMaxIdleFibers(maxIdleFibers);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

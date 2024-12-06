@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/bus/tcp/dispatcher.h>
 
+#include <yt/yt/core/concurrency/fiber_manager.h>
+
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
 #include <yt/yt/library/profiling/perf/counters.h>
@@ -53,9 +55,7 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
 {
     SetSpinWaitSlowPathLoggingThreshold(config->SpinWaitSlowPathLoggingThreshold);
 
-    for (const auto& [kind, size] : config->FiberStackPoolSizes) {
-        NConcurrency::SetFiberStackPoolSize(ParseEnum<NConcurrency::EExecutionStackKind>(kind), size);
-    }
+    TFiberManager::Configure(config->FiberManager);
 
     NLogging::TLogManager::Get()->EnableReopenOnSighup();
     if (!NLogging::TLogManager::Get()->IsConfiguredFromEnv()) {
@@ -103,7 +103,7 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
 {
     SetSpinWaitSlowPathLoggingThreshold(dynamicConfig->SpinWaitSlowPathLoggingThreshold.value_or(config->SpinWaitSlowPathLoggingThreshold));
 
-    NConcurrency::UpdateMaxIdleFibers(dynamicConfig->MaxIdleFibers);
+    TFiberManager::Configure(config->FiberManager->ApplyDynamic(dynamicConfig->FiberManager));
 
     if (!NLogging::TLogManager::Get()->IsConfiguredFromEnv()) {
         NLogging::TLogManager::Get()->Configure(

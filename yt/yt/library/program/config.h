@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/concurrency/config.h>
+
 #include <yt/yt/core/tracing/config.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
@@ -60,7 +62,7 @@ class TSingletonsConfig
 {
 public:
     TDuration SpinWaitSlowPathLoggingThreshold;
-    THashMap<TString, int> FiberStackPoolSizes;
+    NConcurrency::TFiberManagerConfigPtr FiberManager;
     NNet::TAddressResolverConfigPtr AddressResolver;
     NBus::TTcpDispatcherConfigPtr TcpDispatcher;
     NPipes::TIODispatcherConfigPtr IODispatcher;
@@ -91,7 +93,7 @@ class TSingletonsDynamicConfig
 {
 public:
     std::optional<TDuration> SpinWaitSlowPathLoggingThreshold;
-    ui64 MaxIdleFibers;
+    NConcurrency::TFiberManagerDynamicConfigPtr FiberManager;
     NBus::TTcpDispatcherDynamicConfigPtr TcpDispatcher;
     NPipes::TIODispatcherConfigPtr IODispatcher;
     NRpc::TDispatcherDynamicConfigPtr RpcDispatcher;

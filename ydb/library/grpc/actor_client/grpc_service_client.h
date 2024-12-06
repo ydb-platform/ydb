@@ -22,6 +22,7 @@ class TGrpcServiceClient  {
     using TServiceConnection = NYdbGrpc::TServiceConnection<TGrpcService>;
 
     NYdbGrpc::TGRpcClientConfig Config;
+    std::unordered_map<TString, TString> Headers;
     NYdbGrpc::TGRpcClientLow Client;
     std::unique_ptr<TServiceConnection> Connection;
 
@@ -96,6 +97,9 @@ public:
         for (const auto& [k, v] : ev->Get()->Headers) {
             meta.Aux.push_back({k, v});
         }
+        for (auto [k ,v]: Headers) {
+            meta.Aux.push_back({k, v});
+        }
 
         NYdbGrpc::TResponseCallback<TResponseType> callback =
             [actorSystem = NActors::TActivationContext::ActorSystem(), prefix = Prefix(requestId), request = ev](NYdbGrpc::TGrpcStatus&& status, TResponseType&& response) -> void {
@@ -132,6 +136,7 @@ public:
 
     TGrpcServiceClient(const NGrpcActorClient::TGrpcClientSettings& settings)
         : Config(InitGrpcConfig(settings))
+        , Headers(settings.Headers)
     {}
 };
 

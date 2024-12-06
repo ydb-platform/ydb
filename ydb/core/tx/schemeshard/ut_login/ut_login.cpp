@@ -131,6 +131,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             TestDescribeResult(DescribePath(runtime, path),
                 {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
         }
+
+        // check login
+        {
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Invalid user");
+        }
     }
 
     Y_UNIT_TEST(DisableBuiltinAuthMechanism) {

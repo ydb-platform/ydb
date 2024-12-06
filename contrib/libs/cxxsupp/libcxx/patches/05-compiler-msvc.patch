@@ -1,5 +1,5 @@
 diff --git a/include/__functional/bind.h b/include/__functional/bind.h
-index 364ab8d..c91cfc1 100644
+index 61d99e1..a83e762 100644
 --- a/include/__functional/bind.h
 +++ b/include/__functional/bind.h
 @@ -286,6 +286,10 @@ public:

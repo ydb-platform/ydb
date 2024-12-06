@@ -113,62 +113,6 @@ THandlerInvocationOptions THandlerInvocationOptions::SetResponseCodec(NCompressi
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TDynamicConcurrencyLimit::Reconfigure(int limit)
-{
-    ConfigLimit_.store(limit, std::memory_order::relaxed);
-    SetDynamicLimit(limit);
-}
-
-int TDynamicConcurrencyLimit::GetLimitFromConfiguration() const
-{
-    return ConfigLimit_.load(std::memory_order::relaxed);
-}
-
-int TDynamicConcurrencyLimit::GetDynamicLimit() const
-{
-    return DynamicLimit_.load(std::memory_order::relaxed);
-}
-
-void TDynamicConcurrencyLimit::SetDynamicLimit(std::optional<int> dynamicLimit)
-{
-    auto limit = dynamicLimit.has_value() ? *dynamicLimit : ConfigLimit_.load(std::memory_order::relaxed);
-    auto oldLimit = DynamicLimit_.exchange(limit, std::memory_order::relaxed);
-
-    if (oldLimit != limit) {
-        Updated_.Fire();
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TDynamicConcurrencyByteLimit::Reconfigure(i64 limit)
-{
-    ConfigByteLimit_.store(limit, std::memory_order::relaxed);
-    SetDynamicByteLimit(limit);
-}
-
-i64 TDynamicConcurrencyByteLimit::GetByteLimitFromConfiguration() const
-{
-    return ConfigByteLimit_.load(std::memory_order::relaxed);
-}
-
-i64 TDynamicConcurrencyByteLimit::GetDynamicByteLimit() const
-{
-    return DynamicByteLimit_.load(std::memory_order::relaxed);
-}
-
-void TDynamicConcurrencyByteLimit::SetDynamicByteLimit(std::optional<i64> dynamicLimit)
-{
-    auto limit = dynamicLimit.has_value() ? *dynamicLimit : ConfigByteLimit_.load(std::memory_order::relaxed);
-    auto oldLimit = DynamicByteLimit_.exchange(limit, std::memory_order::relaxed);
-
-    if (oldLimit != limit) {
-        Updated_.Fire();
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 TServiceBase::TMethodDescriptor::TMethodDescriptor(
     TString method,
     TLiteHandler liteHandler,
@@ -1127,7 +1071,7 @@ private:
         }
 
         if (RequestRun_) {
-            RequestQueue_->OnRequestFinished(TotalSize_);
+            RequestQueue_->OnRequestFinished(GetTotalSize());
         }
 
         if (ActiveRequestCountIncremented_) {
@@ -1474,20 +1418,17 @@ i64 TRequestQueue::GetConcurrencyByte() const
     return ConcurrencyByte_.load(std::memory_order::relaxed);
 }
 
-void TRequestQueue::OnRequestArrived(const TServiceBase::TServiceContextPtr& context)
+void TRequestQueue::OnRequestArrived(TServiceBase::TServiceContextPtr context)
 {
     // Fast path.
-    auto concurrencyExceeded = IncrementConcurrency(context);
-    if (concurrencyExceeded &&
-        !AreThrottlersOverdrafted())
-    {
+    if (IncrementConcurrency(context->GetTotalSize()) && !AreThrottlersOverdrafted()) {
         RunRequest(std::move(context));
         return;
     }
 
     // Slow path.
     DecrementConcurrency(context->GetTotalSize());
-    IncrementQueueSize(context);
+    IncrementQueueSize(context->GetTotalSize());
 
     context->BeforeEnqueued();
     YT_VERIFY(Queue_.enqueue(std::move(context)));
@@ -1529,7 +1470,7 @@ void TRequestQueue::ScheduleRequestsFromQueue()
 
     // NB: Racy, may lead to overcommit in concurrency semaphore and request bytes throttler.
     auto concurrencyLimit = RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit();
-    auto concurrencyByteLimit = RuntimeInfo_->ConcurrencyByteLimit.GetDynamicByteLimit();
+    auto concurrencyByteLimit = RuntimeInfo_->ConcurrencyByteLimit.GetDynamicLimit();
     while (QueueSize_.load() > 0 && Concurrency_.load() < concurrencyLimit && ConcurrencyByte_.load() < concurrencyByteLimit) {
         if (AreThrottlersOverdrafted()) {
             SubscribeToThrottlers();
@@ -1546,14 +1487,14 @@ void TRequestQueue::ScheduleRequestsFromQueue()
                 return;
             }
 
-            DecrementQueueSize(context);
+            DecrementQueueSize(context->GetTotalSize());
             context->AfterDequeued();
             if (context->IsCanceled()) {
                 context.Reset();
             }
         }
 
-        IncrementConcurrency(context);
+        IncrementConcurrency(context->GetTotalSize());
         RunRequest(std::move(context));
     }
 }
@@ -1579,26 +1520,29 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
     }
 }
 
-void TRequestQueue::IncrementQueueSize(const TServiceBase::TServiceContextPtr& context)
+void TRequestQueue::IncrementQueueSize(i64 requestTotalSize)
 {
     ++QueueSize_;
-    QueueByteSize_.fetch_add(context->GetTotalSize());
+    QueueByteSize_.fetch_add(requestTotalSize);
 }
 
-void  TRequestQueue::DecrementQueueSize(const TServiceBase::TServiceContextPtr& context)
+void TRequestQueue::DecrementQueueSize(i64 requestTotalSize)
 {
     auto newQueueSize = --QueueSize_;
-    auto oldQueueByteSize = QueueByteSize_.fetch_sub(context->GetTotalSize());
+    auto oldQueueByteSize = QueueByteSize_.fetch_sub(requestTotalSize);
 
     YT_ASSERT(newQueueSize >= 0);
     YT_ASSERT(oldQueueByteSize >= 0);
 }
 
-bool TRequestQueue::IncrementConcurrency(const TServiceBase::TServiceContextPtr& context)
+// Returns true if concurrency limits are not exceeded.
+bool TRequestQueue::IncrementConcurrency(i64 requestTotalSize)
 {
-    auto resultSize = ++Concurrency_ <= RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit();
-    auto resultByteSize = ConcurrencyByte_.fetch_add(context->GetTotalSize()) <= RuntimeInfo_->ConcurrencyByteLimit.GetDynamicByteLimit();
-    return resultSize && resultByteSize;
+    auto newConcurrencySemaphore = ++Concurrency_;
+    auto newConcurrencyByteSemaphore = ConcurrencyByte_.fetch_add(requestTotalSize);
+
+    return newConcurrencySemaphore <= RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit() &&
+        newConcurrencyByteSemaphore <= RuntimeInfo_->ConcurrencyByteLimit.GetDynamicLimit();
 }
 
 void TRequestQueue::DecrementConcurrency(i64 requestTotalSize)
@@ -2626,7 +2570,7 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
         return runtimeInfo->ConcurrencyLimit.GetDynamicLimit();
     });
     profiler.AddFuncGauge("/concurrency_byte_limit", MakeStrong(this), [=] {
-        return runtimeInfo->ConcurrencyByteLimit.GetDynamicByteLimit();
+        return runtimeInfo->ConcurrencyByteLimit.GetDynamicLimit();
     });
 
     return runtimeInfo;

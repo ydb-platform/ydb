@@ -14,6 +14,7 @@ private:
         ui32 Threads;
         ui32 MaxInFlight = 128;
         TFsPath FileOutputPath;
+        bool Parquet = false;
     };
     class TUploadCommand;
 
@@ -39,6 +40,7 @@ private:
     };
     class TFileWriter;
     class TDbWriter;
+    class TParquetWriter;
     NTable::TSession GetSession();
     int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
     void ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen) noexcept;

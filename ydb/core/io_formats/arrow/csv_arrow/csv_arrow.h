@@ -1,19 +1,18 @@
 #pragma once
 
-#include <ydb/core/scheme_types/scheme_type_info.h>
-
 #include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <set>
+#include <vector>
+#include <unordered_map>
 
 namespace NKikimr::NFormats {
 
 class TArrowCSV {
 public:
     static constexpr ui32 DEFAULT_BLOCK_SIZE = 1024 * 1024;
-
-    /// If header is true read column names from first line after skipRows. Parse columns as strings in this case.
-    /// @note It's possible to skip header with skipRows and use typed columns instead.
-    static arrow::Result<TArrowCSV> Create(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header = false, const std::set<std::string>& notNullColumns = {});
 
     std::shared_ptr<arrow::RecordBatch> ReadNext(const TString& csv, TString& errString);
     std::shared_ptr<arrow::RecordBatch> ReadSingleBatch(const TString& csv, TString& errString);
@@ -49,7 +48,7 @@ public:
 
     void SetNullValue(const TString& null = "");
 
-private:
+protected:
     struct TColumnInfo {
         TString Name;
         std::shared_ptr<arrow::DataType> ArrowType;
@@ -57,6 +56,12 @@ private:
     };
     using TColummns = TVector<TColumnInfo>;
     TArrowCSV(const TColummns& columns, bool header, const std::set<std::string>& notNullColumns);
+
+    static TString ErrorPrefix() {
+        return "Cannot read CSV: ";
+    }
+
+private:
     arrow::csv::ReadOptions ReadOptions;
     arrow::csv::ParseOptions ParseOptions;
     arrow::csv::ConvertOptions ConvertOptions;
@@ -66,10 +71,6 @@ private:
     std::set<std::string> NotNullColumns;
 
     std::shared_ptr<arrow::RecordBatch> ConvertColumnTypes(std::shared_ptr<arrow::RecordBatch> parsedBatch) const;
-
-    static TString ErrorPrefix() {
-        return "Cannot read CSV: ";
-    }
 };
 
 }

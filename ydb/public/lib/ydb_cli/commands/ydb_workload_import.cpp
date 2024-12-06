@@ -1,5 +1,9 @@
 #include "ydb_workload_import.h"
+#include <ydb/core/io_formats/arrow/table/table.h>
+#include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
+#include <ydb/public/lib/ydb_cli/common/recursive_list.h>
+#include <ydb/public/lib/ydb_cli/import/cli_arrow_helpers.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/threading/future/async.h>
 #include <util/generic/deque.h>
@@ -26,6 +30,7 @@ void TWorkloadCommandImport::Config(TConfig& config) {
         .DefaultValue(UploadParams.MaxInFlight).StoreResult(&UploadParams.MaxInFlight);
     config.Opts->AddLongOption('f', "file-output-path", "Path to a directory to save tables into as files instead of uploading it to db.")
         .StoreResult(&UploadParams.FileOutputPath);
+    config.Opts->AddLongOption("parquet", "Use parquet for upload").NoArgument().StoreTrue(&UploadParams.Parquet);
 }
 
 TWorkloadCommandImport::TUploadParams::TUploadParams()
@@ -43,12 +48,14 @@ TWorkloadCommandImport::TUploadCommand::TUploadCommand(NYdbWorkload::TWorkloadPa
     , Initializer(initializer)
 {}
 
-int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGenerator& /*workloadGen*/, TConfig& /*config*/) {
+int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) {
     auto dataGeneratorList = Initializer->GetBulkInitialData();
     AtomicSet(ErrorsCount, 0);
     InFlightSemaphore = MakeHolder<TFastSemaphore>(UploadParams.MaxInFlight);
     if (UploadParams.FileOutputPath.IsDefined()) {
         Writer = MakeHolder<TFileWriter>(*this);
+    } else if (UploadParams.Parquet) {
+        Writer = MakeHolder<TParquetWriter>(*this, workloadGen, config);
     } else {
         Writer = MakeHolder<TDbWriter>(*this);
     }
@@ -75,40 +82,131 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
     }
     return AtomicGet(ErrorsCount) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
-
 class TWorkloadCommandImport::TUploadCommand::TDbWriter: public IWriter {
 public:
-    using IWriter::IWriter;
+    TDbWriter(const TWorkloadCommandImport::TUploadCommand& owner)
+        : IWriter(owner)
+    {
+        RetrySettings.RetryUndefined(true);
+        RetrySettings.MaxRetries(30);
+    }
 
     TAsyncStatus WriteDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) override {
-        auto convertResult = [](const NTable::TAsyncBulkUpsertResult& result) {
-                return TStatus(result.GetValueSync());
-            };
         if (std::holds_alternative<NYdbWorkload::IBulkDataGenerator::TDataPortion::TSkip>(portion->MutableData())) {
             return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
         }
         if (auto* value = std::get_if<TValue>(&portion->MutableData())) {
-            return Owner.TableClient->BulkUpsert(portion->GetTable(), std::move(*value)).Apply(convertResult);
+            return Owner.TableClient->BulkUpsert(portion->GetTable(), std::move(*value)).Apply(ConvertResult);
         }
-        NRetry::TRetryOperationSettings retrySettings;
-        retrySettings.RetryUndefined(true);
-        retrySettings.MaxRetries(30);
         if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TCsv>(&portion->MutableData())) {
-            return Owner.TableClient->RetryOperation([value, portion, convertResult](NTable::TTableClient& client) {
-                NTable::TBulkUpsertSettings settings;
-                settings.FormatSettings(value->FormatString);
-                return client.BulkUpsert(portion->GetTable(), NTable::EDataFormat::CSV, value->Data, TString(), settings)
-                    .Apply(convertResult);
-            }, retrySettings);
+            return WriteCsv(portion);
         }
         if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TArrow>(&portion->MutableData())) {
-            return Owner.TableClient->RetryOperation([value, portion, convertResult](NTable::TTableClient& client) {
+            return Owner.TableClient->RetryOperation([value, portion](NTable::TTableClient& client) {
                 return client.BulkUpsert(portion->GetTable(), NTable::EDataFormat::ApacheArrow, value->Data, value->Schema)
-                    .Apply(convertResult);
-            }, retrySettings);
+                    .Apply(ConvertResult);
+            }, RetrySettings);
         }
         Y_FAIL_S("Invalid data portion");
     }
+
+protected:
+    virtual TAsyncStatus WriteCsv(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) {
+        return Owner.TableClient->RetryOperation([portion, value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TCsv>(&portion->MutableData())](NTable::TTableClient& client) {
+            NTable::TBulkUpsertSettings settings;
+            settings.FormatSettings(value->FormatString);
+            return client.BulkUpsert(portion->GetTable(), NTable::EDataFormat::CSV, value->Data, TString(), settings)
+                .Apply(ConvertResult);
+        }, RetrySettings);
+    }
+
+    static TStatus ConvertResult(const NTable::TAsyncBulkUpsertResult& result) {
+        return TStatus(result.GetValueSync());
+    }
+
+    NRetry::TRetryOperationSettings RetrySettings;
+};
+
+class TWorkloadCommandImport::TUploadCommand::TParquetWriter: public TDbWriter {
+public:
+    TParquetWriter(TWorkloadCommandImport::TUploadCommand& owner, NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config)
+        : TDbWriter(owner)
+    {
+        for(const auto& path: workloadGen.GetCleanPaths()) {
+            const auto list = NConsoleClient::RecursiveList(*owner.SchemeClient, config.Database + "/" + path.c_str());
+            for (const auto& entry : list.Entries) {
+                if (entry.Type == NScheme::ESchemeEntryType::ColumnTable || entry.Type == NScheme::ESchemeEntryType::Table) {
+                    const auto tableDescr = owner.TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync().GetSession().DescribeTable(entry.Name).ExtractValueSync().GetTableDescription();
+                    auto& params = ArrowCsvParams[entry.Name];
+                    params.Columns = tableDescr.GetTableColumns();
+                }
+            }
+        }
+    }
+
+protected:
+    TAsyncStatus WriteCsv(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) override {
+        const auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TCsv>(&portion->MutableData());
+        auto arrowCsv = CreateArrowCSV(portion->GetTable(), value->FormatString, value->Data.size());
+        if (!arrowCsv.ok()) {
+            return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(arrowCsv.status().ToString())})));
+        }
+        auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
+        constexpr auto codecType = arrow::Compression::type::ZSTD;
+        writeOptions.codec = *arrow::util::Codec::Create(codecType);
+        TString error;
+        if (auto batch = arrowCsv->ReadSingleBatch(value->Data, error)) {
+            if (error) {
+                return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(error)})));
+            }
+            return Owner.TableClient->RetryOperation([
+                parquet = NYdb_cli::NArrow::SerializeBatch(batch, writeOptions),
+                schema = NYdb_cli::NArrow::SerializeSchema(*batch->schema()),
+                portion](NTable::TTableClient& client) {
+                return client.BulkUpsert(portion->GetTable(), NTable::EDataFormat::ApacheArrow, parquet, schema)
+                    .Apply(ConvertResult);
+            }, RetrySettings);
+        }
+        if (error) {
+            return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(error)})));
+        }
+        return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+    }
+
+private:
+    arrow::Result<NKikimr::NFormats::TArrowCSV> CreateArrowCSV(const TString& table, const TString& settingsString, size_t dataSize) const {
+        Ydb::Formats::CsvSettings cvsSettings;
+        cvsSettings.ParseFromStringOrThrow(settingsString);
+        const auto& param = *MapFindPtr(ArrowCsvParams, table);
+        auto reader = NKikimr::NFormats::TArrowCSVTable::Create(param.Columns, true);
+        if (!reader.ok()) {
+            return reader;
+        }
+        const auto& quoting = cvsSettings.quoting();
+        const char qchar = quoting.quote_char().empty() ? '"' : quoting.quote_char().front();
+        reader->SetQuoting(!quoting.disabled(), qchar, !quoting.double_quote_disabled());
+        if (cvsSettings.delimiter()) {
+            if (cvsSettings.delimiter().size() != 1) {
+                return arrow::Status::Invalid("Invalid delimitr in csv: %s", cvsSettings.delimiter().c_str());
+            }
+            reader->SetDelimiter(cvsSettings.delimiter().front());
+        }
+
+        if (cvsSettings.null_value()) {
+            reader->SetNullValue(cvsSettings.null_value());
+        }
+
+        if (dataSize > NKikimr::NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE) {
+            ui32 blockSize = NKikimr::NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
+            blockSize *= dataSize / blockSize + 1;
+            reader->SetBlockSize(blockSize);
+        }
+        return reader;
+    }
+    struct TArrowCSVParams {
+        TVector<NYdb::NTable::TTableColumn> Columns;
+    };
+    TMap<TString, TArrowCSVParams> ArrowCsvParams;
 };
 
 class TWorkloadCommandImport::TUploadCommand::TFileWriter: public IWriter {
@@ -139,7 +237,10 @@ public:
             return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
         }
         if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TArrow>(&portion->MutableData())) {
-            return NThreading::MakeErrorFuture<TStatus>(std::make_exception_ptr(yexception() << "Not implemented"));
+            auto g = Guard(Lock);
+            auto [out, created] = GetOutput(portion->GetTable());
+            out->Write(value->Data);
+            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
         }
         Y_FAIL_S("Invalid data portion");
     }

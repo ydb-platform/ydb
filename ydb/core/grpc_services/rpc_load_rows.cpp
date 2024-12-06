@@ -466,7 +466,7 @@ private:
                 auto& nullValue = cvsSettings.null_value();
                 bool withHeader = cvsSettings.header();
 
-                auto reader = NFormats::TArrowCSV::Create(SrcColumns, withHeader, NotNullColumns);
+                auto reader = NFormats::TArrowCSVScheme::Create(SrcColumns, withHeader, NotNullColumns);
                 if (!reader.ok()) {
                     errorMessage = reader.status().ToString();
                     return false;

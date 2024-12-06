@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
     static void SetupLogging(TTestActorRuntime& runtime) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::PRI_DEBUG);
@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             (5, NULL, true);
         )");
 
-        WaitTxNotification(server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "IncrBackupImpl", "/Root/Table"));
+        WaitTxNotification(server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "/Root/IncrBackupImpl", "/Root/Table"));
 
         SimulateSleep(server, TDuration::Seconds(1));
 
@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         WaitTxNotification(server, edgeActor, AsyncAlterRestoreMultipleIncrementalBackups(
                                server,
                                "/Root",
-                               {"IncrBackupImpl1", "IncrBackupImpl2", "IncrBackupImpl3"},
+                               {"/Root/IncrBackupImpl1", "/Root/IncrBackupImpl2", "/Root/IncrBackupImpl3"},
                                "/Root/Table"));
 
         SimulateSleep(server, TDuration::Seconds(1));
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         SimulateSleep(server, TDuration::Seconds(1));
 
-        WaitTxNotification(server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "IncrBackupImpl", "/Root/RestoreTable"));
+        WaitTxNotification(server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "/Root/IncrBackupImpl", "/Root/RestoreTable"));
 
         SimulateSleep(server, TDuration::Seconds(5)); // wait longer until schema will be applied
 

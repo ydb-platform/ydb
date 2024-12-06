@@ -48,7 +48,7 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
 
     TString lastFullBackupName;
-    TVector<TString> incBackupNames;
+    TVector<TString> incrBackupNames;
 
     if (!bcPath.Base()->GetChildren().size()) {
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Nothing to restore")};
@@ -62,9 +62,9 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         for (auto& [child, _] : bcPath.Base()->GetChildren()) {
             if (child.EndsWith("_full")) {
                 lastFullBackupName = child;
-                incBackupNames.clear();
+                incrBackupNames.clear();
             } else if (child.EndsWith("_incremental")) {
-                incBackupNames.push_back(child);
+                incrBackupNames.push_back(child);
             }
         }
     }
@@ -72,6 +72,7 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     NKikimrSchemeOp::TModifyScheme consistentCopyTables;
     consistentCopyTables.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables);
     consistentCopyTables.SetInternal(true);
+    consistentCopyTables.SetWorkingDir(tx.GetWorkingDir());
 
     auto& cct = *consistentCopyTables.MutableCreateConsistentCopyTables();
     auto& copyTables = *cct.MutableCopyTableDescriptions();
@@ -94,7 +95,7 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 
     CreateConsistentCopyTables(opId, consistentCopyTables, context, result);
 
-    if (incBackupNames) {
+    if (incrBackupNames) {
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
             std::pair<TString, TString> paths;
             TString err;
@@ -107,10 +108,11 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
             NKikimrSchemeOp::TModifyScheme restoreIncrs;
             restoreIncrs.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups);
             restoreIncrs.SetInternal(true);
+            restoreIncrs.SetWorkingDir(tx.GetWorkingDir());
 
             auto& desc = *restoreIncrs.MutableRestoreMultipleIncrementalBackups();
-            for (const auto& incr : incBackupNames) {
-                desc.AddSrcTableNames(JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), incr, relativeItemPath}));
+            for (const auto& incr : incrBackupNames) {
+                desc.AddSrcTablePaths(JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), incr, relativeItemPath}));
             }
             desc.SetDstTablePath(item.GetPath());
 

@@ -1153,6 +1153,7 @@ TTenantTestRuntime::TTenantTestRuntime(const TTenantTestConfig &config,
     , Extension(extension)
 {
     Extension.MutableFeatureFlags()->SetEnableExternalHive(false);
+    Extension.MutableFeatureFlags()->SetEnableScaleRecommender(true);
     Setup(createTenantPools);
 }
 

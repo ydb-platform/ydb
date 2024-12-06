@@ -1038,6 +1038,7 @@ public:
                                 << Tenant->Path 
                                 << ", policy# " << p.target_tracking_policy().ShortDebugString());
                             Finish();
+                            break;
                     }
                     break;
                 }
@@ -1074,6 +1075,7 @@ public:
     void Handle(TEvHive::TEvConfigureScaleRecommenderReply::TPtr& ev, const TActorContext& ctx) {
         switch (ev->Get()->Record.GetStatus()) {
             case NKikimrProto::OK:
+                Tenant->ScaleRecommenderPoliciesConfirmed = true;
                 Finish();
                 break;
             case NKikimrProto::ERROR:
@@ -1434,6 +1436,7 @@ TTenantsManager::TTenant::TTenant(const TString &path,
     , IsExternalStatisticsAggregator(false)
     , IsExternalBackupController(false)
     , AreResourcesShared(false)
+    , ScaleRecommenderPoliciesConfirmed(false)
 {
 }
 
@@ -2044,6 +2047,10 @@ void TTenantsManager::CongifureScaleRecommender(TTenant::TPtr tenant, const TAct
 {
     Y_ABORT_UNLESS(tenant->IsConfiguring() || tenant->IsRunning());
 
+    if (tenant->ScaleRecommenderPoliciesConfirmed) {
+        return;
+    }
+
     if (tenant->ScaleRecommenderPolicies && tenant->IsExternalHive && !tenant->ScaleRecommenderPoliciesWorker) {
         tenant->ScaleRecommenderPoliciesWorker = ctx.RegisterWithSameMailbox(new TScaleRecommenderManip(tenant));
     }
@@ -2174,7 +2181,7 @@ void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDataba
         status.mutable_database_quotas()->CopyFrom(*tenant->DatabaseQuotas);
     }
 
-    if (tenant->ScaleRecommenderPolicies) {
+    if (tenant->ScaleRecommenderPolicies && !tenant->ScaleRecommenderPolicies->policies().empty()) {
         status.mutable_scale_recommender_policies()->CopyFrom(*tenant->ScaleRecommenderPolicies);
     }
 }
@@ -3189,7 +3196,7 @@ void TTenantsManager::DbUpdateScaleRecommenderPolicies(TTenant::TPtr tenant,
 {
     LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
                 "Update scale recommender policies for " << tenant->Path
-                << " quotas = " << policies.DebugString());
+                << " policies = " << policies.DebugString());
 
     TString serialized;
     Y_ABORT_UNLESS(policies.SerializeToString(&serialized));

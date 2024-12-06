@@ -1,7 +1,9 @@
 /* postgres can not */
 USE plato;
+
 PRAGMA DisableOrderedColumns;
 PRAGMA warning("disable", "4517");
+
 $Group = 1u;
 
 INSERT INTO Output (

@@ -1,4 +1,5 @@
 PRAGMA yson.Strict;
+
 DECLARE $x AS Yson;
 
 SELECT

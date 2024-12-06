@@ -19,6 +19,7 @@ SELECT
     JSON_VALUE ($json, "strict $.key" RETURNING Int16 DEFAULT "123" ON ERROR),
     JSON_VALUE ($json, "strict $.key" RETURNING Int16 DEFAULT 123.456 ON ERROR)
 ;
+
 -- Here values retrieved from JSON cannot be casted to the target type Int16.
 -- ON ERROR default value must be used instead
 $invalid_types_json = CAST(

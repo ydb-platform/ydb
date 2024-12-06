@@ -1,6 +1,7 @@
 /* postgres can not */
 /* kikimr can not */
 USE plato;
+
 PRAGMA yt.InferSchema;
 
 SELECT

@@ -34,6 +34,7 @@ SELECT
 FROM
     $b
 ;
+
 COMMIT;
 
 SELECT

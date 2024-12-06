@@ -25,6 +25,7 @@ FROM
     $var
     TABLESAMPLE BERNOULLI (50)
 ;
+
 COMMIT;
 
 SELECT

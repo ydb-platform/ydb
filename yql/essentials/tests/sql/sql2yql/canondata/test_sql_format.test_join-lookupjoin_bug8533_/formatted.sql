@@ -1,6 +1,8 @@
 /* syntax version 1 */
 PRAGMA DisableSimpleColumns;
+
 USE plato;
+
 PRAGMA yt.LookupJoinLimit = "64k";
 PRAGMA yt.LookupJoinMaxRows = "100";
 

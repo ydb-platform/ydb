@@ -1,6 +1,7 @@
 /* postgres can not */
 /* hybridfile can not YQL-17743 */
 USE plato;
+
 PRAGMA OrderedColumns;
 PRAGMA yt.UseNativeYtTypes;
 

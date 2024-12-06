@@ -17,6 +17,7 @@ SELECT
 SELECT
     ListAggregate(Nothing(ParseType("List<Int32>?")), $factory)
 ;
+
 $factory = AGGREGATION_FACTORY("count");
 
 SELECT
@@ -34,6 +35,7 @@ SELECT
 SELECT
     ListAggregate(Nothing(ParseType("List<Int32>?")), $factory)
 ;
+
 $factory = AGGREGATION_FACTORY("sum");
 
 SELECT
@@ -85,6 +87,7 @@ SELECT
         )
     )
 ;
+
 $factory = AGGREGATION_FACTORY("count");
 
 SELECT

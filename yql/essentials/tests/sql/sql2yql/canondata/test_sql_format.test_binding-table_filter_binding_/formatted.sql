@@ -2,9 +2,11 @@
 /* postgres can not */
 /* kikimr can not - range not supported */
 $a = "";
+
 $b = ($_item) -> {
     RETURN TRUE;
 };
+
 $c = "";
 $d = "";
 
@@ -13,10 +15,13 @@ SELECT
 FROM
     plato.filter($a, $b, $c, $d)
 ;
+
 $a = "";
+
 $b = ($_item) -> {
     RETURN TRUE;
 };
+
 $c = "";
 $d = "raw";
 
@@ -25,10 +30,13 @@ SELECT
 FROM
     plato.filter($a, $b, $c, $d)
 ;
+
 USE plato;
+
 $b = ($_item) -> {
     RETURN TRUE;
 };
+
 $c = "";
 $d = "";
 
@@ -37,10 +45,13 @@ SELECT
 FROM
     filter($a, $b, $c, $d)
 ;
+
 $a = "";
+
 $b = ($_item) -> {
     RETURN TRUE;
 };
+
 $c = "";
 $d = "raw";
 

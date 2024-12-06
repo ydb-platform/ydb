@@ -1,4 +1,5 @@
 PRAGMA dq.UseWideChannels = "false";
+
 USE plato;
 
 SELECT

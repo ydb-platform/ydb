@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.UsePartitionsByKeysForFinalAgg = "false";
 
 SELECT

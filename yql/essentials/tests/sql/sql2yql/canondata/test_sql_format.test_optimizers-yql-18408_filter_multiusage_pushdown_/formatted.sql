@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA AnsiOptionalAs;
 PRAGMA config.flags("OptimizerFlags", "FieldSubsetEnableMultiusage", "FilterPushdownEnableMultiusage", "EarlyExpandSkipNull");
 
@@ -58,6 +59,7 @@ SELECT
 FROM
     $store_sales
 ;
+
 COMMIT;
 
 $year_total = (

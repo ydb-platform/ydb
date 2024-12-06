@@ -1,6 +1,7 @@
 /* postgres can not */
 /* kikimr can not */
 USE plato;
+
 PRAGMA DisableSimpleColumns;
 PRAGMA yt.MapJoinLimit = "1m";
 
@@ -12,6 +13,7 @@ FROM
 WHERE
     key > "100"
 ;
+
 COMMIT;
 
 SELECT

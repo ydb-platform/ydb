@@ -3,6 +3,7 @@
 $lists_2sum = ($l1, $l2) -> (
     ListMap(ListZip($l1, $l2), ($x) -> ($x.0 + $x.1))
 );
+
 $perelement_sum = AGGREGATION_FACTORY(
     "UDAF",
     ($item, $_parent) -> ($item),

@@ -12,6 +12,7 @@ $ages = [
     <|suffix: "14-16"u, begin: 14.f, end: 16.f|>,
     <|suffix: "16+"u, begin: 16.f, end: 18.f|>,
 ];
+
 $interval_fits_in = ($interval, $other) -> {
     $length = $interval.end - $interval.begin;
     RETURN IF(
@@ -32,6 +33,7 @@ $interval_fits_in = ($interval, $other) -> {
         )
     );
 };
+
 $age_suffixes = ($interval, $age_segments) -> {
     RETURN IF(
         $interval.end - $interval.begin > 10.f OR $interval.end - $interval.begin < 1e-4f,

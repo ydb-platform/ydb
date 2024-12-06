@@ -9,6 +9,7 @@ SELECT
     "1" AS Text,
     ["a", "b"] AS Attachments
 ;
+
 COMMIT;
 
 SELECT

@@ -13,6 +13,7 @@ SELECT
         )
     ) AS x
 ;
+
 COMMIT;
 
 SELECT

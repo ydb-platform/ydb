@@ -11,6 +11,7 @@ $b = (
     SELECT
         CAST(Unicode::ToUpper("i"u) AS String) || "npu"
 );
+
 $a = $a || CAST(Unicode::ToLower("T"u) AS String);
 $b = $b || CAST(Unicode::ToLower("T"u) AS String);
 

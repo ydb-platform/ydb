@@ -18,6 +18,7 @@ SELECT
 FROM
     $data
 ;
+
 COMMIT;
 
 SELECT

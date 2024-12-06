@@ -1,5 +1,6 @@
 /* yt can not */
 $list = ListFromRange(1, 101);
+
 $test = ($probability, $dependsOn) -> {
     $sample = ListCollect(ListSample($list, $probability, $dependsOn));
     RETURN (

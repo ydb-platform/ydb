@@ -1,11 +1,14 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 PRAGMA yt.FolderInlineItemsLimit = "0";
+
 $script = @@
 def f(s):
   return True
 @@;
+
 $callable = Python3::f(Callable<(String) -> Bool>, $script);
 
 $list = (

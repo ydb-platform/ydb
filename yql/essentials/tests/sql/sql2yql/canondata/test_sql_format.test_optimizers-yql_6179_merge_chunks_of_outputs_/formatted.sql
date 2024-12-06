@@ -3,6 +3,7 @@
 /* kikimr can not - yt pragma */
 PRAGMA yt.MinPublishedAvgChunkSize = "0";
 PRAGMA yt.MinTempAvgChunkSize = "0";
+
 USE plato;
 
 $i = (

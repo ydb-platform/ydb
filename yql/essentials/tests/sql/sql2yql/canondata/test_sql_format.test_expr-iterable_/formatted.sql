@@ -7,6 +7,7 @@ SELECT
     ListHasItems($a),
     ListLength($a)
 ;
+
 $b = Yql::ToList(() -> (Yql::EmptyIterator(Stream<Int32>)));
 
 SELECT
@@ -14,6 +15,7 @@ SELECT
     ListHasItems($b),
     ListLength($b)
 ;
+
 $c = Yql::ToList(() -> (Yql::EmptyIterator(Stream<Int32>)));
 
 SELECT

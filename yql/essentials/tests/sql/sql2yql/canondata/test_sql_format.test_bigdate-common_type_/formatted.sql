@@ -51,6 +51,7 @@ SELECT
 SELECT
     [unwrap(CAST(1 AS interval)), unwrap(CAST(-1 AS interval64))]
 ;
+
 $datetime_values = [$date_val, $date32_val, $datetime_val, $datetime64_val, $timestamp_val, $timestamp64_val];
 $interval_values = [$interval_val, $interval64_val];
 

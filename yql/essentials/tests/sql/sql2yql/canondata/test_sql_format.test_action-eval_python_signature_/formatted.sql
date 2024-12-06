@@ -10,6 +10,7 @@ def f(x, y):
     """
     return x + y
 @@;
+
 --$f = Python::f(EvaluateType(ParseTypeHandle(Core::PythonFuncSignature(AsAtom("Python"), $script, "f"))), $script);
 $f = Python::f($script);
 

@@ -1,6 +1,8 @@
 PRAGMA DisableSimpleColumns;
 PRAGMA DisablePullUpFlatMapOverJoin;
+
 USE plato;
+
 PRAGMA yt.JoinMergeTablesLimit = "10";
 
 FROM (

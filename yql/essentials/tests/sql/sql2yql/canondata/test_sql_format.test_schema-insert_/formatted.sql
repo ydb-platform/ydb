@@ -7,6 +7,7 @@ FROM
 WHERE
     a IS NOT NULL
 ;
+
 COMMIT;
 
 SELECT

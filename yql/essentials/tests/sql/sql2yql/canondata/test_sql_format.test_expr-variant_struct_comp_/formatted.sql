@@ -7,6 +7,7 @@ $id = ($x) -> {
     );
     RETURN $f();
 };
+
 $vt1 = ParseType("Variant<a:Int32,b:Uint32?>");
 $vt2 = ParseType("Variant<b:Int64,c:Uint32>");
 

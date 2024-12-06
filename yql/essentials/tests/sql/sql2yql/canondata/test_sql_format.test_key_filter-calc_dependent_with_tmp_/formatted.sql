@@ -9,6 +9,7 @@ FROM
 ORDER BY
     key DESC
 LIMIT 1;
+
 COMMIT;
 
 $last_key =

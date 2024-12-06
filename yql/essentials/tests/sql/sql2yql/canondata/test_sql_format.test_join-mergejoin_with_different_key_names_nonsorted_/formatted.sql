@@ -1,5 +1,7 @@
 PRAGMA DisableSimpleColumns;
+
 USE plato;
+
 PRAGMA yt.JoinMergeTablesLimit = "10";
 PRAGMA yt.JoinMergeUnsortedFactor = "100.0";
 PRAGMA yt.JoinAllowColumnRenames = "true";

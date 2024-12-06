@@ -1,5 +1,6 @@
 /* yt can not */
 PRAGMA CompactNamedExprs;
+
 $foo = CAST(Unicode::ToLower("PLATO"u) AS String);
 
 INSERT INTO yt: $foo.Output
@@ -27,6 +28,7 @@ DEFINE ACTION $bar() AS
         key
     ;
 END DEFINE;
+
 DO
     $bar()
 ;

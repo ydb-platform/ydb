@@ -1,5 +1,6 @@
 /* postgres can not */
 USE plato;
+
 PRAGMA yt.MapJoinLimit = "1m";
 
 $l1 =

@@ -105,6 +105,7 @@ $switch = ($x) -> {
     END;
     RETURN $res;
 };
+
 $expected = ListFromRange(1, 101);
 
 SELECT

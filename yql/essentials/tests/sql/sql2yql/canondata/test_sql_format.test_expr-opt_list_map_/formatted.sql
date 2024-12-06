@@ -9,6 +9,7 @@ SELECT
     $l2,
     $l3
 ;
+
 $p = ($x) -> {
     RETURN $x < 3
 };
@@ -18,6 +19,7 @@ SELECT
     ListFilter($l2, $p),
     ListFilter($l3, $p)
 ;
+
 $m = ($x) -> {
     RETURN $x * 2
 };
@@ -27,6 +29,7 @@ SELECT
     ListMap($l2, $m),
     ListMap($l3, $m)
 ;
+
 $f = ($x) -> {
     RETURN AsList($x, $x * 2)
 };
@@ -55,6 +58,7 @@ SELECT
     ListExtend($l2, $l3),
     ListExtend($l3, $l3)
 ;
+
 $ls1 = AsList(AsStruct(1 AS a), AsStruct(2 AS a));
 $ls2 = Just($ls1);
 $ls3 = Nothing(TypeOf($ls2));

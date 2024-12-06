@@ -15,6 +15,7 @@ SELECT
     Yql::Optional(OptionalType(OptionalType(OptionalType(DataType("String")))), Yql::Just(Yql::Just("val"))) AS level3_just_just_just_val,
     "const" AS const
 ;
+
 COMMIT;
 
 -- Everything should be True

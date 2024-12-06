@@ -2,18 +2,23 @@
 $create = ($item, $_parent) -> {
     RETURN $item
 };
+
 $add = ($state, $item, $_parent) -> {
     RETURN $item + $state
 };
+
 $merge = ($state1, $state2) -> {
     RETURN $state1 + $state2
 };
+
 $get_result = ($state) -> {
     RETURN $state
 };
+
 $serialize = ($state) -> {
     RETURN $state
 };
+
 $deserialize = ($state) -> {
     RETURN $state
 };

@@ -13,6 +13,7 @@ SELECT
 FROM
     plato.Input
 ;
+
 COMMIT;
 
 INSERT INTO plato.Output (

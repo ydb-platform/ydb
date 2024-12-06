@@ -5,7 +5,9 @@ INSERT INTO @foo
 SELECT
     1
 ;
+
 COMMIT;
+
 $name = "fo" || "o";
 
 SELECT

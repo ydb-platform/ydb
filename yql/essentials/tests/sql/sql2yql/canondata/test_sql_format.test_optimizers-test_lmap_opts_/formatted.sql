@@ -16,6 +16,7 @@ def processRows(prefix, rowList, separator):
     
     return result;
 @@;
+
 $udf = Python::processRows(
     Callable<(String, List<Struct<Name: String, Value: String>>, String) -> List<Struct<Result: String>>>,
     $udfScript
@@ -28,6 +29,7 @@ $data = (
     FROM
         plato.Input0
 );
+
 $prefix = ">>";
 
 $p1 = (

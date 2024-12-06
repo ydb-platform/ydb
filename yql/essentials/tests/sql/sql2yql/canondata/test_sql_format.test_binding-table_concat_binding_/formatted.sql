@@ -7,7 +7,9 @@ SELECT
 FROM
     plato.concat($a, $a)
 ;
+
 USE plato;
+
 $a = "Input";
 
 SELECT

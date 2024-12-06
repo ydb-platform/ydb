@@ -1,4 +1,5 @@
 USE plato;
+
 /* postgres can not */
 /* kikimr can not */
 PRAGMA DisableSimpleColumns;

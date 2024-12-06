@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA DisableSimpleColumns;
 PRAGMA yt.JoinMergeTablesLimit = "100";
 

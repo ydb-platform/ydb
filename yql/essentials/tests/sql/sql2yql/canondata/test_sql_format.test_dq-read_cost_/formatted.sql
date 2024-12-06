@@ -1,5 +1,6 @@
 PRAGMA warning("disable", "4510");
 PRAGMA CostBasedOptimizer = "PG";
+
 USE plato;
 
 $foo =

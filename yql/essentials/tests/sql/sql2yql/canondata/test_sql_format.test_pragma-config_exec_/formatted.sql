@@ -7,6 +7,7 @@ SELECT
     "1" AS subkey,
     "1" AS value
 ;
+
 PRAGMA File("file", "dummy");
 
 INSERT INTO Output

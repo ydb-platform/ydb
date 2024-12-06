@@ -1,7 +1,9 @@
 PRAGMA DisableSimpleColumns;
+
 /* postgres can not */
 /* kikimr can not */
 USE plato;
+
 PRAGMA yt.mapjoinlimit = "1m";
 
 $cnt = (
@@ -10,6 +12,7 @@ $cnt = (
     FROM
         Input
 );
+
 $offset = ($cnt + 10) ?? 0;
 
 $in1 = (
@@ -33,6 +36,7 @@ LEFT JOIN
 ON
     a.key == b.key
 ;
+
 $limit = ($cnt / 100) ?? 0;
 
 $in2 = (

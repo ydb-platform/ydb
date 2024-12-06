@@ -10,6 +10,7 @@ FROM
 ORDER BY
     x ASC
 ;
+
 COMMIT;
 
 SELECT

@@ -7,6 +7,7 @@ SELECT
 FROM
     plato.Input
 ;
+
 COMMIT;
 
 SELECT

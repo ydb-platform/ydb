@@ -1,5 +1,6 @@
 /* syntax version 1 */
 USE plato;
+
 PRAGMA yt.JoinMergeTablesLimit = "10";
 PRAGMA yt.JoinMergeUnsortedFactor = "3";
 PRAGMA yt.JoinAllowColumnRenames = "true";

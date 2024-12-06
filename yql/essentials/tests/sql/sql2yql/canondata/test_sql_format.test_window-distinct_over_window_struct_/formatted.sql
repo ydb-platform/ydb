@@ -1,7 +1,9 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 PRAGMA DistinctOverWindow;
+
 $input = AsList(
     AsStruct(1 AS key, 1 AS subkey, AsStruct(1 AS i1, 2 AS i2, 3 AS i3) AS col),
     AsStruct(2 AS key, 1 AS subkey, AsStruct(1 AS i1, 2 AS i2, 3 AS i3) AS col),

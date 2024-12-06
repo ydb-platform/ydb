@@ -22,6 +22,7 @@ FROM (
 ) AS a (
     x
 );
+
 $agg_string_agg = AggregationFactory("Pg::string_agg");
 
 SELECT
@@ -48,6 +49,7 @@ FROM (
 ) AS a (
     x
 );
+
 $agg_max = AggregationFactory("Pg::max");
 
 SELECT

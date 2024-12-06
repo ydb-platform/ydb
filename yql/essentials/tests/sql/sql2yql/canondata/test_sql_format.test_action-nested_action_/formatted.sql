@@ -19,6 +19,7 @@ DEFINE ACTION $action($b, $c) AS
         $bbb()
     ;
 END DEFINE;
+
 DO
     $action(1, 2)
 ;

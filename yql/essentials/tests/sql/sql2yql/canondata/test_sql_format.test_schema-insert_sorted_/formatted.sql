@@ -10,6 +10,7 @@ ORDER BY
     b,
     c
 ;
+
 COMMIT;
 
 SELECT

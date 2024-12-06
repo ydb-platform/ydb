@@ -6,10 +6,12 @@ SELECT
 FROM
     plato.filter(``, Unicode::IsUtf)
 ;
+
 $script = @@
 def f(s):
   return True
 @@;
+
 $callable = Python3::f(Callable<(String) -> Bool?>, $script);
 
 SELECT

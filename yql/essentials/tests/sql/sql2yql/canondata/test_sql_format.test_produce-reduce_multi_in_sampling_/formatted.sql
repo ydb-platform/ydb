@@ -2,6 +2,7 @@
 /* postgres can not */
 /* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 16 */
 USE plato;
+
 $udf = YQL::@@
 (lambda '(key stream) 
     (PartitionByKey stream

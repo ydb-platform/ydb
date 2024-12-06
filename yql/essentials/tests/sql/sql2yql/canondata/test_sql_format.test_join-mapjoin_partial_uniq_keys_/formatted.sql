@@ -1,8 +1,10 @@
 PRAGMA DisableSimpleColumns;
+
 /* postgres can not */
 /* kikimr can not */
 /* ignore runonopt plan diff */
 USE plato;
+
 PRAGMA yt.MapJoinLimit = "1m";
 
 -- YQL-5582

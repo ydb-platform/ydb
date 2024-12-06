@@ -9,10 +9,12 @@ SELECT
 FROM
     Input
 ;
+
 COMMIT;
 
 $input =
     PROCESS Output;
+
 $c = EvaluateCode(ReprCode(FormatType(TypeOf($input))));
 
 SELECT
@@ -25,10 +27,12 @@ SELECT
 FROM
     Input
 ;
+
 COMMIT;
 
 $input =
     PROCESS Output;
+
 $c = EvaluateCode(ReprCode(FormatType(TypeOf($input))));
 
 SELECT

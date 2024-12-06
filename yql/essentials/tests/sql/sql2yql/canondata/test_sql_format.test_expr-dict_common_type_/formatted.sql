@@ -2,6 +2,7 @@
 /* postgres can not */
 /* yt can not */
 PRAGMA warning("disable", "4510");
+
 $d1 = ToDict([(1, 1u)]);
 $d2 = AsDict((2, 2u));
 $d3 = YQL::Dict(Dict<Int32, Uint32>);

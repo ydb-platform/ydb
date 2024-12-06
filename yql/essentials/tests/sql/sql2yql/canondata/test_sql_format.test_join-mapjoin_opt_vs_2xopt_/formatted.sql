@@ -1,10 +1,13 @@
 USE plato;
+
 PRAGMA yt.MapJoinLimit = "1m";
+
 $t1 = AsList(
     AsStruct(Just(1) AS Key),
     AsStruct(Just(2) AS Key),
     AsStruct(Just(3) AS Key)
 );
+
 $t2 = AsList(
     AsStruct(Just(Just(2)) AS Key),
     AsStruct(Just(Just(3)) AS Key),
@@ -26,6 +29,7 @@ SELECT
 FROM
     as_table($t2)
 ;
+
 COMMIT;
 
 SELECT

@@ -22,6 +22,7 @@ SELECT
     EvaluateExpr(CurrentUtcTimestamp()),
     CurrentUtcTimestamp()
 ;
+
 $y = Yson("{a=7u;c=[<d=%true>1;#;\"привет\";-3.4]}");
 
 SELECT

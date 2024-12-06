@@ -6,6 +6,7 @@ $l =
     FROM
         Input
 ;
+
 $l = EvaluateExpr($l);
 
 SELECT

@@ -1,5 +1,6 @@
 /* postgres can not */
 PRAGMA SimpleColumns;
+
 USE plato;
 
 $req = (

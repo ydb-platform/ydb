@@ -1,5 +1,6 @@
 /* kikimr can not - due to random */
 PRAGMA DisableSimpleColumns;
+
 USE plato;
 
 FROM (

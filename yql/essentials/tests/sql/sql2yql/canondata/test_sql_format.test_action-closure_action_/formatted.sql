@@ -21,6 +21,7 @@ DEFINE ACTION $closure_action($a) AS
         $a(3, 4)
     ;
 END DEFINE;
+
 DO
     $closure_action($action)
 ;

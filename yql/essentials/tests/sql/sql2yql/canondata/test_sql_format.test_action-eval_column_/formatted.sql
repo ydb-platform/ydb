@@ -1,11 +1,13 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 $x = CAST(Unicode::ToLower("foo"u) AS String);
 
 SELECT
     AsStruct("1" AS foo, 2 AS bar).$x
 ;
+
 $x = CAST(Unicode::ToLower("value"u) AS String);
 
 SELECT
@@ -16,6 +18,7 @@ FROM
 ORDER BY
     key
 ;
+
 $x = CAST(Unicode::ToLower("value"u) AS String);
 
 SELECT
@@ -26,6 +29,7 @@ FROM
 ORDER BY
     key
 ;
+
 $x = CAST(Unicode::ToLower("value"u) AS String);
 
 SELECT
@@ -35,6 +39,7 @@ FROM
 ORDER BY
     t.$x
 ;
+
 $x = CAST(Unicode::ToLower("value"u) AS String);
 $y = CAST(Unicode::ToLower("key"u) AS String);
 

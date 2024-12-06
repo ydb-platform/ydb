@@ -1,8 +1,10 @@
 /* postgres can not */
 USE plato;
+
 $identity = ($x) -> {
     RETURN $x
 };
+
 $idDate32 = CALLABLE (Callable<(date32) -> date32>, $identity);
 $idDatetime64 = CALLABLE (Callable<(datetime64) -> datetime64>, $identity);
 $idTimestamp64 = CALLABLE (Callable<(timestamp64) -> timestamp64>, $identity);

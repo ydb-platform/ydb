@@ -7,6 +7,7 @@ SELECT
 FROM
     Input
 ;
+
 COMMIT;
 
 $input = (

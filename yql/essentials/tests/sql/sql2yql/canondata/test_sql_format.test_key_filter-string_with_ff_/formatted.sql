@@ -10,6 +10,7 @@ FROM
 ORDER BY
     key
 ;
+
 COMMIT;
 
 SELECT

@@ -12,6 +12,7 @@ SELECT
 FROM
     plato.range($a, $b, $c, $d, $e)
 ;
+
 $a = "";
 $b = "Inp";
 $c = "Input1";
@@ -23,6 +24,7 @@ SELECT
 FROM
     plato.range($a, $b, $c, $d, $e)
 ;
+
 $a = "";
 $b = "Inp";
 $c = "Input2";
@@ -34,7 +36,9 @@ SELECT
 FROM
     plato.range($a, $b, $c, $d, $e)
 ;
+
 USE plato;
+
 $a = "";
 $b = "Input";
 $c = "Input";
@@ -46,6 +50,7 @@ SELECT
 FROM
     range($a, $b, $c, $d, $e)
 ;
+
 $a = "";
 $b = "Inp";
 $c = "Input1";
@@ -57,6 +62,7 @@ SELECT
 FROM
     range($a, $b, $c, $d, $e)
 ;
+
 $a = "";
 $b = "Inp";
 $c = "Input2";

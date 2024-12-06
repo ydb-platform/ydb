@@ -4,6 +4,7 @@ $t = AsList(
     AsStruct(1 AS key, 200 AS value),
     AsStruct(2 AS key, 100 AS value)
 );
+
 $f = AGGREGATION_FACTORY("maxby");
 
 SELECT
@@ -20,6 +21,7 @@ SELECT
         )
     )
 ;
+
 $f = AGGREGATION_FACTORY("maxby", 10);
 
 SELECT
@@ -36,6 +38,7 @@ SELECT
         )
     )
 ;
+
 USE plato;
 
 INSERT INTO @a
@@ -44,6 +47,7 @@ SELECT
 FROM
     as_table($t)
 ;
+
 COMMIT;
 
 SELECT

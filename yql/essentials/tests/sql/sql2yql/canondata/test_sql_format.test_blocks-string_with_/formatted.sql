@@ -1,5 +1,6 @@
 PRAGMA AnsiLike;
 PRAGMA warning("disable", "4510");
+
 USE plato;
 
 SELECT

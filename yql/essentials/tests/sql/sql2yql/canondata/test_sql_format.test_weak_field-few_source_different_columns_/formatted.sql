@@ -1,6 +1,7 @@
 /* postgres can not */
 /* syntax version 1 */
 PRAGMA yt.InferSchema = "2";
+
 USE plato;
 
 SELECT

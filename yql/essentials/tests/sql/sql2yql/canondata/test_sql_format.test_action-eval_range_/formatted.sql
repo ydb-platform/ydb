@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 $arg1 = "" || "";
 $arg2 = CAST(Unicode::ToUpper("i"u) AS String) || "nput";
 $arg3 = CAST(Unicode::ToUpper("i"u) AS String) || "nput";

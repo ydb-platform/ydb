@@ -1,5 +1,6 @@
 PRAGMA DisableSimpleColumns;
 PRAGMA DisablePullUpFlatMapOverJoin;
+
 USE plato;
 
 $map = (

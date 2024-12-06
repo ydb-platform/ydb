@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 PRAGMA sampleselect;
+
 USE plato;
 
 $data_dict = (

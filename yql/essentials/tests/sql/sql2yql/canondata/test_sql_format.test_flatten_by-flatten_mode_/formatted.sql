@@ -9,6 +9,7 @@ FROM (
 )
     FLATTEN OPTIONAL BY x
 ;
+
 $lst = AsList(1, 2, 3);
 
 SELECT
@@ -43,6 +44,7 @@ FROM (
 ORDER BY
     x
 ;
+
 $dct = AsDict(AsTuple(1, "foo"), AsTuple(2, "bar"), AsTuple(3, "baz"));
 
 SELECT

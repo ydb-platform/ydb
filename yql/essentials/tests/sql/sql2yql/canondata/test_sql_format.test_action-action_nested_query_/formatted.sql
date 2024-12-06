@@ -18,6 +18,7 @@ DEFINE ACTION $action() AS
         key
     ;
 END DEFINE;
+
 DO
     $action()
 ;

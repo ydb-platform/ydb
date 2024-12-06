@@ -11,6 +11,7 @@ ORDER BY
     key ASC,
     subkey ASC
 ;
+
 COMMIT;
 
 SELECT

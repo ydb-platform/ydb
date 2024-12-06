@@ -1,5 +1,6 @@
 /* postgres can not */
 PRAGMA DisableSimpleColumns;
+
 USE plato;
 
 -- should pushdown

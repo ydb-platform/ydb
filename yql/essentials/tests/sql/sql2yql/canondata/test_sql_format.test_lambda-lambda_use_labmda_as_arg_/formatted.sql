@@ -1,9 +1,12 @@
 /* postgres can not */
 USE plato;
+
 PRAGMA DisableSimpleColumns;
+
 $shiftSteps = ($item) -> {
     RETURN CAST($item % 4 AS Uint8) ?? 0
 };
+
 $linear = ($x, $z, $func) -> {
     $v = 10 * $z + $x;
     $shift = ($item, $sk) -> {

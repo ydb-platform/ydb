@@ -3,27 +3,34 @@
 $list = AsList(3, 1, 2, 3);
 $other_list = AsList(4);
 $bool_list = AsList(TRUE, FALSE, TRUE);
+
 $struct_list = AsList(
     AsStruct(1 AS one, 2 AS two),
     AsStruct(-1 AS one, -2 AS two)
 );
+
 $script = @@
 def formula(a, b, c, d):
     return a * b + c // d
 @@;
+
 $udf = Python3::formula(
     Callable<(Int64, Int64, Int64, Int64) -> Int64>,
     $script
 );
+
 $lambdaSum = ($x, $y) -> {
     RETURN $x + $y;
 };
+
 $lambdaMult = ($x) -> {
     RETURN 4 * $x;
 };
+
 $lambdaTuple = ($i, $s) -> {
     RETURN ($i * $s, $i + $s);
 };
+
 $lambdaInc = ($i) -> {
     RETURN ($i + 1, $i + 2);
 };

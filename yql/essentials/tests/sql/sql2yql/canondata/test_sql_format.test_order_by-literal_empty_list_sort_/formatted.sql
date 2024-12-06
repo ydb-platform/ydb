@@ -2,6 +2,7 @@
 /* multirun can not */
 /* syntax version 1 */
 USE plato;
+
 $list = ListCreate(Struct<key: String, subkey: String, value: String>);
 
 INSERT INTO Output

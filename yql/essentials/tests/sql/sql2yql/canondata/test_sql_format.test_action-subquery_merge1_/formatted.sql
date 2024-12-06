@@ -17,15 +17,19 @@ DEFINE SUBQUERY $sub3() AS
         3 AS y
     ;
 END DEFINE;
+
 $s = SubqueryExtend($sub1, $sub2);
 
 PROCESS $s();
+
 $s = SubqueryUnionAll($sub1, $sub3);
 
 PROCESS $s();
+
 $s = SubqueryMerge($sub1, $sub2);
 
 PROCESS $s();
+
 $s = SubqueryUnionMerge($sub1, $sub3);
 
 PROCESS $s();

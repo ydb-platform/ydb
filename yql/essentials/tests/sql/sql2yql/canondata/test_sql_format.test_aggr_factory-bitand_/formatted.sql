@@ -16,6 +16,7 @@ SELECT
         )
     )
 ;
+
 USE plato;
 
 INSERT INTO @a
@@ -24,6 +25,7 @@ SELECT
 FROM
     as_table($t)
 ;
+
 COMMIT;
 
 SELECT

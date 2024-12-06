@@ -2,14 +2,17 @@
 $first = ($x) -> {
     RETURN $x.0
 };
+
 $second = ($x) -> {
     RETURN $x.1
 };
+
 $l = AsList(
     AsTuple(AsTuple(), Void()),
     AsTuple(AsTuple(), Void()),
     AsTuple(AsTuple(), Void())
 );
+
 $d = ToDict($l);
 
 SELECT
@@ -25,6 +28,7 @@ SELECT
 SELECT
     DictContains($d, AsTuple())
 ;
+
 $d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("One")));
 
 SELECT
@@ -40,11 +44,13 @@ SELECT
 SELECT
     DictContains($d, AsTuple())
 ;
+
 $l = AsList(
     AsTuple(AsTuple(1), Void()),
     AsTuple(AsTuple(2), Void()),
     AsTuple(AsTuple(2), Void())
 );
+
 $d = ToDict($l);
 
 SELECT
@@ -62,6 +68,7 @@ SELECT
     DictContains($d, AsTuple(2)),
     DictContains($d, AsTuple(3))
 ;
+
 $d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("One")));
 
 SELECT
@@ -79,11 +86,13 @@ SELECT
     DictContains($d, AsTuple(2)),
     DictContains($d, AsTuple(3))
 ;
+
 $l = AsList(
     AsTuple(AsTuple(1, 2), Void()),
     AsTuple(AsTuple(1, 3), Void()),
     AsTuple(AsTuple(1, 3), Void())
 );
+
 $d = ToDict($l);
 
 SELECT
@@ -101,6 +110,7 @@ SELECT
     DictContains($d, AsTuple(1, 2)),
     DictContains($d, AsTuple(1, 4))
 ;
+
 $d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("One")));
 
 SELECT

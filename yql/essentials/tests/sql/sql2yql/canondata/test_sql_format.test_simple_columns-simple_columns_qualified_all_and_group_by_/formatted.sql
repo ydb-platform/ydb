@@ -1,5 +1,6 @@
 /* postgres can not */
 USE plato;
+
 PRAGMA SimpleColumns;
 
 --INSERT INTO Output

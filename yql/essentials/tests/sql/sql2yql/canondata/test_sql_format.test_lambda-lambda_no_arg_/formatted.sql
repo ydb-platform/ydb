@@ -2,6 +2,7 @@
 $modVal = () -> {
     RETURN 2
 };
+
 $filter = ($item) -> {
     RETURN NOT ($item % $modVal() == 0)
 };

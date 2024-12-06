@@ -7,6 +7,7 @@ EVALUATE PARALLEL FOR $i IN [1, 2, 1, 2, 1] DO BEGIN
         $i AS a
     ;
 END DO;
+
 COMMIT;
 
 INSERT INTO Output WITH truncate

@@ -17,6 +17,7 @@ SELECT
 SELECT
     DictContains($d, AsTuple())
 ;
+
 $d = AsDict(
     AsTuple(AsTuple(1), "foo"),
     AsTuple(AsTuple(2), "bar")
@@ -37,6 +38,7 @@ SELECT
     DictContains($d, AsTuple(1)),
     DictContains($d, AsTuple(3))
 ;
+
 $d = AsDict(
     AsTuple(AsTuple(1, 2), "foo"),
     AsTuple(AsTuple(1, 3), "bar")

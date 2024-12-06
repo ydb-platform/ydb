@@ -14,6 +14,7 @@ $train =
     HAVING
         key > "900"
 ;
+
 $method = ($stream) -> {
     $func = CALLABLE (
         CallableType(0, TypeOf($stream), TypeOf($stream)),

@@ -31,6 +31,7 @@ SELECT
 FROM
     T
 ;
+
 -- In standard this example is demonstrated using PDF table, without any queries.
 -- We represent it as set of queries, using NULL as error value.
 -- Each SELECT is a row in source PDF table

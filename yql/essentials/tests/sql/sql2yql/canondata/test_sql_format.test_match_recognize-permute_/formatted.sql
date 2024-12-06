@@ -11,6 +11,7 @@ $data = [
     <|dt: 1688910900, event: "C"|>,
     <|dt: 1688911000, event: "B"|>,
 ];
+
 PRAGMA FeatureR010 = "prototype";
 
 SELECT

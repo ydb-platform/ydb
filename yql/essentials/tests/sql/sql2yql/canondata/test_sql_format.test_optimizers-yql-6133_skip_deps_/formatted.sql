@@ -17,6 +17,7 @@ $row_count = (
     FROM
         $out
 );
+
 $needed_row = COALESCE(CAST(CAST($row_count AS float) * 0.5 AS Uint64), 1);
 
 INSERT INTO Output WITH TRUNCATE

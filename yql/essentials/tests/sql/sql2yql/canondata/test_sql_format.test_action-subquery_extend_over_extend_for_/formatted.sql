@@ -5,6 +5,7 @@ DEFINE SUBQUERY $sub($i) AS
         $i AS x
     ;
 END DEFINE;
+
 $s = SubqueryExtendFor([1, 2, 3], $sub);
 $s2 = SubqueryExtendFor([1, 2, 3], $sub);
 $s3 = SubqueryExtend($s, $s2);

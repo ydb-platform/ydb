@@ -15,6 +15,7 @@ DEFINE ACTION $action($b, $c) AS
         $d
     ;
 END DEFINE;
+
 DO
     $action(1, 2)
 ;

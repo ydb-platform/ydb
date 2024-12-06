@@ -8,6 +8,7 @@ def save(item):
 def load(item):
     return item
 @@;
+
 $save = Python3::save(Callable<(String) -> Resource<Python3>>, $script);
 $load = Python3::load(Callable<(Resource<Python3>) -> String>, $script);
 

@@ -1,4 +1,5 @@
 PRAGMA warning("disable", "4510");
+
 $wa1 = Date32("1900-01-01");
 $wd1 = Datetime64("1900-01-01T02:03:04Z");
 $wt1 = Timestamp64("1900-01-01T02:03:04.567891Z");

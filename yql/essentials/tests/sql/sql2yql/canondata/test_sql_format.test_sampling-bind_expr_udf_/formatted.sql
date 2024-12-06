@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 $percent = Math::Ceil(0.2);
 
 SELECT

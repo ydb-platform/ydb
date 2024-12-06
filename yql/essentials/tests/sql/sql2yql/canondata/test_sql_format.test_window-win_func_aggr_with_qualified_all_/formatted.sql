@@ -1,4 +1,5 @@
 PRAGMA SimpleColumns;
+
 USE plato;
 
 $q = (

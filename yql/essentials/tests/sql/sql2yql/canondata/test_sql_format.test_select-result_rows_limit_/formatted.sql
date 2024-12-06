@@ -1,6 +1,7 @@
 /* kikimr can not - no refs */
 /* postgres can not */
 USE plato;
+
 PRAGMA ResultRowsLimit = "2";
 
 SELECT

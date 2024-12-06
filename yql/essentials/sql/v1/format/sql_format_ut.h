@@ -872,9 +872,9 @@ Y_UNIT_TEST(CompositeTypesAndQuestions) {
 Y_UNIT_TEST(Lambda) {
     TCases cases = {
         {"$f=($a,$b)->{$x=$a+$b;return $a*$x};$g=($a,$b?)->($a+$b??0);select $f(10,4),$g(1,2);",
-            "$f = ($a, $b) -> {\n\t$x = $a + $b;\n\tRETURN $a * $x\n};\n"
+            "$f = ($a, $b) -> {\n\t$x = $a + $b;\n\tRETURN $a * $x\n};\n\n"
             "$g = ($a, $b?) -> ($a + $b ?? 0);\n\n"
-        "SELECT\n\t$f(10, 4),\n\t$g(1, 2)\n;\n"},
+            "SELECT\n\t$f(10, 4),\n\t$g(1, 2)\n;\n"},
     };
 
     TSetup setup;
@@ -1362,6 +1362,7 @@ FROM Input MATCH_RECOGNIZE(
 );
 )",
 R"(PRAGMA FeatureR010 = "prototype";
+
 USE plato;
 
 SELECT

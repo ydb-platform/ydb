@@ -13,12 +13,14 @@ $mapping =
     FROM
         Input
     LIMIT 1;
+
 $transformer = ($type) -> {
     $t = EvaluateType(ParseTypeHandle($type));
     RETURN ($value) -> {
         RETURN CAST($value AS $t);
     };
 };
+
 $converter = ($row) -> {
     RETURN EvaluateCode(
         LambdaCode(

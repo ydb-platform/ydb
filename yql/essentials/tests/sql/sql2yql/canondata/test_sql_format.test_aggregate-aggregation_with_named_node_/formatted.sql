@@ -7,6 +7,7 @@ $data = (
     FROM
         plato.Input
 );
+
 $quant = 0.1;
 
 SELECT

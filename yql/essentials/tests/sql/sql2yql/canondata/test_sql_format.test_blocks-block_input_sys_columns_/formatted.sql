@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.JobBlockInput;
 
 $a = (

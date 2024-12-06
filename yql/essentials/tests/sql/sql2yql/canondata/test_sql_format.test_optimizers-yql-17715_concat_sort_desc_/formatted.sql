@@ -1,4 +1,5 @@
 USE plato;
+
 $min_ts_for_stat_calculation = DateTime::ToSeconds(CurrentUtcDate() - Interval("P1D"));
 
 INSERT INTO @a
@@ -45,6 +46,7 @@ ASSUME ORDER BY
     puid,
     timestamp DESC
 ;
+
 COMMIT;
 
 $target_events = (

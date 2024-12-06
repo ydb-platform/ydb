@@ -86,6 +86,7 @@ $join5 = (
     ON
         j.n_regionkey == r.r_regionkey
 );
+
 $border = Date("1995-01-01");
 
 SELECT

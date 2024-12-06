@@ -8,6 +8,7 @@ DEFINE ACTION $dup($x) AS
         $x()
     ;
 END DEFINE;
+
 DO
     $dup(EMPTY_ACTION)
 ;
@@ -17,6 +18,7 @@ DEFINE ACTION $sel_foo() AS
         "foo"
     ;
 END DEFINE;
+
 DO
     $dup($sel_foo)
 ;

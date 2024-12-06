@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 PRAGMA yt.JoinMergeTablesLimit = "100";
 
 INSERT INTO @t1
@@ -20,6 +21,7 @@ SELECT
     1us AS k3,
     1000 AS v3
 ;
+
 COMMIT;
 
 SELECT

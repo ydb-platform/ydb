@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.JoinMergeTablesLimit = "10";
 PRAGMA yt.JoinMergeForce = "true";
 PRAGMA yt.JoinMergeUnsortedFactor = "0";

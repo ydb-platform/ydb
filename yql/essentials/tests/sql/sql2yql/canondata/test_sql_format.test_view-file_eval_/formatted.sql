@@ -2,6 +2,7 @@
 /* syntax version 1 */
 /* custom error:FileContent function can't be used inside generated code in views*/
 PRAGMA yt.ViewIsolation = 'true';
+
 USE plato;
 
 SELECT

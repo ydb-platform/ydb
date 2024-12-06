@@ -9,6 +9,7 @@ SELECT
     '1' AS user_phone_pd_id,
     '2' AS utc_order_dttm
 ;
+
 COMMIT;
 
 SELECT

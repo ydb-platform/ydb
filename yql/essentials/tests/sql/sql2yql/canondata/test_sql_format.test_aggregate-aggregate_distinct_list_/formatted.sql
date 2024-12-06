@@ -12,6 +12,7 @@ UNION ALL
 SELECT
     AsList(1, 2) AS x
 ;
+
 COMMIT;
 
 SELECT
@@ -51,6 +52,7 @@ SELECT
     AsList(1, 2) AS x,
     AsList(5) AS y
 ;
+
 COMMIT;
 
 SELECT

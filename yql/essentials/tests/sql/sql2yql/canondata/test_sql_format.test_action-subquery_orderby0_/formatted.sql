@@ -13,9 +13,11 @@ DEFINE SUBQUERY $sub() AS
         y
     );
 END DEFINE;
+
 $sub2 = SubqueryOrderBy($sub, []);
 
 PROCESS $sub2();
+
 $sub3 = SubqueryOrderBy($sub, ListCreate(Tuple<String, Bool>));
 
 PROCESS $sub3();

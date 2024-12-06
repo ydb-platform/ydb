@@ -33,6 +33,7 @@ ORDER BY
     value,
     subkey
 ;
+
 COMMIT;
 
 SELECT

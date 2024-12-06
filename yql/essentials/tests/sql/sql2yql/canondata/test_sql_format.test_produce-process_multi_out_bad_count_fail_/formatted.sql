@@ -10,7 +10,9 @@ $record = (
     FROM
         plato.Input
 );
+
 $recordType = TypeOf(Unwrap($record));
+
 $udf = Python::MyFunc(
     CallableType(
         0,

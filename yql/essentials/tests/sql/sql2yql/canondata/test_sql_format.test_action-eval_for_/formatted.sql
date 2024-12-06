@@ -7,6 +7,7 @@ DEFINE ACTION $action1($x) AS
         $x
     ;
 END DEFINE;
+
 $f = ($i) -> {
     RETURN CAST(Unicode::ToUpper(CAST($i AS Utf8)) AS String);
 };

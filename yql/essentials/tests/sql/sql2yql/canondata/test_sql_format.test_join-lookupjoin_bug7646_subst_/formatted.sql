@@ -1,15 +1,19 @@
 USE plato;
+
 PRAGMA DisableSimpleColumns;
 PRAGMA yt.LookupJoinLimit = "64k";
 PRAGMA yt.LookupJoinMaxRows = "100";
+
 $campaigns_data = AsList(
     AsStruct(Just(1) AS id),
     AsStruct(Just(2) AS id)
 );
+
 $strategies_data = AsList(
     AsStruct(Just(1) AS id),
     AsStruct(Just(2) AS id)
 );
+
 $lottery_data = AsList(
     AsStruct(Just(1) AS id, Just(2) AS campaign_id, Just(3) AS strategy_id)
 );
@@ -40,6 +44,7 @@ FROM
 ORDER BY
     id
 ;
+
 COMMIT;
 
 SELECT

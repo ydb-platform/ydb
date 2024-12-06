@@ -4,6 +4,7 @@ $l = AsList(
     AsTuple(AsList(1, 2), "bar"),
     AsTuple(AsList(1, 2), "baz")
 );
+
 $d = ToSortedDict($l);
 
 SELECT
@@ -21,6 +22,7 @@ SELECT
     DictContains($d, AsList(1, 2)),
     DictContains($d, AsList(1, 3))
 ;
+
 $d = ToSortedMultiDict($l);
 
 SELECT

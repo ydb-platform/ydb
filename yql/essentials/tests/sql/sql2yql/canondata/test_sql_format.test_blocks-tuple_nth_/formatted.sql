@@ -12,6 +12,7 @@ SELECT
 FROM
     Input
 ;
+
 COMMIT;
 
 SELECT

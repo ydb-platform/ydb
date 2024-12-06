@@ -1,6 +1,7 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 $asIs = Python::asIs(
     Callable<(String) -> String>,
     @@
@@ -17,6 +18,7 @@ FROM
 ORDER BY
     value
 ;
+
 COMMIT;
 
 SELECT

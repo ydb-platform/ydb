@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.MaxInputTables = "2";
 
 SELECT

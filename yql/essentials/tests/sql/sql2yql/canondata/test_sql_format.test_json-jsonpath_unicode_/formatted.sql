@@ -11,6 +11,7 @@ SELECT
     JSON_EXISTS ($json, @@strict $."привет"@@),
     JSON_VALUE ($json, @@strict $."привет"@@)
 ;
+
 $nested_json = CAST(
     @@{
     "привет": [1, 2, 3]

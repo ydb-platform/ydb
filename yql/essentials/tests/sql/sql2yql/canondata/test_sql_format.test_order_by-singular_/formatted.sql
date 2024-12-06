@@ -15,6 +15,7 @@ ORDER BY
     z,
     w
 ;
+
 COMMIT;
 
 SELECT

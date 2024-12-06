@@ -24,6 +24,7 @@ SELECT
 SELECT
     $x != $x
 ;
+
 $x = AsStruct(Double("nan") AS a, 42 AS b);
 
 SELECT
@@ -33,6 +34,7 @@ SELECT
 SELECT
     $x != $x
 ;
+
 $x = AsTuple(Nothing(ParseType("Int32?")), 1);
 
 SELECT
@@ -58,6 +60,7 @@ SELECT
 SELECT
     $x != $x
 ;
+
 $x = Nothing(ParseType("Int32?"));
 
 SELECT

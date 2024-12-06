@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 $combineQueries = ($query, $list) -> {
     RETURN EvaluateCode(
         LambdaCode(
@@ -23,6 +24,7 @@ DEFINE SUBQUERY $calc($table) AS
         $table
     ;
 END DEFINE;
+
 $fullQuery = $combineQueries($calc, AsList("Input", "Input"));
 
 SELECT

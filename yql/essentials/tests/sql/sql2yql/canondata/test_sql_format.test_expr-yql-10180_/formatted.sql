@@ -1,5 +1,6 @@
 /* syntax version 1 */
 USE plato;
+
 $logs_path = "//logs/antirobot-daemon-log2/1d";
 $results_path = "//home/antispam/antirobot/sharding_daily";
 $logs_per_run = 10;

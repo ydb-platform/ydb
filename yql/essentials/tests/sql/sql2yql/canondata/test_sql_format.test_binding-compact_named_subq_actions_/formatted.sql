@@ -12,6 +12,7 @@ DEFINE SUBQUERY $sub1() AS
         $src
     ;
 END DEFINE;
+
 $foo = 1 + 2;
 
 DEFINE SUBQUERY $sub2($sub, $extra) AS
@@ -50,15 +51,19 @@ DEFINE ACTION $hello_world($sub, $name, $suffix?) AS
         $sub()
     ;
 END DEFINE;
+
 DO
     EMPTY_ACTION()
 ;
+
 DO
     $hello_world($sub1, NULL)
 ;
+
 DO
     $hello_world($sub1, NULL, "John")
 ;
+
 DO
     $hello_world($sub1, NULL, "Earth")
 ;

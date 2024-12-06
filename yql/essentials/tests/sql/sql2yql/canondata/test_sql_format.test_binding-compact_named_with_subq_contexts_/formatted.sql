@@ -5,6 +5,7 @@ $a = (
     SELECT
         CAST(Unicode::ToUpper("o"u) AS String) || "utpu"
 );
+
 $b = $a || CAST(Unicode::ToLower("T"u) AS String);
 
 SELECT

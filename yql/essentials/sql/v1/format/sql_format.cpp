@@ -463,7 +463,7 @@ public:
     {
     }
 
-    TString Process(const NProtoBuf::Message& msg, bool& addLine) {
+    TString Process(const NProtoBuf::Message& msg, bool& addLineBefore, bool& addLineAfter, TMaybe<ui32>& stmtCoreAltCase) {
         Scopes.push_back(EScope::Default);
         MarkedTokens.reserve(ParsedTokens.size());
         MarkTokens(msg);
@@ -480,7 +480,10 @@ public:
             AddComment(text);
         }
 
-        addLine = AddLine.GetOrElse(true);
+        ui32 lines = OutLine - (OutColumn == 0 ? 1 : 0);
+        addLineBefore = AddLine.GetOrElse(true) || lines > 1;
+        addLineAfter = AddLine.GetOrElse(true) || lines - CommentLines > 1;
+        stmtCoreAltCase = StmtCoreAltCase;
 
         return SB;
     }
@@ -543,6 +546,10 @@ private:
             Out(' ');
         }
 
+        if (OutColumn == 0) {
+            ++CommentLines;
+        }
+
         Out(text);
 
         if (!text.StartsWith("--") &&
@@ -571,7 +578,9 @@ private:
             MarkToken(token);
         } else if (descr == TRule_sql_stmt_core::GetDescriptor()) {
             if (AddLine.Empty()) {
-                AddLine = !IsSimpleStatement(dynamic_cast<const TRule_sql_stmt_core&>(msg)).GetOrElse(false);
+                const auto& rule = dynamic_cast<const TRule_sql_stmt_core&>(msg);
+                AddLine = !IsSimpleStatement(rule).GetOrElse(false);
+                StmtCoreAltCase = rule.Alt_case();
             }
         } else if (descr == TRule_lambda_body::GetDescriptor()) {
             Y_ENSURE(TokenIndex >= 1);
@@ -2725,9 +2734,11 @@ private:
     ui32 LastLine = 0;
     ui32 LastColumn = 0;
     ui32 LastComment = 0;
+    ui32 CommentLines = 0;
     i32 CurrentIndent = 0;
     TVector<EScope> Scopes;
     TMaybe<bool> AddLine;
+    TMaybe<ui32> StmtCoreAltCase;
     ui64 InsideType = 0;
     bool AfterNamespace = false;
     bool AfterBracket = false;
@@ -2972,6 +2983,8 @@ public:
         TVector<TTokenIterator> statements;
         SplitByStatements(allTokens.begin(), allTokens.end(), statements);
         TStringBuilder finalFormattedQuery;
+        bool prevAddLine = false;
+        TMaybe<ui32> prevStmtCoreAltCase;
         for (size_t i = 1; i < statements.size(); ++i) {
             TStringBuilder currentQueryBuilder;
             for (auto it = statements[i - 1]; it != statements[i]; ++it) {
@@ -3022,8 +3035,11 @@ public:
             }
 
             TPrettyVisitor visitor(parsedTokens, comments);
-            bool addLine;
-            auto currentFormattedQuery = visitor.Process(*message, addLine);
+            bool addLineBefore = false;
+            bool addLineAfter = false;
+            TMaybe<ui32> stmtCoreAltCase;
+            auto currentFormattedQuery = visitor.Process(*message, addLineBefore, addLineAfter, stmtCoreAltCase);
+
             TParsedTokenList stmtFormattedTokens;
             auto onNextFormattedToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtFormattedTokens.push_back(token);
@@ -3038,9 +3054,12 @@ public:
                 return false;
             }
 
-            if (addLine && !finalFormattedQuery.empty()) {
+            const bool differentStmtAltCase = prevStmtCoreAltCase.Defined() && stmtCoreAltCase != prevStmtCoreAltCase;
+            if ((addLineBefore || prevAddLine || differentStmtAltCase) && !finalFormattedQuery.empty()) {
                 finalFormattedQuery << "\n";
             }
+            prevAddLine = addLineAfter;
+            prevStmtCoreAltCase = stmtCoreAltCase;
 
             finalFormattedQuery << currentFormattedQuery;
             if (parsedTokens.back().Name != "SEMICOLON") {

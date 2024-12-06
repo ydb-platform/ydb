@@ -30,6 +30,7 @@ def serialize(state):
 def deserialize(serialized):
     return json.loads(serialized)
 @@;
+
 $create = Python3::create(Callable<(Double) -> Resource<Python3>>, $script);
 $add = Python3::add(Callable<(Resource<Python3>, Double) -> Resource<Python3>>, $script);
 $merge = Python3::merge(Callable<(Resource<Python3>, Resource<Python3>) -> Resource<Python3>>, $script);

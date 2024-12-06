@@ -1,5 +1,6 @@
 /* custom error:Insert with different "column_groups" to existing table is not allowed*/
 USE plato;
+
 PRAGMA yt.ColumnGroupMode = "perusage";
 
 $s1 =
@@ -26,6 +27,7 @@ SELECT
 FROM
     $s1
 ;
+
 COMMIT;
 
 INSERT INTO Output WITH column_groups = "{a=#}"

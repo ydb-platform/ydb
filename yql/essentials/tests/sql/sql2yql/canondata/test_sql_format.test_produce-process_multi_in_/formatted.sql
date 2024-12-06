@@ -12,6 +12,7 @@ $record = (
     FROM
         plato.Input
 );
+
 $recordType = TypeOf(Unwrap($record));
 $streamType = StreamType(VariantType(TupleType($recordType, $recordType, $recordType)));
 $udf = Python3::MyFunc(CallableType(0, $streamType, $streamType), $udfScript);

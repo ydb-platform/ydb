@@ -1,6 +1,8 @@
 PRAGMA DisableSimpleColumns;
+
 /* postgres can not */
 PRAGMA yt.MapJoinLimit = "1m";
+
 USE plato;
 
 $i = (

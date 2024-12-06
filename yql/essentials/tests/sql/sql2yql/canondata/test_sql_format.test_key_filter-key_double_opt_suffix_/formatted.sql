@@ -16,6 +16,7 @@ ORDER BY
     key,
     subkey
 ;
+
 COMMIT;
 
 SELECT

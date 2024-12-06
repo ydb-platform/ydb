@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.ColumnGroupMode = "perusage";
 
 $s1 =
@@ -46,6 +47,7 @@ SELECT
 FROM
     $s1
 ;
+
 COMMIT;
 
 INSERT INTO @a WITH column_groups = "{a=#}"

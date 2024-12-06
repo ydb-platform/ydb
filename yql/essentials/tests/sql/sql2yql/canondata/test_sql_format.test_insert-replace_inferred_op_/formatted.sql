@@ -1,6 +1,7 @@
 /* postgres can not */
 /* kikimr can not */
 USE plato;
+
 PRAGMA yt.InferSchema;
 PRAGMA yt.InferSchemaTableCountThreshold = "0";
 

@@ -3,6 +3,7 @@
 /* dqfile can not */
 /* yt can not */
 USE plato;
+
 PRAGMA AnsiOptionalAs;
 
 SELECT

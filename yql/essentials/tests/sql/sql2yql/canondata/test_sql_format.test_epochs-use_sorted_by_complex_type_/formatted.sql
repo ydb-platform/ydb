@@ -14,6 +14,7 @@ ORDER BY
     key,
     lst
 ;
+
 COMMIT;
 
 SELECT

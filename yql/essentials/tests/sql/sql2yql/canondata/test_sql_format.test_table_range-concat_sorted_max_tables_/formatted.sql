@@ -2,6 +2,7 @@
 /* kikimr can not */
 /* multirun can not */
 USE plato;
+
 PRAGMA yt.MaxInputTables = "3";
 PRAGMA yt.MaxInputTablesForSortedMerge = "2";
 

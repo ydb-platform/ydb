@@ -1,11 +1,13 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 $x = AsStruct(1 AS a);
 
 SELECT
     $x.a
 ;
+
 $y = AsTuple(2, 3);
 
 SELECT
@@ -19,6 +21,7 @@ SELECT
 SELECT
     Math::Pi()
 ;
+
 $f = () -> {
     RETURN () -> {
         RETURN AsDict(AsTuple("foo", AsList(AsStruct(AsTuple(1) AS bar))));
@@ -34,7 +37,9 @@ SELECT
         RETURN 1
     }()
 ;
+
 $type = Callable<() -> List<Int32>>;
+
 $g = AsStruct(
     Yql::Callable(
         $type, () -> {

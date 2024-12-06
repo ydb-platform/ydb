@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* dqfile can not */
 USE plato;
+
 PRAGMA DqEngine = "force";
 PRAGMA dq.MemoryLimit = "1M";
 

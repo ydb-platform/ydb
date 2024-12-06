@@ -1,4 +1,5 @@
 PRAGMA config.flags("OptimizerFlags", "FilterPushdownEnableMultiusage");
+
 USE plato;
 
 $src =

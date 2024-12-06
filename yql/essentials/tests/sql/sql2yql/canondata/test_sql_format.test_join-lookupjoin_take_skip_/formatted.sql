@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.LookupJoinMaxRows = "3";
 PRAGMA yt.LookupJoinLimit = '10M';
 
@@ -13,6 +14,7 @@ FROM (
 ORDER BY
     key
 ;
+
 COMMIT;
 
 $small =

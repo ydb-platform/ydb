@@ -8,4 +8,5 @@ $path = (
     FROM
         folder("")
 );
+
 DROP TABLE $path;

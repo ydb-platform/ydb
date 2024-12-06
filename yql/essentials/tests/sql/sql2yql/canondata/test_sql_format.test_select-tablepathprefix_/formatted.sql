@@ -1,7 +1,9 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 PRAGMA TablePathPrefix = "//";
+
 $input = "In" || "put";
 
 SELECT

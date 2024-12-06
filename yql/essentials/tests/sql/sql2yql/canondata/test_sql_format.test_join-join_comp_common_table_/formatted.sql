@@ -1,4 +1,5 @@
 PRAGMA DisableSimpleColumns;
+
 /* postgres can not */
 USE plato;
 

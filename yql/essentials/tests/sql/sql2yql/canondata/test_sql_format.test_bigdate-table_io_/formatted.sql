@@ -19,6 +19,7 @@ WHERE
 ORDER BY
     row
 ;
+
 COMMIT;
 
 SELECT

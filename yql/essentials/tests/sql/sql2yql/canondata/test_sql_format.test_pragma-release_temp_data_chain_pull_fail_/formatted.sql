@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.ReleaseTempData = "finish";
 PRAGMA yt.InflightTempTablesLimit = "6";
 

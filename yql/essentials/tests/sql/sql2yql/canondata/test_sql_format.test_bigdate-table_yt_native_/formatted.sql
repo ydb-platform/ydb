@@ -9,6 +9,7 @@ SELECT
     timestamp64('1969-12-31T0:0:0Z') AS ts64,
     interval64('P65536D') AS i64
 ;
+
 COMMIT;
 
 INSERT INTO Output

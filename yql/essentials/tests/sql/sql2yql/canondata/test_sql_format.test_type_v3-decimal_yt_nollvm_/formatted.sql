@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 PRAGMA yt.UseNativeYtTypes = "1";
 PRAGMA config.flags("LLVM", "OFF");
 
@@ -28,6 +29,7 @@ FROM (
         Decimal("nan", 12, 10) AS d12,
         Decimal("nan", 35, 10) AS d35
 );
+
 COMMIT;
 
 SELECT

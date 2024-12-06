@@ -14,6 +14,7 @@ $groupsrc =
         "1" AS key,
         "3" AS String
 ;
+
 $foo = ($k, $t) -> (FormatType($t) || '_' || $k);
 
 SELECT

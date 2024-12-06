@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA config.flags("OptimizerFlags", "PushdownComplexFiltersOverAggregate");
 
 SELECT

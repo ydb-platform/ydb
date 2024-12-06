@@ -18,6 +18,7 @@ FROM
 ORDER BY
     key || "2"
 ;
+
 COMMIT;
 
 INSERT INTO Output

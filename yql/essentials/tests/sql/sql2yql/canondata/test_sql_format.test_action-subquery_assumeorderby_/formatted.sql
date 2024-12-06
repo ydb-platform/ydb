@@ -12,6 +12,7 @@ DEFINE SUBQUERY $sub() AS
         x
     );
 END DEFINE;
+
 $sub2 = SubqueryAssumeOrderBy($sub, [("x", TRUE)]);
 
 PROCESS $sub2();

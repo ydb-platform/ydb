@@ -8,6 +8,7 @@ SELECT
 ORDER BY
     a
 ;
+
 COMMIT;
 
 SELECT

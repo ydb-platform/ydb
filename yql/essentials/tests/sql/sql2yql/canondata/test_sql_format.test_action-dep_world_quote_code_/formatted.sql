@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 $combineQueries = ($query, $list) -> {
     RETURN EvaluateCode(
         LambdaCode(
@@ -43,6 +44,7 @@ END DEFINE;
 EVALUATE FOR $z IN AsList("Input") DO
     $aaa($z)
 ;
+
 DO
     $aaa("Input")
 ;

@@ -26,6 +26,7 @@ $i3 = (
     FROM
         plato.Input3
 );
+
 $udf = ($x) -> {
     RETURN AsStruct(
         Yql::Visit(

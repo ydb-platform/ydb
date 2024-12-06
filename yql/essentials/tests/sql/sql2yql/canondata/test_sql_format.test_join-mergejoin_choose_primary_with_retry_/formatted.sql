@@ -1,7 +1,10 @@
 PRAGMA DisableSimpleColumns;
+
 USE plato;
+
 PRAGMA yt.JoinMergeTablesLimit = "10";
 PRAGMA yt.JoinAllowColumnRenames = "true";
+
 -- emulate monsters in big table
 PRAGMA yt.JoinMergeReduceJobMaxSize = "1";
 

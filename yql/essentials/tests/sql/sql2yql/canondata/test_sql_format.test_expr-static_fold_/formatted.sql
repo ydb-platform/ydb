@@ -3,9 +3,11 @@ $st_many = <|a: "one", b: "two", c: "three", d: "four"|>;
 $st_single = <|a: "zero"|>;
 $st_empty = <||>;
 $tup = AsTuple("first", "second");
+
 $concat = ($item, $state) -> {
     RETURN $state || $item;
 };
+
 $start = ($value) -> {
     RETURN "(" || $value || ")";
 };

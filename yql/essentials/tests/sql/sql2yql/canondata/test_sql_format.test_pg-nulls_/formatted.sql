@@ -10,6 +10,7 @@ SELECT
     Just(Nothing(pgcstring?)) AS k2,
     Nothing(pgcstring??) AS k3
 ;
+
 COMMIT;
 
 INSERT INTO @bar
@@ -21,6 +22,7 @@ WITHOUT
 FROM
     @foo AS t
 ;
+
 COMMIT;
 
 SELECT

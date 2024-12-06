@@ -1,5 +1,6 @@
 /* kikimr can not */
 USE plato;
+
 PRAGMA DisableSimpleColumns;
 PRAGMA yt.JoinCollectColumnarStatistics = "async";
 PRAGMA yt.MinTempAvgChunkSize = "0";

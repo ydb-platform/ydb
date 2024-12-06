@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.JoinMergeTablesLimit = "100";
 PRAGMA yt.MapJoinLimit = "10M";
 PRAGMA yt.MaxReplicationFactorToFuseOperations = "1";

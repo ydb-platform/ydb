@@ -1,6 +1,7 @@
 /* postgres can not */
 /* kikimr can not - yt pragma */
 USE plato;
+
 PRAGMA yt.MaxExtraJobMemoryToFuseOperations = "550m";
 PRAGMA yt.CombineCoreLimit = "128m";
 

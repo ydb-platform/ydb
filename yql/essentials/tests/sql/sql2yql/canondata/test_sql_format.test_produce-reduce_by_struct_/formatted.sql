@@ -9,7 +9,9 @@ FROM
         <|key: <|field1: 1, field2: 1|>, value: 2|>,
     ])
 ;
+
 COMMIT;
+
 $reducer = ($_key, $stream) -> ($stream);
 
 REDUCE @tmp

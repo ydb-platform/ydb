@@ -3,9 +3,11 @@
 $formatTagged = ($x) -> {
     RETURN AsStruct(FormatType($x.Base) AS Base, $x.Tag AS Tag)
 };
+
 $formatArgument = ($x) -> {
     RETURN AsStruct(FormatType($x.Type) AS Type, $x.Name AS Name, $x.Flags AS Flags)
 };
+
 $formatCallable = ($x) -> {
     RETURN AsStruct(
         $x.OptionalArgumentsCount AS OptionalArgumentsCount,

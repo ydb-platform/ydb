@@ -9,6 +9,7 @@ SELECT
     FALSE AS `IsHead`,
     FALSE AS `WasHead`
 ;
+
 COMMIT;
 
 SELECT

@@ -16,6 +16,7 @@ SELECT
         )
     )
 ;
+
 $f = AGGREGATION_FACTORY("linearhistogram", 10, 0.0, 1000.0);
 
 SELECT
@@ -31,6 +32,7 @@ SELECT
         )
     )
 ;
+
 USE plato;
 
 INSERT INTO @a
@@ -39,6 +41,7 @@ SELECT
 FROM
     as_table($t)
 ;
+
 COMMIT;
 
 SELECT

@@ -8,6 +8,7 @@ SELECT
 FROM
     Input
 ;
+
 COMMIT;
 
 $n = (
@@ -16,6 +17,7 @@ $n = (
     FROM
         @foo
 );
+
 $predicate = $n > 1;
 
 IF $predicate DO BEGIN

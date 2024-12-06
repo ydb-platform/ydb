@@ -2,6 +2,7 @@
 $ns = ($set) -> {
     RETURN ListSort(DictKeys($set))
 };
+
 $nd = ($dict) -> {
     RETURN ListSort(
         DictItems($dict), ($z) -> {

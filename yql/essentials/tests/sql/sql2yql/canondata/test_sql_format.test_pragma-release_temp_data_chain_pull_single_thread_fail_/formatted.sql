@@ -1,5 +1,6 @@
 /* dq can not */
 USE plato;
+
 PRAGMA yt.ReleaseTempData = "immediate";
 PRAGMA yt.InflightTempTablesLimit = "2";
 

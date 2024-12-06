@@ -1,5 +1,6 @@
 PRAGMA WarnUntypedStringLiterals;
 PRAGMA UnicodeLiterals;
+
 $f = () -> {
     RETURN (
         "a"s,
@@ -11,8 +12,10 @@ $f = () -> {
 SELECT
     $f()
 ;
+
 PRAGMA DisableWarnUntypedStringLiterals;
 PRAGMA DisableUnicodeLiterals;
+
 $g = () -> {
     RETURN (
         "a"s,

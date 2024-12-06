@@ -1,7 +1,9 @@
 USE plato;
+
 /* postgres can not */
 /* kikimr can not */
 PRAGMA DisableSimpleColumns;
+
 /* yt_local_var: MAP_JOIN_LIMIT = 30 */
 /* yqlrun_var: MAP_JOIN_LIMIT = 1000 */
 PRAGMA yt.MapJoinLimit = "MAP_JOIN_LIMIT";

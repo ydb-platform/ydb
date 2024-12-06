@@ -1,5 +1,6 @@
 /* syntax version 1 */
 USE plato;
+
 PRAGMA yt.LookupJoinLimit = "64k";
 PRAGMA yt.LookupJoinMaxRows = "100";
 

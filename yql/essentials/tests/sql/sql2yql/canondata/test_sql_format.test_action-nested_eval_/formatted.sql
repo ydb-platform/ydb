@@ -6,6 +6,7 @@ $make_struct = CALLABLE (
         RETURN AsStruct(5 AS lel);
     }
 );
+
 $kekify_struct = ($struct) -> {
     RETURN EvaluateCode(
         FuncCode(
@@ -19,6 +20,7 @@ $kekify_struct = ($struct) -> {
         )
     );
 };
+
 $struct = AsStruct(
     CALLABLE (
         Callable<(String) -> Struct<kek: Int32>>,

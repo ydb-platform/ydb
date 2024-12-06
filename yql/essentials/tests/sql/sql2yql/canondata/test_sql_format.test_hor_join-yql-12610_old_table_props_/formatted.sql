@@ -2,6 +2,7 @@
 /* syntax version 1 */
 /* kikimr can not - yt pragma */
 USE plato;
+
 PRAGMA yt.UseSystemColumns = "0";
 
 SELECT

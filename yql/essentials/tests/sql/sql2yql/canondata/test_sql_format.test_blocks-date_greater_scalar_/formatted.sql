@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.DisableOptimizers = "OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin,FuseMultiOutsWithOuterMaps";
 
 SELECT

@@ -1,5 +1,6 @@
 /* postgres can not */
 USE plato;
+
 $func = ($x, $y) -> {
     $y, $x = AsTuple($x, $y);
     RETURN $x || "_" || $y;

@@ -1,6 +1,7 @@
 /* postgres can not */
 /* multirun can not */
 USE plato;
+
 PRAGMA yt.UseNewPredicateExtraction;
 
 INSERT INTO OutDate32
@@ -38,6 +39,7 @@ FROM
 ORDER BY
     key
 ;
+
 COMMIT;
 
 SELECT

@@ -1,5 +1,6 @@
 PRAGMA DisableSimpleColumns;
 PRAGMA FilterPushdownOverJoinOptionalSide;
+
 USE plato;
 
 SELECT

@@ -2,6 +2,7 @@
 /* multirun can not */
 /* syntax version 1 */
 USE plato;
+
 PRAGMA yt.UseNativeDescSort;
 
 INSERT INTO Output

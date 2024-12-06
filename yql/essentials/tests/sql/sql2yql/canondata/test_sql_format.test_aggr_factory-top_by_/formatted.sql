@@ -7,6 +7,7 @@ $t = AsList(
     AsStruct(2 AS key, 256 AS value),
     AsStruct(7 AS key, 111 AS value)
 );
+
 $f = AGGREGATION_FACTORY("topby", 3);
 
 SELECT
@@ -23,6 +24,7 @@ SELECT
         )
     )
 ;
+
 USE plato;
 
 INSERT INTO @a
@@ -31,6 +33,7 @@ SELECT
 FROM
     as_table($t)
 ;
+
 COMMIT;
 
 SELECT

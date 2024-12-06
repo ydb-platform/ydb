@@ -18,6 +18,7 @@ SELECT
     Interval('PT1M') AS i1,
     Interval('PT1H') AS i2,
 ;
+
 COMMIT;
 
 SELECT

@@ -10,6 +10,7 @@ FROM
 WHERE
     key > "020"
 ;
+
 COMMIT;
 
 SELECT

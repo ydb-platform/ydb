@@ -1,4 +1,5 @@
 USE plato;
+
 $reduce = ($_, $TableRows) -> {
     RETURN Yql::Condense1(
         $TableRows,

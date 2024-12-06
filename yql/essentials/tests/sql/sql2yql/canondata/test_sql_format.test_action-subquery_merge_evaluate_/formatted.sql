@@ -15,6 +15,7 @@ DEFINE SUBQUERY $sub2($i, $j?) AS
         $j
     ;
 END DEFINE;
+
 $sub = EvaluateCode(If(1 > 2, QuoteCode($sub1), QuoteCode($sub2)));
 $s = SubqueryExtendFor([1, 2, 3], $sub);
 

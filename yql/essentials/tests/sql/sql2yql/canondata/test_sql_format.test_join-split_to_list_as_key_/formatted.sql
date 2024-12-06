@@ -1,5 +1,6 @@
 /* syntax version 1 */
 PRAGMA DisableSimpleColumns;
+
 USE plato;
 
 FROM

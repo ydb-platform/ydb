@@ -1,6 +1,7 @@
 /* ignore runonopt plan diff */
 PRAGMA OrderedColumns;
 PRAGMA yt.UseNativeYtTypes;
+
 USE plato;
 
 INSERT INTO @table1 WITH TRUNCATE (
@@ -10,6 +11,7 @@ INSERT INTO @table1 WITH TRUNCATE (
 )
 VALUES
     ('1', '2', '3');
+
 COMMIT;
 
 INSERT INTO Output WITH TRUNCATE

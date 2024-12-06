@@ -12,6 +12,7 @@ $train =
     GROUP BY
         value
 ;
+
 $method = ($stream) -> {
     $func = CALLABLE (
         CallableType(0, TypeOf($stream), TypeOf($stream)),

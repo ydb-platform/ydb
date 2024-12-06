@@ -18,6 +18,7 @@ DEFINE SUBQUERY $s($_i) AS
         EACH($t)
     ;
 END DEFINE;
+
 $extractor = SubqueryMergeFor([1], $s);
 
 SELECT

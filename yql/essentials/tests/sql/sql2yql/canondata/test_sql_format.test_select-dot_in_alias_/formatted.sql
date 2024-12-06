@@ -1,5 +1,6 @@
 /* postgres can not */
 USE plato;
+
 PRAGMA AllowDotInAlias;
 
 --INSERT INTO Output

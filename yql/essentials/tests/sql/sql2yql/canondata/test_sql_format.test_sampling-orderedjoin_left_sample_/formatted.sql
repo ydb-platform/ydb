@@ -3,6 +3,7 @@
 /* ignore plan diff */
 /* syntax version 1 */
 USE plato;
+
 PRAGMA yt.JoinMergeTablesLimit = "2";
 PRAGMA DisableSimpleColumns;
 

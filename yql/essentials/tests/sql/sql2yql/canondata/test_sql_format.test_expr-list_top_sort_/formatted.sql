@@ -1,6 +1,7 @@
 /* syntax version 1 */
 $list = [45, 20, 34, 16];
 $empty = [];
+
 $digit = ($x) -> {
     RETURN $x % 10;
 };

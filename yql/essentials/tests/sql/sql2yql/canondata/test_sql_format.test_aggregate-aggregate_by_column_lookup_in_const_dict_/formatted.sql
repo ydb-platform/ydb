@@ -1,5 +1,6 @@
 /* syntax version 1 */
 USE plato;
+
 $dict = AsDict(("800", "foo"));
 
 SELECT

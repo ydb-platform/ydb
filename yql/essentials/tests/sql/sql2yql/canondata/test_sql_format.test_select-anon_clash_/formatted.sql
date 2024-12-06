@@ -5,6 +5,7 @@ INSERT INTO @a
 SELECT
     1 AS t
 ;
+
 COMMIT;
 
 SELECT

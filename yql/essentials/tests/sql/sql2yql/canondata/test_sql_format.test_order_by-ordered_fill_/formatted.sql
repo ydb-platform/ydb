@@ -13,6 +13,7 @@ FROM (
 ORDER BY
     x
 ;
+
 COMMIT;
 
 SELECT

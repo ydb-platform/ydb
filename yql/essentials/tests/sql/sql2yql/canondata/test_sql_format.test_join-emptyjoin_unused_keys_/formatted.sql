@@ -7,6 +7,7 @@ SELECT
     '' AS v1,
     '' AS u1
 LIMIT 0;
+
 COMMIT;
 
 SELECT

@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA CostBasedOptimizer = "native";
 
 SELECT

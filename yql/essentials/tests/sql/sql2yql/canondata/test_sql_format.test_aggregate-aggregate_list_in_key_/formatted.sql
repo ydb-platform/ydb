@@ -15,6 +15,7 @@ SELECT
     AsList(1, 2) AS x,
     3 AS y
 ;
+
 COMMIT;
 
 SELECT
@@ -59,6 +60,7 @@ SELECT
     AsList(5) AS y,
     6 AS z
 ;
+
 COMMIT;
 
 SELECT

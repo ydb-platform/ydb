@@ -1,4 +1,5 @@
 PRAGMA DisableSimpleColumns;
+
 USE plato;
 
 FROM (

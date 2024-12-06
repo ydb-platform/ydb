@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 PRAGMA yt.JoinMergeTablesLimit = "100";
 PRAGMA yt.JoinMergeForce;
 
@@ -15,6 +16,7 @@ SELECT
     (1u, 1) AS k2,
     100 AS v2
 ;
+
 COMMIT;
 
 SELECT

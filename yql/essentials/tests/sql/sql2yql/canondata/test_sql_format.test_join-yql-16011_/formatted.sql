@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA AnsiInForEmptyOrNullableItemsCollections = "true";
 PRAGMA yt.MapJoinLimit = "1m";
 PRAGMA yt.LookupJoinLimit = "64k";
@@ -19,6 +20,7 @@ SELECT
 ORDER BY
     ID
 ;
+
 COMMIT;
 
 $lost_ids =

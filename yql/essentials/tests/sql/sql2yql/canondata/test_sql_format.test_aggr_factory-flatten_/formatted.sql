@@ -13,6 +13,7 @@ SELECT
     ListAggregate([ListCreate(Int32), [3]], $g),
     ListAggregate([[1, 2], ListCreate(Int32)], $g)
 ;
+
 $i = AGGREGATION_FACTORY("AGGREGATE_LIST_DISTINCT");
 $j = AggregateFlatten($i);
 

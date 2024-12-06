@@ -42,6 +42,7 @@ $i5 = (
     FROM
         plato.Input5
 );
+
 $udf = ($x) -> {
     RETURN Yql::VariantItem($x)
 };

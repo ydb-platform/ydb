@@ -10,6 +10,7 @@ FROM
 WHERE
     value != "111"
 LIMIT 3;
+
 COMMIT;
 
 INSERT INTO Output

@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA DqEngine = "disable";
 
 DEFINE SUBQUERY $sample($product_type) AS
@@ -12,6 +13,7 @@ DEFINE SUBQUERY $sample($product_type) AS
         key
     LIMIT 10;
 END DEFINE;
+
 $list = ["a", "b"];
 $s = SubqueryUnionAllFor($list, $sample);
 

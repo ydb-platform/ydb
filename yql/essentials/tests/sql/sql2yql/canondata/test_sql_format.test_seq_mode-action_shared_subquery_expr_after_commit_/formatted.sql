@@ -1,4 +1,5 @@
 PRAGMA SeqMode;
+
 USE plato;
 
 DEFINE ACTION $a() AS
@@ -27,6 +28,7 @@ DEFINE ACTION $a() AS
         $r
     ;
 END DEFINE;
+
 DO
     $a()
 ;

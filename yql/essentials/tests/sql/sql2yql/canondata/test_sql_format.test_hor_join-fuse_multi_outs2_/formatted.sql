@@ -1,4 +1,5 @@
 USE plato;
+
 $udf = YQL::@@(lambda '(flow) 
 (Map flow
    (lambda '(item) (block '(

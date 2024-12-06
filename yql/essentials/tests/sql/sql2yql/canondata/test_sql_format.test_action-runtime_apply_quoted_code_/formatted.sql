@@ -3,6 +3,7 @@
 $func = ($x) -> {
     RETURN $x == 1;
 };
+
 $structApply = ($strValue, $f) -> {
     $code = EvaluateCode(
         LambdaCode(

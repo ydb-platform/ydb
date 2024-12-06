@@ -1,5 +1,6 @@
 /* syntax version 1 */
 USE plato;
+
 PRAGMA yt.JoinEnableStarJoin = "true";
 
 FROM ANY

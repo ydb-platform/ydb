@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.JoinEnableStarJoin = "true";
 
 INSERT INTO @x
@@ -21,6 +22,7 @@ SELECT
 ORDER BY
     id
 ;
+
 COMMIT;
 
 $xy_leftonly = (

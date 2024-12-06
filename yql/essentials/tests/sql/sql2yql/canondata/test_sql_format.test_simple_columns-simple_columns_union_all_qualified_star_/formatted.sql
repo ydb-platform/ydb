@@ -1,5 +1,6 @@
 /* postgres can not */
 USE plato;
+
 PRAGMA simplecolumns;
 
 INSERT INTO @A (
@@ -17,6 +18,7 @@ INSERT INTO @B (
 VALUES
     ('y', 3),
     ('z', 4);
+
 COMMIT;
 
 SELECT

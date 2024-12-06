@@ -1,5 +1,7 @@
 USE plato;
+
 PRAGMA yt.DisableOptimizers = "OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin";
+
 $ns_tolower = ($x) -> (AssumeNonStrict(String::AsciiToLower($x)));
 $ns_toupper = ($x) -> (AssumeNonStrict(String::AsciiToUpper($x)));
 

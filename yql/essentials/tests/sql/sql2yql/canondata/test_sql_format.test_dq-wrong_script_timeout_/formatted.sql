@@ -1,5 +1,6 @@
 /* dqfile can not */
 USE plato;
+
 $f = Python3::f(
     @@
 def f(x):

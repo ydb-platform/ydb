@@ -1,5 +1,6 @@
 /* custom error:column name: value conflicted without correlation name it may be one of: Input.value, d.value*/
 PRAGMA DisableSimpleColumns;
+
 USE plato;
 
 $data = (

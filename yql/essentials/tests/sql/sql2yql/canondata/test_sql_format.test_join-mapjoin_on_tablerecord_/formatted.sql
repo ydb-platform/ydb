@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.MapJoinLimit = "1M";
 
 $i =

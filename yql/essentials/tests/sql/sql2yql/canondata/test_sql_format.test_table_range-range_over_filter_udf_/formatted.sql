@@ -9,6 +9,7 @@ def f(f):
     return False
   return f and ft or ff
 @@;
+
 $callable = Python3::f(Callable<(Bool) -> Callable<(String) -> Bool>>, $script);
 $callableT = $callable(Re2::Match('test.*')('testfets'));
 

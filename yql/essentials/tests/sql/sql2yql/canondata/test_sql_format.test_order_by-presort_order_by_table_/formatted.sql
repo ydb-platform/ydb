@@ -1,5 +1,6 @@
 /* postgres can not */
 USE plato;
+
 $list = AsList(
     AsList(3, 1),
     AsList(1, 1),
@@ -15,6 +16,7 @@ FROM (
 )
     FLATTEN BY x
 ;
+
 COMMIT;
 
 SELECT

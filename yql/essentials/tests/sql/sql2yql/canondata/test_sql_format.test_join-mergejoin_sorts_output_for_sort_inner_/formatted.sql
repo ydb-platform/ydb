@@ -1,6 +1,8 @@
 /* ignore yt detailed plan diff */
 PRAGMA DisableSimpleColumns;
+
 USE plato;
+
 PRAGMA yt.JoinMergeTablesLimit = "10";
 PRAGMA yt.JoinAllowColumnRenames = "true";
 

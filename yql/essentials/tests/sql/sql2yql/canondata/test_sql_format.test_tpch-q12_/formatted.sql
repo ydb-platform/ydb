@@ -15,6 +15,7 @@ $join = (
     ON
         o.o_orderkey == l.l_orderkey
 );
+
 $border = Date("1994-01-01");
 
 SELECT

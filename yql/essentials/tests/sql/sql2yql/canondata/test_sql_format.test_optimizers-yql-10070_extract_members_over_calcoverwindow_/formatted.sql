@@ -10,6 +10,7 @@ SELECT
     FALSE AS `WasHead`,
     23 AS dummy1
 ;
+
 COMMIT;
 
 SELECT

@@ -11,7 +11,9 @@ SELECT
 FROM
     plato.regexp($a, $b, $c, $d)
 ;
+
 USE plato;
+
 $a = "";
 $b = "Input";
 $c = "";

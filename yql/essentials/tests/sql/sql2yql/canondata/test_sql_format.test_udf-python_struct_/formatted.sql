@@ -1,5 +1,6 @@
 /* postgres can not */
 USE plato;
+
 $udf = YQL::@@(block '(
     (let $udfScript (String '@@@@
 class Person:

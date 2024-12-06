@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 PRAGMA yt.UseNativeYtTypes = "1";
 
 INSERT INTO Output
@@ -13,6 +14,7 @@ FROM (
     SELECT
         Json(@@{"d": "fff"}@@) AS j
 );
+
 COMMIT;
 
 SELECT

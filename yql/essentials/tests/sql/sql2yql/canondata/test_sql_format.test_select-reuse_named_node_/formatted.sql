@@ -1,5 +1,6 @@
 /* postgres can not */
 USE plato;
+
 $x = ($key) -> {
     RETURN "aa" || $key
 };

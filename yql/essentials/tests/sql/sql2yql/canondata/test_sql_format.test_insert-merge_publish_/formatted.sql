@@ -2,6 +2,7 @@
 /* kikimr can not */
 /* ignore plan diff */
 USE plato;
+
 PRAGMA yt.ScriptCpu = "1.0";
 
 INSERT INTO Output1
@@ -39,6 +40,7 @@ SELECT
 FROM
     Input
 ;
+
 PRAGMA yt.ScriptCpu = "2.0";
 
 INSERT INTO Output1

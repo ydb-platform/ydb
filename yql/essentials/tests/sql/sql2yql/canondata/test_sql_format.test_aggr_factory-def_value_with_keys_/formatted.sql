@@ -35,26 +35,34 @@ $my_table =
         2 AS value1,
         7 AS value2
 ;
+
 -- Эмуляция агрегационной функции COUNT
 $cnt_create = ($_item, $_parent) -> {
     RETURN 1ul
 };
+
 $cnt_add = ($state, $_item, $_parent) -> {
     RETURN 1ul + $state
 };
+
 $cnt_merge = ($state1, $state2) -> {
     RETURN $state1 + $state2
 };
+
 $cnt_get_result = ($state) -> {
     RETURN $state
 };
+
 $cnt_serialize = ($state) -> {
     RETURN $state
 };
+
 $cnt_deserialize = ($state) -> {
     RETURN $state
 };
+
 $cnt_default = 0ul;
+
 $cnt_udaf_factory = AggregationFactory(
     "UDAF",
     $cnt_create,

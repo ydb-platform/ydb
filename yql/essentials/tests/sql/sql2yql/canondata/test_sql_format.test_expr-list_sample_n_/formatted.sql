@@ -1,5 +1,6 @@
 /* yt can not */
 $list = ListFromRange(1, 40);
+
 $test = ($n, $dependsOn) -> {
     $sample = ListCollect(ListSampleN($list, $n, $dependsOn));
     RETURN (

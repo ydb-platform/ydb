@@ -4,6 +4,7 @@ $l = AsList(
     AsTuple(AsTuple(), Void()),
     AsTuple(AsTuple(), Void())
 );
+
 $d = ToSortedDict($l);
 
 SELECT
@@ -19,11 +20,13 @@ SELECT
 SELECT
     DictContains($d, AsTuple())
 ;
+
 $l = AsList(
     AsTuple(AsTuple(1), Void()),
     AsTuple(AsTuple(2), Void()),
     AsTuple(AsTuple(2), Void())
 );
+
 $d = ToSortedDict($l);
 
 SELECT
@@ -41,11 +44,13 @@ SELECT
     DictContains($d, AsTuple(2)),
     DictContains($d, AsTuple(3))
 ;
+
 $l = AsList(
     AsTuple(AsTuple(1, 2), Void()),
     AsTuple(AsTuple(1, 3), Void()),
     AsTuple(AsTuple(1, 3), Void())
 );
+
 $d = ToSortedDict($l);
 
 SELECT

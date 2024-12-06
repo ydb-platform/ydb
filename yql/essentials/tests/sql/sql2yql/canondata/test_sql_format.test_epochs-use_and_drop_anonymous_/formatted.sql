@@ -10,6 +10,7 @@ FROM
 WHERE
     key > "100"
 ;
+
 COMMIT;
 
 INSERT INTO Output
@@ -20,7 +21,9 @@ FROM
 WHERE
     key != "150"
 ;
+
 DROP TABLE @tmp;
+
 COMMIT;
 
 INSERT INTO @tmp
@@ -31,6 +34,7 @@ FROM
 WHERE
     key > "200"
 ;
+
 COMMIT;
 
 INSERT INTO Output
@@ -41,5 +45,7 @@ FROM
 WHERE
     key != "150"
 ;
+
 DROP TABLE @tmp;
+
 COMMIT;

@@ -1,4 +1,5 @@
 PRAGMA SeqMode;
+
 USE plato;
 
 DEFINE SUBQUERY $a() AS

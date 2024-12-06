@@ -8,6 +8,7 @@ SELECT
 FROM
     Input
 ;
+
 COMMIT;
 
 $key =

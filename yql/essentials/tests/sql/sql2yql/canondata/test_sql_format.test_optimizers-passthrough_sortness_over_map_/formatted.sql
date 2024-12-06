@@ -11,6 +11,7 @@ ORDER BY
     key,
     subkey
 ;
+
 COMMIT;
 
 INSERT INTO @c
@@ -37,6 +38,7 @@ WHERE
 ORDER BY
     key
 ;
+
 COMMIT;
 
 SELECT

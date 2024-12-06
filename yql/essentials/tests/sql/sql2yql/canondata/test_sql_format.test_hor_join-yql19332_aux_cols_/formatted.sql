@@ -1,5 +1,6 @@
 -- ignore runonopt plan diff
 USE plato;
+
 PRAGMA DisableSimpleColumns;
 PRAGMA yt.JoinMergeTablesLimit = "10";
 

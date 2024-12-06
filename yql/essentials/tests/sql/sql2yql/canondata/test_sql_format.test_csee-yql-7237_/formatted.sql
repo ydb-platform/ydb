@@ -1,5 +1,6 @@
 /* syntax version 1 */
 USE plato;
+
 $push_final_data = AsList(
     AsStruct("manufacturer" AS manufacturer, "state" AS state)
 );
@@ -10,7 +11,9 @@ SELECT
 FROM
     AS_TABLE($push_final_data)
 ;
+
 COMMIT;
+
 $manufacturer_name_fix = ($manufacturer) -> {
     $lowered_manufacturer = CAST(Unicode::ToLower(CAST(String::Strip($manufacturer) AS Utf8)) AS String);
     $in = AsList(

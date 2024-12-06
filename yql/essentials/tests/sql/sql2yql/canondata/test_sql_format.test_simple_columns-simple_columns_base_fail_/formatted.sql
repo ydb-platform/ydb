@@ -1,5 +1,6 @@
 /* custom error:Duplicated member: magic*/
 PRAGMA SimpleColumns;
+
 USE plato;
 
 $req = (

@@ -1,12 +1,14 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 $user_process = ($key, $t1, $t2, $t3) -> {
     RETURN AsStruct(
         $key AS key,
         COALESCE(CAST($t1.subkey AS Int32), 0) + COALESCE(CAST($t2.subkey AS Int32), 0) + COALESCE(CAST($t3.subkey AS Int32), 0) AS subkey
     );
 };
+
 $reducer = ($key, $stream) -> {
     $stream = YQL::OrderedMap(
         $stream, ($item) -> {

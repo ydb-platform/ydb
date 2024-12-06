@@ -4,6 +4,7 @@
 /* dqfile can not */
 /* yt can not */
 PRAGMA warning("disable", "4504");
+
 $t = [<|k: 1, v: 2|>];
 
 $src =

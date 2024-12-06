@@ -2,6 +2,7 @@
 -- underlying type is tuple
 DECLARE $x1 AS Variant<String, Int64>;
 DECLARE $x2 AS Variant<String, Int64>;
+
 -- underlying type is struct
 DECLARE $x3 AS Variant<a: String, b: Int64>;
 DECLARE $x4 AS Variant<a: String, b: Int64>;

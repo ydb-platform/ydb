@@ -1,6 +1,8 @@
 /* syntax version 1 */
 USE plato;
+
 PRAGMA SimpleColumns;
+
 -- fails with CoalesceJoinKeysOnQualifiedAll
 PRAGMA DisableCoalesceJoinKeysOnQualifiedAll;
 

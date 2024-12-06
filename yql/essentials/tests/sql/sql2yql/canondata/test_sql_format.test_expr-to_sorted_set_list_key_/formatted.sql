@@ -4,6 +4,7 @@ $l = AsList(
     AsTuple(AsList(1, 2), Void()),
     AsTuple(AsList(1, 2), Void())
 );
+
 $d = ToSortedDict($l);
 
 SELECT

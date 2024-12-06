@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
 USE plato;
 
 -- Input: optkeys are 1-10,null

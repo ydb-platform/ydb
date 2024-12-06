@@ -7,6 +7,7 @@ $cnt = (
     FROM
         Input
 );
+
 $offset = ($cnt + 10) ?? 0;
 
 $data_limited = (

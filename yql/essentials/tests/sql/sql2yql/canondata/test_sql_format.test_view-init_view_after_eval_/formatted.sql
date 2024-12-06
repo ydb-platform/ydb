@@ -10,7 +10,9 @@ $i =
 
 $i =
     PROCESS $i;
+
 $members = StructTypeComponents(ListItemType(TypeHandle(TypeOf($i))));
+
 $filteredMembers = ListFilter(
     ListMap(
         $members, ($x) -> {

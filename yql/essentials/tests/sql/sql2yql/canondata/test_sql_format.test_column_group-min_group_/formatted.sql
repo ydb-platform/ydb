@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.MinColumnGroupSize = "3";
 PRAGMA yt.ColumnGroupMode = "perusage";
 

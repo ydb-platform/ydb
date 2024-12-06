@@ -1,5 +1,6 @@
 /* postgres can not */
 PRAGMA config.flags("OptimizerFlags", "FieldSubsetEnableMultiusage");
+
 USE plato;
 
 $input = (

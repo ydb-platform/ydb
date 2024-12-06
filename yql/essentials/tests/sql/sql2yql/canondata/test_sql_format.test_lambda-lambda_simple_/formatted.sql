@@ -1,7 +1,10 @@
 /* postgres can not */
 USE plato;
+
 PRAGMA DisableSimpleColumns;
+
 $shiftSteps = 1;
+
 $linear = ($x, $z) -> {
     $v = 10 * $z + $x;
     $shift = ($item) -> {

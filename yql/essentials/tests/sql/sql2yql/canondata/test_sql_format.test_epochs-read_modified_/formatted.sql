@@ -15,6 +15,7 @@ SELECT
 FROM
     Output
 ;
+
 COMMIT;
 
 SELECT
@@ -36,6 +37,7 @@ SELECT
 FROM
     Output
 ;
+
 COMMIT;
 
 SELECT

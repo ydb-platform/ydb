@@ -1,6 +1,7 @@
 /* postgres can not */
 /* kikimr can not */
 USE plato;
+
 PRAGMA DisableSimpleColumns;
 PRAGMA yt.LookupJoinLimit = "64k";
 PRAGMA yt.LookupJoinMaxRows = "100";
@@ -17,6 +18,7 @@ WHERE
 ORDER BY
     key
 ;
+
 COMMIT;
 
 SELECT

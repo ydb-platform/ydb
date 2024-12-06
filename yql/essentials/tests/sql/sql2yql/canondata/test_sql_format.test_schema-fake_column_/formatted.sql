@@ -10,6 +10,7 @@ FROM (
 )
     FLATTEN COLUMNS
 ;
+
 COMMIT;
 
 SELECT

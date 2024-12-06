@@ -1,5 +1,6 @@
 /* ignore runonopt plan diff - extra LogicalOptimizer-PushdownOpColumns */
 PRAGMA yt.PruneKeyFilterLambda = 'true';
+
 USE plato;
 
 $src =

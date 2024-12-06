@@ -1,8 +1,10 @@
 PRAGMA DisableSimpleColumns;
+
 /* postgres can not */
 /* kikimr can not */
 /* ignore yt detailed plan diff */
 USE plato;
+
 PRAGMA yt.MapJoinLimit = "10M";
 
 $sizes = (

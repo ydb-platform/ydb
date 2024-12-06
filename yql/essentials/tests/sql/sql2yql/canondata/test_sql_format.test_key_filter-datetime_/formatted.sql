@@ -28,6 +28,7 @@ FROM
 ASSUME ORDER BY
     key
 ;
+
 COMMIT;
 
 SELECT

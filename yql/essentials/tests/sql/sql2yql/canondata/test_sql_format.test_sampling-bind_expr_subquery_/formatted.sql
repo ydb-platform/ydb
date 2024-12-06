@@ -7,6 +7,7 @@ $rc = (
     FROM
         Input
 );
+
 $sample_size = 10;
 
 SELECT

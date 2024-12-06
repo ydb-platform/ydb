@@ -10,6 +10,7 @@ def add(state, item):
 def merge(state_a, state_b):
     return state_a + state_b 
 @@;
+
 $create = Python3::create(Callable<(Int64) -> Int64>, $script);
 $add = Python3::add(Callable<(Int64, Int64) -> Int64>, $script);
 $merge = Python3::merge(Callable<(Int64, Int64) -> Int64>, $script);

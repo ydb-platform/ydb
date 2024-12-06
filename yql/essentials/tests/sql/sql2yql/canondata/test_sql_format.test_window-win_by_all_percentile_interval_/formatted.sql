@@ -1,6 +1,7 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 $zero = unwrap(CAST(0 AS Interval));
 
 -- safely cast data to get rid of optionals after cast

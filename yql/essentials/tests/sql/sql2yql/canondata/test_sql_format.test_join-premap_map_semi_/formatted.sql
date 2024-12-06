@@ -1,6 +1,8 @@
 PRAGMA DisableSimpleColumns;
 PRAGMA DisablePullUpFlatMapOverJoin;
+
 USE plato;
+
 PRAGMA yt.MapJoinLimit = "1m";
 
 FROM (

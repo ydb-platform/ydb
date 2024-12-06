@@ -10,6 +10,7 @@ UNION ALL
 SELECT
     "subkey" AS field
 ;
+
 COMMIT;
 
 $whitelist =

@@ -1,4 +1,5 @@
 USE plato;
+
 /* syntax version 1 */
 /* postgres can not */
 $udfScript = @@
@@ -12,7 +13,9 @@ $record = (
     FROM
         plato.Input
 );
+
 $recordType = TypeOf(Unwrap($record));
+
 $udf = Python::MyFunc(
     CallableType(
         0,

@@ -1,5 +1,6 @@
 /* kikimr can not */
 PRAGMA yt.InferSchema;
+
 USE plato;
 
 SELECT

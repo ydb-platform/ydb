@@ -7,6 +7,7 @@ SELECT
     "touch" AS ui,
     AsList(1, 2, 236273) AS test_ids
 ;
+
 COMMIT;
 
 $dict = (

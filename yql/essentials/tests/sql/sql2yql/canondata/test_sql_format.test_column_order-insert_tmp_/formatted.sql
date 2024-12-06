@@ -1,6 +1,7 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 PRAGMA OrderedColumns;
 
 INSERT INTO @tmp
@@ -12,6 +13,7 @@ ORDER BY
     subkey,
     key
 ;
+
 COMMIT;
 
 SELECT
@@ -43,6 +45,7 @@ ORDER BY
     subkey,
     key
 ;
+
 COMMIT;
 
 SELECT

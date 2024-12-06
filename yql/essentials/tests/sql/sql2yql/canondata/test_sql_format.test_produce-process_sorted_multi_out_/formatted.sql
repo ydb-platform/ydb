@@ -1,4 +1,5 @@
 USE plato;
+
 $values = ListMap(
     ListFromRange(0, 30),
     ($x) -> (AsStruct($x AS x))
@@ -12,7 +13,9 @@ FROM
 ORDER BY
     x
 ;
+
 COMMIT;
+
 $splitter = ($row) -> {
     $recordType = TypeOf($row);
     $varType = VariantType(TupleType($recordType, $recordType, $recordType, $recordType));

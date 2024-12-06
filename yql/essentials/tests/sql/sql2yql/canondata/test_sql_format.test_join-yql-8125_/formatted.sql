@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.JoinCollectColumnarStatistics = "async";
 
 INSERT INTO @yang_ids
@@ -9,6 +10,7 @@ FROM
 WHERE
     subkey <= "3"
 LIMIT 100;
+
 COMMIT;
 
 INSERT INTO @yang_ids
@@ -19,6 +21,7 @@ FROM
 LEFT ONLY JOIN
     @yang_ids
 USING (key);
+
 COMMIT;
 
 INSERT INTO @yang_ids
@@ -29,6 +32,7 @@ FROM
 LEFT ONLY JOIN
     @yang_ids
 USING (key);
+
 COMMIT;
 
 SELECT

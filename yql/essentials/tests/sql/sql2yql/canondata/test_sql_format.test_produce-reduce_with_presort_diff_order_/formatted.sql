@@ -44,7 +44,9 @@ ORDER BY
     value1,
     value2
 ;
+
 COMMIT;
+
 $udf = YQL::@@(lambda '(key stream) (AsStruct
   '('key key) '('summ (Collect (Condense stream (Nothing (OptionalType (DataType 'String))) (lambda '(item state) (Bool 'False)) (lambda '(item state) (Coalesce state (Just item))))))
 ))@@;

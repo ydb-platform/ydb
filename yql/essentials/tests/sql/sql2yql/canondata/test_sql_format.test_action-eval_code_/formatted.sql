@@ -3,6 +3,7 @@
 SELECT
     EvaluateCode(FuncCode("Int32", AtomCode("1")))
 ;
+
 $inc = EvaluateCode(
     LambdaCode(
         ($x) -> {
@@ -14,6 +15,7 @@ $inc = EvaluateCode(
 SELECT
     $inc(1)
 ;
+
 $addPrefixForMembers = ($strValue) -> {
     $code = EvaluateCode(
         LambdaCode(

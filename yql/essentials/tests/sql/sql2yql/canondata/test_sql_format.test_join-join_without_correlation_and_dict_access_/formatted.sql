@@ -1,5 +1,6 @@
 /* syntax version 1 */
 PRAGMA DisableSimpleColumns;
+
 /* postgres can not */
 USE plato;
 

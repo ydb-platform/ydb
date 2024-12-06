@@ -13,6 +13,7 @@ WHERE
 ORDER BY
     key DESC
 ;
+
 COMMIT;
 
 INSERT INTO Output
@@ -23,6 +24,7 @@ FROM
 ORDER BY
     key DESC
 ;
+
 COMMIT;
 
 SELECT

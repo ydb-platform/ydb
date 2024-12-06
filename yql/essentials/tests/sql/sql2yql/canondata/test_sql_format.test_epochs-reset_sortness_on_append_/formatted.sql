@@ -12,6 +12,7 @@ VALUES
     ('21', '30'),
     ('31', '40'),
     ('41', '50');
+
 COMMIT;
 
 INSERT INTO Output
@@ -22,6 +23,7 @@ FROM
 ORDER BY
     a
 ;
+
 COMMIT;
 
 SELECT

@@ -2,6 +2,7 @@
 /* postgres can not */
 /* custom error:Anonymous table "@Output1" must be materialized*/
 USE plato;
+
 $force_remove_members = ($struct, $to_remove) -> {
     $remover = EvaluateCode(
         LambdaCode(
@@ -50,6 +51,7 @@ DEFINE ACTION $func($input, $output) AS
     ;
     COMMIT;
 END DEFINE;
+
 $exps = [('Input', 'Output1'), ('Input', 'Output2'), ('Input', 'Output3')];
 
 EVALUATE FOR $exp_name IN $exps DO BEGIN

@@ -3,6 +3,7 @@
 $lambda = ($x) -> {
     RETURN CAST($x AS String)
 };
+
 $callables = AsTuple(
     CALLABLE (Callable<(Int32) -> String>, $lambda),
     CALLABLE (Callable<(Bool) -> String>, $lambda),

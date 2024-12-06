@@ -409,7 +409,7 @@ public:
     NKikimrProto::EReplyStatus CheckOwnerAndRound(TRequestBase* req, TStringStream& err);
     bool PreprocessRequest(TRequestBase *request);
     void PushRequestToScheduler(TRequestBase *request);
-    void AddJobToScheduler(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind);
+    void AddJobToScheduler(TRequestBase *request, NSchLab::EJobKind jobKind);
     void RouteRequest(TRequestBase *request);
     void ProcessPausedQueue();
     void ProcessPendingActivities();

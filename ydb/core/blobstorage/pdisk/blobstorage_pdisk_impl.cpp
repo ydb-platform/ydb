@@ -2230,7 +2230,7 @@ void TPDisk::ProcessChunkWriteQueue() {
         }
         delete piece;
     }
-    //LWTRACK(PDiskProcessChunkWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkWrites.size());
+    //LWTRACK(PDiskProcessChunkWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, initialSize, processed, processedBytes, processedCostMs);
     JointChunkWrites.clear();
 }
 
@@ -3100,124 +3100,120 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
 }
 
 void TPDisk::PushRequestToScheduler(TRequestBase *request) {
-    if (request->GateId != GateFastOperation) {
-        bool isAdded = false;
-
-        NSchLab::TCbs *cbs = ForsetiScheduler.GetCbs(request->Owner, request->GateId);
-        if (!cbs) {
-            P_LOG(PRI_ERROR, BPD44, "PushRequestToForseti Can't push to Forseti! Trying system log gate",
-                        (ReqId, request->ReqId),
-                        (Cost, request->Cost),
-                        (JobKind, (ui64)request->JobKind),
-                        (ownerId, request->Owner),
-                        (GateId, (ui64)request->GateId));
-            Mon.ForsetiCbsNotFound->Inc();
-            ui8 originalGateId = request->GateId;
-            request->GateId = GateLog;
-            cbs = ForsetiScheduler.GetCbs(OwnerSystem, request->GateId);
-            if (!cbs) {
-                TStringStream str;
-                str << "PDiskId# " << PCtx->PDiskId
-                    << " ReqId# " <<  request->ReqId
-                    << " Cost# " << request->Cost
-                    << " JobKind# " << (ui64)request->JobKind
-                    << " ownerId# " << request->Owner
-                    << " GateId# " << (ui64)request->GateId
-                    << " originalGateId# " << (ui64)originalGateId
-                    << " PushRequestToForseti Can't push to Forseti! Request may get lost."
-                    << " Marker# BPD45";
-                Y_FAIL_S(str.Str());
-            }
-        }
-
-        if (request->GetType() == ERequestType::RequestLogWrite) {
-            TIntrusivePtr<NSchLab::TJob> job = cbs->PeekTailJob();
-            if (job && job->Cost < ForsetiMaxLogBatchNsCached
-                    && static_cast<TRequestBase *>(job->Payload)->GetType() == ERequestType::RequestLogWrite) {
-                TLogWrite &batch = *static_cast<TLogWrite*>(job->Payload);
-
-                if (auto span = request->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InScheduler.InLogWriteBatch")) {
-                    span->Attribute("Batch.ReqId", static_cast<i64>(batch.ReqId.Id));
-                }
-                batch.AddToBatch(static_cast<TLogWrite*>(request));
-                ui64 prevCost = job->Cost;
-                job->Cost += request->Cost;
-
-                ForsetiTimeNs++;
-                ForsetiScheduler.OnJobCostChange(cbs, job, ForsetiTimeNs, prevCost);
-
-                LOG_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " ReqId# %" PRIu64
-                        " PushRequestToForseti AddToBatch in Forseti.",
-                        PCtx->PDiskId, (ui64)request->ReqId.Id);
-
-                isAdded = true;
-            }
-        }
-        if (!isAdded) {
-            if (request->GetType() == ERequestType::RequestChunkWrite) {
-                TIntrusivePtr<TChunkWrite> whole(static_cast<TChunkWrite*>(request));
-
-                const ui32 jobSizeLimit  = ui64(ForsetiOpPieceSizeCached) * Format.SectorPayloadSize() / Format.SectorSize;
-                const ui32 jobCount = (whole->TotalSize + jobSizeLimit - 1) / jobSizeLimit;
-
-                ui32 remainingSize = whole->TotalSize;
-                for (ui32 idx = 0; idx < jobCount; ++idx) {
-                    auto span = request->SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
-                    span.Attribute("small_job_idx", idx)
-                        .Attribute("is_last_piece", idx == jobCount - 1);
-                    ui32 jobSize = Min(remainingSize, jobSizeLimit);
-                    TChunkWritePiece *piece = new TChunkWritePiece(whole, idx * jobSizeLimit, jobSize, std::move(span));
-                    piece->EstimateCost(DriveModel);
-                    AddJobToScheduler(cbs, piece, request->JobKind);
-                    remainingSize -= jobSize;
-                }
-                Y_VERIFY_S(remainingSize == 0, remainingSize);
-            } else if (request->GetType() == ERequestType::RequestChunkRead) {
-                TIntrusivePtr<TChunkRead> read = std::move(static_cast<TChunkRead*>(request)->SelfPointer);
-                ui32 totalSectors = read->LastSector - read->FirstSector + 1;
-
-                Y_DEBUG_ABORT_UNLESS(ForsetiOpPieceSizeCached % Format.SectorSize == 0);
-                const ui32 jobSizeLimit = ForsetiOpPieceSizeCached / Format.SectorSize;
-                const ui32 jobCount = (totalSectors + jobSizeLimit - 1) / jobSizeLimit;
-                for (ui32 idx = 0; idx < jobCount; ++idx) {
-                    auto span = request->SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkReadPiece", NWilson::EFlags::AUTO_END);
-                    bool isLast = idx == jobCount - 1;
-                    span.Attribute("small_job_idx", idx)
-                        .Attribute("is_last_piece", isLast);
-
-                    ui32 jobSize = Min(totalSectors, jobSizeLimit);
-                    auto piece = new TChunkReadPiece(read, idx * jobSizeLimit, jobSize * Format.SectorSize, isLast, std::move(span));
-                    read->Orbit.Fork(piece->Orbit);
-                    LWTRACK(PDiskChunkReadPieceAddToScheduler, piece->Orbit, PCtx->PDiskId, idx, idx * jobSizeLimit * Format.SectorSize,
-                            jobSizeLimit * Format.SectorSize);
-                    piece->EstimateCost(DriveModel);
-                    piece->SelfPointer = piece;
-                    AddJobToScheduler(cbs, piece, request->JobKind);
-                    totalSectors -= jobSize;
-                }
-                Y_VERIFY_S(totalSectors == 0, totalSectors);
-            } else {
-                AddJobToScheduler(cbs, request, request->JobKind);
-            }
-        }
-    } else {
+    if (request->GateId == GateFastOperation) {
         FastOperationsQueue.push_back(std::unique_ptr<TRequestBase>(request));
         LOG_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " ReqId# %" PRIu64
-                " PushRequestToForseti Push to FastOperationsQueue.size# %" PRIu64,
+                " PushRequestToScheduler Push to FastOperationsQueue.size# %" PRIu64,
                 (ui32)PCtx->PDiskId, (ui64)request->ReqId.Id, (ui64)FastOperationsQueue.size());
+        return;
+    }
+
+    if (request->GetType() == ERequestType::RequestChunkWrite) {
+        TIntrusivePtr<TChunkWrite> whole(static_cast<TChunkWrite*>(request));
+
+        const ui32 jobSizeLimit  = ui64(ForsetiOpPieceSizeCached) * Format.SectorPayloadSize() / Format.SectorSize;
+        const ui32 jobCount = (whole->TotalSize + jobSizeLimit - 1) / jobSizeLimit;
+
+        ui32 remainingSize = whole->TotalSize;
+        for (ui32 idx = 0; idx < jobCount; ++idx) {
+            auto span = request->SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
+            span.Attribute("small_job_idx", idx)
+                .Attribute("is_last_piece", idx == jobCount - 1);
+            ui32 jobSize = Min(remainingSize, jobSizeLimit);
+            TChunkWritePiece *piece = new TChunkWritePiece(whole, idx * jobSizeLimit, jobSize, std::move(span));
+            piece->GateId = whole->GateId;
+            piece->EstimateCost(DriveModel);
+            AddJobToScheduler(piece, request->JobKind);
+            remainingSize -= jobSize;
+        }
+        Y_VERIFY_S(remainingSize == 0, remainingSize);
+    } else if (request->GetType() == ERequestType::RequestChunkRead) {
+        TIntrusivePtr<TChunkRead> read = std::move(static_cast<TChunkRead*>(request)->SelfPointer);
+        ui32 totalSectors = read->LastSector - read->FirstSector + 1;
+
+        Y_DEBUG_ABORT_UNLESS(ForsetiOpPieceSizeCached % Format.SectorSize == 0);
+        const ui32 jobSizeLimit = ForsetiOpPieceSizeCached / Format.SectorSize;
+        const ui32 jobCount = (totalSectors + jobSizeLimit - 1) / jobSizeLimit;
+        for (ui32 idx = 0; idx < jobCount; ++idx) {
+            auto span = request->SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkReadPiece", NWilson::EFlags::AUTO_END);
+            bool isLast = idx == jobCount - 1;
+            span.Attribute("small_job_idx", idx)
+                .Attribute("is_last_piece", isLast);
+
+            ui32 jobSize = Min(totalSectors, jobSizeLimit);
+            auto piece = new TChunkReadPiece(read, idx * jobSizeLimit, jobSize * Format.SectorSize, isLast, std::move(span));
+            piece->GateId = read->GateId;
+            read->Orbit.Fork(piece->Orbit);
+            LWTRACK(PDiskChunkReadPieceAddToScheduler, piece->Orbit, PCtx->PDiskId, idx, idx * jobSizeLimit * Format.SectorSize,
+                    jobSizeLimit * Format.SectorSize);
+            piece->EstimateCost(DriveModel);
+            piece->SelfPointer = piece;
+            AddJobToScheduler(piece, request->JobKind);
+            totalSectors -= jobSize;
+        }
+        Y_VERIFY_S(totalSectors == 0, totalSectors);
+    } else {
+        AddJobToScheduler(request, request->JobKind);
     }
 }
 
-void TPDisk::AddJobToScheduler(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind) {
+void TPDisk::AddJobToScheduler(TRequestBase *request, NSchLab::EJobKind jobKind) {
     if (UseNoopSchedulerCached) {
-        // TODO
-        Y_FAIL();
         RouteRequest(request);
         LWTRACK(PDiskAddToNoopScheduler, request->Orbit, PCtx->PDiskId, request->ReqId.Id, HPSecondsFloat(request->CreationTime),
                 request->Owner, request->IsFast, request->PriorityClass);
         return;
     }
 
+    // Forseti part
+    NSchLab::TCbs *cbs = ForsetiScheduler.GetCbs(request->Owner, request->GateId);
+    if (!cbs) {
+        P_LOG(PRI_ERROR, BPD44, "PushRequestToScheduler Can't push to Forseti! Trying system log gate",
+                    (ReqId, request->ReqId),
+                    (Cost, request->Cost),
+                    (JobKind, (ui64)request->JobKind),
+                    (ownerId, request->Owner),
+                    (GateId, (ui64)request->GateId));
+        Mon.ForsetiCbsNotFound->Inc();
+        ui8 originalGateId = request->GateId;
+        request->GateId = GateLog;
+        cbs = ForsetiScheduler.GetCbs(OwnerSystem, request->GateId);
+        if (!cbs) {
+            TStringStream str;
+            str << "PDiskId# " << PCtx->PDiskId
+                << " ReqId# " <<  request->ReqId
+                << " Cost# " << request->Cost
+                << " JobKind# " << (ui64)request->JobKind
+                << " ownerId# " << request->Owner
+                << " GateId# " << (ui64)request->GateId
+                << " originalGateId# " << (ui64)originalGateId
+                << " PushRequestToScheduler Can't push to Forseti! Request may get lost."
+                << " Marker# BPD45";
+            Y_FAIL_S(str.Str());
+        }
+    }
+
+    if (request->GetType() == ERequestType::RequestLogWrite) {
+        TIntrusivePtr<NSchLab::TJob> job = cbs->PeekTailJob();
+        // try to glue new log write to the previuos write which is already inside the scheduler
+        if (job && job->Cost < ForsetiMaxLogBatchNsCached
+                && static_cast<TRequestBase *>(job->Payload)->GetType() == ERequestType::RequestLogWrite) {
+            TLogWrite &batch = *static_cast<TLogWrite*>(job->Payload);
+
+            if (auto span = request->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InScheduler.InLogWriteBatch")) {
+                span->Attribute("Batch.ReqId", static_cast<i64>(batch.ReqId.Id));
+            }
+            batch.AddToBatch(static_cast<TLogWrite*>(request));
+            ui64 prevCost = job->Cost;
+            job->Cost += request->Cost;
+
+            ForsetiTimeNs++;
+            ForsetiScheduler.OnJobCostChange(cbs, job, ForsetiTimeNs, prevCost);
+
+            P_LOG(PRI_DEBUG, BPD01, "LogWrite add to batch in scheduler", (prevCost , prevCost), (reqCost, request->Cost));
+            return;
+        }
+    }
     LWTRACK(PDiskAddToScheduler, request->Orbit, PCtx->PDiskId, request->ReqId.Id, HPSecondsFloat(request->CreationTime),
             request->Owner, request->IsFast, request->PriorityClass);
     request->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InScheduler");

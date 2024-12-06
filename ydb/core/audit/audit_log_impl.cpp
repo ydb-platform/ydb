@@ -123,6 +123,7 @@ TString GetTxtLog(TInstant time, const TAuditLogParts& parts) {
 
 // Array of functions for converting TEvAuditLog::TEvWriteAuditLog events to a string.
 // Indexing in the array occurs by the value of the NKikimrConfig::TAuditConfig::EFormat enumeration.
+// For each new format, we need to register the audit event conversion function.
 // The size of AuditLogItemBuilders must be equal to the maximum value of the NKikimrConfig::TAuditConfig::EFormat enumeration.
 static std::vector<TAuditLogItemBuilder> AuditLogItemBuilders = { GetJsonLog, GetTxtLog, GetJsonLogCompatibleLog, nullptr };
 
@@ -172,7 +173,7 @@ private:
 
         for (auto& logBackends : LogBackends) {
             const auto builderIndex = static_cast<size_t>(logBackends.first) - 1;
-            const auto builder = builderIndex < AuditLogItemBuilders.size()
+            const auto builder = builderIndex < AuditLogItemBuilders.size() && AuditLogItemBuilders[builderIndex] != nullptr
                 ? AuditLogItemBuilders[builderIndex] : AuditLogItemBuilders[DefaultAuditLogItemBuilder];
             const auto msg = ev->Get();
             const auto auditLogItem = builder(msg->Time, msg->Parts);

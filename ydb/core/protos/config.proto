@@ -1481,6 +1481,8 @@ message TMeteringConfig {
 };
 
 message TAuditConfig {
+    // For each new format, we need to register the audit event conversion function
+    // See  ydb/core/audit/audit_log_impl.cpp for details
     enum EFormat {
         JSON = 1;                // Outputs audit log in format: "<time>: {"k1": "v1", "k2": "v2", ...}" where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
         TXT = 2;                 // Outputs audit log in format: "<time>: k1=v1, k2=v2, ..." where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values

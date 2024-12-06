@@ -562,9 +562,10 @@ private:
         }
 
         const TString error = "No permission to connect to the database";
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER, "AUDIT: "
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER, 
+            "AUDIT: "
             << error
-            << ", database: " << CheckedDatabaseName_
+            << ": " << CheckedDatabaseName_
             << ", user: " << TBase::GetUserSID()
             << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName()
         );

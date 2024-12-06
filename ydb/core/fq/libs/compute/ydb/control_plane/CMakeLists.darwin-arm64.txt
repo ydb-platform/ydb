@@ -32,15 +32,12 @@ target_link_libraries(compute-ydb-control_plane PUBLIC
   library-actors-protos
   library-db_pool-protos
   library-grpc-actor_client
-  essentials-public-issue
-  yql-essentials-utils
   yql-utils-actors
   api-grpc
   api-grpc-draft
   lib-operation_id-protos
-  cpp-client-resources
-  cpp-client-ydb_operation
-  cpp-client-ydb_query
+  essentials-public-issue
+  yql-essentials-utils
 )
 
 target_sources(compute-ydb-control_plane PRIVATE

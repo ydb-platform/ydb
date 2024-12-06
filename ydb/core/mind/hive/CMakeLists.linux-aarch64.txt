@@ -62,6 +62,7 @@ target_sources(core-mind-hive PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tablet_move_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__adopt_tablet.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__block_storage_result.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__configure_scale_recommender.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__configure_subdomain.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__create_tablet.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__cut_tablet_history.cpp

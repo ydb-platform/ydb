@@ -50,6 +50,7 @@ target_link_options(ydb-core-mind-hive-ut PRIVATE
 
 target_sources(ydb-core-mind-hive-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/object_distribution_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/scale_recommender_policy_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/sequencer_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/storage_pool_info_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/hive_ut.cpp

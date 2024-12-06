@@ -667,6 +667,7 @@ ui32 THead::GetCount() const
 
     //how much offsets before last batch and how much offsets in last batch
     Y_ABORT_UNLESS(Batches.front().GetOffset() == Offset);
+
     return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
 }
 
@@ -940,16 +941,23 @@ auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
 
 auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TFormedBlobInfo>
 {
+    if (HeadSize + BlobsSize == 0) { //if nothing to compact at all
+        NeedCompactHead = false;
+    }
+
     std::optional<TFormedBlobInfo> res;
     if (NeedCompactHead) {
         NeedCompactHead = false;
-        GlueNewHead = false;
         res = CreateFormedBlob(0, false);
+
+        StartOffset = NewHead.Offset + NewHead.GetCount();
+        NewHead.Clear();
+        NewHead.Offset = StartOffset;
     }
 
     TKey newKey(TKeyPrefix::TypeData,
                 Partition,
-                NewHead.Offset + oldKey.GetOffset(),
+                StartOffset,
                 oldKey.GetPartNo(),
                 oldKey.GetCount(),
                 oldKey.GetInternalPartsCount(),

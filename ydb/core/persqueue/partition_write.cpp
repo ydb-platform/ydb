@@ -469,7 +469,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 
 void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)
 {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
+    PQ_LOG_T("TPartition::Handle TEvHandleWriteResponse.");
     OnHandleWriteResponse(ctx);
 }
 

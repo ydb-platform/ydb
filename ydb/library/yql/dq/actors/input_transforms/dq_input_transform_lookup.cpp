@@ -202,14 +202,8 @@ private: //IDqComputeActorAsyncInput
 
     std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> GetKeysForLookup() { // must be called with mkql allocator
         if (!KeysForLookup) {
-            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
-        }
-        return KeysForLookup;
-    }
-
-    void PrepareLookupSourceId() {
-        if (!LookupSourceId) {
             Y_ENSURE(SelfId());
+            Y_ENSURE(!LookupSourceId);
             NDq::IDqAsyncIoFactory::TLookupSourceArguments lookupSourceArgs {
                 .Alloc = Alloc,
                 .KeyTypeHelper = KeyTypeHelper,
@@ -225,7 +219,9 @@ private: //IDqComputeActorAsyncInput
             auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
             MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
             LookupSourceId = RegisterWithSameMailbox(lookupSourceActor);
+            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
         }
+        return KeysForLookup;
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
@@ -237,7 +233,6 @@ private: //IDqComputeActorAsyncInput
 
         if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && GetKeysForLookup()->empty()) {
             Y_DEBUG_ABORT_UNLESS(AwaitingQueue.empty());
-            PrepareLookupSourceId();
             NUdf::TUnboxedValue* inputRowItems;
             NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
             const auto now = std::chrono::steady_clock::now();

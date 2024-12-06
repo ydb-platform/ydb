@@ -118,7 +118,7 @@ private:
 
     void HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev);
 
-    void ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt) noexcept;
+    void ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt);
 
     void ProcessScanData();
 

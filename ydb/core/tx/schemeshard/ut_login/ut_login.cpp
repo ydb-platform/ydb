@@ -121,24 +121,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub2"),
             {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir2"),
-            {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-
-        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
 
         CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
 
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1/DirSub2").DebugString() << Endl;
         // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
 
-        return; // TODO:
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-            {NLs::HasNoEffectiveRight("+U:user1")});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
-            {NLs::HasNoEffectiveRight("+U:user1")});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/SubDir1"),
-            {NLs::HasNoEffectiveRight("+U:user1")});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/SubDir2"),
-            {NLs::HasNoEffectiveRight("+U:user1")});
+        for (auto path : {"/MyRoot", "/MyRoot/Dir1", "/MyRoot/Dir2", "/MyRoot/Dir1/DirSub1", "/MyRoot/Dir1/DirSub2"}) {
+            TestDescribeResult(DescribePath(runtime, path),
+                {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
+        }
     }
 
     Y_UNIT_TEST(DisableBuiltinAuthMechanism) {

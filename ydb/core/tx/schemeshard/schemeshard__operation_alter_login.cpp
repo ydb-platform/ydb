@@ -68,16 +68,28 @@ public:
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
-                        for (const TPathId pathId : context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx)) {
+                        auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
+                        for (auto pathId : subTree) {
                             TPathElement::TPtr path = context.SS->PathsById.at(pathId);
                             NACLib::TACL acl(path->ACL);
                             if (acl.RemoveAccess(user)) {
                                 ++path->ACLVersion;
                                 path->ACL = acl.SerializeAsString();
                                 context.SS->PersistACL(db, path);
+                                if (!path->IsPQGroup()) {
+                                    const auto parent = context.SS->PathsById.at(path->ParentPathId);
+                                    ++parent->DirAlterVersion;
+                                    context.SS->PersistPathDirAlterVersion(db, parent);
+                                    context.SS->ClearDescribePathCaches(parent);
+                                    context.OnComplete.PublishToSchemeBoard(OperationId, parent->PathId);
+                                }
+                            }
+                            if (!path->IsMigrated()) {
+                                context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
                             }
                         }
-
+                        // Note: it seems useless to update only the affected paths as we may update database's root
+                        context.OnComplete.UpdateTenants(std::move(subTree));
                         db.Table<Schema::LoginSids>().Key(user).Delete();
                         for (const TString& group : response.TouchedGroups) {
                             db.Table<Schema::LoginSidMembers>().Key(group, user).Delete();

@@ -101,8 +101,7 @@ public:
         return result;
     }
     bool ProcessEndOfData(TComputationContext& ctx) {
-        Y_UNUSED(ctx);
-        return false;
+        return Nfa.ProcessEndOfData(ctx);
     }
 
     void Save(TMrOutputSerializer& serializer) const {
@@ -196,7 +195,7 @@ public:
         if (validDelayedRow) {
             in(DelayedRow);
         }
-        auto restoredRowPatternConfiguration = std::make_shared<TNfaTransitionGraph>(); 
+        auto restoredRowPatternConfiguration = std::make_shared<TNfaTransitionGraph>();
         restoredRowPatternConfiguration->Load(in);
         MKQL_ENSURE(*restoredRowPatternConfiguration == *RowPatternConfiguration, "Restored and current RowPatternConfiguration is different");
         MKQL_ENSURE(in.Empty(), "State is corrupted");
@@ -321,7 +320,7 @@ public:
 
     bool Load2(const NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
-        
+
         const auto loadStateVersion = in.GetStateVersion();
         if (loadStateVersion != StateVersion) {
             THROW yexception() << "Invalid state version " << loadStateVersion;

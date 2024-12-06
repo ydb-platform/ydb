@@ -11124,23 +11124,30 @@
     ],
     "test_sql2yql.test[match_recognize-alerts-streaming]": [
         {
-            "checksum": "b1e24d20f8ef58a389b70cf8deb7ca73",
-            "size": 8933,
-            "uri": "https://{canondata_backend}/1936273/4a1b39013e1bae40e722cff8ccef8829784964e2/resource.tar.gz#test_sql2yql.test_match_recognize-alerts-streaming_/sql.yql"
+            "checksum": "951e1c6d04cbba2370c2a5e5542d6afd",
+            "size": 10537,
+            "uri": "https://{canondata_backend}/1942671/e054628d5e2733e5fbc993cb8c765074de561f06/resource.tar.gz#test_sql2yql.test_match_recognize-alerts-streaming_/sql.yql"
         }
     ],
     "test_sql2yql.test[match_recognize-alerts]": [
         {
-            "checksum": "329715fbdbe2734d1bffd81abf772b30",
-            "size": 8935,
-            "uri": "https://{canondata_backend}/1936273/4a1b39013e1bae40e722cff8ccef8829784964e2/resource.tar.gz#test_sql2yql.test_match_recognize-alerts_/sql.yql"
+            "checksum": "67843aad123bb76d097416bf83bbe749",
+            "size": 10539,
+            "uri": "https://{canondata_backend}/1942671/e054628d5e2733e5fbc993cb8c765074de561f06/resource.tar.gz#test_sql2yql.test_match_recognize-alerts_/sql.yql"
         }
     ],
     "test_sql2yql.test[match_recognize-alerts_without_order]": [
         {
-            "checksum": "8d8b26b500e55135967567ddc12c88a5",
-            "size": 8816,
-            "uri": "https://{canondata_backend}/1936273/4a1b39013e1bae40e722cff8ccef8829784964e2/resource.tar.gz#test_sql2yql.test_match_recognize-alerts_without_order_/sql.yql"
+            "checksum": "3260928c483690ee0d3f06917cd1d5cb",
+            "size": 10420,
+            "uri": "https://{canondata_backend}/1942671/e054628d5e2733e5fbc993cb8c765074de561f06/resource.tar.gz#test_sql2yql.test_match_recognize-alerts_without_order_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[match_recognize-greedy_quantifiers]": [
+        {
+            "checksum": "45d528f98097150c41366da075dc08c8",
+            "size": 4257,
+            "uri": "https://{canondata_backend}/1130705/7ccb4b448efbf0410ae97c635cda187d108148f4/resource.tar.gz#test_sql2yql.test_match_recognize-greedy_quantifiers_/sql.yql"
         }
     ],
     "test_sql2yql.test[match_recognize-permute]": [
@@ -27837,6 +27844,11 @@
     "test_sql_format.test[match_recognize-alerts_without_order]": [
         {
             "uri": "file://test_sql_format.test_match_recognize-alerts_without_order_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[match_recognize-greedy_quantifiers]": [
+        {
+            "uri": "file://test_sql_format.test_match_recognize-greedy_quantifiers_/formatted.sql"
         }
     ],
     "test_sql_format.test[match_recognize-permute]": [

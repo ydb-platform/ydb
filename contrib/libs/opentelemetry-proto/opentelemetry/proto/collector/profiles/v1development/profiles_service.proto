@@ -14,15 +14,15 @@
 
 syntax = "proto3";
 
-package opentelemetry.proto.collector.profiles.v1experimental;
+package opentelemetry.proto.collector.profiles.v1development;
 
-import "opentelemetry/proto/profiles/v1experimental/profiles.proto";
+import "opentelemetry/proto/profiles/v1development/profiles.proto";
 
-option csharp_namespace = "OpenTelemetry.Proto.Collector.Profiles.V1Experimental";
+option csharp_namespace = "OpenTelemetry.Proto.Collector.Profiles.V1Development";
 option java_multiple_files = true;
-option java_package = "io.opentelemetry.proto.collector.profiles.v1experimental";
+option java_package = "io.opentelemetry.proto.collector.profiles.v1development";
 option java_outer_classname = "ProfilesServiceProto";
-option go_package = "go.opentelemetry.io/proto/otlp/collector/profiles/v1experimental";
+option go_package = "go.opentelemetry.io/proto/otlp/collector/profiles/v1development";
 
 // Service that can be used to push profiles between one Application instrumented with
 // OpenTelemetry and a collector, or between a collector and a central collector.
@@ -38,7 +38,7 @@ message ExportProfilesServiceRequest {
   // element. Intermediary nodes (such as OpenTelemetry Collector) that receive
   // data from multiple origins typically batch the data before forwarding further and
   // in that case this array will contain multiple elements.
-  repeated opentelemetry.proto.profiles.v1experimental.ResourceProfiles resource_profiles = 1;
+  repeated opentelemetry.proto.profiles.v1development.ResourceProfiles resource_profiles = 1;
 }
 
 message ExportProfilesServiceResponse {

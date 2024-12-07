@@ -261,19 +261,22 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
             YQL_ENSURE(kqpCtx.Config->EnableKqpScanQueryStreamLookup);
             auto lookupKeys = BuildEquiRangeLookup(keyRange, tableDesc, read.Pos(), ctx);
 
+	    TKqpStreamLookupSettings settings;
+	    settings.Strategy = EStreamLookupStrategyType::LookupRows;
             if (indexName) {
                 readInput = Build<TKqlStreamLookupIndex>(ctx, read.Pos())
                     .Table(read.Table())
                     .LookupKeys(lookupKeys)
                     .Columns(read.Columns())
                     .Index(indexName.Cast())
+                    .Settings(settings.BuildNode(ctx, read.Pos()))
                     .Done();
             } else {
                 readInput = Build<TKqlStreamLookupTable>(ctx, read.Pos())
                     .Table(read.Table())
                     .LookupKeys(lookupKeys)
                     .Columns(read.Columns())
-                    .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+                    .Settings(settings.BuildNode(ctx, read.Pos()))
                     .Done();
             }
         } else {

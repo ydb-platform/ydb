@@ -39,8 +39,6 @@ void TSingletonsConfig::Register(TRegistrar registrar)
         .ResetOnLoad();
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
-    registrar.Parameter("tracing_transport", &TThis::TracingTransport)
-        .DefaultNew();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
         .DefaultNew();
     registrar.Parameter("stockpile", &TThis::Stockpile)
@@ -71,8 +69,6 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
-    registrar.Parameter("tracing_transport", &TThis::TracingTransport)
-        .Optional();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
         .Optional();
     registrar.Parameter("stockpile", &TThis::Stockpile)

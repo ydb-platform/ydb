@@ -4,8 +4,6 @@
 
 #include <yt/yt/core/concurrency/config.h>
 
-#include <yt/yt/core/tracing/config.h>
-
 #include <yt/yt/core/ytree/yson_struct.h>
 
 #include <yt/yt/core/net/config.h>
@@ -16,8 +14,6 @@
 #include <yt/yt/core/bus/tcp/config.h>
 
 #include <yt/yt/core/logging/config.h>
-
-#include <yt/yt/core/tracing/config.h>
 
 #include <yt/yt/core/service_discovery/yp/config.h>
 
@@ -70,7 +66,6 @@ public:
     NServiceDiscovery::NYP::TServiceDiscoveryConfigPtr YPServiceDiscovery;
     NLogging::TLogManagerConfigPtr Logging;
     NTracing::TJaegerTracerConfigPtr Jaeger;
-    NTracing::TTracingTransportConfigPtr TracingTransport;
     NTCMalloc::TTCMallocConfigPtr TCMalloc;
     TStockpileConfigPtr Stockpile;
     bool EnableRefCountedTrackerProfiling;
@@ -97,7 +92,6 @@ public:
     NRpc::TDispatcherDynamicConfigPtr RpcDispatcher;
     NLogging::TLogManagerDynamicConfigPtr Logging;
     NTracing::TJaegerTracerDynamicConfigPtr Jaeger;
-    NTracing::TTracingTransportConfigPtr TracingTransport;
     NTCMalloc::TTCMallocConfigPtr TCMalloc;
     TStockpileDynamicConfigPtr Stockpile;
     NYson::TProtobufInteropDynamicConfigPtr ProtobufInterop;

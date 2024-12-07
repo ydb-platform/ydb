@@ -78,10 +78,6 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
 
     NProfiling::EnablePerfCounters();
 
-    if (auto tracingConfig = config->TracingTransport) {
-        NTracing::SetTracingTransportConfig(tracingConfig);
-    }
-
     NTCMalloc::TTCMallocManager::Configure(config->TCMalloc);
 
     TStockpileManager::Reconfigure(*config->Stockpile);
@@ -115,12 +111,6 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
     NPipes::TIODispatcher::Get()->Configure(dynamicConfig->IODispatcher ? dynamicConfig->IODispatcher : config->IODispatcher);
 
     NRpc::TDispatcher::Get()->Configure(config->RpcDispatcher->ApplyDynamic(dynamicConfig->RpcDispatcher));
-
-    if (dynamicConfig->TracingTransport) {
-        NTracing::SetTracingTransportConfig(dynamicConfig->TracingTransport);
-    } else if (config->TracingTransport) {
-        NTracing::SetTracingTransportConfig(config->TracingTransport);
-    }
 
     NTCMalloc::TTCMallocManager::Configure(dynamicConfig->TCMalloc
         ? config->TCMalloc->ApplyDynamic(dynamicConfig->TCMalloc)

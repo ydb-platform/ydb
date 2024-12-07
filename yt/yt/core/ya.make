@@ -230,7 +230,6 @@ SRCS(
     threading/thread.cpp
 
     tracing/allocation_tags.cpp
-    tracing/config.cpp
     tracing/public.cpp
     GLOBAL tracing/trace_context.cpp
 

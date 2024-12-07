@@ -24,7 +24,10 @@ public:
         : CompressionPoolInvoker_(BIND([this] {
             return CreatePrioritizedInvoker(CompressionPool_->GetInvoker(), "rpc_dispatcher");
         }))
-    { }
+    {
+        // Configure with defaults.
+        Configure(New<TDispatcherConfig>());
+    }
 
     void Configure(const TDispatcherConfigPtr& config)
     {
@@ -33,6 +36,7 @@ public:
         CompressionPool_->Configure(config->CompressionPoolSize);
         FairShareCompressionPool_->Configure(config->CompressionPoolSize);
         AlertOnMissingRequestInfo_.store(config->AlertOnMissingRequestInfo);
+        SendTracingBaggage_.store(config->SendTracingBaggage);
     }
 
     const IInvokerPtr& GetLightInvoker()
@@ -60,6 +64,11 @@ public:
         return AlertOnMissingRequestInfo_.load(std::memory_order::relaxed);
     }
 
+    bool ShouldSendTracingBaggage()
+    {
+        return SendTracingBaggage_.load(std::memory_order::relaxed);
+    }
+
     const IInvokerPtr& GetCompressionPoolInvoker()
     {
         return CompressionPool_->GetInvoker();
@@ -77,13 +86,14 @@ public:
 
 private:
     const TActionQueuePtr LightQueue_ = New<TActionQueue>("RpcLight");
-    const IThreadPoolPtr HeavyPool_ = CreateThreadPool(TDispatcherConfig::DefaultHeavyPoolSize, "RpcHeavy");
-    const IThreadPoolPtr CompressionPool_ = CreateThreadPool(TDispatcherConfig::DefaultCompressionPoolSize, "Compression");
-    const IFairShareThreadPoolPtr FairShareCompressionPool_ = CreateFairShareThreadPool(TDispatcherConfig::DefaultCompressionPoolSize, "FSCompression");
+    const IThreadPoolPtr HeavyPool_ = CreateThreadPool(1, "RpcHeavy");
+    const IThreadPoolPtr CompressionPool_ = CreateThreadPool(1, "Compression");
+    const IFairShareThreadPoolPtr FairShareCompressionPool_ = CreateFairShareThreadPool(1, "FSCompression");
 
     TLazyIntrusivePtr<IPrioritizedInvoker> CompressionPoolInvoker_;
 
     std::atomic<bool> AlertOnMissingRequestInfo_;
+    std::atomic<bool> SendTracingBaggage_;
 
     TAtomicIntrusivePtr<IServiceDiscovery> ServiceDiscovery_;
 };
@@ -134,6 +144,11 @@ const IFairShareThreadPoolPtr& TDispatcher::GetFairShareCompressionThreadPool()
 bool TDispatcher::ShouldAlertOnMissingRequestInfo()
 {
     return Impl_->ShouldAlertOnMissingRequestInfo();
+}
+
+bool TDispatcher::ShouldSendTracingBaggage()
+{
+    return Impl_->ShouldSendTracingBaggage();
 }
 
 IServiceDiscoveryPtr TDispatcher::GetServiceDiscovery()

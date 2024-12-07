@@ -155,11 +155,13 @@ TExprBase KqpRewriteLookupTable(const TExprBase& node, TExprContext& ctx, const 
         return node;
     }
 
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
     return Build<TKqlStreamLookupTable>(ctx, lookup.Pos())
         .Table(lookup.Table())
         .LookupKeys(lookup.LookupKeys())
         .Columns(lookup.Columns())
-        .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+        .Settings(settings.BuildNode(ctx, lookup.Pos()))
         .Done();
 }
 

@@ -509,11 +509,12 @@ void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& p
 
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
         TFsPath changefeedDirPath = CreateDirectory(folderPath, changefeedDesc.GetName());
-
+        
         auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
         auto a = JoinDatabasePath(dirPath, changefeedDesc.GetName());
         const auto topicDescription = GetTopicDescription(driver, JoinDatabasePath(dirPath, changefeedDesc.GetName()));
-        const auto& protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
+        Cout << topicDescription.GetOwner() << Endl;
+        const auto protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
 
         WriteProtoToFile(protoChangeFeedDesc, changefeedDirPath, CHANGEFEED_DESCRIPTION_FILE_NAME);
         WriteProtoToFile(protoTopicDescription, changefeedDirPath, TOPIC_DESCRIPTION_FILE_NAME);

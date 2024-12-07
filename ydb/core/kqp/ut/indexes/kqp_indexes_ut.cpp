@@ -4523,11 +4523,6 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         setting.SetValue("1");
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
-
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(false);
-        serverSettings.SetAppConfig(appConfig);
-
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

@@ -883,7 +883,7 @@ private:
         RequestSuppressionEnabled_.store(config->RequestSuppressionTimeout != TDuration::Zero());
         AbortOnAlert_.store(config->AbortOnAlert);
 
-        CompressionThreadPool_->Configure(config->CompressionThreadCount);
+        CompressionThreadPool_->SetThreadCount(config->CompressionThreadCount);
 
         if (RequestSuppressionEnabled_) {
             SuppressedRequestIdSet_.SetTtl((config->RequestSuppressionTimeout + DequeuePeriod) * 2);

@@ -30,7 +30,7 @@ TIODispatcher* TIODispatcher::Get()
 
 void TIODispatcher::Configure(const TIODispatcherConfigPtr& config)
 {
-    Poller_->Reconfigure(config->ThreadPoolPollingPeriod);
+    Poller_->SetPollingPeriod(config->ThreadPoolPollingPeriod);
 }
 
 IInvokerPtr TIODispatcher::GetInvoker()

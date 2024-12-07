@@ -31,10 +31,10 @@ public:
 
     void Configure(const TDispatcherConfigPtr& config)
     {
-        HeavyPool_->Configure(config->HeavyPoolSize);
-        HeavyPool_->Configure(config->HeavyPoolPollingPeriod);
-        CompressionPool_->Configure(config->CompressionPoolSize);
-        FairShareCompressionPool_->Configure(config->CompressionPoolSize);
+        HeavyPool_->SetThreadCount(config->HeavyPoolSize);
+        HeavyPool_->SetPollingPeriod(config->HeavyPoolPollingPeriod);
+        CompressionPool_->SetThreadCount(config->CompressionPoolSize);
+        FairShareCompressionPool_->SetThreadCount(config->CompressionPoolSize);
         AlertOnMissingRequestInfo_.store(config->AlertOnMissingRequestInfo);
         SendTracingBaggage_.store(config->SendTracingBaggage);
     }

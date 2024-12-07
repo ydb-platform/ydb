@@ -101,9 +101,10 @@ namespace NYdb {
         }
 
         size_t LastWordIndex(TStringBuf text) {
-            auto length = static_cast<int64_t>(text.size());
+            const auto length = static_cast<int64_t>(text.size());
             for (int64_t i = length - 1; 0 <= i; --i) {
-                if (IsWhitespace(text[i])) {
+                const auto ch = text[i];
+                if (IsSpace(ch) || IsSymbol(ch) || IsPairedPunct(ch)) {
                     return i + 1;
                 }
             }

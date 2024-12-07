@@ -42,6 +42,9 @@ void ProbeTest(bool isServerless) {
     auto analyzeRequest = MakeAnalyzeRequest({{tableInfo.PathId, {1, 2}}}, operationId);
     runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
     runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+    if (isServerless) {
+        runtime.SimulateSleep(TDuration::Seconds(10));
+    }
 
     runtime.Register(new THttpRequest(THttpRequest::ERequestType::COUNT_MIN_SKETCH_PROBE, {
             { THttpRequest::EParamType::DATABASE, databaseInfo.FullDatabaseName},

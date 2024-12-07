@@ -2817,7 +2817,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
 
         Cerr << ">>>>> 1" << Endl << Flush;
-        auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 23);
+        auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 16);
         Cerr << ">>>>> 2" << Endl << Flush;
         auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
@@ -2829,9 +2829,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value);
 
         Cerr << ">>>>> 3" << Endl << Flush;
-        info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 23);
+        info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 16);
         Cerr << ">>>>> 4" << Endl << Flush;
-        info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 22);
+        info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
         ui32 fromDisk = info0.BlobsFromDisk + info16.BlobsFromDisk;
         ui32 fromCache = info0.BlobsFromCache + info16.BlobsFromCache;

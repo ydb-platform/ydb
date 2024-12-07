@@ -5,7 +5,6 @@
 #include <yt/yt/core/logging/log.h>
 
 #include <yt/yt/core/misc/fs.h>
-#include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/proc.h>
 
 #include <yt/yt/core/ypath/token.h>

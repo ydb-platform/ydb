@@ -6,7 +6,6 @@
 #include <yt/yt/core/concurrency/fair_share_thread_pool.h>
 
 #include <yt/yt/core/misc/lazy_ptr.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 

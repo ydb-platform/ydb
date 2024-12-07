@@ -3,7 +3,6 @@
 #include "dispatcher.h"
 #include "helpers.h"
 
-#include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/rpc/channel.h>
@@ -19,6 +18,8 @@
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <array>
 

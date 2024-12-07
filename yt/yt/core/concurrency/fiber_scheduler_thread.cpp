@@ -11,7 +11,6 @@
 
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/shutdown.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <library/cpp/yt/threading/spin_lock_count.h>
 

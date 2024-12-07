@@ -1,8 +1,6 @@
 #include "protobuf_helpers.h"
 #include "mpl.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/compression/codec.h>
 
 #include <yt/yt/core/logging/log.h>

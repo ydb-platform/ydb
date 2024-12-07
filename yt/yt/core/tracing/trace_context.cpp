@@ -8,7 +8,6 @@
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/core/ytree/convert.h>
 

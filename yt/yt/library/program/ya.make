@@ -7,6 +7,7 @@ SRCS(
     config.cpp
     helpers.cpp
     program.cpp
+    program_mixin.cpp
     program_config_mixin.cpp
     program_pdeathsig_mixin.cpp
     program_setsid_mixin.cpp

@@ -32,7 +32,7 @@ public:
 private:
     template <class TTagPerfect>
     TTagId EncodeSanitized(TTagPerfect&& tag);
-    TTagId TryEncodeSanitized(const TTag& tag) const;
+    std::optional<TTagId> TryEncodeSanitized(const TTag& tag) const;
 
     // TODO(prime@): maybe do something about the fact that tags are never freed.
     THashMap<TTag, TTagId> TagByName_;

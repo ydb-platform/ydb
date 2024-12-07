@@ -76,6 +76,12 @@ protected:
     [[noreturn]]
     void Exit(int code) noexcept;
 
+    //! A typed version of #Exit.
+    template <class E>
+        requires std::is_enum_v<E>
+    [[noreturn]]
+    void Exit(E exitCode) noexcept;
+
 private:
     bool CrashOnError_ = false;
 

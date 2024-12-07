@@ -183,12 +183,12 @@ void TTagRegistry::DumpTags(NProto::TSensorDump* dump)
     }
 }
 
-TTagId TTagRegistry::TryEncodeSanitized(const TTag& tag) const
+std::optional<TTagId> TTagRegistry::TryEncodeSanitized(const TTag& tag) const
 {
     if (auto it = TagByName_.find(tag); it != TagByName_.end()) {
         return it->second;
     } else {
-        return {};
+        return std::nullopt;
     }
 }
 

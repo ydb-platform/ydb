@@ -5,6 +5,7 @@ SRCS(
     line_reader.cpp
     yql_highlight.cpp
     yql_position.cpp
+    yql_syntax.cpp
 )
 
 PEERDIR(

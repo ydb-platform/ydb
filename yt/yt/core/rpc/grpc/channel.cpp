@@ -343,6 +343,9 @@ private:
             }
 
             try {
+                THROW_ERROR_EXCEPTION_IF(
+                    Request_->IsAttachmentCompressionEnabled(),
+                    "Compression codecs are not supported in RPC over GRPC");
                 RequestBody_ = Request_->Serialize();
             } catch (const std::exception& ex) {
                 auto responseHandler = TryAcquireResponseHandler();

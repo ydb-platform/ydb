@@ -22,6 +22,8 @@
 
 #include <library/cpp/yt/system/exit.h>
 
+#include <library/cpp/yt/backtrace/absl_unwinder/absl_unwinder.h>
+
 #include <tcmalloc/malloc_extension.h>
 
 #include <absl/debugging/stacktrace.h>
@@ -334,7 +336,7 @@ void ConfigureAllocator(const TAllocatorOptions& options)
 
     NYTProf::EnableMemoryProfilingTags(options.SnapshotUpdatePeriod);
 
-    absl::SetStackUnwinder(NYTProf::AbslStackUnwinder);
+    NBacktrace::SetAbslStackUnwinder();
 #else
     Y_UNUSED(options);
 #endif

@@ -28,6 +28,7 @@ PEERDIR(
     library/cpp/yt/mlock
     library/cpp/yt/stockpile
     library/cpp/yt/string
+    library/cpp/yt/backtrace/absl_unwinder
     library/cpp/getopt/small
 )
 

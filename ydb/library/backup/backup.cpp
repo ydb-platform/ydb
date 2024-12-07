@@ -474,12 +474,8 @@ void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& p
     outFile.Write(permissionsStr.data(), permissionsStr.size());
 }
 
-TString CreateChageefeedBackupFolderName(const TString& changefeedName) {
-    return TStringBuilder() << changefeedName << ".pb";
-}
-
 TFsPath CreateDirectory(const TFsPath& folderPath, const TString& name) {
-    TFsPath childFolderPath = folderPath.Child(CreateChageefeedBackupFolderName(name));
+    TFsPath childFolderPath = folderPath.Child(name);
     LOG_D("Process " << childFolderPath.GetPath().Quote());
     childFolderPath.MkDir();
     return childFolderPath;
@@ -491,7 +487,7 @@ Ydb::Table::ChangefeedDescription ProtoFromChangefeedDesc(const NTable::TChangef
     return protoChangeFeedDesc;
 }
 
-const NTopic::TTopicDescription& GetTopicDescription(TDriver driver, const TString& path) {
+NTopic::TTopicDescription GetTopicDescription(TDriver driver, const TString& path) {
     NYdb::NTopic::TTopicClient client(driver);
     auto result =
         client.DescribeTopic(path).GetValueSync();
@@ -512,11 +508,11 @@ void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& p
     auto desc = DescribeTable(driver, dirPath);
 
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
-        const auto changeefeedDirName = CreateChageefeedBackupFolderName(changefeedDesc.GetName());
-        TFsPath changefeedDirPath = CreateDirectory(folderPath, changeefeedDirName);
+        TFsPath changefeedDirPath = CreateDirectory(folderPath, changefeedDesc.GetName());
 
         auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
-        const auto& topicDescription = GetTopicDescription(driver, path);
+        auto a = JoinDatabasePath(dirPath, changefeedDesc.GetName());
+        const auto topicDescription = GetTopicDescription(driver, JoinDatabasePath(dirPath, changefeedDesc.GetName()));
         const auto& protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
 
         WriteProtoToFile(protoChangeFeedDesc, changefeedDirPath, CHANGEFEED_DESCRIPTION_FILE_NAME);

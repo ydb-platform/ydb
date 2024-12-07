@@ -13,8 +13,37 @@
 #include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Parser.h>
 
+#define RULE(mode, name) NALP##mode##Antlr4::SQLv1Antlr4Parser::Rule##name
+
+#define STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(name) \
+    static_assert(RULE(Default, name) == RULE(Ansi, name))
+
 namespace NYdb {
     namespace NConsoleClient {
+
+        const std::initializer_list<size_t> YQLKeywordRules = {
+            RULE(Default, Keyword),
+            RULE(Default, Keyword_expr_uncompat),
+            RULE(Default, Keyword_table_uncompat),
+            RULE(Default, Keyword_select_uncompat),
+            RULE(Default, Keyword_alter_uncompat),
+            RULE(Default, Keyword_in_uncompat),
+            RULE(Default, Keyword_window_uncompat),
+            RULE(Default, Keyword_hint_uncompat),
+            RULE(Default, Keyword_as_compat),
+            RULE(Default, Keyword_compat),
+        };
+
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_expr_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_table_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_select_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_alter_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_in_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_window_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_hint_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_as_compat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_compat);
 
         class AntlrPipeline {
         public:
@@ -119,33 +148,43 @@ namespace NYdb {
                 engine.ignoredTokens = CppIgnoredTokens;
             }
 
+            engine.preferredRules = YQLKeywordRules;
+
             tokens.fill();
             size_t caretTokenIndex = (2 <= tokens.size()) ? tokens.size() - 2 : tokens.size() - 1;
             c3::CandidatesCollection candidates = engine.collectCandidates(caretTokenIndex);
 
-            auto lastWord = ToLowerUTF8(LastWord(queryUtf8));
-            auto isSuitable = [&](TStringBuf candidate) {
+            std::vector<size_t> justKeywords;
+            for (const auto& [token, _] : candidates.tokens) {
+                const auto& rules = candidates.rules[token].ruleList;
+                for (const auto keywordRule : YQLKeywordRules) {
+                    if (std::ranges::find(rules, keywordRule) != std::end(rules)) {
+                        continue;
+                    }
+                }
+                justKeywords.emplace_back(token);
+            }
+
+            const auto lastWord = ToLowerUTF8(LastWord(queryUtf8));
+            const auto isSuitable = [&](TStringBuf candidate) {
                 return ToLowerUTF8(candidate).StartsWith(lastWord);
             };
 
-            auto toString = [&](size_t token) -> TString {
+            const auto toString = [&](size_t token) -> TString {
                 const auto& vocabulary = lexer.getVocabulary();
                 auto display = vocabulary.getDisplayName(token);
-                if (display.starts_with('\'')) {
-                    assert(display.ends_with('\''));
-                    display.erase(std::begin(display));
-                    display.erase(std::prev(std::end(display)));
-                }
+                assert(!display.starts_with('\''));
                 return display;
             };
 
             TVector<TString> words;
-            for (const auto& [token, follow] : candidates.tokens) {
+            for (const auto token : justKeywords) {
                 auto candidate = toString(token);
                 if (isSuitable(candidate)) {
                     words.emplace_back(std::move(candidate));
                 }
             }
+
             for (auto& word : words) {
                 word += ' ';
             }

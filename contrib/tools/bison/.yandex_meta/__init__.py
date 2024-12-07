@@ -200,6 +200,7 @@ bison = NixProject(
     disable_includes=[
         "InnoTekLIBC/backend.h",
         "bits/libc-lock.h",
+        "libio/",
         "synch.h",
         "random.h",
         "OS.h",

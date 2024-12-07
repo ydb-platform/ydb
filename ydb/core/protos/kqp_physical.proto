@@ -274,6 +274,7 @@ message TKqpPhyCnStreamLookup {
     bytes ResultType = 5;
     EStreamLookupStrategy LookupStrategy = 6;
     bool KeepRowsOrder = 7;
+    bool AllowNullKeys = 8;
 }
 
 message TKqpPhyCnSequencer {

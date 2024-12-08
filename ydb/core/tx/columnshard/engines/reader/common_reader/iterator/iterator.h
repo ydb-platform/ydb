@@ -5,7 +5,7 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-struct TReadMetadata;
+class TReadMetadata;
 
 class TReadyResults {
 private:

@@ -30,7 +30,7 @@ public:
 };
 
 // Holds all metadata that is needed to perform read/scan
-struct TReadMetadataBase {
+class TReadMetadataBase {
 public:
     enum class ESorting {
         NONE = 0 /* "not_sorted" */,
@@ -153,8 +153,8 @@ public:
 
     ui64 Limit = 0;
 
-    virtual void Dump(IOutputStream& out) const {
-        out << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
+    virtual void DebugString() const {
+        return TStringBuilder() << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
             << " " << Sorting << " sorted";
     }
 

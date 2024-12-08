@@ -3,8 +3,6 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-struct TReadMetadata;
-
 class TColumnShardScanIterator: public NCommon::TColumnShardScanIterator {
 private:
     using TBase = NCommon::TColumnShardScanIterator;

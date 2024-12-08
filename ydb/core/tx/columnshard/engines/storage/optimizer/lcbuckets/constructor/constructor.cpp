@@ -18,6 +18,14 @@ bool TOptimizerPlannerConstructor::DoApplyToCurrentObject(IOptimizerPlanner& cur
 bool TOptimizerPlannerConstructor::DoIsEqualTo(const IOptimizerPlannerConstructor& item) const {
     const auto* itemClass = dynamic_cast<const TOptimizerPlannerConstructor*>(&item);
     AFL_VERIFY(itemClass);
+    if (Levels.size() != itemClass->Levels.size()) {
+        return false;
+    }
+    for (ui32 i = 0; i < Levels.size(); ++i) {
+        if (!Levels[i]->IsEqualTo(*itemClass->Levels[i])) {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -61,8 +69,8 @@ NKikimr::TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(c
         if (!level) {
             return TConclusionStatus::Fail("incorrect level class_name: " + className);
         }
-        if (!level->DeserializeFromJson(i["description"])) {
-            return TConclusionStatus::Fail("cannot parse level: " + className + ": " + i["description"].GetStringRobust());
+        if (!level->DeserializeFromJson(i)) {
+            return TConclusionStatus::Fail("cannot parse level: " + i.GetStringRobust());
         }
         Levels.emplace_back(TLevelConstructorContainer(std::shared_ptr<ILevelConstructor>(level.Release())));
     }

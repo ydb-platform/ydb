@@ -18,6 +18,9 @@ private:
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& json) override;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) override;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) const override;
+    virtual bool IsEqualToSameClass(const ILevelConstructor& item) const override {
+        return PortionsLiveDuration == item.PortionsLiveDuration && ExpectedBlobsSize == item.ExpectedBlobsSize;
+    }
 
     static const inline TFactory::TRegistrator<TZeroLevelConstructor> Registrator = TFactory::TRegistrator<TZeroLevelConstructor>(GetClassNameStatic());
 

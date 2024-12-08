@@ -105,8 +105,6 @@ void TProgram::SetCrashOnError()
     CrashOnError_ = true;
 }
 
-TProgram::~TProgram() = default;
-
 void TProgram::HandleVersionAndBuild()
 {
     if (PrintVersion_) {

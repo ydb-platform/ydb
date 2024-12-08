@@ -79,31 +79,42 @@ TMemoryUsageSnapshotPtr GetGlobalMemoryUsageSnapshot()
     return TGlobalMemoryUsageSnapshot::Get()->Snapshot.Acquire();
 }
 
+static std::atomic<TDuration> SnapshotUpdatePeriod;
+
 void EnableMemoryProfilingTags(std::optional<TDuration> snapshotUpdatePeriod)
 {
-    static std::once_flag onceFlag;
-    std::call_once(onceFlag, [&] {
+    static std::once_flag hooksFlag;
+    std::call_once(hooksFlag, [&] {
         const auto& hooks = GetAllocationTagsHooks();
         tcmalloc::MallocExtension::SetSampleUserDataCallbacks(
             hooks.CreateAllocationTags,
             hooks.CopyAllocationTags,
             hooks.DestroyAllocationTags);
+    });
 
-        if (snapshotUpdatePeriod) {
-            std::thread thread([snapshotUpdatePeriod] {
+    SnapshotUpdatePeriod.store(snapshotUpdatePeriod.value_or(TDuration::Zero()));
+    if (snapshotUpdatePeriod) {
+        static std::once_flag threadFlag;
+        std::call_once(threadFlag, [&] {
+            std::thread thread([] {
                 TThread::SetCurrentThreadName("MemSnapUpdate");
                 while (true) {
+                    auto snapshotUpdatePeriod = SnapshotUpdatePeriod.load();
+                    if (snapshotUpdatePeriod == TDuration::Zero()) {
+                        Sleep(TDuration::Seconds(1));
+                        continue;
+                    }
                     auto lastUpdateTime = Now();
                     SetGlobalMemoryUsageSnapshot(CollectMemoryUsageSnapshot());
                     auto currentTime = Now();
-                    if (lastUpdateTime + *snapshotUpdatePeriod > currentTime) {
-                        Sleep(lastUpdateTime + *snapshotUpdatePeriod - currentTime);
+                    if (lastUpdateTime + snapshotUpdatePeriod > currentTime) {
+                        Sleep(lastUpdateTime + snapshotUpdatePeriod - currentTime);
                     }
                 }
             });
             thread.detach();
-        }
-    });
+        });
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

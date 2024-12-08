@@ -16,7 +16,6 @@ class TProgram
 {
 public:
     TProgram();
-    ~TProgram();
 
     TProgram(const TProgram&) = delete;
     TProgram(TProgram&&) = delete;

@@ -9,6 +9,8 @@ items:
     href: parameterized_queries.md
   - name: Working with topics
     href: topic.md
+  - name: Working with coordination nodes
+    href: coordination.md
   - name: Handling errors in the API
     href: error_handling.md
   - name: gRPC API

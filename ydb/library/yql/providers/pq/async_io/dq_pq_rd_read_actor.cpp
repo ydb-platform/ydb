@@ -546,7 +546,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) 
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-    SRC_LOG_T("Received TEvStatistics from " << ev->Sender << ", offset " << ev->Get()->Record.GetNextMessageOffset() << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
+    SRC_LOG_T("Received TEvStatistics from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.Statistics++;
 
     auto* session = FindSession(ev->Sender, ev);
@@ -554,21 +554,20 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
         return;
     }
     IngressStats.Bytes += ev->Get()->Record.GetReadBytes();
-    ui64 partitionId = ev->Get()->Record.GetPartitionId();
+    for (auto partition : ev->Get()->Record.GetPartition()) {
+        ui64 partitionId = ev->Get()->Record.GetPartitionId();
+        SRC_LOG_T("Partition id " << partitionId << ", offset " << partition.GetNextMessageOffset());
 
-    auto& nextOffset = NextOffsetFromRD[partitionId];
-    if (nextOffset) {
-        if (ev->Get()->Record.GetNextMessageOffset() < nextOffset) {
-            auto str = TStringBuilder() << "Wrong NextMessageOffset in TEvStatistics, current " << nextOffset << " received " << ev->Get()->Record.GetNextMessageOffset();
-            SRC_LOG_E(str);
-            Stop(str);
+        auto& nextOffset = NextOffsetFromRD[partitionId];
+        if (!nextOffset) {
+            nextOffset = partition.GetNextMessageOffset();
+        } else {
+            nextOffset = std::max(*nextOffset, partition.GetNextMessageOffset());
         }
-    }
-    nextOffset = ev->Get()->Record.GetNextMessageOffset();
-
-    if (ReadyBuffer.empty()) {
-        TPartitionKey partitionKey{TString{}, partitionId};
-        PartitionToOffset[partitionKey] = ev->Get()->Record.GetNextMessageOffset();
+        if (ReadyBuffer.empty()) {
+            TPartitionKey partitionKey{TString{}, partitionId};
+            PartitionToOffset[partitionKey] = *nextOffset;
+        }
     }
 }
 

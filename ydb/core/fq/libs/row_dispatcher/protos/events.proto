@@ -68,10 +68,16 @@ message TEvMessageBatch {
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
-message TEvStatistics {
+message TEvPartitionStatistics {
     uint32 PartitionId = 1;
     uint64 NextMessageOffset = 2;
+}
+
+message TEvStatistics {
+    uint32 PartitionId = 1;             // deprecated
+    uint64 NextMessageOffset = 2;       // deprecated
     uint64 ReadBytes = 3;
+    repeated TEvPartitionStatistics Partition = 4;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

@@ -65,7 +65,7 @@ struct TEvPrivate {
         EvSendStatisticToReadActor,
         EvDataAfterFilteration,
         EvDataFiltered,
-        EvSendStatisticToRowDispatcher,
+        EvSendStatistic,
         EvStartParsing,
         EvReconnectSession,
         EvEnd
@@ -75,8 +75,7 @@ struct TEvPrivate {
     // Events
     struct TEvPqEventsReady : public NActors::TEventLocal<TEvPqEventsReady, EvPqEventsReady> {};
     struct TEvCreateSession : public NActors::TEventLocal<TEvCreateSession, EvCreateSession> {};
-    struct TEvSendStatisticToRowDispatcher : public NActors::TEventLocal<TEvSendStatisticToRowDispatcher, EvSendStatisticToRowDispatcher> {};
-    struct TEvSendStatisticToReadActor : public NActors::TEventLocal<TEvSendStatisticToReadActor, EvSendStatisticToReadActor> {};
+    struct TEvSendStatistic : public NActors::TEventLocal<TEvSendStatistic, EvSendStatistic> {};
     struct TEvStartParsing : public NActors::TEventLocal<TEvStartParsing, EvStartParsing> {};
     struct TEvReconnectSession : public NActors::TEventLocal<TEvReconnectSession, EvReconnectSession> {};
 
@@ -204,8 +203,7 @@ private:
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     const i64 BufferSize;
     TString LogPrefix;
-    TStats SessionStats;
-    TStats ClientsStats;
+    TStats Statistics;
     ui64 LastMessageOffset = 0;
     bool IsWaitingEvents = false;
     bool IsStartParsingScheduled = false;
@@ -271,16 +269,15 @@ private:
     void Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&);
     void Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr&);
-    void Handle(NFq::TEvPrivate::TEvSendStatisticToReadActor::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr&);
-    void Handle(NFq::TEvPrivate::TEvSendStatisticToRowDispatcher::TPtr&);
+    void Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&);
     void Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     void Handle(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev);
     void HandleException(const std::exception& err);
 
-    void SendStatisticToRowDispatcher();
+    void SendStatistics();
     void SendSessionError(NActors::TActorId readActorId, const TString& message);
     TVector<const TVector<NYql::NUdf::TUnboxedValue>*> RebuildJson(const TClientsInfo& info, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues);
     void UpdateParserSchema(const TParserInputType& inputType);
@@ -295,9 +292,8 @@ private:
         hFunc(NFq::TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(NFq::TEvPrivate::TEvCreateSession, Handle);
         hFunc(NFq::TEvPrivate::TEvDataAfterFilteration, Handle);
-        hFunc(NFq::TEvPrivate::TEvSendStatisticToReadActor, Handle);
         hFunc(NFq::TEvPrivate::TEvDataFiltered, Handle);
-        hFunc(NFq::TEvPrivate::TEvSendStatisticToRowDispatcher, Handle);
+        hFunc(NFq::TEvPrivate::TEvSendStatistic, Handle);
         hFunc(NFq::TEvPrivate::TEvReconnectSession, Handle);
         hFunc(TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
@@ -313,12 +309,11 @@ private:
         IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
         IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
         IgnoreFunc(NFq::TEvPrivate::TEvDataAfterFilteration);
-        IgnoreFunc(NFq::TEvPrivate::TEvSendStatisticToReadActor);
         IgnoreFunc(NFq::TEvPrivate::TEvDataFiltered);
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
-        IgnoreFunc(NFq::TEvPrivate::TEvSendStatisticToRowDispatcher);
+        IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
         IgnoreFunc(TEvRowDispatcher::TEvPurecalcCompileResponse);
     })
 };
@@ -360,8 +355,7 @@ void TTopicSession::Bootstrap() {
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
         << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec,  StatusPeriod " << Config.GetSendStatusPeriodSec() << " sec");
     Y_ENSURE(Config.GetSendStatusPeriodSec() > 0);
-    Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvSendStatisticToReadActor());
-    Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatisticToRowDispatcher());
+    Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
 }
 
 void TTopicSession::PassAway() {
@@ -501,26 +495,6 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr& ev) {
     AddDataToClient(it->second, ev->Get()->Offset, ev->Get()->Json);
 }
 
-void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatisticToReadActor::TPtr&) {
-    LOG_ROW_DISPATCHER_TRACE("TEvSendStatisticToReadActor");
-    Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvSendStatisticToReadActor());
-    
-    auto readBytes = ClientsStats.Bytes;
-    for (auto& [actorId, info] : Clients) {
-        if (!info.ProcessedNextMessageOffset) {
-            continue;
-        }
-        auto event = std::make_unique<TEvRowDispatcher::TEvStatistics>();
-        event->Record.SetPartitionId(PartitionId);
-        event->Record.SetNextMessageOffset(*info.ProcessedNextMessageOffset);
-        event->Record.SetReadBytes(readBytes);
-        event->ReadActorId = info.ReadActorId;
-        LOG_ROW_DISPATCHER_TRACE("Send statistics to " << info.ReadActorId << ", offset " << *info.ProcessedNextMessageOffset);
-        Send(RowDispatcherActorId, event.release());
-    }
-    ClientsStats.Clear();
-}
-
 void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
     Metrics.ReconnectRate->Inc();
     TInstant minTime = GetMinStartingMessageTimestamp();
@@ -598,8 +572,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
         Self.LastMessageOffset = message.GetOffset();
     }
 
-    Self.SessionStats.Add(dataSize, event.GetMessages().size());
-    Self.ClientsStats.Add(dataSize, event.GetMessages().size());
+    Self.Statistics.Add(dataSize, event.GetMessages().size());
     Self.Metrics.SessionDataRate->Add(dataSize);
     Self.Metrics.AllSessionsDataRate->Add(dataSize);
     dataReceivedEventSize += dataSize;
@@ -702,8 +675,7 @@ void TTopicSession::DoParsing(bool force) {
         FatalError(e.what(), nullptr, true, Nothing());
     }
     auto parseAndFilterLatency = TInstant::Now() - startParseAndFilter;
-    SessionStats.ParseAndFilterLatency = Max(SessionStats.ParseAndFilterLatency, parseAndFilterLatency);
-    ClientsStats.ParseAndFilterLatency = Max(ClientsStats.ParseAndFilterLatency, parseAndFilterLatency);
+    Statistics.ParseAndFilterLatency = Max(Statistics.ParseAndFilterLatency, parseAndFilterLatency);
 }
 
 void TTopicSession::DoFiltering(ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues) {
@@ -885,7 +857,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         FatalError("Adding new client failed, got unexpected exception: " + CurrentExceptionMessage(), nullptr, true, Nothing());
     }
     ConsumerName = ev->Get()->Record.GetSource().GetConsumerName();
-    SendStatisticToRowDispatcher();
+    SendStatistics();
 }
 
 void TTopicSession::AddDataToClient(TClientsInfo& info, ui64 offset, const TString& json) {
@@ -1040,16 +1012,17 @@ void TTopicSession::HandleException(const std::exception& e) {
     FatalError(TString("Internal error: exception: ") + e.what(), nullptr, false, Nothing());
 }
 
-void TTopicSession::SendStatisticToRowDispatcher() {
+void TTopicSession::SendStatistics() {
+    LOG_ROW_DISPATCHER_TRACE("SendStatistics");
     TopicSessionStatistic sessionStatistic;
     auto& commonStatistic = sessionStatistic.Common;
     commonStatistic.UnreadBytes = UnreadBytes;
     commonStatistic.RestartSessionByOffsets = RestartSessionByOffsets;
-    commonStatistic.ReadBytes = SessionStats.Bytes;
-    commonStatistic.ReadEvents = SessionStats.Events;
-    commonStatistic.ParseAndFilterLatency = SessionStats.ParseAndFilterLatency;
+    commonStatistic.ReadBytes = Statistics.Bytes;
+    commonStatistic.ReadEvents = Statistics.Events;
+    commonStatistic.ParseAndFilterLatency = Statistics.ParseAndFilterLatency;
     commonStatistic.LastReadedOffset = LastMessageOffset;
-    SessionStats.Clear();
+    Statistics.Clear();
 
     sessionStatistic.SessionKey = TopicSessionParams{Endpoint, Database, TopicPath, PartitionId};
     sessionStatistic.Clients.reserve(Clients.size());
@@ -1059,7 +1032,7 @@ void TTopicSession::SendStatisticToRowDispatcher() {
         clientStatistic.ReadActorId = readActorId;
         clientStatistic.UnreadRows = info.Buffer.size();
         clientStatistic.UnreadBytes = info.UnreadBytes;
-        clientStatistic.Offset = info.NextMessageOffset.GetOrElse(0);
+        clientStatistic.Offset = info.ProcessedNextMessageOffset.GetOrElse(0);
         clientStatistic.ReadBytes = info.Stat.Bytes;
         clientStatistic.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.GetOrElse(0);
         clientStatistic.ReadLagMessages = info.NextMessageOffset.GetOrElse(0) - LastMessageOffset - 1;
@@ -1071,9 +1044,9 @@ void TTopicSession::SendStatisticToRowDispatcher() {
     Send(RowDispatcherActorId, event.release());
 }
 
-void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatisticToRowDispatcher::TPtr&) {
-    Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatisticToRowDispatcher());
-    SendStatisticToRowDispatcher();
+void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
+    SendStatistics();
+    Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
 }
 
 bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {

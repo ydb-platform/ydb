@@ -9,6 +9,13 @@ namespace NYdb {
         using NSQLTranslation::TTranslationSettings;
         using NYql::TIssues;
 
+        EYQLSyntaxMode QuerySyntaxMode(const TString& queryUtf8) {
+            if (IsAnsiQuery(queryUtf8)) {
+                return EYQLSyntaxMode::ANSI;
+            }
+            return EYQLSyntaxMode::Default;
+        }
+
         // Permits invalid special comments
         bool IsAnsiQuery(const TString& queryUtf8) {
             TTranslationSettings settings;

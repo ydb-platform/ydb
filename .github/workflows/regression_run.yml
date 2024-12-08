@@ -7,6 +7,7 @@ jobs:
   main:
     name: Build and run tests
     runs-on: [ self-hosted, "${{ inputs.runner_label || 'auto-provisioned' }}", "${{ format('build-preset-{0}', inputs.build_preset || 'relwithdebinfo') }}" ]
+    timeout-minutes: 480
     strategy:
       fail-fast: false # do not stop wf if the tests in one of the configurations failed
       matrix:

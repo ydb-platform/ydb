@@ -54,7 +54,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterKesus TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -151,7 +151,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterKesus TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

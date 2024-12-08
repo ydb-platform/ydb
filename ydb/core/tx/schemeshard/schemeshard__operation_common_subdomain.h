@@ -55,7 +55,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "NSubDomainState::TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 public:
     TConfigureParts(TOperationId id);
@@ -72,7 +72,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "NSubDomainState::TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

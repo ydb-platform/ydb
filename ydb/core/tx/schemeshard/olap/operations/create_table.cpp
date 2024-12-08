@@ -224,7 +224,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateColumnTable TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -343,7 +343,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateColumnTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -430,7 +430,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateColumnTable TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

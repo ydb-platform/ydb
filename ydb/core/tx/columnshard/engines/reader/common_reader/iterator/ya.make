@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     fetched_data.cpp
     columns_set.cpp
+    iterator.cpp
 )
 
 PEERDIR(

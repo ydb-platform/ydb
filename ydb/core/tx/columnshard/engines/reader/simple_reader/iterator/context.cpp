@@ -5,11 +5,6 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-std::unique_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::BuildMerger() const {
-    return std::make_unique<NArrow::NMerger::TMergePartialStream>(
-        ReadMetadata->GetReplaceKey(), ProgramInputColumns->GetSchema(), CommonContext->IsReverse(), IIndexInfo::GetSnapshotColumnNames());
-}
-
 std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) {
     const bool needSnapshots = ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax();
     if (!needSnapshots && FFColumns->GetColumnIds().size() == 1 &&

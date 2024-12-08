@@ -78,8 +78,6 @@ public:
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("fetching", DebugString());
     }
 
-    std::unique_ptr<NArrow::NMerger::TMergePartialStream> BuildMerger() const;
-
     TString DebugString() const;
     TString ProfileDebugString() const;
 

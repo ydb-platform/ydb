@@ -80,6 +80,10 @@ namespace NYdb {
                 }
             }
 
+            Sort(candidates, [](const TCandidate& lhs, const TCandidate& rhs) {
+                return std::tie(lhs.Content, lhs.Kind) < std::tie(rhs.Content, rhs.Kind);
+            });
+
             return {
                 .CompletedToken = std::move(completedToken),
                 .Candidates = std::move(candidates),

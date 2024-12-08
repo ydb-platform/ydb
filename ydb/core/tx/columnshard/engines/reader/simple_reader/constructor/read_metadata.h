@@ -8,7 +8,6 @@ class TReadMetadata: public NCommon::TReadMetadata {
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
-
     using TBase::TBase;
 
     virtual bool Empty() const override {

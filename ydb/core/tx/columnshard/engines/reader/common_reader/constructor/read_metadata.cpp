@@ -31,7 +31,12 @@ TConclusionStatus TReadMetadata::Init(
         }
     }
 
-    DoInitCustom(readDescription, owner);
+    {
+        auto customConclusion = DoInitCustom(owner, readDescription, dataAccessor);
+        if (customConclusion.IsFail()) {
+            return customConclusion;
+        }
+    }
 
     StatsMode = readDescription.StatsMode;
     return TConclusionStatus::Success();

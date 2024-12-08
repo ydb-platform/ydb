@@ -51,10 +51,12 @@ private:
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) const override;
     virtual void DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData) const override;
 
-    virtual void DoInitCustom(
+    virtual TConclusionStatus DoInitCustom(
         const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) = 0;
 
 public:
+    using TConstPtr = std::shared_ptr<const TReadMetadata>;
+
     bool GetBrokenWithCommitted() const {
         return BrokenWithCommitted->Val();
     }

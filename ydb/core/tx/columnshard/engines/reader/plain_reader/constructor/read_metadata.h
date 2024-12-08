@@ -11,11 +11,12 @@ namespace NKikimr::NOlap::NReader::NPlain {
 class TReadMetadata: public NCommon::TReadMetadata {
 private:
     using TBase = NCommon::TReadMetadata;
-    virtual void DoInitCustom(
+    virtual TConclusionStatus DoInitCustom(
         const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) override;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
+    using TBase::TBase;
 
     std::vector<TCommittedBlob> CommittedBlobs;
     virtual bool Empty() const override {

@@ -55,13 +55,15 @@ public:
 
 class TColumnShardScanIterator: public TScanIteratorBase {
 private:
+    virtual void DoOnSentDataFromInterval(const ui32 intervalIdx) const override;
+
+protected:
+    ui64 ItemsRead = 0;
+    const i64 MaxRowsInBatch = 5000;
     std::shared_ptr<TReadContext> Context;
     std::shared_ptr<const TReadMetadata> ReadMetadata;
     TReadyResults ReadyResults;
     std::shared_ptr<IDataReader> IndexedData;
-    ui64 ItemsRead = 0;
-    const i64 MaxRowsInBatch = 5000;
-    virtual void DoOnSentDataFromInterval(const ui32 intervalIdx) const override;
 
 public:
     TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context, const std::shared_ptr<const TReadMetadata>& readMetadata);

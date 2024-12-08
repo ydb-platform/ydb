@@ -153,7 +153,7 @@ public:
 
     ui64 Limit = 0;
 
-    virtual void DebugString() const {
+    virtual TString DebugString() const {
         return TStringBuilder() << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
             << " " << Sorting << " sorted";
     }
@@ -178,12 +178,6 @@ public:
 
     virtual std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& readContext) const = 0;
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const = 0;
-
-    // TODO:  can this only be done for base class?
-    friend IOutputStream& operator<<(IOutputStream& out, const TReadMetadataBase& meta) {
-        meta.Dump(out);
-        return out;
-    }
 
     const TProgramContainer& GetProgram() const {
         return Program;

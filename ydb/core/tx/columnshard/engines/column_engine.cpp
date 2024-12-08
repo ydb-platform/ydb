@@ -51,13 +51,16 @@ TSelectInfo::TStats TSelectInfo::Stats() const {
     return out;
 }
 
-void TSelectInfo::DebugStream(IOutputStream& out) {
+TString TSelectInfo::DebugString() const {
+    TStringBuilder result;
+    result << "count:" << PortionsOrderedPK.size() << ";";
     if (PortionsOrderedPK.size()) {
-        out << "portions:";
+        result << "portions:";
         for (auto& portionInfo : PortionsOrderedPK) {
-            out << portionInfo->DebugString();
+            result << portionInfo->DebugString();
         }
     }
+    return result;
 }
 
 }   // namespace NKikimr::NOlap

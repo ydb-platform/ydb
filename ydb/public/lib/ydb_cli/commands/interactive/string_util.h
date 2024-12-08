@@ -2,8 +2,12 @@
 
 #include <util/charset/unidata.h>
 
+#include <string_view>
+
 namespace NYdb {
     namespace NConsoleClient {
+
+        static constexpr std::string_view WordBreakCharacters = " \t\v\f\a\b\r\n`~!@#$%^&*-=+[](){}\\|;:'\".,<>/?";
 
         bool IsWordBoundary(char ch);
 

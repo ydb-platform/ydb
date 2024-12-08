@@ -6,7 +6,7 @@ namespace NYdb {
     namespace NConsoleClient {
 
         bool IsWordBoundary(char ch) {
-            return IsSpace(ch) || IsSymbol(ch) || IsPairedPunct(ch);
+            return WordBreakCharacters.contains(ch);
         }
 
         size_t LastWordIndex(TStringBuf text) {

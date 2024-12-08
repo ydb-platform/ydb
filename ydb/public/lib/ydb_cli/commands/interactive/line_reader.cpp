@@ -54,9 +54,6 @@ public:
 private:
     void AddToHistory(const std::string & line);
 
-    // TODO: Extract it to IsWordBoundary function
-    static constexpr std::string_view WordBreakCharacters = " \t\v\f\a\b\r\n`~!@#$%^&*-=+[](){}\\|;:'\".,<>/?";
-
     std::string Prompt;
     std::string HistoryFilePath;
     TFileHandle HistoryFileHandle;

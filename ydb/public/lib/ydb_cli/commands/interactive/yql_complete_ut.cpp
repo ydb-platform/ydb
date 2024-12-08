@@ -26,6 +26,7 @@ Y_UNIT_TEST_SUITE(YqlCompleteTests) {
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select (s"), 3);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select 1 "), 30);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select 1 + "), 27);
+        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select 1+"), 27);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test "), 30);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from "), 13);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from (s"), 1);
@@ -33,7 +34,7 @@ Y_UNIT_TEST_SUITE(YqlCompleteTests) {
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from as "), 27);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from as as "), 0);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from as as as "), 23);
-        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select * from test;"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select * from test;"), 33);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select * from test; "), 33);
     }
 

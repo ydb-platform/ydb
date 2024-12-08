@@ -214,12 +214,26 @@ TDqConnection BuildShuffleConnection(TPositionHandle pos, TCoLambda keySelector,
         keyElements.push_back(keySelector.Body());
     }
 
+    bool forceMapConnection = false;
+
     TVector<TCoAtom> keyColumns;
     keyColumns.reserve(keyElements.size());
     for (auto& element : keyElements) {
         auto member = element.Cast<TCoMember>();
         YQL_ENSURE(member.Struct().Raw() == keySelector.Args().Arg(0).Raw(), "Should be handled earlier");
         keyColumns.push_back(element.Cast<TCoMember>().Name());
+        if (element.Cast<TCoMember>().Name().StringValue().find("_map.") != TString::npos) {
+            forceMapConnection = true;
+        }
+    }
+
+    if (forceMapConnection) {
+        return Build<TDqCnMap>(ctx, pos)
+            .Output()
+                .Stage(dqUnion.Output().Stage())
+                .Index(dqUnion.Output().Index())
+            .Build()
+            .Done();
     }
 
     return Build<TDqCnHashShuffle>(ctx, pos)
@@ -762,7 +776,7 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
     Y_UNUSED(optCtx);
-    
+
     if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }

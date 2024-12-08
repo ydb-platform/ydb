@@ -411,7 +411,7 @@ void TColumnShard::SendPeriodicStats() {
     const TInstant now = TAppData::TimeProvider->Now();
 
     if (LastStatsReport + StatsReportInterval > now) {
-        LOG_S_TRACE("Skip send periodic stats: report interavl = " << StatsReportInterval);
+        LOG_S_TRACE("Skip send periodic stats: report interval = " << StatsReportInterval);
         return;
     }
     LastStatsReport = now;

@@ -19,7 +19,8 @@ private:
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) override;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) const override;
     virtual bool IsEqualToSameClass(const ILevelConstructor& item) const override {
-        return PortionsLiveDuration == item.PortionsLiveDuration && ExpectedBlobsSize == item.ExpectedBlobsSize;
+        const auto& itemCast = dynamic_cast<const TZeroLevelConstructor&>(item);
+        return PortionsLiveDuration == itemCast.PortionsLiveDuration && ExpectedBlobsSize == itemCast.ExpectedBlobsSize;
     }
 
     static const inline TFactory::TRegistrator<TZeroLevelConstructor> Registrator = TFactory::TRegistrator<TZeroLevelConstructor>(GetClassNameStatic());

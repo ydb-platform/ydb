@@ -22,7 +22,7 @@ bool TOptimizerPlannerConstructor::DoIsEqualTo(const IOptimizerPlannerConstructo
         return false;
     }
     for (ui32 i = 0; i < Levels.size(); ++i) {
-        if (!Levels[i]->IsEqualTo(*itemClass->Levels[i])) {
+        if (!Levels[i]->IsEqualTo(*itemClass->Levels[i].GetObjectPtrVerified())) {
             return false;
         }
     }

@@ -117,6 +117,7 @@ namespace NYdb {
                 }
             }
 
+            ignoredTokens.emplace(TOKEN_EOF);
             return ignoredTokens;
         }
 

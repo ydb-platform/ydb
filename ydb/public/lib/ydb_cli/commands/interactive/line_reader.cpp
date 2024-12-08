@@ -152,7 +152,7 @@ void TLineReader::AddToHistory(const std::string & line) {
 }
 
 std::unique_ptr<ILineReader> CreateLineReader(std::string prompt, std::string historyFilePath) {
-    return std::make_unique<TLineReader>(std::move(prompt), std::move(historyFilePath));
+w    return std::make_unique<TLineReader>(std::move(prompt), std::move(historyFilePath));
 }
 
 }

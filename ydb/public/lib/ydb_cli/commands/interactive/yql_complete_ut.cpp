@@ -24,15 +24,17 @@ Y_UNIT_TEST_SUITE(YqlCompleteTests) {
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select "), 30);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select ("), 28);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select (s"), 3);
-        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select 1 "), 31);
+        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select 1 "), 30);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select 1 + "), 27);
-        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test "), 31);
+        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test "), 30);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from "), 13);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from (s"), 1);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from select 1 "), 0);
-        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from as "), 28);
+        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from as "), 27);
         UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from as as "), 0);
-        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from as as as "), 24);
+        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select test from as as as "), 23);
+        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select * from test;"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CompletionsCount(engine, "select * from test; "), 33);
     }
 
     Y_UNIT_TEST(UTF8Wide) {
@@ -42,18 +44,18 @@ Y_UNIT_TEST_SUITE(YqlCompleteTests) {
     }
 
     Y_UNIT_TEST(Typing) {
-        const TString query =
+        const auto queryUtf16 = TUtf16String::FromUtf8(
             "SELECT \n"
             "  123467, \"Hello, {name}! 编码\", \n"
             "  (1 + (5 * 1 / 0)), MIN(identifier), \n"
             "  Bool(field), Math::Sin(var) \n"
-            "FROM `local/test/space/table` JOIN test;";
+            "FROM `local/test/space/table` JOIN test;");
 
         TYQLCompletionEngine engine;
 
-        for (std::size_t size = 0; size <= query.size(); ++size) {
-            const TStringBuf prefix(query, 0, size);
-            auto completion = engine.Complete(prefix);
+        for (std::size_t size = 0; size <= queryUtf16.size(); ++size) {
+            const TWtringBuf prefixUtf16(queryUtf16, 0, size);
+            auto completion = engine.Complete(TString::FromUtf16(prefixUtf16));
             Y_DO_NOT_OPTIMIZE_AWAY(completion);
         }
     }

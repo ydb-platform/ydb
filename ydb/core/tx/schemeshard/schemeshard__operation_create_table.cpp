@@ -736,7 +736,7 @@ public:
                 << " path# " << dstPath.PathString()
                 << " pathId# " << newTable->PathId
                 << " schemeshard# " << ssId
-                << " tx# " << Transaction.DebugString()
+                << " tx# " << Transaction.ShortDebugString()
                 );
 
         SetState(NextState());

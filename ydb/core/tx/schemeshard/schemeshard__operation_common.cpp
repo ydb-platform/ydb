@@ -354,7 +354,7 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " CreateRequest"
                                     << " Event to Hive: " << hiveToRequest
-                                    << " msg:  "<< ev->Record.DebugString().c_str());
+                                    << " msg:  "<< ev->Record.ShortDebugString());
 
             context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, shard.Idx, ev.Release());
         }

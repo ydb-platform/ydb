@@ -62,7 +62,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropTable TDropParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -152,7 +152,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

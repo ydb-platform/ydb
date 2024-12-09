@@ -15,7 +15,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TAlterTableIndex TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:

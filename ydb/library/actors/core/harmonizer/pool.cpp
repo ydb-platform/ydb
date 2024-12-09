@@ -17,56 +17,56 @@ TPoolInfo::TPoolInfo()
 
 double TPoolInfo::GetCpu(i16 threadIdx) const {
     if ((size_t)threadIdx < ThreadInfo.size()) {
-        return ThreadInfo[threadIdx].CpuUs.GetAvgPart();
+        return ThreadInfo[threadIdx].UsedCpu.GetAvgPart();
     }
     return 0.0;
 }
 
 double TPoolInfo::GetSharedCpu(i16 sharedThreadIdx) const {
     if ((size_t)sharedThreadIdx < SharedInfo.size()) {
-        return SharedInfo[sharedThreadIdx].CpuUs.GetAvgPart();
+        return SharedInfo[sharedThreadIdx].UsedCpu.GetAvgPart();
     }
     return 0.0;
 }
 
 double TPoolInfo::GetLastSecondCpu(i16 threadIdx) const {
     if ((size_t)threadIdx < ThreadInfo.size()) {
-        return ThreadInfo[threadIdx].CpuUs.GetAvgPartForLastSeconds(1);
+        return ThreadInfo[threadIdx].UsedCpu.GetAvgPartForLastSeconds<true>(1);
     }
     return 0.0;
 }
 
 double TPoolInfo::GetLastSecondSharedCpu(i16 sharedThreadIdx) const {
     if ((size_t)sharedThreadIdx < SharedInfo.size()) {
-        return SharedInfo[sharedThreadIdx].CpuUs.GetAvgPartForLastSeconds(1);
+        return SharedInfo[sharedThreadIdx].UsedCpu.GetAvgPartForLastSeconds<true>(1);
     }
     return 0.0;
 }
 
 double TPoolInfo::GetElapsed(i16 threadIdx) const {
     if ((size_t)threadIdx < ThreadInfo.size()) {
-        return ThreadInfo[threadIdx].ElapsedUs.GetAvgPart();
+        return ThreadInfo[threadIdx].ElapsedCpu.GetAvgPart();
     }
     return 0.0;
 }
 
 double TPoolInfo::GetSharedElapsed(i16 sharedThreadIdx) const {
     if ((size_t)sharedThreadIdx < SharedInfo.size()) {
-        return SharedInfo[sharedThreadIdx].ElapsedUs.GetAvgPart();
+        return SharedInfo[sharedThreadIdx].ElapsedCpu.GetAvgPart();
     }
     return 0.0;
 }
 
 double TPoolInfo::GetLastSecondElapsed(i16 threadIdx) const {
     if ((size_t)threadIdx < ThreadInfo.size()) {
-        return ThreadInfo[threadIdx].ElapsedUs.GetAvgPartForLastSeconds(1);
+        return ThreadInfo[threadIdx].ElapsedCpu.GetAvgPartForLastSeconds<true>(1);
     }
     return 0.0;
 }
 
 double TPoolInfo::GetLastSecondSharedElapsed(i16 sharedThreadIdx) const {
     if ((size_t)sharedThreadIdx < SharedInfo.size()) {
-        return SharedInfo[sharedThreadIdx].ElapsedUs.GetAvgPartForLastSeconds(1);
+        return SharedInfo[sharedThreadIdx].ElapsedCpu.GetAvgPartForLastSeconds<true>(1);
     }
     return 0.0;
 }
@@ -78,10 +78,10 @@ TCpuConsumption TPoolInfo::PullStats(ui64 ts) {
         TThreadInfo &threadInfo = ThreadInfo[threadIdx];
         TCpuConsumption cpuConsumption = Pool->GetThreadCpuConsumption(threadIdx);
         acc.Add(cpuConsumption);
-        threadInfo.ElapsedUs.Register(ts, cpuConsumption.ElapsedUs);
-        LWPROBE(SavedValues, Pool->PoolId, Pool->GetName(), "elapsed", UNROLL_HISTORY(threadInfo.ElapsedUs.History));
-        threadInfo.CpuUs.Register(ts, cpuConsumption.CpuUs);
-        LWPROBE(SavedValues, Pool->PoolId, Pool->GetName(), "cpu", UNROLL_HISTORY(threadInfo.CpuUs.History));
+        threadInfo.ElapsedCpu.Register(ts, cpuConsumption.ElapsedUs / 1'000'000.0);
+        LWPROBE_WITH_TRACE(SavedValues, Pool->PoolId, Pool->GetName(), "elapsed", UNROLL_HISTORY(threadInfo.ElapsedCpu.History));
+        threadInfo.UsedCpu.Register(ts, cpuConsumption.CpuUs / 1'000'000.0);
+        LWPROBE_WITH_TRACE(SavedValues, Pool->PoolId, Pool->GetName(), "cpu", UNROLL_HISTORY(threadInfo.UsedCpu.History));
     }
     TVector<TExecutorThreadStats> sharedStats;
     if (Shared) {
@@ -91,24 +91,25 @@ TCpuConsumption TPoolInfo::PullStats(ui64 ts) {
     for (ui32 sharedIdx = 0; sharedIdx < SharedInfo.size(); ++sharedIdx) {
         auto stat = sharedStats[sharedIdx];
         TCpuConsumption sharedConsumption{
+            static_cast<float>(stat.CpuUs),
             Ts2Us(stat.SafeElapsedTicks),
-            static_cast<double>(stat.CpuUs),
             stat.NotEnoughCpuExecutions
         };
         acc.Add(sharedConsumption);
-        SharedInfo[sharedIdx].ElapsedUs.Register(ts, sharedConsumption.ElapsedUs);
-        LWPROBE(SavedValues, Pool->PoolId, Pool->GetName(), "elapsed", UNROLL_HISTORY(SharedInfo[sharedIdx].ElapsedUs.History));
-        SharedInfo[sharedIdx].CpuUs.Register(ts, sharedConsumption.CpuUs);
-        LWPROBE(SavedValues, Pool->PoolId, Pool->GetName(), "cpu", UNROLL_HISTORY(SharedInfo[sharedIdx].CpuUs.History));
+        SharedInfo[sharedIdx].ElapsedCpu.Register(ts, sharedConsumption.ElapsedUs / 1'000'000.0);
+        LWPROBE_WITH_TRACE(SavedValues, Pool->PoolId, Pool->GetName(), "elapsed", UNROLL_HISTORY(SharedInfo[sharedIdx].ElapsedCpu.History));
+        SharedInfo[sharedIdx].UsedCpu.Register(ts, sharedConsumption.CpuUs / 1'000'000.0);
+        LWPROBE_WITH_TRACE(SavedValues, Pool->PoolId, Pool->GetName(), "cpu", UNROLL_HISTORY(SharedInfo[sharedIdx].UsedCpu.History));
     }
 
-    CpuUs.Register(ts, acc.CpuUs);
-    MaxCpuUs.store(CpuUs.GetMax() / 1'000'000, std::memory_order_relaxed);
-    MinCpuUs.store(CpuUs.GetMin() / 1'000'000, std::memory_order_relaxed);
-    AvgCpuUs.store(CpuUs.GetAvgPart() / 1'000'000, std::memory_order_relaxed);
-    ElapsedUs.Register(ts, acc.ElapsedUs);
-    MaxElapsedUs.store(ElapsedUs.GetMax() / 1'000'000, std::memory_order_relaxed);
-    MinElapsedUs.store(ElapsedUs.GetMin() / 1'000'000, std::memory_order_relaxed);
+    UsedCpu.Register(ts, acc.CpuUs / 1'000'000.0);
+    MaxUsedCpu.store(UsedCpu.GetMax(), std::memory_order_relaxed);
+    MinUsedCpu.store(UsedCpu.GetMin(), std::memory_order_relaxed);
+    AvgUsedCpu.store(UsedCpu.GetAvgPart(), std::memory_order_relaxed);
+    ElapsedCpu.Register(ts, acc.ElapsedUs / 1'000'000.0);
+    MaxElapsedCpu.store(ElapsedCpu.GetMax(), std::memory_order_relaxed);
+    MinElapsedCpu.store(ElapsedCpu.GetMin(), std::memory_order_relaxed);
+    AvgElapsedCpu.store(ElapsedCpu.GetAvgPart(), std::memory_order_relaxed);
     NewNotEnoughCpuExecutions = acc.NotEnoughCpuExecutions - NotEnoughCpuExecutions;
     NotEnoughCpuExecutions = acc.NotEnoughCpuExecutions;
     if (WaitingStats && BasicPool) {

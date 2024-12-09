@@ -24,12 +24,12 @@ namespace NActors {
         ui64 ReturnedHalfThreadByStarvedState = 0;
         ui64 ReturnedHalfThreadByOtherHoggishState = 0;
 
-        float MaxCpuUs = 0.0;
-        float MinCpuUs = 0.0;
-        float AvgCpuUs = 0.0;
-        float MaxElapsedUs = 0.0;
-        float MinElapsedUs = 0.0;
-        float AvgElapsedUs = 0.0;
+        float MaxUsedCpu = 0.0;
+        float MinUsedCpu = 0.0;
+        float AvgUsedCpu = 0.0;
+        float MaxElapsedCpu = 0.0;
+        float MinElapsedCpu = 0.0;
+        float AvgElapsedCpu = 0.0;
         i16 PotentialMaxThreadCount = 0;
         bool IsNeedy = false;
         bool IsStarved = false;
@@ -39,13 +39,13 @@ namespace NActors {
     };
 
     struct THarmonizerStats {
-        i64 MaxCpuUs = 0.0;
-        i64 MinCpuUs = 0.0;
-        i64 MaxElapsedUs = 0.0;
-        i64 MinElapsedUs = 0.0;
+        float MaxUsedCpu = 0.0;
+        float MinUsedCpu = 0.0;
+        float MaxElapsedCpu = 0.0;
+        float MinElapsedCpu = 0.0;
 
-        double AvgAwakeningTimeUs = 0;
-        double AvgWakingUpTimeUs = 0;
+        float AvgAwakeningTimeUs = 0;
+        float AvgWakingUpTimeUs = 0;
 
         TString ToString() const;
     };

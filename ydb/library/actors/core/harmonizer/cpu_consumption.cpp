@@ -36,7 +36,7 @@ namespace {
             poolConsumption->LastSecondElapsed += threadLastSecondElapsed;
             poolConsumption->Cpu += threadCpu;
             poolConsumption->LastSecondCpu += threadLastSecondCpu;
-            LWPROBE(HarmonizeCheckPoolByThread, pool.Pool->PoolId, pool.Pool->GetName(), threadIdx, threadElapsed, threadCpu, threadLastSecondElapsed, threadLastSecondCpu);
+            LWPROBE_WITH_DEBUG(HarmonizeCheckPoolByThread, pool.Pool->PoolId, pool.Pool->GetName(), threadIdx, threadElapsed, threadCpu, threadLastSecondElapsed, threadLastSecondCpu);
         }
         for (ui32 sharedIdx = 0; sharedIdx < pool.SharedInfo.size(); ++sharedIdx) {
             float sharedElapsed = Rescale(pool.GetSharedElapsed(sharedIdx));
@@ -47,7 +47,7 @@ namespace {
             poolConsumption->LastSecondElapsed += sharedLastSecondElapsed;
             poolConsumption->Cpu += sharedCpu;
             poolConsumption->LastSecondCpu += sharedLastSecondCpu;
-            LWPROBE(HarmonizeCheckPoolByThread, pool.Pool->PoolId, pool.Pool->GetName(), -1 - sharedIdx, sharedElapsed, sharedCpu, sharedLastSecondElapsed, sharedLastSecondCpu);
+            LWPROBE_WITH_DEBUG(HarmonizeCheckPoolByThread, pool.Pool->PoolId, pool.Pool->GetName(), -1 - sharedIdx, sharedElapsed, sharedCpu, sharedLastSecondElapsed, sharedLastSecondCpu);
         }
     }
 
@@ -165,7 +165,7 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
     if (Overbooked < 0) {
         IsStarvedPresent = false;
     }
-    HARMONIZER_DEBUG_PRINT("IsStarvedPresent", IsStarvedPresent, "Budget", Budget, "BudgetInt", BudgetInt, "Overbooked", Overbooked, "TotalCores", TotalCores, "Elapsed", Elapsed, "Cpu", Cpu);
+    HARMONIZER_DEBUG_PRINT("IsStarvedPresent", IsStarvedPresent, "Budget", Budget, "BudgetInt", BudgetInt, "Overbooked", Overbooked, "TotalCores", TotalCores, "Elapsed", Elapsed, "Cpu", Cpu, "LastSecondElapsed", LastSecondElapsed, "LastSecondCpu", LastSecondCpu);
 }
 
 } // namespace NActors

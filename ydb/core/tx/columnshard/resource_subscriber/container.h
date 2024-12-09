@@ -10,6 +10,10 @@ private:
     std::optional<T> Value;
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
+    TResourceContainer(T&& value)
+        : Value(std::move(value)) {
+    }
+
 public:
     const T& GetValue() const {
         AFL_VERIFY(Value);
@@ -48,6 +52,10 @@ public:
         if (!Value) {
             AFL_VERIFY(!ResourcesGuard);
         }
+    }
+
+    static TResourceContainer BuildForTest(T&& value) {
+        return TResourceContainer(std::move(value));
     }
 };
 }   // namespace NKikimr::NOlap::NResourceBroker::NSubscribe

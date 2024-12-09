@@ -18,12 +18,12 @@ public:
     TPortionsIndex(const TGranuleMeta& owner, const NColumnShard::TPortionsIndexCounters& counters)
         : Owner(owner)
     {
-
+        Y_UNUSED(Owner);
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
         AFL_VERIFY(p);
-        AFL_VERIFY(Portions.emplace(p->GetPortionId(), p));
+        AFL_VERIFY(Portions.emplace(p->GetPortionId(), p).second);
     }
     void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
         AFL_VERIFY(p);

@@ -484,10 +484,10 @@ TConclusionStatus FillTtlExpressionImpl(MutableDateTypeColumn&& mutable_date_typ
 TConclusionStatus FillLegacyTtlMode(
     Ydb::Table::TtlSettings& out, const TString& column, const NKikimrSchemeOp::TTTLSettings::EUnit unit, const ui32 expireAfterSeconds) {
     return FillTtlExpressionImpl(
-        [out]() mutable {
+        [&out]() mutable {
             return out.mutable_date_type_column();
         },
-        [out]() mutable {
+        [&out]() mutable {
             return out.mutable_value_since_unix_epoch();
         },
         column, unit, expireAfterSeconds);

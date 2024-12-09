@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
             Ydb::Topic::StreamWriteMessage::FromServer resp;
 
             req.mutable_init_request()->set_path("topic2");
-            if (!producerId.Empty()) {
+            if (!producerId.empty()) {
                 req.mutable_init_request()->set_producer_id(producerId);
                 req.mutable_init_request()->set_message_group_id(producerId);
             }

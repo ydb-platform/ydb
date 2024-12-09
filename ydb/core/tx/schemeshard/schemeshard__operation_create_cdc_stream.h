@@ -22,6 +22,14 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     bool acceptExisted,
     bool restore = false);
 
+void DoCreateStreamImpl(
+    TVector<ISubOperation::TPtr>& result,
+    const NKikimrSchemeOp::TCreateCdcStream& op,
+    const TOperationId& opId,
+    const TPath& tablePath,
+    const bool acceptExisted,
+    const bool initialScan);
+
 void DoCreateStream(
     TVector<ISubOperation::TPtr>& result,
     const NKikimrSchemeOp::TCreateCdcStream& op,

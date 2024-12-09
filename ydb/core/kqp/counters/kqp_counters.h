@@ -11,7 +11,7 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tx/tx_proxy/mon.h>
 
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -408,6 +408,28 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorFails;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
+
+    // Sink write counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsShardResolve;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ForwardActorsCount;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorImmediateWrites;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorImmediateWritesRetries;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorPrepareWrites;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorFlushes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorImmediateCommits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorDistributedCommits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorRollbacks;
+
+    NMonitoring::THistogramPtr WriteActorWritesSizeHistogram;
+    NMonitoring::THistogramPtr WriteActorWritesOperationsHistogram;
+    NMonitoring::THistogramPtr WriteActorWritesLatencyHistogram;
+
+    NMonitoring::THistogramPtr ForwardActorWritesSizeHistogram;
+    NMonitoring::THistogramPtr ForwardActorWritesLatencyHistogram;
 
     // Scheduler signals
     ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerThrottled;

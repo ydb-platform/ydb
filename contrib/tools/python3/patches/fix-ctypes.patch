@@ -1,0 +1,11 @@
+--- contrib/tools/python3/Lib/ctypes/__init__.py	(index)
++++ contrib/tools/python3/Lib/ctypes/__init__.py	(working tree)
+@@ -345,7 +345,7 @@ class CDLL(object):
+                  use_errno=False,
+                  use_last_error=False,
+                  winmode=None):
+-        if name:
++        if name and not isinstance(name, dict):
+             name = _os.fspath(name)
+         self._name = name
+         flags = self._func_flags_

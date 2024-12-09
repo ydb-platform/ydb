@@ -5,7 +5,7 @@
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 #include <ydb/core/protos/index_builder.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
                              std::unique_ptr<TEvDataShard::TEvReshuffleKMeansRequest> & ev, size_t dims = 2,
                              VectorIndexSettings::VectorType type = VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                             VectorIndexSettings::Distance metric = VectorIndexSettings::DISTANCE_COSINE)
+                             VectorIndexSettings::Metric metric = VectorIndexSettings::DISTANCE_COSINE)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
             VectorIndexSettings settings;
             settings.set_vector_dimension(dims);
             settings.set_vector_type(type);
-            settings.set_distance(metric);
+            settings.set_metric(metric);
             *rec.MutableSettings() = settings;
 
             rec.SetUpload(NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING);
@@ -84,9 +84,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         }
     }
 
-    static TString DoReshuffleKMeans(
-        Tests::TServer::TPtr server, TActorId sender, ui32 parent, const std::vector<TString>& level,
-        NKikimrTxDataShard::TEvLocalKMeansRequest::EState upload, VectorIndexSettings::VectorType type, auto metric)
+    static TString DoReshuffleKMeans(Tests::TServer::TPtr server, TActorId sender, ui32 parent,
+                                     const std::vector<TString>& level,
+                                     NKikimrTxDataShard::TEvLocalKMeansRequest::EState upload,
+                                     VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -115,11 +116,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 VectorIndexSettings settings;
                 settings.set_vector_dimension(2);
                 settings.set_vector_type(type);
-                if constexpr (std::is_same_v<decltype(metric), VectorIndexSettings::Distance>) {
-                    settings.set_distance(metric);
-                } else {
-                    settings.set_similarity(metric);
-                }
+                settings.set_metric(metric);
                 *rec.MutableSettings() = settings;
 
                 rec.SetUpload(upload);
@@ -182,7 +179,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     }
 
     static void CreateBuildTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options,
-                               const char* name)
+                                 const char* name)
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
@@ -257,7 +254,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
             auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
 
             DoBadRequest(server, sender, ev, 2, VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                         VectorIndexSettings::DISTANCE_UNSPECIFIED);
+                         VectorIndexSettings::METRIC_UNSPECIFIED);
         }
         // TODO(mbkkt) For now all build_index, sample_k, build_columns, local_kmeans doesn't really check this
         // {
@@ -341,7 +338,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                                               "__ydb_parent = 2, key = 5, data = five\n");
             recreate();
         }
-        for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE})
+        for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE,
+                                VectorIndexSettings::DISTANCE_COSINE})
         {
             std::vector<TString> level = {
                 "II\3",
@@ -349,20 +347,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
             auto posting = DoReshuffleKMeans(server, sender, 0, level,
                                              NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING,
                                              VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, data = one\n"
-                                              "__ydb_parent = 1, key = 2, data = two\n"
-                                              "__ydb_parent = 1, key = 3, data = three\n"
-                                              "__ydb_parent = 1, key = 4, data = four\n"
-                                              "__ydb_parent = 1, key = 5, data = five\n");
-            recreate();
-        }
-        {
-            std::vector<TString> level = {
-                "II\3",
-            };
-            auto posting = DoReshuffleKMeans(
-                server, sender, 0, level, NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING,
-                VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, data = one\n"
                                               "__ydb_parent = 1, key = 2, data = two\n"
                                               "__ydb_parent = 1, key = 3, data = three\n"
@@ -439,7 +423,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                                               "__ydb_parent = 2, key = 5, embedding = \x75\x75\3, data = five\n");
             recreate();
         }
-        for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE})
+        for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE,
+                                VectorIndexSettings::DISTANCE_COSINE})
         {
             std::vector<TString> level = {
                 "II\3",
@@ -447,20 +432,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
             auto posting = DoReshuffleKMeans(server, sender, 0, level,
                                              NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD,
                                              VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\3, data = one\n"
-                                              "__ydb_parent = 1, key = 2, embedding = \x31\x31\3, data = two\n"
-                                              "__ydb_parent = 1, key = 3, embedding = \x32\x32\3, data = three\n"
-                                              "__ydb_parent = 1, key = 4, embedding = \x65\x65\3, data = four\n"
-                                              "__ydb_parent = 1, key = 5, embedding = \x75\x75\3, data = five\n");
-            recreate();
-        }
-        {
-            std::vector<TString> level = {
-                "II\3",
-            };
-            auto posting = DoReshuffleKMeans(
-                server, sender, 0, level, NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD,
-                VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\3, data = one\n"
                                               "__ydb_parent = 1, key = 2, embedding = \x31\x31\3, data = two\n"
                                               "__ydb_parent = 1, key = 3, embedding = \x32\x32\3, data = three\n"
@@ -539,7 +510,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                                               "__ydb_parent = 42, key = 5, data = five\n");
             recreate();
         }
-        for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE})
+        for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE,
+                                VectorIndexSettings::DISTANCE_COSINE})
         {
             std::vector<TString> level = {
                 "II\3",
@@ -547,20 +519,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
             auto posting = DoReshuffleKMeans(server, sender, 40, level,
                                              NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
                                              VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, data = one\n"
-                                              "__ydb_parent = 41, key = 2, data = two\n"
-                                              "__ydb_parent = 41, key = 3, data = three\n"
-                                              "__ydb_parent = 41, key = 4, data = four\n"
-                                              "__ydb_parent = 41, key = 5, data = five\n");
-            recreate();
-        }
-        {
-            std::vector<TString> level = {
-                "II\3",
-            };
-            auto posting = DoReshuffleKMeans(
-                server, sender, 40, level, NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
-                VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, data = one\n"
                                               "__ydb_parent = 41, key = 2, data = two\n"
                                               "__ydb_parent = 41, key = 3, data = three\n"
@@ -639,7 +597,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                                               "__ydb_parent = 42, key = 5, embedding = \x75\x75\3, data = five\n");
             recreate();
         }
-        for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE})
+        for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE,
+                                VectorIndexSettings::DISTANCE_COSINE})
         {
             std::vector<TString> level = {
                 "II\3",
@@ -647,20 +606,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
             auto posting = DoReshuffleKMeans(server, sender, 40, level,
                                              NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
                                              VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\3, data = one\n"
-                                              "__ydb_parent = 41, key = 2, embedding = \x31\x31\3, data = two\n"
-                                              "__ydb_parent = 41, key = 3, embedding = \x32\x32\3, data = three\n"
-                                              "__ydb_parent = 41, key = 4, embedding = \x65\x65\3, data = four\n"
-                                              "__ydb_parent = 41, key = 5, embedding = \x75\x75\3, data = five\n");
-            recreate();
-        }
-        {
-            std::vector<TString> level = {
-                "II\3",
-            };
-            auto posting = DoReshuffleKMeans(
-                server, sender, 40, level, NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
-                VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\3, data = one\n"
                                               "__ydb_parent = 41, key = 2, embedding = \x31\x31\3, data = two\n"
                                               "__ydb_parent = 41, key = 3, embedding = \x32\x32\3, data = three\n"

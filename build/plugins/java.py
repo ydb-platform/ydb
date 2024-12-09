@@ -68,13 +68,12 @@ def onjava_module(unit, *args):
         'MANAGED_PEERS': '${MANAGED_PEERS}',
         'MANAGED_PEERS_CLOSURE': '${MANAGED_PEERS_CLOSURE}',
         'NON_NAMAGEABLE_PEERS': '${NON_NAMAGEABLE_PEERS}',
-        'TEST_CLASSPATH_MANAGED': '${TEST_CLASSPATH_MANAGED}',
         'EXCLUDE': extract_macro_calls(unit, 'EXCLUDE_VALUE', args_delim),
         'JAVA_SRCS': extract_macro_calls(unit, 'JAVA_SRCS_VALUE', args_delim),
         'JAVAC_FLAGS': extract_macro_calls(unit, 'JAVAC_FLAGS_VALUE', args_delim),
         'ANNOTATION_PROCESSOR': extract_macro_calls(unit, 'ANNOTATION_PROCESSOR_VALUE', args_delim),
-        'EXTERNAL_JAR': extract_macro_calls(unit, 'EXTERNAL_JAR_VALUE', args_delim),
-        'MAVEN_GROUP_ID': extract_macro_calls(unit, 'MAVEN_GROUP_ID_VALUE', args_delim),
+        'EXTERNAL_JAR': [],
+        'MAVEN_GROUP_ID': [],
         'JAR_INCLUDE_FILTER': extract_macro_calls(unit, 'JAR_INCLUDE_FILTER_VALUE', args_delim),
         'JAR_EXCLUDE_FILTER': extract_macro_calls(unit, 'JAR_EXCLUDE_FILTER_VALUE', args_delim),
         # TODO remove when java test dart is in prod
@@ -406,16 +405,19 @@ def _maven_coords_for_project(unit, project_dir):
     if os.path.exists(pom_path):
         import xml.etree.ElementTree as et
 
-        with open(pom_path, 'rb') as f:
-            root = et.fromstring(f.read())
-        for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
-            artifact = root.find(xpath)
-            if artifact is not None:
-                artifact = artifact.text
-                if a != artifact and a.startswith(artifact):
-                    c = a[len(artifact) :].lstrip('-_')
-                    a = artifact
-                break
+        try:
+            with open(pom_path, 'rb') as f:
+                root = et.fromstring(f.read())
+            for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
+                artifact = root.find(xpath)
+                if artifact is not None:
+                    artifact = artifact.text
+                    if a != artifact and a.startswith(artifact):
+                        c = a[len(artifact) :].lstrip('-_')
+                        a = artifact
+                    break
+        except Exception as e:
+            raise Exception(f"Can't parse {pom_path}: {str(e)}") from None
 
     return '{}:{}:{}:{}'.format(g, a, v, c)
 

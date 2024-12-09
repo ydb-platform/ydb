@@ -70,8 +70,6 @@ private:
 
     DECLARE_LEAKY_SINGLETON_FRIEND()
 
-    void Initialize();
-
     class TImpl;
     const TIntrusivePtr<TImpl> Impl_;
 };

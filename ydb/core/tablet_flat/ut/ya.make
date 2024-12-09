@@ -3,11 +3,9 @@ UNITTEST_FOR(ydb/core/tablet_flat)
 FORK_SUBTESTS()
 
 IF (WITH_VALGRIND)
-    TIMEOUT(2400)
     TAG(ya:fat)
     SIZE(LARGE)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -26,6 +24,8 @@ SRCS(
     flat_test_db.cpp
     flat_test_db_helpers.h
     shared_cache_s3fifo_ut.cpp
+    shared_cache_clock_pro_ut.cpp
+    shared_cache_switchable_ut.cpp
     shared_handle_ut.cpp
     ut_btree_index_nodes.cpp
     ut_btree_index_iter_charge.cpp
@@ -67,7 +67,7 @@ PEERDIR(
     ydb/core/tablet_flat/test/libs/exec
     ydb/core/tablet_flat/test/libs/table
     ydb/core/testlib/default
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 END()

@@ -90,7 +90,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.d > item.e And item.e > item.a And item.e < item.b And item.b > item.c"
+                                                "Predicate": "item.d > item.e AND item.e > item.a AND item.e < item.b AND item.b > item.c"
                                             }
                                         ],
                                         "PlanNodeId": 2,

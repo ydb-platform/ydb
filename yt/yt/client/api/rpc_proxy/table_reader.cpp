@@ -22,7 +22,7 @@ public:
     TTableReader(
         IAsyncZeroCopyInputStreamPtr underlying,
         i64 startRowIndex,
-        const std::vector<TString>& omittedInaccessibleColumns,
+        const std::vector<std::string>& omittedInaccessibleColumns,
         TTableSchemaPtr schema,
         const NProto::TRowsetStatistics& statistics)
         : TRowBatchReader(std::move(underlying), /*isStreamWithStatistics*/ true)
@@ -57,7 +57,7 @@ public:
         return TableSchema_;
     }
 
-    const std::vector<TString>& GetOmittedInaccessibleColumns() const override
+    const std::vector<std::string>& GetOmittedInaccessibleColumns() const override
     {
         return OmittedInaccessibleColumns_;
     }
@@ -65,7 +65,7 @@ public:
 private:
     const i64 StartRowIndex_;
     const TTableSchemaPtr TableSchema_;
-    const std::vector<TString> OmittedInaccessibleColumns_;
+    const std::vector<std::string> OmittedInaccessibleColumns_;
 
     NChunkClient::NProto::TDataStatistics DataStatistics_;
     i64 TotalRowCount_;
@@ -85,15 +85,11 @@ TFuture<ITableReaderPtr> CreateTableReader(IAsyncZeroCopyInputStreamPtr inputStr
             THROW_ERROR_EXCEPTION("Failed to deserialize table reader meta information");
         }
 
-        i64 startRowIndex = meta.start_row_index();
-        auto omittedInaccessibleColumns = FromProto<std::vector<TString>>(
-            meta.omitted_inaccessible_columns());
-        auto schema = NYT::FromProto<TTableSchemaPtr>(meta.schema());
         return New<TTableReader>(
             inputStream,
-            startRowIndex,
-            std::move(omittedInaccessibleColumns),
-            std::move(schema),
+            meta.start_row_index(),
+            FromProto<std::vector<std::string>>(meta.omitted_inaccessible_columns()),
+             NYT::FromProto<TTableSchemaPtr>(meta.schema()),
             meta.statistics());
     })).As<ITableReaderPtr>();
 }

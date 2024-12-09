@@ -16,7 +16,7 @@ Schema of the `episodes` table:
 
 Let's build a plan for this query. You can do this via either UI or {{ ydb-short-name }} CLI:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - {{ ydb-short-name }} CLI
 
@@ -67,7 +67,7 @@ Please note that this example uses [synchronous secondary index](../concepts/_in
 
 Let's build the query plan using the secondary index `title_index`. Secondary indexes to be used need to be explicitly specified in the `VIEW` clause.
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - {{ ydb-short-name }} CLI
 

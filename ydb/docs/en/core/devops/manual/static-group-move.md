@@ -1,10 +1,10 @@
 # Moving a static group
 
-To decommission a {{ ydb-short-name }} cluster host that accommodates a part of a [static group](../../deploy/configuration/config.md#blob_storage_config), you need to move the group to another host.
+To decommission a {{ ydb-short-name }} cluster host that accommodates a part of a [static group](../../reference/configuration/index.md#blob_storage_config), you need to move the group to another host.
 
 {% include [warning-configuration-error](../_includes/warning-configuration-error.md) %}
 
-As an example, let's take a {{ ydb-short-name }} cluster where you set up and launched a [static node](../../deploy/configuration/config.md#hosts) on a host with `node_id:1`. This node serves a part of the static group.
+As an example, let's take a {{ ydb-short-name }} cluster where you set up and launched a [static node](../../reference/configuration/index.md#hosts) on a host with `node_id:1`. This node serves a part of the static group.
 
 Fragment of the static group configuration:
 

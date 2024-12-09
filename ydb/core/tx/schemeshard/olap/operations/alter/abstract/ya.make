@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/core/scheme
     ydb/library/accessor
     ydb/core/protos

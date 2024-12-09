@@ -1,13 +1,11 @@
 #pragma once
 
-#include "actorsystem.h"
 #include "event.h"
-#include "executor_thread.h"
 #include "mailbox.h"
 #include "monotonic.h"
-#include "thread_context.h"
 
 #include <ydb/library/actors/actor_type/indexes.h>
+#include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/util/local_process_key.h>
 
 #include <util/system/tls.h>
@@ -16,7 +14,7 @@
 namespace NActors {
     class TActorSystem;
     class TMailboxTable;
-    struct TMailboxHeader;
+    class TMailbox;
 
     class TGenericExecutorThread;
     class IActor;
@@ -45,12 +43,12 @@ namespace NActors {
 
     struct TActivationContext {
     public:
-        TMailboxHeader& Mailbox;
+        TMailbox& Mailbox;
         TGenericExecutorThread& ExecutorThread;
         const NHPTimer::STime EventStart;
 
     protected:
-        explicit TActivationContext(TMailboxHeader& mailbox, TGenericExecutorThread& executorThread, NHPTimer::STime eventStart)
+        explicit TActivationContext(TMailbox& mailbox, TGenericExecutorThread& executorThread, NHPTimer::STime eventStart)
             : Mailbox(mailbox)
             , ExecutorThread(executorThread)
             , EventStart(eventStart)
@@ -138,7 +136,7 @@ namespace NActors {
     struct TActorContext: public TActivationContext {
         const TActorId SelfID;
         using TEventFlags = IEventHandle::TEventFlags;
-        explicit TActorContext(TMailboxHeader& mailbox, TGenericExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
+        explicit TActorContext(TMailbox& mailbox, TGenericExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
             : TActivationContext(mailbox, executorThread, eventStart)
             , SelfID(selfID)
         {

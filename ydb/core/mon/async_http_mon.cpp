@@ -320,7 +320,7 @@ public:
         }
 
         response << "Content-Type: " << contentType << "\r\n";
-        response << "Content-Length: " << body.Size() << "\r\n";
+        response << "Content-Length: " << body.size() << "\r\n";
         response << "\r\n";
         response << body;
         ReplyWith(request->CreateResponseString(response));

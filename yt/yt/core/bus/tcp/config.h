@@ -20,6 +20,9 @@ public:
     int TosLevel;
     THashMap<std::string, int> NetworkToTosLevel;
 
+    int MinMultiplexingParallelism;
+    int MaxMultiplexingParallelism;
+
     REGISTER_YSON_STRUCT(TMultiplexingBandConfig);
 
     static void Register(TRegistrar registrar);

@@ -11,7 +11,8 @@ import yaml
 from google.protobuf.text_format import Parse
 from importlib_resources import read_binary
 
-import ydb.tests.library.common.yatest_common as yatest_common
+import yatest
+
 from ydb.core.protos import config_pb2
 from ydb.tests.library.common.types import Erasure
 
@@ -85,13 +86,9 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
     return yaml_dict
 
 
-def _read_file(filename):
-    with open(filename, "r") as f:
-        return f.read()
-
-
 def _load_yaml_config(filename):
-    return yaml.safe_load(_read_file(filename))
+    with open(filename, "r") as f:
+        return yaml.safe_load(f)
 
 
 def _use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks):
@@ -112,7 +109,6 @@ class KikimrConfigGenerator(object):
             nodes=None,
             additional_log_configs=None,
             port_allocator=None,
-            load_udfs=False,
             udfs_path=None,
             output_path=None,
             enable_pq=True,
@@ -157,6 +153,8 @@ class KikimrConfigGenerator(object):
             default_user_sid=None,
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
+            kafka_api_port=None,
+            metadata_section=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -177,7 +175,7 @@ class KikimrConfigGenerator(object):
         self.__grpc_tls_cert = None
         self._pdisks_info = []
         if self.__grpc_ssl_enable:
-            self.__grpc_tls_data_path = grpc_tls_data_path or yatest_common.output_path()
+            self.__grpc_tls_data_path = grpc_tls_data_path or yatest.common.output_path()
             cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
             self.__grpc_tls_ca = cert_pem
             self.__grpc_tls_key = key_pem
@@ -203,7 +201,6 @@ class KikimrConfigGenerator(object):
         self.static_erasure = erasure
         self.domain_name = domain_name
         self.__number_of_pdisks_per_node = 1 + len(dynamic_pdisks)
-        self.__load_udfs = load_udfs
         self.__udfs_path = udfs_path
         self._dcs = [1]
         if erasure == Erasure.MIRROR_3_DC:
@@ -222,7 +219,16 @@ class KikimrConfigGenerator(object):
 
         self.__dynamic_pdisks = dynamic_pdisks
 
-        self.__output_path = output_path or yatest_common.output_path()
+        try:
+            test_path = yatest.common.test_output_path()
+        except Exception:
+            test_path = os.path.abspath("kikimr_working_dir")
+
+        self.__working_dir = output_path or test_path
+
+        if not os.path.isdir(self.__working_dir):
+            os.makedirs(self.__working_dir)
+
         self.node_kind = node_kind
         self.yq_tenant = yq_tenant
         self.dc_mapping = dc_mapping
@@ -279,8 +285,10 @@ class KikimrConfigGenerator(object):
         # NOTE(shmel1k@): change to 'true' after migration to YDS scheme
         self.yaml_config['sqs_config']['enable_sqs'] = enable_sqs
         self.yaml_config['pqcluster_discovery_config']['enabled'] = enable_pqcd
-        self.yaml_config["net_classifier_config"]["net_data_file_path"] = os.path.join(self.__output_path,
-                                                                                       'netData.tsv')
+        self.yaml_config["net_classifier_config"]["net_data_file_path"] = os.path.join(
+            self.__working_dir,
+            'netData.tsv',
+        )
         with open(self.yaml_config["net_classifier_config"]["net_data_file_path"], "w") as net_data_file:
             net_data_file.write("")
 
@@ -418,6 +426,20 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
 
+        if kafka_api_port is not None:
+            kafka_proxy_config = dict()
+            kafka_proxy_config["enable_kafka_proxy"] = True
+            kafka_proxy_config["listening_port"] = kafka_api_port
+
+            self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
+
+        self.full_config = dict()
+        if metadata_section:
+            self.full_config["metadata"] = metadata_section
+            self.full_config["config"] = self.yaml_config
+        else:
+            self.full_config = self.yaml_config
+
     @property
     def pdisks_info(self):
         return self._pdisks_info
@@ -465,37 +487,13 @@ class KikimrConfigGenerator(object):
         return self.naming_config.NameserviceConfig
 
     def __set_enable_metering(self):
-        def ensure_path_exists(path):
-            if not os.path.isdir(path):
-                os.makedirs(path)
-            return path
-
-        def get_cwd_for_test(output_path):
-            test_name = yatest_common.context.test_name or ""
-            test_name = test_name.replace(':', '_')
-            return os.path.join(output_path, test_name)
-
-        cwd = get_cwd_for_test(self.__output_path)
-        ensure_path_exists(cwd)
-        metering_file_path = os.path.join(cwd, 'metering.txt')
+        metering_file_path = os.path.join(self.__working_dir, 'metering.txt')
         with open(metering_file_path, "w") as metering_file:
             metering_file.write('')
         self.yaml_config['metering_config'] = {'metering_file_path': metering_file_path}
 
     def __set_enable_audit_log(self):
-        def ensure_path_exists(path):
-            if not os.path.isdir(path):
-                os.makedirs(path)
-            return path
-
-        def get_cwd_for_test(output_path):
-            test_name = yatest_common.context.test_name or ""
-            test_name = test_name.replace(':', '_')
-            return os.path.join(output_path, test_name)
-
-        cwd = get_cwd_for_test(self.__output_path)
-        ensure_path_exists(cwd)
-        audit_file_path = os.path.join(cwd, 'audit.txt')
+        audit_file_path = os.path.join(self.__working_dir, 'audit.txt')
         with open(audit_file_path, "w") as audit_file:
             audit_file.write('')
         self.yaml_config['audit_config'] = dict(
@@ -517,8 +515,8 @@ class KikimrConfigGenerator(object):
         return self.yaml_config['sqs_config']['enable_sqs']
 
     @property
-    def output_path(self):
-        return self.__output_path
+    def working_dir(self):
+        return self.__working_dir
 
     def get_binary_path(self, node_id):
         binary_paths = self.__binary_paths
@@ -538,14 +536,17 @@ class KikimrConfigGenerator(object):
     def write_proto_configs(self, configs_path):
         self.write_tls_data()
         with open(os.path.join(configs_path, "config.yaml"), "w") as writer:
-            writer.write(yaml.safe_dump(self.yaml_config))
+            writer.write(yaml.safe_dump(self.full_config))
 
-    def clone_grpc_as_ext_endpoint(self, port):
+    def clone_grpc_as_ext_endpoint(self, port, endpoint_id=None):
         cur_grpc_config = copy.deepcopy(self.yaml_config['grpc_config'])
         if 'ext_endpoints' in cur_grpc_config:
             del cur_grpc_config['ext_endpoints']
 
         cur_grpc_config['port'] = port
+
+        if endpoint_id is not None:
+            cur_grpc_config['endpoint_id'] = endpoint_id
 
         if 'ext_endpoints' not in self.yaml_config['grpc_config']:
             self.yaml_config['grpc_config']['ext_endpoints'] = []
@@ -553,9 +554,9 @@ class KikimrConfigGenerator(object):
         self.yaml_config['grpc_config']['ext_endpoints'].append(cur_grpc_config)
 
     def get_yql_udfs_to_load(self):
-        if not self.__load_udfs:
+        if self.__udfs_path is None:
             return []
-        udfs_path = self.__udfs_path or yatest_common.build_path("yql/udfs")
+        udfs_path = self.__udfs_path
         result = []
         for dirpath, dnames, fnames in os.walk(udfs_path):
             is_loaded = False

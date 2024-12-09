@@ -6,19 +6,19 @@
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/public/lib/value/value.h>
 
-#include <ydb/library/yql/ast/yql_ast_escaping.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/utils/utf8.h>
+#include <yql/essentials/utils/utf8.h>
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
@@ -33,7 +33,7 @@
 #include <unordered_map>
 #include <regex>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -131,14 +131,20 @@ struct TSerializerCtx {
 };
 
 TString GetExprStr(const TExprBase& scalar, bool quoteStr = true) {
+    TMaybe<TString> literal = Nothing();
     if (auto maybeData = scalar.Maybe<TCoDataCtor>()) {
-        auto literal = TString(maybeData.Cast().Literal());
-        CollapseText(literal, 32);
+        literal = TString(maybeData.Cast().Literal());
+    } else if (auto maybeData = scalar.Maybe<TCoPgConst>()) {
+        literal = TString(maybeData.Cast().Value());
+    }
+
+    if (literal) {
+        CollapseText(*literal, 32);
 
         if (quoteStr) {
-            return TStringBuilder() << '"' << literal << '"';
+            return TStringBuilder() << '"' << *literal << '"';
         } else {
-            return literal;
+            return *literal;
         }
     }
 
@@ -443,7 +449,7 @@ private:
     }
 
     ui32 AddOperator(TQueryPlanNode& planNode, const TString& name, TOperator op) {
-        if (!planNode.TypeName.Empty()) {
+        if (!planNode.TypeName.empty()) {
             planNode.TypeName += "-" + name;
         } else {
             planNode.TypeName = name;
@@ -720,15 +726,17 @@ private:
             }
         }
         for (const auto& child : node->Children()) {
-            std::shared_ptr<TOptimizerStatistics> result;
             if (child->IsLambda()) {
-                auto lambda = TExprBase(child).Cast<TCoLambda>();
-                result = FindWrapStats(lambda.Body().Ptr(), dataSourceNode);
+                // support wide lambda as well
+                for (size_t bodyIndex = 1; bodyIndex < child->ChildrenSize(); ++bodyIndex) {
+                    if (auto result = FindWrapStats(child->ChildPtr(bodyIndex), dataSourceNode)) {
+                        return result;
+                    }
+                }
             } else {
-                result = FindWrapStats(child, dataSourceNode);
-            }
-            if (result) {
-                return result;
+                if (auto result = FindWrapStats(child, dataSourceNode)) {
+                    return result;
+                }
             }
         }
         return nullptr;
@@ -875,7 +883,7 @@ private:
             CurrentArgContext.stack.pop_back();
 
             /* is that collect stage? */
-            if (stagePlanNode.TypeName.Empty()) {
+            if (stagePlanNode.TypeName.empty()) {
                 if (expr.Cast<TDqStageBase>().Program().Body().Maybe<TCoArgument>()) {
                     stagePlanNode.TypeName = "Collect";
                 } else {
@@ -893,7 +901,7 @@ private:
         } else {
             Visit(expr.Ptr(),  planNode);
 
-            if (planNode.TypeName.Empty()) {
+            if (planNode.TypeName.empty()) {
                 planNode.TypeName = "Stage";
             }
         }
@@ -952,6 +960,8 @@ private:
             operatorId = Visit(maybeCondense.Cast(), planNode);
         } else if (auto maybeCombiner = TMaybeNode<TCoCombineCore>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
+        } else if (auto maybeBlockCombine = TMaybeNode<TCoBlockCombineHashed>(node)) {
+            operatorId = Visit(maybeBlockCombine.Cast(), planNode);
         } else if (auto maybeSort = TMaybeNode<TCoSort>(node)) {
             operatorId = Visit(maybeSort.Cast(), planNode);
         } else if (auto maybeTop = TMaybeNode<TCoTop>(node)) {
@@ -1009,21 +1019,24 @@ private:
                 auto pred = [](const TExprNode::TPtr& n) -> bool { 
                     if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false; 
                 };
-                if (auto maybeOlapFilter = FindNode(olapTable.Process().Body().Ptr(), pred)) {
-                    auto olapFilter = TExprBase(maybeOlapFilter).Cast<TKqpOlapFilter>();
+
+                if (auto maybeKqpOlapFilter = FindNode(olapTable.Process().Body().Ptr(), pred)) {
+                    auto kqpOlapFilter = TExprBase(maybeKqpOlapFilter).Cast<TKqpOlapFilter>();
 
                     TOperator op;
                     op.Properties["Name"] = "Filter";
-                    
-                    op.Properties["Predicate"] = OlapStr(olapFilter.Condition().Ptr());
+                    op.Properties["Predicate"] = OlapFilterStr(kqpOlapFilter);
+                    op.Properties["Pushdown"] = "True";
 
-                    AddOptimizerEstimates(op, olapFilter);
+                    AddOptimizerEstimates(op, kqpOlapFilter);
 
                     operatorId = AddOperator(planNode, "Filter", std::move(op));
                     inputIds.push_back(Visit(olapTable, planNode));
                 } else {
                     operatorId = Visit(olapTable, planNode);
                 }
+            } else if (TMaybeNode<TCoToFlow>(node)) {
+                // do nothing
             } else {
                 for (const auto& child : node->Children()) {
                     if(!child->IsLambda()) {
@@ -1048,30 +1061,42 @@ private:
         return inputIds;
     }
 
-    TString OlapStr(const TExprNode::TPtr& node) {
+    TString OlapFilterExpr(const TExprNode::TPtr& node) {
         TVector<TString> s;
-
         if (TMaybeNode<TKqpOlapNot>(node)) {
-            s.emplace_back("Not");
+            s.emplace_back("NOT");
         } else if (auto maybeList = TMaybeNode<TCoAtomList>(node)) {
             auto listPtr = maybeList.Cast().Ptr();
             size_t listSize = listPtr->Children().size();
             if (listSize == 3) {
                 THashMap<TString, TString> strComp = {
-                    {"eq", "=="}, 
-                    {"neq", "!="},
-                    {"lt", "<"},
-                    {"lte", "<="},
-                    {"gt", ">"},
-                    {"gte", ">="}
+                    {"eq", " == "},
+                    {"neq", " != "},
+                    {"lt", " < "},
+                    {"lte", " <= "},
+                    {"gt", " > "},
+                    {"gte", " >= "}
                 };
-                THashSet<TString> strRegexp = {
-                    "string_contains",
-                    "starts_with",
-                    "ends_with"
+                THashMap<TString, TString> strRegexp = {
+                    {"string_contains", "%s LIKE \"%%%s%%\""},
+                    {"starts_with", "%s LIKE \"%s%%\""},
+                    {"ends_with", "%s LIKE \"%%%s\""}
                 };
                 TString compSign = TString(listPtr->Child(0)->Content());
                 if (strComp.contains(compSign)) {
+                    TString attr = TString(listPtr->Child(1)->Content());
+                    TString value;
+                    if (listPtr->Child(2)->ChildrenSize() >= 1) {
+                        value = TString(listPtr->Child(2)->Child(0)->Content());
+                        if (TString(listPtr->Child(2)->Content()) == "String") {
+                            value = TStringBuilder() << '"' << value << '"';
+                        }
+                    } else if (listPtr->Child(2)->ChildrenSize() == 0 && listPtr->Child(2)->Content()) {
+                        value = TString(listPtr->Child(2)->Content());
+                    }
+                    
+                    return TStringBuilder() << attr << strComp[compSign] << value;
+                } else if (strRegexp.contains(compSign)) {
                     TString attr = TString(listPtr->Child(1)->Content());
                     TString value;
                     if (listPtr->Child(2)->ChildrenSize() >= 1) {
@@ -1080,15 +1105,13 @@ private:
                         value = TString(listPtr->Child(2)->Content());
                     }
                     
-                    return Sprintf("%s %s %s", attr.c_str(), strComp[compSign].c_str(), value.c_str());
-                } else if (strRegexp.contains(compSign)) {
-                    return compSign;
+                    return Sprintf(strRegexp[compSign].c_str(), attr.c_str(), value.c_str());
                 }
             }
         }
 
         for (const auto& child: node->Children()) {
-            auto childStr = OlapStr(child);
+            auto childStr = OlapFilterExpr(child);
             if (!childStr.empty()) {
                 s.push_back(std::move(childStr));
             }
@@ -1096,11 +1119,19 @@ private:
 
         TString delim = " ";
         if (TMaybeNode<TKqpOlapAnd>(node)) {
-            delim = " And ";
+            delim = " AND ";
         } else if (TMaybeNode<TKqpOlapOr>(node)) {
-            delim = " Or ";
+            delim = " OR ";
         } 
         return JoinStrings(s, delim);
+    }
+
+    TString OlapFilterStr(const TKqpOlapFilter& filter) {
+        auto result = OlapFilterExpr(filter.Condition().Ptr());
+        if (auto maybeInnerFilter = TMaybeNode<TKqpOlapFilter>(filter.Input().Ptr())) {
+            return TStringBuilder() << '(' << OlapFilterStr(maybeInnerFilter.Cast()) << ") AND (" << result << ')';
+        }
+        return result;
     }
 
     TVector<std::variant<ui32, TArgContext>> Visit(const TCoMap& map, TQueryPlanNode& planNode) {
@@ -1162,6 +1193,40 @@ private:
         op.Properties["Name"] = "Aggregate";
         op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
         op.Properties["Aggregation"] = NPlanUtils::PrettyExprStr(combiner.UpdateHandler());
+
+        return AddOperator(planNode, "Aggregate", std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TCoBlockCombineHashed& blockCombine, TQueryPlanNode& planNode) {
+
+        static const THashMap<TString, TString> aggregations = {
+            {"count", "COUNT"},
+            {"count_all", "COUNT"},
+            {"min", "MIN"},
+            {"max", "MAX"},
+            {"avg", "AVG"},
+            {"sum", "SUM"}
+        };
+
+        TOperator op;
+        op.Properties["Name"] = "Aggregate";
+        op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(blockCombine.Keys());
+
+        if (blockCombine.Aggregations().Ref().IsList()) {
+            TVector<TString> aggrs;
+            for (ui32 index = 0; index < blockCombine.Aggregations().Ref().ChildrenSize(); index++) {
+                auto child = blockCombine.Aggregations().Ref().Child(index);
+                if (child && child->IsList() && child->ChildrenSize() >= 2) {
+                    auto callable = child->Child(0);
+                    if (callable->ChildrenSize() >= 1) {
+                        if (auto aggrName = TMaybeNode<TCoAtom>(callable->Child(0))) {
+                            aggrs.push_back(aggregations.Value(aggrName.Cast().StringValue(), "??"));
+                        }
+                    }
+                }
+            }
+            op.Properties["Aggregation"] = JoinStrings(std::move(aggrs), ",");
+        }
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
@@ -1444,15 +1509,21 @@ private:
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoFlatMapBase& flatMap, const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
-        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Grace)";
+        auto joinAlgo = "(Grace)";
+        for (size_t i=0; i<join.Flags().Size(); i++) {
+            if (join.Flags().Item(i).StringValue() == "Broadcast") {
+                joinAlgo = "(MapJoin)";
+            }
+        }
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join " << joinAlgo;
 
         TOperator op;
         op.Properties["Name"] = name;
         op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
 
-        auto operatorId = AddOperator(planNode, name, std::move(op));
-
         AddOptimizerEstimates(op, join);
+
+        auto operatorId = AddOperator(planNode, name, std::move(op));
 
         Visit(flatMap, planNode);
 
@@ -1460,7 +1531,13 @@ private:
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
-        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Grace)";
+        auto joinAlgo = "(Grace)";
+        for (size_t i=0; i<join.Flags().Size(); i++) {
+            if (join.Flags().Item(i).StringValue() == "Broadcast") {
+                joinAlgo = "(MapJoin)";
+            }
+        }
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join " << joinAlgo;
 
         TOperator op;
         op.Properties["Name"] = name;
@@ -1657,6 +1734,8 @@ private:
                 res = NUuid::UuidBytesToString(literal.Cast().Literal().StringValue());
             } else if (auto literal = key.Maybe<TCoDataCtor>()) {
                 res = literal.Cast().Literal().StringValue();
+            } else if (auto literal = key.Maybe<TCoPgConst>()) {
+                res = literal.Cast().Value().StringValue();
             } else if (auto literal = key.Maybe<TCoNothing>()) {
                 res = TString("null");
             }
@@ -2349,7 +2428,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
     writer.WriteKey("type").WriteString("query");
     writer.EndObject();
 
-    if (!commonPlanInfo.Empty()) {
+    if (!commonPlanInfo.empty()) {
         NJson::TJsonValue commonPlanJson;
         NJson::ReadJsonTree(commonPlanInfo, &commonPlanJson, true);
 

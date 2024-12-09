@@ -37,6 +37,8 @@ public:
 
     virtual void Accept(IVisitor& visitor) const = 0;
 
+    virtual void RewriteTxId(ui64 value) = 0;
+
     virtual TString ToString() const = 0;
     virtual void Out(IOutputStream& out) const = 0;
 
@@ -55,6 +57,8 @@ public:
     ESource GetSource() const override { return Source; }
     const TString& GetSourceId() const override { return SourceId; }
     bool IsBroadcast() const override { return false; }
+
+    void RewriteTxId(ui64) override { Y_ABORT("not implemented"); }
 
     TString ToString() const override;
     void Out(IOutputStream& out) const override;

@@ -13,11 +13,13 @@
 // NB: We don't need printability since TError from
 // this file is not printable.
 #include <yt/yt/core/ytree/attributes.h>
+#include <yt/yt/core/ytree/exception_helpers.h>
 
 #include <yt/yt/core/misc/origin_attributes.h>
 
 #include <library/cpp/yt/exception/exception.h>
 
+#include <library/cpp/yt/error/error_attributes.h>
 #include <library/cpp/yt/error/origin_attributes.h>
 
 #include <library/cpp/yt/yson_string/string.h>
@@ -56,7 +58,7 @@ public:
         : Code_(other.Code_)
         , Message_(other.Message_)
         , OriginAttributes_(other.OriginAttributes_)
-        , Attributes_(other.Attributes_ ? other.Attributes_->Clone() : nullptr)
+        , AttributesImpl_(other.AttributesImpl_ ? other.AttributesImpl_->Clone() : nullptr)
         , InnerErrors_(other.InnerErrors_)
     { }
 
@@ -148,29 +150,26 @@ public:
 
     bool HasAttributes() const noexcept
     {
-        return Attributes_.operator bool();
+        return AttributesImpl_.operator bool();
     }
 
-    const IAttributeDictionary& Attributes() const
+    const TErrorAttributes& Attributes() const
     {
-        if (!Attributes_) {
-            return EmptyAttributes();
+        return Attributes_;
+    }
+
+    void UpdateOriginAttributes()
+    {
+        OriginAttributes_ = NYT::NDetail::ExtractFromDictionary(AttributesImpl_);
+    }
+
+    TErrorAttributes* MutableAttributes() noexcept
+    {
+        if (!HasAttributes()) {
+            AttributesImpl_ = CreateEphemeralAttributes();
+            Attributes_ = TErrorAttributes(AttributesImpl_.Get());
         }
-        return *Attributes_;
-    }
-
-    void SetAttributes(IAttributeDictionaryPtr attributes)
-    {
-        Attributes_ = std::move(attributes);
-        ExtractBultinAttributes();
-    }
-
-    IAttributeDictionary* MutableAttributes() noexcept
-    {
-        if (!Attributes_) {
-            Attributes_ = CreateEphemeralAttributes();
-        }
-        return Attributes_.Get();
+        return &Attributes_;
     }
 
     const std::vector<TError>& InnerErrors() const noexcept
@@ -192,18 +191,78 @@ private:
         .Tid = NThreading::InvalidThreadId,
     };
 
-    NYTree::IAttributeDictionaryPtr Attributes_;
+    NYTree::IAttributeDictionaryPtr AttributesImpl_;
+    TErrorAttributes Attributes_ = TErrorAttributes(AttributesImpl_.Get());
+
     std::vector<TError> InnerErrors_;
 
-    void ExtractBultinAttributes()
-    {
-        OriginAttributes_ = NYT::NDetail::ExtractFromDictionary(Attributes_);
-    }
+    friend class TErrorAttributes;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace  {
+// NB(arkady-e1ppa): Currently TErrorAttributes is a facade
+// which has minimal API of original dict with backend being the
+// actual original dict. Once API-related issues are fixed we are
+// free to implement a backend which doesn't depend on original dict.
+std::vector<TErrorAttributes::TKey> TErrorAttributes::ListKeys() const
+{
+    auto* attributes = static_cast<IAttributeDictionary*>(Attributes_);
+    if (!attributes) {
+        return {};
+    }
+    return attributes->ListKeys();
+}
+
+std::vector<TErrorAttributes::TKeyValuePair> TErrorAttributes::ListPairs() const
+{
+    auto* attributes = static_cast<IAttributeDictionary*>(Attributes_);
+    if (!attributes) {
+        return {};
+    }
+    return attributes->ListPairs();
+}
+
+TErrorAttributes::TValue TErrorAttributes::FindYson(TStringBuf key) const
+{
+    auto* attributes = static_cast<IAttributeDictionary*>(Attributes_);
+    if (!attributes) {
+        return {};
+    }
+    return attributes->FindYson(key);
+}
+
+void TErrorAttributes::SetYson(const TKey& key, const TValue& value)
+{
+    auto* attributes = static_cast<IAttributeDictionary*>(Attributes_);
+    YT_VERIFY(attributes);
+    return attributes->SetYson(key, value);
+}
+
+bool TErrorAttributes::Remove(const TKey& key)
+{
+    auto* attributes = static_cast<IAttributeDictionary*>(Attributes_);
+    if (!attributes) {
+        return false;
+    }
+    return attributes->Remove(key);
+}
+
+TErrorAttributes::TValue TErrorAttributes::GetYson(TStringBuf key) const
+{
+    auto result = FindYson(key);
+    if (!result) {
+        // This method comes from "exception_helpers.h"
+        // and requires NYTree::EErrorCode::ResolveError enum value.
+        // TODO(arkady-e1ppa): eliminate this dependency somehow.
+        ThrowNoSuchAttribute(key);
+    }
+    return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
 
 bool IsWhitelisted(const TError& error, const THashSet<TStringBuf>& attributeWhitelist)
 {
@@ -455,15 +514,16 @@ bool TError::HasAttributes() const noexcept
     return Impl_->HasAttributes();
 }
 
-const IAttributeDictionary& TError::Attributes() const
+const TErrorAttributes& TError::Attributes() const
 {
     if (!Impl_) {
-        return EmptyAttributes();
+        static TErrorAttributes empty{nullptr};
+        return empty;
     }
     return Impl_->Attributes();
 }
 
-IAttributeDictionary* TError::MutableAttributes()
+TErrorAttributes* TError::MutableAttributes()
 {
     MakeMutable();
     return Impl_->MutableAttributes();
@@ -492,12 +552,12 @@ TOriginAttributes* TError::MutableOriginAttributes() const noexcept
     return Impl_->MutableOriginAttributes();
 }
 
-void TError::SetAttributes(NYTree::IAttributeDictionaryPtr attributes)
+void TError::UpdateOriginAttributes()
 {
     if (!Impl_) {
         return;
     }
-    Impl_->SetAttributes(std::move(attributes));
+    Impl_->UpdateOriginAttributes();
 }
 
 const TString InnerErrorsTruncatedKey("inner_errors_truncated");
@@ -515,22 +575,20 @@ TError TError::Truncate(
         return innerError.Truncate(maxInnerErrorCount, stringLimit, attributeWhitelist);
     };
 
-    auto truncateAttributes = [stringLimit, &attributeWhitelist] (const IAttributeDictionary& attributes) {
-        auto truncatedAttributes = CreateEphemeralAttributes();
+    auto truncateAttributes = [stringLimit, &attributeWhitelist] (const TErrorAttributes& attributes, TErrorAttributes* mutableAttributes) {
         for (const auto& key : attributes.ListKeys()) {
             const auto& value = attributes.FindYson(key);
 
             if (std::ssize(value.AsStringBuf()) > stringLimit && !attributeWhitelist.contains(key)) {
-                truncatedAttributes->SetYson(
+                mutableAttributes->SetYson(
                     key,
                     NYson::ConvertToYsonString("...<attribute truncated>..."));
             } else {
-                truncatedAttributes->SetYson(
+                mutableAttributes->SetYson(
                     key,
                     value);
             }
         }
-        return truncatedAttributes;
     };
 
     auto result = std::make_unique<TImpl>();
@@ -538,7 +596,7 @@ TError TError::Truncate(
     *result->MutableMessage()
         = std::move(TruncateString(GetMessage(), stringLimit, ErrorMessageTruncatedSuffix));
     if (Impl_->HasAttributes()) {
-        result->SetAttributes(truncateAttributes(Impl_->Attributes()));
+        truncateAttributes(Impl_->Attributes(), result->MutableAttributes());
     }
     *result->MutableOriginAttributes() = Impl_->OriginAttributes();
 
@@ -550,7 +608,7 @@ TError TError::Truncate(
             copiedInnerErrors.push_back(truncateInnerError(innerError));
         }
     } else {
-        result->MutableAttributes()->Set(InnerErrorsTruncatedKey, true);
+        result->MutableAttributes()->SetYson(InnerErrorsTruncatedKey, ConvertToYsonString(true));
 
         // NB(arkady-e1ppa): We want to always keep the last inner error,
         // so we make room for it and do not check if it is whitelisted.
@@ -582,7 +640,7 @@ TError TError::Truncate(
         innerError = std::move(innerError).Truncate(maxInnerErrorCount, stringLimit, attributeWhitelist);
     };
 
-    auto truncateAttributes = [stringLimit, &attributeWhitelist] (IAttributeDictionary* attributes) {
+    auto truncateAttributes = [stringLimit, &attributeWhitelist] (TErrorAttributes* attributes) {
         for (const auto& key : attributes->ListKeys()) {
             if (std::ssize(attributes->FindYson(key).AsStringBuf()) > stringLimit && !attributeWhitelist.contains(key)) {
                 attributes->SetYson(
@@ -602,7 +660,7 @@ TError TError::Truncate(
         }
     } else {
         auto& innerErrors = ApplyWhitelist(*MutableInnerErrors(), attributeWhitelist, maxInnerErrorCount);
-        MutableAttributes()->Set(InnerErrorsTruncatedKey, true);
+        MutableAttributes()->SetYson(InnerErrorsTruncatedKey, ConvertToYsonString(true));
 
         for (auto& innerError : innerErrors) {
             truncateInnerError(innerError);
@@ -712,12 +770,6 @@ TError& TError::operator <<= (std::vector<TError>&& innerErrors) &
     return *this;
 }
 
-TError& TError::operator <<= (const NYTree::IAttributeDictionary& attributes) &
-{
-    MutableAttributes()->MergeFrom(attributes);
-    return *this;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 bool operator == (const TError& lhs, const TError& rhs)
@@ -797,7 +849,21 @@ void AppendError(TStringBuilderBase* builder, const TError& error, int indent)
 
     for (const auto& [key, value] : error.Attributes().ListPairs()) {
         TTokenizer tokenizer(value.AsStringBuf());
-        YT_VERIFY(tokenizer.ParseNext());
+        // TODO(arkady-e1ppa): Remove this once failed verifies have been dealt with.
+        [[unlikely]] if (!tokenizer.ParseNext()) {
+            Cerr <<
+                NYT::Format(
+                    "%v *** Empty token encountered while formatting TError attribute (Key: %v, Value: %v)"
+                    "(BuilderAccumulatedData: %v)",
+                    TInstant::Now(),
+                    key,
+                    value.AsStringBuf(),
+                    builder->GetBuffer())
+                << '\n';
+            Flush(Cerr);
+            YT_ABORT();
+        }
+        // YT_VERIFY(tokenizer.ParseNext());
         switch (tokenizer.GetCurrentType()) {
             case ETokenType::String:
                 AppendAttribute(builder, key, TString(tokenizer.CurrentToken().GetStringValue()), indent);
@@ -851,6 +917,17 @@ const char* TErrorException::what() const noexcept
         CachedWhat_ = ToString(Error_);
     }
     return CachedWhat_.data();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// TODO(arkady-e1ppa): Move this out eventually.
+[[noreturn]] void TErrorAttributes::ThrowCannotParseAttributeException(TStringBuf key, const std::exception& ex)
+{
+    THROW_ERROR_EXCEPTION(
+        "Error parsing attribute %Qv",
+        key)
+        << ex;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

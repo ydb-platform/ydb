@@ -10,7 +10,7 @@
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NFq::NPrivate {
 
@@ -202,9 +202,15 @@ public:
         }
     }
 
+    bool ShouldCreateRateLimiter() const {
+        return RequestProxy->Get()->Quotas 
+                && (RequestProxy->Get()->Request.content().type() == FederatedQuery::QueryContent::STREAMING
+                    || !Config.ComputeConfig.YdbComputeControlPlaneEnabled(RequestProxy->Get()->Scope));
+    }
+
     void OnBootstrap() override {
         this->UnsafeBecome(&TCreateQueryRequestActor::StateFunc);
-        if (RequestProxy->Get()->Quotas) {
+        if (ShouldCreateRateLimiter()) {
             SendCreateRateLimiterResourceRequest();
         } else {
             SendRequestIfCan();
@@ -249,7 +255,7 @@ public:
     }
 
     bool CanSendRequest() const override {
-        return (QuoterResourceCreated || !RequestProxy->Get()->Quotas) && TBaseRequestActor::CanSendRequest();
+        return (QuoterResourceCreated || !ShouldCreateRateLimiter()) && TBaseRequestActor::CanSendRequest();
     }
 };
 

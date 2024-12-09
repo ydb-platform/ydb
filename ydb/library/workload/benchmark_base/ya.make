@@ -10,10 +10,11 @@ SRCS(
 PEERDIR(
     ydb/library/accessor
     ydb/library/workload/abstract
+    ydb/library/yaml_json
     ydb/public/api/protos
 )
 
-GENERATE_ENUM_SERIALIZATION(workload.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(workload.h)
 
 END()
 

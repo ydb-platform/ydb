@@ -3,13 +3,14 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -82,19 +83,31 @@ TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, T
 bool IsLiteralNothing(TExprBase node) {
     if (node.Maybe<TCoNothing>()) {
         auto* type = node.Raw()->GetTypeAnn();
-        if (type->GetKind() != ETypeAnnotationKind::Optional) {
-            return false;
+        switch (type->GetKind()) {
+            case ETypeAnnotationKind::Optional: {
+                type = type->Cast<TOptionalExprType>()->GetItemType();
+
+                if (type->GetKind() != ETypeAnnotationKind::Data) {
+                    return false;
+                }
+
+                auto slot = type->Cast<TDataExprType>()->GetSlot();
+                auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
+
+                return (
+                    NKikimr::NScheme::NTypeIds::IsYqlType(typeId)
+                    && NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId))
+                );
+            }
+            case ETypeAnnotationKind::Pg: {
+                auto pgTypeId = type->Cast<TPgExprType>()->GetId();
+                return NKikimr::IsAllowedKeyType(
+                    NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId))
+                );
+            }
+            default:
+                return false;
         }
-        type = type->Cast<TOptionalExprType>()->GetItemType();
-
-        if (type->GetKind() != ETypeAnnotationKind::Data) {
-            return false;
-        }
-
-        auto slot = type->Cast<TDataExprType>()->GetSlot();
-        auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
-
-        return (NKikimr::NScheme::NTypeIds::IsYqlType(typeId) && NKikimr::NSchemeShard::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
     } else {
         return false;
     }
@@ -119,7 +132,11 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
                 return false;
             }
 
-            if (!value.Maybe<TCoDataCtor>() && !value.Maybe<TCoParameter>() && !IsLiteralNothing(value)) {
+            if (!value.Maybe<TCoDataCtor>()
+                && !value.Maybe<TCoParameter>()
+                && !value.Maybe<TCoPgConst>()
+                && !IsLiteralNothing(value))
+            {
                 literalRange = false;
             }
 
@@ -404,12 +421,20 @@ bool RequireLookupPrecomputeStage(const TKqlLookupTable& lookup) {
                 if (tuple.Value().Maybe<TCoParameter>()) {
                     // pass
                 } else if (tuple.Value().Maybe<TCoDataCtor>()) {
-                    // TODO: support pg types
-                    Y_ENSURE(tuple.Value().Ref().GetTypeAnn()->GetKind() != NYql::ETypeAnnotationKind::Pg);
+                    Y_ENSURE(tuple.Value().Ref().GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Data);
                     auto slot = tuple.Value().Ref().GetTypeAnn()->Cast<TDataExprType>()->GetSlot();
                     auto typeId = NUdf::GetDataTypeInfo(slot).TypeId;
                     auto typeInfo = NScheme::TTypeInfo(typeId);
-                    if (NScheme::NTypeIds::IsYqlType(typeId) && NSchemeShard::IsAllowedKeyType(typeInfo)) {
+                    if (NScheme::NTypeIds::IsYqlType(typeId) && NKikimr::IsAllowedKeyType(typeInfo)) {
+                        // pass
+                    } else {
+                        return true;
+                    }
+                } else if (tuple.Value().Maybe<TCoPgConst>()) {
+                    Y_ENSURE(tuple.Value().Ref().GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg);
+                    auto pgTypeId = tuple.Value().Ref().GetTypeAnn()->Cast<TPgExprType>()->GetId();
+                    auto typeInfo = NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId));
+                    if (NKikimr::IsAllowedKeyType(typeInfo)) {
                         // pass
                     } else {
                         return true;
@@ -579,6 +604,8 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
     YQL_ENSURE(lookupKeys.Maybe<TCoIterator>(), "Expected list iterator as LookupKeys, but got: "
         << KqpExprToPrettyString(lookupKeys, ctx));
 
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;    
     TNodeOnNodeOwnedMap replaceMap;
     TVector<TExprBase> newInputs;
     TVector<TCoArgument> newArgs;
@@ -615,7 +642,7 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
                 .Table(lookupTable.Table())
                 .Columns(lookupTable.Columns())
                 .InputType(ExpandType(node.Pos(), *keysPrecompute.Ref().GetTypeAnn(), ctx))
-                .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+                .Settings(settings.BuildNode(ctx, node.Pos()))
                 .Done();
 
             newInputs.emplace_back(std::move(cnStreamLookup));
@@ -650,7 +677,7 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
             .Table(lookupTable.Table())
             .Columns(lookupTable.Columns())
             .InputType(ExpandType(node.Pos(), *lookupKeysList.Ref().GetTypeAnn(), ctx))
-            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+            .Settings(settings.BuildNode(ctx, node.Pos()))
             .Done();
 
         newInputs.emplace_back(std::move(cnStreamLookup));
@@ -702,7 +729,7 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
             .Table(lookup.Table())
             .Columns(lookup.Columns())
             .InputType(ExpandType(lookup.Pos(), *lookup.LookupKeys().Ref().GetTypeAnn(), ctx))
-            .LookupStrategy(lookup.LookupStrategy())
+            .Settings(lookup.Settings())
             .Done();
 
     } else if (lookup.LookupKeys().Maybe<TDqCnUnionAll>()) {
@@ -713,7 +740,7 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
             .Table(lookup.Table())
             .Columns(lookup.Columns())
             .InputType(ExpandType(lookup.Pos(), *output.Ref().GetTypeAnn(), ctx))
-            .LookupStrategy(lookup.LookupStrategy())
+            .Settings(lookup.Settings())
             .Done();
     } else {
         return node;

@@ -6,7 +6,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
 ## Topic usage examples
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -28,7 +28,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
 ## Initializing a connection {#init}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -98,7 +98,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
 ### Creating a topic {#create-topic}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 The topic path is mandatory. Other parameters are optional.
 
@@ -169,7 +169,7 @@ The topic path is mandatory. Other parameters are optional.
 
 When you update a topic, you must specify the topic path and the parameters to be changed.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -235,7 +235,7 @@ When you update a topic, you must specify the topic path and the parameters to b
 
 ### Getting topic information {#describe-topic}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -291,7 +291,7 @@ When you update a topic, you must specify the topic path and the parameters to b
 
 To delete a topic, just specify the path to it.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -325,7 +325,7 @@ To delete a topic, just specify the path to it.
 
 Only connections with matching [producer and message group](../../concepts/topic#producer-id) identifiers are currently supported (`producer_id` shoud be equal to `message_group_id`). This restriction will be removed in the future.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -434,7 +434,7 @@ Only connections with matching [producer and message group](../../concepts/topic
 
 ### Writing messages {#writing-messages}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -572,7 +572,7 @@ Only connections with matching [producer and message group](../../concepts/topic
 
 ### Message writes with storage confirmation on the server
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -699,7 +699,7 @@ Only connections with matching [producer and message group](../../concepts/topic
 For more details on using data compression for topics, see [here](../../concepts/topic#message-codec).
 
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -759,7 +759,7 @@ For more details on using data compression for topics, see [here](../../concepts
 
 ### Writing messages in no-deduplication mode
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -781,7 +781,7 @@ If, on other hand, you want to ensure deduplication is enabled, you can specify 
 You can provide some metadata for any particular message when writing. This metadata can be a list of up to 100 key-value pairs per message.
 All the metadata provided when writing a message is sent to a consumer with the message during reading.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -847,7 +847,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 ### Write in a transaction {#write-tx}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go
 
@@ -1001,7 +1001,7 @@ To be able to read messages from topic, a Consumer on this topic should exist.
 A Consumer can be created on [creating](#create-topic) or [altering](#alter-topic) a topic.
 Topic can have several Consumers and for each of them server stores its own reading progress.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1144,7 +1144,7 @@ Topic can have several Consumers and for each of them server stores its own read
 Additional options are used to specify multiple topics and other parameters.
 To establish a connection to the `my-topic` and `my-specific-topic` topics using the `my-consumer` consumer and also set the time to start reading messages, use the following code:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1210,7 +1210,7 @@ Information about which messages have already been processed can be [saved on th
 
 Data from topics can be read in the context of [transactions](#read-tx). In this case, the reading offset will only advance when the transaction is committed. On reconnect, all uncommitted messages will be read again.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1239,7 +1239,7 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 #### Reading messages one by one
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1286,7 +1286,7 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 #### Reading message batches
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1361,7 +1361,7 @@ If a commit fails with an error, the application should log it and continue; it 
 
 #### Reading messages one by one with commits
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1415,7 +1415,7 @@ If a commit fails with an error, the application should log it and continue; it 
 
 #### Reading message batches with commits
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1493,7 +1493,7 @@ If a commit fails with an error, the application should log it and continue; it 
 
 Instead of committing messages, the client application may track reading progress on its own. In this case, it can provide a handler, which will be called back on each partition read start. This handler may set a starting reading position for this partition.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1586,7 +1586,7 @@ Instead of committing messages, the client application may track reading progres
 
 Reading progress is usually saved on a server for each Consumer. However, such progress can't be saved if a reader is created without a specified `Consumer`.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Java
 
@@ -1617,7 +1617,7 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
 ### Reading in a transaction {#read-tx}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1772,7 +1772,7 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
 #### Soft reading interruption {#soft-stop}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1844,7 +1844,7 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
 #### Hard reading interruption {#hard-stop}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 

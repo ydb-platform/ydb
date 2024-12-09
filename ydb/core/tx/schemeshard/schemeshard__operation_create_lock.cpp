@@ -55,14 +55,8 @@ private:
 }; // TPropose
 
 class TCreateLock: public TSubOperation {
-    const bool ProposeToCoordinator;
-
     TTxState::ETxState NextState() const {
-        if (ProposeToCoordinator) {
-            return TTxState::Propose;
-        } else {
-            return TTxState::Done;
-        }
+        return TTxState::Propose;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
@@ -90,13 +84,11 @@ class TCreateLock: public TSubOperation {
 public:
     explicit TCreateLock(TOperationId id, const TTxTransaction& tx)
         : TSubOperation(id, tx)
-        , ProposeToCoordinator(AppData()->FeatureFlags.GetEnableChangefeedInitialScan())
     {
     }
 
     explicit TCreateLock(TOperationId id, TTxState::ETxState state)
         : TSubOperation(id, state)
-        , ProposeToCoordinator(AppData()->FeatureFlags.GetEnableChangefeedInitialScan())
     {
     }
 
@@ -190,7 +182,7 @@ public:
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLock, pathId);
-        txState.State = ProposeToCoordinator ? TTxState::Propose : TTxState::Done;
+        txState.State = TTxState::Propose;
 
         tablePath.Base()->LastTxId = OperationId.GetTxId();
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;

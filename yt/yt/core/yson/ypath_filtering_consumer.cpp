@@ -62,17 +62,15 @@ public:
     void OnBeginMap() override
     {
         BeforeValue();
-        AfterCollectionBegin_ = true;
+        PendingRollback_ = false;
 
         Forward_->OnBeginMap();
     }
 
     void OnKeyedItem(TStringBuf key) override
     {
-        if (!AfterCollectionBegin_) {
-            RollbackPath();
-        }
-        AfterCollectionBegin_ = false;
+        FlushPendingRollback();
+        PendingRollback_ = true;
         AppendPath(key);
 
         Forward_->OnKeyedItem(key);
@@ -80,18 +78,17 @@ public:
 
     void OnEndMap() override
     {
-        if (!AfterCollectionBegin_) {
-            RollbackPath();
-        }
-        AfterCollectionBegin_ = false;
         BeforeEndDictionary();
+
+        FlushPendingRollback();
+        PendingRollback_ = true;
         Forward_->OnEndMap();
     }
 
     void OnBeginList() override
     {
         BeforeValue();
-        AfterCollectionBegin_ = true;
+        PendingRollback_ = false;
         ListIndexes_.push_back(0);
 
         Forward_->OnBeginList();
@@ -99,10 +96,10 @@ public:
 
     void OnListItem() override
     {
-        if (!AfterCollectionBegin_) {
+        if (PendingRollback_) {
             RollbackPath();
         }
-        AfterCollectionBegin_ = false;
+        PendingRollback_ = true;
         AppendPath(ListIndexes_.back());
         ++ListIndexes_.back();
 
@@ -111,10 +108,8 @@ public:
 
     void OnEndList() override
     {
-        if (!AfterCollectionBegin_) {
-            RollbackPath();
-        }
-        AfterCollectionBegin_ = false;
+        FlushPendingRollback();
+        PendingRollback_ = true;
         ListIndexes_.pop_back();
 
         Forward_->OnEndList();
@@ -125,18 +120,17 @@ public:
     {
         AppendPath(TAtTokenTag{});
 
-        AfterCollectionBegin_ = true;
+        PendingRollback_ = false;
 
         Forward_->OnBeginAttributes();
     }
 
     void OnEndAttributes() override
     {
-        if (!AfterCollectionBegin_) {
-            RollbackPath();
-        }
-
         BeforeEndDictionary();
+
+        FlushPendingRollback();
+        PendingRollback_ = true;
         Forward_->OnEndAttributes();
         RollbackPath();
     }
@@ -166,9 +160,16 @@ protected:
         return Forward_;
     }
 
+    void FlushPendingRollback() {
+        if (PendingRollback_) {
+            RollbackPath();
+            PendingRollback_ = false;
+        }
+    }
+
 private:
     NYson::IYsonConsumer* Forward_;
-    bool AfterCollectionBegin_ = false;
+    bool PendingRollback_ = false;
     std::vector<int> ListIndexes_;
 };
 
@@ -310,39 +311,30 @@ private:
             return;
         }
 
-        for (auto& state : PerPathFilteringStates_) {
+        for (const auto& state : PerPathFilteringStates_) {
+            FlushPendingRollback();
+
             if (Depth_ != state.MaxMatchedDepth || state.Fulfilled) {
                 continue;
             }
 
-            auto& tokenizer = state.Tokenizer;
-            std::vector<bool> isAttributesStack;
+            const auto& tokenizer = state.Tokenizer;
             tokenizer.Expect(NYPath::ETokenType::Literal);
-            GetForward()->OnKeyedItem(tokenizer.GetLiteralValue());
-            while(ToNextLiteral(tokenizer)) {
-                if (tokenizer.GetType() == NYPath::ETokenType::At) {
-                    isAttributesStack.push_back(true);
-                    GetForward()->OnBeginAttributes();
-                    tokenizer.Advance();
-                } else {
-                    isAttributesStack.push_back(false);
-                    GetForward()->OnBeginMap();
-                }
-                tokenizer.Expect(NYPath::ETokenType::Literal);
-                GetForward()->OnKeyedItem(tokenizer.GetLiteralValue());
-            }
-            GetForward()->OnEntity();
-            tokenizer.Expect(NYPath::ETokenType::EndOfStream);
-            while(!isAttributesStack.empty()) {
-                if (isAttributesStack.back()) {
-                    GetForward()->OnEndAttributes();
-                } else {
-                    GetForward()->OnEndMap();
-                }
-                isAttributesStack.pop_back();
+            auto currentLiteral = tokenizer.GetLiteralValue();
+            OnKeyedItem(currentLiteral);
+
+            YT_VERIFY(tokenizer.GetType() != NYPath::ETokenType::Slash);
+            if (tokenizer.GetType() == NYPath::ETokenType::EndOfStream) {
+                OnEntity();
+            } else if (tokenizer.GetType() == NYPath::ETokenType::At) {
+                OnBeginAttributes();
+                OnEndAttributes();
+            } else {
+                OnBeginMap();
+                OnEndMap();
             }
 
-            state.Fulfilled = true;
+            YT_VERIFY(state.Fulfilled);
         }
     }
 

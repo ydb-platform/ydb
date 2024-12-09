@@ -1,0 +1,13 @@
+diff --git a/include/__functional/function.h b/include/__functional/function.h
+index 895d1c3..b1faed9 100644
+--- a/include/__functional/function.h
++++ b/include/__functional/function.h
+@@ -610,7 +610,7 @@ struct __policy
+     _LIBCPP_INLINE_VISIBILITY
+     static const __policy* __create_empty()
+     {
+-        static const _LIBCPP_CONSTEXPR __policy __policy_ = {nullptr, nullptr,
++        static const /*_LIBCPP_CONSTEXPR*/ __policy __policy_ = {nullptr, nullptr,
+                                                              true,
+ #ifndef _LIBCPP_NO_RTTI
+                                                              &typeid(void)

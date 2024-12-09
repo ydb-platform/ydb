@@ -3,21 +3,25 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
+
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/blob.h>
-
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
-#include <library/cpp/logger/stream.h>
+#include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
+#include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYdb::NTopic::NTests {
 
 const auto TEST_MESSAGE_GROUP_ID_1 = TEST_MESSAGE_GROUP_ID + "_1";
 const auto TEST_MESSAGE_GROUP_ID_2 = TEST_MESSAGE_GROUP_ID + "_2";
+const auto TEST_MESSAGE_GROUP_ID_3 = TEST_MESSAGE_GROUP_ID + "_3";
+const auto TEST_MESSAGE_GROUP_ID_4 = TEST_MESSAGE_GROUP_ID + "_4";
 
 Y_UNIT_TEST_SUITE(TxUsage) {
 
@@ -61,7 +65,14 @@ protected:
     void StartPartitionSession(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset);
     void StartPartitionSession(TTopicReadSessionPtr reader, ui64 offset);
 
+    struct TReadMessageSettings {
+        NTable::TTransaction& Tx;
+        bool CommitOffsets = false;
+        TMaybe<ui64> Offset;
+    };
+
     void ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset);
+    void ReadMessage(TTopicReadSessionPtr reader, const TReadMessageSettings& settings);
 
     void WriteMessage(const TString& message);
     void WriteMessages(const TVector<TString>& messages,
@@ -72,9 +83,16 @@ protected:
                      const TString& consumer = TEST_CONSUMER,
                      size_t partitionCount = 1,
                      std::optional<size_t> maxPartitionCount = std::nullopt);
-    void DescribeTopic(const TString& path);
+    TTopicDescription DescribeTopic(const TString& path);
 
-    void AddConsumer(const TString& topic, const TVector<TString>& consumers);
+    void AddConsumer(const TString& topicPath, const TVector<TString>& consumers);
+    void AlterAutoPartitioning(const TString& topicPath,
+                               ui64 minActivePartitions,
+                               ui64 maxActivePartitions,
+                               EAutoPartitioningStrategy strategy,
+                               TDuration stabilizationWindow,
+                               ui64 downUtilizationPercent,
+                               ui64 upUtilizationPercent);
 
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
@@ -174,6 +192,28 @@ protected:
 
     NTable::TDataQueryResult ExecuteDataQuery(NTable::TSession session, const TString& query, const NTable::TTxControl& control);
 
+    TVector<TString> Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
+                                                        const TString& consumerName,
+                                                        size_t count);
+
+    struct TAvgWriteBytes {
+        ui64 PerSec = 0;
+        ui64 PerMin = 0;
+        ui64 PerHour = 0;
+        ui64 PerDay = 0;
+    };
+
+    TAvgWriteBytes GetAvgWriteBytes(const TString& topicPath,
+                                    ui32 partitionId);
+
+    void CheckAvgWriteBytes(const TString& topicPath,
+                            ui32 partitionId,
+                            size_t minSize, size_t maxSize);
+
+    void SplitPartition(const TString& topicPath,
+                        ui32 partitionId,
+                        const TString& boundary);
+
 private:
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader, NTable::TTransaction& tx);
@@ -202,6 +242,8 @@ private:
 
     THashMap<std::pair<TString, TString>, TTopicWriteSessionContext> TopicWriteSessions;
     THashMap<TString, TTopicReadSessionPtr> TopicReadSessions;
+
+    ui64 SchemaTxId = 1000;
 };
 
 TFixture::TTableRecord::TTableRecord(const TString& key, const TString& value) :
@@ -214,6 +256,7 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
 {
     NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetEnableTopicServiceTx(true);
+    settings.SetEnableTopicSplitMerge(true);
     settings.SetEnablePQConfigTransactionsAtSchemeShard(true);
 
     Setup = std::make_unique<TTopicSdkTestSetup>(TEST_CASE_NAME, settings);
@@ -305,8 +348,23 @@ void TFixture::StartPartitionSession(TTopicReadSessionPtr reader, ui64 offset)
 
 void TFixture::ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset)
 {
-    auto event = ReadEvent<NTopic::TReadSessionEvent::TDataReceivedEvent>(reader, tx);
-    UNIT_ASSERT_VALUES_EQUAL(event.GetMessages()[0].GetOffset(), offset);
+    TReadMessageSettings settings {
+        .Tx = tx,
+        .CommitOffsets = false,
+        .Offset = offset
+    };
+    ReadMessage(reader, settings);
+}
+
+void TFixture::ReadMessage(TTopicReadSessionPtr reader, const TReadMessageSettings& settings)
+{
+    auto event = ReadEvent<NTopic::TReadSessionEvent::TDataReceivedEvent>(reader, settings.Tx);
+    if (settings.Offset.Defined()) {
+        UNIT_ASSERT_VALUES_EQUAL(event.GetMessages()[0].GetOffset(), *settings.Offset);
+    }
+    if (settings.CommitOffsets) {
+        event.Commit();
+    }
 }
 
 template<class E>
@@ -379,7 +437,7 @@ void TFixture::CreateTopic(const TString& path,
     Setup->CreateTopic(path, consumer, partitionCount, maxPartitionCount);
 }
 
-void TFixture::AddConsumer(const TString& path,
+void TFixture::AddConsumer(const TString& topicPath,
                            const TVector<TString>& consumers)
 {
     NTopic::TTopicClient client(GetDriver());
@@ -389,13 +447,41 @@ void TFixture::AddConsumer(const TString& path,
         settings.BeginAddConsumer(consumer);
     }
 
-    auto result = client.AlterTopic(path, settings).GetValueSync();
+    auto result = client.AlterTopic(topicPath, settings).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void TFixture::DescribeTopic(const TString& path)
+void TFixture::AlterAutoPartitioning(const TString& topicPath,
+                                     ui64 minActivePartitions,
+                                     ui64 maxActivePartitions,
+                                     EAutoPartitioningStrategy strategy,
+                                     TDuration stabilizationWindow,
+                                     ui64 downUtilizationPercent,
+                                     ui64 upUtilizationPercent)
 {
-    Setup->DescribeTopic(path);
+    NTopic::TTopicClient client(GetDriver());
+    NTopic::TAlterTopicSettings settings;
+
+    settings
+        .BeginAlterPartitioningSettings()
+            .MinActivePartitions(minActivePartitions)
+            .MaxActivePartitions(maxActivePartitions)
+            .BeginAlterAutoPartitioningSettings()
+                .Strategy(strategy)
+                .StabilizationWindow(stabilizationWindow)
+                .DownUtilizationPercent(downUtilizationPercent)
+                .UpUtilizationPercent(upUtilizationPercent)
+            .EndAlterAutoPartitioningSettings()
+        .EndAlterTopicPartitioningSettings()
+        ;
+
+    auto result = client.AlterTopic(topicPath, settings).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+TTopicDescription TFixture::DescribeTopic(const TString& path)
+{
+    return Setup->DescribeTopic(path);
 }
 
 const TDriver& TFixture::GetDriver() const
@@ -489,9 +575,7 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
 
     {
         auto reader = CreateReader();
-
         StartPartitionSession(reader, tx1, 0);
-
         ReadMessage(reader, tx1, 0);
     }
 
@@ -500,9 +584,7 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
 
     {
         auto reader = CreateReader();
-
         StartPartitionSession(reader, tx2, 0);
-
         ReadMessage(reader, tx2, 0);
     }
 
@@ -510,11 +592,24 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
     CommitTx(tx1, EStatus::ABORTED);
 }
 
-//Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)
-//{
-//    WriteToTopicWithInvalidTxId(false);
-//}
-//
+Y_UNIT_TEST_F(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction, TFixture)
+{
+    WriteMessage("message");
+
+    auto session = CreateTableSession();
+    auto tx = BeginTx(session);
+
+    auto reader = CreateReader();
+    StartPartitionSession(reader, tx, 0);
+
+    UNIT_ASSERT_EXCEPTION(ReadMessage(reader, {.Tx = tx, .CommitOffsets = true}), yexception);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)
+{
+    WriteToTopicWithInvalidTxId(false);
+}
+
 //Y_UNIT_TEST_F(WriteToTopic_Invalid_Tx, TFixture)
 //{
 //    WriteToTopicWithInvalidTxId(true);
@@ -974,6 +1069,52 @@ void TFixture::RestartLongTxService()
     }
 }
 
+TVector<TString> TFixture::Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
+                                                              const TString& consumerName,
+                                                              size_t limit)
+{
+    TVector<TString> result;
+
+    while (result.size() < limit) {
+        auto messages = ReadFromTopic(topicPath, consumerName, TDuration::Seconds(2));
+        for (auto& m : messages) {
+            result.push_back(std::move(m));
+        }
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(result.size(), limit);
+
+    return result;
+}
+
+auto TFixture::GetAvgWriteBytes(const TString& topicName,
+                                ui32 partitionId) -> TAvgWriteBytes
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partitionId);
+
+    runtime.SendToPipe(tabletId, edge, new NKikimr::TEvPersQueue::TEvStatus());
+    auto response = runtime.GrabEdgeEvent<NKikimr::TEvPersQueue::TEvStatusResponse>();
+
+    UNIT_ASSERT_VALUES_EQUAL(tabletId, response->Record.GetTabletId());
+
+    TAvgWriteBytes result;
+
+    for (size_t i = 0; i < response->Record.PartResultSize(); ++i) {
+        const auto& partition = response->Record.GetPartResult(i);
+        if (partition.GetPartition() == static_cast<int>(partitionId)) {
+            result.PerSec = partition.GetAvgWriteSpeedPerSec();
+            result.PerMin = partition.GetAvgWriteSpeedPerMin();
+            result.PerHour = partition.GetAvgWriteSpeedPerHour();
+            result.PerDay = partition.GetAvgWriteSpeedPerDay();
+            break;
+        }
+    }
+
+    return result;
+}
+
 Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
 {
     CreateTopic("topic_A");
@@ -1006,15 +1147,13 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
     CommitTx(tx, EStatus::SUCCESS);
 
     {
-        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
+        auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 4);
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
         UNIT_ASSERT_VALUES_EQUAL(messages[3], "message #4");
     }
 
     {
-        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 5);
+        auto messages = Read_Exactly_N_Messages_From_Topic("topic_B", TEST_CONSUMER, 5);
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #5");
         UNIT_ASSERT_VALUES_EQUAL(messages[4], "message #9");
     }
@@ -1055,15 +1194,13 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_2, TFixture)
     CommitTx(tx, EStatus::SUCCESS);
 
     {
-        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
+        auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 4);
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
         UNIT_ASSERT_VALUES_EQUAL(messages[3], "message #4");
     }
 
     {
-        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+        auto messages = Read_Exactly_N_Messages_From_Topic("topic_B", TEST_CONSUMER, 3);
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #7");
         UNIT_ASSERT_VALUES_EQUAL(messages[2], "message #9");
     }
@@ -1164,15 +1301,13 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_5, TFixture)
     }
 
     {
-        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 2);
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
         UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #3");
     }
 
     {
-        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        auto messages = Read_Exactly_N_Messages_From_Topic("topic_B", TEST_CONSUMER, 2);
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #2");
         UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #4");
     }
@@ -1196,8 +1331,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_6, TFixture)
     CommitTx(tx, EStatus::SUCCESS);
 
     {
-        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 2);
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
         UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
     }
@@ -1222,8 +1356,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_7, TFixture)
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #6", &tx);
 
     {
-        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 2);
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #3");
         UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #4");
     }
@@ -1231,8 +1364,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_7, TFixture)
     CommitTx(tx, EStatus::SUCCESS);
 
     {
-        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
+        auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 4);
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
         UNIT_ASSERT_VALUES_EQUAL(messages[3], "message #6");
     }
@@ -1321,8 +1453,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_10, TFixture)
     }
 
     {
-        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 2);
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
         UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
     }
@@ -1618,8 +1749,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_15, TFixture)
 
     CommitTx(tx, EStatus::SUCCESS);
 
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+    auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 2);
     UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
     UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
 }
@@ -1638,8 +1768,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_16, TFixture)
 
     CommitTx(tx, EStatus::SUCCESS);
 
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+    auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 2);
     UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
     UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
 }
@@ -1665,8 +1794,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_17, TFixture)
 
     //RestartPQTablet("topic_A", 0);
 
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 8);
+    auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 8);
     UNIT_ASSERT_VALUES_EQUAL(messages[0].size(), 22'000'000);
     UNIT_ASSERT_VALUES_EQUAL(messages[1].size(),        100);
     UNIT_ASSERT_VALUES_EQUAL(messages[2].size(),        200);
@@ -1898,8 +2026,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_25, TFixture)
 
     CommitTx(tx, EStatus::SUCCESS);
 
-    messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+    Read_Exactly_N_Messages_From_Topic("topic_B", TEST_CONSUMER, 3);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_26, TFixture)
@@ -1948,10 +2075,12 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_27, TFixture)
 
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+
         WriteToTopic("topic_C", TEST_MESSAGE_GROUP_ID, messages[0], &tx, 0);
 
         messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+
         WriteToTopic("topic_C", TEST_MESSAGE_GROUP_ID, messages[0], &tx, 0);
 
         CommitTx(tx, EStatus::SUCCESS);
@@ -2082,8 +2211,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_39, TFixture)
 
     CommitTx(tx, EStatus::SUCCESS);
 
-    auto messages = ReadFromTopic("topic_A", "consumer", TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+    Read_Exactly_N_Messages_From_Topic("topic_A", "consumer", 2);
 }
 
 Y_UNIT_TEST_F(ReadRuleGeneration, TFixture)
@@ -2103,8 +2231,7 @@ Y_UNIT_TEST_F(ReadRuleGeneration, TFixture)
     AddConsumer(TEST_TOPIC, {"consumer-1"});
 
     // We read messages from the topic and committed offsets
-    auto messages = ReadFromTopic(TEST_TOPIC, "consumer-1", TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+    Read_Exactly_N_Messages_From_Topic(TEST_TOPIC, "consumer-1", 3);
     CloseTopicReadSession(TEST_TOPIC, "consumer-1");
 
     // And then the Logbroker team turned on the feature flag
@@ -2117,8 +2244,7 @@ Y_UNIT_TEST_F(ReadRuleGeneration, TFixture)
     AddConsumer(TEST_TOPIC, {"consumer-2"});
 
     // And they wanted to continue reading their messages
-    messages = ReadFromTopic(TEST_TOPIC, "consumer-1", TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+    Read_Exactly_N_Messages_From_Topic(TEST_TOPIC, "consumer-1", 1);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_40, TFixture)
@@ -2136,8 +2262,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_40, TFixture)
 
     CommitTx(tx, EStatus::SUCCESS);
 
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 100);
+    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_41, TFixture)
@@ -2172,8 +2297,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_42, TFixture)
 
     CommitTx(tx, EStatus::SUCCESS);
 
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 100);
+    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_43, TFixture)
@@ -2191,8 +2315,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_43, TFixture)
 
     ExecuteDataQuery(tableSession, "SELECT 1", NTable::TTxControl::Tx(tx).CommitTx(true));
 
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 100);
+    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
@@ -2216,8 +2339,151 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
 
     ExecuteDataQuery(tableSession, "SELECT 2", NTable::TTxControl::Tx(tx).CommitTx(true));
 
-    messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 100);
+    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
+}
+
+void TFixture::CheckAvgWriteBytes(const TString& topicPath,
+                                  ui32 partitionId,
+                                  size_t minSize, size_t maxSize)
+{
+#define UNIT_ASSERT_AVGWRITEBYTES(v, minSize, maxSize) \
+    UNIT_ASSERT_LE_C(minSize, v, ", actual " << minSize << " > " << v); \
+    UNIT_ASSERT_LE_C(v, maxSize, ", actual " << v << " > " << maxSize);
+
+    auto avgWriteBytes = GetAvgWriteBytes(topicPath, partitionId);
+
+    UNIT_ASSERT_AVGWRITEBYTES(avgWriteBytes.PerSec, minSize, maxSize);
+    UNIT_ASSERT_AVGWRITEBYTES(avgWriteBytes.PerMin, minSize, maxSize);
+    UNIT_ASSERT_AVGWRITEBYTES(avgWriteBytes.PerHour, minSize, maxSize);
+    UNIT_ASSERT_AVGWRITEBYTES(avgWriteBytes.PerDay, minSize, maxSize);
+
+#undef UNIT_ASSERT_AVGWRITEBYTES
+}
+
+void TFixture::SplitPartition(const TString& topicName,
+                              ui32 partitionId,
+                              const TString& boundary)
+{
+    NKikimr::NPQ::NTest::SplitPartition(Setup->GetRuntime(),
+                                        ++SchemaTxId,
+                                        topicName,
+                                        partitionId,
+                                        boundary);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_45, TFixture)
+{
+    // Writing to a topic in a transaction affects the `AvgWriteBytes` indicator
+    CreateTopic("topic_A", TEST_CONSUMER, 2);
+
+    auto session = CreateTableSession();
+    auto tx = BeginTx(session);
+
+    TString message(1'000, 'x');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    size_t minSize = (message.size() + TEST_MESSAGE_GROUP_ID_1.size()) * 2;
+    size_t maxSize = minSize + 200;
+
+    CheckAvgWriteBytes("topic_A", 0, minSize, maxSize);
+
+    minSize = (message.size() + TEST_MESSAGE_GROUP_ID_2.size());
+    maxSize = minSize + 200;
+
+    CheckAvgWriteBytes("topic_A", 1, minSize, maxSize);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_46, TFixture)
+{
+    // The `split` operation of the topic partition affects the writing in the transaction.
+    // The transaction commit should fail with an error
+    CreateTopic("topic_A", TEST_CONSUMER, 2, 10);
+
+    auto session = CreateTableSession();
+    auto tx = BeginTx(session);
+
+    TString message(1'000, 'x');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+
+    SplitPartition("topic_A", 1, "\xC0");
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
+
+    CommitTx(tx, EStatus::ABORTED);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_47, TFixture)
+{
+    // The `split` operation of the topic partition does not affect the reading in the transaction.
+    CreateTopic("topic_A", TEST_CONSUMER, 2, 10);
+
+    TString message(1'000, 'x');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, nullptr, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, nullptr, 0);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, nullptr, 1);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, nullptr, 1);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+
+    SplitPartition("topic_A", 1, "\xC0");
+
+    auto session = CreateTableSession();
+    auto tx = BeginTx(session);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+
+    CloseTopicReadSession("topic_A", TEST_CONSUMER);
+
+    messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx, 1);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+
+    CommitTx(tx, EStatus::SUCCESS);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_48, TFixture)
+{
+    // the commit of a transaction affects the split of the partition
+    CreateTopic("topic_A", TEST_CONSUMER, 2, 10);
+    AlterAutoPartitioning("topic_A", 2, 10, EAutoPartitioningStrategy::ScaleUp, TDuration::Seconds(2), 1, 2);
+
+    auto session = CreateTableSession();
+    auto tx = BeginTx(session);
+
+    TString message(1_MB, 'x');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_3, message, &tx, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_3, message, &tx, 0);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_4, message, &tx, 1);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_4, message, &tx, 1);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    Sleep(TDuration::Seconds(5));
+
+    auto topicDescription = DescribeTopic("topic_A");
+
+    UNIT_ASSERT_GT(topicDescription.GetTotalPartitionsCount(), 2);
 }
 
 }

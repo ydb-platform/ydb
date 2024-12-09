@@ -2,8 +2,8 @@
 #include "knn-serializer.h"
 #include "knn-distance.h"
 
-#include <ydb/library/yql/public/udf/udf_helpers.h>
-#include <ydb/library/yql/public/udf/udf_type_printer.h>
+#include <yql/essentials/public/udf/udf_helpers.h>
+#include <yql/essentials/public/udf/udf_type_printer.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/queue.h>

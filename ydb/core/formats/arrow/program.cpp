@@ -56,7 +56,7 @@ struct GroupByOptions: public arrow::compute::ScalarAggregateOptions {
 #include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/library/yql/core/arrow_kernels/request/request.h>
+#include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NSsa {
 
@@ -555,7 +555,7 @@ arrow::Status TDatumBatch::AddColumn(const std::string& name, arrow::Datum&& col
 
     auto field = arrow::field(name, column.type());
     if (!field || !field->type()->Equals(column.type())) {
-        return arrow::Status::Invalid("Cannot create field.");
+        return arrow::Status::Invalid("Cannot create field " + name + ". type:" + field->type()->ToString() + " vs " + column.type()->ToString());
     }
     if (!column.is_scalar() && column.length() != Rows) {
         return arrow::Status::Invalid("Wrong column length.");

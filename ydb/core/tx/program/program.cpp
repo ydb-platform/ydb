@@ -37,7 +37,7 @@ private:
         if (column.HasId() && column.GetId()) {
             const ui32 columnId = column.GetId();
             const TString name = ColumnResolver.GetColumnName(columnId, false);
-            if (name.Empty()) {
+            if (name.empty()) {
                 return NSsa::TColumnInfo::Generated(columnId, GenerateName(column));
             } else {
                 Sources.emplace(columnId, NSsa::TColumnInfo::Original(columnId, name));

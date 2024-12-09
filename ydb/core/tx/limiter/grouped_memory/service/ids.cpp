@@ -12,6 +12,17 @@ ui64 TIdsControl::ExtractInternalIdVerified(const ui64 externalId) {
     return result;
 }
 
+std::optional<ui64> TIdsControl::ExtractInternalIdOptional(const ui64 externalId) {
+    auto it = ExternalIdIntoInternalId.find(externalId);
+    if (it == ExternalIdIntoInternalId.end()) {
+        return std::nullopt;
+    }
+    const ui64 result = it->second;
+    InternalIdIntoExternalId.erase(result);
+    ExternalIdIntoInternalId.erase(it);
+    return result;
+}
+
 std::optional<ui64> TIdsControl::GetInternalIdOptional(const ui64 externalId) const {
     auto it = ExternalIdIntoInternalId.find(externalId);
     if (it != ExternalIdIntoInternalId.end()) {

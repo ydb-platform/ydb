@@ -183,6 +183,7 @@ struct TPlanViewConfig {
     ui32 SummaryWidth;
     ui32 Width;
     TColorPalette Palette;
+    bool Simplified = false;
 };
 
 class TPlan {
@@ -250,7 +251,7 @@ class TPlanVisualizer {
 
 public:
 
-    void LoadPlans(const TString& plans);
+    void LoadPlans(const TString& plans, bool simplified = false);
     void LoadPlan(const TString& planNodeType, const NJson::TJsonValue& root);
     void PostProcessPlans();
     TString PrintSvg();

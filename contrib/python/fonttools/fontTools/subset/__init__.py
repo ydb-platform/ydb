@@ -122,15 +122,16 @@ Other options
 ^^^^^^^^^^^^^
 
 For the other options listed below, to see the current value of the option,
-pass a value of '?' to it, with or without a '='.
+pass a value of '?' to it, with or without a '='. In some environments,
+you might need to escape the question mark, like this: '--glyph-names\\?'.
 
 Examples::
 
     $ pyftsubset --glyph-names?
     Current setting for 'glyph-names' is: False
-    $ ./pyftsubset --name-IDs=?
+    $ pyftsubset --name-IDs=?
     Current setting for 'name-IDs' is: [0, 1, 2, 3, 4, 5, 6]
-    $ ./pyftsubset --hinting? --no-hinting --hinting?
+    $ pyftsubset --hinting? --no-hinting --hinting?
     Current setting for 'hinting' is: True
     Current setting for 'hinting' is: False
 
@@ -2872,7 +2873,9 @@ def closure_glyphs(self, s):
     # Close glyphs
     for table in tables:
         if table.format == 14:
-            for cmap in table.uvsDict.values():
+            for varSelector, cmap in table.uvsDict.items():
+                if varSelector not in s.unicodes_requested:
+                    continue
                 glyphs = {g for u, g in cmap if u in s.unicodes_requested}
                 if None in glyphs:
                     glyphs.remove(None)
@@ -2927,6 +2930,7 @@ def subset_glyphs(self, s):
                     if g in s.glyphs_requested or u in s.unicodes_requested
                 ]
                 for v, l in t.uvsDict.items()
+                if v in s.unicodes_requested
             }
             t.uvsDict = {v: l for v, l in t.uvsDict.items() if l}
         elif t.isUnicode():
@@ -3796,6 +3800,8 @@ def main(args=None):
             for t in font["cmap"].tables:
                 if t.isUnicode():
                     unicodes.extend(t.cmap.keys())
+                    if t.format == 14:
+                        unicodes.extend(t.uvsDict.keys())
         assert "" not in glyphs
 
     log.info("Text: '%s'" % text)

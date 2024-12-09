@@ -368,7 +368,7 @@ template <class TQueueImpl>
 TInvokerQueue<TQueueImpl>::TInvokerQueue(
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
     const TTagSet& counterTagSet,
-    NProfiling::IRegistryImplPtr registry)
+    NProfiling::IRegistryPtr registry)
     : CallbackEventCount_(std::move(callbackEventCount))
 {
     Counters_.push_back(CreateCounters(counterTagSet, std::move(registry)));
@@ -379,7 +379,7 @@ TInvokerQueue<TQueueImpl>::TInvokerQueue(
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
     const std::vector<TTagSet>& counterTagSets,
     const std::vector<NYTProf::TProfilerTagPtr>& profilerTags,
-    NProfiling::IRegistryImplPtr registry)
+    NProfiling::IRegistryPtr registry)
     : CallbackEventCount_(std::move(callbackEventCount))
 {
     YT_VERIFY(counterTagSets.size() == profilerTags.size());
@@ -686,7 +686,7 @@ void TInvokerQueue<TQueueImpl>::RegisterWaitTimeObserver(TWaitTimeObserver waitT
 }
 
 template <class TQueueImpl>
-typename TInvokerQueue<TQueueImpl>::TCountersPtr TInvokerQueue<TQueueImpl>::CreateCounters(const TTagSet& tagSet, NProfiling::IRegistryImplPtr registry)
+typename TInvokerQueue<TQueueImpl>::TCountersPtr TInvokerQueue<TQueueImpl>::CreateCounters(const TTagSet& tagSet, NProfiling::IRegistryPtr registry)
 {
     auto profiler = TProfiler(registry, "/action_queue").WithTags(tagSet).WithHot();
 

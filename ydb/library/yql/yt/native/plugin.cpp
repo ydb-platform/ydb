@@ -4,45 +4,47 @@
 #include "error_helpers.h"
 #include "progress_merger.h"
 
-#include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
-#include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
-#include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
-#include <ydb/library/yql/providers/yt/lib/res_pull/res_or_pull.h>
-#include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
-#include <ydb/library/yql/providers/yt/lib/schema/schema.h>
-#include <ydb/library/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
-#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/common/yql_names.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
+#include <yt/yql/providers/yt/lib/log/yt_logger.h>
+#include <yt/yql/providers/yt/lib/res_pull/res_or_pull.h>
+#include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
+#include <yt/yql/providers/yt/lib/schema/schema.h>
+#include <yt/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
+#include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
-#include <ydb/library/yql/core/facade/yql_facade.h>
-#include <ydb/library/yql/core/file_storage/file_storage.h>
-#include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
-#include <ydb/library/yql/core/yql_library_compiler.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/core/file_storage/file_storage.h>
+#include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
+#include <yql/essentials/core/yql_library_compiler.h>
+#include <yql/essentials/core/yql_type_helpers.h>
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/yt/core/ytree/convert.h>
 
@@ -353,7 +355,7 @@ public:
             }
 
             auto ytNativeGateway = CreateYtNativeGateway(ytServices);
-            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
 
             ProgramFactory_ = std::make_unique<NYql::TProgramFactory>(
                 false, FuncRegistry_.Get(), ExprContext_.NextUniqueId, dataProvidersInit, "embedded");
@@ -400,14 +402,20 @@ public:
         program->AddCredentials({{"default_yt", NYql::TCredential("yt", "", YqlAgentToken_)}});
         program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
 
+        auto defaultQueryCluster = DefaultCluster_;
+        auto ysonSettings = NodeFromYsonString(settings.ToString()).AsMap();
+        if (auto cluster = ysonSettings.FindPtr("cluster")) {
+            defaultQueryCluster = cluster->AsString();
+        }
+
         auto userDataTable = FilesToUserTable(files);
         program->AddUserDataTable(userDataTable);
 
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = Clusters_;
         sqlSettings.ModuleMapping = Modules_;
-        if (DefaultCluster_) {
-            sqlSettings.DefaultCluster = *DefaultCluster_;
+        if (defaultQueryCluster) {
+            sqlSettings.DefaultCluster = *defaultQueryCluster;
         }
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
@@ -431,8 +439,8 @@ public:
             };
         }
 
-        if (DefaultCluster_ && !usedClusters->contains(*DefaultCluster_)) {
-            usedClusters->insert(*DefaultCluster_);
+        if (defaultQueryCluster && !usedClusters->contains(*defaultQueryCluster)) {
+            usedClusters->insert(*defaultQueryCluster);
         }
 
         std::vector<TString> clustersList(usedClusters->begin(), usedClusters->end());
@@ -460,6 +468,12 @@ public:
         program->AddCredentials({{"default_yt", NYql::TCredential("yt", "", token)}});
         program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
 
+        auto defaultQueryCluster = DefaultCluster_;
+        auto settingsMap = NodeFromYsonString(settings.ToString()).AsMap();
+        if (auto cluster = settingsMap.FindPtr("cluster")) {
+            defaultQueryCluster = cluster->AsString();
+        }
+
         auto userDataTable = FilesToUserTable(files);
         program->AddUserDataTable(userDataTable);
 
@@ -485,8 +499,8 @@ public:
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = Clusters_;
         sqlSettings.ModuleMapping = Modules_;
-        if (DefaultCluster_) {
-            sqlSettings.DefaultCluster = *DefaultCluster_;
+        if (defaultQueryCluster) {
+            sqlSettings.DefaultCluster = *defaultQueryCluster;
         }
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;

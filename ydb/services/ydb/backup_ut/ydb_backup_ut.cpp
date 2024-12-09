@@ -12,6 +12,7 @@
 
 #include <ydb/library/backup/backup.h>
 
+#include <library/cpp/regex/pcre/regexp.h>
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -20,6 +21,7 @@
 
 using namespace NYdb;
 using namespace NYdb::NOperation;
+using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 
 namespace NYdb::NTable {
@@ -39,6 +41,35 @@ bool operator==(const TKeyRange& lhs, const TKeyRange& rhs) {
 }
 
 namespace {
+
+#define Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, ENUM_TYPE) \
+    template <ENUM_TYPE Value> \
+    struct TTestCase##N : public TCurrentTestCase { \
+        TString ParametrizedTestName = #N "-" + ENUM_TYPE##_Name(Value); \
+\
+        TTestCase##N() : TCurrentTestCase() { \
+            Name_ = ParametrizedTestName.c_str(); \
+        } \
+\
+        static THolder<NUnitTest::TBaseTestCase> Create()  { return ::MakeHolder<TTestCase##N<Value>>();  } \
+        void Execute_(NUnitTest::TTestContext&) override; \
+    }; \
+    struct TTestRegistration##N { \
+        template <int I, int End> \
+        static constexpr void AddTestsForEnumRange() { \
+            if constexpr (I < End) { \
+                TCurrentTest::AddTest(TTestCase##N<static_cast<ENUM_TYPE>(I)>::Create); \
+                AddTestsForEnumRange<I + 1, End>(); \
+            } \
+        } \
+\
+        TTestRegistration##N() { \
+            AddTestsForEnumRange<0, ENUM_TYPE##_ARRAYSIZE>(); \
+        } \
+    }; \
+    static TTestRegistration##N testRegistration##N; \
+    template <ENUM_TYPE Value> \
+    void TTestCase##N<Value>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
 #define DEBUG_HINT (TStringBuilder() << "at line " << __LINE__)
 
@@ -100,10 +131,10 @@ auto CreateMinPartitionsChecker(ui32 expectedMinPartitions, const TString& debug
     };
 }
 
-auto CreateHasIndexChecker(const TString& indexName) {
+auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType) {
     return [=](const TTableDescription& tableDescription) {
         for (const auto& indexDesc : tableDescription.GetIndexDescriptions()) {
-            if (indexDesc.GetIndexName() == indexName) {
+            if (indexDesc.GetIndexName() == indexName && indexDesc.GetIndexType() == indexType) {
                 return true;
             }
         }
@@ -285,48 +316,24 @@ void TestTableSplitBoundariesArePreserved(
 }
 
 void TestIndexTableSplitBoundariesArePreserved(
-    const char* table, const char* index, ui64 indexPartitions, TSession& session,
+    const char* table, const char* index, ui64 indexPartitions, TSession& session, TTableBuilder& tableBuilder,
     TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
-    const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
-
     {
-        TExplicitPartitions indexPartitionBoundaries;
-        for (ui32 boundary : {1, 2, 4, 8, 16, 32, 64, 128, 256}) {
-            indexPartitionBoundaries.AppendSplitPoints(
-                // split boundary is technically always a tuple
-                TValueBuilder().BeginTuple().AddElement().OptionalUint32(boundary).EndTuple().Build()
-            );
-        }
-        // By default indexImplTable has auto partitioning by size enabled,
-        // so you must set min partition count for partitions to not merge immediately after indexImplTable is built.
-        TPartitioningSettingsBuilder partitioningSettingsBuilder;
-        partitioningSettingsBuilder
-            .SetMinPartitionsCount(indexPartitions)
-            .SetMaxPartitionsCount(indexPartitions);
-
-        const auto indexSettings = TGlobalIndexSettings{
-            .PartitioningSettings = partitioningSettingsBuilder.Build(),
-            .Partitions = std::move(indexPartitionBoundaries)
-        };
-
-        auto tableBuilder = TTableBuilder()
-            .AddNullableColumn("Key", EPrimitiveType::Uint32)
-            .AddNullableColumn("Value", EPrimitiveType::Uint32)
-            .SetPrimaryKeyColumn("Key")
-            .AddSecondaryIndex(TIndexDescription("byValue", EIndexType::GlobalSync, { "Value" }, {}, { indexSettings }));
-
         const auto result = session.CreateTable(table, tableBuilder.Build()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
+
+    const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
     const auto describeSettings = TDescribeTableSettings()
             .WithTableStatistics(true)
             .WithKeyShardBoundary(true);
-    const auto originalIndexTableDescription = GetTableDescription(
+
+    const auto originalDescription = GetTableDescription(
         session, indexTablePath, describeSettings
     );
-    UNIT_ASSERT_VALUES_EQUAL(originalIndexTableDescription.GetPartitionsCount(), indexPartitions);
-    const auto& originalKeyRanges = originalIndexTableDescription.GetKeyRanges();
+    UNIT_ASSERT_VALUES_EQUAL(originalDescription.GetPartitionsCount(), indexPartitions);
+    const auto& originalKeyRanges = originalDescription.GetKeyRanges();
     UNIT_ASSERT_VALUES_EQUAL(originalKeyRanges.size(), indexPartitions);
 
     backup(table);
@@ -337,11 +344,11 @@ void TestIndexTableSplitBoundariesArePreserved(
     ));
 
     restore(table);
-    const auto restoredIndexTableDescription = GetTableDescription(
+    const auto restoredDescription = GetTableDescription(
         session, indexTablePath, describeSettings
     );
-    UNIT_ASSERT_VALUES_EQUAL(restoredIndexTableDescription.GetPartitionsCount(), indexPartitions);
-    const auto& restoredKeyRanges = restoredIndexTableDescription.GetKeyRanges();
+    UNIT_ASSERT_VALUES_EQUAL(restoredDescription.GetPartitionsCount(), indexPartitions);
+    const auto& restoredKeyRanges = restoredDescription.GetKeyRanges();
     UNIT_ASSERT_VALUES_EQUAL(restoredKeyRanges.size(), indexPartitions);
     UNIT_ASSERT_EQUAL(restoredKeyRanges, originalKeyRanges);
 }
@@ -381,6 +388,86 @@ void TestRestoreTableWithSerial(
     CompareResults(GetTableContent(session, table), originalContent);
 }
 
+const char* ConvertIndexTypeToSQL(NKikimrSchemeOp::EIndexType indexType) {
+    switch (indexType) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+            return "GLOBAL";
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            return "GLOBAL ASYNC";
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            return "GLOBAL UNIQUE";
+        default:
+            UNIT_FAIL("No conversion to SQL for this index type");
+            return nullptr;
+    }
+}
+
+NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType indexType) {
+    switch (indexType) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+            return NYdb::NTable::EIndexType::GlobalSync;
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            return NYdb::NTable::EIndexType::GlobalAsync;
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            return NYdb::NTable::EIndexType::GlobalUnique;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
+        default:
+            UNIT_FAIL("No conversion to API for this index type");
+            return NYdb::NTable::EIndexType::Unknown;
+    }
+}
+
+void TestRestoreTableWithIndex(
+    const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, TSession& session,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key),
+                INDEX %s %s ON (Value)
+            );
+        )",
+        table, index, ConvertIndexTypeToSQL(indexType)
+    ));
+
+    backup(table);
+
+    // restore deleted table
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+
+    restore(table);
+
+    CheckTableDescription(session, table, CreateHasIndexChecker(index, ConvertIndexTypeToAPI(indexType)));
+}
+
+void TestRestoreDirectory(const char* directory, TSchemeClient& client, TBackupFunction&& backup, TRestoreFunction&& restore) {
+    {
+        const auto result = client.MakeDirectory(directory).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    backup(directory);
+
+    {
+        const auto result = client.RemoveDirectory(directory).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    restore(directory);
+
+    {
+        const auto result = client.DescribePath(directory).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetEntry().Type, ESchemeEntryType::Directory);
+    }
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -404,24 +491,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             NDump::TClient backupClient(driver);
             Restore(backupClient, pathToBackup, "/Root");
         };
-    }
-
-    Y_UNIT_TEST(RestoreTableContent) {
-        TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
-        TTableClient tableClient(driver);
-        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
-        TTempDir tempDir;
-        const auto& pathToBackup = tempDir.Path();
-
-        constexpr const char* table = "/Root/table";
-
-        TestTableContentIsPreserved(
-            table,
-            session,
-            CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup)
-        );
     }
 
     Y_UNIT_TEST(RestoreTablePartitioningSettings) {
@@ -488,44 +557,46 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     // TO DO: test index impl table split boundaries restoration from a backup
 
-    Y_UNIT_TEST(BasicRestoreTableWithIndex) {
+    void TestTableBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* table = "/Root/table";
+
+        TestTableContentIsPreserved(
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
-
-        constexpr const char* table = "/Root/table";
-        constexpr const char* index = "byValue";
-        ExecuteDataDefinitionQuery(session, Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Uint32,
-                    Value Uint32,
-                    PRIMARY KEY (Key),
-                    INDEX %s GLOBAL ON (Value)
-                );
-            )",
-            table, index
-        ));
-  
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
-        // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
-        NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, false, false);
-        
-        NDump::TClient backupClient(driver);
+        constexpr const char* table = "/Root/table";
+        constexpr const char* index = "byValue";
 
-        // restore deleted table
-        ExecuteDataDefinitionQuery(session, Sprintf(R"(
-                DROP TABLE `%s`;
-            )", table
-        ));
-        Restore(backupClient, pathToBackup, "/Root");
-
-        CheckTableDescription(session, table, CreateHasIndexChecker(index));
+        TestRestoreTableWithIndex(
+            table,
+            index,
+            indexType,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
         CheckBuildIndexOperationsCleared(driver);
     }
 
-    Y_UNIT_TEST(BasicRestoreTableWithSerial) {
+    void TestTableWithSerialBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
         TTableClient tableClient(driver);
@@ -540,6 +611,93 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
+    }
+
+    void TestDirectoryBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        TSchemeClient schemeClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        constexpr const char* directory = "/Root/dir";
+
+        TestRestoreDirectory(
+            directory,
+            schemeClient,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
+        using namespace NKikimrSchemeOp;
+
+        switch (Value) {
+            case EPathTypeTable:
+                TestTableBackupRestore();
+                break;
+            case EPathTypeTableIndex:
+                TestTableWithIndexBackupRestore();
+                break;
+            case EPathTypeSequence:
+                TestTableWithSerialBackupRestore();
+                break;
+            case EPathTypeDir:
+                TestDirectoryBackupRestore();
+                break;
+            case EPathTypePersQueueGroup:
+                break; // https://github.com/ydb-platform/ydb/issues/10431
+            case EPathTypeSubDomain:
+            case EPathTypeExtSubDomain:
+                break; // https://github.com/ydb-platform/ydb/issues/10432
+            case EPathTypeView:
+                break; // https://github.com/ydb-platform/ydb/issues/10433
+            case EPathTypeCdcStream:
+                break; // https://github.com/ydb-platform/ydb/issues/7054
+            case EPathTypeReplication:
+                break; // https://github.com/ydb-platform/ydb/issues/10436
+            case EPathTypeExternalTable:
+                break; // https://github.com/ydb-platform/ydb/issues/10438
+            case EPathTypeExternalDataSource:
+                break; // https://github.com/ydb-platform/ydb/issues/10439
+            case EPathTypeResourcePool:
+                break; // https://github.com/ydb-platform/ydb/issues/10440
+            case EPathTypeKesus:
+                break; // https://github.com/ydb-platform/ydb/issues/10444
+            case EPathTypeColumnStore:
+            case EPathTypeColumnTable:
+                break; // https://github.com/ydb-platform/ydb/issues/10459
+            case EPathTypeInvalid:
+            case EPathTypeBackupCollection:
+            case EPathTypeBlobDepot:
+                break; // not applicable
+            case EPathTypeRtmrVolume:
+            case EPathTypeBlockStoreVolume:
+            case EPathTypeSolomonVolume:
+            case EPathTypeFileStore:
+                break; // other projects
+            default:
+                UNIT_FAIL("Client backup/restore were not implemented for this scheme object");
+        }
+    }
+
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllIndexTypes, NKikimrSchemeOp::EIndexType) {
+        using namespace NKikimrSchemeOp;
+
+        switch (Value) {
+            case EIndexTypeGlobal:
+            case EIndexTypeGlobalAsync:
+                TestTableWithIndexBackupRestore(Value);
+                break;
+            case EIndexTypeGlobalUnique:
+                break; // https://github.com/ydb-platform/ydb/issues/10468
+            case EIndexTypeGlobalVectorKmeansTree:
+                break; // https://github.com/ydb-platform/ydb/issues/10469
+            case EIndexTypeInvalid:
+                break; // not applicable
+            default:
+                UNIT_FAIL("Client backup/restore were not implemented for this index type");
+        }
     }
 }
 
@@ -675,18 +833,6 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         };
     }
 
-    Y_UNIT_TEST(RestoreTableContent) {
-        TS3TestEnv testEnv;
-        constexpr const char* table = "/Root/table";
-
-        TestTableContentIsPreserved(
-            table,
-            testEnv.GetSession(),
-            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
-        );
-    }
-
     Y_UNIT_TEST(RestoreTablePartitioningSettings) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
@@ -737,17 +883,121 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         constexpr const char* index = "byValue";
         constexpr ui64 indexPartitions = 10;
 
+        TExplicitPartitions indexPartitionBoundaries;
+        for (ui32 i = 1; i < indexPartitions; ++i) {
+            indexPartitionBoundaries.AppendSplitPoints(
+                // split boundary is technically always a tuple
+                TValueBuilder().BeginTuple().AddElement().OptionalUint32(i * 10).EndTuple().Build()
+            );
+        }
+        // By default indexImplTables have auto partitioning by size enabled.
+        // If you don't want the partitions to merge immediately after the indexImplTable is built,
+        // you must set the min partition count for the table.
+        TPartitioningSettingsBuilder partitioningSettingsBuilder;
+        partitioningSettingsBuilder
+            .SetMinPartitionsCount(indexPartitions)
+            .SetMaxPartitionsCount(indexPartitions);
+
+        const auto indexSettings = TGlobalIndexSettings{
+            .PartitioningSettings = partitioningSettingsBuilder.Build(),
+            .Partitions = std::move(indexPartitionBoundaries)
+        };
+
+        auto tableBuilder = TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint32)
+            .AddNullableColumn("Value", EPrimitiveType::Uint32)
+            .SetPrimaryKeyColumn("Key")
+            .AddSecondaryIndex(TIndexDescription(index, EIndexType::GlobalSync, { "Value" }, {}, { indexSettings }));
+
         TestIndexTableSplitBoundariesArePreserved(
             table,
             index,
             indexPartitions,
+            testEnv.GetSession(),
+            tableBuilder,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+        );
+    }
+
+    Y_UNIT_TEST(RestoreIndexTableDecimalSplitBoundaries) {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+        constexpr const char* index = "byValue";
+        constexpr ui64 indexPartitions = 10;
+
+        constexpr ui8 decimalPrecision = 22;
+        constexpr ui8 decimalScale = 9;
+
+        TExplicitPartitions indexPartitionBoundaries;
+        for (ui32 i = 1; i < indexPartitions; ++i) {
+            TDecimalValue boundary(ToString(i * 10), decimalPrecision, decimalScale);
+            indexPartitionBoundaries.AppendSplitPoints(
+                // split boundary is technically always a tuple
+                TValueBuilder()
+                    .BeginTuple().AddElement()
+                        .BeginOptional().Decimal(boundary).EndOptional()
+                    .EndTuple().Build()
+            );
+        }
+        // By default indexImplTables have auto partitioning by size enabled.
+        // If you don't want the partitions to merge immediately after the indexImplTable is built,
+        // you must set the min partition count for the table.
+        TPartitioningSettingsBuilder partitioningSettingsBuilder;
+        partitioningSettingsBuilder
+            .SetMinPartitionsCount(indexPartitions)
+            .SetMaxPartitionsCount(indexPartitions);
+
+        const auto indexSettings = TGlobalIndexSettings{
+            .PartitioningSettings = partitioningSettingsBuilder.Build(),
+            .Partitions = std::move(indexPartitionBoundaries)
+        };
+
+        auto tableBuilder = TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint32)
+            .AddNullableColumn("Value", TDecimalType(decimalPrecision, decimalScale))
+            .SetPrimaryKeyColumn("Key")
+            .AddSecondaryIndex(TIndexDescription(index, EIndexType::GlobalSync, { "Value" }, {}, { indexSettings }));
+
+        TestIndexTableSplitBoundariesArePreserved(
+            table,
+            index,
+            indexPartitions,
+            testEnv.GetSession(),
+            tableBuilder,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+        );
+    }
+
+    void TestTableBackupRestore() {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+
+        TestTableContentIsPreserved(
+            table,
             testEnv.GetSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
         );
     }
 
-    Y_UNIT_TEST(RestoreTableWithSerial) {
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+        constexpr const char* index = "value_idx";
+
+        TestRestoreTableWithIndex(
+            table,
+            index,
+            indexType,
+            testEnv.GetSession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+        );
+    }
+
+    void TestTableWithSerialBackupRestore() {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
 
@@ -759,4 +1009,73 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
+        using namespace NKikimrSchemeOp;
+
+        switch (Value) {
+            case EPathTypeTable:
+                TestTableBackupRestore();
+                break;
+            case EPathTypeTableIndex:
+                TestTableWithIndexBackupRestore();
+                break;
+            case EPathTypeSequence:
+                TestTableWithSerialBackupRestore();
+                break;
+            case EPathTypeDir:
+                break; // https://github.com/ydb-platform/ydb/issues/10430
+            case EPathTypePersQueueGroup:
+                break; // https://github.com/ydb-platform/ydb/issues/10431
+            case EPathTypeSubDomain:
+            case EPathTypeExtSubDomain:
+                break; // https://github.com/ydb-platform/ydb/issues/10432
+            case EPathTypeView:
+                break; // https://github.com/ydb-platform/ydb/issues/10433
+            case EPathTypeCdcStream:
+                break; // https://github.com/ydb-platform/ydb/issues/7054
+            case EPathTypeReplication:
+                break; // https://github.com/ydb-platform/ydb/issues/10436
+            case EPathTypeExternalTable:
+                break; // https://github.com/ydb-platform/ydb/issues/10438
+            case EPathTypeExternalDataSource:
+                break; // https://github.com/ydb-platform/ydb/issues/10439
+            case EPathTypeResourcePool:
+                break; // https://github.com/ydb-platform/ydb/issues/10440
+            case EPathTypeKesus:
+                break; // https://github.com/ydb-platform/ydb/issues/10444
+            case EPathTypeColumnStore:
+            case EPathTypeColumnTable:
+                break; // https://github.com/ydb-platform/ydb/issues/10459
+            case EPathTypeInvalid:
+            case EPathTypeBackupCollection:
+            case EPathTypeBlobDepot:
+                break; // not applicable
+            case EPathTypeRtmrVolume:
+            case EPathTypeBlockStoreVolume:
+            case EPathTypeSolomonVolume:
+            case EPathTypeFileStore:
+                break; // other projects
+            default:
+                UNIT_FAIL("S3 backup/restore were not implemented for this scheme object");
+        }
+    }
+
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllIndexTypes, NKikimrSchemeOp::EIndexType) {
+        using namespace NKikimrSchemeOp;
+
+        switch (Value) {
+            case EIndexTypeGlobal:
+            case EIndexTypeGlobalAsync:
+                TestTableWithIndexBackupRestore(Value);
+                break;
+            case EIndexTypeGlobalUnique:
+                break; // https://github.com/ydb-platform/ydb/issues/10468
+            case EIndexTypeGlobalVectorKmeansTree:
+                break; // https://github.com/ydb-platform/ydb/issues/10469
+            case EIndexTypeInvalid:
+                break; // not applicable
+            default:
+                UNIT_FAIL("S3 backup/restore were not implemented for this index type");
+        }
+    }
 }

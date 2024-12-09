@@ -1,0 +1,11 @@
+--- contrib/libs/libidn/lib/idna.h	(index)
++++ contrib/libs/libidn/lib/idna.h	(working tree)
+@@ -61,7 +61,7 @@
+ # endif
+ 
+ # include <stddef.h>		/* size_t */
+-# include <idn-int.h>		/* uint32_t */
++# include "idn-int.h"		/* uint32_t */
+ 
+ # ifdef __cplusplus
+ extern "C"

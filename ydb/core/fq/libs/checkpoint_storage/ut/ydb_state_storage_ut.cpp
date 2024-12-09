@@ -11,7 +11,7 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
 
 namespace NFq {

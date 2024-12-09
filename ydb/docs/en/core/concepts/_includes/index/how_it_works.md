@@ -10,7 +10,7 @@ Fully explaining how YDB works in detail takes quite a while. Below you can revi
 
 One of the key building blocks of {{ ydb-short-name }}'s compute layer is called a *tablet*. They are stateful logical components implementing various aspects of {{ ydb-short-name }}.
 
-The next level of detail of overall {{ ydb-short-name }} architecture is explained in the [YDB cluster documentation section](../../cluster/index.md).
+The next level of detail of overall {{ ydb-short-name }} architecture is explained in the [{#T}](../../../contributor/general-schema.md) article.
 
 ### Hierarchy {#ydb-hierarchy}
 

@@ -80,6 +80,9 @@ def get_all_manifests(directory):
                      'Please create NodeClaim mainfest')
         sys.exit(2)
 
+    if not result:
+        raise RuntimeError(f'failed to find any manifests in {os.path.abspath(directory)}')
+
     return result
 
 

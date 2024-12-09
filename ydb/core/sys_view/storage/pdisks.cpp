@@ -36,6 +36,7 @@ public:
             {T::AvailableSize::ColumnId, {E::kInfoFieldNumber, V::kAvailableSizeFieldNumber}},
             {T::TotalSize::ColumnId, {E::kInfoFieldNumber, V::kTotalSizeFieldNumber}},
             {T::Status::ColumnId, {E::kInfoFieldNumber, V::kStatusV2FieldNumber}},
+            {T::State::ColumnId, {E::kInfoFieldNumber, V::kStateFieldNumber}},
             {T::StatusChangeTimestamp::ColumnId, {E::kInfoFieldNumber, V::kStatusChangeTimestampFieldNumber}},
             {T::ExpectedSlotCount::ColumnId, {E::kInfoFieldNumber, V::kExpectedSlotCountFieldNumber}},
             {T::NumActiveSlots::ColumnId, {E::kInfoFieldNumber, V::kNumActiveSlotsFieldNumber}},

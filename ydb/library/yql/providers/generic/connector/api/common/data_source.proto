@@ -36,6 +36,7 @@ enum EDataSourceKind {
     MS_SQL_SERVER = 6;
     GREENPLUM = 7;
     ORACLE = 8;
+    LOGGING = 9;
 }
 
 // EProtocol generalizes various kinds of network protocols supported by different databases.
@@ -77,6 +78,11 @@ message TOracleDataSourceOptions {
     string service_name = 1;
 }
 
+// TLoggingDataSourceOptions represents settings specific to Logging
+message TLoggingDataSourceOptions {
+    string folder_id = 1;
+}
+
 // TDataSourceInstance helps to identify the instance of a data source to redirect request to.
 message TDataSourceInstance {
     // Data source kind
@@ -100,5 +106,6 @@ message TDataSourceInstance {
         TS3DataSourceOptions s3_options = 9;
         TGreenplumDataSourceOptions gp_options = 10;
         TOracleDataSourceOptions oracle_options = 11;
+        TLoggingDataSourceOptions logging_options = 12;
     }
 }

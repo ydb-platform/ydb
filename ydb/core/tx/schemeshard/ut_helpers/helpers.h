@@ -18,8 +18,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/core/cms/console/console.h>
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
 
 #include <util/stream/null.h>
 
@@ -61,6 +61,11 @@
     static TTestRegistration##N testRegistration##N;                                                               \
     template<bool OPT1, bool OPT2>                                                                                 \
     void N(NUnitTest::TTestContext&)
+
+namespace NYdb::NTable {
+    struct TGlobalIndexSettings;
+    struct TKMeansTreeSettings;
+}
 
 namespace NSchemeShardUT_Private {
     using namespace NKikimr;
@@ -290,6 +295,13 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropResourcePool);
     DROP_BY_PATH_ID_HELPERS(DropResourcePool);
 
+    // backup collection
+    GENERIC_HELPERS(CreateBackupCollection);
+    GENERIC_HELPERS(DropBackupCollection);
+    DROP_BY_PATH_ID_HELPERS(DropBackupCollection);
+    GENERIC_HELPERS(BackupBackupCollection);
+    GENERIC_HELPERS(BackupIncrementalBackupCollection);
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
@@ -361,6 +373,9 @@ namespace NSchemeShardUT_Private {
         NKikimrSchemeOp::EIndexType IndexType = NKikimrSchemeOp::EIndexTypeGlobal;
         TVector<TString> IndexColumns;
         TVector<TString> DataColumns;
+        TVector<NYdb::NTable::TGlobalIndexSettings> GlobalIndexSettings = {};
+        // implementation note: it was made a pointer, not optional, to enable forward declaration
+        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> KMeansTreeSettings = {};
     };
 
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal);
@@ -500,9 +515,20 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, ui64 schemeShard, ui64 tabletId,
         NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);
 
-    // Login
-    TEvTx* CreateAlterLoginCreateUser(ui64 txId, const TString& user, const TString& password);
-    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
+    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
+        const TString& user, const TString& password,
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
+    void AlterLoginAddGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
+        const TString& member, const TString& group, 
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
+    void AlterLoginRemoveGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, 
+        const TString& member, const TString& group, 
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
+    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, 
+        const TString& user, const TString& password);
 
     // Mimics data query to a single table with multiple partitions
     class TFakeDataReq {

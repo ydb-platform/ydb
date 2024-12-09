@@ -116,7 +116,7 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Filter",
-                                                                "Predicate": "item.e + item.d >= item.a + item.b - 10 And item.e + item.d <= item.c + 130 And item.c > item.d And item.b > item.c"
+                                                                "Predicate": "item.e + item.d >= item.a + item.b - 10 AND item.e + item.d <= item.c + 130 AND item.c > item.d AND item.b > item.c"
                                                             }
                                                         ],
                                                         "PlanNodeId": 10,

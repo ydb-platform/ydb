@@ -1,0 +1,5 @@
+exclude:
+  - kubernetes/leaderelection/example.py
+mark_as_tests:
+  - kubernetes/*_test.py
+  - kubernetes/dynamic/test_*.py

@@ -620,7 +620,15 @@ namespace NKikimr::NPDisk {
                     true, fmt.DataKey, 0, 0, 1);
                 const size_t bytesToWrite = payload.size();
 
-                const ui64 deviceSizeInBytes = DriveData.Size & ~ui64(DefaultSectorSize - 1);
+                ui64 rawDeviceSize = 0;
+                try {
+                    bool isBlockDevice = false;
+                    DetectFileParameters(Cfg->Path, rawDeviceSize, isBlockDevice);
+                } catch (const std::exception&) {
+                    rawDeviceSize = 0;
+                }
+
+                const ui64 deviceSizeInBytes = rawDeviceSize & ~ui64(DefaultSectorSize - 1);
                 auto& cur = unformatted.Format;
                 const ui64 endOffset = !cur || cur->Offset + cur->Length + bytesToWrite <= deviceSizeInBytes
                     ? deviceSizeInBytes
@@ -629,7 +637,7 @@ namespace NKikimr::NPDisk {
                 if (endOffset < bytesToWrite + FormatSectorSize * ReplicationFactor) { // way too large metadata
                     P_LOG(PRI_ERROR, BPD01, "ProcessWriteMetadata (unformatted): not enough free space",
                         (EndOffset, endOffset),
-                        (RawDeviceSize, DriveData.Size),
+                        (RawDeviceSize, rawDeviceSize),
                         (DeviceSizeInBytes, deviceSizeInBytes),
                         (BytesToWrite, bytesToWrite));
                     PCtx->ActorSystem->Send(write.Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));

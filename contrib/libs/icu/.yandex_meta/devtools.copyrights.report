@@ -1,0 +1,4501 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 00b960dcf89e7cc9d74b0a028076392f
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2001-2008, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/utrie2_impl.h [6:7]
+        i18n/casetrn.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 00d488c60d13be676dcd8b1f85c6cb8d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucase.cpp [793:801]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 02056fc990d537a276dd4bc5b957c657
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2000-2015, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ubidiwrt.cpp [6:7]
+        common/ucnvhz.cpp [5:6]
+        common/ucnvlat1.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0504cf08dde4fb6f8d397a556a395cae
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2010 , Yahoo! Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/selfmt.cpp [7:7]
+        i18n/selfmtimpl.h [7:7]
+        include/unicode/selfmt.h [7:7]
+        include/unicode/umsg.h [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 066c8801b5a55e48db808980d061e5aa
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2000-2004, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/ucnv_cb.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 06f72b77085eb81e7d97925edf9d5c2c
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2007-2016, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/dt_impl.h [5:6]
+        i18n/dtitv_impl.h [5:6]
+        i18n/dtptngen.cpp [5:6]
+        i18n/dtptngen_impl.h [5:6]
+        i18n/plurrule.cpp [5:6]
+        i18n/plurrule_impl.h [5:6]
+        i18n/reldtfmt.cpp [5:6]
+        i18n/reldtfmt.h [5:6]
+        i18n/vtzone.cpp [5:6]
+        include/unicode/dtptngen.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 080ab467dac7bd56a0493bfe8c995e25
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2002-2010, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/propsvec.h [6:7]
+        i18n/tridpars.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 09bdb3fccc0d23c09561b213d83e8643
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2012-2015, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/collationdata.cpp [5:6]
+        i18n/collationdatabuilder.cpp [5:6]
+        i18n/collationkeys.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 09e8ed2da01de5c51e230797bdbb2949
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2001, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/cwchar.cpp [6:7]
+        common/cwchar.h [6:7]
+        i18n/umsg_imp.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0aff59d44c10fb4ac10dbe88c45617f0
+BELONGS ya.make
+    License text:
+        /* Copyright (c) IBM Corporation, 2000-2014.  All rights reserved.    */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/decNumber.cpp [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0c87cfb8b518b14d560356ad48d35a1f
+BELONGS ya.make
+    License text:
+         \#   * Copyright (c) 1999 TaBE Project.
+         \#   * Copyright (c) 1999 Pai-Hsiang Hsiao.
+         \#   * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [146:148]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0cb0ec3dd69071db5f6f7181c854c372
+BELONGS ya.make
+    License text:
+         *   Copyright (C) 2005-2013, International Business Machines
+         *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/csrucode.cpp [5:6]
+        include/unicode/ucsdet.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0d2b5f3194f556439dbd4b5a379262d2
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2003-2009, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/utracimp.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0e1717ca38d4ab223ef5231f558f4397
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2003-2011, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ruleiter.cpp [5:6]
+        common/ruleiter.h [5:6]
+        common/ustack.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0e84950d5b16c9b032e1c968e92848b8
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2006-2016, International Business Machines Corporation
+         * and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/brkeng.cpp [5:6]
+        common/dictbe.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0f75d1d0d1f7b46184cb0b42d008610a
+BELONGS ya.make
+    License text:
+            UnicodeString src(c);
+            UnicodeString dest;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/uprops.cpp [271:272]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 11069f1c5f0ae92f706fd1313c8bd0e3
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2001-2015 IBM and others. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/usearch.cpp [5:5]
+        i18n/usrchimp.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1204a8917bbfdd16c45aaaba0681db02
+BELONGS ya.make
+    License text:
+        * Copyright (C) {1999-2001}, International Business Machines Corporation and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/rbt_rule.h [4:4]
+        include/unicode/utf32.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1369b66f5995a94130615ba0e5247660
+BELONGS ya.make
+    License text:
+        // © 2021 and later: Unicode, Inc. and others.
+        // License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/lstmbe.cpp [1:2]
+        common/lstmbe.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 13abf4a9750a22765abe0573992f1d72
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2009-2012, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/filterednormalizer2.cpp [6:7]
+        i18n/fpositer.cpp [5:6]
+        include/unicode/bytestream.h [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 144ad289ab6f8934f1c018e2705c59ea
+BELONGS ya.make
+    License text:
+        // Copyright 2012 the V8 project authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/double-conversion-double-to-string.h [6:6]
+        i18n/double-conversion-fast-dtoa.cpp [6:6]
+        i18n/double-conversion-ieee.h [6:6]
+        i18n/double-conversion-string-to-double.h [6:6]
+        i18n/double-conversion.h [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1467b8235fd157ab6e2782f8e88c8155
+BELONGS ya.make
+    License text:
+         *   Copyright (C) 2005-2012, International Business Machines
+         *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/csmatch.cpp [5:6]
+        i18n/csmatch.h [5:6]
+        i18n/csrecog.h [5:6]
+        i18n/csrmbcs.h [5:6]
+        i18n/csrucode.h [5:6]
+        i18n/csrutf8.h [5:6]
+        include/unicode/ucasemap.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 146a960705362bf0fa9ecdaef6566478
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        readme.html [7:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 15d83207399227b14a1044b1cba00a64
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2010, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/udatamem.h [6:7]
+        common/uinvchar.cpp [6:7]
+        common/ustr_cnv.h [5:6]
+        include/unicode/unifilt.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 16d77374d4f3ba25a3fdfa4958bf4c49
+BELONGS ya.make
+    License text:
+        Copyright 2006-2011, the V8 project authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [407:407]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1724152ffb2614c7582af8ad412a7b55
+BELONGS ya.make
+    License text:
+        * Copyright (C) 1997-2015, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/brkiter.cpp [5:6]
+        common/uhash.h [5:6]
+        common/umutex.h [5:6]
+        common/utypes.cpp [6:7]
+        i18n/datefmt.cpp [5:6]
+        i18n/msgfmt.cpp [4:6]
+        i18n/nfrs.cpp [5:6]
+        i18n/nfrs.h [5:6]
+        i18n/nfrule.cpp [5:6]
+        i18n/nfrule.h [5:6]
+        i18n/nfsubs.cpp [5:6]
+        i18n/nfsubs.h [5:6]
+        i18n/numfmt.cpp [5:6]
+        i18n/rbnf.cpp [5:6]
+        include/unicode/filteredbrk.h [5:6]
+        include/unicode/rbnf.h [5:6]
+        include/unicode/unum.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1739d98e187695c654face1ce00e4398
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2013-2015, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/collationdatareader.cpp [5:6]
+        i18n/collationdatareader.h [5:6]
+        i18n/collationdatawriter.cpp [5:6]
+        i18n/collationfastlatin.cpp [5:6]
+        i18n/collationfastlatin.h [5:6]
+        i18n/collationfastlatinbuilder.cpp [5:6]
+        i18n/collationruleparser.cpp [5:6]
+        i18n/collationsettings.cpp [5:6]
+        i18n/collationsettings.h [5:6]
+        i18n/collationtailoring.cpp [5:6]
+        i18n/uregion.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 177048547be92621ac16138e4dfd305c
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2013-2016, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/uscript_props.cpp [5:6]
+        i18n/collationfastlatinbuilder.h [5:6]
+        i18n/listformatter.cpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 17dacec07ae8e10533003c8aa855c840
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2016 International Business Machines Corporation
+        *   and others. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/rbbi.cpp [5:6]
+        include/unicode/rbbi.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a3f563d25099a01c95afbe65c12e842
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2001-2014 IBM and others. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/stsearch.cpp [5:5]
+        include/unicode/stsearch.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ab4b49d19e33b8ff967525e961890db
+BELONGS ya.make
+    License text:
+        // © 2023 and later: Unicode, Inc. and others.
+        // License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ulocale.cpp [1:2]
+        common/ulocbuilder.cpp [1:2]
+        include/unicode/ulocale.h [1:2]
+        include/unicode/ulocbuilder.h [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b180c37baa8c9b6e77edc8ca2a80c7a
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2011-2013, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/messagepattern.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b60a45684a8ce1b2100fccc4a80f7c2
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1996-2008, International Business Machines Corporation *
+         * and others. All Rights Reserved.                                     *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/astro.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1bb07512afddf41028a05a310a97a26a
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2002-2012, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/uenum.cpp [6:7]
+        common/uiter.cpp [6:7]
+        common/uobject.cpp [6:7]
+        i18n/funcrepl.cpp [5:6]
+        i18n/strrepl.cpp [5:6]
+        include/unicode/strenum.h [6:7]
+        include/unicode/uobject.h [6:7]
+        include/unicode/utf_old.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1c0451c620cd1590691ba62d945f6403
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2012, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/utf_impl.cpp [6:7]
+        i18n/umsg.cpp [6:7]
+        include/unicode/rep.h [5:6]
+        include/unicode/utf16.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1c2176223100a37a72d8c90ec1d5ee98
+BELONGS ya.make
+    License text:
+        // © 2020 and later: Unicode, Inc. and others.
+        // License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/charstrmap.h [1:2]
+        common/uniquecharstr.h [1:2]
+        i18n/measunit_extra.cpp [1:2]
+        i18n/measunit_impl.h [1:2]
+        i18n/number_symbolswrapper.cpp [1:2]
+        i18n/number_usageprefs.cpp [1:2]
+        i18n/number_usageprefs.h [1:2]
+        i18n/units_complexconverter.cpp [1:2]
+        i18n/units_complexconverter.h [1:2]
+        i18n/units_converter.cpp [1:2]
+        i18n/units_converter.h [1:2]
+        i18n/units_data.cpp [1:2]
+        i18n/units_data.h [1:2]
+        i18n/units_router.cpp [1:2]
+        i18n/units_router.h [1:2]
+        include/unicode/unumberrangeformatter.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e18e8386b6b42e5a6314a1da861c3e9
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2001-2010, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/nortrans.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 217196cfa84c55ceceb96d287984fdf4
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2003-2016, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnv_ext.cpp [6:7]
+        common/usprep.cpp [6:7]
+        i18n/hebrwcal.cpp [5:6]
+        i18n/ulocdata.cpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 21f1ef78247d3fad0b18eef56c915537
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2001-2011,2014 IBM and others. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/usearch.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 223c6ab7ff67d303e8abfd5008f2aaca
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1998-2004, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnvdisp.cpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22e5e0febb8bd17296e77df0a446bbe6
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1998-2006, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        io/uprintf.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 253b6558d66b5714cb744e5270df77db
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2001-2011, International Business Machines Corporation.       *
+         * All Rights Reserved.                                                        *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/serv.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 254c3aabc336feede9e56b1ab0a5717a
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2002-2007, International Business Machines Corporation
+        * and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/anytrans.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 25a755ff1553ec1b01bbec3211ec3d10
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2010-2014, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/collation.cpp [5:6]
+        i18n/collationiterator.cpp [5:6]
+        i18n/collationiterator.h [5:6]
+        i18n/fmtableimp.h [5:6]
+        i18n/utf16collationiterator.cpp [5:6]
+        i18n/utf16collationiterator.h [5:6]
+        include/unicode/numsys.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 25e33b598a2091402adb6e6e7adb30e7
+BELONGS ya.make
+    License text:
+        // © 2022 and later: Unicode, Inc. and others.
+        // License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/localefallback_data.h [1:2]
+        common/mlbe.cpp [1:2]
+        common/mlbe.h [1:2]
+        i18n/displayoptions.cpp [1:2]
+        i18n/iso8601cal.cpp [1:3]
+        i18n/iso8601cal.h [1:4]
+        include/unicode/displayoptions.h [1:2]
+        include/unicode/formattednumber.h [1:2]
+        include/unicode/simplenumberformatter.h [1:2]
+        include/unicode/udisplayoptions.h [1:2]
+        include/unicode/uformattednumber.h [1:2]
+        include/unicode/usimplenumberformatter.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 268f4bd6f24aa7f38630d5a9baf54c7a
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1998-2016, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnv.cpp [6:7]
+        common/ucnv_err.cpp [6:7]
+        common/ustring.cpp [6:7]
+        include/unicode/unistr.h [5:6]
+        io/uprntf_p.cpp [6:7]
+        io/uscanf_p.cpp [6:7]
+        io/ustdio.cpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 282027a25fc53ee56aeb38bf80a1e1e4
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2014, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/unames.cpp [6:7]
+        common/uniset_props.cpp [6:7]
+        common/unistr_case.cpp [6:7]
+        common/unistr_cnv.cpp [6:7]
+        common/uvectr64.h [5:6]
+        i18n/collationweights.h [6:7]
+        i18n/rbt_data.cpp [5:6]
+        include/unicode/translit.h [5:6]
+        include/unicode/ucnv.h [5:6]
+        include/unicode/udata.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 28a0c5fdb2de9c27d3415a45e22e80f7
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2003 - 2009, International Business Machines Corporation and  *
+        * others. All Rights Reserved.                                                *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/cecal.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 29be00457f74dcf5f2b494d41d6a6c10
+BELONGS ya.make
+    License text:
+        // Copyright 2007 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/bytestream.cpp [6:6]
+        include/unicode/bytestream.h [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2a49930c8b486d8f8e224a81d926405d
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1997-2011, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/cpputils.h [6:7]
+        common/cstring.cpp [6:7]
+        common/uelement.h [5:6]
+        common/uhash_us.cpp [5:6]
+        i18n/selfmtimpl.h [4:6]
+        include/unicode/chariter.h [6:7]
+        include/unicode/format.h [5:6]
+        include/unicode/selfmt.h [4:6]
+        include/unicode/umsg.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2a4e27e8d5d46fb305aaa9ee946c9903
+BELONGS ya.make
+    License text:
+        Copyright © 2016-2024 Unicode, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2b694c7444010b1b84ed2710400fe3ef
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucase.cpp [793:801]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2ec16a90233286d80e8edbbd0e0f0a0e
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2009-2014, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/normalizer2impl.cpp [6:7]
+        common/normalizer2impl.h [6:7]
+        i18n/alphaindex.cpp [5:6]
+        i18n/currpinf.cpp [5:6]
+        include/unicode/std_string.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 31211fa907ef4f706569f88d67fea711
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2011-2016, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/tzgnames.cpp [5:6]
+        i18n/tznames_impl.cpp [5:6]
+        i18n/tznames_impl.h [5:6]
+        include/unicode/tznames.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 328516a0f29252548a0ea446076092a2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucase.cpp [793:801]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 32ae55e197e49c20922f6a1f369d69b1
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1998-2014, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ustr_cnv.cpp [6:7]
+        i18n/ucol_imp.h [6:7]
+        include/unicode/ustring.h [5:6]
+        io/locbund.cpp [6:7]
+        io/ufile.h [6:7]
+        io/ufmt_cmn.cpp [6:7]
+        io/uprintf.cpp [6:7]
+        io/uscanf.cpp [6:7]
+        io/uscanf.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 32ea97f4323bd4baceabda9fead99e81
+BELONGS ya.make
+    License text:
+        // © 2019 and later: Unicode, Inc. and others.
+        // License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/localebuilder.cpp [1:2]
+        common/localematcher.cpp [1:2]
+        common/localeprioritylist.cpp [1:2]
+        common/localeprioritylist.h [1:2]
+        common/locdistance.cpp [1:2]
+        common/locdistance.h [1:2]
+        common/loclikelysubtags.cpp [1:2]
+        common/loclikelysubtags.h [1:2]
+        common/lsr.cpp [1:2]
+        common/lsr.h [1:2]
+        common/restrace.cpp [1:2]
+        common/restrace.h [1:2]
+        common/ulayout_props.h [1:2]
+        i18n/number_output.cpp [1:2]
+        include/unicode/localematcher.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 34644d29f15d2200a92fddcf2eea0dbf
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2000-2006, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnv_cb.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 35817885d29f54caf8a797836b56e3ef
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2003-2003, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/parsepos.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 36609d6e55c207076f2c48fa0d3fd8a6
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2001-2014, International Business Machines Corporation and    *
+         * others. All Rights Reserved.                                                *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/servlk.cpp [5:6]
+        common/servlkf.cpp [5:6]
+        common/servls.cpp [5:6]
+        common/servnotf.h [5:6]
+        common/servrbf.cpp [5:6]
+        common/servslkf.cpp [5:6]
+        common/ucln_cmn.cpp [5:6]
+        common/unormcmp.cpp [6:7]
+        common/utrie2.cpp [6:7]
+        common/utrie2.h [6:7]
+        common/utrie2_builder.cpp [6:7]
+        i18n/bocsu.cpp [5:6]
+        i18n/bocsu.h [5:6]
+        i18n/transreg.cpp [5:6]
+        i18n/transreg.h [5:6]
+        i18n/ucln_in.cpp [6:7]
+        include/unicode/uclean.h [5:6]
+        include/unicode/ucoleitr.h [5:6]
+        io/sprintf.cpp [6:7]
+        io/ucln_io.cpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3666116ac4f173e889ce41ac8ed171ca
+BELONGS ya.make
+    License text:
+        // Copyright 2006-2008 the V8 project authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/double-conversion-cached-powers.cpp [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 371c867a63504aaf6ecf34ab19af5df2
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2009-2014 International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ureslocs.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 37393e316ef92a545566754e09a10a78
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2015 International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnv_bld.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 37803253a285b7d36a90f4900f9ea15d
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2004, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnv_cnv.cpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 384f9781d0d4a1734e8389b133b522ea
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2004, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/curramt.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3934ab2386d341a637de2579ee513c55
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2001-2014, International Business Machines Corporation.
+        * All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/serv.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 39869448adf5f534333b8c1ac6d48488
+BELONGS ya.make
+    License text:
+         *   Copyright (C) 1999-2006, International Business Machines
+         *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnv_io.h [5:6]
+        include/unicode/umisc.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3a32e16e534acbd3f946c45de5cb7763
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2003-2009,2012,2016 International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/japancal.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3afb6f4878679f5d7625233578fb31bd
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2008, International Business Machines
+         * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/gregoimp.cpp [5:6]
+        i18n/gregoimp.h [5:6]
+        i18n/indiancal.h [5:6]
+        i18n/japancal.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3b862b213aec9889d0e0427b0b73cd10
+BELONGS ya.make
+    License text:
+         * COPYRIGHT: 
+         * Copyright (c) 1996-2012, International Business Machines Corporation and
+         * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/normlzr.cpp [5:7]
+        i18n/astro.cpp [4:5]
+        i18n/sortkey.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3c3422ac29c1e6e9c3e9a18573b76511
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2002-2015, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/cmemory.cpp [6:7]
+        common/ucnv_u16.cpp [5:6]
+        common/ucnv_u32.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3d69d5ec9e69183a9e86a95d77eb017b
+BELONGS ya.make
+    License text:
+        //  Copyright (C) 2004-2015, International Business Machines Corporation and others.
+        //  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/regexst.cpp [6:7]
+        i18n/uregex.cpp [5:6]
+        include/unicode/measure.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3dd5361f3b447c083f00ddf8021ba290
+BELONGS ya.make
+    License text:
+             Copyright © 2016 and later: Unicode, Inc. and others.
+             License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        APIChangeReport.html [3:4]
+        LICENSE [298:301]
+        common/norm2_nfc_data.h [1:4]
+        common/propname_data.h [1:4]
+        common/rbbi_cache.cpp [1:2]
+        common/rbbi_cache.h [1:2]
+        common/ubidi_props_data.h [1:4]
+        common/ucase_props_data.h [1:4]
+        common/uchar_props_data.h [1:4]
+        i18n/collationfcd.cpp [1:4]
+        icu4c.css [3:6]
+        include/unicode/uvernum.h [49:50]
+        readme.html [7:10]
+        readme.html [24:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e9301268dfb40bafda46235733161e6
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2011, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/chariter.cpp [5:6]
+        common/ucmndata.cpp [6:7]
+        common/ucmndata.h [6:7]
+        common/ucnv_cnv.h [5:6]
+        common/ucnv_imp.h [5:6]
+        common/udatamem.cpp [6:7]
+        common/umapfile.h [6:7]
+        common/unistr_props.cpp [6:7]
+        common/usc_impl.h [5:6]
+        common/uvectr32.h [5:6]
+        i18n/cpdtrans.cpp [5:6]
+        i18n/cpdtrans.h [5:6]
+        i18n/rbt_pars.h [5:6]
+        i18n/rbt_rule.cpp [5:6]
+        i18n/rbt_set.cpp [5:6]
+        include/unicode/utf.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3ec29f95cc16cf7eaa8ceac0c47c8555
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2000-2011, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucol_data.h [5:6]
+        include/unicode/uversion.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 412d83000349f6225384f339be95e941
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2002-2005, International Business Machines Corporation and    *
+         * others. All Rights Reserved.                                                *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/locutil.h [5:6]
+        include/unicode/unifunct.h [5:6]
+        include/unicode/unirepl.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 414987f2570e87958ea4f1d4d28a7edb
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2008-2011, International Business Machines
+        *   Corporation, Google and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnvsel.cpp [6:7]
+        include/unicode/ucnvsel.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 43d7a3619e6be8505e17e496da59a7c0
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2011-2012, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/appendable.cpp [5:6]
+        common/messagepattern.cpp [5:6]
+        i18n/tzgnames.h [5:6]
+        include/unicode/appendable.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 43e6f1146df2eca3fbaed3b3ea1538ff
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1997-2014, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/hash.h [5:6]
+        common/uscript.cpp [5:6]
+        include/unicode/calendar.h [5:6]
+        include/unicode/coleitr.h [5:6]
+        include/unicode/fmtable.h [5:6]
+        include/unicode/putil.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 46943afe72262286cb13087abd95d87f
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2016, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/cstr.h [6:7]
+        i18n/dayperiodrules.cpp [5:6]
+        i18n/dayperiodrules.h [5:6]
+        include/unicode/ureldatefmt.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 46dc033853bcb8df3dacfbdae3608248
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2004-2012, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucase.h [6:7]
+        i18n/utmscale.cpp [5:6]
+        include/unicode/utext.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49d535ae4925cfe626786ef7b6f01d96
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2003-2014, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucol_swp.h [6:7]
+        common/udataswp.cpp [6:7]
+        common/udataswp.h [6:7]
+        common/uidna.cpp [6:7]
+        common/utrace.cpp [5:6]
+        i18n/indiancal.cpp [4:5]
+        include/unicode/uidna.h [6:7]
+        include/unicode/usprep.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4a90d6bd4d71d2b43e4d94ed5f5c984b
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2009-2015, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/icuplug.cpp [6:7]
+        common/icuplugimp.h [6:7]
+        common/uloc_tag.cpp [5:6]
+        i18n/fphdlimp.cpp [5:6]
+        i18n/fphdlimp.h [5:6]
+        i18n/plurfmt.cpp [5:6]
+        i18n/udatpg.cpp [6:7]
+        include/unicode/currpinf.h [5:6]
+        include/unicode/icuplug.h [6:7]
+        include/unicode/unorm2.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4bc62ecc248d3e44a50c45d9a6231e74
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2011, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/messageimpl.h [5:6]
+        common/patternprops.cpp [5:6]
+        common/patternprops.h [5:6]
+        common/ucasemap_titlecase_brkiter.cpp [5:6]
+        common/uniset_closure.cpp [6:7]
+        common/unistr_case_locale.cpp [5:6]
+        common/unistr_titlecase_brkiter.cpp [5:6]
+        common/ustr_titlecase_brkiter.cpp [5:6]
+        common/ustrcase_locale.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4c67a5f71210ca5ad262361b18a41da6
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2007-2015, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/udatpg.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4cb8447010f6f686ae36eee0b00e7a54
+BELONGS ya.make
+    License text:
+        Copyright (c) 1995-2016 International Business Machines Corporation and others
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [57:58]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4f88fbecb7a8ddf75f669ee598477d79
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2002-2008 International Business Machines Corporation   *
+        *   and others. All rights reserved.                                      *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/rbbisetb.cpp [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 51a72979c21740b2d46d27d3ebb8aec8
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2010-2012,2015 International Business Machines
+        * Corporation and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/udateintervalformat.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5333e14289cbb5cfe9da2dc5cada0cd3
+BELONGS ya.make
+    License text:
+        // © 2017 and later: Unicode, Inc. and others.
+        // License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/bytesinkutil.cpp [1:2]
+        common/bytesinkutil.h [1:2]
+        common/edits.cpp [1:2]
+        common/ucasemap_imp.h [1:2]
+        common/ucptrie.cpp [1:2]
+        common/ucptrie_impl.h [1:2]
+        common/umutablecptrie.cpp [1:2]
+        i18n/formatted_string_builder.cpp [1:2]
+        i18n/formatted_string_builder.h [1:2]
+        i18n/number_affixutils.cpp [1:2]
+        i18n/number_affixutils.h [1:2]
+        i18n/number_asformat.h [1:2]
+        i18n/number_compact.cpp [1:2]
+        i18n/number_compact.h [1:2]
+        i18n/number_decimalquantity.cpp [1:2]
+        i18n/number_decimalquantity.h [1:2]
+        i18n/number_decimfmtprops.cpp [1:2]
+        i18n/number_decimfmtprops.h [1:2]
+        i18n/number_decnum.h [1:2]
+        i18n/number_fluent.cpp [1:2]
+        i18n/number_formatimpl.cpp [1:2]
+        i18n/number_formatimpl.h [1:2]
+        i18n/number_grouping.cpp [1:2]
+        i18n/number_integerwidth.cpp [1:2]
+        i18n/number_longnames.cpp [1:2]
+        i18n/number_longnames.h [1:2]
+        i18n/number_microprops.h [1:2]
+        i18n/number_modifiers.cpp [1:2]
+        i18n/number_modifiers.h [1:2]
+        i18n/number_notation.cpp [1:2]
+        i18n/number_padding.cpp [1:2]
+        i18n/number_patternmodifier.cpp [1:2]
+        i18n/number_patternmodifier.h [1:2]
+        i18n/number_patternstring.cpp [1:2]
+        i18n/number_patternstring.h [1:2]
+        i18n/number_rounding.cpp [1:2]
+        i18n/number_roundingutils.h [1:2]
+        i18n/number_scientific.cpp [1:2]
+        i18n/number_scientific.h [1:2]
+        i18n/number_simple.cpp [1:2]
+        i18n/number_types.h [1:2]
+        i18n/number_utils.h [1:2]
+        include/unicode/casemap.h [1:2]
+        include/unicode/char16ptr.h [1:2]
+        include/unicode/nounit.h [1:2]
+        include/unicode/numberformatter.h [1:2]
+        include/unicode/stringoptions.h [1:2]
+        include/unicode/ucptrie.h [1:2]
+        include/unicode/umutablecptrie.h [1:2]
+        include/unicode/unumberoptions.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 54a59bbade65e8a194ed76f4af30de25
+BELONGS ya.make
+    License text:
+        // Copyright 2010 the V8 project authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/double-conversion-bignum-dtoa.cpp [6:6]
+        i18n/double-conversion-bignum-dtoa.h [6:6]
+        i18n/double-conversion-bignum.cpp [6:6]
+        i18n/double-conversion-bignum.h [6:6]
+        i18n/double-conversion-cached-powers.h [6:6]
+        i18n/double-conversion-diy-fp.h [6:6]
+        i18n/double-conversion-double-to-string.cpp [6:6]
+        i18n/double-conversion-fast-dtoa.h [6:6]
+        i18n/double-conversion-string-to-double.cpp [6:6]
+        i18n/double-conversion-strtod.cpp [6:6]
+        i18n/double-conversion-strtod.h [6:6]
+        i18n/double-conversion-utils.h [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5586c83d8058198d961999e599a603ed
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2007-2013, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/basictz.cpp [5:6]
+        i18n/chnsecal.h [5:6]
+        i18n/rbtz.cpp [5:6]
+        i18n/zonemeta.h [5:6]
+        include/unicode/basictz.h [5:6]
+        include/unicode/msgfmt.h [4:5]
+        include/unicode/rbtz.h [5:6]
+        include/unicode/vtzone.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 55cc31ef2a0f43e078f6d6152ea10d71
+BELONGS ya.make
+    License text:
+        /* Copyright (c) IBM Corporation, 2000-2016.   All rights reserved.   */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/decNumberLocal.h [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 55f38e30e091580b6fc5cecb9da1682f
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2015, International Business Machines Corporation and
+         * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/pluralmap.cpp [4:5]
+        common/pluralmap.h [5:6]
+        common/sharedobject.cpp [5:6]
+        common/unifiedcache.cpp [5:6]
+        common/unifiedcache.h [5:6]
+        common/unistrappender.h [5:6]
+        i18n/numsys_impl.h [5:6]
+        i18n/standardplural.cpp [5:6]
+        i18n/standardplural.h [5:6]
+        i18n/ufieldpositer.cpp [5:6]
+        i18n/ulistformatter.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 570f77f7e18897dd94d48d010d3eaac3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [298:301]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 575dddbf62d23e467bca78a2bae8aac7
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2005-2011, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/wintz.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5835b7cc215207039d00dac9854e8bae
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2007, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/rbt.h [5:6]
+        i18n/rbt_data.h [5:6]
+        i18n/rbt_set.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 583aec355f3e3d5b72e1b5afcc0a077f
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2003-2004, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/ucat.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 58ef6d0e7b6a8f16c9dd1f1a352fb31e
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2011-2014 International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/alphaindex.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5a3202f9a4fd56ae894737e6ad72dcb5
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1996-2013, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/locmap.h [6:7]
+        include/unicode/resbund.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5b5bf79aace58a8718abde8a6bd3bc1b
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2002-2004, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/unifunct.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5dbd106c29c5d0a8b66792bf8d9c57e0
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2004-2014, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/locbased.cpp [5:6]
+        common/locbased.h [5:6]
+        common/ubidi_props.cpp [6:7]
+        common/ubidi_props.h [6:7]
+        common/ucase.cpp [6:7]
+        i18n/currfmt.h [5:6]
+        i18n/currunit.cpp [5:6]
+        i18n/measure.cpp [5:6]
+        include/unicode/currunit.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5e0b32f0941d85702d51d13e02678307
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2001-2013, International Business Machines
+        *                Corporation and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucln.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5ed2e362a52087e59dc79b5b1e09ae74
+BELONGS ya.make
+    License text:
+        Copyright © 2004 Scott James Remnant <scott@netsplit.com>.
+        Copyright © 2012-2015 Dan Nicholson <dbn.lists@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [468:469]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5f05b10e1950e5d7e3ebd28e04ee09d5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucase.cpp [793:801]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5fdaf9f50e0815faf4eec8d6947282b6
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1997-2006, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/resbund_cnv.cpp [6:7]
+        common/umath.cpp [6:7]
+        common/ures_cnv.cpp [6:7]
+        include/unicode/fieldpos.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 617a6f392430aa65fcba2f540dad8ef2
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2009, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/ucnv_err.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 62228ee53c4db343d96704b9313e4b90
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2004 - 2008, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/utmscale.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 63a308733413fd09808b022b8f07f579
+BELONGS ya.make
+    License text:
+         * COPYRIGHT:
+         * Copyright (c) 2001-2016, International Business Machines Corporation and
+         * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/rbbinode.h [4:6]
+        common/ucln_cmn.h [5:6]
+        common/ustrtrns.cpp [6:7]
+        common/util_props.cpp [5:6]
+        i18n/ucln_in.h [5:6]
+        i18n/ucoleitr.cpp [5:6]
+        io/ustream.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6651fab4363a8dd0c636ad40e0b469f8
+BELONGS ya.make
+    License text:
+         *   Copyright (C) 1997-2009,2014 International Business Machines
+         *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/utrans.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 66a6f0bc0ef0524000b5974649deba37
+BELONGS ya.make
+    License text:
+         \#  Copyright 1996 Chih-Hao Tsai @ Beckman Institute,
+         \#      University of Illinois
+         \#  c-tsai4@uiuc.edu  http://casper.beckman.uiuc.edu/~c-tsai4
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [212:214]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 678e4f6e864bbbbec78dab091d5b7bca
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2014 International Business Machines Corporation   *
+        *   and others. All rights reserved.                                      *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/rbbidata.cpp [5:6]
+        common/rbbidata.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 679c5b05c7a7b331a884a628fb8737c8
+BELONGS ya.make
+    License text:
+         *   Copyright (C) 2005-2008, International Business Machines
+         *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/inputext.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6824cf1096897a3c4f24f374c18482b6
+BELONGS ya.make
+    License text:
+        //   Copyright (C) 2012 International Business Machines Corporation
+        //   and others. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/regeximp.cpp [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 68ce4da267848d02211a80c27b74ddb1
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2009-2017, International Business Machines Corporation,       *
+         * Google, and others. All Rights Reserved.                                    *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/nounit.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 69908d911e5c174b1ffd1c3b8a891a4f
+BELONGS ya.make
+    License text:
+        *   Copyright (c) 2001-2015, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/charstr.h [5:6]
+        common/uinit.cpp [5:6]
+        common/ustrcase.cpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 69d5ab3c1e727b228b32655432bc7e4a
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2002-2003, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/punycode.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 69e72583732034e306de31c45d00d28a
+BELONGS ya.make
+    License text:
+         *   Copyright (C) 2005-2006, International Business Machines
+         *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/csrecog.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a4e658251e3d456cb548bf29cc0625e
+BELONGS ya.make
+    License text:
+         \#  Copyright (C) 2013 Brian Eugene Wilson, Robert Martin Campbell.
+         \#  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [310:311]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6aaf3ef5c8da53aa3c0de77d9939c466
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2008-2013, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/gender.cpp [5:6]
+        i18n/uspoof_impl.h [5:6]
+        include/unicode/gender.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6b33a2f983f9cfd7b29c192023cb385c
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2010-2016, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/locdspnm.cpp [5:6]
+        include/unicode/bytestriebuilder.h [5:6]
+        include/unicode/locdspnm.h [5:6]
+        include/unicode/ucharstriebuilder.h [5:6]
+        include/unicode/uldnames.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6b35bfacafe878f2de83b5f86409dc32
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2001-2011 IBM and others. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/search.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6d82363e2d21e288d1ead8ef77fbda7d
+BELONGS ya.make
+    License text:
+        /* Copyright (c) IBM Corporation, 2000-2010.   All rights reserved.   */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/decNumber.h [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6f2084dd189141611d64f31fed02ffee
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2013, International Business Machines Corporation
+         * and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/dangical.cpp [5:6]
+        i18n/dangical.h [5:6]
+        i18n/region_impl.h [5:6]
+        i18n/scriptset.h [5:6]
+        i18n/unumsys.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6fd38e3d50d44313449b9cf9dab3ad15
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2010-2011, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/bytestrie.cpp [5:6]
+        common/ucharstrie.cpp [5:6]
+        common/ucharstrieiterator.cpp [5:6]
+        i18n/udateintervalformat.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 703d116a0caba12e4084fdd4592cb97c
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2003-2015, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucol_swp.cpp [6:7]
+        i18n/islamcal.cpp [5:6]
+        include/unicode/ulocdata.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 72568c613e837640648dd9c49821e644
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2008-2009, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/dtintrv.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7301bb89182939ecec0ac83dae91e4b4
+BELONGS ya.make
+    License text:
+        \#define FROM_BASE64_IMAP(c) ((c)==COMMA ? 63 : (c)==SLASH ? -1 : fromBase64[c])
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnv_u7.cpp [873:873]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 73f50bfa96efbdc9d33f92dcdcbefe9b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/bytestream.cpp [1:4]
+        common/errorcode.cpp [6:7]
+        common/icudataver.cpp [6:7]
+        common/ucln_imp.h [6:7]
+        i18n/vzone.cpp [5:6]
+        i18n/zrule.cpp [5:6]
+        include/unicode/errorcode.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 74a089b9e73afa92a28709a7cabb1465
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2010-2012,2014, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/stringtriebuilder.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 74d03ed6c81de6b26958446ae58f8cb4
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2003 - 2013, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/coptccal.cpp [5:6]
+        i18n/coptccal.h [5:6]
+        i18n/ethpccal.cpp [5:6]
+        i18n/ethpccal.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 74d5c1118d3a57833d575982995c2952
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2006-2012, International Business Machines Corporation and others. *
+         * All Rights Reserved.                                                             *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/brkeng.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7510c0841413b36a45fd7d3d440d3b6a
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1998-2011, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        io/locbund.h [6:7]
+        io/ufmt_cmn.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 761b4ddbe753d0f874c7cf778a0aab37
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2000-2013, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnvmbcs.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 777870e036e273e83769bbd594cbecd0
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2008-2014, Google, International Business Machines Corporation and
+         * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/tmunit.cpp [5:6]
+        include/unicode/tmutfmt.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77bddbddc8b484d7681bb585e4169adf
+BELONGS ya.make
+    License text:
+        * Copyright (C) 1997-2010, International Business Machines Corporation and    *
+        * others. All Rights Reserved.                                                *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/fmtable_cnv.cpp [5:6]
+        include/unicode/urep.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 786fbdf515bc37c90be6adbc41c96e4c
+BELONGS ya.make
+    License text:
+         \#  Copyright (c) 2014 International Business Machines Corporation
+         \#  and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [340:341]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 796d3240bd8b450f5056edcc583461e0
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2004-2014 International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/currfmt.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7b2281be857b89854a4f4be2980d4e46
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2007-2008, International Business Machines Corporation and
+        * others. All Rights Reserved.                                                *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/msgfmt_impl.h [5:6]
+        include/unicode/dtrule.h [5:6]
+        include/unicode/tzrule.h [5:6]
+        include/unicode/tztrans.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7b88398059fe668427a92830f2334cb3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        readme.html [24:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 806ce7a163373d1cfc753811a8aa6cf8
+BELONGS ya.make
+    License text:
+         * COPYRIGHT:
+         * Copyright (c) 2008-2010, International Business Machines Corporation and
+         * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/regextxt.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 81329158a8b40488474a23401f03b5ae
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2008, Google, International Business Machines Corporation and *
+         * others. All Rights Reserved.                                                *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/tmutamt.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 816d3bf7bbad59a00cb6fc1f5b8fbec2
+BELONGS ya.make
+    License text:
+        *   Copyright (c) 2001-2005, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/rbbisetb.h [7:8]
+        include/unicode/unimatch.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 82def6d7161cf2def2b0e1b1f3410e43
+BELONGS ya.make
+    License text:
+        * Copyright (C) 1997-2005, International Business Machines Corporation and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/parsepos.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 83ed5dc64374f12bc044316e46718ffe
+BELONGS ya.make
+    License text:
+         * COPYRIGHT:
+         * Copyright (c) 2008-2011, International Business Machines Corporation and
+         * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/regextxt.cpp [4:6]
+        i18n/wintzimpl.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8549ee46511ca64f7da4741561014978
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1998-2015, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/ustdio.h [6:7]
+        io/ufile.cpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 85a0464cc33a5f99a985262562a47cbf
+BELONGS ya.make
+    License text:
+        Copyright © 2004 Scott James Remnant <scott@netsplit.com>.
+        Copyright © 2012-2015 Dan Nicholson <dbn.lists@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [468:469]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 863ed5a91853ff39803980ae8c89be56
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2003-2013, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/uarrsort.cpp [6:7]
+        common/uarrsort.h [6:7]
+        common/ucnv_ext.h [6:7]
+        i18n/buddhcal.cpp [5:6]
+        i18n/buddhcal.h [5:6]
+        i18n/hebrwcal.h [5:6]
+        i18n/islamcal.h [5:6]
+        i18n/olsontz.cpp [5:6]
+        i18n/olsontz.h [5:6]
+        i18n/persncal.cpp [5:6]
+        i18n/persncal.h [5:6]
+        i18n/taiwncal.cpp [5:6]
+        i18n/taiwncal.h [5:6]
+        include/unicode/utrace.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 86651e744b35ae871a61c13ad1027287
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2008-2016, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/dtitvfmt.cpp [4:5]
+        i18n/dtitvinf.cpp [4:5]
+        i18n/uspoof_conf.h [6:7]
+        i18n/uspoof_impl.cpp [5:6]
+        include/unicode/dtitvfmt.h [4:5]
+        include/unicode/dtitvinf.h [5:6]
+        include/unicode/uspoof.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 86cfc9409fa4842999bfc19f454b46c6
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2012-2016, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/utypeinfo.h [6:7]
+        i18n/uitercollationiterator.h [5:6]
+        i18n/utf8collationiterator.h [5:6]
+        include/unicode/compactdecimalformat.h [5:6]
+        include/unicode/listformatter.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 871c35b4466595f1cb8c25906580029f
+BELONGS ya.make
+    License text:
+        // Copyright 2001 and onwards Google Inc.
+        // Author: Sanjay Ghemawat
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/stringpiece.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8737fbe6cb73b99ffbe3ed659a1b2e68
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2002-2016 International Business Machines Corporation   *
+        *   and others. All rights reserved.                                      *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/rbbinode.cpp [5:6]
+        common/rbbirpt.h [11:12]
+        i18n/regexcmp.cpp [6:7]
+        i18n/regexcst.h [10:11]
+        i18n/rematch.cpp [5:6]
+        i18n/repattrn.cpp [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 87f8da27289f69b12f63a440ef133e67
+BELONGS ya.make
+    License text:
+         *   Copyright (C) 2003-2006, International Business Machines
+         *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/sprpimpl.h [6:7]
+        i18n/uregexc.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8882e58cc6c8d52c72cb6fee5c77e315
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2006, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ubrkimpl.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8a0eaceca57b7973cf0f1aab35eda8cd
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1997-2016, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/cmemory.h [6:7]
+        common/locdispnames.cpp [6:7]
+        common/locid.cpp [5:6]
+        common/loclikely.cpp [6:7]
+        common/putil.cpp [6:7]
+        common/putilimp.h [6:7]
+        common/uhash.cpp [5:6]
+        common/uloc.cpp [5:6]
+        common/umutex.cpp [6:7]
+        common/uresbund.cpp [5:6]
+        i18n/calendar.cpp [5:6]
+        i18n/dcfmtsym.cpp [5:6]
+        i18n/dtfmtsym.cpp [5:6]
+        i18n/fmtable.cpp [5:6]
+        i18n/gregocal.cpp [5:6]
+        i18n/smpdtfmt.cpp [5:6]
+        i18n/timezone.cpp [5:6]
+        include/unicode/brkiter.h [5:6]
+        include/unicode/datefmt.h [5:6]
+        include/unicode/dcfmtsym.h [5:6]
+        include/unicode/decimfmt.h [5:6]
+        include/unicode/dtfmtsym.h [5:6]
+        include/unicode/numfmt.h [5:6]
+        include/unicode/platform.h [6:7]
+        include/unicode/smpdtfmt.h [4:5]
+        include/unicode/timezone.h [4:5]
+        include/unicode/uchar.h [5:6]
+        include/unicode/uloc.h [5:6]
+        include/unicode/ures.h [5:6]
+        include/unicode/uscript.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8a62de95950230a5776f3e803733fd12
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2001-2006, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ustrfmt.cpp [5:6]
+        common/ustrfmt.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8bba2ec449ad45b163bc48b141763131
+BELONGS ya.make
+    License text:
+        Copyright 1991 by the Massachusetts Institute of Technology
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [532:532]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8bbce99b686530a3582b17254424cf52
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2008-2015, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/brktrans.cpp [5:6]
+        i18n/brktrans.h [5:6]
+        i18n/uspoof.cpp [5:6]
+        i18n/uspoof_build.cpp [5:6]
+        i18n/uspoof_conf.cpp [6:7]
+        include/unicode/plurrule.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8c914f0243cb54f45de0de5a6ab5c30c
+BELONGS ya.make
+    License text:
+        /* Copyright (c) IBM Corporation, 2000-2011.   All rights reserved.   */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/decContext.h [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8e46d6cd74a0448dcc8549d7ecdff3c2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucase.cpp [793:801]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8fae7f4b8635b2b013fd9712a5497d0d
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2006-2014, International Business Machines Corporation   *
+         * and others. All Rights Reserved.                                            *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/dictbe.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8fb362b4e32f4c2aa2c842ae97cd1bf9
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1997-2013, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/locavailable.cpp [6:7]
+        common/mutex.h [6:7]
+        common/resbund.cpp [5:6]
+        i18n/choicfmt.cpp [5:6]
+        i18n/simpletz.cpp [5:6]
+        include/unicode/choicfmt.h [5:6]
+        include/unicode/gregocal.h [4:5]
+        include/unicode/simpletz.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8fef800639678aafdfb470d5fc4dbfb1
+BELONGS ya.make
+    License text:
+        //  Copyright (C) 2002-2008, International Business Machines Corporation and others.
+        //  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/rbbirb.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 91f1377d1ebe4756a0af50236381473b
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2004-2006, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/curramt.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 936d32b37ccf3528ee3965adeeca7530
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2002-2011 International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/uiter.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93b4446774db3c7a71eeac1c61e9c2c6
+BELONGS ya.make
+    License text:
+        // © 2018 and later: Unicode, Inc. and others.
+        // License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/capi_helper.h [1:2]
+        common/characterproperties.cpp [1:2]
+        common/static_unicode_sets.cpp [1:2]
+        common/static_unicode_sets.h [1:2]
+        common/utrie_swap.cpp [1:2]
+        i18n/compactdecimalformat.cpp [1:2]
+        i18n/decimfmt.cpp [1:2]
+        i18n/double-conversion-bignum-dtoa.cpp [1:2]
+        i18n/double-conversion-bignum-dtoa.h [1:2]
+        i18n/double-conversion-bignum.cpp [1:2]
+        i18n/double-conversion-bignum.h [1:2]
+        i18n/double-conversion-cached-powers.cpp [1:2]
+        i18n/double-conversion-cached-powers.h [1:2]
+        i18n/double-conversion-diy-fp.h [1:2]
+        i18n/double-conversion-double-to-string.cpp [1:2]
+        i18n/double-conversion-double-to-string.h [1:2]
+        i18n/double-conversion-fast-dtoa.cpp [1:2]
+        i18n/double-conversion-fast-dtoa.h [1:2]
+        i18n/double-conversion-ieee.h [1:2]
+        i18n/double-conversion-string-to-double.cpp [1:2]
+        i18n/double-conversion-string-to-double.h [1:2]
+        i18n/double-conversion-strtod.cpp [1:2]
+        i18n/double-conversion-strtod.h [1:2]
+        i18n/double-conversion-utils.h [1:2]
+        i18n/double-conversion.h [1:2]
+        i18n/erarules.cpp [1:2]
+        i18n/erarules.h [1:2]
+        i18n/formattedval_impl.h [1:2]
+        i18n/formattedval_iterimpl.cpp [1:2]
+        i18n/formattedval_sbimpl.cpp [1:2]
+        i18n/formattedvalue.cpp [1:2]
+        i18n/number_asformat.cpp [1:2]
+        i18n/number_capi.cpp [1:2]
+        i18n/number_currencysymbols.cpp [1:2]
+        i18n/number_currencysymbols.h [1:2]
+        i18n/number_mapper.cpp [1:2]
+        i18n/number_mapper.h [1:2]
+        i18n/number_multiplier.cpp [1:2]
+        i18n/number_multiplier.h [1:2]
+        i18n/number_skeletons.cpp [1:2]
+        i18n/number_skeletons.h [1:2]
+        i18n/number_utils.cpp [1:2]
+        i18n/number_utypes.h [1:2]
+        i18n/numparse_affixes.cpp [1:2]
+        i18n/numparse_affixes.h [1:2]
+        i18n/numparse_compositions.cpp [1:2]
+        i18n/numparse_compositions.h [1:2]
+        i18n/numparse_currency.cpp [1:2]
+        i18n/numparse_currency.h [1:2]
+        i18n/numparse_decimal.cpp [1:2]
+        i18n/numparse_decimal.h [1:2]
+        i18n/numparse_impl.cpp [1:2]
+        i18n/numparse_impl.h [1:2]
+        i18n/numparse_parsednumber.cpp [1:2]
+        i18n/numparse_scientific.cpp [1:2]
+        i18n/numparse_scientific.h [1:2]
+        i18n/numparse_symbols.cpp [1:2]
+        i18n/numparse_symbols.h [1:2]
+        i18n/numparse_types.h [1:2]
+        i18n/numparse_utils.h [1:2]
+        i18n/numparse_validators.cpp [1:2]
+        i18n/numparse_validators.h [1:2]
+        i18n/numrange_capi.cpp [1:2]
+        i18n/numrange_fluent.cpp [1:2]
+        i18n/numrange_impl.cpp [1:2]
+        i18n/numrange_impl.h [1:2]
+        i18n/pluralranges.cpp [1:2]
+        i18n/pluralranges.h [1:2]
+        i18n/string_segment.cpp [1:2]
+        i18n/string_segment.h [1:2]
+        include/unicode/formattedvalue.h [1:2]
+        include/unicode/localebuilder.h [1:4]
+        include/unicode/numberrangeformatter.h [1:2]
+        include/unicode/ucpmap.h [1:2]
+        include/unicode/uformattedvalue.h [1:2]
+        include/unicode/unumberformatter.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93c4a85915c1f800bd94a4e22b075152
+BELONGS ya.make
+    License text:
+        (c) 2016 and later Unicode, Inc. and others
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/appendable.cpp [1:2]
+        common/bmpset.cpp [1:2]
+        common/bmpset.h [1:2]
+        common/brkeng.cpp [1:2]
+        common/brkeng.h [1:2]
+        common/brkiter.cpp [1:2]
+        common/bytestream.cpp [1:4]
+        common/bytestrie.cpp [1:2]
+        common/bytestriebuilder.cpp [1:2]
+        common/bytestrieiterator.cpp [1:2]
+        common/caniter.cpp [1:2]
+        common/chariter.cpp [1:2]
+        common/charstr.cpp [1:2]
+        common/charstr.h [1:2]
+        common/cmemory.cpp [1:2]
+        common/cmemory.h [1:2]
+        common/cpputils.h [1:2]
+        common/cstr.cpp [1:2]
+        common/cstr.h [1:2]
+        common/cstring.cpp [1:2]
+        common/cstring.h [1:2]
+        common/cwchar.cpp [1:2]
+        common/cwchar.h [1:2]
+        common/dictbe.cpp [1:2]
+        common/dictbe.h [1:2]
+        common/dictionarydata.cpp [1:2]
+        common/dictionarydata.h [1:2]
+        common/dtintrv.cpp [1:2]
+        common/errorcode.cpp [1:2]
+        common/filteredbrk.cpp [1:2]
+        common/filterednormalizer2.cpp [1:2]
+        common/hash.h [1:2]
+        common/icudataver.cpp [1:2]
+        common/icuplug.cpp [1:2]
+        common/icuplugimp.h [1:2]
+        common/loadednormalizer2impl.cpp [1:2]
+        common/localsvc.h [1:2]
+        common/locavailable.cpp [1:2]
+        common/locbased.cpp [1:2]
+        common/locbased.h [1:2]
+        common/locdispnames.cpp [1:2]
+        common/locdspnm.cpp [1:2]
+        common/locid.cpp [1:2]
+        common/loclikely.cpp [1:2]
+        common/locmap.cpp [1:2]
+        common/locmap.h [1:2]
+        common/locresdata.cpp [1:2]
+        common/locutil.cpp [1:2]
+        common/locutil.h [1:2]
+        common/messageimpl.h [1:2]
+        common/messagepattern.cpp [1:2]
+        common/msvcres.h [1:5]
+        common/mutex.h [1:2]
+        common/norm2allmodes.h [1:2]
+        common/normalizer2.cpp [1:2]
+        common/normalizer2impl.cpp [1:2]
+        common/normalizer2impl.h [1:2]
+        common/normlzr.cpp [1:2]
+        common/parsepos.cpp [1:2]
+        common/patternprops.cpp [1:2]
+        common/patternprops.h [1:2]
+        common/pluralmap.cpp [1:2]
+        common/pluralmap.h [1:2]
+        common/propname.cpp [1:2]
+        common/propname.h [1:2]
+        common/propsvec.cpp [1:2]
+        common/propsvec.h [1:2]
+        common/punycode.cpp [1:2]
+        common/punycode.h [1:2]
+        common/putil.cpp [1:2]
+        common/putilimp.h [1:2]
+        common/rbbi.cpp [1:2]
+        common/rbbidata.cpp [1:2]
+        common/rbbidata.h [1:2]
+        common/rbbinode.cpp [1:2]
+        common/rbbinode.h [1:2]
+        common/rbbirb.cpp [1:2]
+        common/rbbirb.h [1:2]
+        common/rbbirpt.h [1:2]
+        common/rbbiscan.cpp [1:2]
+        common/rbbiscan.h [1:2]
+        common/rbbisetb.cpp [1:2]
+        common/rbbisetb.h [1:2]
+        common/rbbistbl.cpp [1:2]
+        common/rbbitblb.cpp [1:2]
+        common/rbbitblb.h [1:2]
+        common/resbund.cpp [1:2]
+        common/resbund_cnv.cpp [1:2]
+        common/resource.cpp [1:2]
+        common/resource.h [1:2]
+        common/ruleiter.cpp [1:2]
+        common/ruleiter.h [1:2]
+        common/schriter.cpp [1:2]
+        common/serv.cpp [1:2]
+        common/serv.h [1:2]
+        common/servlk.cpp [1:2]
+        common/servlkf.cpp [1:2]
+        common/servloc.h [1:2]
+        common/servls.cpp [1:2]
+        common/servnotf.cpp [1:2]
+        common/servnotf.h [1:2]
+        common/servrbf.cpp [1:2]
+        common/servslkf.cpp [1:2]
+        common/sharedobject.cpp [1:2]
+        common/sharedobject.h [1:2]
+        common/simpleformatter.cpp [1:2]
+        common/sprpimpl.h [1:2]
+        common/stringpiece.cpp [1:4]
+        common/stringtriebuilder.cpp [1:2]
+        common/uarrsort.cpp [1:2]
+        common/uarrsort.h [1:2]
+        common/uassert.h [1:2]
+        common/ubidi.cpp [1:2]
+        common/ubidi_props.cpp [1:2]
+        common/ubidi_props.h [1:2]
+        common/ubidiimp.h [1:2]
+        common/ubidiln.cpp [1:2]
+        common/ubiditransform.cpp [4:5]
+        common/ubidiwrt.cpp [1:2]
+        common/ubrk.cpp [1:2]
+        common/ubrkimpl.h [1:2]
+        common/ucase.cpp [1:2]
+        common/ucase.h [1:2]
+        common/ucasemap.cpp [1:2]
+        common/ucasemap_titlecase_brkiter.cpp [1:2]
+        common/ucat.cpp [1:2]
+        common/uchar.cpp [1:2]
+        common/ucharstrie.cpp [1:2]
+        common/ucharstriebuilder.cpp [1:2]
+        common/ucharstrieiterator.cpp [1:2]
+        common/uchriter.cpp [1:2]
+        common/ucln.h [1:2]
+        common/ucln_cmn.cpp [1:2]
+        common/ucln_cmn.h [1:2]
+        common/ucln_imp.h [1:2]
+        common/ucmndata.cpp [1:2]
+        common/ucmndata.h [1:2]
+        common/ucnv.cpp [1:2]
+        common/ucnv2022.cpp [1:2]
+        common/ucnv_bld.cpp [1:2]
+        common/ucnv_bld.h [1:2]
+        common/ucnv_cb.cpp [1:2]
+        common/ucnv_cnv.cpp [1:2]
+        common/ucnv_cnv.h [1:2]
+        common/ucnv_ct.cpp [1:2]
+        common/ucnv_err.cpp [1:2]
+        common/ucnv_ext.cpp [1:2]
+        common/ucnv_ext.h [1:2]
+        common/ucnv_imp.h [1:2]
+        common/ucnv_io.cpp [1:2]
+        common/ucnv_io.h [1:2]
+        common/ucnv_lmb.cpp [1:2]
+        common/ucnv_set.cpp [1:2]
+        common/ucnv_u16.cpp [1:2]
+        common/ucnv_u32.cpp [1:2]
+        common/ucnv_u7.cpp [1:2]
+        common/ucnv_u8.cpp [1:2]
+        common/ucnvbocu.cpp [1:2]
+        common/ucnvdisp.cpp [1:2]
+        common/ucnvhz.cpp [1:2]
+        common/ucnvisci.cpp [1:2]
+        common/ucnvlat1.cpp [1:2]
+        common/ucnvmbcs.cpp [1:2]
+        common/ucnvmbcs.h [1:2]
+        common/ucnvscsu.cpp [1:2]
+        common/ucnvsel.cpp [1:2]
+        common/ucol_data.h [1:2]
+        common/ucol_swp.cpp [1:2]
+        common/ucol_swp.h [1:2]
+        common/ucurr.cpp [1:2]
+        common/ucurrimp.h [1:2]
+        common/udata.cpp [1:2]
+        common/udatamem.cpp [1:2]
+        common/udatamem.h [1:2]
+        common/udataswp.cpp [1:2]
+        common/udataswp.h [1:2]
+        common/uelement.h [1:2]
+        common/uenum.cpp [1:2]
+        common/uenumimp.h [1:2]
+        common/uhash.cpp [1:2]
+        common/uhash.h [1:2]
+        common/uhash_us.cpp [1:2]
+        common/uidna.cpp [1:2]
+        common/uinit.cpp [1:2]
+        common/uinvchar.cpp [1:2]
+        common/uinvchar.h [1:2]
+        common/uiter.cpp [1:2]
+        common/ulist.cpp [1:2]
+        common/ulist.h [1:2]
+        common/uloc.cpp [1:2]
+        common/uloc_keytype.cpp [1:2]
+        common/uloc_tag.cpp [1:2]
+        common/ulocimp.h [1:2]
+        common/umapfile.cpp [1:2]
+        common/umapfile.h [1:2]
+        common/umath.cpp [1:2]
+        common/umutex.cpp [1:2]
+        common/umutex.h [1:2]
+        common/unames.cpp [1:2]
+        common/unifiedcache.cpp [1:2]
+        common/unifiedcache.h [1:2]
+        common/unifilt.cpp [1:2]
+        common/unifunct.cpp [1:2]
+        common/uniset.cpp [1:2]
+        common/uniset_closure.cpp [1:2]
+        common/uniset_props.cpp [1:2]
+        common/unisetspan.cpp [1:2]
+        common/unisetspan.h [1:2]
+        common/unistr.cpp [1:2]
+        common/unistr_case.cpp [1:2]
+        common/unistr_case_locale.cpp [1:2]
+        common/unistr_cnv.cpp [1:2]
+        common/unistr_props.cpp [1:2]
+        common/unistr_titlecase_brkiter.cpp [1:2]
+        common/unistrappender.h [1:2]
+        common/unorm.cpp [1:2]
+        common/unormcmp.cpp [1:2]
+        common/unormimp.h [1:2]
+        common/uobject.cpp [1:2]
+        common/uposixdefs.h [1:2]
+        common/uprops.cpp [1:2]
+        common/uprops.h [1:2]
+        common/ures_cnv.cpp [1:2]
+        common/uresbund.cpp [1:2]
+        common/uresdata.cpp [1:2]
+        common/uresdata.h [1:2]
+        common/uresimp.h [1:2]
+        common/ureslocs.h [1:2]
+        common/usc_impl.cpp [1:2]
+        common/usc_impl.h [1:2]
+        common/uscript.cpp [1:2]
+        common/uscript_props.cpp [1:2]
+        common/uset.cpp [1:2]
+        common/uset_imp.h [1:2]
+        common/uset_props.cpp [1:2]
+        common/usetiter.cpp [1:2]
+        common/ushape.cpp [1:2]
+        common/usprep.cpp [1:2]
+        common/ustack.cpp [1:2]
+        common/ustr_cnv.cpp [1:2]
+        common/ustr_cnv.h [1:2]
+        common/ustr_imp.h [1:2]
+        common/ustr_titlecase_brkiter.cpp [1:2]
+        common/ustr_wcs.cpp [1:2]
+        common/ustrcase.cpp [1:2]
+        common/ustrcase_locale.cpp [1:2]
+        common/ustrenum.cpp [1:2]
+        common/ustrenum.h [1:2]
+        common/ustrfmt.cpp [1:2]
+        common/ustrfmt.h [1:2]
+        common/ustring.cpp [1:2]
+        common/ustrtrns.cpp [1:2]
+        common/utext.cpp [1:2]
+        common/utf_impl.cpp [1:2]
+        common/util.cpp [1:2]
+        common/util.h [1:2]
+        common/util_props.cpp [1:2]
+        common/utrace.cpp [1:2]
+        common/utracimp.h [1:2]
+        common/utrie.cpp [1:2]
+        common/utrie.h [1:2]
+        common/utrie2.cpp [1:2]
+        common/utrie2.h [1:2]
+        common/utrie2_builder.cpp [1:2]
+        common/utrie2_impl.h [1:2]
+        common/uts46.cpp [1:2]
+        common/utypeinfo.h [1:2]
+        common/utypes.cpp [1:2]
+        common/uvector.cpp [1:2]
+        common/uvector.h [1:2]
+        common/uvectr32.cpp [1:2]
+        common/uvectr32.h [1:2]
+        common/uvectr64.cpp [1:2]
+        common/uvectr64.h [1:2]
+        common/wintz.cpp [1:2]
+        common/wintz.h [1:2]
+        i18n/alphaindex.cpp [1:2]
+        i18n/anytrans.cpp [1:2]
+        i18n/anytrans.h [1:2]
+        i18n/astro.cpp [1:2]
+        i18n/astro.h [1:2]
+        i18n/basictz.cpp [1:2]
+        i18n/bocsu.cpp [1:2]
+        i18n/bocsu.h [1:2]
+        i18n/brktrans.cpp [1:2]
+        i18n/brktrans.h [1:2]
+        i18n/buddhcal.cpp [1:2]
+        i18n/buddhcal.h [1:2]
+        i18n/calendar.cpp [1:2]
+        i18n/casetrn.cpp [1:2]
+        i18n/casetrn.h [1:2]
+        i18n/cecal.cpp [1:2]
+        i18n/cecal.h [1:2]
+        i18n/chnsecal.cpp [1:2]
+        i18n/chnsecal.h [1:2]
+        i18n/choicfmt.cpp [1:2]
+        i18n/coleitr.cpp [1:2]
+        i18n/coll.cpp [1:2]
+        i18n/collation.cpp [1:2]
+        i18n/collation.h [1:2]
+        i18n/collationbuilder.cpp [1:2]
+        i18n/collationbuilder.h [1:2]
+        i18n/collationcompare.cpp [1:2]
+        i18n/collationcompare.h [1:2]
+        i18n/collationdata.cpp [1:2]
+        i18n/collationdata.h [1:2]
+        i18n/collationdatabuilder.cpp [1:2]
+        i18n/collationdatabuilder.h [1:2]
+        i18n/collationdatareader.cpp [1:2]
+        i18n/collationdatareader.h [1:2]
+        i18n/collationdatawriter.cpp [1:2]
+        i18n/collationdatawriter.h [1:2]
+        i18n/collationfastlatin.cpp [1:2]
+        i18n/collationfastlatin.h [1:2]
+        i18n/collationfastlatinbuilder.cpp [1:2]
+        i18n/collationfastlatinbuilder.h [1:2]
+        i18n/collationfcd.h [1:2]
+        i18n/collationiterator.cpp [1:2]
+        i18n/collationiterator.h [1:2]
+        i18n/collationkeys.cpp [1:2]
+        i18n/collationkeys.h [1:2]
+        i18n/collationroot.cpp [1:2]
+        i18n/collationroot.h [1:2]
+        i18n/collationrootelements.cpp [1:2]
+        i18n/collationrootelements.h [1:2]
+        i18n/collationruleparser.cpp [1:2]
+        i18n/collationruleparser.h [1:2]
+        i18n/collationsets.cpp [1:2]
+        i18n/collationsets.h [1:2]
+        i18n/collationsettings.cpp [1:2]
+        i18n/collationsettings.h [1:2]
+        i18n/collationtailoring.cpp [1:2]
+        i18n/collationtailoring.h [1:2]
+        i18n/collationweights.cpp [1:2]
+        i18n/collationweights.h [1:2]
+        i18n/collunsafe.h [1:5]
+        i18n/coptccal.cpp [1:2]
+        i18n/coptccal.h [1:2]
+        i18n/cpdtrans.cpp [1:2]
+        i18n/cpdtrans.h [1:2]
+        i18n/csdetect.cpp [1:2]
+        i18n/csdetect.h [1:2]
+        i18n/csmatch.cpp [1:2]
+        i18n/csmatch.h [1:2]
+        i18n/csr2022.cpp [1:2]
+        i18n/csr2022.h [1:2]
+        i18n/csrecog.cpp [1:2]
+        i18n/csrecog.h [1:2]
+        i18n/csrmbcs.cpp [1:2]
+        i18n/csrmbcs.h [1:2]
+        i18n/csrsbcs.cpp [1:2]
+        i18n/csrsbcs.h [1:2]
+        i18n/csrucode.cpp [1:2]
+        i18n/csrucode.h [1:2]
+        i18n/csrutf8.cpp [1:2]
+        i18n/csrutf8.h [1:2]
+        i18n/curramt.cpp [1:2]
+        i18n/currfmt.cpp [1:2]
+        i18n/currfmt.h [1:2]
+        i18n/currpinf.cpp [1:2]
+        i18n/currunit.cpp [1:2]
+        i18n/dangical.cpp [1:2]
+        i18n/dangical.h [1:2]
+        i18n/datefmt.cpp [1:2]
+        i18n/dayperiodrules.cpp [1:2]
+        i18n/dayperiodrules.h [1:2]
+        i18n/dcfmtsym.cpp [1:2]
+        i18n/decContext.cpp [1:2]
+        i18n/decContext.h [1:2]
+        i18n/decNumber.cpp [1:2]
+        i18n/decNumber.h [1:2]
+        i18n/decNumberLocal.h [1:2]
+        i18n/dt_impl.h [1:2]
+        i18n/dtfmtsym.cpp [1:2]
+        i18n/dtitv_impl.h [1:2]
+        i18n/dtitvfmt.cpp [1:2]
+        i18n/dtitvinf.cpp [1:2]
+        i18n/dtptngen.cpp [1:2]
+        i18n/dtptngen_impl.h [1:2]
+        i18n/dtrule.cpp [1:2]
+        i18n/esctrn.cpp [1:2]
+        i18n/esctrn.h [1:2]
+        i18n/ethpccal.cpp [1:2]
+        i18n/ethpccal.h [1:2]
+        i18n/fmtable.cpp [1:2]
+        i18n/fmtable_cnv.cpp [1:2]
+        i18n/fmtableimp.h [1:2]
+        i18n/format.cpp [1:2]
+        i18n/fphdlimp.cpp [1:2]
+        i18n/fphdlimp.h [1:2]
+        i18n/fpositer.cpp [1:2]
+        i18n/funcrepl.cpp [1:2]
+        i18n/funcrepl.h [1:2]
+        i18n/gender.cpp [1:2]
+        i18n/gregocal.cpp [1:2]
+        i18n/gregoimp.cpp [1:2]
+        i18n/gregoimp.h [1:2]
+        i18n/hebrwcal.cpp [1:2]
+        i18n/hebrwcal.h [1:2]
+        i18n/indiancal.cpp [1:2]
+        i18n/indiancal.h [1:2]
+        i18n/inputext.cpp [1:2]
+        i18n/inputext.h [1:2]
+        i18n/islamcal.cpp [1:2]
+        i18n/islamcal.h [1:2]
+        i18n/japancal.cpp [1:2]
+        i18n/japancal.h [1:2]
+        i18n/listformatter.cpp [1:2]
+        i18n/measfmt.cpp [1:2]
+        i18n/measunit.cpp [1:2]
+        i18n/measure.cpp [1:2]
+        i18n/msgfmt.cpp [1:2]
+        i18n/msgfmt_impl.h [1:2]
+        i18n/name2uni.cpp [1:2]
+        i18n/name2uni.h [1:2]
+        i18n/nfrlist.h [1:2]
+        i18n/nfrs.cpp [1:2]
+        i18n/nfrs.h [1:2]
+        i18n/nfrule.cpp [1:2]
+        i18n/nfrule.h [1:2]
+        i18n/nfsubs.cpp [1:2]
+        i18n/nfsubs.h [1:2]
+        i18n/nortrans.cpp [1:2]
+        i18n/nortrans.h [1:2]
+        i18n/nultrans.cpp [1:2]
+        i18n/nultrans.h [1:2]
+        i18n/numfmt.cpp [1:2]
+        i18n/numsys.cpp [1:2]
+        i18n/numsys_impl.h [1:2]
+        i18n/olsontz.cpp [1:2]
+        i18n/olsontz.h [1:2]
+        i18n/persncal.cpp [1:2]
+        i18n/persncal.h [1:2]
+        i18n/plurfmt.cpp [1:2]
+        i18n/plurrule.cpp [1:2]
+        i18n/plurrule_impl.h [1:2]
+        i18n/quant.cpp [1:2]
+        i18n/quant.h [1:2]
+        i18n/quantityformatter.cpp [1:2]
+        i18n/quantityformatter.h [1:2]
+        i18n/rbnf.cpp [1:2]
+        i18n/rbt.cpp [1:2]
+        i18n/rbt.h [1:2]
+        i18n/rbt_data.cpp [1:2]
+        i18n/rbt_data.h [1:2]
+        i18n/rbt_pars.cpp [1:2]
+        i18n/rbt_pars.h [1:2]
+        i18n/rbt_rule.cpp [1:2]
+        i18n/rbt_rule.h [1:2]
+        i18n/rbt_set.cpp [1:2]
+        i18n/rbt_set.h [1:2]
+        i18n/rbtz.cpp [1:2]
+        i18n/regexcmp.cpp [1:2]
+        i18n/regexcmp.h [1:2]
+        i18n/regexcst.h [1:2]
+        i18n/regeximp.cpp [1:2]
+        i18n/regeximp.h [1:2]
+        i18n/regexst.cpp [1:2]
+        i18n/regexst.h [1:2]
+        i18n/regextxt.cpp [1:2]
+        i18n/regextxt.h [1:2]
+        i18n/region.cpp [1:2]
+        i18n/region_impl.h [1:2]
+        i18n/reldatefmt.cpp [1:2]
+        i18n/reldtfmt.cpp [1:2]
+        i18n/reldtfmt.h [1:2]
+        i18n/rematch.cpp [1:2]
+        i18n/remtrans.cpp [1:2]
+        i18n/remtrans.h [1:2]
+        i18n/repattrn.cpp [1:2]
+        i18n/rulebasedcollator.cpp [1:2]
+        i18n/scientificnumberformatter.cpp [1:2]
+        i18n/scriptset.cpp [1:2]
+        i18n/scriptset.h [1:2]
+        i18n/search.cpp [1:2]
+        i18n/selfmt.cpp [1:2]
+        i18n/selfmtimpl.h [1:2]
+        i18n/sharedbreakiterator.cpp [1:2]
+        i18n/sharedbreakiterator.h [1:2]
+        i18n/sharedcalendar.h [1:2]
+        i18n/shareddateformatsymbols.h [1:2]
+        i18n/sharednumberformat.h [1:2]
+        i18n/sharedpluralrules.h [1:2]
+        i18n/simpletz.cpp [1:2]
+        i18n/smpdtfmt.cpp [1:2]
+        i18n/smpdtfst.cpp [1:2]
+        i18n/smpdtfst.h [1:2]
+        i18n/sortkey.cpp [1:2]
+        i18n/standardplural.cpp [1:2]
+        i18n/standardplural.h [1:2]
+        i18n/strmatch.cpp [1:2]
+        i18n/strmatch.h [1:2]
+        i18n/strrepl.cpp [1:2]
+        i18n/strrepl.h [1:2]
+        i18n/stsearch.cpp [1:2]
+        i18n/taiwncal.cpp [1:2]
+        i18n/taiwncal.h [1:2]
+        i18n/timezone.cpp [1:2]
+        i18n/titletrn.cpp [1:2]
+        i18n/titletrn.h [1:2]
+        i18n/tmunit.cpp [1:2]
+        i18n/tmutamt.cpp [1:2]
+        i18n/tmutfmt.cpp [1:2]
+        i18n/tolowtrn.cpp [1:2]
+        i18n/tolowtrn.h [1:2]
+        i18n/toupptrn.cpp [1:2]
+        i18n/toupptrn.h [1:2]
+        i18n/translit.cpp [1:2]
+        i18n/transreg.cpp [1:2]
+        i18n/transreg.h [1:2]
+        i18n/tridpars.cpp [1:2]
+        i18n/tridpars.h [1:2]
+        i18n/tzfmt.cpp [1:2]
+        i18n/tzgnames.cpp [1:2]
+        i18n/tzgnames.h [1:2]
+        i18n/tznames.cpp [1:2]
+        i18n/tznames_impl.cpp [1:2]
+        i18n/tznames_impl.h [1:2]
+        i18n/tzrule.cpp [1:2]
+        i18n/tztrans.cpp [1:2]
+        i18n/ucal.cpp [1:2]
+        i18n/ucln_in.cpp [1:2]
+        i18n/ucln_in.h [1:2]
+        i18n/ucol.cpp [1:2]
+        i18n/ucol_imp.h [1:2]
+        i18n/ucol_res.cpp [1:2]
+        i18n/ucol_sit.cpp [1:2]
+        i18n/ucoleitr.cpp [1:2]
+        i18n/ucsdet.cpp [1:2]
+        i18n/udat.cpp [1:2]
+        i18n/udateintervalformat.cpp [1:2]
+        i18n/udatpg.cpp [1:2]
+        i18n/ufieldpositer.cpp [1:2]
+        i18n/uitercollationiterator.cpp [1:2]
+        i18n/uitercollationiterator.h [1:2]
+        i18n/ulistformatter.cpp [1:2]
+        i18n/ulocdata.cpp [1:2]
+        i18n/umsg.cpp [1:2]
+        i18n/umsg_imp.h [1:2]
+        i18n/unesctrn.cpp [1:2]
+        i18n/unesctrn.h [1:2]
+        i18n/uni2name.cpp [1:2]
+        i18n/uni2name.h [1:2]
+        i18n/unum.cpp [1:2]
+        i18n/unumsys.cpp [1:2]
+        i18n/upluralrules.cpp [1:2]
+        i18n/uregex.cpp [1:2]
+        i18n/uregexc.cpp [1:2]
+        i18n/uregion.cpp [1:2]
+        i18n/usearch.cpp [1:2]
+        i18n/uspoof.cpp [1:2]
+        i18n/uspoof_build.cpp [1:2]
+        i18n/uspoof_conf.cpp [1:2]
+        i18n/uspoof_conf.h [1:2]
+        i18n/uspoof_impl.cpp [1:2]
+        i18n/uspoof_impl.h [1:2]
+        i18n/usrchimp.h [1:2]
+        i18n/utf16collationiterator.cpp [1:2]
+        i18n/utf16collationiterator.h [1:2]
+        i18n/utf8collationiterator.cpp [1:2]
+        i18n/utf8collationiterator.h [1:2]
+        i18n/utmscale.cpp [1:2]
+        i18n/utrans.cpp [1:2]
+        i18n/vtzone.cpp [1:2]
+        i18n/vzone.cpp [1:2]
+        i18n/vzone.h [1:2]
+        i18n/windtfmt.cpp [1:2]
+        i18n/windtfmt.h [1:2]
+        i18n/winnmfmt.cpp [1:2]
+        i18n/winnmfmt.h [1:2]
+        i18n/wintzimpl.cpp [1:2]
+        i18n/wintzimpl.h [1:2]
+        i18n/zonemeta.cpp [1:2]
+        i18n/zonemeta.h [1:2]
+        i18n/zrule.cpp [1:2]
+        i18n/zrule.h [1:2]
+        i18n/ztrans.cpp [1:2]
+        i18n/ztrans.h [1:2]
+        include/unicode/alphaindex.h [1:2]
+        include/unicode/appendable.h [1:2]
+        include/unicode/basictz.h [1:2]
+        include/unicode/brkiter.h [1:2]
+        include/unicode/bytestream.h [1:4]
+        include/unicode/bytestrie.h [1:2]
+        include/unicode/bytestriebuilder.h [1:2]
+        include/unicode/calendar.h [1:2]
+        include/unicode/caniter.h [1:2]
+        include/unicode/chariter.h [1:2]
+        include/unicode/choicfmt.h [1:2]
+        include/unicode/coleitr.h [1:2]
+        include/unicode/coll.h [1:2]
+        include/unicode/compactdecimalformat.h [1:2]
+        include/unicode/curramt.h [1:2]
+        include/unicode/currpinf.h [1:2]
+        include/unicode/currunit.h [1:2]
+        include/unicode/datefmt.h [1:2]
+        include/unicode/dbbi.h [1:2]
+        include/unicode/dcfmtsym.h [1:2]
+        include/unicode/decimfmt.h [1:2]
+        include/unicode/docmain.h [1:2]
+        include/unicode/dtfmtsym.h [1:2]
+        include/unicode/dtintrv.h [1:2]
+        include/unicode/dtitvfmt.h [1:2]
+        include/unicode/dtitvinf.h [1:2]
+        include/unicode/dtptngen.h [1:2]
+        include/unicode/dtrule.h [1:2]
+        include/unicode/edits.h [1:2]
+        include/unicode/enumset.h [1:2]
+        include/unicode/errorcode.h [1:2]
+        include/unicode/fieldpos.h [1:2]
+        include/unicode/filteredbrk.h [1:2]
+        include/unicode/fmtable.h [1:2]
+        include/unicode/format.h [1:2]
+        include/unicode/fpositer.h [1:2]
+        include/unicode/gender.h [1:2]
+        include/unicode/gregocal.h [1:2]
+        include/unicode/icudataver.h [1:2]
+        include/unicode/icuplug.h [1:2]
+        include/unicode/idna.h [1:2]
+        include/unicode/listformatter.h [1:2]
+        include/unicode/localpointer.h [1:2]
+        include/unicode/locdspnm.h [1:2]
+        include/unicode/locid.h [1:2]
+        include/unicode/measfmt.h [1:2]
+        include/unicode/measunit.h [1:2]
+        include/unicode/measure.h [1:2]
+        include/unicode/messagepattern.h [1:2]
+        include/unicode/msgfmt.h [1:2]
+        include/unicode/normalizer2.h [1:2]
+        include/unicode/normlzr.h [1:2]
+        include/unicode/numfmt.h [1:2]
+        include/unicode/numsys.h [1:2]
+        include/unicode/parseerr.h [1:2]
+        include/unicode/parsepos.h [1:2]
+        include/unicode/platform.h [1:2]
+        include/unicode/plurfmt.h [1:2]
+        include/unicode/plurrule.h [1:2]
+        include/unicode/ptypes.h [1:2]
+        include/unicode/putil.h [1:2]
+        include/unicode/rbbi.h [1:2]
+        include/unicode/rbnf.h [1:2]
+        include/unicode/rbtz.h [1:2]
+        include/unicode/regex.h [1:2]
+        include/unicode/region.h [1:2]
+        include/unicode/reldatefmt.h [1:2]
+        include/unicode/rep.h [1:2]
+        include/unicode/resbund.h [1:2]
+        include/unicode/schriter.h [1:2]
+        include/unicode/scientificnumberformatter.h [1:2]
+        include/unicode/search.h [1:2]
+        include/unicode/selfmt.h [1:2]
+        include/unicode/simpleformatter.h [1:2]
+        include/unicode/simpletz.h [1:2]
+        include/unicode/smpdtfmt.h [1:2]
+        include/unicode/sortkey.h [1:2]
+        include/unicode/std_string.h [1:2]
+        include/unicode/strenum.h [1:2]
+        include/unicode/stringpiece.h [1:4]
+        include/unicode/stringtriebuilder.h [1:2]
+        include/unicode/stsearch.h [1:2]
+        include/unicode/symtable.h [1:2]
+        include/unicode/tblcoll.h [1:2]
+        include/unicode/timezone.h [1:2]
+        include/unicode/tmunit.h [1:2]
+        include/unicode/tmutamt.h [1:2]
+        include/unicode/tmutfmt.h [1:2]
+        include/unicode/translit.h [1:2]
+        include/unicode/tzfmt.h [1:2]
+        include/unicode/tznames.h [1:2]
+        include/unicode/tzrule.h [1:2]
+        include/unicode/tztrans.h [1:2]
+        include/unicode/ubidi.h [1:2]
+        include/unicode/ubiditransform.h [4:5]
+        include/unicode/ubrk.h [1:2]
+        include/unicode/ucal.h [1:2]
+        include/unicode/ucasemap.h [1:2]
+        include/unicode/ucat.h [1:2]
+        include/unicode/uchar.h [1:2]
+        include/unicode/ucharstrie.h [1:2]
+        include/unicode/ucharstriebuilder.h [1:2]
+        include/unicode/uchriter.h [1:2]
+        include/unicode/uclean.h [1:2]
+        include/unicode/ucnv.h [1:2]
+        include/unicode/ucnv_cb.h [1:2]
+        include/unicode/ucnv_err.h [1:2]
+        include/unicode/ucnvsel.h [1:2]
+        include/unicode/ucol.h [1:2]
+        include/unicode/ucoleitr.h [1:2]
+        include/unicode/uconfig.h [1:2]
+        include/unicode/ucsdet.h [1:2]
+        include/unicode/ucurr.h [1:2]
+        include/unicode/udat.h [1:2]
+        include/unicode/udata.h [1:2]
+        include/unicode/udateintervalformat.h [1:2]
+        include/unicode/udatpg.h [1:2]
+        include/unicode/udisplaycontext.h [1:2]
+        include/unicode/uenum.h [1:2]
+        include/unicode/ufieldpositer.h [1:2]
+        include/unicode/uformattable.h [1:2]
+        include/unicode/ugender.h [1:2]
+        include/unicode/uidna.h [1:2]
+        include/unicode/uiter.h [1:2]
+        include/unicode/uldnames.h [1:2]
+        include/unicode/ulistformatter.h [1:2]
+        include/unicode/uloc.h [1:2]
+        include/unicode/ulocdata.h [1:2]
+        include/unicode/umachine.h [1:2]
+        include/unicode/umisc.h [1:2]
+        include/unicode/umsg.h [1:2]
+        include/unicode/unifilt.h [1:2]
+        include/unicode/unifunct.h [1:2]
+        include/unicode/unimatch.h [1:2]
+        include/unicode/unirepl.h [1:2]
+        include/unicode/uniset.h [1:2]
+        include/unicode/unistr.h [1:2]
+        include/unicode/unorm.h [1:2]
+        include/unicode/unorm2.h [1:2]
+        include/unicode/unum.h [1:2]
+        include/unicode/unumsys.h [1:2]
+        include/unicode/uobject.h [1:2]
+        include/unicode/upluralrules.h [1:2]
+        include/unicode/uregex.h [1:2]
+        include/unicode/uregion.h [1:2]
+        include/unicode/ureldatefmt.h [1:2]
+        include/unicode/urename.h [1:2]
+        include/unicode/urep.h [1:2]
+        include/unicode/ures.h [1:2]
+        include/unicode/uscript.h [1:2]
+        include/unicode/usearch.h [1:2]
+        include/unicode/uset.h [1:2]
+        include/unicode/usetiter.h [1:2]
+        include/unicode/ushape.h [1:2]
+        include/unicode/uspoof.h [1:2]
+        include/unicode/usprep.h [1:2]
+        include/unicode/ustdio.h [1:2]
+        include/unicode/ustream.h [1:2]
+        include/unicode/ustring.h [1:2]
+        include/unicode/ustringtrie.h [1:2]
+        include/unicode/utext.h [1:2]
+        include/unicode/utf.h [1:2]
+        include/unicode/utf16.h [1:2]
+        include/unicode/utf32.h [1:2]
+        include/unicode/utf8.h [1:2]
+        include/unicode/utf_old.h [1:2]
+        include/unicode/utmscale.h [1:2]
+        include/unicode/utrace.h [1:2]
+        include/unicode/utrans.h [1:2]
+        include/unicode/utypes.h [1:2]
+        include/unicode/uvernum.h [1:2]
+        include/unicode/uversion.h [1:2]
+        include/unicode/vtzone.h [1:2]
+        io/locbund.cpp [1:2]
+        io/locbund.h [1:2]
+        io/sprintf.cpp [1:2]
+        io/sscanf.cpp [1:2]
+        io/ucln_io.cpp [1:2]
+        io/ucln_io.h [1:2]
+        io/ufile.cpp [1:2]
+        io/ufile.h [1:2]
+        io/ufmt_cmn.cpp [1:2]
+        io/ufmt_cmn.h [1:2]
+        io/uprintf.cpp [1:2]
+        io/uprintf.h [1:2]
+        io/uprntf_p.cpp [1:2]
+        io/uscanf.cpp [1:2]
+        io/uscanf.h [1:2]
+        io/uscanf_p.cpp [1:2]
+        io/ustdio.cpp [1:2]
+        io/ustream.cpp [1:2]
+        license.html [14:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 94d0b8c9728fb0dc5601252e1df53082
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/csrutf8.cpp [5:6]
+        icu4c.css [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 962ccc995ba98fd7fae7b902764d48f0
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2014-2016, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/dictionarydata.cpp [5:6]
+        common/simpleformatter.cpp [5:6]
+        common/uloc_keytype.cpp [5:6]
+        i18n/quantityformatter.cpp [5:6]
+        i18n/quantityformatter.h [5:6]
+        i18n/region.cpp [5:6]
+        i18n/reldatefmt.cpp [5:6]
+        include/unicode/region.h [5:6]
+        include/unicode/reldatefmt.h [5:7]
+        include/unicode/scientificnumberformatter.h [5:6]
+        include/unicode/simpleformatter.h [5:6]
+        include/unicode/udisplaycontext.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9670d5e377d905430346980ea04f1d6c
+BELONGS ya.make
+    License text:
+        * Copyright (C) 1998-2012, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/schriter.cpp [5:6]
+        common/uchriter.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9ab0d1a3c92647f878f31485881f9c47
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2003-2007, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnv_set.cpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9b030d5634a1df38fdea28583d4642ed
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/stringpiece.cpp [1:4]
+        i18n/smpdtfst.cpp [5:6]
+        i18n/smpdtfst.h [5:6]
+        i18n/wintzimpl.cpp [5:6]
+        include/unicode/icudataver.h [6:7]
+        include/unicode/normalizer2.h [6:7]
+        include/unicode/stringpiece.h [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9c9b5b5cdc14f34676187a5da7efcf89
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2007-2012, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/bmpset.cpp [6:7]
+        common/unisetspan.cpp [6:7]
+        i18n/dtrule.cpp [5:6]
+        i18n/tzrule.cpp [5:6]
+        i18n/tztrans.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9cbcf316d3188a05eb891360a0b8e60f
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1997-2012, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/cstring.h [6:7]
+        common/locresdata.cpp [6:7]
+        i18n/format.cpp [5:6]
+        i18n/nfrlist.h [5:6]
+        i18n/selfmt.cpp [4:6]
+        include/unicode/docmain.h [4:6]
+        include/unicode/ptypes.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9e663ee96901713c8984025e4ffe7577
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2005-2016, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucasemap.cpp [6:7]
+        common/utext.cpp [6:7]
+        i18n/csdetect.cpp [5:6]
+        i18n/csdetect.h [5:6]
+        i18n/csr2022.cpp [5:6]
+        i18n/csrmbcs.cpp [5:6]
+        i18n/csrsbcs.cpp [5:6]
+        i18n/inputext.cpp [5:6]
+        i18n/ucsdet.cpp [5:6]
+        i18n/windtfmt.cpp [5:6]
+        i18n/winnmfmt.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f89fd35d0b55a21c8bf543e7e9b8974
+BELONGS ya.make
+    License text:
+                    // 2i(c). Assert that `key` is a literal.
+                    // (Not needed)
+                    // 2i(d). Let `ks` be the resolved value of `key`.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/messageformat2.cpp [523:525]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a021d3bd6d6cbb97cbccc0ab1586c491
+BELONGS ya.make
+    License text:
+        Copyright (c) 2013-2022 Niels Lohmann
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [442:442]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a2e73c1b5033a91a4568b306596e332b
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2009-2010, Google, International Business Machines Corporation and *
+         * others. All Rights Reserved.                                                *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/tmutamt.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a4a10e27cf992a4f3cab9f4c56afd236
+BELONGS ya.make
+    License text:
+         \#  Copyright (c) 2013, LeRoy Benjamin Sharon
+         \#  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [347:348]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a4dd8701bb82b64b855f50ce44835295
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2004-2007, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/uset_imp.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a51ecacda59c811ed9c370e17b3f5efa
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2010-2015, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/charstr.cpp [5:6]
+        common/ucnv_ct.cpp [5:6]
+        common/uts46.cpp [5:6]
+        i18n/collation.h [5:6]
+        i18n/collationdata.h [5:6]
+        i18n/numsys.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a7643bf43061105c931388b129c669bf
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2008, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/dtintrv.cpp [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a86dc1622e34a5a3b4e6bfa39993d93b
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2001-2011, International Business Machines Corporation and    *
+         * others. All Rights Reserved.                                                *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/servloc.h [5:6]
+        common/unormimp.h [6:7]
+        common/util.cpp [5:6]
+        common/util.h [5:6]
+        common/utrie.h [6:7]
+        i18n/casetrn.cpp [6:7]
+        i18n/esctrn.cpp [5:6]
+        i18n/name2uni.cpp [5:6]
+        i18n/nortrans.cpp [5:6]
+        i18n/quant.h [5:6]
+        i18n/remtrans.cpp [5:6]
+        i18n/strmatch.h [4:5]
+        i18n/titletrn.cpp [5:6]
+        i18n/unesctrn.cpp [5:6]
+        i18n/uni2name.cpp [5:6]
+        io/ucln_io.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a90617581794c0914a64181af9b5b752
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2001-2014 International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/ustream.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a981cec51bb8713af050012a2fd40396
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2008-2015, Google, International Business Machines Corporation
+         * and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/tmutfmt.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aba540495a9ec06be988e5448bc78953
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucase.cpp [793:801]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ac32e6fd7d2f219bee9da0e9dfb4ef82
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2014-2015, International Business Machines Corporation and
+        * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/filteredbrk.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL acdba783775d88baa352d8dda2f477e5
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2003 - 2008, International Business Machines Corporation and  *
+        * others. All Rights Reserved.                                                *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/cecal.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ace2818a65f7649e54d09a35f711fe79
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2013-2014, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/collationbuilder.cpp [5:6]
+        i18n/collationbuilder.h [5:6]
+        i18n/collationdatawriter.h [5:6]
+        i18n/collationrootelements.cpp [5:6]
+        i18n/collationrootelements.h [5:6]
+        i18n/collationruleparser.h [5:6]
+        i18n/collationsets.cpp [5:6]
+        i18n/collationsets.h [5:6]
+        i18n/collationtailoring.h [5:6]
+        i18n/sharedbreakiterator.cpp [5:6]
+        include/unicode/uformattable.h [5:6]
+        include/unicode/unumsys.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL adcbf5e0f15080881a655b3167e4673e
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2015-2016, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/cstr.cpp [5:6]
+        common/resource.cpp [5:6]
+        common/resource.h [5:6]
+        common/sharedobject.h [5:6]
+        i18n/collunsafe.h [1:5]
+        include/unicode/ufieldpositer.h [5:6]
+        include/unicode/ulistformatter.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ae978110a7def652feaf669980c242b5
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2015, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ubidi.cpp [6:7]
+        common/ubidiln.cpp [6:7]
+        common/ucnv_io.cpp [6:7]
+        common/uinvchar.h [6:7]
+        common/uniset.cpp [5:6]
+        common/ustr_imp.h [5:6]
+        common/uvectr32.cpp [5:6]
+        common/uvectr64.cpp [5:6]
+        i18n/collationweights.cpp [6:7]
+        i18n/rbt.cpp [5:6]
+        include/unicode/umachine.h [6:7]
+        include/unicode/utf8.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b046e407080084733a69b594dffb8686
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2002-2014 International Business Machines Corporation
+        *   and others. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/rbbistbl.cpp [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b11e20f37cc5a1dbf39ba341be9e9d5b
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2002-2011, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/propname.h [5:6]
+        common/propsvec.cpp [6:7]
+        common/punycode.cpp [6:7]
+        common/rbbirb.cpp [6:7]
+        common/uassert.h [6:7]
+        common/uset.cpp [6:7]
+        common/uset_props.cpp [6:7]
+        i18n/funcrepl.h [5:6]
+        i18n/strrepl.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b219719a83c0f21f54419666d79b70f1
+BELONGS ya.make
+    License text:
+        /* Copyright (c) IBM Corporation, 2000-2012.  All rights reserved.    */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/decContext.cpp [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b2437018b002df83c6c7ea9b2d593523
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2002-2013, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/uenum.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b3b1a01f6c7b5ef6822411209de2aa59
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2001-2008,2010 IBM and others. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/search.cpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b5860edcdb054e809856c251b71cb8ec
+BELONGS ya.make
+    License text:
+         \#   * Copyright (c) 1999 Computer Systems and Communication Lab,
+         \#   *                    Institute of Information Science, Academia
+         \#       *                    Sinica. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [179:181]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b66afcce2b39e075c24204a500459d19
+BELONGS ya.make
+    License text:
+        //  Copyright (C) 2003-2010, International Business Machines Corporation and others.
+        //  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/regexst.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b7ac12ff15d6387a4c77a95c6728f660
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2002-2014, International Business Machines Corporation and
+         * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/locutil.cpp [5:6]
+        common/propname.cpp [5:6]
+        common/ustrenum.cpp [5:6]
+        common/ustrenum.h [5:6]
+        i18n/anytrans.cpp [5:6]
+        i18n/tridpars.cpp [5:6]
+        include/unicode/uset.h [6:7]
+        include/unicode/usetiter.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b7c278cc57f479d9f799d8fe6cc1fb7c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/msvcres.h [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b8fb1ca6b6e07ea2420d549f04c1c1a2
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1996-2015, International Business Machines Corporation and
+         * others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/caniter.cpp [5:6]
+        common/ubrk.cpp [5:6]
+        i18n/collationcompare.cpp [5:6]
+        i18n/rulebasedcollator.cpp [5:6]
+        i18n/ucol.cpp [5:6]
+        i18n/udat.cpp [5:6]
+        i18n/unum.cpp [5:6]
+        include/unicode/locid.h [6:7]
+        include/unicode/normlzr.h [5:7]
+        include/unicode/ubrk.h [5:6]
+        include/unicode/ucal.h [5:6]
+        include/unicode/ucol.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bce62155e580bc8ca8317dff33827b11
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2003, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucat.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c04329975d6617a30b8c8d08934b9151
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        APIChangeReport.html [1173:1175]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c1b7297fc443f46a1d1de36f8b788822
+BELONGS ya.make
+    License text:
+                _this->toUBytes[_this->toULength++] = static_cast<uint8_t>(c);
+                value = getKey_2022(c, reinterpret_cast<int32_t*>(&key), &offset);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnv2022.cpp [841:842]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c23d9e061ec6d06fc6dd96a82a5984cc
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2009-2010, International Business Machines Corporation and         *
+        * others. All Rights Reserved.                                                *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/ztrans.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c2c09483a367ef286112370f2ff5185a
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2006,2013 IBM Corp. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/dbbi.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c4106f9ac6f8ef41a818a8e59b7f6613
+BELONGS ya.make
+    License text:
+        *   Copyright (c) 2000-2005, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/nultrans.cpp [5:6]
+        include/unicode/symtable.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c4739568fb214f55087b37c6b3b40284
+BELONGS ya.make
+    License text:
+        //   Copyright (C) 2002-2015 International Business Machines Corporation
+        //   and others. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/regeximp.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c4dc5e2663ff7cc2d5bbe4668622eb70
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2012,2014 International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/enumset.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c68a6fb4e6d05b57fab1d8ea800d4d2c
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2013, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/umapfile.cpp [6:7]
+        common/uvector.cpp [5:6]
+        include/unicode/ubidi.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c7a1cf358c6cec7a3359544072765ae4
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2004-2016, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ulocimp.h [5:6]
+        i18n/measfmt.cpp [5:6]
+        i18n/measunit.cpp [5:6]
+        i18n/ucol_sit.cpp [5:6]
+        include/unicode/measfmt.h [5:6]
+        include/unicode/measunit.h [5:6]
+        include/unicode/uregex.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c82fb22292c7c573aed5f12a0943de39
+BELONGS ya.make
+    License text:
+        //  Copyright (C) 2002-2016, International Business Machines Corporation and others.
+        //  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/rbbiscan.cpp [6:7]
+        common/rbbiscan.h [6:7]
+        common/rbbitblb.cpp [5:6]
+        common/rbbitblb.h [9:10]
+        common/ucnv_u7.cpp [5:6]
+        common/ucnv_u8.cpp [5:6]
+        common/ucnvbocu.cpp [6:7]
+        common/ucurr.cpp [5:6]
+        common/ucurrimp.h [5:6]
+        common/uprops.cpp [6:7]
+        common/uprops.h [6:7]
+        i18n/regexcmp.h [6:7]
+        include/unicode/regex.h [5:6]
+        include/unicode/uconfig.h [5:6]
+        include/unicode/ucurr.h [5:6]
+        include/unicode/urename.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c8451b107c49a0d6a11ab1ad88203484
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2012-2014, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/collationdatabuilder.h [5:6]
+        i18n/collationfcd.h [5:6]
+        i18n/collationkeys.h [5:6]
+        i18n/collationroot.cpp [5:6]
+        i18n/collationroot.h [5:6]
+        i18n/uitercollationiterator.cpp [5:6]
+        i18n/utf8collationiterator.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c85e6722fc6a1d152e472cfe9dc72942
+BELONGS ya.make
+    License text:
+         \#  Copyright (C) 2006-2008, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [98:98]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd417bc62ea8d7ba8fb8dde19fd390fa
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1999-2005, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/parseerr.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cda0efd1cafec6f7a39d077424879bb4
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2006 International Business Machines Corporation        *
+        *   and others. All rights reserved.                                      *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/localsvc.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce16fc6430632c2cce96583835728dfc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/norm2_nfc_data.h [1:4]
+        common/propname_data.h [1:4]
+        common/ubidi_props_data.h [1:4]
+        common/ubidiimp.h [6:7]
+        common/ucase_props_data.h [1:4]
+        common/uchar_props_data.h [1:4]
+        common/udata.cpp [6:7]
+        common/unistr.cpp [5:6]
+        common/uresdata.cpp [5:6]
+        common/uresdata.h [5:6]
+        common/usc_impl.cpp [5:6]
+        common/uvector.h [5:6]
+        i18n/collationfcd.cpp [1:4]
+        i18n/rbt_pars.cpp [5:6]
+        i18n/translit.cpp [5:6]
+        include/unicode/uniset.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce9aad96b1b334c0a679ec4e10cb35e9
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2000-2016, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnv2022.cpp [5:6]
+        common/ucnv_lmb.cpp [5:6]
+        common/ucnvisci.cpp [5:6]
+        common/ucnvmbcs.cpp [6:7]
+        common/ucnvscsu.cpp [6:7]
+        common/uresimp.h [5:6]
+        common/ushape.cpp [6:7]
+        include/unicode/uvernum.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ceaebba480daea99b6daa9a8c3f3bfe3
+BELONGS ya.make
+    License text:
+        // Copyright 2004 and onwards Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/stringpiece.cpp [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cffeb9db280dee61545337fc741b400d
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2009-2016, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/normalizer2.cpp [6:7]
+        common/ulist.cpp [5:6]
+        common/ulist.h [5:6]
+        i18n/vzone.h [5:6]
+        i18n/zrule.h [5:6]
+        i18n/ztrans.h [5:6]
+        include/unicode/localpointer.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d5c31d83449105cb743d15dd401893ec
+BELONGS ya.make
+    License text:
+        // © 2024 and later: Unicode, Inc. and others.
+        // License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/messageformat2.cpp [1:2]
+        i18n/messageformat2_allocation.h [1:2]
+        i18n/messageformat2_arguments.cpp [1:2]
+        i18n/messageformat2_checker.cpp [1:2]
+        i18n/messageformat2_checker.h [1:2]
+        i18n/messageformat2_data_model.cpp [1:2]
+        i18n/messageformat2_errors.cpp [1:2]
+        i18n/messageformat2_errors.h [1:2]
+        i18n/messageformat2_evaluation.cpp [1:2]
+        i18n/messageformat2_evaluation.h [1:2]
+        i18n/messageformat2_formattable.cpp [1:2]
+        i18n/messageformat2_formatter.cpp [1:2]
+        i18n/messageformat2_function_registry.cpp [1:2]
+        i18n/messageformat2_function_registry_internal.h [1:2]
+        i18n/messageformat2_macros.h [1:2]
+        i18n/messageformat2_parser.cpp [1:2]
+        i18n/messageformat2_parser.h [1:2]
+        i18n/messageformat2_serializer.cpp [1:2]
+        i18n/messageformat2_serializer.h [1:2]
+        include/unicode/messageformat2.h [1:2]
+        include/unicode/messageformat2_arguments.h [1:2]
+        include/unicode/messageformat2_data_model.h [1:2]
+        include/unicode/messageformat2_data_model_names.h [1:2]
+        include/unicode/messageformat2_formattable.h [1:2]
+        include/unicode/messageformat2_function_registry.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d82157333c39db58ee7911e05bd4c3e4
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1997-2011,2014-2015 International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/utrans.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d9fa5e630e4f1622ffc1667f978a0116
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucase.cpp [793:801]
+
+KEEP     COPYRIGHT_SERVICE_LABEL da80353845fce1ac40297f14ec1c169b
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2001-2012, International Business Machines Corporation and    *
+         * others. All Rights Reserved.                                                *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/servnotf.cpp [5:6]
+        common/unifilt.cpp [5:6]
+        common/ustr_wcs.cpp [6:7]
+        common/utrie.cpp [6:7]
+        i18n/quant.cpp [5:6]
+        i18n/strmatch.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dabfc92d3bdac1cb148571b684a54557
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2014, International Business Machines
+        * Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/dictionarydata.h [5:6]
+        common/loadednormalizer2impl.cpp [5:6]
+        common/norm2allmodes.h [5:6]
+        i18n/scientificnumberformatter.cpp [5:6]
+        i18n/scriptset.cpp [5:6]
+        i18n/sharedbreakiterator.h [5:6]
+        i18n/sharedcalendar.h [5:6]
+        i18n/shareddateformatsymbols.h [5:6]
+        i18n/sharednumberformat.h [5:6]
+        i18n/sharedpluralrules.h [5:6]
+        include/unicode/uregion.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dbd769689ee05ac5883c44a2f76b62ac
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2011-2015, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/uposixdefs.h [5:6]
+        i18n/tzfmt.cpp [5:6]
+        i18n/tznames.cpp [5:6]
+        include/unicode/tzfmt.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dbfebde6da89e9e6c22d7bfe29effd33
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2005-2015, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/wintz.cpp [5:6]
+        i18n/csr2022.h [5:6]
+        i18n/csrsbcs.h [5:6]
+        i18n/windtfmt.h [5:6]
+        i18n/winnmfmt.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dcf3106e4dec244e5d19c61b888ac911
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2007-2014, International Business Machines Corporation
+         * and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/chnsecal.cpp [5:6]
+        i18n/zonemeta.cpp [5:6]
+        include/unicode/plurfmt.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e0fd60506fc1f7125cab287362d1f134
+BELONGS ya.make
+    License text:
+         \#   * Copyright (c) 1999 TaBE Project.
+         \#   * Copyright (c) 1999 Pai-Hsiang Hsiao.
+         \#   * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [146:148]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e7b2539b421bc18466527fff5888cdef
+BELONGS ya.make
+    License text:
+         \#  Copyright 2000, 2001, 2002, 2003 Nara Institute of Science
+         \#  and Technology.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [221:222]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e849a1336b641d75f7cc2f21c69514a9
+BELONGS ya.make
+    License text:
+        * Copyright (C) 2010-2013, International Business Machines
+        * Corporation and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/ugender.h [5:6]
+        include/unicode/upluralrules.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e99a033494f0a677079d0c5b85deb19f
+BELONGS ya.make
+    License text:
+        *   Copyright (c) 2001-2007, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/esctrn.h [5:6]
+        i18n/name2uni.h [5:6]
+        i18n/remtrans.h [5:6]
+        i18n/titletrn.h [5:6]
+        i18n/tolowtrn.cpp [5:6]
+        i18n/tolowtrn.h [5:6]
+        i18n/toupptrn.cpp [5:6]
+        i18n/toupptrn.h [5:6]
+        i18n/unesctrn.h [5:6]
+        i18n/uni2name.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eaa2eacf9bf7d4712bee5d8b7f46bae8
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2002-2006, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/uenumimp.h [6:7]
+        common/usetiter.cpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eaf8b5e53acf0739376dcad971e95344
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2010-2012, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/bytestriebuilder.cpp [5:6]
+        common/bytestrieiterator.cpp [5:6]
+        common/stringtriebuilder.cpp [5:6]
+        common/ucharstriebuilder.cpp [5:6]
+        i18n/upluralrules.cpp [5:6]
+        include/unicode/bytestrie.h [5:6]
+        include/unicode/fpositer.h [5:6]
+        include/unicode/idna.h [5:6]
+        include/unicode/ucharstrie.h [5:6]
+        include/unicode/ustringtrie.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ebaa44507182294feaa2eb9fb2cbae8d
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2000-2012, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/ushape.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ee1b008ed9576c458cd253dcb454da1b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/messageformat2.cpp [581:591]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eed7e8b3d80757822970ac3a50dd6716
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2007, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/bmpset.h [6:7]
+        common/unisetspan.h [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ef69505a804579d3e09b4f925dc646de
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucase.cpp [793:801]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f07c6268eccea88dd57382a005435b2b
+BELONGS ya.make
+    License text:
+         *   Copyright (C) 1996-2016, International Business Machines
+         *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/locmap.cpp [5:6]
+        common/uchar.cpp [5:6]
+        common/ucnv_bld.cpp [5:7]
+        i18n/ucal.cpp [5:6]
+        i18n/ucol_res.cpp [5:6]
+        include/unicode/coll.h [5:6]
+        include/unicode/tblcoll.h [5:6]
+        include/unicode/udat.h [5:6]
+        include/unicode/unorm.h [5:6]
+        include/unicode/utypes.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f393c1d45986d70f8d749cd57c646dd7
+BELONGS ya.make
+    License text:
+            // For fast UnicodeSet::contains(c).
+            inline UBool contains(UChar32 c) const;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/unisetspan.h [74:75]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f704300a55c74d96a1c1afbcd7787ad7
+BELONGS ya.make
+    License text:
+          <i>© 2016 and later: Unicode, Inc. and others. License &amp; terms of use: http://www.unicode.org/copyright.html</i> 
+          <i>© 1995-2016 International Business Machines Corporation and others</i>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        license.html [14:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f7092102cc97f30dcdae8de1d8e5a61b
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2009-2016, International Business Machines Corporation,       *
+         * Google, and others. All Rights Reserved.                                    *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/tmunit.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f9846c19b7f5ada0ec708a668e348dce
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 1998-2005, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/unicode/schriter.h [6:7]
+        include/unicode/uchriter.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fba28ca6bbdc3042b35f2d1ba130ce84
+BELONGS ya.make
+    License text:
+        *   Copyright (C) 2000-2014, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        io/sscanf.cpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fc9c93bab631afed5f374a254682d4fa
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucase.cpp [793:801]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fd15cc5d14356c080a3284511c538d89
+BELONGS ya.make
+    License text:
+        * Copyright (c) 1996-2014, International Business Machines
+        * Corporation and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/unorm.cpp [5:6]
+        i18n/coleitr.cpp [5:6]
+        i18n/coll.cpp [5:6]
+        i18n/collationcompare.h [5:6]
+        include/unicode/caniter.h [5:6]
+        include/unicode/sortkey.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ff8b8860b894ba2746d49a64547f4fd5
+BELONGS ya.make
+    License text:
+        *   Copyright (c) 2000-2007, International Business Machines
+        *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        i18n/nultrans.h [5:6]

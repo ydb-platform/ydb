@@ -35,6 +35,7 @@
 #include <ydb/library/actors/interconnect/mock/ic_mock.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/util/affinity.h>
+#include <ydb/library/pdisk_io/aio.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -3070,7 +3071,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 230:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, nullptr);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
                 }
@@ -3079,7 +3080,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 240:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, "");
                 }
@@ -3088,7 +3089,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 250:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, NODATA, 0, "");
                 }
@@ -3097,7 +3098,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 260:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
                 }
@@ -3106,7 +3107,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 break;
             case 270:
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, "");
                 }
@@ -3116,7 +3117,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
             case 280:
             {
                 if (Env->ShouldBeUndiscoverable) {
-                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, 0);
+                    TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
                 } else {
                     TEST_RESPONSE(MessageDiscoverResult, NODATA, 0, "");
                 }
@@ -4207,15 +4208,13 @@ public:
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         TControlWrapper enablePutBatching(args.EnablePutBatching, false, true);
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
-        TControlWrapper slowDiskThreshold(DefaultSlowDiskThreshold * 1000, 1, 1000000);
-        TControlWrapper predictedDelayMultiplier(DefaultPredictedDelayMultiplier * 1000, 1, 1000000);
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), false,
                 dsProxyNodeMon, TIntrusivePtr(storagePoolCounters),
                 TBlobStorageProxyParameters{
-                    .EnablePutBatching = enablePutBatching,
-                    .EnableVPatch = enableVPatch,
-                    .SlowDiskThreshold = slowDiskThreshold,
-                    .PredictedDelayMultiplier = predictedDelayMultiplier,
+                    .Controls = TBlobStorageProxyControlWrappers{
+                        .EnablePutBatching = enablePutBatching,
+                        .EnableVPatch = enableVPatch,
+                    }
                 }
             )
         };

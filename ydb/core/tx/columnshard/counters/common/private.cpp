@@ -12,7 +12,7 @@ private:
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
         Agent->ResendStatus();
-        Schedule(TDuration::Seconds(5), new NActors::TEvents::TEvWakeup);
+        Schedule(TDuration::Seconds(13), new NActors::TEvents::TEvWakeup);
     }
 public:
     TRegularSignalBuilderActor(std::shared_ptr<TValueAggregationAgent> agent)
@@ -23,7 +23,7 @@ public:
 
     void Bootstrap() {
         Agent->ResendStatus();
-        Schedule(TDuration::Seconds(5), new NActors::TEvents::TEvWakeup);
+        Schedule(TDuration::Seconds(13), new NActors::TEvents::TEvWakeup);
         Become(&TRegularSignalBuilderActor::StateMain);
     }
 

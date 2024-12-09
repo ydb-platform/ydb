@@ -6,6 +6,7 @@
 #include "file_reader.h"
 #include "file_writer.h"
 #include "format_hints.h"
+#include "init.h"
 #include "lock.h"
 #include "operation.h"
 #include "retry_transaction.h"
@@ -1243,6 +1244,14 @@ IFileReaderPtr TClient::GetJobStderr(
     return NRawClient::GetJobStderr(Context_, operationId, jobId, options);
 }
 
+std::vector<TJobTraceEvent> TClient::GetJobTrace(
+    const TOperationId& operationId,
+    const TGetJobTraceOptions& options)
+{
+    CheckShutdown();
+    return NRawClient::GetJobTrace(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
+}
+
 TNode::TListType TClient::SkyShareTable(
     const std::vector<TYPath>& tablePaths,
     const TSkyShareTableOptions& options)
@@ -1425,7 +1434,10 @@ TClientPtr CreateClientImpl(
     if (!retryConfigProvider) {
         retryConfigProvider = CreateDefaultRetryConfigProvider();
     }
-    return new NDetail::TClient(context, globalTxId, CreateDefaultClientRetryPolicy(retryConfigProvider, context.Config));
+
+    EnsureInitialized();
+
+    return new TClient(context, globalTxId, CreateDefaultClientRetryPolicy(retryConfigProvider, context.Config));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1433,6 +1445,7 @@ TClientPtr CreateClientImpl(
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
+
 
 IClientPtr CreateClient(
     const TString& serverName,
@@ -1447,9 +1460,8 @@ IClientPtr CreateClientFromEnv(const TCreateClientOptions& options)
     if (!serverName) {
         ythrow yexception() << "YT_PROXY is not set";
     }
-    return NDetail::CreateClientImpl(serverName, options);
+    return CreateClient(serverName, options);
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 

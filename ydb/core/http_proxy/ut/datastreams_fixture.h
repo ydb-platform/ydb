@@ -17,6 +17,7 @@
 #include <ydb/core/http_proxy/http_service.h>
 #include <ydb/core/http_proxy/metrics_actor.h>
 #include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/ymq/actor/auth_multi_factory.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/tests/counters.h>
@@ -36,6 +37,7 @@
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/core/ymq/actor/serviceid.h>
 
+#include <thread>
 
 using TJMap = NJson::TJsonValue::TMapType;
 using TJVector = NJson::TJsonValue::TArray;
@@ -66,8 +68,8 @@ T GetByPath(const NJson::TJsonValue& msg, TStringBuf path) {
     }
 }
 
-
 class THttpProxyTestMock : public NUnitTest::TBaseFixture {
+    friend class THttpProxyTestMockForSQS;
 public:
     THttpProxyTestMock() = default;
     ~THttpProxyTestMock() = default;
@@ -80,12 +82,12 @@ public:
         InitAll();
     }
 
-    void InitAll() {
+    void InitAll(bool yandexCloudMode = true) {
         AccessServicePort = PortManager.GetPort(8443);
         AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
-        InitKikimr();
+        InitKikimr(yandexCloudMode);
         InitAccessServiceService();
-        InitHttpServer();
+        InitHttpServer(yandexCloudMode);
     }
 
     static TString FormAuthorizationStr(const TString& region) {
@@ -335,6 +337,110 @@ public:
         return {httpCode, "", ""};
     }
 
+    NJson::TJsonMap CreateQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+        if (expectedHttpCode == 200) {
+            UNIT_ASSERT(GetByPath<TString>(json, "QueueUrl").EndsWith(GetByPath<TString>(request, "QueueName")));
+        }
+        return json;
+    }
+
+    NJson::TJsonMap SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", TStringBuilder() << "AmazonSQS." << method, request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    NJson::TJsonMap DeleteQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("DeleteQueue", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap GetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("GetQueueAttributes", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap SendMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto json = SendJsonRequest("SendMessage", request, expectedHttpCode);
+        if (expectedHttpCode == 200) {
+            UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+        }
+        return json;
+    }
+
+    NJson::TJsonMap SendMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("SendMessageBatch", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap ReceiveMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("ReceiveMessage", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap DeleteMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("DeleteMessage", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap DeleteMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("DeleteMessageBatch", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap GetQueueUrl(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("GetQueueUrl", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap ListQueues(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("ListQueues", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap PurgeQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("PurgeQueue", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap SetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("SetQueueAttributes", request, expectedHttpCode);
+    }
+
+    void WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes) {
+        WaitQueueAttributes(queueUrl, retries, [&attributes](NJson::TJsonMap json) {
+            for (const auto& [k, v] : attributes.GetMapSafe()) {
+                if (json["Attributes"][k] != v) {
+                    return false;
+                }
+            }
+            return true;
+        });
+    }
+
+    void WaitQueueAttributes(TString queueUrl, size_t retries, std::function<bool (NJson::TJsonMap json)> predicate) {
+        for (size_t i = 0; i < retries; ++i) {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", queueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All"}}
+            });
+
+            if (predicate(json)) {
+                return;
+            }
+
+            if (i + 1 < retries) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            }
+        }
+        UNIT_FAIL("WaitQueueAttributes: predicate is still false");
+    }
+
+    NJson::TJsonMap ChangeMessageVisibility(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("ChangeMessageVisibility", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap ChangeMessageVisibilityBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("ChangeMessageVisibilityBatch", request, expectedHttpCode);
+    }
+
 private:
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query) {
         TString endpoint = TStringBuilder() << "localhost:" << KikimrGrpcPort;
@@ -364,7 +470,7 @@ private:
         return resultSet;
     }
 
-    void InitKikimr() {
+    void InitKikimr(bool yandexCloudMode) {
         AuthFactory = std::make_shared<TIamAuthFactory>();
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
@@ -375,7 +481,7 @@ private:
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
 
         appConfig.MutableSqsConfig()->SetEnableSqs(true);
-        appConfig.MutableSqsConfig()->SetYandexCloudMode(true);
+        appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
         appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
 
         auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
@@ -476,7 +582,7 @@ private:
         );
 
         client.MkDir("/Root/SQS", ".FIFO");
-        client.CreateTable("/Root/SQS/.FIFO", 
+        client.CreateTable("/Root/SQS/.FIFO",
            "Name: \"Messages\""
            "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
            "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
@@ -489,6 +595,54 @@ private:
            "Columns { Name: \"FirstReceiveTimestamp\" Type: \"Uint64\"}"
            "Columns { Name: \"SentTimestamp\"         Type: \"Uint64\"}"
            "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Offset\"]"
+        );
+
+        client.CreateTable("/Root/SQS/.FIFO",
+           "Name: \"Deduplication\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"DedupId\"               Type: \"String\"}"
+           "Columns { Name: \"Deadline\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Offset\"                Type: \"Uint64\"}"
+           "Columns { Name: \"MessageId\"             Type: \"String\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"DedupId\"]"
+        );
+
+        client.CreateTable("/Root/SQS/.FIFO",
+           "Name: \"Groups\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"GroupId\"               Type: \"String\"}"
+           "Columns { Name: \"VisibilityDeadline\"    Type: \"Uint64\"}"
+           "Columns { Name: \"RandomId\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Head\"                  Type: \"Uint64\"}"
+           "Columns { Name: \"Tail\"                  Type: \"Uint64\"}"
+           "Columns { Name: \"ReceiveAttemptId\"      Type: \"Utf8\"}"
+           "Columns { Name: \"LockTimestamp\"         Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"GroupId\"]"
+        );
+
+        client.CreateTable("/Root/SQS/.FIFO",
+           "Name: \"Data\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"RandomId\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Offset\"                Type: \"Uint64\"}"
+           "Columns { Name: \"SenderId\"              Type: \"String\"}"
+           "Columns { Name: \"DedupId\"               Type: \"String\"}"
+           "Columns { Name: \"Attributes\"            Type: \"String\"}"
+           "Columns { Name: \"Data\"                  Type: \"String\"}"
+           "Columns { Name: \"MessageId\"             Type: \"String\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"RandomId\", \"Offset\"]"
+        );
+
+        client.CreateTable("/Root/SQS/.FIFO",
+           "Name: \"Reads\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"ReceiveAttemptId\"      Type: \"Utf8\"}"
+           "Columns { Name: \"Deadline\"              Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"ReceiveAttemptId\"]"
         );
 
         client.CreateTable("/Root/SQS",
@@ -536,7 +690,7 @@ private:
            "KeyColumnNames: [\"Account\", \"QueueName\", \"EventType\"]"
         );
 
-        auto stateTableCommon = 
+        auto stateTableCommon =
            "Name: \"State\""
            "Columns { Name: \"QueueIdNumberHash\"      Type: \"Uint64\"}"
            "Columns { Name: \"QueueIdNumber\"          Type: \"Uint64\"}"
@@ -580,7 +734,7 @@ private:
            "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]"
         );
 
-        auto sentTimestampIdxCommonColumns= 
+        auto sentTimestampIdxCommonColumns=
            "Columns { Name: \"QueueIdNumberAndShardHash\"  Type: \"Uint64\"}"
            "Columns { Name: \"QueueIdNumber\"              Type: \"Uint64\"}"
            "Columns { Name: \"Shard\"                      Type: \"Uint32\"}"
@@ -595,12 +749,17 @@ private:
            << sentTimestampIdxCommonColumns
            << sendTimestampIdsKeys
         );
+
         client.CreateTable("/Root/SQS/.FIFO",
-           TStringBuilder()
-           << "Name: \"SentTimestampIdx\""
-           << "Columns { Name: \"GroupId\"  Type: \"String\"}"
-           << sentTimestampIdxCommonColumns
-           << sendTimestampIdsKeys
+           "Name: \"SentTimestampIdx\""
+           "Columns { Name: \"QueueIdNumberHash\"      Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"          Type: \"Uint64\"}"
+           "Columns { Name: \"SentTimestamp\"          Type: \"Uint64\"}"
+           "Columns { Name: \"Offset\"                 Type: \"Uint64\"}"
+           "Columns { Name: \"GroupId\"                Type: \"String\"}"
+           "Columns { Name: \"RandomId\"               Type: \"Uint64\"}"
+           "Columns { Name: \"DelayDeadline\"          Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"SentTimestamp\", \"Offset\"]"
         );
 
         client.CreateTable("/Root/SQS/.STD",
@@ -638,7 +797,7 @@ private:
         AccessServiceServer = builder.BuildAndStart();
     }
 
-    void InitHttpServer() {
+    void InitHttpServer(bool yandexCloudMode = true) {
         NKikimrConfig::TServerlessProxyConfig config;
         config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central1");
         config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central-1");
@@ -648,7 +807,7 @@ private:
         config.MutableHttpConfig()->SetAccessServiceEndpoint(TStringBuilder() << "127.0.0.1:" << AccessServicePort);
         config.SetTestMode(true);
         config.MutableHttpConfig()->SetPort(HttpServicePort);
-        config.MutableHttpConfig()->SetYandexCloudMode(true);
+        config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
         config.MutableHttpConfig()->SetYmqEnabled(true);
 
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYdb::CreateOAuthCredentialsProviderFactory("proxy_sa@builtin");
@@ -699,9 +858,14 @@ private:
         folderServiceConfig.SetEnable(false);
         actorId = as->Register(NKikimr::NFolderService::CreateFolderServiceActor(folderServiceConfig, "cloud4"));
         as->RegisterLocalService(NFolderService::FolderServiceActorId(), actorId);
-        
+
         actorId = as->Register(NKikimr::NFolderService::CreateFolderServiceActor(folderServiceConfig, "cloud4"));
         as->RegisterLocalService(NSQS::MakeSqsFolderServiceID(), actorId);
+
+        NActors::TActorSystemSetup::TLocalServices services {};
+        MultiAuthFactory = std::make_unique<NKikimr::NSQS::TMultiAuthFactory>();
+        MultiAuthFactory->Initialize(services, *AppData(as), AppData(as)->SqsConfig);
+        AppData(as)->SqsAuthFactory = MultiAuthFactory.get();
 
         for (ui32 i = 0; i < ActorRuntime->GetNodeCount(); i++) {
             auto nodeId = ActorRuntime->GetNodeId(i);
@@ -742,6 +906,7 @@ public:
     std::unique_ptr<grpc::Server> AccessServiceServer;
     std::unique_ptr<grpc::Server> IamTokenServer;
     std::unique_ptr<grpc::Server> DatabaseServiceServer;
+    std::unique_ptr<NKikimr::NSQS::TMultiAuthFactory> MultiAuthFactory;
     TAutoPtr<TMon> Monitoring;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters = {};
     THolder<NYdbGrpc::TGRpcServer> GRpcServer;
@@ -752,4 +917,10 @@ public:
     ui16 DatabaseServicePort = 0;
     ui16 MonPort = 0;
     ui16 KikimrGrpcPort = 0;
+};
+
+class THttpProxyTestMockForSQS : public THttpProxyTestMock {
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(false);
+    }
 };

@@ -179,9 +179,11 @@ private:
             LDAP_LOG_D("start TLS");
             result = NKikimrLdap::StartTLS(*ld);
             if (!NKikimrLdap::IsSuccess(result)) {
-                LDAP_LOG_D("Could not start TLS. " << NKikimrLdap::ErrorToString(result));
+                TStringBuilder logErrorMessage;
+                logErrorMessage << "Could not start TLS. " << NKikimrLdap::ErrorToString(result);
+                LDAP_LOG_D(logErrorMessage);
                 TEvLdapAuthProvider::TError error {
-                    .Message = ERROR_MESSAGE, .Retryable = NKikimrLdap::IsRetryableError(result)
+                    .Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)
                 };
                 // The Unbind operation is not the antithesis of the Bind operation as the name implies.
                 // Close the LDAP connection, free the resources contained in the LDAP structure
@@ -193,10 +195,12 @@ private:
         LDAP_LOG_D("bind: bindDn: " << Settings.GetBindDn());
         result = NKikimrLdap::Bind(*ld, Settings.GetBindDn(), Settings.GetBindPassword());
         if (!NKikimrLdap::IsSuccess(result)) {
-            LDAP_LOG_D("Could not perform initial LDAP bind for dn " << Settings.GetBindDn() << " on server " + UrisCreator.GetUris() << ". "
-                            << NKikimrLdap::ErrorToString(result));
+            TStringBuilder logErrorMessage;
+            logErrorMessage << "Could not perform initial LDAP bind for dn " << Settings.GetBindDn() << " on server " + UrisCreator.GetUris() << ". "
+                            << NKikimrLdap::ErrorToString(result);
+            LDAP_LOG_D(logErrorMessage);
             TEvLdapAuthProvider::TError error {
-                .Message = ERROR_MESSAGE, .Retryable = NKikimrLdap::IsRetryableError(result)
+                .Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)
             };
             // The Unbind operation is not the antithesis of the Bind operation as the name implies.
             // Close the LDAP connection, free the resources contained in the LDAP structure
@@ -216,27 +220,33 @@ private:
             const TString& caCertificateFile = Settings.GetUseTls().GetCaCertFile();
             result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_CACERTFILE, caCertificateFile.c_str());
             if (!NKikimrLdap::IsSuccess(result)) {
-                LDAP_LOG_D("Could not set LDAP ca certificate file \"" << caCertificateFile + "\": " << NKikimrLdap::ErrorToString(result));
+                TStringBuilder logErrorMessage;
+                logErrorMessage << "Could not set LDAP ca file \"" << caCertificateFile + "\": " << NKikimrLdap::ErrorToString(result);
+                LDAP_LOG_D(logErrorMessage);
                 NKikimrLdap::Unbind(*ld);
                 return {{NKikimrLdap::ErrorToStatus(result),
-                        {.Message = ERROR_MESSAGE, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+                        {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
             }
         }
 
         LDAP_LOG_D("init: scheme: " << Settings.GetScheme() << ", uris: " << UrisCreator.GetUris() << ", port: " << UrisCreator.GetConfiguredPort());
         result = NKikimrLdap::Init(ld, Settings.GetScheme(), UrisCreator.GetUris(), UrisCreator.GetConfiguredPort());
         if (!NKikimrLdap::IsSuccess(result)) {
-            LDAP_LOG_D("Could not initialize LDAP connection for uris: " << UrisCreator.GetUris() << ". " << NKikimrLdap::LdapError(*ld));
+            TStringBuilder logErrorMessage;
+            logErrorMessage << "Could not initialize LDAP connection for uris: " << UrisCreator.GetUris() << ". " << NKikimrLdap::LdapError(*ld);
+            LDAP_LOG_D(logErrorMessage);
             return {{TEvLdapAuthProvider::EStatus::UNAVAILABLE,
-                    {.Message = ERROR_MESSAGE, .Retryable = false}}};
+                    {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false}}};
         }
 
         result = NKikimrLdap::SetProtocolVersion(*ld);
         if (!NKikimrLdap::IsSuccess(result)) {
             NKikimrLdap::Unbind(*ld);
-            LDAP_LOG_D("Could not set LDAP protocol version: " << NKikimrLdap::ErrorToString(result));
+            TStringBuilder logErrorMessage;
+            logErrorMessage << "Could not set LDAP protocol version: " << NKikimrLdap::ErrorToString(result);
+            LDAP_LOG_D(logErrorMessage);
             return {{NKikimrLdap::ErrorToStatus(result),
-                    {.Message = ERROR_MESSAGE, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+                    {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
         }
 
         if (Settings.GetScheme() == NKikimrLdap::LDAPS_SCHEME || Settings.GetUseTls().GetEnable()) {
@@ -244,9 +254,11 @@ private:
             result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_REQUIRE_CERT, &requireCert);
             if (!NKikimrLdap::IsSuccess(result)) {
                 NKikimrLdap::Unbind(*ld);
-                LDAP_LOG_D("Could not set require certificate option: " << NKikimrLdap::ErrorToString(result));
+                TStringBuilder logErrorMessage;
+                logErrorMessage << "Could not set require certificate option: " << NKikimrLdap::ErrorToString(result);
+                LDAP_LOG_D(logErrorMessage);
                 return {{NKikimrLdap::ErrorToStatus(result),
-                        {.Message = ERROR_MESSAGE, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+                        {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
             }
         }
 
@@ -256,18 +268,30 @@ private:
     TAuthenticateUserResponse AuthenticateUser(const TAuthenticateUserRequest& request) {
         char* dn = NKikimrLdap::GetDn(*request.Ld, request.Entry);
         if (dn == nullptr) {
-            LDAP_LOG_D("Could not get dn for the first entry matching " << FilterCreator.GetFilter(request.Login) << " on server " << UrisCreator.GetUris() << ". "
-                            << NKikimrLdap::LdapError(*request.Ld));
+            TStringBuilder logErrorMessage;
+            logErrorMessage << "Could not get dn for the first entry matching " << FilterCreator.GetFilter(request.Login)
+                            << " on server " << UrisCreator.GetUris() << ". " << NKikimrLdap::LdapError(*request.Ld);
+            LDAP_LOG_D(logErrorMessage);
             return {{TEvLdapAuthProvider::EStatus::UNAUTHORIZED,
-                    {.Message = ERROR_MESSAGE, .Retryable = false}}};
+                    {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false}}};
+        }
+        if (request.Password.empty()) {
+            TStringBuilder logErrorMessage;
+            logErrorMessage << "LDAP login failed for user " << TString(dn) << ". Empty password";
+            LDAP_LOG_D(logErrorMessage);
+            NKikimrLdap::MemFree(dn);
+            return {{.Status = TEvLdapAuthProvider::EStatus::UNAUTHORIZED, .Error = {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false}}};
         }
         TEvLdapAuthProvider::TError error;
         LDAP_LOG_D("bind: bindDn: " << dn);
         int result = NKikimrLdap::Bind(*request.Ld, dn, request.Password);
         if (!NKikimrLdap::IsSuccess(result)) {
-            LDAP_LOG_D("LDAP login failed for user " << TString(dn) << " on server " << UrisCreator.GetUris() << ". "
-                            << NKikimrLdap::ErrorToString((result)));
+            TStringBuilder logErrorMessage;
+            logErrorMessage << "LDAP login failed for user " << TString(dn) << " on server " << UrisCreator.GetUris() << ". "
+                            << NKikimrLdap::ErrorToString((result));
+            LDAP_LOG_D(logErrorMessage);
             error.Message = ERROR_MESSAGE;
+            error.LogMessage = logErrorMessage;
             error.Retryable = NKikimrLdap::IsRetryableError(result);
         }
         NKikimrLdap::MemFree(dn);
@@ -291,24 +315,28 @@ private:
                                         &searchMessage);
         TSearchUserResponse response;
         if (!NKikimrLdap::IsSuccess(result)) {
-            LDAP_LOG_D("Could not search for filter " << searchFilter << " on server " << UrisCreator.GetUris() << ". "
-                                         << NKikimrLdap::ErrorToString(result));
+            TStringBuilder logErrorMessage;
+            logErrorMessage << "Could not perform search for filter " << searchFilter << " on server " << UrisCreator.GetUris() << ". "
+                            << NKikimrLdap::ErrorToString(result);
             response.Status = NKikimrLdap::ErrorToStatus(result);
-            response.Error = {.Message = ERROR_MESSAGE, .Retryable = NKikimrLdap::IsRetryableError(result)};
+            response.Error = {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)};
+            LDAP_LOG_D(logErrorMessage);
             return response;
         }
         const int countEntries = NKikimrLdap::CountEntries(request.Ld, searchMessage);
         if (countEntries != 1) {
+            TStringBuilder logErrorMessage;
             if (countEntries == 0) {
-                LDAP_LOG_D("LDAP user " << request.User << " does not exist. "
-                           "LDAP search for filter " << searchFilter << " on server " << UrisCreator.GetUris() << " return no entries");
+                logErrorMessage << "LDAP user " << request.User << " does not exist. "
+                                   "LDAP search for filter " << searchFilter << " on server " << UrisCreator.GetUris() << " return no entries";
             } else {
-                LDAP_LOG_D("LDAP user " << request.User << " is not unique. "
-                           "LDAP search for filter " << searchFilter << " on server " << UrisCreator.GetUris() << " return " << countEntries << " entries");
+                logErrorMessage << "LDAP user " << request.User << " is not unique. "
+                                   "LDAP search for filter " << searchFilter << " on server " << UrisCreator.GetUris() << " return " << countEntries << " entries";
             }
-            response.Error = {.Message = ERROR_MESSAGE, .Retryable = false};
+            response.Error = {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false};
             response.Status = TEvLdapAuthProvider::EStatus::UNAUTHORIZED;
             NKikimrLdap::MsgFree(searchMessage);
+            LDAP_LOG_D(logErrorMessage);
             return response;
         }
         response.SearchMessage = searchMessage;
@@ -406,16 +434,16 @@ private:
 
     TInitializeLdapConnectionResponse CheckRequiredSettingsParameters() const {
         if (Settings.GetHosts().empty() && Settings.GetHost().empty()) {
-            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "List of ldap server hosts is empty", .Retryable = false}};
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "List of ldap server hosts is empty", .Retryable = false}};
         }
         if (Settings.GetBaseDn().empty()) {
-            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Parameter BaseDn is empty", .Retryable = false}};
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BaseDn is empty", .Retryable = false}};
         }
         if (Settings.GetBindDn().empty()) {
-            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Parameter BindDn is empty", .Retryable = false}};
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindDn is empty", .Retryable = false}};
         }
         if (Settings.GetBindPassword().empty()) {
-            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Parameter BindPassword is empty", .Retryable = false}};
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindPassword is empty", .Retryable = false}};
         }
         return {TEvLdapAuthProvider::EStatus::SUCCESS, {}};
     }
@@ -447,7 +475,7 @@ private:
     }
 
 private:
-    static constexpr const char* ERROR_MESSAGE = "User is unauthorized in LDAP server";
+    static constexpr const char* ERROR_MESSAGE = "Could not login via LDAP";
 
     const NKikimrProto::TLdapAuthentication Settings;
     const TSearchFilterCreator FilterCreator;

@@ -3,10 +3,10 @@ from typing import Any, Optional
 import yatest.common
 import json
 import os
+import re
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import StrEnum
-from time import time
 from types import TracebackType
 
 
@@ -19,14 +19,18 @@ class WorkloadType(StrEnum):
 class YdbCliHelper:
     @staticmethod
     def get_cli_command() -> list[str]:
-        cli = get_external_param('ydb-cli', 'git')
+        args = [
+            '-e', YdbCluster.ydb_endpoint,
+            '-d', f'/{YdbCluster.ydb_database}'
+        ]
+        cli = get_external_param('ydb-cli', 'main')
         if cli == 'git':
-            return [yatest.common.work_path('ydb')]
+            return [yatest.common.work_path('ydb')] + args
         elif cli == 'main':
             path = os.path.join(yatest.common.context.project_path, '../../../apps/ydb/ydb')
-            return [yatest.common.binary_path(path)]
+            return [yatest.common.binary_path(path)] + args
         else:
-            return [cli]
+            return [cli] + args
 
     class QueryPlan:
         def __init__(self, plan: dict | None = None, table: str | None = None, ast: str | None = None, svg: str | None = None) -> None:
@@ -39,12 +43,13 @@ class YdbCliHelper:
         def __init__(self):
             self.stats: dict[str, dict[str, Any]] = {}
             self.query_out: Optional[str] = None
-            self.stdout: Optional[str] = None
-            self.stderr: Optional[str] = None
+            self.stdout: str = ''
+            self.stderr: str = ''
             self.error_message: str = ''
             self.plans: Optional[list[YdbCliHelper.QueryPlan]] = None
             self.explain_plan: Optional[YdbCliHelper.QueryPlan] = None
             self.errors_by_iter: dict[int, str] = {}
+            self.time_by_iter: dict[int, float] = {}
             self.traceback: Optional[TracebackType] = None
 
         @property
@@ -58,9 +63,11 @@ class YdbCliHelper:
                      query_num: int,
                      iterations: int,
                      timeout: float,
-                     check_canonical: bool):
+                     check_canonical: bool,
+                     query_syntax: str,
+                     scale: Optional[int]):
             def _get_output_path(ext: str) -> str:
-                return yatest.common.work_path(f'q{query_num}.{ext}')
+                return yatest.common.test_output_path(f'q{query_num}.{ext}')
 
             self.result = YdbCliHelper.WorkloadRunResult()
             self.workload_type = workload_type
@@ -69,6 +76,8 @@ class YdbCliHelper:
             self.iterations = iterations
             self.timeout = timeout
             self.check_canonical = check_canonical
+            self.query_syntax = query_syntax
+            self.scale = scale
             self._nodes_info: dict[str, dict[str, int]] = {}
             self._plan_path = _get_output_path('plan')
             self._query_output_path = _get_output_path('out')
@@ -81,26 +90,26 @@ class YdbCliHelper:
                 else:
                     self.result.error_message = msg
 
-        def _process_returncode(self, returncode, stderr: str) -> None:
+        def _process_returncode(self, returncode) -> None:
             begin_str = f'{self.query_num}:'
             end_str = 'Query text:'
             iter_str = 'iteration '
-            begin_pos = stderr.find(begin_str)
+            begin_pos = self.result.stderr.find(begin_str)
             if begin_pos >= 0:
                 while True:
-                    begin_pos = stderr.find(iter_str, begin_pos)
+                    begin_pos = self.result.stderr.find(iter_str, begin_pos)
                     if begin_pos < 0:
                         break
                     begin_pos += len(iter_str)
-                    end_pos = stderr.find('\n', begin_pos)
+                    end_pos = self.result.stderr.find('\n', begin_pos)
                     if end_pos < 0:
-                        iter = int(stderr[begin_pos:])
-                        begin_pos = len(stderr) - 1
+                        iter = int(self.result.stderr[begin_pos:])
+                        begin_pos = len(self.result.stderr) - 1
                     else:
-                        iter = int(stderr[begin_pos:end_pos])
+                        iter = int(self.result.stderr[begin_pos:end_pos])
                         begin_pos = end_pos + 1
-                    end_pos = stderr.find(end_str, begin_pos)
-                    msg = (stderr[begin_pos:] if end_pos < 0 else stderr[begin_pos:end_pos]).strip()
+                    end_pos = self.result.stderr.find(end_str, begin_pos)
+                    msg = (self.result.stderr[begin_pos:] if end_pos < 0 else self.result.stderr[begin_pos:end_pos]).strip()
                     self.result.errors_by_iter[iter] = msg
                     self._add_error(f'Iteration {iter}: {msg}')
             if returncode != 0 and len(self.result.errors_by_iter) == 0:
@@ -146,13 +155,12 @@ class YdbCliHelper:
                     self.result.query_out = r.read()
 
         @staticmethod
-        def _get_nodes_info() -> dict[str, dict[str, int]]:
-            nodes, _ = YdbCluster.get_cluster_nodes()
+        def _get_nodes_info() -> dict[str, dict[str, Any]]:
             return {
-                n['SystemState']['Host']: {
-                    'start_time': int(int(n['SystemState'].get('StartTime', time() * 1000)) / 1000)
+                n.host: {
+                    'start_time': n.start_time
                 }
-                for n in nodes
+                for n in YdbCluster.get_cluster_nodes(db_only=True)
             }
 
         def _check_nodes(self):
@@ -167,10 +175,14 @@ class YdbCliHelper:
                     node_errors.append(f'Node {node} is down')
             self._add_error('\n'.join(node_errors))
 
+        def _parse_stdout(self):
+            for line in self.result.stdout.splitlines():
+                m = re.search(r'iteration ([0-9]*):\s*ok\s*([\.0-9]*)s', line)
+                if m is not None:
+                    self.result.time_by_iter[int(m.group(1))] = float(m.group(2))
+
         def _get_cmd(self) -> list[str]:
             cmd = YdbCliHelper.get_cli_command() + [
-                '-e', YdbCluster.ydb_endpoint,
-                '-d', f'/{YdbCluster.ydb_database}',
                 'workload', str(self.workload_type), '--path', self.db_path, 'run',
                 '--json', self._json_path,
                 '--output', self._query_output_path,
@@ -186,17 +198,22 @@ class YdbCliHelper:
                 cmd += ['--query-settings', query_preffix]
             if self.check_canonical:
                 cmd.append('--check-canonical')
+            if self.query_syntax:
+                cmd += ['--syntax', self.query_syntax]
+            if self.scale is not None and self.scale > 0:
+                cmd += ['--scale', str(self.scale)]
             return cmd
 
         def _exec_cli(self) -> None:
             process = yatest.common.process.execute(self._get_cmd(), check_exit_code=False)
             self.result.stdout = process.stdout.decode('utf-8', 'replace')
             self.result.stderr = process.stderr.decode('utf-8', 'replace')
-            self._process_returncode(process.returncode, self.result.stderr)
+            self._process_returncode(process.returncode)
+            self._parse_stdout()
 
         def process(self) -> YdbCliHelper.WorkloadRunResult:
             try:
-                wait_error = YdbCluster.wait_ydb_alive(300, self.db_path)
+                wait_error = YdbCluster.wait_ydb_alive(20 * 60, self.db_path)
                 if wait_error is not None:
                     self.result.error_message = wait_error
                 else:
@@ -213,5 +230,15 @@ class YdbCliHelper:
 
     @staticmethod
     def workload_run(workload_type: WorkloadType, path: str, query_num: int, iterations: int = 5,
-                     timeout: float = 100., check_canonical: bool = False) -> YdbCliHelper.WorkloadRunResult:
-        return YdbCliHelper.WorkloadProcessor(workload_type, path, query_num, iterations, timeout, check_canonical).process()
+                     timeout: float = 100., check_canonical: bool = False, query_syntax: str = '',
+                     scale: Optional[int] = None) -> YdbCliHelper.WorkloadRunResult:
+        return YdbCliHelper.WorkloadProcessor(
+            workload_type,
+            path,
+            query_num,
+            iterations,
+            timeout,
+            check_canonical,
+            query_syntax,
+            scale
+        ).process()

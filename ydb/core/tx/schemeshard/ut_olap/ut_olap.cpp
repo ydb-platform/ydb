@@ -70,7 +70,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )";
@@ -92,13 +91,87 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )");
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/DirA/DirB/OlapStore", false, NLs::PathExist);
+    }
+
+    Y_UNIT_TEST(CreateTableWithNullableKeysNotAllowed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto& appData = runtime.GetAppData();
+        appData.ColumnShardConfig.SetAllowNullableColumnsInPK(false);
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "MyStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "key1" Type: "Uint32" }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: [ "timestamp", "key1" ]
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(CreateTableWithNullableKeys) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto& appData = runtime.GetAppData();
+        appData.ColumnShardConfig.SetAllowNullableColumnsInPK(true);
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "MyStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "key1" Type: "Uint32" }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: [ "timestamp", "key1" ]
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyStore", false, NLs::PathExist);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir", false, NLs::PathExist);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", R"(
+            Name: "MyTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key1" Type: "Uint32" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: [ "timestamp", "key1" ]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLsPathId(runtime, 4, NLs::PathStringEqual("/MyRoot/MyDir/MyTable"));
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "MyTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/MyTable", false, NLs::PathNotExist);
+        TestLsPathId(runtime, 4, NLs::PathStringEqual(""));
     }
 
     Y_UNIT_TEST(CreateTable) {
@@ -137,7 +210,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -150,7 +222,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 Columns { Name: "comment" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -162,7 +233,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -175,7 +245,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
                 KeyColumnNames: "data"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -187,7 +256,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "nottimestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -199,7 +267,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "String" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -211,7 +278,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -235,7 +301,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusAccepted});
     }
@@ -339,7 +404,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" NotNull: true }
                 KeyColumnNames: "some"
                 KeyColumnNames: "data"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
             Sharding {
                 HashSharding {
@@ -437,7 +501,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(CreateTableTtl) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnvOptions options;
+        options.EnableTieringInColumnShard(true);
+        TTestEnv env(runtime, options);
         ui64 txId = 100;
 
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
@@ -481,7 +547,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Name: "Table3"
             ColumnShardCount: 1
             TtlSettings {
-                UseTiering : "Tiering1"
+                Enabled: {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    Tiers: {
+                        ApplyAfterSeconds: 360
+                        EvictToExternalStorage {
+                            StorageName: "Tier1"
+                        }
+                    }
+                }
             }
         )";
 
@@ -492,13 +567,22 @@ Y_UNIT_TEST_SUITE(TOlap) {
             NLs::HasColumnTableSchemaPreset("default"),
             NLs::HasColumnTableSchemaVersion(1),
             NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsTiering("Tiering1")));
+            NLs::HasColumnTableTtlSettingsTier("timestamp", TDuration::Seconds(360), "Tier1")));
 
         TString tableSchema4 = R"(
             Name: "Table4"
             ColumnShardCount: 1
             TtlSettings {
-                UseTiering : "Tiering1"
+                Enabled: {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    Tiers: {
+                        ApplyAfterSeconds: 3600000000
+                        EvictToExternalStorage {
+                            StorageName: "Tier1"
+                        }
+                    }
+                }
             }
         )";
 
@@ -587,7 +671,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )";
@@ -643,7 +726,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"
             AlterTtlSettings {
-                UseTiering : "Tiering1"
+                Enabled: {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    Tiers: {
+                        ApplyAfterSeconds: 3600000000
+                        EvictToExternalStorage {
+                            StorageName: "Tier1"
+                        }
+                    }
+                }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -727,8 +819,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
             TSet<ui64> txIds;
             for (ui32 i = 0; i < 10; ++i) {
                 std::vector<ui64> writeIds;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
-                NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
+                ++txId;
+                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
 
@@ -739,9 +832,10 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
             // trigger periodic stats at shard (after timeout)
             std::vector<ui64> writeIds;
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
-            NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
-            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, {txId});
+            ++txId;
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+            NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, { txId });
         }
         csController->WaitIndexation(TDuration::Seconds(5));
         {
@@ -806,5 +900,5 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
-    }    
+    }
 }

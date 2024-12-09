@@ -1,16 +1,17 @@
 #pragma once
 
-#include "common/modification_type.h"
 #include "events.h"
 #include "shards_splitter.h"
 
-#include <ydb/library/accessor/accessor.h>
+#include "common/modification_type.h"
+
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/columnshard/counters/common/owner.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
-
 
 namespace NKikimr::NEvWrite {
 
@@ -19,6 +20,7 @@ private:
     YDB_READONLY(ui64, ShardId, 0);
     YDB_READONLY(ui64, WriteId, 0);
     YDB_READONLY(ui64, WritePartId, 0);
+
 public:
     TWriteIdForShard() = default;
     TWriteIdForShard(const ui64 shardId, const ui64 writeId, const ui32 writePartId)
@@ -37,9 +39,13 @@ private:
     NMonitoring::THistogramPtr FailedFullReplyDuration;
     NMonitoring::THistogramPtr BytesDistribution;
     NMonitoring::THistogramPtr RowsDistribution;
+    NMonitoring::THistogramPtr ShardsCountDistribution;
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
     NMonitoring::TDynamicCounters::TCounterPtr BytesCount;
     NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr GlobalTimeoutCount;
+    NMonitoring::TDynamicCounters::TCounterPtr RetryTimeoutCount;
+
 public:
     TCSUploadCounters()
         : TBase("CSUpload")
@@ -49,10 +55,21 @@ public:
         , FailedFullReplyDuration(TBase::GetHistogram("Replies/Failed/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
         , BytesDistribution(TBase::GetHistogram("Requests/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024)))
         , RowsDistribution(TBase::GetHistogram("Requests/Rows", NMonitoring::ExponentialHistogram(15, 2, 16)))
+        , ShardsCountDistribution(TBase::GetHistogram("Requests/ShardSplits", NMonitoring::LinearHistogram(50, 1, 1)))
         , RowsCount(TBase::GetDeriviative("Rows"))
         , BytesCount(TBase::GetDeriviative("Bytes"))
-        , FailsCount(TBase::GetDeriviative("Fails")) {
+        , FailsCount(TBase::GetDeriviative("Fails"))
+        , GlobalTimeoutCount(TBase::GetDeriviative("GlobalTimeouts"))
+        , RetryTimeoutCount(TBase::GetDeriviative("RetryTimeouts"))
+    {
+    }
 
+    void OnGlobalTimeout() const {
+        GlobalTimeoutCount->Inc();
+    }
+
+    void OnRetryTimeout() const {
+        RetryTimeoutCount->Inc();
     }
 
     void OnRequest(const ui64 rows, const ui64 bytes) const {
@@ -64,6 +81,10 @@ public:
 
     void OnCSFailed(const Ydb::StatusIds::StatusCode /*code*/) {
         FailsCount->Add(1);
+    }
+
+    void OnSplitByShards(const ui64 shardsCount) const {
+        ShardsCountDistribution->Collect(shardsCount);
     }
 
     void OnCSReply(const TDuration d) const {
@@ -110,6 +131,7 @@ private:
             LongTxActorId.Send(NLongTxService::MakeLongTxServiceID(LongTxActorId.NodeId()), req.Release());
         }
     }
+
 public:
     using TPtr = std::shared_ptr<TWritersController>;
 
@@ -131,10 +153,10 @@ public:
                 , Issues(issues) {
             }
         };
-
     };
 
-    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId, const bool immediateWrite);
+    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId,
+        const bool immediateWrite);
     void OnSuccess(const ui64 shardId, const ui64 writeId, const ui32 writePartId);
     void OnFail(const Ydb::StatusIds::StatusCode code, const TString& message);
 };
@@ -158,40 +180,43 @@ private:
     NWilson::TProfileSpan ActorSpan;
     EModificationType ModificationType;
     const bool ImmediateWrite = false;
+    const std::optional<TDuration> Timeout;
 
     void SendWriteRequest();
     static TDuration OverloadTimeout() {
         return TDuration::MilliSeconds(OverloadedDelayMs);
     }
     void SendToTablet(THolder<IEventBase> event) {
-        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true),
-            IEventHandle::FlagTrackDelivery, 0, ActorSpan.GetTraceId());
+        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true), IEventHandle::FlagTrackDelivery, 0,
+            ActorSpan.GetTraceId());
     }
     virtual void PassAway() override {
         Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
     }
+
 public:
     TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
-        const EModificationType mType, const bool immediateWrite);
+        const EModificationType mType, const bool immediateWrite, const std::optional<TDuration> timeout = std::nullopt);
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvColumnShard::TEvWriteResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
-            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            hFunc(NActors::TEvents::TEvWakeup, Handle);
         }
     }
 
     void Bootstrap();
 
+    void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
     void Handle(TEvColumnShard::TEvWriteResult::TPtr& ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
     void Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev);
-    void HandleTimeout(const TActorContext& ctx);
+
 private:
     bool RetryWriteRequest(const bool delayed = true);
 };
-}
+}   // namespace NKikimr::NEvWrite

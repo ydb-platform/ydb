@@ -5,7 +5,7 @@
 #include "factory.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 #include <util/stream/str.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
@@ -13,7 +13,7 @@
 #include <util/generic/hash.h>
 
 extern "C" {
-#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
 }
 
 namespace NKikHouse {

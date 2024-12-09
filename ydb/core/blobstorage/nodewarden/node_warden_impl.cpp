@@ -1,29 +1,171 @@
+#include "node_warden.h"
+#include "node_warden_events.h"
 #include "node_warden_impl.h"
-#include "distconf.h"
 
+#include <google/protobuf/util/message_differencer.h>
+#include <ydb/core/blobstorage/common/immediate_control_defaults.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
+#include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/core/base/nameservice.h>
-
 #include <ydb/core/protos/key.pb.h>
+
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 using namespace NKikimr;
 using namespace NStorage;
+
+TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
+    : Cfg(cfg)
+    , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
+    , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true)
+    , EnableLocalSyncLogDataCutting(0, 0, 1)
+    , EnableSyncLogChunkCompressionHDD(1, 0, 1)
+    , EnableSyncLogChunkCompressionSSD(0, 0, 1)
+    , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
+    , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
+    , DefaultHugeGarbagePerMille(300, 1, 1000)
+    , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
+    , MaxCommonLogChunksHDD(200, 1, 1'000'000)
+    , MaxCommonLogChunksSSD(200, 1, 1'000'000)
+    , CostMetricsParametersByMedia({
+        TCostMetricsParameters{200},
+        TCostMetricsParameters{50},
+        TCostMetricsParameters{32},
+    })
+    , SlowDiskThreshold(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000)
+    , SlowDiskThresholdHDD(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000)
+    , SlowDiskThresholdSSD(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000)
+    , PredictedDelayMultiplier(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
+    , PredictedDelayMultiplierHDD(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
+    , PredictedDelayMultiplierSSD(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
+    , MaxNumOfSlowDisks(DefaultMaxNumOfSlowDisks, 1, 2)
+    , MaxNumOfSlowDisksHDD(DefaultMaxNumOfSlowDisks, 1, 2)
+    , MaxNumOfSlowDisksSSD(DefaultMaxNumOfSlowDisks, 1, 2)
+    , LongRequestThresholdMs(50'000, 1, 1'000'000)
+    , LongRequestReportingDelayMs(60'000, 1, 1'000'000)
+{
+    Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
+    AvailDomainId = 1;
+    for (const auto& domain : Cfg->BlobStorageConfig.GetServiceSet().GetAvailabilityDomains()) {
+        AvailDomainId = domain;
+    }
+    if (Cfg->DomainsConfig) {
+        for (const auto& ssconf : Cfg->DomainsConfig->GetStateStorage()) {
+            BuildStateStorageInfos(ssconf, StateStorageInfo, BoardInfo, SchemeBoardInfo);
+            StateStorageProxyConfigured = true;
+        }
+    }
+}
+
+STATEFN(TNodeWarden::StateOnline) {
+    switch (ev->GetTypeRewrite()) {
+        fFunc(TEvBlobStorage::TEvPut::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvGet::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvBlock::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvPatch::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvDiscover::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvRange::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvCollectGarbage::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvStatus::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvAssimilate::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvBunchOfEvents::EventType, HandleForwarded);
+        fFunc(TEvRequestProxySessionsState::EventType, HandleForwarded);
+
+        cFunc(TEvPrivate::EvGroupPendingQueueTick, HandleGroupPendingQueueTick);
+
+        hFunc(NIncrHuge::TEvIncrHugeInit, HandleIncrHugeInit);
+
+        hFunc(TEvInterconnect::TEvNodeInfo, Handle);
+
+        hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+        hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+
+        hFunc(NPDisk::TEvSlayResult, Handle);
+
+        hFunc(TEvRegisterPDiskLoadActor, Handle);
+
+        hFunc(TEvStatusUpdate, Handle);
+        hFunc(TEvBlobStorage::TEvDropDonor, Handle);
+        hFunc(TEvBlobStorage::TEvAskRestartVDisk, Handle);
+        hFunc(TEvBlobStorage::TEvAskWardenRestartPDisk, Handle);
+        hFunc(TEvBlobStorage::TEvNotifyWardenPDiskRestarted, Handle);
+
+        hFunc(TEvGroupStatReport, Handle);
+
+        hFunc(TEvBlobStorage::TEvControllerNodeServiceSetUpdate, Handle);
+        hFunc(TEvBlobStorage::TEvUpdateGroupInfo, Handle);
+        hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
+        hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
+        hFunc(TEvPrivate::TEvSendDiskMetrics, Handle);
+        hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
+        hFunc(NMon::TEvHttpInfo, Handle);
+        cFunc(NActors::TEvents::TSystem::Poison, PassAway);
+
+        hFunc(TEvBlobStorage::TEvControllerScrubQueryStartQuantum, Handle);
+        hFunc(TEvBlobStorage::TEvControllerScrubStartQuantum, Handle);
+        hFunc(TEvBlobStorage::TEvControllerScrubQuantumFinished, Handle);
+
+        hFunc(TEvents::TEvInvokeResult, Handle);
+
+        hFunc(TEvNodeWardenQueryGroupInfo, Handle);
+        hFunc(TEvNodeWardenQueryStorageConfig, Handle);
+        hFunc(TEvNodeWardenStorageConfig, Handle);
+        fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
+
+        // proxy requests for the NodeWhiteboard to prevent races
+        hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
+
+        hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
+
+        cFunc(TEvPrivate::EvReadCache, HandleReadCache);
+        fFunc(TEvPrivate::EvGetGroup, HandleGetGroup);
+
+        fFunc(TEvBlobStorage::EvNodeConfigPush, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeConfigReversePush, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeConfigUnbind, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeConfigScatter, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeConfigGather, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeConfigInvokeOnRoot, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeWardenDynamicConfigPush, ForwardToDistributedConfigKeeper);
+
+        hFunc(TEvNodeWardenQueryBaseConfig, Handle);
+        hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
+
+        fFunc(TEvents::TSystem::Gone, HandleGone);
+
+        hFunc(TEvNodeWardenReadMetadata, Handle);
+        hFunc(TEvNodeWardenWriteMetadata, Handle);
+        hFunc(TEvPrivate::TEvDereferencePDisk, Handle);
+
+        default:
+            EnqueuePendingMessage(ev);
+            break;
+    }
+
+    if (VDiskStatusChanged) {
+        SendDiskMetrics(false);
+        VDiskStatusChanged = false;
+    }
+}
 
 void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData>& drives, TStringStream& details) {
     // Serial number's size definitely won't exceed this number of bytes.
     size_t maxSerialSizeInBytes = 100;
 
     auto isValidSerial = [maxSerialSizeInBytes](TString& serial) {
-        if (serial.Size() > maxSerialSizeInBytes) {
+        if (serial.size() > maxSerialSizeInBytes) {
             // Not sensible size.
             return false;
         }
 
         // Check if serial number contains only ASCII characters.
-        for (size_t i = 0; i < serial.Size(); ++i) {
+        for (size_t i = 0; i < serial.size(); ++i) {
             i8 c = serial[i];
 
             if (c <= 0) {
@@ -76,7 +218,7 @@ void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData
         auto [mapIt, _] = ByPathDriveCounters.try_emplace(path, AppData()->Counters, path);
 
         // Cut string in case it exceeds max size.
-        size_t size = std::min(serial.Size(), maxSerialSizeInBytes);
+        size_t size = std::min(serial.size(), maxSerialSizeInBytes);
 
         // Encode in case it contains weird symbols.
         TString encoded = Base64Encode(serial.substr(0, size));
@@ -92,6 +234,10 @@ void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData
 }
 
 TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
+    if (!AppData()->FeatureFlags.GetEnableDriveSerialsDiscovery()) {
+        return {};
+    }
+
     TStringStream details;
     TVector<NPDisk::TDriveData> drives = ListDevicesWithPartlabel(details);
 
@@ -133,7 +279,7 @@ void TNodeWarden::StopInvalidGroupProxy() {
 }
 
 void TNodeWarden::StartRequestReportingThrottler() {
-    STLOG(PRI_DEBUG, BS_NODE, NW27, "StartRequestReportingThrottler");
+    STLOG(PRI_DEBUG, BS_NODE, NW62, "StartRequestReportingThrottler");
     Register(CreateRequestReportingThrottler(LongRequestReportingDelayMs));
 }
 
@@ -187,6 +333,7 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, "VDiskControls.MaxSyncLogChunksInFlightHDD");
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
         icb->RegisterSharedControl(DefaultHugeGarbagePerMille, "VDiskControls.DefaultHugeGarbagePerMille");
+        icb->RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, "VDiskControls.HugeDefragFreeSpaceBorderPerMille");
         icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
         icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
 
@@ -204,10 +351,19 @@ void TNodeWarden::Bootstrap() {
                 "VDiskControls.DiskTimeAvailableScaleNVME");
 
         icb->RegisterSharedControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
+        icb->RegisterSharedControl(SlowDiskThresholdHDD, "DSProxyControls.SlowDiskThresholdHDD");
+        icb->RegisterSharedControl(SlowDiskThresholdSSD, "DSProxyControls.SlowDiskThresholdSSD");
+
         icb->RegisterSharedControl(PredictedDelayMultiplier, "DSProxyControls.PredictedDelayMultiplier");
+        icb->RegisterSharedControl(PredictedDelayMultiplierHDD, "DSProxyControls.PredictedDelayMultiplierHDD");
+        icb->RegisterSharedControl(PredictedDelayMultiplierSSD, "DSProxyControls.PredictedDelayMultiplierSSD");
+
+        icb->RegisterSharedControl(MaxNumOfSlowDisks, "DSProxyControls.MaxNumOfSlowDisks");
+        icb->RegisterSharedControl(MaxNumOfSlowDisksHDD, "DSProxyControls.MaxNumOfSlowDisksHDD");
+        icb->RegisterSharedControl(MaxNumOfSlowDisksSSD, "DSProxyControls.MaxNumOfSlowDisksSSD");
+
         icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
         icb->RegisterSharedControl(LongRequestReportingDelayMs, "DSProxyControls.LongRequestReportingDelayMs");
-        icb->RegisterSharedControl(MaxNumOfSlowDisks, "DSProxyControls.MaxNumOfSlowDisks");
     }
 
     // start replication broker

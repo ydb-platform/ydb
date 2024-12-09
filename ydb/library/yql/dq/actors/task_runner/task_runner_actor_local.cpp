@@ -2,8 +2,8 @@
 
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
 #include <ydb/library/yql/dq/actors/dq.h>
 
@@ -412,7 +412,7 @@ private:
         const bool finished = sink->IsFinished();
         const bool changed = finished || size > 0 || hasCheckpoint;
 
-        Parent->SinkSend(ev->Get()->Index, std::move(batch), std::move(maybeCheckpoint), checkpointSize, size, finished, changed);
+        Parent->SinkSend(ev->Get()->Index, std::move(batch), std::move(maybeCheckpoint), size, checkpointSize, finished, changed);
     }
 
     void OnDqTask(TEvTaskRunnerCreate::TPtr& ev) {

@@ -6,7 +6,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 #include <util/stream/str.h>
 #include <util/string/join.h>
@@ -56,8 +56,8 @@ public:
 
             while (!buf.empty()) {
                 auto nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
-                Y_ENSURE(buf.Size() >= nodeStateSize, "State/buf is corrupted");
-                TStringBuf nodeStateBuf(buf.Data(), nodeStateSize);
+                Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
+                TStringBuf nodeStateBuf(buf.data(), nodeStateSize);
                 buf.Skip(nodeStateSize);
 
                 NKikimr::NMiniKQL::TInputSerializer reader(nodeStateBuf);
@@ -68,7 +68,7 @@ public:
                 switch (type) {
                     case NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB:
                     {
-                        nodeState.SimpleBlobNodeState = TString(nodeStateBuf.Data(), nodeStateBuf.Size());
+                        nodeState.SimpleBlobNodeState = TString(nodeStateBuf.data(), nodeStateBuf.size());
                     }
                     break;
                     case NKikimr::NMiniKQL::EMkqlStateType::SNAPSHOT:
@@ -105,8 +105,8 @@ public:
                 NYql::NUdf::TUnboxedValue saved =
                      NKikimr::NMiniKQL::TOutputSerializer::MakeSnapshotState(nodeState.Items, 0);
                 const TStringBuf savedBuf = saved.AsStringRef();
-                NKikimr::NMiniKQL::WriteUi64(result, savedBuf.Size());
-                result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+                NKikimr::NMiniKQL::WriteUi64(result, savedBuf.size());
+                result.AppendNoAlias(savedBuf.data(), savedBuf.size());
             }
         }
         auto& stateData = state.MiniKqlProgram.ConstructInPlace().Data;
@@ -124,8 +124,8 @@ public:
         TStringBuf buf(blob);
         while (!buf.empty()) {
             auto nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
-            Y_ENSURE(buf.Size() >= nodeStateSize, "State/buf is corrupted");
-            TStringBuf nodeStateBuf(buf.Data(), nodeStateSize);
+            Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
+            TStringBuf nodeStateBuf(buf.data(), nodeStateSize);
             if (NKikimr::NMiniKQL::TInputSerializer(nodeStateBuf).GetType() == NKikimr::NMiniKQL::EMkqlStateType::INCREMENT) {
                 return EStateType::Increment;
             }

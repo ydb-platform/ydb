@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <cstring>
 #include <stlfwd>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -14,13 +13,15 @@
 
 #include "ptr.h"
 #include "utility.h"
-#include "bitops.h"
 #include "explicit_type.h"
 #include "reserve.h"
-#include "singleton.h"
+#ifndef _LIBCPP_VERSION
+    #include "singleton.h"
+#endif
 #include "strbase.h"
 #include "strbuf.h"
 #include "string_hash.h"
+#include "ylimits.h"
 
 #if defined(address_sanitizer_enabled) || defined(thread_sanitizer_enabled)
     #include "hide_ptr.h"
@@ -190,7 +191,7 @@ public:
         size_t Size;
     };
 
-    static size_t max_size() noexcept {
+    size_t max_size() noexcept {
         static size_t res = TStringType().max_size();
 
         return res;
@@ -325,14 +326,36 @@ public:
         return reverse_iterator(begin());
     }
 
-    using TBase::begin;   //!< const_iterator TStringBase::begin() const
-    using TBase::cbegin;  //!< const_iterator TStringBase::cbegin() const
-    using TBase::cend;    //!< const_iterator TStringBase::cend() const
-    using TBase::crbegin; //!< const_reverse_iterator TStringBase::crbegin() const
-    using TBase::crend;   //!< const_reverse_iterator TStringBase::crend() const
-    using TBase::end;     //!< const_iterator TStringBase::end() const
-    using TBase::rbegin;  //!< const_reverse_iterator TStringBase::rbegin() const
-    using TBase::rend;    //!< const_reverse_iterator TStringBase::rend() const
+    const_iterator begin() const noexcept Y_LIFETIME_BOUND {
+        return TBase::begin();
+    }
+    const_iterator cbegin() const noexcept Y_LIFETIME_BOUND {
+        return TBase::cbegin();
+    }
+
+    const_iterator cend() const noexcept Y_LIFETIME_BOUND {
+        return TBase::cend();
+    }
+
+    const_reverse_iterator crbegin() const noexcept Y_LIFETIME_BOUND {
+        return TBase::crbegin();
+    }
+
+    const_reverse_iterator crend() const noexcept Y_LIFETIME_BOUND {
+        return TBase::crend();
+    }
+
+    const_iterator end() const noexcept Y_LIFETIME_BOUND {
+        return TBase::end();
+    }
+
+    const_reverse_iterator rbegin() const noexcept Y_LIFETIME_BOUND {
+        return TBase::rbegin();
+    }
+
+    const_reverse_iterator rend() const noexcept Y_LIFETIME_BOUND {
+        return TBase::rend();
+    }
 
     inline size_t capacity() const noexcept {
 #ifdef TSTRING_IS_STD_STRING
@@ -1173,6 +1196,10 @@ public:
     bool to_lower(size_t pos = 0, size_t n = TBase::npos);
     bool to_upper(size_t pos = 0, size_t n = TBase::npos);
     bool to_title(size_t pos = 0, size_t n = TBase::npos);
+
+    constexpr const TCharType* Data() const noexcept = delete;
+    constexpr size_t Size() noexcept = delete;
+    Y_PURE_FUNCTION constexpr bool Empty() const noexcept = delete;
 
 public:
     /**

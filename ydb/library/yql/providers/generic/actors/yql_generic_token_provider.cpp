@@ -1,7 +1,7 @@
 #include "yql_generic_token_provider.h"
 
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NDq {
     TGenericTokenProvider::TGenericTokenProvider(const TString& staticIamToken)
@@ -12,8 +12,8 @@ namespace NYql::NDq {
     TGenericTokenProvider::TGenericTokenProvider(
         const TString& serviceAccountId, const TString& ServiceAccountIdSignature,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
-        Y_ENSURE(!serviceAccountId.Empty(), "No service account provided");
-        Y_ENSURE(!ServiceAccountIdSignature.Empty(), "No service account signature provided");
+        Y_ENSURE(!serviceAccountId.empty(), "No service account provided");
+        Y_ENSURE(!ServiceAccountIdSignature.empty(), "No service account signature provided");
         Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
 
         auto structuredTokenJSON =
@@ -61,10 +61,10 @@ namespace NYql::NDq {
     CreateGenericTokenProvider(const TString& staticIamToken, const TString& serviceAccountId,
                                const TString& serviceAccountIdSignature,
                                const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
-        if (!staticIamToken.Empty()) {
+        if (!staticIamToken.empty()) {
             return std::make_unique<TGenericTokenProvider>(staticIamToken);
         }
-        if (!serviceAccountId.Empty()) {
+        if (!serviceAccountId.empty()) {
             return std::make_unique<TGenericTokenProvider>(serviceAccountId, serviceAccountIdSignature,
                                                            credentialsFactory);
         }

@@ -435,7 +435,7 @@ int TCube<T>::ReadSensors(
         };
 
         if constexpr (std::is_same_v<T, i64> || std::is_same_v<T, TDuration>) {
-            if (options.ConvertCountersToRateGauge) {
+            if (options.ConvertCountersToRateGauge || options.ConvertCountersToDeltaGauge) {
                 consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
             } else {
                 consumer->OnMetricBegin(NMonitoring::EMetricType::RATE);
@@ -454,6 +454,12 @@ int TCube<T>::ReadSensors(
                         consumer->OnDouble(time, value / options.RateDenominator);
                     } else {
                         consumer->OnDouble(time, value.SecondsFloat() / options.RateDenominator);
+                    }
+                } else if (options.ConvertCountersToDeltaGauge) {
+                    if constexpr (std::is_same_v<T, i64>) {
+                        consumer->OnDouble(time, value);
+                    } else {
+                        consumer->OnDouble(time, value.SecondsFloat());
                     }
                 } else {
                     // TODO(prime@): RATE is incompatible with windowed read.
@@ -514,7 +520,7 @@ int TCube<T>::ReadSensors(
                     }
 
                     for (size_t i = 0; i < n; ++i) {
-                        int bucketValue = i < value.Values.size() ? value.Values[i] : 0u;
+                        auto bucketValue = i < value.Values.size() ? value.Values[i] : 0u;
 
                         (*hist)[i] = {value.Bounds[i], bucketValue / options.RateDenominator};
                     }
@@ -525,7 +531,7 @@ int TCube<T>::ReadSensors(
                     auto rollup = Rollup(*window, indices.back());
 
                     for (size_t i = 0; i < n; ++i) {
-                        int bucketValue = i < rollup.Values.size() ? rollup.Values[i] : 0u;
+                        auto bucketValue = i < rollup.Values.size() ? rollup.Values[i] : 0u;
                         (*hist)[i] = {rollup.Bounds[i], bucketValue};
                     }
 
@@ -549,7 +555,7 @@ int TCube<T>::ReadSensors(
                 auto hist = NMonitoring::TExplicitHistogramSnapshot::New(n + 1);
 
                 for (size_t i = 0; i < n; ++i) {
-                    int bucketValue = i < value.Values.size() ? value.Values[i] : 0u;
+                    auto bucketValue = i < value.Values.size() ? value.Values[i] : 0u;
                     (*hist)[i] = {value.Bounds[i], bucketValue};
                 }
 
@@ -576,7 +582,7 @@ int TCube<T>::ReadSensors(
                 }
 
                 for (size_t i = 0; i < n; ++i) {
-                    int bucketValue = i < value.Values.size() ? value.Values[i] : 0u;
+                    auto bucketValue = i < value.Values.size() ? value.Values[i] : 0u;
                     (*hist)[i] = {value.Bounds[i], bucketValue / options.RateDenominator};
                 }
 
@@ -669,11 +675,11 @@ int TCube<T>::ReadSensorValues(
             }
             ++valuesRead;
         } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot> || std::is_same_v<T, TGaugeHistogramSnapshot> || std::is_same_v<T, TRateHistogramSnapshot>) {
-            std::vector<std::pair<double, int>> hist;
+            std::vector<std::pair<double, i64>> hist;
             size_t n = value.Bounds.size();
             hist.reserve(n + 1);
             for (size_t i = 0; i != n; ++i) {
-                int bucketValue = i < value.Values.size() ? value.Values[i] : 0;
+                auto bucketValue = i < value.Values.size() ? value.Values[i] : 0;
                 hist.emplace_back(value.Bounds[i], bucketValue);
             }
             hist.emplace_back(Max<double>(), n < value.Values.size() ? value.Values[n] : 0u);

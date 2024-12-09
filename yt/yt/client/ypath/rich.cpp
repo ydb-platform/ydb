@@ -217,15 +217,15 @@ void TRichYPath::SetReadViaExecNode(bool value)
     Attributes().Set("read_via_exec_node", value);
 }
 
-std::optional<std::vector<TString>> TRichYPath::GetColumns() const
+std::optional<std::vector<std::string>> TRichYPath::GetColumns() const
 {
     if (Attributes().Contains("channel")) {
         THROW_ERROR_EXCEPTION("Deprecated attribute \"channel\" in YPath");
     }
-    return FindAttribute<std::vector<TString>>(*this, "columns");
+    return FindAttribute<std::vector<std::string>>(*this, "columns");
 }
 
-void TRichYPath::SetColumns(const std::vector<TString>& columns)
+void TRichYPath::SetColumns(const std::vector<std::string>& columns)
 {
     Attributes().Set("columns", columns);
 }
@@ -751,6 +751,16 @@ void ToProto(TString* protoPath, const TRichYPath& path)
 void FromProto(TRichYPath* path, const TString& protoPath)
 {
     *path = TRichYPath::Parse(protoPath);
+}
+
+void ToProto(std::string* protoPath, const TRichYPath& path)
+{
+    *protoPath = ConvertToString(path, EYsonFormat::Binary);
+}
+
+void FromProto(TRichYPath* path, const std::string& protoPath)
+{
+    *path = TRichYPath::Parse(TString(protoPath));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

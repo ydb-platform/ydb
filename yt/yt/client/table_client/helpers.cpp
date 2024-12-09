@@ -243,8 +243,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
         } else if (treatMissingAsNull) {
             validateAndAddValue(MakeUnversionedSentinelValue(EValueType::Null, id), tableSchema.Columns()[id]);
         } else if (validateValues && tableSchema.Columns()[id].Required()) {
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Required column %v cannot have %Qlv value",
                 tableSchema.Columns()[id].GetDiagnosticNameString(),
                 EValueType::Null);
@@ -256,8 +255,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
         int id = nameTable->GetIdOrRegisterName(name);
         if (id >= std::ssize(tableSchema.Columns())) {
             if (validateValues && tableSchema.GetStrict()) {
-                THROW_ERROR_EXCEPTION(
-                    EErrorCode::SchemaViolation,
+                THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                     "Unknown column %Qv in strict schema",
                     name);
             }
@@ -828,7 +826,7 @@ void UnversionedValueToProtobufImpl(
         THROW_ERROR_EXCEPTION("Cannot parse a protobuf message from %Qlv",
             unversionedValue.Type);
     }
-    TString wireBytes;
+    TProtobufString wireBytes;
     StringOutputStream outputStream(&wireBytes);
     TProtobufWriterOptions options;
     options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(EUnknownYsonFieldsMode::Keep);
@@ -992,7 +990,7 @@ void UnversionedValueToListImpl(
         std::unique_ptr<IYsonConsumer> Underlying_;
         int Depth_ = 0;
 
-        TString WireBytes_;
+        TProtobufString WireBytes_;
         StringOutputStream OutputStream_;
 
 
@@ -1301,7 +1299,7 @@ void UnversionedValueToMapImpl(
         std::unique_ptr<IYsonConsumer> Underlying_;
         int Depth_ = 0;
 
-        TString WireBytes_;
+        TProtobufString WireBytes_;
         StringOutputStream OutputStream_;
 
 

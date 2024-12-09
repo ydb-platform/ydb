@@ -1,10 +1,10 @@
 #include "distconf.h"
 
+#include <ydb/core/mind/bscontroller/group_geometry_info.h>
+
 namespace NKikimr::NStorage {
 
-    bool TDistributedConfigKeeper::GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config) {
-        bool changes = false;
-
+    void TDistributedConfigKeeper::GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID) {
         if (config->HasBlobStorageConfig()) {
             const auto& bsConfig = config->GetBlobStorageConfig();
             const bool noStaticGroup = !bsConfig.HasServiceSet() || !bsConfig.GetServiceSet().GroupsSize();
@@ -22,7 +22,6 @@ namespace NKikimr::NStorage {
                         settings.GetGeometry(), settings.GetPDiskFilter(),
                         settings.HasPDiskType() ? std::make_optional(settings.GetPDiskType()) : std::nullopt, {}, {}, 0,
                         nullptr, false, true, false);
-                    changes = true;
                     STLOG(PRI_DEBUG, BS_NODE, NWDC33, "Allocated static group", (Group, bsConfig.GetServiceSet().GetGroups(0)));
                 } catch (const TExConfigError& ex) {
                     STLOG(PRI_ERROR, BS_NODE, NWDC10, "Failed to allocate static group", (Reason, ex.what()));
@@ -42,12 +41,7 @@ namespace NKikimr::NStorage {
             GenerateStateStorageConfig(config->MutableSchemeBoardConfig(), *config);
         }
 
-        if (!config->GetSelfAssemblyUUID()) {
-            config->SetSelfAssemblyUUID(CreateGuidAsString());
-            changes = true;
-        }
-
-        return changes;
+        config->SetSelfAssemblyUUID(selfAssemblyUUID);
     }
 
     void TDistributedConfigKeeper::AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId,

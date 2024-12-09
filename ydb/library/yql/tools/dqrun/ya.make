@@ -27,31 +27,32 @@ ENDIF()
         library/cpp/yson
         library/cpp/digest/md5
         yt/cpp/mapreduce/interface
-        ydb/library/yql/sql/pg
-        ydb/library/yql/core/facade
-        ydb/library/yql/core/file_storage
-        ydb/library/yql/core/file_storage/proto
-        ydb/library/yql/core/file_storage/http_download
-        ydb/library/yql/core/services
-        ydb/library/yql/core/services/mounts
+        yql/essentials/sql/pg
+        yql/essentials/core/facade
+        yql/essentials/core/file_storage
+        yql/essentials/core/file_storage/proto
+        yql/essentials/core/file_storage/http_download
+        yql/essentials/core/services
+        yql/essentials/core/services/mounts
         ydb/library/yql/dq/actors/input_transforms
         ydb/library/yql/dq/comp_nodes
-        ydb/library/yql/dq/actors/input_transforms
-        ydb/library/yql/dq/integration/transform
+        ydb/library/yql/dq/opt
+        yql/essentials/core/dq_integration/transform
         ydb/library/yql/dq/transform
-        ydb/library/yql/minikql/comp_nodes/llvm14
-        ydb/library/yql/minikql/invoke_builtins/llvm14
+        yql/essentials/minikql/comp_nodes/llvm14
+        yql/essentials/minikql/invoke_builtins/llvm14
         ydb/library/yql/providers/clickhouse/actors
         ydb/library/yql/providers/clickhouse/provider
-        ydb/library/yql/providers/common/comp_nodes
-        ydb/library/yql/providers/common/proto
+        yql/essentials/providers/common/comp_nodes
+        yql/essentials/providers/common/proto
         ydb/library/yql/providers/common/token_accessor/client
-        ydb/library/yql/providers/common/udf_resolve
+        yql/essentials/providers/common/udf_resolve
         ydb/library/yql/providers/generic/actors
         ydb/library/yql/providers/generic/provider
         ydb/library/yql/providers/dq/local_gateway
         ydb/library/yql/providers/dq/provider
         ydb/library/yql/providers/dq/provider/exec
+        ydb/library/yql/providers/dq/helper
         ydb/library/yql/providers/pq/async_io
         ydb/library/yql/providers/pq/gateway/dummy
         ydb/library/yql/providers/pq/gateway/native
@@ -64,37 +65,38 @@ ENDIF()
         ydb/library/yql/providers/ydb/actors
         ydb/library/yql/providers/ydb/comp_nodes
         ydb/library/yql/providers/ydb/provider
-        ydb/library/yql/providers/pg/provider
+        yql/essentials/providers/pg/provider
 
-        ydb/library/yql/public/udf/service/terminate_policy
-        ydb/library/yql/utils/backtrace
+        yql/essentials/public/udf/service/exception_policy
+        yql/essentials/utils/backtrace
         ydb/library/yql/utils/bindings
-        ydb/library/yql/utils/log
-        ydb/library/yql/utils/failure_injector
-        ydb/library/yql/core/url_preprocessing
-        ydb/library/yql/core/url_lister
-        ydb/library/yql/core/pg_ext
+        yql/essentials/utils/log
+        yql/essentials/utils/failure_injector
+        yql/essentials/core/url_preprocessing
+        yql/essentials/core/url_lister
+        yql/essentials/core/pg_ext
         ydb/library/yql/providers/yt/actors
-        ydb/library/yql/providers/yt/comp_nodes/dq
+        yt/yql/providers/yt/comp_nodes/dq
         ydb/library/yql/providers/yt/dq_task_preprocessor
-        ydb/library/yql/providers/yt/gateway/file
-        ydb/library/yql/providers/yt/gateway/native
-        ydb/library/yql/providers/yt/codec/codegen
-        ydb/library/yql/providers/yt/mkql_dq
-        ydb/library/yql/providers/yt/provider
-        ydb/library/yql/providers/yt/codec/codegen
-        ydb/library/yql/providers/yt/comp_nodes/llvm14
-        ydb/library/yql/providers/yt/lib/yt_download
-        ydb/library/yql/providers/yt/lib/yt_url_lister
-        ydb/library/yql/providers/yt/lib/config_clusters
-        ydb/library/yql/parser/pg_wrapper
-        ydb/library/yql/utils/log/proto
-        ydb/library/yql/core/qplayer/storage/file
-        ydb/library/yql/public/result_format
+        yt/yql/providers/yt/gateway/file
+        yt/yql/providers/yt/gateway/native
+        yt/yql/providers/yt/codec/codegen
+        yt/yql/providers/yt/mkql_dq
+        yt/yql/providers/yt/provider
+        yt/yql/providers/yt/codec/codegen
+        yt/yql/providers/yt/comp_nodes/llvm14
+        yt/yql/providers/yt/lib/yt_download
+        yt/yql/providers/yt/lib/yt_url_lister
+        yt/yql/providers/yt/lib/config_clusters
+        yql/essentials/parser/pg_wrapper
+        yql/essentials/utils/log/proto
+        yql/essentials/core/qplayer/storage/file
+        yql/essentials/public/result_format
 
         ydb/library/yql/utils/actor_system
         ydb/core/fq/libs/actors
         ydb/core/fq/libs/db_id_async_resolver_impl
+        ydb/core/fq/libs/init
 
         ydb/library/yql/udfs/common/clickhouse/client
     )

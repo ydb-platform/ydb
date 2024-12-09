@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         TExecuteScriptSettings settings;
 
         {  // Existing pool
-            settings.PoolId("default");
+            settings.ResourcePool("default");
 
             auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
 
         {  // Not existing pool (check workload manager enabled)
-            settings.PoolId("another_pool_id");
+            settings.ResourcePool("another_pool_id");
 
             auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
 
         TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0, settings).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
-        UNIT_ASSERT(results.GetNextFetchToken().Empty());
+        UNIT_ASSERT(results.GetNextFetchToken().empty());
 
         TResultSetParser resultSet(results.ExtractResultSet());
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), NUMBER_OF_ROWS);

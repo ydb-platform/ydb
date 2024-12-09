@@ -222,6 +222,13 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxAlterResourcePool = 176          [(CounterOpts) = {Name: "InFlightOps/AlterResourcePool"}];
 
     COUNTER_IN_FLIGHT_OPS_TxRestoreIncrementalBackupAtTable = 177   [(CounterOpts) = {Name: "InFlightOps/RestoreIncrementalBackupAtTable"}];
+
+    COUNTER_BACKUP_COLLECTION_COUNT = 178 [(CounterOpts) = {Name: "BackupCollectionCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateBackupCollection = 179       [(CounterOpts) = {Name: "InFlightOps/CreateBackupCollection"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterBackupCollection = 180        [(CounterOpts) = {Name: "InFlightOps/AlterBackupCollection"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropBackupCollection = 181         [(CounterOpts) = {Name: "InFlightOps/DropBackupCollection"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxMoveSequence = 182           [(CounterOpts) = {Name: "InFlightOps/MoveSequence"}];
 }
 
 enum ECumulativeCounters {
@@ -355,6 +362,12 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterResourcePool = 105   [(CounterOpts) = {Name: "FinishedOps/AlterResourcePool"}];
 
     COUNTER_FINISHED_OPS_TxRestoreIncrementalBackupAtTable = 106   [(CounterOpts) = {Name: "FinishedOps/RestoreIncrementalBackupAtTable"}];
+
+    COUNTER_FINISHED_OPS_TxCreateBackupCollection = 107         [(CounterOpts) = {Name: "FinishedOps/CreateBackupCollection"}];
+    COUNTER_FINISHED_OPS_TxAlterBackupCollection = 108          [(CounterOpts) = {Name: "FinishedOps/AlterBackupCollection"}];
+    COUNTER_FINISHED_OPS_TxDropBackupCollection = 109           [(CounterOpts) = {Name: "FinishedOps/DropBackupCollection"}];
+
+    COUNTER_FINISHED_OPS_TxMoveSequence = 110        [(CounterOpts) = {Name: "FinishedOps/TxMoveSequence"}];
 }
 
 enum EPercentileCounters {
@@ -578,4 +591,8 @@ enum ETxTypes {
     TXTYPE_UPDATE_DOMAIN_REPLY = 85                       [(TxTypeOpts) = {Name: "TxUpdateDomainReply"}];
 
     TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT = 86    [(TxTypeOpts) = {Name: "TxSequenceShardGetSequenceResult"}];
+
+    TXTYPE_CREATE_BACKUP_COLLECTION_RESULT = 87                 [(TxTypeOpts) = {Name: "TxCreateBackupCollectionResult"}];
+    TXTYPE_ALTER_BACKUP_COLLECTION_RESULT = 88                  [(TxTypeOpts) = {Name: "TxAlterBackupCollectionResult"}];
+    TXTYPE_DROP_BACKUP_COLLECTION_RESULT = 89                   [(TxTypeOpts) = {Name: "TxDropBackupCollectionResult"}];
 }

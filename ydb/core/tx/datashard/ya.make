@@ -215,6 +215,7 @@ SRCS(
     type_serialization.cpp
     upload_stats.cpp
     volatile_tx.cpp
+    volatile_tx_mon.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
 )
@@ -227,9 +228,10 @@ GENERATE_ENUM_SERIALIZATION(datashard_s3_upload.h)
 GENERATE_ENUM_SERIALIZATION(execution_unit.h)
 GENERATE_ENUM_SERIALIZATION(execution_unit_kind.h)
 GENERATE_ENUM_SERIALIZATION(operation.h)
+GENERATE_ENUM_SERIALIZATION(volatile_tx.h)
 
 RESOURCE(
-    index.html datashard/index.html
+    ui/index.html datashard/index.html
 )
 
 PEERDIR(
@@ -268,17 +270,16 @@ PEERDIR(
     ydb/core/wrappers
     ydb/core/ydb_convert
     ydb/library/aclib
-    ydb/library/binary_json
-    ydb/library/dynumber
-    ydb/library/minsketch
-    ydb/library/yql/parser/pg_wrapper/interface
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
+    yql/essentials/core/minsketch
+    yql/essentials/parser/pg_wrapper/interface
     ydb/public/api/protos
-    ydb/public/lib/deprecated/kicli
     ydb/library/yql/dq/actors/compute
-    ydb/library/yql/parser/pg_wrapper/interface
+    yql/essentials/parser/pg_wrapper/interface
     ydb/services/lib/sharding
     ydb/library/chunks_limiter
-    ydb/library/uuid
+    yql/essentials/types/uuid
 )
 
 YQL_LAST_ABI_VERSION()
@@ -307,6 +308,7 @@ RECURSE_FOR_TESTS(
     ut_column_stats
     ut_compaction
     ut_erase_rows
+    ut_external_blobs
     ut_followers
     ut_incremental_backup
     ut_incremental_restore_scan

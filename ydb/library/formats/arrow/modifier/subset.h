@@ -14,6 +14,10 @@ public:
     TSchemaSubset() = default;
     TSchemaSubset(const std::set<ui32>& fieldsIdx, const ui32 fieldsCount);
 
+    ui64 GetTxVolume() const {
+        return FieldBits.size() + FieldIdx.size() * sizeof(ui32) + 1;
+    }
+
     static TSchemaSubset AllFieldsAccepted() {
         TSchemaSubset result;
         result.Exclude = true;

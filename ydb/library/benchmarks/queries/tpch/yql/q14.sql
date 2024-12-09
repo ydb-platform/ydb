@@ -4,7 +4,7 @@
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
 
-$border = Date("1994-08-01");
+$border = Date("1995-09-01");
 select
     $z100_35 * sum(case
         when p.p_type like 'PROMO%'
@@ -19,4 +19,4 @@ on
     l.l_partkey = p.p_partkey
 where
     l.l_shipdate >= $border
-    and l.l_shipdate < ($border + Interval("P31D"));
+    and l.l_shipdate < ($border + Interval("P30D"));

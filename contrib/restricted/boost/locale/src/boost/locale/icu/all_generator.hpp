@@ -10,7 +10,7 @@
 #include <boost/locale/generator.hpp>
 
 namespace boost { namespace locale { namespace impl_icu {
-    struct cdata;
+    class cdata;
     std::locale create_convert(const std::locale&, const cdata&, char_facet_t);
     std::locale create_collate(const std::locale&, const cdata&, char_facet_t);
     std::locale create_formatting(const std::locale&, const cdata&, char_facet_t);

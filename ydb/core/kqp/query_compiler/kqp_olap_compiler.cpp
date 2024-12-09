@@ -4,11 +4,11 @@
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 
-#include <ydb/library/yql/core/arrow_kernels/request/request.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/core/arrow_kernels/request/request.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <memory>
 

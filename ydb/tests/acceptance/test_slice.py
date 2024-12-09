@@ -1,8 +1,9 @@
 import os
 import sys
 
+import yatest
+
 import ydb
-from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.ydbd_slice import YdbdSlice
 
 
@@ -13,8 +14,8 @@ class TestWithSlice(object):
     @classmethod
     def setup_class(cls):
         cls.cluster = YdbdSlice(
-            config_path=yatest_common.source_path(os.environ["YDB_CLUSTER_YAML"]),
-            binary_path=yatest_common.binary_path(os.environ["YDB_DRIVER_BINARY"])
+            config_path=yatest.common.source_path(os.environ["YDB_CLUSTER_YAML"]),
+            binary_path=yatest.common.binary_path(os.environ["YDB_DRIVER_BINARY"])
         )
         cls.cluster.start()
 
@@ -42,12 +43,12 @@ class TestWithSlice(object):
                     )
 
     def test_serializable(self):
-        yatest_common.execute(
+        yatest.common.execute(
             [
-                yatest_common.binary_path('ydb/tests/tools/ydb_serializable/ydb_serializable'),
+                yatest.common.binary_path('ydb/tests/tools/ydb_serializable/ydb_serializable'),
                 '--endpoint=%s:%d' % (self.cluster.nodes[1].host, self.cluster.nodes[1].grpc_port),
                 '--database=%s' % self.cluster.db_path,
-                '--output-path=%s' % yatest_common.output_path(),
+                '--output-path=%s' % yatest.common.output_path(),
                 '--iterations=25',
                 '--processes=1'
             ],

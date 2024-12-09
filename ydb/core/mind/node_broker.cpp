@@ -8,6 +8,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -59,8 +60,6 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     }
 
     const auto *appData = AppData(ctx);
-
-    Y_ABORT_UNLESS(appData->FeatureFlags.GetEnableNodeBrokerSingleDomainMode());
 
     MaxStaticId = Min(appData->DynamicNameserviceConfig->MaxStaticNodeId, TActorId::MaxNodeId);
     MinDynamicId = Max(MaxStaticId + 1, (ui64)Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId));
@@ -200,7 +199,7 @@ void TNodeBroker::AddNode(const TNodeInfo &info)
     FreeIds.Reset(info.NodeId);
     if (info.SlotIndex.has_value()) {
         SlotIndexesPools[info.ServicedSubDomain].Acquire(info.SlotIndex.value());
-    }    
+    }
 
     if (info.Expire > Epoch.Start) {
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -466,7 +465,7 @@ void TNodeBroker::PrepareEpochCache()
         FillNodeInfo(entry.second, *info.AddExpiredNodes());
 
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&EpochCache);
-    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.Size());
+    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.size());
 
     EpochDeltasCache.clear();
     EpochDeltasVersions.clear();
@@ -486,7 +485,7 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&delta);
 
     EpochCache += delta;
-    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.Size());
+    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.size());
 
     if (!EpochDeltasVersions.empty() && EpochDeltasVersions.back() + 1 != Epoch.Version) {
         EpochDeltasCache.clear();
@@ -565,7 +564,8 @@ void TNodeBroker::DbAddNode(const TNodeInfo &node,
                 << " lease=" << node.Lease
                 << " expire=" << node.ExpirationString()
                 << " servicedsubdomain=" << node.ServicedSubDomain
-                << " slotindex= " << node.SlotIndex);
+                << " slotindex=" << node.SlotIndex
+                << " authorizedbycertificate=" << (node.AuthorizedByCertificate ? "true" : "false"));
 
     NIceDb::TNiceDb db(txc.DB);
     using T = Schema::Nodes;
@@ -577,7 +577,8 @@ void TNodeBroker::DbAddNode(const TNodeInfo &node,
         .Update<T::Lease>(node.Lease)
         .Update<T::Expire>(node.Expire.GetValue())
         .Update<T::Location>(node.Location.GetSerializedLocation())
-        .Update<T::ServicedSubDomain>(node.ServicedSubDomain);
+        .Update<T::ServicedSubDomain>(node.ServicedSubDomain)
+        .Update<T::AuthorizedByCertificate>(node.AuthorizedByCertificate);
 
     if (node.SlotIndex.has_value()) {
         db.Table<T>().Key(node.NodeId)
@@ -730,7 +731,8 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
             info.ServicedSubDomain = TSubDomainKey(nodesRowset.GetValueOrDefault<T::ServicedSubDomain>());
             if (nodesRowset.HaveValue<T::SlotIndex>()) {
                 info.SlotIndex = nodesRowset.GetValue<T::SlotIndex>();
-            } 
+            }
+            info.AuthorizedByCertificate = nodesRowset.GetValue<T::AuthorizedByCertificate>();
             AddNode(info);
 
             LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
@@ -844,9 +846,33 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
     db.Table<T>().Key(node.NodeId).Update<T::Location>(node.Location.GetSerializedLocation());
 }
 
+void TNodeBroker::DbReleaseSlotIndex(const TNodeInfo &node,
+                                       TTransactionContext &txc) 
+{
+
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Release slot index (" << node.SlotIndex << ") node " << node.IdString() );
+    NIceDb::TNiceDb db(txc.DB);
+    using T = Schema::Nodes;
+    db.Table<T>().Key(node.NodeId)
+        .UpdateToNull<T::SlotIndex>();
+}
+  
+void TNodeBroker::DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
+                                       TTransactionContext &txc)
+{
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Update node " << node.IdString() << " authorizedbycertificate in database"
+                << " authorizedbycertificate=" << (node.AuthorizedByCertificate ? "true" : "false"));
+
+    NIceDb::TNiceDb db(txc.DB);
+    using T = Schema::Nodes;
+    db.Table<T>().Key(node.NodeId).Update<T::AuthorizedByCertificate>(node.AuthorizedByCertificate);
+}
+
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                          const TActorContext &ctx)
-{   
+{
     const auto& appConfig = ev->Get()->Record.GetConfig();
     if (appConfig.HasFeatureFlags()) {
         EnableStableNodeNames = appConfig.GetFeatureFlags().GetEnableStableNodeNames();
@@ -1000,6 +1026,14 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         })
     };
     ctx.RegisterWithSameMailbox(new TResolveTenantActor(ev, SelfId()));
+}
+
+void TNodeBroker::Handle(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev,
+                         const TActorContext &ctx) {
+    LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvGracefulShutdownRequest"
+        << ": request# " << ev->Get()->Record.ShortDebugString());   
+    TabletCounters->Cumulative()[COUNTER_GRACEFUL_SHUTDOWN_REQUESTS].Increment(1);
+    ProcessTx(CreateTxGracefulShutdown(ev), ctx);                     
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,

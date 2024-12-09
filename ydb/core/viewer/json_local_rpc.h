@@ -1,6 +1,7 @@
 #pragma once
 #include "json_pipe_req.h"
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <library/cpp/protobuf/json/json2proto.h>
 
 namespace NKikimr::NViewer {
 
@@ -127,10 +128,9 @@ public:
                 ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", e.what()));
                 return false;
             }
-        } else {
-            const auto& params(Event->Get()->Request.GetParams());
-            Params2Proto(params, request);
         }
+        const auto& params(Event->Get()->Request.GetParams());
+        Params2Proto(params, request);
         if (!ValidateRequest(request)) {
             return false;
         }

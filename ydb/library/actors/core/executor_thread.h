@@ -2,8 +2,6 @@
 
 #include "defs.h"
 #include "event.h"
-#include "callstack.h"
-#include "probes.h"
 #include "thread_context.h"
 #include "worker_context.h"
 #include "log_settings.h"
@@ -56,8 +54,8 @@ namespace NActors {
         TActorId RegisterActor(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>(),
                                TActorId parentId = TActorId());
         template <ESendingType SendingType = ESendingType::Common>
-        TActorId RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId = TActorId());
-        void UnregisterActor(TMailboxHeader* mailbox, TActorId actorId);
+        TActorId RegisterActor(IActor* actor, TMailbox* mailbox, TActorId parentId = TActorId());
+        void UnregisterActor(TMailbox* mailbox, TActorId actorId);
         void DropUnregistered();
         const std::vector<THolder<IActor>>& GetUnregistered() const { return DyingActors; }
 
@@ -80,8 +78,7 @@ namespace NActors {
     protected:
         TProcessingResult ProcessExecutorPool(IExecutorPool *pool);
 
-        template <typename TMailbox>
-        TProcessingResult Execute(TMailbox* mailbox, ui32 hint, bool isTailExecution);
+        TProcessingResult Execute(TMailbox* mailbox, bool isTailExecution);
 
         void UpdateThreadStats();
 
@@ -167,21 +164,4 @@ namespace NActors {
         TSharedExecutorThreadCtx *ThreadCtx;
     };
 
-    template <typename TMailbox>
-    void UnlockFromExecution(TMailbox* mailbox, IExecutorPool* executorPool, bool asFree, ui32 hint, TWorkerId workerId, ui64& revolvingWriteCounter) {
-        mailbox->UnlockFromExecution1();
-        const bool needReschedule1 = (nullptr != mailbox->Head());
-        if (!asFree) {
-            if (mailbox->UnlockFromExecution2(needReschedule1)) {
-                RelaxedStore<NHPTimer::STime>(&mailbox->ScheduleMoment, GetCycleCountFast());
-                executorPool->ScheduleActivationEx(hint, ++revolvingWriteCounter);
-            }
-        } else {
-            if (mailbox->UnlockAsFree(needReschedule1)) {
-                RelaxedStore<NHPTimer::STime>(&mailbox->ScheduleMoment, GetCycleCountFast());
-                executorPool->ScheduleActivationEx(hint, ++revolvingWriteCounter);
-            }
-            executorPool->ReclaimMailbox(TMailbox::MailboxType, hint, workerId, ++revolvingWriteCounter);
-        }
-    }
 }

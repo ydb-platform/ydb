@@ -5,10 +5,6 @@ import pathlib
 import pytest
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
-from ydb.library.yql.providers.generic.connector.tests.utils.clients.clickhouse import (
-    make_client as make_clickhouse_client,
-    Client as ClickHouseClient,
-)
 from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import Client as PostgreSQLClient
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 
@@ -24,15 +20,14 @@ def settings() -> Settings:
     )
 
 
+# TODO: avoid using clients, initialize
 @dataclasses.dataclass
 class Clients:
-    ClickHouse: ClickHouseClient
     PostgreSQL: PostgreSQLClient
 
 
 @pytest.fixture
 def clients(settings):
     return Clients(
-        ClickHouse=make_clickhouse_client(settings=settings.clickhouse),
         PostgreSQL=PostgreSQLClient(settings=settings.postgresql),
     )

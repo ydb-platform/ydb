@@ -1,0 +1,809 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 09cc1fb7c33b7954947a92ced3ff6df1
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2009-2011 Frederic Bron, Robert Stewart, Steven Watanabe & Roman Perepelitsa.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/detail/has_binary_operator.hpp [1:1]
+        include/boost/type_traits/detail/has_postfix_operator.hpp [1:1]
+        include/boost/type_traits/detail/has_prefix_operator.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0efd40a9062a85639e10344c951c8ddb
+BELONGS ya.make
+    License text:
+        // Copyright 2005 Alexander Nasonov.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/floating_point_promotion.hpp [1:3]
+        include/boost/type_traits/integral_promotion.hpp [1:3]
+        include/boost/type_traits/promote.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1039b7b0a1f8cafe9e6caab87c5befcd
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2017.
+        //  Use, modification and distribution are subject to the Boost Software License,
+        //  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_complete.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 11d429a7e0f83394f0cc86e5e9f3bb69
+BELONGS ya.make
+    License text:
+        // Copyright 2000 John Maddock (john@johnmaddock.co.uk)
+        // Copyright 2000 Jeremy Siek (jsiek@lsc.nd.edu)
+        // Copyright 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/conversion_traits.hpp [2:4]
+        include/boost/type_traits/is_convertible.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 14119de8db705578a517c134230e8e03
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/reference_traits.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1877c8c0d80d7b1ea728c21778641fa6
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2000.
+        //  Use, modification and distribution are subject to the Boost Software License,
+        //  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits.hpp [1:3]
+        include/boost/type_traits/alignment_of.hpp [2:4]
+        include/boost/type_traits/alignment_traits.hpp [2:4]
+        include/boost/type_traits/is_polymorphic.hpp [1:3]
+        include/boost/type_traits/type_with_alignment.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a3cdf7829fa3778821cc02be36b9488
+BELONGS ya.make
+    License text:
+        //  Copyright 2010 John Maddock
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/add_lvalue_reference.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1f48b5f1ab3f8b394c86f6d510e964a3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/has_new_operator.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 215bdc768306d436a8bb86e0c01115e8
+BELONGS ya.make
+    License text:
+        Copyright 2017-2018 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/detail/detector.hpp [2:3]
+        include/boost/type_traits/detected.hpp [2:3]
+        include/boost/type_traits/detected_or.hpp [2:3]
+        include/boost/type_traits/is_detected.hpp [2:3]
+        include/boost/type_traits/is_detected_convertible.hpp [2:3]
+        include/boost/type_traits/is_detected_exact.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 21e959ad55799f0d703f33fa06e92175
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Peter Dimov 2017. 
+        //  Use, modification and distribution are subject to the Boost Software License,
+        //  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/remove_cv_ref.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 28d732e1da2cbf52812dcc1844a4d2d4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_class.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2cc8d0bd746b1af01391a996cc0b013e
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2002-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/detail/bool_trait_def.hpp [4:4]
+        include/boost/type_traits/detail/bool_trait_undef.hpp [4:4]
+        include/boost/type_traits/detail/template_arity_spec.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d5f4cfed3e5b32b63312a117e31a283
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2010.  
+        //  Use, modification and distribution are subject to the Boost Software License,
+        //  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/conditional.hpp [1:3]
+        include/boost/type_traits/is_rvalue_reference.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 355b2ffcb48b6b4cc42ba88a8b3a4faf
+BELONGS ya.make
+    License text:
+        Copyright 2017 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/make_void.hpp [2:3]
+        include/boost/type_traits/nonesuch.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 39f186083461682d70be78cbf83e9b85
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Dave Abrahams, Steve Cleary, Beman Dawes, 
+        //      Howard Hinnant and John Maddock 2000. 
+        //  (C) Copyright Mat Marcus, Jesse Jones and Adobe Systems Inc 2001
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_const.hpp [2:4]
+        include/boost/type_traits/is_lvalue_reference.hpp [2:4]
+        include/boost/type_traits/is_member_pointer.hpp [2:4]
+        include/boost/type_traits/is_pointer.hpp [2:4]
+        include/boost/type_traits/is_reference.hpp [2:4]
+        include/boost/type_traits/is_same.hpp [2:4]
+        include/boost/type_traits/is_volatile.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 451b638bc1cc4d0d8edae8f16c04a7a5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_abstract.hpp [11:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 56b725b9f15bba9b40cf58c1889a032b
+BELONGS ya.make
+    License text:
+        //  Copyright 2015 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/common_type.hpp [5:5]
+        include/boost/type_traits/copy_cv.hpp [5:5]
+        include/boost/type_traits/detail/common_arithmetic_type.hpp [5:5]
+        include/boost/type_traits/detail/common_type_impl.hpp [5:5]
+        include/boost/type_traits/detail/composite_member_pointer_type.hpp [5:5]
+        include/boost/type_traits/detail/composite_pointer_type.hpp [5:5]
+        include/boost/type_traits/detail/mp_defer.hpp [5:5]
+        include/boost/type_traits/type_identity.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6256fe9595065a7f6ee40e467ac1f448
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/detail/is_function_ptr_tester.hpp [2:5]
+        include/boost/type_traits/detail/is_mem_fun_pointer_impl.hpp [2:5]
+        include/boost/type_traits/detail/is_mem_fun_pointer_tester.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 634f5b2f48befd4ad6b83568ae03e21c
+BELONGS ya.make
+    License text:
+        //  Copyright 2000 John Maddock (john@johnmaddock.co.uk)
+        //  Copyright 2002 Aleksey Gurtovoy (agurtovoy@meta-comm.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/detail/is_function_cxx_03.hpp [2:3]
+        include/boost/type_traits/detail/is_function_cxx_11.hpp [2:3]
+        include/boost/type_traits/detail/is_function_ptr_helper.hpp [2:3]
+        include/boost/type_traits/is_function.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 648f3551deff5504ae253422933dad8a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/add_pointer.hpp [2:4]
+        include/boost/type_traits/add_reference.hpp [2:4]
+        include/boost/type_traits/arithmetic_traits.hpp [1:3]
+        include/boost/type_traits/broken_compiler_spec.hpp [2:4]
+        include/boost/type_traits/config.hpp [2:4]
+        include/boost/type_traits/detail/config.hpp [2:4]
+        include/boost/type_traits/has_nothrow_assign.hpp [2:4]
+        include/boost/type_traits/has_nothrow_constructor.hpp [2:4]
+        include/boost/type_traits/has_nothrow_copy.hpp [2:4]
+        include/boost/type_traits/has_nothrow_destructor.hpp [2:4]
+        include/boost/type_traits/has_trivial_assign.hpp [2:4]
+        include/boost/type_traits/has_trivial_constructor.hpp [2:4]
+        include/boost/type_traits/has_trivial_copy.hpp [2:4]
+        include/boost/type_traits/has_trivial_destructor.hpp [2:4]
+        include/boost/type_traits/has_trivial_move_assign.hpp [2:6]
+        include/boost/type_traits/has_trivial_move_constructor.hpp [2:6]
+        include/boost/type_traits/intrinsics.hpp [1:3]
+        include/boost/type_traits/is_arithmetic.hpp [2:4]
+        include/boost/type_traits/is_compound.hpp [2:4]
+        include/boost/type_traits/is_empty.hpp [2:4]
+        include/boost/type_traits/is_float.hpp [1:3]
+        include/boost/type_traits/is_fundamental.hpp [2:4]
+        include/boost/type_traits/is_integral.hpp [2:4]
+        include/boost/type_traits/is_nothrow_move_assignable.hpp [2:6]
+        include/boost/type_traits/is_nothrow_move_constructible.hpp [2:6]
+        include/boost/type_traits/is_object.hpp [2:4]
+        include/boost/type_traits/is_pod.hpp [2:4]
+        include/boost/type_traits/is_scalar.hpp [2:4]
+        include/boost/type_traits/is_stateless.hpp [2:4]
+        include/boost/type_traits/is_void.hpp [2:4]
+        include/boost/type_traits/object_traits.hpp [1:3]
+        include/boost/type_traits/remove_bounds.hpp [2:4]
+        include/boost/type_traits/remove_pointer.hpp [2:4]
+        include/boost/type_traits/remove_reference.hpp [2:4]
+        include/boost/type_traits/transform_traits.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 66f5b918eb37787d1fd47384e1d4d24d
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Dave Abrahams, Steve Cleary, Beman Dawes, 
+        //      Howard Hinnant and John Maddock 2000. 
+        //  (C) Copyright Mat Marcus, Jesse Jones and Adobe Systems Inc 2001
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_const.hpp [2:4]
+        include/boost/type_traits/is_lvalue_reference.hpp [2:4]
+        include/boost/type_traits/is_member_pointer.hpp [2:4]
+        include/boost/type_traits/is_pointer.hpp [2:4]
+        include/boost/type_traits/is_same.hpp [2:4]
+        include/boost/type_traits/is_volatile.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a88160c047fa8e02c3278fc7d84cae4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/has_trivial_move_assign.hpp [2:6]
+        include/boost/type_traits/has_trivial_move_constructor.hpp [2:6]
+        include/boost/type_traits/is_nothrow_move_assignable.hpp [2:6]
+        include/boost/type_traits/is_nothrow_move_constructible.hpp [2:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7b5b76a48b60990aebae4bceee943dc7
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2002-2003
+        // Eric Friedman, Itay Maman
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/aligned_storage.hpp [6:7]
+        include/boost/type_traits/aligned_storage.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 857ffcad3efa00650a38f17b49cfd2ab
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Rani Sharoni 2003.
+        //  Use, modification and distribution are subject to the Boost Software License,
+        //  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_base_and_derived.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8aa205df11e7313c7f73c113a9ad1407
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Ion Gaztanaga 2014.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_copy_assignable.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8e7a593588369508c428e748fbb1d2c0
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Rani Sharoni 2003-2005.
+        //  Use, modification and distribution are subject to the Boost Software License,
+        //  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_base_of.hpp [2:4]
+        include/boost/type_traits/is_base_of_tr1.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8fc0f0fba44b95f1156474d48496df66
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2009-2011 Frederic Bron.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/has_bit_and.hpp [1:1]
+        include/boost/type_traits/has_bit_and_assign.hpp [1:1]
+        include/boost/type_traits/has_bit_or.hpp [1:1]
+        include/boost/type_traits/has_bit_or_assign.hpp [1:1]
+        include/boost/type_traits/has_bit_xor.hpp [1:1]
+        include/boost/type_traits/has_bit_xor_assign.hpp [1:1]
+        include/boost/type_traits/has_complement.hpp [1:1]
+        include/boost/type_traits/has_dereference.hpp [1:1]
+        include/boost/type_traits/has_divides.hpp [1:1]
+        include/boost/type_traits/has_divides_assign.hpp [1:1]
+        include/boost/type_traits/has_equal_to.hpp [1:1]
+        include/boost/type_traits/has_greater.hpp [1:1]
+        include/boost/type_traits/has_greater_equal.hpp [1:1]
+        include/boost/type_traits/has_left_shift.hpp [1:1]
+        include/boost/type_traits/has_left_shift_assign.hpp [1:1]
+        include/boost/type_traits/has_less.hpp [1:1]
+        include/boost/type_traits/has_less_equal.hpp [1:1]
+        include/boost/type_traits/has_logical_and.hpp [1:1]
+        include/boost/type_traits/has_logical_not.hpp [1:1]
+        include/boost/type_traits/has_logical_or.hpp [1:1]
+        include/boost/type_traits/has_minus.hpp [1:1]
+        include/boost/type_traits/has_minus_assign.hpp [1:1]
+        include/boost/type_traits/has_modulus.hpp [1:1]
+        include/boost/type_traits/has_modulus_assign.hpp [1:1]
+        include/boost/type_traits/has_multiplies.hpp [1:1]
+        include/boost/type_traits/has_multiplies_assign.hpp [1:1]
+        include/boost/type_traits/has_negate.hpp [1:1]
+        include/boost/type_traits/has_not_equal_to.hpp [1:1]
+        include/boost/type_traits/has_operator.hpp [1:1]
+        include/boost/type_traits/has_plus.hpp [1:1]
+        include/boost/type_traits/has_plus_assign.hpp [1:1]
+        include/boost/type_traits/has_post_decrement.hpp [1:1]
+        include/boost/type_traits/has_post_increment.hpp [1:1]
+        include/boost/type_traits/has_pre_decrement.hpp [1:1]
+        include/boost/type_traits/has_pre_increment.hpp [1:1]
+        include/boost/type_traits/has_right_shift.hpp [1:1]
+        include/boost/type_traits/has_right_shift_assign.hpp [1:1]
+        include/boost/type_traits/has_unary_minus.hpp [1:1]
+        include/boost/type_traits/has_unary_plus.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 939d3c6b732a958e23eb33fe64213b93
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/has_trivial_move_assign.hpp [2:6]
+        include/boost/type_traits/has_trivial_move_constructor.hpp [2:6]
+        include/boost/type_traits/is_copy_constructible.hpp [1:1]
+        include/boost/type_traits/is_nothrow_move_assignable.hpp [2:6]
+        include/boost/type_traits/is_nothrow_move_constructible.hpp [2:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93df83f6c44de7d0493fe49ba8dd9a6e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_virtual_base_of.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 942029d7de2e3614e5e94a57e0bdfebe
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/add_const.hpp [2:5]
+        include/boost/type_traits/add_cv.hpp [2:5]
+        include/boost/type_traits/add_volatile.hpp [2:5]
+        include/boost/type_traits/array_traits.hpp [1:4]
+        include/boost/type_traits/composite_traits.hpp [1:4]
+        include/boost/type_traits/cv_traits.hpp [1:4]
+        include/boost/type_traits/detail/is_member_function_pointer_cxx_03.hpp [2:5]
+        include/boost/type_traits/detail/is_member_function_pointer_cxx_11.hpp [2:5]
+        include/boost/type_traits/is_array.hpp [2:5]
+        include/boost/type_traits/is_enum.hpp [2:5]
+        include/boost/type_traits/is_member_function_pointer.hpp [2:5]
+        include/boost/type_traits/is_union.hpp [2:5]
+        include/boost/type_traits/remove_const.hpp [2:5]
+        include/boost/type_traits/remove_cv.hpp [2:5]
+        include/boost/type_traits/remove_volatile.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 98430e0b9b7c8812e9d7cd75c41cb4ef
+BELONGS ya.make
+    License text:
+        /* Copyright 2017 Joaquin M Lopez Munoz.
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/detail/is_likely_lambda.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9efac63295490759e6d24cbbd00922ff
+BELONGS ya.make
+    License text:
+        Copyright 2019 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/copy_cv_ref.hpp [2:3]
+        include/boost/type_traits/copy_reference.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a16d2d9333074214b789369553ae6d4b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/same_traits.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a37cab93049a887698030b027ee6f1fb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_virtual_base_of.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c02bfefa74f87417f2dbc10a0395ffac
+BELONGS ya.make
+    License text:
+        //  Copyright 2018 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_noncopyable.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c1dec1e9437c6eb354abe1a9562b2d77
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/decay.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c2c5f360273c75026e91b3e8329e2a4d
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2018. 
+        //  Use, modification and distribution are subject to the Boost Software License,
+        //  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/detail/is_function_msvc10_fix.hpp [2:4]
+        include/boost/type_traits/detail/is_rvalue_reference_msvc10_fix.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c3f6937fa9ed593f0837a0f91c6d568a
+BELONGS ya.make
+    License text:
+        //  Copyright 2010 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/add_rvalue_reference.hpp [3:3]
+        include/boost/type_traits/declval.hpp [3:3]
+        include/boost/utility/declval.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c8f7e91cd195e8c07907b91700843aa8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_floating_point.hpp [1:3]
+        include/boost/type_traits/remove_extent.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cc1d970568793824ad7593567509ba7b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/detail/ice_and.hpp [1:1]
+        include/boost/type_traits/detail/ice_eq.hpp [1:3]
+        include/boost/type_traits/detail/ice_not.hpp [1:3]
+        include/boost/type_traits/detail/ice_or.hpp [1:3]
+        include/boost/type_traits/detail/yes_no_type.hpp [2:4]
+        include/boost/type_traits/ice.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd266ef654ad1fe897697167d4c4630b
+BELONGS ya.make
+    License text:
+        Copyright 2003 The Trustees of Indiana University
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/enable_if.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d0be2d8de4aedec01573af923ce64bf0
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Dave Abrahams, Steve Cleary, Beman Dawes, 
+        //      Howard Hinnant and John Maddock 2000, 2010. 
+        //  (C) Copyright Mat Marcus, Jesse Jones and Adobe Systems Inc 2001
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_reference.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d1621c6c21ccfd4947a100ffad23e459
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2014 Agustin Berge
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_final.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d440603ebd923c0691ca1c572228d831
+BELONGS ya.make
+    License text:
+        Copyright 2020 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/conjunction.hpp [2:3]
+        include/boost/type_traits/disjunction.hpp [2:3]
+        include/boost/type_traits/is_scoped_enum.hpp [2:3]
+        include/boost/type_traits/is_trivially_copyable.hpp [2:3]
+        include/boost/type_traits/is_unscoped_enum.hpp [2:3]
+        include/boost/type_traits/negation.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d5560a9b5388fcb00fcee11320a6d25a
+BELONGS ya.make
+    License text:
+        Copyright 2018 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/enable_if.hpp [8:9]
+        include/boost/type_traits/is_bounded_array.hpp [2:3]
+        include/boost/type_traits/is_unbounded_array.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dd7064b16e3bfd8491f05e3483f06f45
+BELONGS ya.make
+    License text:
+        // Copyright 2000 John Maddock (john@johnmaddock.co.uk)
+        // Copyright 2000 Jeremy Siek (jsiek@lsc.nd.edu)
+        // Copyright 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/conversion_traits.hpp [2:4]
+        include/boost/type_traits/is_convertible.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e323857368fb1433c9c3079428ca51d3
+BELONGS ya.make
+    License text:
+        //  Copyright 2017 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/detail/is_swappable_cxx_11.hpp [4:5]
+        include/boost/type_traits/is_list_constructible.hpp [4:4]
+        include/boost/type_traits/is_nothrow_swappable.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e3adff0ee350b1ce3e1bf4597996eaa2
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2007. 
+        //  Use, modification and distribution are subject to the Boost Software License,
+        //  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/is_complex.hpp [1:3]
+        include/boost/type_traits/make_signed.hpp [2:4]
+        include/boost/type_traits/make_unsigned.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL efe3bf28177d97f0a177262eb13f6de2
+BELONGS ya.make
+    License text:
+        //  Copyright 2023 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/detail/is_swappable_cxx_11.hpp [4:5]
+        include/boost/type_traits/is_swappable.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f091662b8bb6cc43b1bae6fb4713d892
+BELONGS ya.make
+    License text:
+        // Copyright 2000 John Maddock (john@johnmaddock.co.uk)
+        // Copyright 2000 Jeremy Siek (jsiek@lsc.nd.edu)
+        // Copyright 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/conversion_traits.hpp [2:4]
+        include/boost/type_traits/detail/is_function_cxx_03.hpp [2:3]
+        include/boost/type_traits/detail/is_function_cxx_11.hpp [2:3]
+        include/boost/type_traits/detail/is_function_ptr_helper.hpp [2:3]
+        include/boost/type_traits/function_traits.hpp [2:4]
+        include/boost/type_traits/is_convertible.hpp [2:4]
+        include/boost/type_traits/is_function.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f4a325f0484c0bb7a3c17c3f81fb8c89
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2015. 
+        //  Use, modification and distribution are subject to the 
+        //  Boost Software License, Version 1.0. (See accompanying file 
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/integral_constant.hpp [1:3]
+        include/boost/type_traits/is_assignable.hpp [2:4]
+        include/boost/type_traits/is_constructible.hpp [2:4]
+        include/boost/type_traits/is_default_constructible.hpp [2:4]
+        include/boost/type_traits/is_destructible.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fb0c843abf394387c8df0eca1810bb44
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2005.  
+        //  Use, modification and distribution are subject to the Boost Software License,
+        //  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_traits/extent.hpp [2:4]
+        include/boost/type_traits/has_virtual_destructor.hpp [2:4]
+        include/boost/type_traits/is_member_object_pointer.hpp [2:4]
+        include/boost/type_traits/is_signed.hpp [2:4]
+        include/boost/type_traits/is_unsigned.hpp [2:4]
+        include/boost/type_traits/rank.hpp [2:4]
+        include/boost/type_traits/remove_all_extents.hpp [2:4]

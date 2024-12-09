@@ -12,9 +12,9 @@ PEERDIR(
     ydb/core/node_whiteboard
     ydb/core/tablet
     ydb/library/pdisk_io
-    ydb/library/yql/parser/pg_wrapper
-    ydb/library/yql/sql/pg
-    ydb/library/yql/minikql/comp_nodes/llvm14
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg
+    yql/essentials/minikql/comp_nodes/llvm14
     ydb/tools/stress_tool/lib
     ydb/tools/stress_tool/proto
 )

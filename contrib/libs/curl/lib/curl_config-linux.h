@@ -1,16 +1,13 @@
 /* lib/curl_config.h.  Generated from curl_config.h.in by configure.  */
 /* lib/curl_config.h.in.  Generated from configure.ac by autoheader.  */
 
-/* Ignore c-ares deprecation warnings */
-#define CARES_NO_DEPRECATED 1
-
 /* to enable curl debug memory tracking */
 /* #undef CURLDEBUG */
 
 /* Location of default ca bundle */
 #define CURL_CA_BUNDLE "/etc/ssl/certs/ca-certificates.crt"
 
-/* define "1" to use built-in CA store of SSL library */
+/* define "1" to use built in CA store of SSL library */
 #define CURL_CA_FALLBACK 1
 
 /* Location of default ca path */
@@ -121,9 +118,6 @@
 /* to disable RTSP */
 /* #undef CURL_DISABLE_RTSP */
 
-/* disable SHA-512/256 hash algorithm */
-/* #undef CURL_DISABLE_SHA512_256 */
-
 /* disable DNS shuffling */
 /* #undef CURL_DISABLE_SHUFFLE_DNS */
 
@@ -156,6 +150,9 @@
 
 /* enable debug build options */
 /* #undef DEBUGBUILD */
+
+/* Define if you want to enable IPv6 support */
+#define ENABLE_IPV6 1
 
 /* Define to the type of arg 2 for gethostname. */
 #define GETHOSTNAME_TYPE_ARG2 size_t
@@ -213,17 +210,11 @@
 /* "Set if getpwuid_r() declaration is missing" */
 /* #undef HAVE_DECL_GETPWUID_R_MISSING */
 
-/* if you have <dirent.h> */
-#define HAVE_DIRENT_H 1
-
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #define HAVE_DLFCN_H 1
 
 /* Define to 1 if you have the <err.h> header file. */
 /* #undef HAVE_ERR_H */
-
-/* Define to 1 if you have the `eventfd' function. */
-#define HAVE_EVENTFD 1
 
 /* Define to 1 if you have the fcntl function. */
 #define HAVE_FCNTL 1
@@ -333,6 +324,12 @@
 /* if you have GNU GSS */
 /* #undef HAVE_GSSGNU */
 
+/* if you have Heimdal */
+/* #undef HAVE_GSSHEIMDAL */
+
+/* if you have MIT Kerberos */
+/* #undef HAVE_GSSMIT */
+
 /* Define to 1 if you have the <hyper.h> header file. */
 /* #undef HAVE_HYPER_H */
 
@@ -406,10 +403,7 @@
 /* Define to 1 if you have the `idn2' library (-lidn2). */
 /* #undef HAVE_LIBIDN2 */
 
-/* Define to 1 if you have the <libpsl.h> header file. */
-/* #undef HAVE_LIBPSL_H */
-
-/* Define to 1 if using LibreSSL. */
+/* Define to 1 if using libressl. */
 /* #undef HAVE_LIBRESSL */
 
 /* Define to 1 if you have the <librtmp/rtmp.h> header file. */
@@ -476,20 +470,20 @@
 #define HAVE_NGHTTP2_NGHTTP2_H 1
 
 /* Define to 1 if you have the <nghttp3/nghttp3.h> header file. */
-/* #undef HAVE_NGHTTP3_NGHTTP3_H */
+#define HAVE_NGHTTP3_NGHTTP3_H 1
 
 /* Define to 1 if you have the <ngtcp2/ngtcp2_crypto.h> header file. */
-/* #undef HAVE_NGTCP2_NGTCP2_CRYPTO_H */
+#define HAVE_NGTCP2_NGTCP2_CRYPTO_H 1
 
 /* Define to 1 if you have the <ngtcp2/ngtcp2.h> header file. */
-/* #undef HAVE_NGTCP2_NGTCP2_H */
+#define HAVE_NGTCP2_NGTCP2_H 1
 
 /* if you have an old MIT Kerberos version, lacking GSS_C_NT_HOSTBASED_SERVICE
    */
 /* #undef HAVE_OLD_GSSMIT */
 
-/* if you have opendir */
-#define HAVE_OPENDIR 1
+/* Define to 1 if using OpenSSL 3 or later. */
+#define HAVE_OPENSSL3 1
 
 /* Define to 1 if you have the <openssl/crypto.h> header file. */
 #define HAVE_OPENSSL_CRYPTO_H 1
@@ -600,21 +594,14 @@
 /* Define to 1 if you have the <socket.h> header file. */
 /* #undef HAVE_SOCKET_H */
 
-/* Define to 1 if you have the `SSL_ech_set1_echconfig' function. */
-/* #undef HAVE_SSL_ECH_SET1_ECHCONFIG */
+/* Define to 1 if you have the `SSL_get_ech_status' function. */
+/* #undef HAVE_SSL_GET_ECH_STATUS */
 
 /* Define to 1 if you have the <ssl.h> header file. */
 /* #undef HAVE_SSL_H */
 
 /* Define to 1 if you have the `SSL_set0_wbio' function. */
 #define HAVE_SSL_SET0_WBIO 1
-
-/* Define to 1 if you have the `SSL_set1_ech_config_list' function. */
-/* #undef HAVE_SSL_SET1_ECH_CONFIG_LIST */
-
-/* Define to 1 if you have the `SSL_set_quic_use_legacy_codepoint' function.
-   */
-/* #undef HAVE_SSL_SET_QUIC_USE_LEGACY_CODEPOINT */
 
 /* Define to 1 if you have the <stdatomic.h> header file. */
 #define HAVE_STDATOMIC_H 1
@@ -670,9 +657,6 @@
 /* Define to 1 if suseconds_t is an available type. */
 #define HAVE_SUSECONDS_T 1
 
-/* Define to 1 if you have the <sys/eventfd.h> header file. */
-#define HAVE_SYS_EVENTFD_H 1
-
 /* Define to 1 if you have the <sys/filio.h> header file. */
 /* #undef HAVE_SYS_FILIO_H */
 
@@ -727,9 +711,6 @@
 /* Define this if time_t is unsigned */
 /* #undef HAVE_TIME_T_UNSIGNED */
 
-/* Define to 1 if you have the <unicode/uidna.h> header file. */
-/* #undef HAVE_UNICODE_UIDNA_H */
-
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
 
@@ -742,14 +723,14 @@
 /* Define to 1 if you have the <utime.h> header file. */
 #define HAVE_UTIME_H 1
 
-/* Define to 1 if you have the <uv.h> header file. */
-/* #undef HAVE_UV_H */
+/* Define to 1 if you have the windows.h header file. */
+/* #undef HAVE_WINDOWS_H */
+
+/* Define to 1 if you have the winsock2.h header file. */
+/* #undef HAVE_WINSOCK2_H */
 
 /* Define to 1 if you have the <wolfssh/ssh.h> header file. */
 /* #undef HAVE_WOLFSSH_SSH_H */
-
-/* Define to 1 if you have the `wolfSSL_CTX_GenerateEchConfig' function. */
-/* #undef HAVE_WOLFSSL_CTX_GENERATEECHCONFIG */
 
 /* if you have wolfSSL_DES_ecb_encrypt */
 /* #undef HAVE_WOLFSSL_DES_ECB_ENCRYPT */
@@ -765,6 +746,9 @@
 
 /* Define this symbol if your OS supports changing the contents of argv */
 #define HAVE_WRITABLE_ARGV 1
+
+/* Define to 1 if you have the ws2tcpip.h header file. */
+/* #undef HAVE_WS2TCPIP_H */
 
 /* Define to 1 if you have the <x509.h> header file. */
 /* #undef HAVE_X509_H */
@@ -790,6 +774,12 @@
 /* Define to 1 if _THREAD_SAFE preprocessor symbol must be defined. */
 /* #undef NEED_THREAD_SAFE */
 
+/* Define to enable NTLM delegation to winbind's ntlm_auth helper. */
+/* #undef NTLM_WB_ENABLED */
+
+/* Define absolute filename for winbind's ntlm_auth helper. */
+/* #undef NTLM_WB_FILE */
+
 /* cpu-machine-OS */
 #define OS "x86_64-pc-linux-gnu"
 
@@ -813,6 +803,9 @@
 
 /* Define to the version of this package. */
 #define PACKAGE_VERSION "-"
+
+/* a suitable file to read random data from */
+#define RANDOM_FILE "/dev/urandom"
 
 /* Size of curl_off_t in number of bytes */
 #define SIZEOF_CURL_OFF_T 8
@@ -850,9 +843,6 @@
 /* if AmiSSL is in use */
 /* #undef USE_AMISSL */
 
-/* if AppleIDN */
-/* #undef USE_APPLE_IDN */
-
 /* Define to enable c-ares support */
 #define USE_ARES 1
 
@@ -868,29 +858,23 @@
 /* GSASL support enabled */
 /* #undef USE_GSASL */
 
-/* force HTTPS RR support for ECH */
-/* #undef USE_HTTPSRR */
-
 /* if hyper is in use */
 /* #undef USE_HYPER */
 
-/* Define if you want to enable IPv6 support */
-#define USE_IPV6 1
-
-/* if libpsl is in use */
+/* PSL support enabled */
 /* #undef USE_LIBPSL */
 
 /* if librtmp is in use */
 /* #undef USE_LIBRTMP */
 
-/* if libssh is in use */
+/* if libSSH is in use */
 /* #undef USE_LIBSSH */
 
-/* if libssh2 is in use */
+/* if libSSH2 is in use */
 /* #undef USE_LIBSSH2 */
 
-/* if libuv is in use */
-/* #undef USE_LIBUV */
+/* If you want to build curl with the built-in manual */
+/* #undef USE_MANUAL */
 
 /* if mbedTLS is enabled */
 /* #undef USE_MBEDTLS */
@@ -902,25 +886,19 @@
 #define USE_NGHTTP2 1
 
 /* if nghttp3 is in use */
-/* #undef USE_NGHTTP3 */
+#define USE_NGHTTP3 1
 
 /* if ngtcp2 is in use */
-/* #undef USE_NGTCP2 */
-
-/* if ngtcp2_crypto_boringssl is in use */
-/* #undef USE_NGTCP2_CRYPTO_BORINGSSL */
+#define USE_NGTCP2 1
 
 /* if ngtcp2_crypto_gnutls is in use */
 /* #undef USE_NGTCP2_CRYPTO_GNUTLS */
 
 /* if ngtcp2_crypto_quictls is in use */
-/* #undef USE_NGTCP2_CRYPTO_QUICTLS */
+#define USE_NGTCP2_CRYPTO_QUICTLS 1
 
 /* if ngtcp2_crypto_wolfssl is in use */
 /* #undef USE_NGTCP2_CRYPTO_WOLFSSL */
-
-/* if ngtcp2 + nghttp3 is in use */
-/* #undef USE_NGTCP2_H3 */
 
 /* Use OpenLDAP-specific code */
 /* #undef USE_OPENLDAP */
@@ -928,16 +906,10 @@
 /* if OpenSSL is in use */
 #define USE_OPENSSL 1
 
-/* if openssl quic + nghttp3 is in use */
-/* #undef USE_OPENSSL_H3 */
-
-/* if openssl QUIC is in use */
-/* #undef USE_OPENSSL_QUIC */
-
 /* if quiche is in use */
 /* #undef USE_QUICHE */
 
-/* if Rustls is enabled */
+/* if rustls is enabled */
 /* #undef USE_RUSTLS */
 
 /* to enable Windows native SSL/TLS support */
@@ -958,7 +930,7 @@
 /* Use Unix domain sockets */
 #define USE_UNIX_SOCKETS 1
 
-/* enable WebSockets support */
+/* enable websockets support */
 /* #undef USE_WEBSOCKETS */
 
 /* Define to 1 if you are building a Windows target with crypto API support.
@@ -1007,6 +979,12 @@
 
 /* Type to use in place of in_addr_t when system does not provide it. */
 /* #undef in_addr_t */
+
+/* Define to `__inline__' or `__inline' if that's what the C compiler
+   calls it, or to nothing if 'inline' is not supported under any name.  */
+#ifndef __cplusplus
+/* #undef inline */
+#endif
 
 /* Define to `unsigned int' if <sys/types.h> does not define. */
 /* #undef size_t */

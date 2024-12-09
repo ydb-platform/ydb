@@ -29,7 +29,7 @@ NProto::Profile ConvertAllocationProfile(const tcmalloc::Profile& snapshot)
 
     auto addString = [&] (const std::string& str) {
         auto index = profile.string_table_size();
-        profile.add_string_table(ToProto<TProtobufString>(str));
+        profile.add_string_table(ToProto(str));
         return index;
     };
 

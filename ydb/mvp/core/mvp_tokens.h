@@ -140,6 +140,7 @@ protected:
         NYdbGrpc::TGRpcClientConfig config;
         config.Locator = host;
         config.EnableSsl = (scheme == "grpcs");
+        SetGrpcKeepAlive(config);
         return std::unique_ptr<NMVP::TLoggedGrpcServiceConnection<TGRpcService>>(new NMVP::TLoggedGrpcServiceConnection<TGRpcService>(config, GRpcClientLow.CreateGRpcServiceConnection<TGRpcService>(config)));
     }
 

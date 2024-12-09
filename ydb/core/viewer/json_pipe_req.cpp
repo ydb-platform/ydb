@@ -1,4 +1,5 @@
 #include "json_pipe_req.h"
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NViewer {
@@ -25,7 +26,28 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     : Viewer(viewer)
     , Event(ev)
 {
-    InitConfig(Event->Get()->Request.GetParams());
+    TCgiParameters params = Event->Get()->Request.GetParams();
+    if (Event->Get()->Request.GetHeader("Content-Type") == "application/json") {
+        NJson::TJsonValue jsonData;
+        if (NJson::ReadJsonTree(Event->Get()->Request.GetPostContent(), &jsonData)) {
+            if (jsonData.IsMap()) {
+                for (const auto& [key, value] : jsonData.GetMap()) {
+                    switch (value.GetType()) {
+                        case NJson::EJsonValueType::JSON_STRING:
+                        case NJson::EJsonValueType::JSON_INTEGER:
+                        case NJson::EJsonValueType::JSON_UINTEGER:
+                        case NJson::EJsonValueType::JSON_DOUBLE:
+                        case NJson::EJsonValueType::JSON_BOOLEAN:
+                            params.InsertUnescaped(key, value.GetStringRobust());
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+        }
+    }
+    InitConfig(params);
     NWilson::TTraceId traceId;
     TStringBuf traceparent = Event->Get()->Request.GetHeader("traceparent");
     if (traceparent) {
@@ -231,6 +253,15 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
                 break;
             case NKikimrViewer::TEvViewerRequest::kSystemRequest:
                 response.Span.Attribute("request_type", "SystemRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kPDiskRequest:
+                response.Span.Attribute("request_type", "PDiskRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kVDiskRequest:
+                response.Span.Attribute("request_type", "VDiskRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kNodeRequest:
+                response.Span.Attribute("request_type", "NodeRequest");
                 break;
             case NKikimrViewer::TEvViewerRequest::kQueryRequest:
                 response.Span.Attribute("request_type", "QueryRequest");
@@ -542,6 +573,9 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
 void TViewerPipeClient::RequestTxProxyDescribe(const TString& path) {
     THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
     request->Record.MutableDescribePath()->SetPath(path);
+    if (!Event->Get()->UserToken.empty()) {
+        request->Record.SetUserToken(Event->Get()->UserToken);
+    }
     SendRequest(MakeTxProxyID(), request.Release());
 }
 
@@ -601,7 +635,16 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     }
     Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
-    JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), true);
+    JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
+    if (FromStringWithDefault<bool>(params.Get("enums"), true)) {
+        Proto2JsonConfig.EnumMode = TProto2JsonConfig::EnumValueMode::EnumName;
+    }
+    if (!FromStringWithDefault<bool>(params.Get("ui64"), false)) {
+        Proto2JsonConfig.StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always;
+    }
+    Proto2JsonConfig.MapAsObject = true;
+    Proto2JsonConfig.ConvertAny = true;
+    Proto2JsonConfig.WriteNanAsString = true;
     Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), Timeout.MilliSeconds()));
 }
 
@@ -636,10 +679,20 @@ TRequestState TViewerPipeClient::GetRequest() const {
 }
 
 void TViewerPipeClient::ReplyAndPassAway(TString data, const TString& error) {
+    TString message = error;
     Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+    if (message.empty()) {
+        TStringBuf dataParser(data);
+        if (dataParser.NextTok(' ') == "HTTP/1.1") {
+            TStringBuf code = dataParser.NextTok(' ');
+            if (code.size() == 3 && code[0] != '2') {
+                message = dataParser.NextTok('\n');
+            }
+        }
+    }
     if (Span) {
-        if (error) {
-            Span.EndError(error);
+        if (message) {
+            Span.EndError(message);
         } else {
             Span.EndOk();
         }
@@ -661,7 +714,7 @@ TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TIns
 
 TString TViewerPipeClient::GetHTTPOKJSON(const google::protobuf::Message& response, TInstant lastModified) {
     TStringStream json;
-    TProtoToJson::ProtoToJson(json, response, JsonSettings);
+    NProtobufJson::Proto2Json(response, json, Proto2JsonConfig);
     return GetHTTPOKJSON(json.Str(), lastModified);
 }
 
@@ -713,13 +766,15 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
             SharedDatabase = CanonizePath(entry.Path);
             if (SharedDatabase == AppData()->TenantName) {
                 Direct = true;
-                return Bootstrap(); // retry bootstrap without redirect this time
+                Bootstrap(); // retry bootstrap without redirect this time
+            } else {
+                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
             }
-            DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
         } else {
-            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"));
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"));
         }
     }
+    RequestDone();
 }
 
 void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -730,24 +785,27 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
             if (entry.DomainInfo && entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                 ResourceNavigateResponse = MakeRequestSchemeCacheNavigate(TPathId(entry.DomainInfo->ResourcesDomainKey));
                 Become(&TViewerPipeClient::StateResolveResource);
-                return;
+            } else {
+                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(CanonizePath(entry.Path));
             }
-            DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(CanonizePath(entry.Path));
         } else {
-            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"));
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"));
         }
     }
+    RequestDone();
 }
 
 void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
     if (DatabaseBoardInfoResponse) {
         DatabaseBoardInfoResponse->Set(std::move(ev));
         if (DatabaseBoardInfoResponse->IsOk()) {
-            ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
+            return ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
         } else {
-            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - no nodes found"));
+            Direct = true;
+            Bootstrap(); // retry bootstrap without redirect this time
         }
     }
+    RequestDone();
 }
 
 void TViewerPipeClient::HandleTimeout() {

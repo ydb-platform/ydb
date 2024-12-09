@@ -715,7 +715,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
                 const auto query = Sprintf("\
                     INSERT INTO test (key, val)\n\
                     VALUES (Uuid(\"%s\"), %u);\n\
-                ", uuid.Data(), val++);
+                ", uuid.data(), val++);
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             }
@@ -746,7 +746,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             for (const auto& uuid : testUuids) {
                 const auto query = Sprintf("\
                     SELECT (val) FROM test WHERE key=CAST(\"%s\" as uuid);\n\
-                ", uuid.Data());
+                ", uuid.data());
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -863,7 +863,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
                 const auto query = Sprintf("\
                     INSERT INTO test (key, val)\n\
                     VALUES (Uuid(\"%s\"), %u);\n\
-                ", uuid.Data(), val++);
+                ", uuid.data(), val++);
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             }
@@ -871,7 +871,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         {
             int val = 0;
             for (const auto& uuid : testUuids) {
-                const auto query = Sprintf("SELECT * FROM test WHERE key=Uuid(\"%s\");", uuid.Data());
+                const auto query = Sprintf("SELECT * FROM test WHERE key=Uuid(\"%s\");", uuid.data());
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -964,6 +964,73 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             for (size_t i = 0; parser.TryNextRow(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetUuid().ToString(), testUuids[i]);
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), i);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(PgIntPrimaryKey, EnableKqpDataQueryStreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(EnableKqpDataQueryStreamLookup);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TVector<TMaybe<ui64>> testKeys = {
+            Nothing(),
+            0,
+            308794346358062113,
+            5914002261229509558,
+            1349805057304957886,
+            493702609046240998,
+        };
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE test(
+                    key pgint8,
+                    val int,
+                    PRIMARY KEY (key)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            int val = 0;
+            for (const auto& key : testKeys) {
+                const auto query = key
+                    ? Sprintf("\
+                        INSERT INTO test (key, val)\n\
+                        VALUES (%lupb, %u);\n\
+                    ", *key, val)
+                    : Sprintf("\
+                        INSERT INTO test (key, val)\n\
+                        VALUES (NULL, %u);\n\
+                    ", val);
+                ++val;
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+        {
+            int val = 0;
+            for (const auto& key : testKeys) {
+                const auto query = key
+                    ? Sprintf("SELECT * FROM test WHERE key=%lupb;", *key)
+                    : "SELECT * FROM test WHERE key IS NULL;";
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+                TResultSetParser parser(result.GetResultSetParser(0));
+                UNIT_ASSERT(parser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), val++);
+                UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
             }
         }
     }

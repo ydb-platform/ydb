@@ -25,6 +25,8 @@
 
 #include "strcase.h"
 
+#define ENABLE_CURLX_PRINTF
+/* use our own printf() functions */
 #include "curlx.h"
 
 #include "tool_cfgable.h"
@@ -276,7 +278,7 @@ static CURLcode tool2curlparts(CURL *curl, struct tool_mime *m,
       case TOOLMIME_STDIN:
         if(!filename)
           filename = "-";
-        FALLTHROUGH();
+        /* FALLTHROUGH */
       case TOOLMIME_STDINDATA:
         ret = curl_mime_data_cb(part, m->size,
                                 (curl_read_callback) tool_mime_stdin_read,
@@ -635,7 +637,7 @@ static int get_param_part(struct OperationConfig *config, char endchar,
     *pfilename = filename;
   else if(filename)
     warnf(config->global,
-          "Field filename not allowed here: %s", filename);
+          "Field file name not allowed here: %s", filename);
 
   if(pencoder)
     *pencoder = encoder;
@@ -691,7 +693,7 @@ static int get_param_part(struct OperationConfig *config, char endchar,
  * 'name=foo;headers=@headerfile' or why not
  * 'name=@filemame;headers=@headerfile'
  *
- * To upload a file, but to fake the filename that will be included in the
+ * To upload a file, but to fake the file name that will be included in the
  * formpost, do like this:
  *
  * 'name=@filename;filename=/dev/null' or quote the faked filename like:
@@ -718,7 +720,7 @@ int formparse(struct OperationConfig *config,
               struct tool_mime **mimecurrent,
               bool literal_value)
 {
-  /* input MUST be a string in the format 'name=contents' and we will
+  /* input MUST be a string in the format 'name=contents' and we'll
      build a linked list with the info */
   char *name = NULL;
   char *contents = NULL;
@@ -777,7 +779,7 @@ int formparse(struct OperationConfig *config,
     }
     else if('@' == contp[0] && !literal_value) {
 
-      /* we use the @-letter to indicate filename(s) */
+      /* we use the @-letter to indicate file name(s) */
 
       struct tool_mime *subparts = NULL;
 
@@ -829,7 +831,7 @@ int formparse(struct OperationConfig *config,
         SET_TOOL_MIME_PTR(part, encoder);
 
         /* *contp could be '\0', so we just check with the delimiter */
-      } while(sep); /* loop if there is another filename */
+      } while(sep); /* loop if there's another file name */
       part = (*mimecurrent)->subparts;  /* Set name on group. */
     }
     else {

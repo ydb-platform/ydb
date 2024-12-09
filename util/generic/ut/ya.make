@@ -43,6 +43,7 @@ SRCS(
     generic/strbuf_ut.cpp
     generic/string_transparent_hash_ut.cpp
     generic/string_ut.cpp
+    generic/string_ut.h
     generic/typelist_ut.cpp
     generic/typetraits_ut.cpp
     generic/utility_ut.cpp
@@ -51,6 +52,7 @@ SRCS(
     generic/xrange_ut.cpp
     generic/yexception_ut.c
     generic/yexception_ut.cpp
+    generic/yexception_ut.h
     generic/ylimits_ut.cpp
     generic/ymath_ut.cpp
 )

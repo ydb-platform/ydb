@@ -8,8 +8,6 @@
 
 #include <util/system/env.h>
 
-#include <random>
-
 using namespace NYT;
 using namespace NYT::NTracing;
 
@@ -99,7 +97,6 @@ NAuth::TTvmServiceConfigPtr GetTvmConfig()
 int main(int argc, char* argv[])
 {
     try {
-
         bool test = false;
         auto usage = Format("usage: %v [--test] COLLECTOR_ENDPOINTS", argv[0]);
 

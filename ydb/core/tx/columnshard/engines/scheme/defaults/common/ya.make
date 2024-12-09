@@ -9,6 +9,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/conclusion
     ydb/core/scheme_types
+    ydb/library/actors/core
 )
 
 END()

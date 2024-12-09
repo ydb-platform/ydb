@@ -8,6 +8,12 @@ namespace NYT::NScheduler {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DEFINE_STRONG_TYPEDEF(TJobTraceId, TGuid);
+
+extern const TJobTraceId NullJobTraceId;
+
+////////////////////////////////////////////////////////////////////////////////
+
 using NJobTrackerClient::TJobId;
 using NJobTrackerClient::TOperationId;
 
@@ -61,6 +67,8 @@ YT_DEFINE_ERROR_ENUM(
     ((MasterDisconnected)                     (218))
     ((NoSuchJobShell)                         (219))
     ((JobResourceLimitsRestrictionsViolated)  (220))
+    ((CannotUseBothAclAndAco)                 (221))
+    ((GangOperationsAllowedOnlyInFifoPools)   (222))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,
@@ -134,6 +142,8 @@ DEFINE_ENUM(EAbortReason,
     ((RootVolumePreparationFailed)     ( 54))
     ((InterruptionFailed)              ( 55))
     ((OperationIncarnationChanged)     ( 56))
+    ((AddressResolveFailed)            ( 57))
+    ((UnexpectedNodeJobPhase)          ( 58))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))
@@ -145,6 +155,8 @@ DEFINE_ENUM(EAbortReason,
     ((SchedulingLast)                  (199))
 );
 
+DEFINE_ENUM_UNKNOWN_VALUE(EAbortReason, Unknown);
+
 DEFINE_ENUM(EInterruptReason,
     ((None)               (0))
     ((Preemption)         (1))
@@ -153,6 +165,8 @@ DEFINE_ENUM(EInterruptReason,
     ((Unknown)            (4))
     ((JobsDisabledOnNode) (5))
 );
+
+DEFINE_ENUM_UNKNOWN_VALUE(EInterruptReason, Unknown);
 
 DEFINE_ENUM(EAutoMergeMode,
     (Disabled)

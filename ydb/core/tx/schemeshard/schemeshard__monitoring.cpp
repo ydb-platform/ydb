@@ -717,7 +717,7 @@ private:
 
                     << "Shards.size:                  " << info.Shards.size() << Endl
                     << "ToUploadShards.size:          " << info.ToUploadShards.size() << Endl
-                    << "DoneShards.size:              " << info.DoneShardsSize << Endl
+                    << "DoneShards.size:              " << info.DoneShards.size() << Endl
                     << "InProgressShards.size:        " << info.InProgressShards.size() << Endl
 
                     << "DomainPathId:                  " << LinkToPathInfo(info.DomainPathId) << Endl
@@ -786,7 +786,6 @@ private:
                             TABLEH() {str << "DebugMessage";}
                             TABLEH() {str << "SeqNo";}
                             TABLEH() {str << "Processed";}
-                            TABLEH() {str << "Billed";}
                         }
                     }
                     for (auto item : info.Shards) {

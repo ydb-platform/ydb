@@ -260,6 +260,10 @@ class YtError(Exception):
         """Rpc unavailable."""
         return self.contains_code(105)
 
+    def is_rpc_response_memory_pressure(self):
+        """Rpc response memory pressure."""
+        return self.contains_code(122)
+
     def is_master_communication_error(self):
         """Master communication error."""
         return self.contains_code(712)
@@ -641,7 +645,7 @@ def flatten(obj, list_types=(list, tuple, set, frozenset, types.GeneratorType)):
 
 
 def update_from_env(variables):
-    """Update variables dict from environment."""
+    """Update variables dict from environment (cuts name prefix "YT_")."""
     for key, value in iteritems(os.environ):
         prefix = "YT_"
         if not key.startswith(prefix):

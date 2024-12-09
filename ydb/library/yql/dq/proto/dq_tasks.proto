@@ -161,7 +161,7 @@ message TTaskOutput {
 message TDqTransform {
     string Type = 1;
 
-    // binary YSON(codec ydb/library/yql/providers/common/schema/mkql)
+    // binary YSON(codec yql/essentials/providers/common/schema/mkql)
     bytes InputType = 2;
     bytes OutputType = 3;
 
@@ -186,6 +186,7 @@ message TDqInputTransformLookupSettings {
     bytes NarrowOutputRowType = 8; //Serialized struct type
     uint64 CacheLimit = 9;
     uint64 CacheTtlSeconds = 10;
+    uint64 MaxDelayedRows = 11;
 }
 
 message TDqTask {

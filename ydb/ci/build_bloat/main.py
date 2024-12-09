@@ -86,8 +86,8 @@ def build_include_tree(path: str, build_output_dir: str, base_src_dir: str) -> l
         else:
             assert current_includes_stack[-1] == sanitize_path(path, base_src_dir)
             current_includes_stack.pop()
-    
-    # filter small entities    
+
+    # filter small entities
     tree_paths_to_include = set()
     result = []
     for tree_path, duration in tree_path_to_sum_duration.items():
@@ -97,7 +97,7 @@ def build_include_tree(path: str, build_output_dir: str, base_src_dir: str) -> l
 
     def add_to_tree(tree, tree_path, duration):
         if len(tree_path) == 0:
-            tree["duration"] += duration 
+            tree["duration"] += duration
         else:
             if tree_path[0] not in tree["children"]:
                 tree["children"][tree_path[0]] = {
@@ -140,7 +140,7 @@ def build_include_tree(path: str, build_output_dir: str, base_src_dir: str) -> l
             result.append((current_tree_path[:], tree["duration"]))
         for child, child_tree in tree["children"].items():
             collect(child_tree, current_tree_path + [child])
-    
+
     collect(tree, [])
 
     return result
@@ -209,6 +209,8 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str, base_src_dir: str
         ("cpp", "Cpp", "#FC8D62"),
         ("dir", "Dir", "#8DA0CB"),
     ]
+    # sort paths to make render results more stable
+    tree_paths = sorted(tree_paths)
     tree_map.generate_tree_map_html(result_dir, tree_paths, unit_name="ms", factor=1, types=types)
 
     os.makedirs(result_dir, exist_ok=True)
@@ -359,6 +361,8 @@ def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: 
         ("cpp", "Cpp", "#FC8D62"),
         ("dir", "Dir", "#8DA0CB"),
     ]
+    # sort paths to make render results more stable
+    tree_paths = sorted(tree_paths)
     tree_map.generate_tree_map_html(result_dir, tree_paths, unit_name="ms", factor=1, types=types)
 
     time_breakdown = {}
@@ -383,7 +387,7 @@ def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: 
     }
 
     os.makedirs(result_dir, exist_ok=True)
-    
+
     with open(os.path.join(result_dir, "output.json"), "w") as f:
         json.dump(human_readable_output, f, indent=4)
 
@@ -393,7 +397,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="""A tool for analyzing build time\n
 
-To use it run ya make with '--output=output_dir -DCOMPILER_TIME_TRACE' and *.time_trace.json files 
+To use it run ya make with '--output=output_dir -DCOMPILER_TIME_TRACE' and *.time_trace.json files
 will be generated in output_dir"""
     )
     parser.add_argument(

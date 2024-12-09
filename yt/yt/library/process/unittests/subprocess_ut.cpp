@@ -26,7 +26,6 @@ TEST(TSubprocessTest, Basic)
     EXPECT_TRUE(result.Status.IsOK());
 }
 
-
 TEST(TSubprocessTest, PipeOutput)
 {
     TSubprocess subprocess("/bin/echo");
@@ -74,7 +73,6 @@ TEST(TSubprocessTest, PipeBigOutput)
     EXPECT_TRUE(result);
 }
 
-
 TEST(TSubprocessTest, PipeBigError)
 {
     auto queue = New<TActionQueue>();
@@ -91,6 +89,18 @@ TEST(TSubprocessTest, PipeBigError)
 
     EXPECT_TRUE(result.Status.IsOK());
     EXPECT_EQ(6*100000, std::ssize(result.Error));
+}
+
+TEST(TSubprocessTest, BinaryNotFound)
+{
+    auto queue = New<TActionQueue>();
+
+    auto result = BIND([] {
+        TSubprocess subprocess("does-not-exist");
+        return subprocess.Execute();
+    }).AsyncVia(queue->GetInvoker()).Run().Get().Value();
+
+    EXPECT_FALSE(result.Status.IsOK());
 }
 
 #endif

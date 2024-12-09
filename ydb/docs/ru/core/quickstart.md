@@ -80,7 +80,7 @@
       mkdir ydb_certs
       ```
 
-   2. Запустите Docker контейнер:
+   2. Запустите Docker-контейнер:
 
       ```bash
       docker run -d --rm --name ydb-local -h localhost \
@@ -88,13 +88,23 @@
         -p 2135:2135 -p 2136:2136 -p 8765:8765 \
         -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
         -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
-        -e YDB_USE_IN_MEMORY_PDISKS=true \
         {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
       ```
 
-      Если контейнер успешно запустился, вы увидите его идентификатор. Контейнеру может потребоваться несколько минут для инициализации. База данных будет недоступна до окончания инициализации.
+      Если контейнер успешно запустился, вы увидите его идентификатор. Контейнеру может потребоваться несколько секунд для инициализации. База данных будет недоступна до окончания инициализации.
 
-      Настройка `YDB_USE_IN_MEMORY_PDISKS` делает все данные волатильными, хранящимися только в оперативной памяти. В настоящее время сохранение данных путем её отключения поддерживается только на x86_64 процессорах. Подробнее о [настройке Docker контейнера](./reference/docker/environment.md).
+      {% note warning %}
+
+      В настоящее время сохранение данных на диск поддерживается только на x86_64 процессорах.
+
+      Чтобы отключить сохранение данных на диск и сделать все данные волатильными, хранящимися только в оперативной памяти, добавьте в команду запуска Docker-контейнера параметр `-e YDB_USE_IN_MEMORY_PDISKS=true`. Подробнее о [настройке Docker контейнера](./reference/docker/environment.md).
+
+      В ином случае, при запуске контейнера Docker на Mac с процессором Apple Silicon, необходимо эмулировать набор инструкций x86_64, используя технологию виртуализации [Rosetta](https://support.apple.com/en-us/102527):
+
+      - [colima](https://github.com/abiosoft/colima) c параметрами `colima start --arch aarch64 --vm-type=vz --vz-rosetta`;
+      - [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) с установленной и включённой Rosetta 2.
+
+      {% endnote %}
 
 - Minikube
 
@@ -133,6 +143,50 @@
    9. После обработки манифеста создаётся объект StatefulSet, описывающий набор динамических узлов. Созданная база данных будет доступна изнутри кластера Kubernetes по DNS-имени `database-minikube-sample` на портах 2135 и 8765.
 
    10. Получите доступ к порту 8765 снаружи Kubernetes через `kubectl port-forward database-minikube-sample-0 8765` для продолжения.
+
+- Kind
+
+   1. Установите интерфейс командной строки Kubernetes [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl) и менеджер пакетов [Helm 3](https://helm.sh/docs/intro/install/).
+
+   2. Установите [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/).
+
+   3. Склонируйте репозиторий с [{{ ydb-short-name }} Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator):
+
+      ```bash
+      git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
+      ```
+
+   4. Создайте Kind кластер и дождитесь его готовности:
+
+      ```bash
+      kind create cluster --config=samples/kind/kind-config.yaml  --wait 5m
+      ```
+
+   5. Установите на кластер контроллер {{ ydb-short-name }}:
+
+      ```bash
+      helm upgrade --install ydb-operator deploy/ydb-operator --set metrics.enabled=false
+      ```
+
+   6. Примените манифест для создания хранилища данных {{ ydb-short-name }}:
+
+      ```bash
+      kubectl apply -f samples/kind/storage.yaml
+      ```
+
+   7. Подождите, пока `kubectl get storages.ydb.tech` станет `Ready`.
+
+   8. Примените манифест для создания базы данных:
+
+      ```bash
+      kubectl apply -f samples/kind/database.yaml
+      ```
+
+   9. Подождите, пока `kubectl get databases.ydb.tech` станет `Ready`.
+
+   10. После обработки манифеста создаётся объект StatefulSet, описывающий набор динамических узлов. Созданная база данных будет доступна изнутри кластера Kubernetes по DNS-имени `database-kind-sample` на портах 2135 и 8765.
+
+   11. Получите доступ к порту 8765 снаружи Kubernetes через `kubectl port-forward database-kind-sample-0 8765` для продолжения.
 
 {% endlist %}
 
@@ -287,6 +341,32 @@ FLATTEN LIST BY keys AS key
 
    ```bash
    helm delete ydb-operator
+   ```
+
+- Kind
+
+   Чтобы удалить базу данных {{ ydb-short-name }}, достаточно удалить сопоставленный с ней ресурс Database:
+
+   ```bash
+   kubectl delete database.ydb.tech database-kind-sample
+   ```
+
+   Чтобы удалить кластер {{ ydb-short-name }}, выполните следующие команды (все данные будут потеряны):
+
+   ```bash
+   kubectl delete storage.ydb.tech storage-kind-sample
+   ```
+
+   Чтобы удалить контроллер {{ ydb-short-name }} из кластера Kubernetes, удалите релиз, созданный Helm:
+
+   ```bash
+   helm delete ydb-operator
+   ```
+
+   Чтобы удалить кластер Kind целиком, выполните следующую команду:
+
+   ```bash
+   kind delete cluster
    ```
 
 {% endlist %}

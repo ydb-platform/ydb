@@ -220,12 +220,6 @@ DEFINE_ENUM(ETabletServiceFeatures,
     ((SharedWriteLocks)         (1))
 );
 
-DEFINE_ENUM(ESecondaryIndexKind,
-    ((FullSync)                 (0))
-    ((Unfolding)                (1))
-    ((Unique)                   (2))
-);
-
 DEFINE_ENUM(ERowMergerType,
     ((Legacy)               (0))
     ((Watermark)            (1))
@@ -235,6 +229,16 @@ DEFINE_ENUM(ERowMergerType,
 extern const TString CustomRuntimeDataWatermarkKey;
 struct TWatermarkRuntimeDataConfig;
 struct TWatermarkRuntimeData;
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_ENUM(ESecondaryIndexKind,
+    ((FullSync)                 (0))
+    ((Unfolding)                (1))
+    ((Unique)                   (2))
+);
+
+struct TIndexInfo;
 
 ////////////////////////////////////////////////////////////////////////////////
 

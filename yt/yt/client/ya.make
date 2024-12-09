@@ -13,7 +13,7 @@ SRCS(
     api/client_cache.cpp
     api/delegating_client.cpp
     api/delegating_transaction.cpp
-    api/distributed_table_sessions.cpp
+    api/distributed_table_session.cpp
     api/etc_client.cpp
     api/journal_client.cpp
     api/operation_client.cpp
@@ -127,6 +127,7 @@ SRCS(
     table_client/schemaless_buffered_dynamic_table_writer.cpp
     table_client/schemaless_dynamic_table_writer.cpp
     table_client/serialize.cpp
+    table_client/table_upload_options.cpp
     table_client/logical_type.cpp
     table_client/merge_table_schemas.cpp
     table_client/name_table.cpp
@@ -197,9 +198,13 @@ SRCS(
     kafka/requests.cpp
 )
 
+CONFIGURE_FILE(
+    api/rpc_proxy/protocol_version_variables.h.in
+    api/rpc_proxy/protocol_version_variables.h
+)
+
 SRCS(
     ${YT_SRCS}
-    yt/yt/client/api/rpc_proxy/protocol_version_variables.h.in
 )
 
 PEERDIR(
@@ -215,6 +220,7 @@ PEERDIR(
     yt/yt/library/quantile_digest
     yt/yt_proto/yt/client
     library/cpp/json
+    library/cpp/string_utils/base64
     contrib/libs/pfr
 )
 

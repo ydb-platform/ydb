@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.h"
-#include "grpc_request_proxy.h"
 #include "cancelation/cancelation.h"
 #include "cancelation/cancelation_event.h"
 #include "rpc_common/rpc_common.h"

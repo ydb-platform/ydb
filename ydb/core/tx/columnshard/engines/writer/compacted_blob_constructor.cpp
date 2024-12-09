@@ -20,7 +20,7 @@ TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, T
         auto* pInfo = changes.GetWritePortionInfo(i);
         Y_ABORT_UNLESS(pInfo);
         TWritePortionInfoWithBlobsResult& portionWithBlobs = *pInfo;
-        for (auto&& b : portionWithBlobs.GetBlobs()) {
+        for (auto&& b : portionWithBlobs.MutableBlobs()) {
             auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), changes.MutableBlobsAction().GetWriting(b.GetOperator()->GetStorageId())));
             b.RegisterBlobId(portionWithBlobs, task.GetBlobId());
             WriteVolume += b.GetSize();

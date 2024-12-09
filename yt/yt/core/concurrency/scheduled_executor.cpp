@@ -38,9 +38,9 @@ bool TScheduledInvocationTimePolicy::IsEnabled()
     return static_cast<bool>(Interval_);
 }
 
-bool TScheduledInvocationTimePolicy::ShouldKickstart(const TOptions&)
+bool TScheduledInvocationTimePolicy::ShouldKickstart(const TOptions& interval)
 {
-    return IsEnabled();
+    return static_cast<bool>(interval);
 }
 
 void TScheduledInvocationTimePolicy::SetOptions(TOptions interval)

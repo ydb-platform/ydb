@@ -127,7 +127,7 @@ private:
     STFUNC(CompileState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvKqp::TEvContinueProcess, Handle);
+                HFunc(TEvKqp::TEvContinueProcess, HandleCompile);
                 cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
             default:
                 UnexpectedEvent("CompileState", ev->GetTypeRewrite());
@@ -136,6 +136,20 @@ private:
             InternalError(e.what());
         }
     }
+
+    STFUNC(SplitState) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                HFunc(TEvKqp::TEvContinueProcess, HandleSplit);
+                cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            default:
+                UnexpectedEvent("SplitState", ev->GetTypeRewrite());
+            }
+        } catch (const yexception& e) {
+            InternalError(e.what());
+        }
+    }
+
 
 private:
     TVector<TQueryAst> GetAstStatements(const TActorContext &ctx) {
@@ -158,9 +172,11 @@ private:
         ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send split result"
             << ", self: " << SelfId()
             << ", owner: " << Owner
-            << (!result.Exprs.empty() ? ", split is successful" : ", split is not successful"));
+            << ", success: " << GetYdbStatus(result)
+            << ", issues: " << result.Issues().ToOneLineString());
 
         auto responseEv = MakeHolder<TEvKqp::TEvSplitResponse>(
+            GetYdbStatus(result), result.Issues(),
             QueryId, std::move(result.Exprs), std::move(result.World), std::move(result.Ctx));
         Send(Owner, responseEv.Release());
 
@@ -174,11 +190,38 @@ private:
     }
 
     void StartSplitting(const TActorContext &ctx) {
-        const auto prepareSettings = PrepareCompilationSettings(ctx);
-        auto result = KqpHost->SplitQuery(QueryRef, prepareSettings);
+        Become(&TKqpCompileActor::SplitState);
+        TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
+            new TEvents::TEvWakeup()));
 
-        Become(&TKqpCompileActor::CompileState);
-        ReplySplitResult(ctx, std::move(result));
+        const auto prepareSettings = PrepareCompilationSettings(ctx);
+        AsyncSplitResult = KqpHost->SplitQuery(QueryRef, prepareSettings);
+        ContinueSplittig(ctx);
+    }
+
+    void ContinueSplittig(const TActorContext &ctx) {
+        TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        TActorId selfId = ctx.SelfID;
+
+        auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
+            bool finished = future.GetValue();
+            auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(0, finished);
+            actorSystem->Send(selfId, processEv.Release());
+        };
+
+        AsyncSplitResult->Continue().Apply(callback);
+    }
+
+    void HandleSplit(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
+        Y_ENSURE(!ev->Get()->QueryId);
+
+        if (!ev->Get()->Finished) {
+            ContinueSplittig(ctx);
+            return;
+        }
+
+        auto splitResult = std::move(AsyncSplitResult->GetResult());
+        ReplySplitResult(ctx, std::move(splitResult));
     }
 
     void StartParsing(const TActorContext &ctx) {
@@ -460,7 +503,7 @@ private:
         KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery()) && allowCache;
     }
 
-    void Handle(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
+    void HandleCompile(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
         Y_ENSURE(!ev->Get()->QueryId);
 
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, UserRequestContext->TraceId);
@@ -558,6 +601,7 @@ private:
     TIntrusivePtr<IKqpGateway> Gateway;
     TIntrusivePtr<IKqpHost> KqpHost;
     TIntrusivePtr<IKqpHost::IAsyncQueryResult> AsyncCompileResult;
+    TIntrusivePtr<IKqpHost::IAsyncSplitResult> AsyncSplitResult;
     std::shared_ptr<TKqpCompileResult> KqpCompileResult;
     std::optional<TString> ReplayMessage;  // here metadata is encoded protobuf - for logs
     std::optional<TString> ReplayMessageUserView;  // here metadata is part of json - full readable json for diagnostics

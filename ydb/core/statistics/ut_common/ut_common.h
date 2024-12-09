@@ -68,7 +68,7 @@ Ydb::StatusIds::StatusCode ExecuteYqlScript(TTestEnv& env, const TString& script
 TString CreateDatabase(TTestEnv& env, const TString& databaseName,
     size_t nodeCount = 1, bool isShared = false, const TString& poolName = "hdd1");
 
-TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName);
+TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName, size_t nodeCount = 0);
 
 struct TTableInfo {
     std::vector<ui64> ShardIds;

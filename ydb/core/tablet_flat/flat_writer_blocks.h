@@ -18,6 +18,12 @@ namespace NWriter {
         using TPageId = NTable::NPage::TPageId;
         using TCache = TPrivatePageCache::TInfo;
 
+        struct TResult : TMoveOnly {
+            TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+            TVector<NPageCollection::TLoadedPage> RegularPages;
+            TVector<NPageCollection::TLoadedPage> StickyPages;
+        };
+
         TBlocks(ICone *cone, ui8 channel, ECache cache, ui32 block, bool stickyFlatIndex)
             : Cone(cone)
             , Channel(channel)
@@ -25,7 +31,6 @@ namespace NWriter {
             , StickyFlatIndex(stickyFlatIndex)
             , Writer(Cone->CookieRange(1), Channel, block)
         {
-
         }
 
         ~TBlocks()
@@ -35,39 +40,38 @@ namespace NWriter {
 
         explicit operator bool() const noexcept
         {
-            return Writer || Regular || Sticky;
+            return Writer || Result.RegularPages || Result.StickyPages;
         }
 
-        TIntrusivePtr<TCache> Finish() noexcept
+        TResult Finish() noexcept
         {
-            TIntrusivePtr<TCache> pageCollection;
-
             if (auto meta = Writer.Finish(false /* omit empty page collection */)) {
-                for (auto &glob : Writer.Grab())
+                for (auto &glob : Writer.Grab()) {
                     Cone->Put(std::move(glob));
+                }
 
-                pageCollection = MakePageCollection(std::move(meta));
+                auto largeGlobId = CutToChunks(meta);
+                Result.PageCollection = MakeIntrusiveConst<NPageCollection::TPageCollection>(largeGlobId, std::move(meta));
             }
 
             Y_ABORT_UNLESS(!Writer, "Block writer is not empty after Finish");
-            Y_ABORT_UNLESS(!Regular && !Sticky, "Unexpected non-empty page lists");
 
-            return pageCollection;
+            return std::exchange(Result, {});
         }
 
         TPageId Write(TSharedData raw, EPage type)
         {
             auto pageId = Writer.AddPage(raw, (ui32)type);
 
-            for (auto &glob : Writer.Grab())
+            for (auto &glob : Writer.Grab()) {
                 Cone->Put(std::move(glob));
+            }
 
-            if (NTable::TLoader::NeedIn(type) || StickyFlatIndex && type == EPage::FlatIndex) {
-                // Note: we mark flat index pages sticky after we load them
-                Sticky.emplace_back(pageId, std::move(raw));
+            if (NTable::TLoader::NeedIn(type) || Cache == ECache::Ever || StickyFlatIndex && type == EPage::FlatIndex) {
+                Result.StickyPages.emplace_back(pageId, std::move(raw));
             } else if (bool(Cache) && type == EPage::DataPage || type == EPage::BTreeIndex) {
-                // Note: we save b-tree index pages to shared cache regardless of a cache mode  
-                Regular.emplace_back(pageId, std::move(raw));
+                // Note: save b-tree index pages to shared cache regardless of a cache mode
+                Result.RegularPages.emplace_back(pageId, std::move(raw));
             }
 
             return pageId;
@@ -79,25 +83,6 @@ namespace NWriter {
         }
 
     private:
-        TIntrusivePtr<TCache> MakePageCollection(TSharedData body) noexcept
-        {
-            auto largeGlobId = CutToChunks(body);
-
-            auto *pack = new NPageCollection::TPageCollection(largeGlobId, std::move(body));
-
-            TIntrusivePtr<TCache> cache = new TCache(pack);
-
-            const bool sticky = (Cache == ECache::Ever);
-
-            for (auto &paged : Sticky) cache->Fill(paged, true);
-            for (auto &paged : Regular) cache->Fill(paged, sticky);
-
-            Sticky.clear();
-            Regular.clear();
-
-            return cache;
-        }
-
         NPageCollection::TLargeGlobId CutToChunks(TArrayRef<const char> body)
         {
             return Cone->Put(0, Channel, body, Writer.MaxBlobSize);
@@ -110,8 +95,7 @@ namespace NWriter {
         const bool StickyFlatIndex;
 
         NPageCollection::TWriter Writer;
-        TVector<NPageCollection::TLoadedPage> Regular;
-        TVector<NPageCollection::TLoadedPage> Sticky;
+        TResult Result;
     };
 }
 }

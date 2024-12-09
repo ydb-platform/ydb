@@ -1,13 +1,7 @@
-from typing import Set
-from datetime import datetime
-import time
-
 import pytest
 
-import yatest.common
-
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
-from ydb.library.yql.providers.generic.connector.tests.utils.docker_compose import DockerComposeHelper
+from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
@@ -29,11 +23,10 @@ tc_collection = Collection(
     Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EDataSourceKind.ORACLE])
 )
 
-
-class OneTimeWaiter:
-    __launched: bool = False
-
-    __expected_tables: Set[str] = {
+one_time_waiter = OneTimeWaiter(
+    data_source_kind=EDataSourceKind.ORACLE,
+    docker_compose_file_path=str(docker_compose_dir / 'docker-compose.yml'),
+    expected_tables=[
         'column_selection_A_b_C_d_E',
         'column_selection_COL1',
         'column_selection_col1',
@@ -50,40 +43,8 @@ class OneTimeWaiter:
         'DATETIMES',
         'LONGRAW',
         'LONG_TABLE',
-    }
-
-    def __init__(self):
-        docker_compose_file_relative_path = str(docker_compose_dir / 'docker-compose.yml')
-        docker_compose_file_abs_path = yatest.common.source_path(docker_compose_file_relative_path)
-        self.docker_compose_helper = DockerComposeHelper(docker_compose_yml_path=docker_compose_file_abs_path)
-
-    def wait(self):
-        if self.__launched:
-            return
-
-        start = datetime.now()
-        actual_tables: Set[str] = None
-        timeout = 600
-
-        while (datetime.now() - start).total_seconds() < timeout:
-            try:
-                actual_tables = set(self.docker_compose_helper.list_oracle_tables())
-            except Exception as e:
-                LOGGER.error(f"list oracle tables error: {e}")
-                time.sleep(5)
-            else:
-                if self.__expected_tables.issubset(actual_tables):
-                    self.__launched = True
-                    return
-
-        raise RuntimeError(
-            f"No expected tables in Oracle. Latest result: {actual_tables},  "
-            + f"extra tables loaded: {actual_tables - set(self.__expected_tables)}, "
-            + f"did not found tables: {set(self.__expected_tables) - actual_tables}"
-        )
-
-
-one_time_waiter = OneTimeWaiter()
+    ],
+)
 
 
 @pytest.mark.parametrize("runner_type", runner_types)

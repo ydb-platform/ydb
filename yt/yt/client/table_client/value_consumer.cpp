@@ -1,10 +1,10 @@
 #include "value_consumer.h"
-#include "helpers.h"
 
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/row_buffer.h>
-#include <yt/yt/client/table_client/schema.h>
-#include <yt/yt/client/table_client/unversioned_writer.h>
+#include "helpers.h"
+#include "name_table.h"
+#include "row_buffer.h"
+#include "schema.h"
+#include "unversioned_writer.h"
 
 #include <yt/yt/core/concurrency/scheduler.h>
 
@@ -200,7 +200,7 @@ const TTableSchemaPtr& TValueConsumerBase::GetSchema() const
 
 void TValueConsumerBase::ThrowConversionException(const TUnversionedValue& value, EValueType columnType, const TError& ex)
 {
-    THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation, "Error while performing type conversion")
+    THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation, "Error while performing type conversion")
         << ex
         << TErrorAttribute("column", GetNameTable()->GetName(value.Id))
         << TErrorAttribute("value_type", value.Type)

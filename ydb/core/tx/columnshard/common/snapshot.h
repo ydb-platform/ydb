@@ -26,6 +26,8 @@ public:
         , TxId(txId) {
     }
 
+    NJson::TJsonValue SerializeToJson() const;
+
     constexpr TInstant GetPlanInstant() const noexcept {
         return TInstant::MilliSeconds(PlanStep);
     }

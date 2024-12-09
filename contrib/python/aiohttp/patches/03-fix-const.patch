@@ -1,0 +1,20 @@
+--- contrib/python/aiohttp/aiohttp/_http_parser.pyx	(index)
++++ contrib/python/aiohttp/aiohttp/_http_parser.pyx	(working tree)
+@@ -393,7 +393,7 @@ cdef class HttpParser:
+             self._has_value = False
+             self._raw_headers.append((raw_name, raw_value))
+ 
+-    cdef _on_header_field(self, char* at, size_t length):
++    cdef _on_header_field(self, const char* at, size_t length):
+         cdef Py_ssize_t size
+         cdef char *buf
+         if self._has_value:
+@@ -404,7 +404,7 @@ cdef class HttpParser:
+         buf = PyByteArray_AsString(self._raw_name)
+         memcpy(buf + size, at, length)
+ 
+-    cdef _on_header_value(self, char* at, size_t length):
++    cdef _on_header_value(self, const char* at, size_t length):
+         cdef Py_ssize_t size
+         cdef char *buf
+ 

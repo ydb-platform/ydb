@@ -1,0 +1,570 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+IGNORE_FILES CHANGELOG
+
+KEEP     MIT                  04380297db22a888ca5ed52dc9d62896
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lib/dictBuilder/divsufsort.c [5:24]
+        lib/dictBuilder/divsufsort.h [5:24]
+
+KEEP     BSD-3-Clause OR GPL-2.0-only 08cc21e89f47b7d754951b372ad6340e
+BELONGS ya.make
+    License text:
+        \## License
+        Zstandard is dual-licensed under [BSD](LICENSE) OR [GPLv2](COPYING).
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.91
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [218:220]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 90.91
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        README.md [218:220]
+
+KEEP     BSD-3-Clause         3558a3d8190bccbcb77e37475a533262
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 93.39
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1:30]
+
+KEEP     "(BSD-3-Clause OR GPL-2.0-only)" 39bba7d2cf0ba1036f2a6e2be52fe3f0
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: COPYING at line 60
+FILE_INCLUDE LICENSE found in files: COPYING at line 1, COPYING at line 59
+    # We consider that dual-license should be interpreted as OR. The source code explicitly says
+    # You may select, at your option, one of the above-listed licenses.
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        COPYING [1:339]
+
+KEEP     BSD-2-Clause         4297c106811922bb21a828238ae39102
+BELONGS ya.make
+    License text:
+           BSD 2-Clause License (https://opensource.org/licenses/bsd-license.php)
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        lib/legacy/zstd_v02.c [32:32]
+        lib/legacy/zstd_v02.c [211:211]
+        lib/legacy/zstd_v02.c [452:452]
+        lib/legacy/zstd_v02.c [551:551]
+        lib/legacy/zstd_v02.c [695:695]
+        lib/legacy/zstd_v02.c [888:888]
+        lib/legacy/zstd_v02.c [1392:1392]
+        lib/legacy/zstd_v03.c [33:33]
+        lib/legacy/zstd_v03.c [212:212]
+        lib/legacy/zstd_v03.c [453:453]
+        lib/legacy/zstd_v03.c [552:552]
+        lib/legacy/zstd_v03.c [696:696]
+        lib/legacy/zstd_v03.c [888:888]
+        lib/legacy/zstd_v03.c [1392:1392]
+        lib/legacy/zstd_v04.c [489:489]
+        lib/legacy/zstd_v04.c [728:728]
+        lib/legacy/zstd_v04.c [877:877]
+        lib/legacy/zstd_v04.c [1383:1383]
+        lib/legacy/zstd_v04.c [1461:1461]
+        lib/legacy/zstd_v04.c [1548:1548]
+        lib/legacy/zstd_v05.c [22:22]
+        lib/legacy/zstd_v05.c [504:504]
+        lib/legacy/zstd_v05.c [623:623]
+        lib/legacy/zstd_v05.c [852:852]
+        lib/legacy/zstd_v05.c [1002:1002]
+        lib/legacy/zstd_v05.c [1488:1488]
+        lib/legacy/zstd_v05.c [1561:1561]
+        lib/legacy/zstd_v05.c [1653:1653]
+        lib/legacy/zstd_v06.c [27:27]
+        lib/legacy/zstd_v06.c [566:566]
+        lib/legacy/zstd_v06.c [714:714]
+        lib/legacy/zstd_v06.c [949:949]
+        lib/legacy/zstd_v06.c [1157:1157]
+        lib/legacy/zstd_v06.c [1302:1302]
+        lib/legacy/zstd_v06.c [1626:1626]
+        lib/legacy/zstd_v06.c [1696:1696]
+        lib/legacy/zstd_v06.c [1878:1878]
+        lib/legacy/zstd_v07.c [188:188]
+        lib/legacy/zstd_v07.c [387:387]
+        lib/legacy/zstd_v07.c [618:618]
+        lib/legacy/zstd_v07.c [926:926]
+        lib/legacy/zstd_v07.c [1099:1099]
+        lib/legacy/zstd_v07.c [1323:1323]
+        lib/legacy/zstd_v07.c [1647:1647]
+
+SKIP     LicenseRef-scancode-generic-cla 48655d2ad7a012f625f944caf1f36e00
+BELONGS ya.make
+    # CLA is intended for the code owners, not code users
+    License text:
+        6. If you haven't already, complete the Contributor License Agreement ("CLA").
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 22.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [21:21]
+
+KEEP     BSD-2-Clause         6ca0834139eb9247627b34236ec57382
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        lib/legacy/zstd_v01.c [1157:1176]
+        lib/legacy/zstd_v02.c [766:785]
+        lib/legacy/zstd_v02.c [826:845]
+        lib/legacy/zstd_v02.c [2553:2572]
+        lib/legacy/zstd_v03.c [766:785]
+        lib/legacy/zstd_v03.c [826:845]
+        lib/legacy/zstd_v03.c [2191:2210]
+        lib/legacy/zstd_v04.c [2350:2369]
+        lib/legacy/zstd_v04.c [3239:3258]
+        lib/legacy/zstd_v05.c [215:234]
+        lib/legacy/zstd_v05.c [351:370]
+        lib/legacy/zstd_v05.c [2500:2519]
+        lib/legacy/zstd_v05.c [3706:3725]
+        lib/legacy/zstd_v06.c [230:249]
+        lib/legacy/zstd_v06.c [361:380]
+        lib/legacy/zstd_v06.c [2625:2644]
+        lib/legacy/zstd_v06.c [2679:2698]
+        lib/legacy/zstd_v06.c [3845:3864]
+        lib/legacy/zstd_v07.c [2527:2546]
+        lib/legacy/zstd_v07.c [2597:2616]
+        lib/legacy/zstd_v07.c [2804:2823]
+        lib/legacy/zstd_v07.c [4206:4225]
+
+KEEP     BSD-2-Clause         6f0749d4986832a1bc037394cb7e6657
+BELONGS ya.make
+    License text:
+            BSD 2-Clause License (https://opensource.org/licenses/bsd-license.php)
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        lib/legacy/zstd_v01.c [1155:1155]
+        lib/legacy/zstd_v02.c [764:764]
+        lib/legacy/zstd_v02.c [824:824]
+        lib/legacy/zstd_v02.c [2551:2551]
+        lib/legacy/zstd_v03.c [764:764]
+        lib/legacy/zstd_v03.c [824:824]
+        lib/legacy/zstd_v03.c [2189:2189]
+        lib/legacy/zstd_v04.c [2348:2348]
+        lib/legacy/zstd_v04.c [3237:3237]
+        lib/legacy/zstd_v05.c [213:213]
+        lib/legacy/zstd_v05.c [349:349]
+        lib/legacy/zstd_v05.c [2498:2498]
+        lib/legacy/zstd_v05.c [3704:3704]
+        lib/legacy/zstd_v06.c [228:228]
+        lib/legacy/zstd_v06.c [359:359]
+        lib/legacy/zstd_v06.c [2623:2623]
+        lib/legacy/zstd_v06.c [2677:2677]
+        lib/legacy/zstd_v06.c [3843:3843]
+        lib/legacy/zstd_v07.c [2525:2525]
+        lib/legacy/zstd_v07.c [2595:2595]
+        lib/legacy/zstd_v07.c [2802:2802]
+        lib/legacy/zstd_v07.c [4204:4204]
+
+KEEP     "(BSD-2-Clause OR GPL-2.0-only)" 6f7ad0bdd3c593de2e2e20a000feb85f
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: lib/zdict.h at line 7, lib/zstd.h at line 7
+FILE_INCLUDE LICENSE found in files: lib/zdict.h at line 6, lib/zstd.h at line 6
+    # We consider that dual-license should be interpreted as OR. The source code explicitly says
+    # You may select, at your option, one of the above-listed licenses.
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        lib/zdict.h [5:8]
+        lib/zstd.h [5:8]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        lib/zdict.h [5:8]
+        lib/zstd.h [5:8]
+
+SKIP     LicenseRef-scancode-generic-cla ad49803b7b931b4ef1a24e5473e3f269
+BELONGS ya.make
+    # CLA is intended for the code owners, not code users
+    License text:
+        \## Contributor License Agreement ("CLA")
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 22.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [23:23]
+
+KEEP     BSD-3-Clause OR GPL-2.0-only ad9a690b6b45d546beb34637b7d1159c
+BELONGS ya.make
+    License text:
+        This repository represents the reference implementation, provided as an open-source dual [BSD](LICENSE) OR [GPLv2](COPYING) licensed **C** library,
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 76.47
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [8:8]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 76.47
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        README.md [8:8]
+
+KEEP     BSD-2-Clause         c67981f06ea0c00fcf4c73a2ef8d2c8a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        lib/legacy/zstd_v02.c [34:55]
+        lib/legacy/zstd_v02.c [213:234]
+        lib/legacy/zstd_v02.c [454:475]
+        lib/legacy/zstd_v02.c [553:574]
+        lib/legacy/zstd_v02.c [697:718]
+        lib/legacy/zstd_v02.c [890:911]
+        lib/legacy/zstd_v02.c [1394:1415]
+        lib/legacy/zstd_v03.c [35:56]
+        lib/legacy/zstd_v03.c [214:235]
+        lib/legacy/zstd_v03.c [455:476]
+        lib/legacy/zstd_v03.c [554:575]
+        lib/legacy/zstd_v03.c [698:719]
+        lib/legacy/zstd_v03.c [890:911]
+        lib/legacy/zstd_v03.c [1394:1415]
+        lib/legacy/zstd_v04.c [491:512]
+        lib/legacy/zstd_v04.c [730:751]
+        lib/legacy/zstd_v04.c [879:900]
+        lib/legacy/zstd_v04.c [1385:1406]
+        lib/legacy/zstd_v04.c [1463:1484]
+        lib/legacy/zstd_v04.c [1550:1571]
+        lib/legacy/zstd_v05.c [24:45]
+        lib/legacy/zstd_v05.c [506:527]
+        lib/legacy/zstd_v05.c [625:646]
+        lib/legacy/zstd_v05.c [854:875]
+        lib/legacy/zstd_v05.c [1004:1025]
+        lib/legacy/zstd_v05.c [1490:1511]
+        lib/legacy/zstd_v05.c [1563:1584]
+        lib/legacy/zstd_v05.c [1655:1676]
+        lib/legacy/zstd_v06.c [29:50]
+        lib/legacy/zstd_v06.c [568:589]
+        lib/legacy/zstd_v06.c [716:737]
+        lib/legacy/zstd_v06.c [951:972]
+        lib/legacy/zstd_v06.c [1159:1180]
+        lib/legacy/zstd_v06.c [1304:1325]
+        lib/legacy/zstd_v06.c [1628:1649]
+        lib/legacy/zstd_v06.c [1698:1719]
+        lib/legacy/zstd_v06.c [1880:1901]
+        lib/legacy/zstd_v07.c [190:211]
+        lib/legacy/zstd_v07.c [389:410]
+        lib/legacy/zstd_v07.c [620:641]
+        lib/legacy/zstd_v07.c [928:949]
+        lib/legacy/zstd_v07.c [1101:1122]
+        lib/legacy/zstd_v07.c [1325:1346]
+        lib/legacy/zstd_v07.c [1649:1670]
+
+SKIP     MIT                  cce6439656e544e767329cf7faaff00c
+BELONGS ya.make
+    # LICENSE was already scanned and contains BSD-style license, not MIT
+    License text:
+        licensed
+        under both the [LICENSE](LICENSE)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 12.50
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        CONTRIBUTING.md [488:489]
+
+KEEP     "(BSD-2-Clause OR GPL-2.0-only)" e884260c5ca39c4e993ef8760401c0ae
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: lib/common/allocations.h at line 7, lib/common/bits.h at line 7, lib/common/bitstream.h at line 11, lib/common/compiler.h at line 7, lib/common/cpu.h at line 7, lib/common/debug.c at line 11, lib/common/debug.h at line 11, lib/common/entropy_common.c at line 11, lib/common/error_private.c at line 7, lib/common/error_private.h at line 7, lib/common/fse.h at line 11, lib/common/fse_decompress.c at line 11, lib/common/huf.h at line 11, lib/common/mem.h at line 7, lib/common/pool.c at line 7, lib/common/pool.h at line 7, lib/common/portability_macros.h at line 7, lib/common/threading.c at line 10, lib/common/threading.h at line 10, lib/common/zstd_common.c at line 7, lib/common/zstd_deps.h at line 7, lib/common/zstd_internal.h at line 7, lib/common/zstd_trace.h at line 7, lib/compress/clevels.h at line 7, lib/compress/fse_compress.c at line 11, lib/compress/hist.c at line 12, lib/compress/hist.h at line 12, lib/compress/huf_compress.c at line 11, lib/compress/zstd_compress.c at line 7, lib/compress/zstd_compress_internal.h at line 7, lib/compress/zstd_compress_literals.c at line 7, lib/compress/zstd_compress_literals.h at line 7, lib/compress/zstd_compress_sequences.c at line 7, lib/compress/zstd_compress_sequences.h at line 7, lib/compress/zstd_compress_superblock.c at line 7, lib/compress/zstd_compress_superblock.h at line 7, lib/compress/zstd_cwksp.h at line 7, lib/compress/zstd_double_fast.c at line 7, lib/compress/zstd_double_fast.h at line 7, lib/compress/zstd_fast.c at line 7, lib/compress/zstd_fast.h at line 7, lib/compress/zstd_lazy.c at line 7, lib/compress/zstd_lazy.h at line 7, lib/compress/zstd_ldm.c at line 7, lib/compress/zstd_ldm.h at line 7, lib/compress/zstd_ldm_geartab.h at line 7, lib/compress/zstd_opt.c at line 7, lib/compress/zstd_opt.h at line 7, lib/compress/zstdmt_compress.c at line 7, lib/compress/zstdmt_compress.h at line 7, lib/decompress/huf_decompress.c at line 11, lib/decompress/huf_decompress_amd64.S at line 7, lib/decompress/zstd_ddict.c at line 7, lib/decompress/zstd_ddict.h at line 7, lib/decompress/zstd_decompress.c at line 7, lib/decompress/zstd_decompress_block.c at line 7, lib/decompress/zstd_decompress_block.h at line 7, lib/decompress/zstd_decompress_internal.h at line 7, lib/dictBuilder/cover.c at line 7, lib/dictBuilder/cover.h at line 7, lib/dictBuilder/fastcover.c at line 7, lib/dictBuilder/zdict.c at line 7, lib/legacy/zstd_legacy.h at line 7, lib/legacy/zstd_v01.c at line 7, lib/legacy/zstd_v01.h at line 7, lib/legacy/zstd_v02.c at line 7, lib/legacy/zstd_v02.h at line 7, lib/legacy/zstd_v03.c at line 7, lib/legacy/zstd_v03.h at line 7, lib/legacy/zstd_v04.c at line 7, lib/legacy/zstd_v04.h at line 7, lib/legacy/zstd_v05.c at line 7, lib/legacy/zstd_v05.h at line 7, lib/legacy/zstd_v06.c at line 7, lib/legacy/zstd_v06.h at line 7, lib/legacy/zstd_v07.c at line 7, lib/legacy/zstd_v07.h at line 7, lib/zstd_errors.h at line 7, programs/benchfn.c at line 7, programs/benchfn.h at line 7, programs/benchzstd.c at line 7, programs/benchzstd.h at line 7, programs/datagen.c at line 7, programs/datagen.h at line 7, programs/dibio.c at line 7, programs/dibio.h at line 7, programs/fileio.c at line 7, programs/fileio.h at line 7, programs/fileio_asyncio.c at line 7, programs/fileio_asyncio.h at line 7, programs/fileio_common.h at line 7, programs/fileio_types.h at line 7, programs/lorem.c at line 7, programs/lorem.h at line 7, programs/platform.h at line 7, programs/timefn.c at line 7, programs/timefn.h at line 7, programs/util.c at line 7, programs/util.h at line 7, programs/zstdcli.c at line 7, programs/zstdcli_trace.c at line 7, programs/zstdcli_trace.h at line 7
+FILE_INCLUDE LICENSE found in files: lib/common/allocations.h at line 6, lib/common/bits.h at line 6, lib/common/bitstream.h at line 10, lib/common/compiler.h at line 6, lib/common/cpu.h at line 6, lib/common/debug.c at line 10, lib/common/debug.h at line 10, lib/common/entropy_common.c at line 10, lib/common/error_private.c at line 6, lib/common/error_private.h at line 6, lib/common/fse.h at line 10, lib/common/fse_decompress.c at line 10, lib/common/huf.h at line 10, lib/common/mem.h at line 6, lib/common/pool.c at line 6, lib/common/pool.h at line 6, lib/common/portability_macros.h at line 6, lib/common/threading.c at line 9, lib/common/threading.h at line 9, lib/common/zstd_common.c at line 6, lib/common/zstd_deps.h at line 6, lib/common/zstd_internal.h at line 6, lib/common/zstd_trace.h at line 6, lib/compress/clevels.h at line 6, lib/compress/fse_compress.c at line 10, lib/compress/hist.c at line 11, lib/compress/hist.h at line 11, lib/compress/huf_compress.c at line 10, lib/compress/zstd_compress.c at line 6, lib/compress/zstd_compress_internal.h at line 6, lib/compress/zstd_compress_literals.c at line 6, lib/compress/zstd_compress_literals.h at line 6, lib/compress/zstd_compress_sequences.c at line 6, lib/compress/zstd_compress_sequences.h at line 6, lib/compress/zstd_compress_superblock.c at line 6, lib/compress/zstd_compress_superblock.h at line 6, lib/compress/zstd_cwksp.h at line 6, lib/compress/zstd_double_fast.c at line 6, lib/compress/zstd_double_fast.h at line 6, lib/compress/zstd_fast.c at line 6, lib/compress/zstd_fast.h at line 6, lib/compress/zstd_lazy.c at line 6, lib/compress/zstd_lazy.h at line 6, lib/compress/zstd_ldm.c at line 6, lib/compress/zstd_ldm.h at line 6, lib/compress/zstd_ldm_geartab.h at line 6, lib/compress/zstd_opt.c at line 6, lib/compress/zstd_opt.h at line 6, lib/compress/zstdmt_compress.c at line 6, lib/compress/zstdmt_compress.h at line 6, lib/decompress/huf_decompress.c at line 10, lib/decompress/huf_decompress_amd64.S at line 6, lib/decompress/zstd_ddict.c at line 6, lib/decompress/zstd_ddict.h at line 6, lib/decompress/zstd_decompress.c at line 6, lib/decompress/zstd_decompress_block.c at line 6, lib/decompress/zstd_decompress_block.h at line 6, lib/decompress/zstd_decompress_internal.h at line 6, lib/dictBuilder/cover.c at line 6, lib/dictBuilder/cover.h at line 6, lib/dictBuilder/fastcover.c at line 6, lib/dictBuilder/zdict.c at line 6, lib/legacy/zstd_legacy.h at line 6, lib/legacy/zstd_v01.c at line 6, lib/legacy/zstd_v01.h at line 6, lib/legacy/zstd_v02.c at line 6, lib/legacy/zstd_v02.h at line 6, lib/legacy/zstd_v03.c at line 6, lib/legacy/zstd_v03.h at line 6, lib/legacy/zstd_v04.c at line 6, lib/legacy/zstd_v04.h at line 6, lib/legacy/zstd_v05.c at line 6, lib/legacy/zstd_v05.h at line 6, lib/legacy/zstd_v06.c at line 6, lib/legacy/zstd_v06.h at line 6, lib/legacy/zstd_v07.c at line 6, lib/legacy/zstd_v07.h at line 6, lib/zstd_errors.h at line 6, programs/benchfn.c at line 6, programs/benchfn.h at line 6, programs/benchzstd.c at line 6, programs/benchzstd.h at line 6, programs/datagen.c at line 6, programs/datagen.h at line 6, programs/dibio.c at line 6, programs/dibio.h at line 6, programs/fileio.c at line 6, programs/fileio.h at line 6, programs/fileio_asyncio.c at line 6, programs/fileio_asyncio.h at line 6, programs/fileio_common.h at line 6, programs/fileio_types.h at line 6, programs/lorem.c at line 6, programs/lorem.h at line 6, programs/platform.h at line 6, programs/timefn.c at line 6, programs/timefn.h at line 6, programs/util.c at line 6, programs/util.h at line 6, programs/zstdcli.c at line 6, programs/zstdcli_trace.c at line 6, programs/zstdcli_trace.h at line 6
+    # We consider that dual-license should be interpreted as OR. The source code explicitly says
+    # You may select, at your option, one of the above-listed licenses.
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        lib/common/allocations.h [5:8]
+        lib/common/bits.h [5:8]
+        lib/common/bitstream.h [9:12]
+        lib/common/compiler.h [5:8]
+        lib/common/cpu.h [5:8]
+        lib/common/debug.c [9:12]
+        lib/common/debug.h [9:12]
+        lib/common/entropy_common.c [9:12]
+        lib/common/error_private.c [5:8]
+        lib/common/error_private.h [5:8]
+        lib/common/fse.h [9:12]
+        lib/common/fse_decompress.c [9:12]
+        lib/common/huf.h [9:12]
+        lib/common/mem.h [5:8]
+        lib/common/pool.c [5:8]
+        lib/common/pool.h [5:8]
+        lib/common/portability_macros.h [5:8]
+        lib/common/threading.c [8:11]
+        lib/common/threading.h [8:11]
+        lib/common/zstd_common.c [5:8]
+        lib/common/zstd_deps.h [5:8]
+        lib/common/zstd_internal.h [5:8]
+        lib/common/zstd_trace.h [5:8]
+        lib/compress/clevels.h [5:8]
+        lib/compress/fse_compress.c [9:12]
+        lib/compress/hist.c [10:13]
+        lib/compress/hist.h [10:13]
+        lib/compress/huf_compress.c [9:12]
+        lib/compress/zstd_compress.c [5:8]
+        lib/compress/zstd_compress_internal.h [5:8]
+        lib/compress/zstd_compress_literals.c [5:8]
+        lib/compress/zstd_compress_literals.h [5:8]
+        lib/compress/zstd_compress_sequences.c [5:8]
+        lib/compress/zstd_compress_sequences.h [5:8]
+        lib/compress/zstd_compress_superblock.c [5:8]
+        lib/compress/zstd_compress_superblock.h [5:8]
+        lib/compress/zstd_cwksp.h [5:8]
+        lib/compress/zstd_double_fast.c [5:8]
+        lib/compress/zstd_double_fast.h [5:8]
+        lib/compress/zstd_fast.c [5:8]
+        lib/compress/zstd_fast.h [5:8]
+        lib/compress/zstd_lazy.c [5:8]
+        lib/compress/zstd_lazy.h [5:8]
+        lib/compress/zstd_ldm.c [5:8]
+        lib/compress/zstd_ldm.h [5:8]
+        lib/compress/zstd_ldm_geartab.h [5:8]
+        lib/compress/zstd_opt.c [5:8]
+        lib/compress/zstd_opt.h [5:8]
+        lib/compress/zstdmt_compress.c [5:8]
+        lib/compress/zstdmt_compress.h [5:8]
+        lib/decompress/huf_decompress.c [9:12]
+        lib/decompress/huf_decompress_amd64.S [5:8]
+        lib/decompress/zstd_ddict.c [5:8]
+        lib/decompress/zstd_ddict.h [5:8]
+        lib/decompress/zstd_decompress.c [5:8]
+        lib/decompress/zstd_decompress_block.c [5:8]
+        lib/decompress/zstd_decompress_block.h [5:8]
+        lib/decompress/zstd_decompress_internal.h [5:8]
+        lib/dictBuilder/cover.c [5:8]
+        lib/dictBuilder/cover.h [5:8]
+        lib/dictBuilder/fastcover.c [5:8]
+        lib/dictBuilder/zdict.c [5:8]
+        lib/legacy/zstd_legacy.h [5:8]
+        lib/legacy/zstd_v01.c [5:8]
+        lib/legacy/zstd_v01.h [5:8]
+        lib/legacy/zstd_v02.c [5:8]
+        lib/legacy/zstd_v02.h [5:8]
+        lib/legacy/zstd_v03.c [5:8]
+        lib/legacy/zstd_v03.h [5:8]
+        lib/legacy/zstd_v04.c [5:8]
+        lib/legacy/zstd_v04.h [5:8]
+        lib/legacy/zstd_v05.c [5:8]
+        lib/legacy/zstd_v05.h [5:8]
+        lib/legacy/zstd_v06.c [5:8]
+        lib/legacy/zstd_v06.h [5:8]
+        lib/legacy/zstd_v07.c [5:8]
+        lib/legacy/zstd_v07.h [5:8]
+        lib/zstd_errors.h [5:8]
+        programs/benchfn.c [5:8]
+        programs/benchfn.h [5:8]
+        programs/benchzstd.c [5:8]
+        programs/benchzstd.h [5:8]
+        programs/datagen.c [5:8]
+        programs/datagen.h [5:8]
+        programs/dibio.c [5:8]
+        programs/dibio.h [5:8]
+        programs/fileio.c [5:8]
+        programs/fileio.h [5:8]
+        programs/fileio_asyncio.c [5:8]
+        programs/fileio_asyncio.h [5:8]
+        programs/fileio_common.h [5:8]
+        programs/fileio_types.h [5:8]
+        programs/lorem.c [5:8]
+        programs/lorem.h [5:8]
+        programs/platform.h [5:8]
+        programs/timefn.c [5:8]
+        programs/timefn.h [5:8]
+        programs/util.c [5:8]
+        programs/util.h [5:8]
+        programs/zstdcli.c [5:8]
+        programs/zstdcli_trace.c [5:8]
+        programs/zstdcli_trace.h [5:8]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        lib/common/allocations.h [5:8]
+        lib/common/bits.h [5:8]
+        lib/common/bitstream.h [9:12]
+        lib/common/compiler.h [5:8]
+        lib/common/cpu.h [5:8]
+        lib/common/debug.c [9:12]
+        lib/common/debug.h [9:12]
+        lib/common/entropy_common.c [9:12]
+        lib/common/error_private.c [5:8]
+        lib/common/error_private.h [5:8]
+        lib/common/fse.h [9:12]
+        lib/common/fse_decompress.c [9:12]
+        lib/common/huf.h [9:12]
+        lib/common/mem.h [5:8]
+        lib/common/pool.c [5:8]
+        lib/common/pool.h [5:8]
+        lib/common/portability_macros.h [5:8]
+        lib/common/threading.c [8:11]
+        lib/common/threading.h [8:11]
+        lib/common/zstd_common.c [5:8]
+        lib/common/zstd_deps.h [5:8]
+        lib/common/zstd_internal.h [5:8]
+        lib/common/zstd_trace.h [5:8]
+        lib/compress/clevels.h [5:8]
+        lib/compress/fse_compress.c [9:12]
+        lib/compress/hist.c [10:13]
+        lib/compress/hist.h [10:13]
+        lib/compress/huf_compress.c [9:12]
+        lib/compress/zstd_compress.c [5:8]
+        lib/compress/zstd_compress_internal.h [5:8]
+        lib/compress/zstd_compress_literals.c [5:8]
+        lib/compress/zstd_compress_literals.h [5:8]
+        lib/compress/zstd_compress_sequences.c [5:8]
+        lib/compress/zstd_compress_sequences.h [5:8]
+        lib/compress/zstd_compress_superblock.c [5:8]
+        lib/compress/zstd_compress_superblock.h [5:8]
+        lib/compress/zstd_cwksp.h [5:8]
+        lib/compress/zstd_double_fast.c [5:8]
+        lib/compress/zstd_double_fast.h [5:8]
+        lib/compress/zstd_fast.c [5:8]
+        lib/compress/zstd_fast.h [5:8]
+        lib/compress/zstd_lazy.c [5:8]
+        lib/compress/zstd_lazy.h [5:8]
+        lib/compress/zstd_ldm.c [5:8]
+        lib/compress/zstd_ldm.h [5:8]
+        lib/compress/zstd_ldm_geartab.h [5:8]
+        lib/compress/zstd_opt.c [5:8]
+        lib/compress/zstd_opt.h [5:8]
+        lib/compress/zstdmt_compress.c [5:8]
+        lib/compress/zstdmt_compress.h [5:8]
+        lib/decompress/huf_decompress.c [9:12]
+        lib/decompress/huf_decompress_amd64.S [5:8]
+        lib/decompress/zstd_ddict.c [5:8]
+        lib/decompress/zstd_ddict.h [5:8]
+        lib/decompress/zstd_decompress.c [5:8]
+        lib/decompress/zstd_decompress_block.c [5:8]
+        lib/decompress/zstd_decompress_block.h [5:8]
+        lib/decompress/zstd_decompress_internal.h [5:8]
+        lib/dictBuilder/cover.c [5:8]
+        lib/dictBuilder/cover.h [5:8]
+        lib/dictBuilder/fastcover.c [5:8]
+        lib/dictBuilder/zdict.c [5:8]
+        lib/legacy/zstd_legacy.h [5:8]
+        lib/legacy/zstd_v01.c [5:8]
+        lib/legacy/zstd_v01.h [5:8]
+        lib/legacy/zstd_v02.c [5:8]
+        lib/legacy/zstd_v02.h [5:8]
+        lib/legacy/zstd_v03.c [5:8]
+        lib/legacy/zstd_v03.h [5:8]
+        lib/legacy/zstd_v04.c [5:8]
+        lib/legacy/zstd_v04.h [5:8]
+        lib/legacy/zstd_v05.c [5:8]
+        lib/legacy/zstd_v05.h [5:8]
+        lib/legacy/zstd_v06.c [5:8]
+        lib/legacy/zstd_v06.h [5:8]
+        lib/legacy/zstd_v07.c [5:8]
+        lib/legacy/zstd_v07.h [5:8]
+        lib/zstd_errors.h [5:8]
+        programs/benchfn.c [5:8]
+        programs/benchfn.h [5:8]
+        programs/benchzstd.c [5:8]
+        programs/benchzstd.h [5:8]
+        programs/datagen.c [5:8]
+        programs/datagen.h [5:8]
+        programs/dibio.c [5:8]
+        programs/dibio.h [5:8]
+        programs/fileio.c [5:8]
+        programs/fileio.h [5:8]
+        programs/fileio_asyncio.c [5:8]
+        programs/fileio_asyncio.h [5:8]
+        programs/fileio_common.h [5:8]
+        programs/fileio_types.h [5:8]
+        programs/lorem.c [5:8]
+        programs/lorem.h [5:8]
+        programs/platform.h [5:8]
+        programs/timefn.c [5:8]
+        programs/timefn.h [5:8]
+        programs/util.c [5:8]
+        programs/util.h [5:8]
+        programs/zstdcli.c [5:8]
+        programs/zstdcli_trace.c [5:8]
+        programs/zstdcli_trace.h [5:8]

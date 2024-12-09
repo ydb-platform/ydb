@@ -1,0 +1,14 @@
+From 01e632604535ee9d0a7306b6950d95b355db3034 Mon Sep 17 00:00:00 2001
+From: Антон Самохвалов <pg@yandex-team.ru>
+Date: Wed, 15 Oct 2008 00:45:17 +0000
+Subject: [PATCH] shut up valgrind
+
+git-svn-id: svn+ssh://arcadia.yandex.ru/arc/trunk/arcadia/contrib/libs/zlib@117628 41d65440-b5be-11dd-afe3-b2e846d9b4f8
+--- a/deflate.c
++++ b/deflate.c
+@@ -294,3 +294,5 @@
+     s->window = (Bytef *) ZALLOC(strm, s->w_size, 2*sizeof(Byte));
++    memset(s->window, 0, s->w_size * 2*sizeof(Byte));
+     s->prev   = (Posf *)  ZALLOC(strm, s->w_size, sizeof(Pos));
++    memset(s->prev, 0, s->w_size * sizeof(Pos));
+     s->head   = (Posf *)  ZALLOC(strm, s->hash_size, sizeof(Pos));

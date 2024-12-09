@@ -42,8 +42,7 @@ public:
     )
     
     void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        auto response = MakeHolder<NKikimr::NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        response->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        auto response = MakeHolder<NKikimr::NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(ResultSizeLimit_);
 
         auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
@@ -131,7 +130,7 @@ public:
         RequestsLatency_ += TInstant::Now() - RunningRequests_[requestId].StartTime;
         RunningRequests_.erase(requestId);
 
-        const auto& response = ev->Get()->Result.Response->Get()->Record.GetRef();
+        const auto& response = ev->Get()->Result.Response->Get()->Record;
         const auto status = response.GetYdbStatus();
 
         if (status == Ydb::StatusIds::SUCCESS) {

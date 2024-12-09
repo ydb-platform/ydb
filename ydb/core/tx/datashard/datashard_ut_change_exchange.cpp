@@ -1993,6 +1993,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"pgfloat8_value", "pgfloat8", false, false},
                 {"pgbytea_value", "pgbytea", false, false},
                 {"pgtext_value", "pgtext", false, false},
+                {"pgtimestamp_value", "pgtimestamp", false, false},
+                {"pgdate_value", "pgdate", false, false},
             });
         TopicRunner::Read(table, Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {
             R"(UPSERT INTO `/Root/Table` (key, int32_value) VALUES (1, -100500);)",
@@ -2026,6 +2028,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"(UPSERT INTO `/Root/Table` (key, pgfloat8_value) VALUES (28, 2.718pf8);)",
             R"(UPSERT INTO `/Root/Table` (key, pgbytea_value) VALUES (29, 'lorem "ipsum"'pb);)",
             R"(UPSERT INTO `/Root/Table` (key, pgtext_value) VALUES (30, 'lorem "ipsum"'p);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgtimestamp_value) VALUES (31, pgtimestamp('2020-01-01T23:30:10Z'));)",
+            R"(UPSERT INTO `/Root/Table` (key, pgdate_value) VALUES (32, pgdate('2020-03-01T20:30:10Z'));)",
         }, {
             R"({"key":[1],"update":{"int32_value":-100500}})",
             R"({"key":[2],"update":{"uint32_value":100500}})",
@@ -2058,6 +2062,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"key":[28],"update":{"pgfloat8_value":"2.718"}})",
             R"({"key":[29],"update":{"pgbytea_value":"\\x6c6f72656d2022697073756d22"}})",
             R"({"key":[30],"update":{"pgtext_value":"lorem \"ipsum\""}})",
+            R"({"key":[31],"update":{"pgtimestamp_value":"2020-01-01 23:30:10"}})",
+            R"({"key":[32],"update":{"pgdate_value":"2020-03-01"}})",
         });
     }
 
@@ -3860,6 +3866,44 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     Y_UNIT_TEST(MustNotLoseSchemaSnapshotWithVolatileTx) {
         MustNotLoseSchemaSnapshot(true);
+    }
+
+    Y_UNIT_TEST(ShouldBreakLocksOnConcurrentSchemeTx) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+
+        TString sessionId;
+        TString txId;
+        KqpSimpleBegin(runtime, sessionId, txId, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 11);");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, "SELECT key, value FROM `/Root/Table`;"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }");
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1;"),
+            "ERROR: ABORTED");
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+        });
     }
 
     Y_UNIT_TEST(ResolvedTimestampsContinueAfterMerge) {

@@ -3,18 +3,18 @@
 #include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
 
 #include <ydb/library/actors/prof/tag.h>
-#include <library/cpp/cache/cache.h>
+#include <ydb/core/mon/mon.h>
 
+#include <library/cpp/cache/cache.h>
 #if defined(USE_DWARF_BACKTRACE)
 #   include <library/cpp/dwarf_backtrace/backtrace.h>
 #endif
-
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
-#include <ydb/core/mon/mon.h>
-
 #include <util/stream/format.h>
+
+#include <thread>
 
 using namespace NActors;
 
@@ -478,6 +478,93 @@ public:
 };
 
 
+void HandleTcMallocSoftLimit();
+
+class TTcMallocLimitHandler : public TSingletonTraits<TTcMallocLimitHandler> {
+public:
+    Y_DECLARE_SINGLETON_FRIEND();
+
+    ~TTcMallocLimitHandler() {
+        if (Thread_.joinable()) {
+            {
+                std::unique_lock<std::mutex> lock(Mutex_);
+                JustQuit_ = true;
+            }
+            Fire();
+            Thread_.join();
+        }
+    }
+
+    void SetOutputStream(IOutputStream& out) {
+        Out_ = &out;
+    }
+
+    void Fire() {
+        std::unique_lock<std::mutex> lock(Mutex_);
+        Fired_ = true;
+        CV_.notify_all();
+    }
+
+private:
+    TTcMallocLimitHandler() {
+        tcmalloc::MallocExtension::EnableForkSupport();
+        tcmalloc::MallocExtension::SetSoftMemoryLimitHandler(&HandleTcMallocSoftLimit);
+        Thread_ = std::thread(&TTcMallocLimitHandler::Handle, this);
+    }
+
+private:
+    std::mutex Mutex_;
+    bool Fired_ = false;         // protected by Mutex_
+    bool JustQuit_ = false;      // protected by Mutex_
+    std::condition_variable CV_; // protected by Mutex_
+
+    IOutputStream* Out_ = &Cerr;
+    std::thread Thread_;
+
+    void Handle() {
+        std::unique_lock<std::mutex> lock(Mutex_);
+        CV_.wait(lock, [&] {
+            return Fired_;
+        });
+
+        if (JustQuit_) {
+            return;
+        }
+
+        *Out_ << tcmalloc::MallocExtension::GetStats() << Endl;
+
+#ifndef _win_
+        if (auto childPid = fork(); childPid == 0) {
+            kill(getppid(), SIGSTOP);
+
+            *Out_ << "Child: " << getpid() << ", parent process stopped: " << getppid() << Endl;
+
+            try {
+                auto profile = tcmalloc::MallocExtension::SnapshotCurrent(tcmalloc::ProfileType::kHeap);
+                TAllocationAnalyzer analyzer(std::move(profile));
+                TAllocationStats allocationStats;
+                analyzer.Prepare(&allocationStats);
+                analyzer.Dump(*Out_, 256, 1024, true, true);
+            } catch (...) {
+                kill(getppid(), SIGCONT);
+                throw;
+            }
+
+            kill(getppid(), SIGCONT);
+        } else if (childPid < 0) {
+            *Out_ << "Failed to dump current heap: fork failed" << Endl;
+        }
+
+        // TODO: probably should wait for child, but we're going to OOM anyway.
+#endif
+    }
+};
+
+void HandleTcMallocSoftLimit() {
+    Singleton<TTcMallocLimitHandler>()->Fire();
+}
+
+
 class TTcMallocMonitor : public IAllocMonitor {
     TDynamicCountersPtr CounterGroup;
 
@@ -694,6 +781,11 @@ public:
 
         CountHistogram = CounterGroup->GetHistogram("tcmalloc.sampled_count",
             NMonitoring::ExponentialHistogram(TAllocationStats::MaxSizeIndex, 2, 1), false);
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        // Setup tcmalloc soft limit handling
+        Singleton<TTcMallocLimitHandler>();
+#endif
     }
 
     void RegisterPages(TMon* mon, TActorSystem* actorSystem, TActorId actorId) override {
@@ -807,6 +899,7 @@ public:
     }
 };
 
+// Public functions
 
 std::unique_ptr<IAllocStats> CreateTcMallocStats(TDynamicCountersPtr group) {
     return std::make_unique<TTcMallocStats>(std::move(group));
@@ -824,4 +917,4 @@ std::unique_ptr<IProfilerLogic> CreateTcMallocProfiler() {
     return std::make_unique<TTcMallocProfiler>();
 }
 
-}
+} // namespace NKikimr

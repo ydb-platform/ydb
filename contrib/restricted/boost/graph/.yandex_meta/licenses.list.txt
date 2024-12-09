@@ -1,0 +1,477 @@
+====================BSL-1.0====================
+ * Distributed under the Boost Software License, Version 1.0. (See
+ * accompanying file LICENSE_1_0.txt or copy at
+ * http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//    Distributed under the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE_1_0.txt or copy at
+//    http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE_1_0.txt or copy at
+//          http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+//   (See accompanying file LICENSE_1_0.txt or the copy at
+//         http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or copy at
+// http://boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See accompany-
+// ing file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Use, modification and distribution are subject to the
+// Boost Software License, Version 1.0 (See accompanying file
+// LICENSE_1_0.txt or http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Use, modification and distribution is subject to the Boost Software
+// License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy
+// at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Use, modification and distribution is subject to the Boost Software
+// License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 1994
+ * Hewlett-Packard Company
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 1996
+ * Silicon Graphics Computer Systems, Inc.
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2010 Matthias Walter (xammy@xammy.homelinux.net)
+
+
+====================COPYRIGHT====================
+//            Copyright Daniel Trebbien 2010.
+// Distributed under the Boost Software License, Version 1.0.
+//   (See accompanying file LICENSE_1_0.txt or the copy at
+
+
+====================COPYRIGHT====================
+//          Copyright (C) 2012, Michele Caini.
+// Distributed under the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright David Abrahams 2000.
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Jeremiah Willcock 2004
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Jeremy Siek 1999.
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Jeremy Siek 2004
+//  (C) Copyright Thomas Claveirole 2010
+//  (C) Copyright Ignacy Gawedzki 2010
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Jeremy Siek 2006
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2006, Stephan Diederich
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2007 Andrew Sutton
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2007-2009 Andrew Sutton
+
+
+====================COPYRIGHT====================
+// (C) Copyright 2009 Eric Bose-Wolf
+
+
+====================COPYRIGHT====================
+// (C) Copyright Andrew Sutton 2007
+
+
+====================COPYRIGHT====================
+// (C) Copyright Francois Faure, iMAGIS-GRAVIR / UJF, 2001.
+
+
+====================COPYRIGHT====================
+// (C) Copyright Jeremy Siek 2001.
+// Distributed under the Boost Software License, Version 1.0. (See accompany-
+// ing file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (c) Copyright Juergen Hunold 2008
+// Use, modification and distribution is subject to the Boost Software
+// License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2001 Jeremy Siek, Douglas Gregor, Brian Osman
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2001 Vladimir Prus <ghost@cs.msu.su>
+// Copyright (C) 2001 Jeremy Siek <jsiek@cs.indiana.edu>
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2005-2006 The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2005-2009 Jongsoo Park <jongsoo.park -at- gmail.com>
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2005-2010 The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2006  Tiago de Paula Peixoto <tiago@forked.de>
+// Copyright (C) 2004  The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2006  Tiago de Paula Peixoto <tiago@forked.de>
+// Copyright (C) 2004,2009  The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2006 The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2006-2009 Dmitry Bufistov and Andrey Parfenov
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2007 Douglas Gregor
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2009 Andrew Sutton
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2012 Flavio De Lorenzi (fdlorenzi@gmail.com)
+// Copyright (C) 2013 Jakob Lykke Andersen, University of Southern Denmark
+// (jlandersen@imada.sdu.dk)
+
+
+====================COPYRIGHT====================
+// Copyright (c) 2004 Kristopher Beevers
+
+
+====================COPYRIGHT====================
+// Copyright (c) 2005 Aaron Windsor
+
+
+====================COPYRIGHT====================
+// Copyright (c) 2018 Yi Ji
+
+
+====================COPYRIGHT====================
+// Copyright (c) Aaron Windsor 2007
+
+
+====================COPYRIGHT====================
+// Copyright (c) Jeremy Siek 2001
+// Copyright (c) Douglas Gregor 2004
+
+
+====================COPYRIGHT====================
+// Copyright (c) Jeremy Siek 2001, Marc Wintermantel 2002
+
+
+====================COPYRIGHT====================
+// Copyright 1997, 1998, 1999, 2000 University of Notre Dame.
+// Copyright (C) Vladimir Prus 2003
+// Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek
+
+
+====================COPYRIGHT====================
+// Copyright 1997, 1998, 1999, 2000 University of Notre Dame.
+// Copyright 2003 Bruce Barr
+// Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek
+
+
+====================COPYRIGHT====================
+// Copyright 1997, 1998, 1999, 2000 University of Notre Dame.
+// Copyright 2004 The Trustees of Indiana University.
+// Copyright 2007 University of Karlsruhe
+// Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek, Douglas Gregor,
+//          Jens Mueller
+
+
+====================COPYRIGHT====================
+// Copyright 1997, 1998, 1999, 2000 University of Notre Dame.
+// Copyright 2004, 2005 Trustees of Indiana University
+// Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek,
+//          Doug Gregor, D. Kevin McGrath
+
+
+====================COPYRIGHT====================
+// Copyright 1997, 1998, 1999, 2000 University of Notre Dame.
+// Copyright 2006 The Trustees of Indiana University.
+// Copyright (C) 2001 Vladimir Prus <ghost@cs.msu.su>
+// Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek, Douglas Gregor
+
+
+====================COPYRIGHT====================
+// Copyright 1997, 1998, 1999, 2000 University of Notre Dame.
+// Copyright 2009 Trustees of Indiana University.
+// Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek, Michael Hansen
+
+
+====================COPYRIGHT====================
+// Copyright 1997, 1998, 1999, 2000 University of Notre Dame.
+// Copyright 2010 Thomas Claveirole
+// Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek, Thomas Claveirole
+
+
+====================COPYRIGHT====================
+// Copyright 1997-2001 University of Notre Dame.
+// Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek
+
+
+====================COPYRIGHT====================
+// Copyright 2000 University of Notre Dame.
+// Authors: Jeremy G. Siek, Andrew Lumsdaine, Lie-Quan Lee
+
+
+====================COPYRIGHT====================
+// Copyright 2001 Indiana University
+// Author: Jeremy G. Siek
+
+
+====================COPYRIGHT====================
+// Copyright 2001 Universite Joseph Fourier, Grenoble.
+// Author: Francois Faure
+
+
+====================COPYRIGHT====================
+// Copyright 2001 University of Notre Dame.
+// Copyright 2003 Jeremy Siek
+// Authors: Lie-Quan Lee, Jeremy Siek, and Douglas Gregor
+
+
+====================COPYRIGHT====================
+// Copyright 2001 University of Notre Dame.
+// Copyright 2006 Trustees of Indiana University
+// Authors: Jeremy G. Siek and Douglas Gregor <dgregor@cs.indiana.edu>
+
+
+====================COPYRIGHT====================
+// Copyright 2002 Indiana University.
+// Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek
+
+
+====================COPYRIGHT====================
+// Copyright 2002 Marc Wintermantel (wintermantel@even-ag.ch)
+// ETH Zurich, Center of Structure Technologies
+// (https://web.archive.org/web/20050307090307/http://www.structures.ethz.ch/)
+
+
+====================COPYRIGHT====================
+// Copyright 2002 Rensselaer Polytechnic Institute
+
+
+====================COPYRIGHT====================
+// Copyright 2004 The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright 2004, 2005 The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright 2004-2006 The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright 2004-5 The Trustees of Indiana University.
+// Copyright 2002 Brad King and Douglas Gregor
+
+
+====================COPYRIGHT====================
+// Copyright 2004-9 Trustees of Indiana University
+
+
+====================COPYRIGHT====================
+// Copyright 2005 Jeremy G. Siek
+// Authors: Jeremy G. Siek
+
+
+====================COPYRIGHT====================
+// Copyright 2005 The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright 2005 Trustees of Indiana University
+// Authors: Andrew Lumsdaine, Douglas Gregor
+
+
+====================COPYRIGHT====================
+// Copyright 2005-2009 The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright 2007 Aaron Windsor
+
+
+====================COPYRIGHT====================
+// Copyright 2007 Stanford University
+// Authors: David Gleich
+
+
+====================COPYRIGHT====================
+// Copyright 2008
+// Author: Matyas W Egyhazy
+
+
+====================COPYRIGHT====================
+// Copyright 2009 The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright 2009, Andrew Sutton
+
+
+====================COPYRIGHT====================
+// Copyright 2010 The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright 2012 Fernando Vilas
+//           2010 Daniel Trebbien
+
+
+====================COPYRIGHT====================
+// Copyright 2012 The Trustees of Indiana University.
+
+
+====================COPYRIGHT====================
+// Copyright 2013 Maciej Piechotka
+// Authors: Maciej Piechotka
+
+
+====================COPYRIGHT====================
+// Copyright 2013 University of Warsaw.
+// Authors: Piotr Wygocki
+
+
+====================COPYRIGHT====================
+// Copyright 2018 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright Louis Dionne 2013
+
+
+====================COPYRIGHT====================
+// Copyright Michael Drexl 2005, 2006.
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================MIT====================
+//    Permission is hereby granted, free of charge, to any person
+//    obtaining a copy of this software and associated documentation
+//    files (the "Software"), to deal in the Software without
+//    restriction, including without limitation the rights to use,
+//    copy, modify, merge, publish, distribute, sublicense, and/or
+//    sell copies of the Software, and to permit persons to whom the
+//    Software is furnished to do so, subject to the following
+//    conditions:
+//
+//    The above copyright notice and this permission notice shall be
+//    included in all copies or substantial portions of the Software.
+//
+//    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+//    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+//    OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+//    NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+//    HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+//    WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+//    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+//    OTHER DEALINGS IN THE SOFTWARE. OF SUCH DAMAGE.
+
+
+====================Mit-Old-Style====================
+ * Permission to use, copy, modify, distribute and sell this software
+ * and its documentation for any purpose is hereby granted without fee,
+ * provided that the above copyright notice appear in all copies and
+ * that both that copyright notice and this permission notice appear
+ * in supporting documentation.  Hewlett-Packard Company makes no
+ * representations about the suitability of this software for any
+ * purpose.  It is provided "as is" without express or implied warranty.
+
+
+====================Mit-Old-Style====================
+ * Permission to use, copy, modify, distribute and sell this software
+ * and its documentation for any purpose is hereby granted without fee,
+ * provided that the above copyright notice appear in all copies and
+ * that both that copyright notice and this permission notice appear
+ * in supporting documentation.  Silicon Graphics makes no
+ * representations about the suitability of this software for any
+ * purpose.  It is provided "as is" without express or implied warranty.

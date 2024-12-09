@@ -9,11 +9,11 @@
 #include <yt/yt/core/rpc/public.h>
 
 // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-#include <yt/yt/core/misc/atomic_object.h>
-
 #include <yt/yt/core/service_discovery/public.h>
 
 #include <yt/yt/core/logging/log.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -49,6 +49,7 @@ public:
     void ClearMetadataCaches() override;
 
     void Terminate() override;
+    bool IsTerminated() const override;
 
     NYson::TYsonString GetConfigYson() const override;
 
@@ -58,6 +59,8 @@ private:
     friend class TTimestampProvider;
 
     const TConnectionConfigPtr Config_;
+
+    std::atomic<bool> Terminated_ = false;
 
     const TGuid ConnectionId_;
     const TString LoggingTag_;
@@ -73,7 +76,7 @@ private:
     NConcurrency::TPeriodicExecutorPtr UpdateProxyListExecutor_;
 
     // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-    TAtomicObject<TString> DiscoveryToken_;
+    NThreading::TAtomicObject<TString> DiscoveryToken_;
 
     NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
 

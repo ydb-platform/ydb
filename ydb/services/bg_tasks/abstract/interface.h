@@ -103,34 +103,19 @@ public:
 };
 
 template <class IInterface>
-class TCommonInterfaceContainer {
+class TControlInterfaceContainer {
 protected:
     std::shared_ptr<IInterface> Object;
-    using TFactory = typename IInterface::TFactory;
 public:
-    TCommonInterfaceContainer() = default;
-    TCommonInterfaceContainer(std::shared_ptr<IInterface> object)
+    TControlInterfaceContainer() = default;
+    TControlInterfaceContainer(std::shared_ptr<IInterface> object)
         : Object(object) {
     }
 
     template <class TDerived>
-    TCommonInterfaceContainer(std::shared_ptr<TDerived> object)
+    TControlInterfaceContainer(std::shared_ptr<TDerived> object)
         : Object(object) {
         static_assert(std::is_base_of<IInterface, TDerived>::value);
-    }
-
-    bool Initialize(const TString& className, const bool maybeExists = false) {
-        AFL_VERIFY(maybeExists || !Object)("problem", "initialize for not-empty-object");
-        Object.reset(TFactory::Construct(className));
-        if (!Object) {
-            ALS_ERROR(NKikimrServices::BG_TASKS) << "incorrect class name: " << className << " for " << typeid(IInterface).name();
-            return false;
-        }
-        return true;
-    }
-
-    TString GetClassName() const {
-        return Object ? Object->GetClassName() : "UNDEFINED";
     }
 
     bool HasObject() const {
@@ -163,6 +148,12 @@ public:
         return result;
     }
 
+    template <class T>
+    std::shared_ptr<T> GetObjectPtrOptionalAs() const {
+        auto result = std::dynamic_pointer_cast<T>(Object);
+        return result;
+    }
+
     const IInterface& GetObjectVerified() const {
         AFL_VERIFY(Object);
         return *Object;
@@ -184,6 +175,32 @@ public:
 
     operator bool() const {
         return !!Object;
+    }
+
+};
+
+template <class IInterface>
+class TCommonInterfaceContainer: public TControlInterfaceContainer<IInterface> {
+private:
+    using TBase = TControlInterfaceContainer<IInterface>;
+protected:
+    using TFactory = typename IInterface::TFactory;
+    using TBase::Object;
+public:
+    using TBase::TBase;
+
+    bool Initialize(const TString& className, const bool maybeExists = false) {
+        AFL_VERIFY(maybeExists || !Object)("problem", "initialize for not-empty-object");
+        Object.reset(TFactory::Construct(className));
+        if (!Object) {
+            ALS_ERROR(NKikimrServices::BG_TASKS) << "incorrect class name: " << className << " for " << typeid(IInterface).name();
+            return false;
+        }
+        return true;
+    }
+
+    TString GetClassName() const {
+        return Object ? Object->GetClassName() : "UNDEFINED";
     }
 
 };

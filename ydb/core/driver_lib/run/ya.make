@@ -145,16 +145,17 @@ PEERDIR(
     ydb/library/folder_service/proto
     ydb/library/pdisk_io
     ydb/library/security
-    ydb/library/yql/minikql/comp_nodes/llvm14
-    ydb/library/yql/providers/yt/codec/codegen
-    ydb/library/yql/providers/yt/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm14
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/s3/actors
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
     ydb/services/auth
     ydb/services/backup
+    ydb/services/bsconfig
     ydb/services/cms
     ydb/services/dynamic_config
     ydb/services/datastreams
@@ -175,6 +176,7 @@ PEERDIR(
     ydb/services/rate_limiter
     ydb/services/replication
     ydb/services/tablet
+    ydb/services/view
     ydb/services/ydb
 )
 

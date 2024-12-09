@@ -20,7 +20,7 @@ PEERDIR(
     ydb/library/db_pool
     ydb/library/security
     ydb/library/protobuf_printer
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_value
 )

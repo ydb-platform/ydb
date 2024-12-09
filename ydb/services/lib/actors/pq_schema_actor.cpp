@@ -7,7 +7,9 @@
 
 #include <ydb/public/lib/jwt/jwt.h>
 
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <util/string/vector.h>
 
@@ -597,9 +599,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (!config.HasPartitionStrategy()) {
             return std::nullopt;
         }
-        if (::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED == config.GetPartitionStrategy().GetPartitionStrategyType()) {
-            return std::nullopt;
-        }
         auto strategy = config.GetPartitionStrategy();
         if (strategy.GetMinPartitionCount() < 0) {
             error = TStringBuilder() << "Partitions count must be non-negative, provided " << strategy.GetMinPartitionCount();
@@ -1007,7 +1006,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
             }
             minParts = std::max<ui32>(1, settings.min_active_partitions());
-            if (appData->FeatureFlags.GetEnableTopicSplitMerge() && request.has_partitioning_settings()) {
+            if (appData->FeatureFlags.GetEnableTopicSplitMerge() &&
+                request.partitioning_settings().has_auto_partitioning_settings() &&
+                request.partitioning_settings().auto_partitioning_settings().strategy() != ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) {
+
                 auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
                 auto autoscaleSettings = settings.auto_partitioning_settings();
                 pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);

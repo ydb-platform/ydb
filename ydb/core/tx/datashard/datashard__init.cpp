@@ -26,6 +26,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->NextSeqno = 1;
         Self->NextChangeRecordOrder = 1;
         Self->LastChangeRecordGroup = 1;
+        Self->Pipeline.Reset();
         Self->TransQueue.Reset();
         Self->SnapshotManager.Reset();
         Self->SchemaSnapshotManager.Reset();
@@ -155,6 +156,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::PlanQueue);
         PRECHARGE_SYS_TABLE(Schema::DeadlineQueue);
         PRECHARGE_SYS_TABLE(Schema::SchemaOperations);
+        PRECHARGE_SYS_TABLE(Schema::ScanProgress);
         PRECHARGE_SYS_TABLE(Schema::SplitSrcSnapshots);
         PRECHARGE_SYS_TABLE(Schema::SplitDstReceivedSnapshots);
         PRECHARGE_SYS_TABLE(Schema::Snapshots);
@@ -172,6 +174,9 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::Locks);
         PRECHARGE_SYS_TABLE(Schema::LockRanges);
         PRECHARGE_SYS_TABLE(Schema::LockConflicts);
+        PRECHARGE_SYS_TABLE(Schema::LockVolatileDependencies);
+        PRECHARGE_SYS_TABLE(Schema::LockChangeRecords);
+        PRECHARGE_SYS_TABLE(Schema::ChangeRecordCommits);
         PRECHARGE_SYS_TABLE(Schema::TxVolatileDetails);
         PRECHARGE_SYS_TABLE(Schema::TxVolatileParticipants);
         PRECHARGE_SYS_TABLE(Schema::CdcStreamScans);
@@ -182,6 +187,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
 #undef PRECHARGE_SYS_TABLE
     }
+
+    txc.DB.NoMoreUnprechargedReadsForTx();
 
     // Reads from Sys table
     LOAD_SYS_UI64(db, Schema::Sys_State, Self->State);

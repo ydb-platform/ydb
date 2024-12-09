@@ -1,6 +1,6 @@
 import itertools
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Sequence, Final
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
@@ -119,7 +119,7 @@ class InnerJoinTestCase(TestCase):
 
 
 class Factory:
-    _id_column: Column = Column(
+    _id_column: Final = Column(
         name='id',
         ydb_type=Type.INT32,
         data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Serial()),

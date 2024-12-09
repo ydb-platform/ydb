@@ -28,6 +28,13 @@
 
 #if defined(USE_CURL_NTLM_CORE)
 
+#if defined(USE_OPENSSL)
+#  include <openssl/ssl.h>
+#elif defined(USE_WOLFSSL)
+#  error #include <wolfssl/options.h>
+#  error #include <wolfssl/openssl/ssl.h>
+#endif
+
 /* Helpers to generate function byte arguments in little endian order */
 #define SHORTPAIR(x) ((int)((x) & 0xff)), ((int)(((x) >> 8) & 0xff))
 #define LONGQUARTET(x) ((int)((x) & 0xff)), ((int)(((x) >> 8) & 0xff)), \

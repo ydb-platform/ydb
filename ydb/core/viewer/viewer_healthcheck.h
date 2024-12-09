@@ -196,8 +196,7 @@ public:
             return TBase::ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "No result"));
         } else {
             if (Format == HealthCheckResponseFormat::PROMETHEUS) {
-                HandlePrometheus();
-                return PassAway();
+                return HandlePrometheus();
             } else {
                 TStringStream json;
                 TProtoToJson::ProtoToJson(json, *Result, JsonSettings);

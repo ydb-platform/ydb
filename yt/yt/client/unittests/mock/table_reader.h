@@ -24,7 +24,7 @@ public:
 
     MOCK_METHOD(NTableClient::IUnversionedRowBatchPtr, Read, (const NTableClient::TRowBatchReadOptions& options), (override));
 
-    MOCK_METHOD(const std::vector<TString>&, GetOmittedInaccessibleColumns, (), (const, override));
+    MOCK_METHOD(const std::vector<std::string>&, GetOmittedInaccessibleColumns, (), (const, override));
 
     const NTableClient::TNameTablePtr& GetNameTable() const override;
 

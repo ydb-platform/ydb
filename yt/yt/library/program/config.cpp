@@ -8,57 +8,53 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void THeapSizeLimitConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("container_memory_ratio", &TThis::ContainerMemoryRatio)
-        .Optional();
-    registrar.Parameter("container_memory_margin", &TThis::ContainerMemoryMargin)
-        .Optional();
-    registrar.Parameter("hard", &TThis::Hard)
-        .Default(false);
-    registrar.Parameter("dump_memory_profile_on_violation", &TThis::DumpMemoryProfileOnViolation)
-        .Default(false);
-    registrar.Parameter("dump_memory_profile_timeout", &TThis::DumpMemoryProfileTimeout)
-        .Default(TDuration::Minutes(10));
-    registrar.Parameter("dump_memory_profile_path", &TThis::DumpMemoryProfilePath)
-        .Default();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TTCMallocConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("background_release_rate", &TThis::BackgroundReleaseRate)
-        .Default(32_MB);
-    registrar.Parameter("max_per_cpu_cache_size", &TThis::MaxPerCpuCacheSize)
-        .Default(3_MB);
-
-    registrar.Parameter("aggressive_release_threshold", &TThis::AggressiveReleaseThreshold)
-        .Default(20_GB);
-    registrar.Parameter("aggressive_release_threshold_ratio", &TThis::AggressiveReleaseThresholdRatio)
-        .Optional();
-
-    registrar.Parameter("aggressive_release_size", &TThis::AggressiveReleaseSize)
-        .Default(128_MB);
-    registrar.Parameter("aggressive_release_period", &TThis::AggressiveReleasePeriod)
-        .Default(TDuration::MilliSeconds(100));
-    registrar.Parameter("guarded_sampling_rate", &TThis::GuardedSamplingRate)
-        .Default(128_MB);
-
-    registrar.Parameter("heap_size_limit", &TThis::HeapSizeLimit)
-        .DefaultNew();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 void TStockpileConfig::Register(TRegistrar registrar)
 {
     registrar.BaseClassParameter("buffer_size", &TThis::BufferSize)
-        .Default(DefaultBufferSize);
+        .Default(DefaultBufferSize)
+        .GreaterThan(0);
     registrar.BaseClassParameter("thread_count", &TThis::ThreadCount)
         .Default(DefaultThreadCount);
+    registrar.BaseClassParameter("strategy", &TThis::Strategy)
+        .Default(DefaultStrategy);
     registrar.BaseClassParameter("period", &TThis::Period)
         .Default(DefaultPeriod);
+}
+
+TStockpileConfigPtr TStockpileConfig::ApplyDynamic(const TStockpileDynamicConfigPtr& dynamicConfig) const
+{
+    auto mergedConfig = CloneYsonStruct(MakeStrong(this));
+
+    if (dynamicConfig->BufferSize) {
+        mergedConfig->BufferSize = *dynamicConfig->BufferSize;
+    }
+    if (dynamicConfig->ThreadCount) {
+        mergedConfig->ThreadCount = *dynamicConfig->ThreadCount;
+    }
+    if (dynamicConfig->Strategy) {
+        mergedConfig->Strategy = *dynamicConfig->Strategy;
+    }
+    if (dynamicConfig->Period) {
+        mergedConfig->Period = *dynamicConfig->Period;
+    }
+
+    return mergedConfig;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TStockpileDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.BaseClassParameter("buffer_size", &TThis::BufferSize)
+        .Optional()
+        .GreaterThan(0);
+    registrar.BaseClassParameter("thread_count", &TThis::ThreadCount)
+        .Optional()
+        .GreaterThanOrEqual(0);
+    registrar.BaseClassParameter("strategy", &TThis::Strategy)
+        .Optional();
+    registrar.BaseClassParameter("period", &TThis::Period)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -77,8 +73,6 @@ void TSingletonsConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("spin_wait_slow_path_logging_threshold", &TThis::SpinWaitSlowPathLoggingThreshold)
         .Default(TDuration::MicroSeconds(100));
-    registrar.Parameter("yt_alloc", &TThis::YTAlloc)
-        .DefaultNew();
     registrar.Parameter("fiber_stack_pool_sizes", &TThis::FiberStackPoolSizes)
         .Default({});
     registrar.Parameter("address_resolver", &TThis::AddressResolver)
@@ -92,8 +86,6 @@ void TSingletonsConfig::Register(TRegistrar registrar)
     registrar.Parameter("grpc_dispatcher", &TThis::GrpcDispatcher)
         .DefaultNew();
     registrar.Parameter("yp_service_discovery", &TThis::YPServiceDiscovery)
-        .DefaultNew();
-    registrar.Parameter("solomon_exporter", &TThis::SolomonExporter)
         .DefaultNew();
     registrar.Parameter("logging", &TThis::Logging)
         .DefaultCtor([] { return NLogging::TLogManagerConfig::CreateDefault(); })
@@ -132,8 +124,6 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("max_idle_fibers", &TThis::MaxIdleFibers)
         .Default(NConcurrency::DefaultMaxIdleFibers);
-    registrar.Parameter("yt_alloc", &TThis::YTAlloc)
-        .Optional();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)
         .DefaultNew();
     registrar.Parameter("io_dispatcher", &TThis::IODispatcher)
@@ -148,18 +138,10 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
         .Optional();
+    registrar.Parameter("stockpile", &TThis::Stockpile)
+        .Optional();
     registrar.Parameter("protobuf_interop", &TThis::ProtobufInterop)
         .DefaultNew();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TDiagnosticDumpConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("yt_alloc_dump_period", &TThis::YTAllocDumpPeriod)
-        .Default();
-    registrar.Parameter("ref_counted_tracker_dump_period", &TThis::RefCountedTrackerDumpPeriod)
-        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

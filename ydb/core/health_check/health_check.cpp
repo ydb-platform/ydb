@@ -1,7 +1,7 @@
 #include "health_check.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -28,7 +28,7 @@
 #include <ydb/core/util/tuples.h>
 
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
-#include <ydb/core/protos/sys_view.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 #include <regex>
@@ -182,21 +182,34 @@ public:
             int Count = 1;
             TStackVec<TString> Identifiers;
 
-            TNodeTabletStateCount(const NKikimrHive::TTabletInfo& info, const TTabletStateSettings& settings) {
-                Type = info.tablettype();
-                Leader = info.followerid() == 0;
+            static ETabletState GetState(const NKikimrHive::TTabletInfo& info, const TTabletStateSettings& settings) {
                 if (info.volatilestate() == NKikimrHive::TABLET_VOLATILE_STATE_STOPPED) {
-                    State = ETabletState::Stopped;
-                } else if (info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_RUNNING
-                            && info.has_lastalivetimestamp()
-                            && (info.lastalivetimestamp() != 0 && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier)
-                            && info.tabletbootmode() == NKikimrHive::TABLET_BOOT_MODE_DEFAULT) {
-                    State = ETabletState::Dead;
-                } else if (info.restartsperperiod() >= settings.MaxRestartsPerPeriod) {
-                    State = ETabletState::RestartsTooOften;
-                } else {
-                    State = ETabletState::Good;
+                    return ETabletState::Stopped;
                 }
+                ETabletState state = (info.restartsperperiod() >= settings.MaxRestartsPerPeriod) ? ETabletState::RestartsTooOften : ETabletState::Good;
+                if (info.volatilestate() == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING) {
+                    return state;
+                }
+                if (info.tabletbootmode() != NKikimrHive::TABLET_BOOT_MODE_DEFAULT) {
+                    return state;
+                }
+                if (info.lastalivetimestamp() != 0 && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier) {
+                    // Tablet is not alive for a long time
+                    // We should report it as dead unless it's just waiting to be created
+                    if (info.generation() == 0 && info.volatilestate() == NKikimrHive::TABLET_VOLATILE_STATE_BOOTING && !info.inwaitqueue()) {
+                        return state;
+                    }
+                    return ETabletState::Dead;
+                }
+                return state;
+
+            }
+
+            TNodeTabletStateCount(const NKikimrHive::TTabletInfo& info, const TTabletStateSettings& settings)
+                : Type(info.tablettype())
+                , State(GetState(info, settings))
+                , Leader(info.followerid() == 0)
+            {
             }
 
             bool operator ==(const TNodeTabletStateCount& o) const {
@@ -1993,6 +2006,8 @@ public:
             }
         }
 
+        // do not propagate RED status to vdisk - so that vdisk is not considered down when computing group status
+        context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::ORANGE);
         storagePDiskStatus.set_overall(context.GetOverallStatus());
     }
 

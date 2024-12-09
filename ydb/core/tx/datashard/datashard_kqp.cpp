@@ -13,6 +13,7 @@
 #include <ydb/core/protos/kqp_stats.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 
 #include <util/generic/size_literals.h>
@@ -503,8 +504,8 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
                         const size_t outputDataSize = serialized.Size();
                         *outputData = std::move(serialized.Proto);
                         outputData->ClearPayloadId();
-                        if (!serialized.Payload.IsEmpty()) {
-                            outputData->SetPayloadId(dataEv->AddPayload(std::move(serialized.Payload)));
+                        if (!serialized.Payload.Empty()) {
+                            outputData->SetPayloadId(dataEv->AddPayload(NYql::MakeReadOnlyRope(std::move(serialized.Payload))));
                         }
                         dataEv->Record.MutableChannelData()->SetFinished(fetchStatus == NUdf::EFetchStatus::Finish);
                         if (outputDataSize > MaxDatashardReplySize) {

@@ -20,13 +20,14 @@ class TJsonQuery : public TViewerPipeClient {
     using TThis = TJsonQuery;
     using TBase = TViewerPipeClient;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0;
+    ui32 Timeout = 60000;
     std::vector<std::vector<Ydb::ResultSet>> ResultSets;
     TString Query;
     TString Action;
     TString Stats;
     TString Syntax;
     TString QueryId;
+    TString ResourcePool;
     TString TransactionMode;
     bool IsBase64Encode = true;
     int LimitRows = 10000;
@@ -37,6 +38,7 @@ class TJsonQuery : public TViewerPipeClient {
         Modern,
         Multi,
         Ydb,
+        Ydb2,
     };
     ESchemaType Schema = ESchemaType::Classic;
     TRequestResponse<NKqp::TEvKqp::TEvCreateSessionResponse> CreateSessionResponse;
@@ -53,6 +55,8 @@ public:
             return ESchemaType::Multi;
         } else if (schemaStr == "ydb") {
             return ESchemaType::Ydb;
+        } else if (schemaStr == "ydb2") {
+            return ESchemaType::Ydb2;
         } else {
             return ESchemaType::Classic;
         }
@@ -61,7 +65,7 @@ public:
     void ParseCgiParameters(const TCgiParameters& params) {
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 60000);
+        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), Timeout);
         if (params.Has("query")) {
             Query = params.Get("query");
         }
@@ -92,6 +96,9 @@ public:
         if (params.Has("limit_rows")) {
             LimitRows = std::clamp<int>(FromStringWithDefault<int>(params.Get("limit_rows"), 10000), 1, 100000);
         }
+        if (params.Has("resource_pool")) {
+            ResourcePool = params.Get("resource_pool");
+        }
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     }
 
@@ -100,6 +107,12 @@ public:
         NJson::TJsonValue requestData;
         bool success = NJson::ReadJsonTree(content, &JsonConfig, &requestData);
         if (success) {
+            if (requestData.Has("timeout")) {
+                Timeout = requestData["timeout"].GetUIntegerRobust();
+                if (Timeout == 0) {
+                    return false;
+                }
+            }
             if (requestData.Has("query")) {
                 Query = requestData["query"].GetStringRobust();
             }
@@ -129,6 +142,9 @@ public:
             }
             if (requestData.Has("limit_rows")) {
                 LimitRows = std::clamp<int>(requestData["limit_rows"].GetIntegerRobust(), 1, 100000);
+            }
+            if (requestData.Has("resource_pool")) {
+                ResourcePool = requestData["resource_pool"].GetStringRobust();
             }
         }
         return success;
@@ -185,7 +201,6 @@ public:
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
-            hFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, HandleReply);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -273,6 +288,9 @@ public:
         }
         if (Event->Get()->UserToken) {
             event->Record.SetUserToken(Event->Get()->UserToken);
+        }
+        if (ResourcePool) {
+            request.SetPoolId(ResourcePool);
         }
         request.SetClientAddress(Event->Get()->Request.GetRemoteAddr());
         if (Action == "execute-script") {
@@ -394,8 +412,8 @@ private:
                 return valueParser.GetDyNumber();
             case NYdb::EPrimitiveType::Uuid:
                 return valueParser.GetUuid().ToString();
-            default:
-                Y_ENSURE(false, TStringBuilder() << "Unsupported type: " << primitive);        }
+        }
+        return NJson::JSON_UNDEFINED;
     }
 
     NJson::TJsonValue ColumnValueToJsonValue(NYdb::TValueParser& valueParser) {
@@ -404,28 +422,107 @@ private:
                 return ColumnPrimitiveValueToJsonValue(valueParser);
 
             case NYdb::TTypeParser::ETypeKind::Optional:
-                valueParser.OpenOptional();
-                if (valueParser.IsNull()) {
-                    return NJson::JSON_NULL;
-                }
-                switch(valueParser.GetKind()) {
-                    case NYdb::TTypeParser::ETypeKind::Primitive:
-                        return ColumnPrimitiveValueToJsonValue(valueParser);
-                    case NYdb::TTypeParser::ETypeKind::Decimal:
-                        return valueParser.GetDecimal().ToString();
-                    default:
-                        return NJson::JSON_UNDEFINED;
+                {
+                    NJson::TJsonValue jsonOptional;
+                    valueParser.OpenOptional();
+                    if (valueParser.IsNull()) {
+                        jsonOptional = NJson::JSON_NULL;
+                    } else {
+                        switch(valueParser.GetKind()) {
+                            case NYdb::TTypeParser::ETypeKind::Primitive:
+                                jsonOptional = ColumnPrimitiveValueToJsonValue(valueParser);
+                                break;
+                            case NYdb::TTypeParser::ETypeKind::Decimal:
+                                jsonOptional = valueParser.GetDecimal().ToString();
+                                break;
+                            default:
+                                jsonOptional = NJson::JSON_UNDEFINED;
+                                break;
+                        }
+                    }
+                    valueParser.CloseOptional();
+                    return jsonOptional;
                 }
 
             case NYdb::TTypeParser::ETypeKind::Tagged:
-                valueParser.OpenTagged();
-                return ColumnValueToJsonValue(valueParser);
+                {
+                    NJson::TJsonValue jsonTagged;
+                    valueParser.OpenTagged();
+                    jsonTagged = ColumnValueToJsonValue(valueParser);
+                    valueParser.CloseTagged();
+                    return jsonTagged;
+                }
 
             case NYdb::TTypeParser::ETypeKind::Pg:
                 return valueParser.GetPg().Content_;
 
             case NYdb::TTypeParser::ETypeKind::Decimal:
                 return valueParser.GetDecimal().ToString();
+
+            case NYdb::TTypeParser::ETypeKind::List:
+                {
+                    NJson::TJsonValue jsonList;
+                    jsonList.SetType(NJson::JSON_ARRAY);
+                    valueParser.OpenList();
+                    while (valueParser.TryNextListItem()) {
+                        jsonList.AppendValue(ColumnValueToJsonValue(valueParser));
+                    }
+                    valueParser.CloseList();
+                    return jsonList;
+                }
+
+            case NYdb::TTypeParser::ETypeKind::Tuple:
+                {
+                    NJson::TJsonValue jsonTuple;
+                    jsonTuple.SetType(NJson::JSON_ARRAY);
+                    valueParser.OpenTuple();
+                    while (valueParser.TryNextElement()) {
+                        jsonTuple.AppendValue(ColumnValueToJsonValue(valueParser));
+                    }
+                    valueParser.CloseTuple();
+                    return jsonTuple;
+                }
+
+            case NYdb::TTypeParser::ETypeKind::Struct:
+                {
+                    NJson::TJsonValue jsonStruct;
+                    jsonStruct.SetType(NJson::JSON_MAP);
+                    valueParser.OpenStruct();
+                    while (valueParser.TryNextMember()) {
+                        jsonStruct[valueParser.GetMemberName()] = ColumnValueToJsonValue(valueParser);
+                    }
+                    valueParser.CloseStruct();
+                    return jsonStruct;
+                }
+
+            case NYdb::TTypeParser::ETypeKind::Dict:
+                {
+                    NJson::TJsonValue jsonDict;
+                    jsonDict.SetType(NJson::JSON_MAP);
+                    valueParser.OpenDict();
+                    while (valueParser.TryNextDictItem()) {
+                        valueParser.DictKey();
+                        NJson::TJsonValue jsonDictKey = ColumnValueToJsonValue(valueParser);
+                        valueParser.DictPayload();
+                        jsonDict[jsonDictKey.GetStringRobust()] = ColumnValueToJsonValue(valueParser);
+                    }
+                    valueParser.CloseDict();
+                    return jsonDict;
+                }
+
+            case NYdb::TTypeParser::ETypeKind::Variant:
+                {
+                    valueParser.OpenVariant();
+                    NJson::TJsonValue jsonVariant = ColumnValueToJsonValue(valueParser);
+                    valueParser.CloseVariant();
+                    return jsonVariant;
+                }
+
+            case NYdb::TTypeParser::ETypeKind::EmptyList:
+                return NJson::JSON_ARRAY;
+
+            case NYdb::TTypeParser::ETypeKind::EmptyDict:
+                return NJson::JSON_MAP;
 
             default:
                 return NJson::JSON_UNDEFINED;
@@ -435,17 +532,17 @@ private:
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         NJson::TJsonValue jsonResponse;
         jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
-        if (ev->Get()->Record.GetRef().GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+        if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             QueryResponse.Set(std::move(ev));
-            MakeOkReply(jsonResponse, QueryResponse->Record.GetRef());
+            MakeOkReply(jsonResponse, QueryResponse->Record);
             if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
                 jsonResponse = std::move(jsonResponse["result"]);
             }
         } else {
             QueryResponse.Error("QueryError");
             NYql::TIssues issues;
-            NYql::IssuesFromMessage(ev->Get()->Record.GetRef().GetResponse().GetQueryIssues(), issues);
-            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetRef().GetYdbStatus()), std::move(issues)));
+            NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
+            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), std::move(issues)));
         }
 
         TStringStream stream;
@@ -482,10 +579,6 @@ private:
         TBase::ReplyAndPassAway(GetHTTPOKJSON(stream.Str()));
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev) {
-        Y_UNUSED(ev);
-    }
-
     void HandleReply(NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev) {
         Y_UNUSED(ev);
     }
@@ -507,8 +600,7 @@ private:
             ResultSets[data.GetQueryResultIndex()].emplace_back() = std::move(*data.MutableResultSet());
         }
 
-        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         if (TotalRows >= LimitRows) {
             ack->Record.SetEnough(true);
         }
@@ -665,6 +757,37 @@ private:
                     }
                 }
             }
+
+            if (Schema == ESchemaType::Ydb2) {
+                NJson::TJsonValue& jsonResults = jsonResponse["result"];
+                jsonResults.SetType(NJson::JSON_ARRAY);
+                for (const auto& resultSets : ResultSets) {
+                    NJson::TJsonValue& jsonResult = jsonResults.AppendValue({});
+                    bool hasColumns = false;
+                    for (NYdb::TResultSet resultSet : resultSets) {
+                        if (!hasColumns) {
+                            NJson::TJsonValue& jsonColumns = jsonResult["columns"];
+                            jsonColumns.SetType(NJson::JSON_ARRAY);
+                            const auto& columnsMeta = resultSet.GetColumnsMeta();
+                            for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                                NJson::TJsonValue& jsonColumn = jsonColumns.AppendValue({});
+                                const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
+                                jsonColumn["name"] = columnMeta.Name;
+                                jsonColumn["type"] = columnMeta.Type.ToString();
+                            }
+                            hasColumns = true;
+                        }
+                        NJson::TJsonValue& jsonRows = jsonResult["rows"];
+                        const auto& columnsMeta = resultSet.GetColumnsMeta();
+                        NYdb::TResultSetParser rsParser(resultSet);
+                        while (rsParser.TryNextRow()) {
+                            NJson::TJsonValue& jsonRow = jsonRows.AppendValue({});
+                            TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, IsBase64Encode ? NYdb::EBinaryStringEncoding::Base64 : NYdb::EBinaryStringEncoding::Unicode);
+                            NJson::ReadJsonTree(row, &jsonRow);
+                        }
+                    }
+                }
+            }
         }
         if (response.HasQueryAst()) {
             jsonResponse["ast"] = response.GetQueryAst();
@@ -775,6 +898,11 @@ public:
                 in: query
                 description: return ui64 as number to avoid 56-bit js rounding
                 type: boolean
+                required: false
+              - name: resource_pool
+                in: query
+                description: resource pool in which the query will be executed
+                type: string
                 required: false
             requestBody:
                 description: Executes SQL query

@@ -2,8 +2,6 @@
 #include "fake_storage_config.h"
 #include "s3_storage_config.h"
 
-#include <util/system/rwlock.h>
-
 namespace NKikimr::NWrappers::NExternalStorage {
 
 IExternalStorageOperator::TPtr IExternalStorageConfig::ConstructStorageOperator(bool verbose) const {
@@ -17,4 +15,5 @@ IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrSche
         return std::make_shared<TS3ExternalStorageConfig>(settings);
     }
 }
+
 }

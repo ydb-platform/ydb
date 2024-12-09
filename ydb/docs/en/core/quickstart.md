@@ -89,13 +89,23 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
         -p 2135:2135 -p 2136:2136 -p 8765:8765 \
         -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
         -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
-        -e YDB_USE_IN_MEMORY_PDISKS=true \
         {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
       ```
 
-      If the container starts successfully, you'll see the container's ID. The container might take a few minutes to initialize. The database will not be available until container initialization is complete.
+      If the container starts successfully, you'll see the container ID. The container might take a few seconds to initialize. The database will not be available until container initialization is complete.
 
-      The `YDB_USE_IN_MEMORY_PDISKS` setting makes all data volatile, stored only in RAM. Currently, data persistence by turning it off is supported only on x86_64 processors. Learn more about [configuring Docker container](./reference/docker/environment.md).
+      {% note warning %}
+
+      Data persistence is currently supported only on x86_64 processors.
+
+      To disable data persistence and make all data volatile, stored only in RAM, add the `-e YDB_USE_IN_MEMORY_PDISKS=true` parameter to the command that runs the Docker container. Learn more about [configuring Docker container](./reference/docker/environment.md)
+
+      Alternatively, to run the Docker container on a Mac with an Apple Silicon processor, emulate the x86_64 instruction set with [Rosetta](https://support.apple.com/en-us/102527):
+
+      - [colima](https://github.com/abiosoft/colima) with the `colima start --arch aarch64 --vm-type=vz --vz-rosetta` options.
+      - [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) with installed and enabled Rosetta 2.
+
+      {% endnote %}
 
 - Minikube
 
@@ -134,6 +144,50 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
    9. After processing the manifest, a StatefulSet object that describes a set of dynamic nodes is created. The created database will be accessible from inside the Kubernetes cluster by the `database-minikube-sample` DNS name on port 2135.
 
    10. To continue, get access to port 8765 from outside Kubernetes using `kubectl port-forward database-minikube-sample-0 8765`.
+
+- Kind
+
+   1. Install the Kubernetes CLI [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl) and [Helm 3](https://helm.sh/docs/intro/install/) package manager.
+
+   2. Install [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/).
+
+   3. Clone the repository with [{{ ydb-short-name }} Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator):
+
+      ```bash
+      git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
+      ```
+
+   4. Create a Kind cluster and wait until it is ready:
+
+      ```bash
+      kind create cluster --config=samples/kind/kind-config.yaml  --wait 5m
+      ```
+
+   5. Install the {{ ydb-short-name }} controller in the cluster:
+
+      ```bash
+      helm upgrade --install ydb-operator deploy/ydb-operator --set metrics.enabled=false
+      ```
+
+   6. Apply the manifest for creating a storage:
+
+      ```bash
+      kubectl apply -f samples/kind/storage.yaml
+      ```
+
+   7. Wait for `kubectl get storages.ydb.tech` to become `Ready`.
+
+   8. Apply the manifest for creating a database:
+
+      ```bash
+      kubectl apply -f samples/kind/database.yaml
+      ```
+
+   9. Wait for `kubectl get databases.ydb.tech` to become `Ready`.
+
+   10. After processing the manifest, a StatefulSet object that describes a set of dynamic nodes is created. The created database will be accessible from inside the Kubernetes cluster by the `database-kind-sample` DNS name on port 2135.
+
+   11. To continue, get access to port 8765 from outside Kubernetes using `kubectl port-forward database-kind-sample-0 8765`.
 
 {% endlist %}
 
@@ -287,6 +341,32 @@ Stop the local {{ ydb-short-name }} cluster after you have finished experimentin
 
    ```bash
    helm delete ydb-operator
+   ```
+
+- Kind
+
+   To delete the {{ ydb-short-name }} database, it is enough to delete the Database resource associated with it:
+
+   ```bash
+   kubectl delete database.ydb.tech database-kind-sample
+   ```
+
+   To delete the {{ ydb-short-name }} cluster, execute the following commands (all data will be lost):
+
+   ```bash
+   kubectl delete storage.ydb.tech storage-kind-sample
+   ```
+
+   To remove the {{ ydb-short-name }} controller from the Kubernetes cluster, delete the release created by Helm:
+
+   ```bash
+   helm delete ydb-operator
+   ```
+
+   To delete `kind` cluster, run the following command:
+
+   ```bash
+   kind delete cluster
    ```
 
 {% endlist %}

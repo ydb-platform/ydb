@@ -13,17 +13,21 @@ TTpcDSGeneratorReason::TTpcDSGeneratorReason(const TTpcdsWorkloadDataInitializer
     : TBulkDataGenerator(owner, REASON)
 {}
 
-void TTpcDSGeneratorReason::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorReason::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
+    TTpcdsCsvItemWriter<W_REASON_TBL> writer(ctxs.front().GetCsv().Out, ctxs.front().GetCount());
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, r_reason_sk, R_REASON_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, r_reason_id, R_REASON_ID);
+    CSV_WRITER_REGISTER_FIELD_STRING(writer, "r_reason_desc", r_reason_description, R_REASON_DESCRIPTION);
+
     TVector<W_REASON_TBL> reasonList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_reason(NULL, ctxs.front().GetStart() + i);
         reasonList[i] = g_w_reason;
+        writer.RegisterRow();
         tpcds_row_stop(TableNum);
     }
-    TCsvItemWriter<W_REASON_TBL> writer(ctxs.front().GetCsv().Out);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, r_reason_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, r_reason_id);
-    CSV_WRITER_REGISTER_FIELD_STRING(writer, "r_reason_desc", r_reason_description);
+    g.Release();
+
     writer.Write(reasonList);
 };
 

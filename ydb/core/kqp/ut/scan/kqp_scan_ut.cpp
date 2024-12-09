@@ -237,16 +237,35 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 .BeginTuple().AddElement().BeginOptional().Decimal(TDecimalValue("1.5", 22, 9)).EndOptional().EndTuple()
                 .Build());
 
-        auto ret = session.CreateTable("/Root/DecimalTest",
+       auto ret = session.CreateTable("/Root/DecimalTest",
                 TTableBuilder()
                     .AddNullableColumn("Key", TDecimalType(22, 9))
                     .AddNullableColumn("Key35", TDecimalType(35, 10))
                     .AddNullableColumn("Value", TDecimalType(22, 9))
                     .AddNullableColumn("Value35", TDecimalType(35, 10))
                     .SetPrimaryKeyColumns({"Key", "Key35"})
-                    // .SetPartitionAtKeys(partitions)  // Error at split boundary 0: Unsupported typeId 4865 at index 0
+                    .SetPartitionAtKeys(partitions)
                     .Build()).GetValueSync();
         UNIT_ASSERT_C(ret.IsSuccess(), ret.GetIssues().ToString());
+
+        {
+            auto describeResult = session.DescribeTable("/Root/DecimalTest" , TDescribeTableSettings().WithKeyShardBoundary(true)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), NYdb::EStatus::SUCCESS);
+            const NYdb::NTable::TTableDescription& tableDescription = describeResult.GetTableDescription();
+            const TVector<NYdb::NTable::TKeyRange>& keyRanges = tableDescription.GetKeyRanges();
+            const TVector<NYdb::NTable::TTableColumn>& columns = tableDescription.GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
+            UNIT_ASSERT_STRINGS_EQUAL(columns[0].Type.ToString(), "Decimal(22,9)?");
+            UNIT_ASSERT_STRINGS_EQUAL(columns[1].Type.ToString(), "Decimal(35,10)?");
+            auto extractValue = [](const TValue& val) {
+                auto parser = TValueParser(val);
+                parser.OpenTuple();
+                UNIT_ASSERT(parser.TryNextElement());
+                return parser.GetOptionalDecimal()->ToString();
+            };
+            UNIT_ASSERT_VALUES_EQUAL(keyRanges.size(), 2);
+            UNIT_ASSERT_STRINGS_EQUAL(extractValue(keyRanges[0].To()->GetValue()), "1.5");
+        }
 
         auto params = TParamsBuilder().AddParam("$in").BeginList()
                 .AddListItem().BeginStruct()
@@ -282,7 +301,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         CompareYson(R"([
             [["155555555555555"];["155555555555555.123456789"]];
             [["255555555555555"];["255555555555555.987654321"]]
-        ])", StreamResultToYson(it35));        
+        ])", StreamResultToYson(it35));
     }
 
     Y_UNIT_TEST(TaggedScalar) {
@@ -2395,9 +2414,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
                 Y_ASSERT(record.GetResultSet().rows().size() == 0);
 
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
-                resp->Record.SetSeqNo(record.GetSeqNo());
                 runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                 return true;
             }
@@ -2422,7 +2440,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         };
 
         auto sendQuery = [&](const TString& queryText) {
@@ -2435,7 +2453,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         };
 
         createTable(createSession(), R"(

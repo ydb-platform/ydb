@@ -4,7 +4,6 @@ TEST_SRCS(
     test_stability.py
 )
 
-TIMEOUT(18000)
 SIZE(LARGE)
 TAG(ya:manual)
 
@@ -22,6 +21,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/wardens
 )
 
 END()

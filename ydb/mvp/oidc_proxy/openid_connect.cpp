@@ -1,17 +1,17 @@
-#include <util/random/random.h>
-#include <util/string/builder.h>
-#include <util/string/hex.h>
+#include "context.h"
+#include "openid_connect.h"
+#include "oidc_settings.h"
+#include <ydb/library/security/util.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
-#include "context.h"
-#include "openid_connect.h"
-#include "oidc_settings.h"
+#include <util/random/random.h>
+#include <util/string/builder.h>
+#include <util/string/hex.h>
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 namespace {
 
@@ -50,8 +50,10 @@ void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuild
     }
     headers->Set("Access-Control-Allow-Origin", origin);
     headers->Set("Access-Control-Allow-Credentials", "true");
-    headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
-    headers->Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
+    headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent");
+    headers->Set("Access-Control-Expose-Headers", "traceresponse,X-Worker-Name");
+    headers->Set("Access-Control-Allow-Methods", "OPTIONS,GET,POST,PUT,DELETE");
+    headers->Set("Allow", "OPTIONS,GET,POST,PUT,DELETE");
 }
 
 TString HmacSHA256(TStringBuf key, TStringBuf data) {
@@ -109,15 +111,25 @@ TString CreateNameSessionCookie(TStringBuf key) {
     return "__Host_" + TOpenIdConnectSettings::SESSION_COOKIE + "_" + HexEncode(key);
 }
 
+TString CreateNameImpersonatedCookie(TStringBuf key) {
+    return "__Host_" + TOpenIdConnectSettings::IMPERSONATED_COOKIE + "_" + HexEncode(key);
+}
+
 const TString& GetAuthCallbackUrl() {
     static const TString callbackUrl = "/auth/callback";
     return callbackUrl;
 }
 
-TString CreateSecureCookie(const TString& key, const TString& value) {
+TString CreateSecureCookie(const TString& name, const TString& value) {
     TStringBuilder cookieBuilder;
-    cookieBuilder << CreateNameSessionCookie(key) << "=" << Base64Encode(value)
+    cookieBuilder << name << "=" << value
             << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned";
+    return cookieBuilder;
+}
+
+TString ClearSecureCookie(const TString& name) {
+    TStringBuilder cookieBuilder;
+    cookieBuilder << name << "=; Path=/; Secure; HttpOnly; SameSite=None; Partitioned; Max-Age=0";
     return cookieBuilder;
 }
 
@@ -140,7 +152,7 @@ TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, con
             requestedAddressContext = jsonRequestedAddressContext->GetStringRobust();
             requestedAddressContext = Base64Decode(requestedAddressContext);
         }
-        if (requestedAddressContext.Empty()) {
+        if (requestedAddressContext.empty()) {
             return TRestoreOidcContextResult({.IsSuccess = false,
                                          .IsErrorRetryable = false,
                                          .ErrorMessage = errorMessage << "Struct with state is empty"});
@@ -150,7 +162,7 @@ TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, con
             expectedDigest = jsonDigest->GetStringRobust();
             expectedDigest = Base64Decode(expectedDigest);
         }
-        if (expectedDigest.Empty()) {
+        if (expectedDigest.empty()) {
             return TRestoreOidcContextResult({.IsSuccess = false,
                                             .IsErrorRetryable = false,
                                             .ErrorMessage = errorMessage << "Expected digest is empty"});
@@ -192,7 +204,7 @@ TCheckStateResult CheckState(const TString& state, const TString& key) {
             stateContainer = jsonStateContainer->GetStringRobust();
             stateContainer = Base64Decode(stateContainer);
         }
-        if (stateContainer.Empty()) {
+        if (stateContainer.empty()) {
             return TCheckStateResult(false, errorMessage << "Container with state is empty");
         }
         const NJson::TJsonValue* jsonDigest = nullptr;
@@ -200,7 +212,7 @@ TCheckStateResult CheckState(const TString& state, const TString& key) {
             expectedDigest = jsonDigest->GetStringRobust();
             expectedDigest = Base64Decode(expectedDigest);
         }
-        if (expectedDigest.Empty()) {
+        if (expectedDigest.empty()) {
             return TCheckStateResult(false, errorMessage << "Expected digest is empty");
         }
     }
@@ -225,5 +237,23 @@ TCheckStateResult CheckState(const TString& state, const TString& key) {
     return TCheckStateResult();
 }
 
-}  // NOIDC
-}  // NMVP
+TString DecodeToken(const TStringBuf& cookie) {
+    TString token;
+    try {
+        Base64StrictDecode(cookie, token);
+    } catch (std::exception& e) {
+        BLOG_D("Base64Decode " << NKikimr::MaskTicket(cookie) << " cookie: " << e.what());
+        token.clear();
+    }
+    return token;
+}
+
+TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName) {
+    TStringBuf cookieValue = cookies.Get(cookieName);
+    if (!cookieValue.Empty()) {
+        BLOG_D("Using cookie (" << cookieName << ": " << NKikimr::MaskTicket(cookieValue) << ")");
+    }
+    return cookieValue;
+}
+
+} // NMVP::NOIDC

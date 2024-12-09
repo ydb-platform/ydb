@@ -451,7 +451,7 @@ public:
         : ShouldHideAttributes_(shouldHideAttributes)
     { }
 
-    virtual ~TEphemeralNodeFactory() override
+    ~TEphemeralNodeFactory() override
     {
         RollbackIfNeeded();
     }
@@ -507,9 +507,14 @@ std::unique_ptr<ITransactionalNodeFactory> CreateEphemeralNodeFactory(bool shoul
 
 INodeFactory* GetEphemeralNodeFactory(bool shouldHideAttributes)
 {
-    static auto hidingFactory = CreateEphemeralNodeFactory(true);
-    static auto nonhidingFactory = CreateEphemeralNodeFactory(false);
-    return shouldHideAttributes ? hidingFactory.get() : nonhidingFactory.get();
+    struct TStorage
+    {
+        const std::unique_ptr<ITransactionalNodeFactory> HidingFactory = CreateEphemeralNodeFactory(true);
+        const std::unique_ptr<ITransactionalNodeFactory> NonhidingFactory = CreateEphemeralNodeFactory(false);
+    };
+
+    const auto* storage = LeakySingleton<TStorage>();
+    return shouldHideAttributes ? storage->HidingFactory.get() : storage->NonhidingFactory.get();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

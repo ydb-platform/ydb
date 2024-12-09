@@ -2,6 +2,8 @@
 
 #include "spilling_counters.h"
 
+#include <library/cpp/threading/future/future.h>
+
 #include <ydb/library/yql/dq/runtime/dq_channel_storage.h>
 #include "ydb/library/yql/dq/common/dq_common.h"
 
@@ -18,7 +20,7 @@ struct TDqChannelStorageActorEvents {
 
 struct TEvDqChannelSpilling {
     struct TEvPut : NActors::TEventLocal<TEvPut, TDqChannelStorageActorEvents::EvPut> {
-        TEvPut(ui64 blobId, TRope&& blob, NThreading::TPromise<void>&& promise)
+        TEvPut(ui64 blobId, TChunkedBuffer&& blob, NThreading::TPromise<void>&& promise)
             : BlobId_(blobId)
             , Blob_(std::move(blob))
             , Promise_(std::move(promise))
@@ -26,7 +28,7 @@ struct TEvDqChannelSpilling {
         }
 
         ui64 BlobId_;
-        TRope Blob_;
+        TChunkedBuffer Blob_;
         NThreading::TPromise<void> Promise_;
     };
 

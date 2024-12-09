@@ -4,11 +4,9 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
 IF (WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -22,7 +20,8 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
-    ydb/library/yql/udfs/common/digest
+    yql/essentials/sql/pg_dummy
+    yql/essentials/udfs/common/digest
 )
 
 

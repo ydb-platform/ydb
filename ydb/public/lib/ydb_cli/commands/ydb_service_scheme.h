@@ -7,6 +7,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_view.h>
 #include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
@@ -99,6 +100,9 @@ private:
 
     int DescribeReplication(const TDriver& driver);
     int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
+
+    int DescribeView(const TDriver& driver);
+    int PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const;
 
     int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
     std::pair<TString, TString> ParseTopicConsumer() const;
@@ -194,6 +198,22 @@ private:
 class TCommandPermissionClear : public TYdbOperationCommand, public TCommandWithPath {
 public:
     TCommandPermissionClear();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+};
+
+class TCommandPermissionSetInheritance : public TYdbOperationCommand, public TCommandWithPath {
+public:
+    TCommandPermissionSetInheritance();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+};
+
+class TCommandPermissionClearInheritance : public TYdbOperationCommand, public TCommandWithPath {
+public:
+    TCommandPermissionClearInheritance();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;

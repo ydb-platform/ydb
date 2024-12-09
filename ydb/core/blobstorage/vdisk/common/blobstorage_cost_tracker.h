@@ -10,7 +10,6 @@
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <ydb/library/lockfree_bucket/lockfree_bucket.h>
 #include <util/system/compiler.h>
-#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/util/light.h>
 
@@ -94,7 +93,7 @@ public:
         DeviceWriteSpeedBps = costModel.WriteSpeedBps;
         DeviceReadBlockSize = costModel.ReadBlockSize;
         DeviceWriteBlockSize = costModel.WriteBlockSize;
-        HugeBlobSize = costModel.MinREALHugeBlobInBytes;
+        HugeBlobSize = costModel.MinHugeBlobInBytes;
     }
 
 protected:
@@ -267,18 +266,10 @@ public:
 
     /////// PDisk requests
     // READS
-    ui64 GetCost(const NPDisk::TEvChunkRead& ev) const {
-        return ReadCost(ev.Size);
-    }
+    ui64 GetCost(const NPDisk::TEvChunkRead& ev) const;
 
     // WRITES
-    ui64 GetCost(const NPDisk::TEvChunkWrite& ev) const {
-        if (ev.PriorityClass == NPriPut::Log) {
-            return WriteCost(ev.PartsPtr->ByteSize());
-        } else {
-            return HugeWriteCost(ev.PartsPtr->ByteSize());
-        }
-    }
+    ui64 GetCost(const NPDisk::TEvChunkWrite& ev) const;
 };
 
 struct TFailTimer {

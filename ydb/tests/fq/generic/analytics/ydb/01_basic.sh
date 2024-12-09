@@ -35,6 +35,9 @@ set -ex
       (56, 12, "2a02:1812:1713:4f00:517e:1d79:c88b:704", "Elena", 2),
       (18, 17, "ivalid ip", "newUser", 12);
     COMMIT;
+
+    CREATE TABLE dummy_table(name STRING, cnt Uint64, PRIMARY KEY(name));
+    COMMIT;
   '
 
 retVal=$?

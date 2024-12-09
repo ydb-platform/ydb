@@ -4,7 +4,7 @@
 
 #include <util/system/compiler.h>
 
-#ifdef _lsan_enabled_
+#if defined(_lsan_enabled_) || defined(_asan_enabled_)
 #include <util/system/spinlock.h>
 #endif
 
@@ -20,6 +20,9 @@ template <class T>
 class TAtomicIntrusivePtr
 {
 public:
+    using TUnderlying = T;
+    using element_type = T;
+
     TAtomicIntrusivePtr() = default;
     TAtomicIntrusivePtr(std::nullptr_t);
 
@@ -45,6 +48,9 @@ public:
     //! Result is only suitable for comparison, not dereference.
     TRawPtr Get() const;
 
+    //! Result is only suitable for comparison, not dereference.
+    TRawPtr get() const;
+
     explicit operator bool() const;
 
 private:
@@ -60,7 +66,7 @@ private:
     template <class U>
     friend bool operator!=(const TIntrusivePtr<U>& lhs, const TAtomicIntrusivePtr<U>& rhs);
 
-#ifdef _lsan_enabled_
+#if defined(_lsan_enabled_) || defined(_asan_enabled_)
     ::TSpinLock Lock_;
     TIntrusivePtr<T> Ptr_;
 #else

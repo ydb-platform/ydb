@@ -225,6 +225,10 @@ private:
                 Become(&TThis::StateConnectLeader);
                 return;
             }
+            case NKikimrProto::RACE: {
+                // State storage is working, but data is inconsistent
+                [[fallthrough]];
+            }
             case NKikimrProto::NODATA: {
                 // We have state storage quorum and no known leader
                 BeginNewRound();

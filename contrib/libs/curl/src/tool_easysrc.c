@@ -27,6 +27,8 @@
 
 #ifndef CURL_DISABLE_LIBCURL_OPTION
 
+#define ENABLE_CURLX_PRINTF
+/* use our own printf() functions */
 #include "curlx.h"
 
 #include "tool_cfgable.h"
@@ -111,7 +113,7 @@ CURLcode easysrc_addf(struct slist_wc **plist, const char *fmt, ...)
   char *bufp;
   va_list ap;
   va_start(ap, fmt);
-  bufp = vaprintf(fmt, ap);
+  bufp = curlx_mvaprintf(fmt, ap);
   va_end(ap);
   if(!bufp) {
     ret = CURLE_OUT_OF_MEMORY;

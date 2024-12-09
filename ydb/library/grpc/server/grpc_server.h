@@ -18,6 +18,10 @@
 
 #include <grpcpp/grpcpp.h>
 
+namespace NMonitoring {
+    struct TDynamicCounters;
+} // NMonitoring
+
 namespace NYdbGrpc {
 
 struct TSslData {
@@ -107,6 +111,8 @@ struct TServerOptions {
 
     //! Logger which will be used to write logs about requests handling (iff appropriate log level is enabled).
     DECLARE_FIELD(Logger, TLoggerPtr, nullptr);
+
+    DECLARE_FIELD(EndpointId, TString, "");
 
 #undef DECLARE_FIELD
 };
@@ -203,6 +209,8 @@ public:
      * service to inspect server options and initialize accordingly.
      */
     virtual void SetServerOptions(const TServerOptions& options) = 0;
+
+    virtual TString GetEndpointId() const = 0;
 };
 
 class TGrpcServiceProtectiable: public IGRpcService {
@@ -258,12 +266,18 @@ public:
     };
 
 public:
-    void SetGlobalLimiterHandle(TGlobalLimiter* /*limiter*/) override {}
+    void SetGlobalLimiterHandle(TGlobalLimiter* limiter) override {
+        Limiter_ = limiter;
+    }
+
     void StopService() noexcept override;
     size_t RequestsInProgress() const override;
 
     bool RegisterRequestCtx(ICancelableContext* req);
     void DeregisterRequestCtx(ICancelableContext* req);
+
+    virtual bool IncRequest();
+    virtual void DecRequest();
 
     TShutdownGuard ProtectShutdown() noexcept {
         AtomicIncrement(GuardCount_);
@@ -282,6 +296,11 @@ public:
     void SetServerOptions(const TServerOptions& options) override {
         SslServer_ = bool(options.SslData);
         NeedAuth_ = options.UseAuth;
+        EndpointId_ = options.EndpointId;
+    }
+
+    TString GetEndpointId() const override {
+        return EndpointId_;
     }
 
     //! Check if the server is going to shut down.
@@ -303,6 +322,7 @@ private:
 
     bool SslServer_ = false;
     bool NeedAuth_ = false;
+    TString EndpointId_;
 
     struct TShard {
         TAdaptiveLock Lock_;
@@ -312,6 +332,8 @@ private:
     // Note: benchmarks showed 4 shards is enough to scale to ~30 threads
     TVector<TShard> Shards_{ size_t(4) };
     std::atomic<size_t> NextShard_{ 0 };
+
+    NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
 };
 
 template<typename T>
@@ -331,8 +353,11 @@ protected:
 class TGRpcServer {
 public:
     using IGRpcServicePtr = TIntrusivePtr<IGRpcService>;
-    TGRpcServer(const TServerOptions& opts);
+
+    // TODO: remove default nullptr after migration
+    TGRpcServer(const TServerOptions& opts, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = nullptr);
     ~TGRpcServer();
+
     void AddService(IGRpcServicePtr service);
     void Start();
     // Send stop to registred services and call Shutdown on grpc server
@@ -347,6 +372,7 @@ private:
     using IThreadRef = TAutoPtr<IThreadFactory::IThread>;
 
     const TServerOptions Options_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     std::unique_ptr<grpc::Server> Server_;
     std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> CQS_;
     TVector<IThreadRef> Ts;

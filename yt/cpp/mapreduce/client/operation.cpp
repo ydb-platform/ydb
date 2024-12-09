@@ -4,9 +4,7 @@
 #include "client.h"
 #include "operation_helpers.h"
 #include "operation_tracker.h"
-#include "transaction.h"
 #include "prepare_operation.h"
-#include "retry_heavy_write_request.h"
 #include "skiff.h"
 #include "structured_table_formats.h"
 #include "yt_poller.h"
@@ -50,6 +48,8 @@
 #include <util/string/cast.h>
 
 #include <util/system/thread.h>
+#include <util/system/env.h>
+#include <util/system/fs.h>
 
 namespace NYT {
 namespace NDetail {
@@ -558,7 +558,7 @@ EOperationBriefState CheckOperation(
             .Add(EOperationAttribute::Result)));
     Y_ABORT_UNLESS(attributes.BriefState,
         "get_operation for operation %s has not returned \"state\" field",
-        GetGuidAsString(operationId).Data());
+        GetGuidAsString(operationId).data());
     if (*attributes.BriefState == EOperationBriefState::Completed) {
         return EOperationBriefState::Completed;
     } else if (*attributes.BriefState == EOperationBriefState::Aborted || *attributes.BriefState == EOperationBriefState::Failed) {
@@ -760,55 +760,111 @@ void BuildUserJobFluently(
         .Item("redirect_stdout_to_stderr").Value(preparer.ShouldRedirectStdoutToStderr());
 }
 
-template <typename T>
-void BuildCommonOperationPart(const TConfigPtr& config, const TOperationSpecBase<T>& baseSpec, const TOperationOptions& options, TFluentMap fluent)
+struct TNirvanaContext
 {
-    const TProcessState* properties = TProcessState::Get();
-    TString pool = config->Pool;
+    TNode BlockUrl;
+    TNode Annotations;
+};
 
-    if (baseSpec.Pool_) {
-        pool = *baseSpec.Pool_;
+// Try to detect if we are inside nirvana operation and reat nirvana job context.
+// Items of TNirvanaContext might be Undefined, if we are not inside nirvana context (or if nirvana context is unexpected)
+TNirvanaContext GetNirvanaContext()
+{
+    static const auto filePath = TString("/slot/sandbox/j/job_context.json");
+    auto nvYtOperationId = GetEnv("NV_YT_OPERATION_ID");
+    if (nvYtOperationId.empty()) {
+        return {};
+    }
+    if (!NFs::Exists(filePath)) {
+        return {};
+    }
+    NJson::TJsonValue json;
+    try {
+        auto inf = TIFStream(filePath);
+        json = NJson::ReadJsonTree(&inf, /*throwOnError*/ true);
+    } catch (const std::exception& ex) {
+        YT_LOG_ERROR("Failed to load nirvana job context: %v", ex.what());
+        return {};
     }
 
-    fluent
-        .Item("started_by")
-        .BeginMap()
-            .Item("hostname").Value(properties->FqdnHostName)
-            .Item("pid").Value(properties->Pid)
-            .Item("user").Value(properties->UserName)
-            .Item("command").List(properties->CensoredCommandLine)
-            .Item("wrapper_version").Value(properties->ClientVersion)
-        .EndMap()
-        .DoIf(!pool.empty(), [&] (TFluentMap fluentMap) {
-            fluentMap.Item("pool").Value(pool);
-        })
-        .DoIf(baseSpec.Weight_.Defined(), [&] (TFluentMap fluentMap) {
-            fluentMap.Item("weight").Value(*baseSpec.Weight_);
-        })
-        .DoIf(baseSpec.TimeLimit_.Defined(), [&] (TFluentMap fluentMap) {
-            fluentMap.Item("time_limit").Value(baseSpec.TimeLimit_->MilliSeconds());
-        })
-        .DoIf(baseSpec.PoolTrees().Defined(), [&] (TFluentMap fluentMap) {
-            TNode poolTreesSpec = TNode::CreateList();
-            for (const auto& tree : *baseSpec.PoolTrees()) {
-                poolTreesSpec.Add(tree);
-            }
-            fluentMap.Item("pool_trees").Value(poolTreesSpec);
-        })
-        .DoIf(baseSpec.ResourceLimits().Defined(), [&] (TFluentMap fluentMap) {
-            auto resourceLimitsSpec = BuildSchedulerResourcesSpec(*baseSpec.ResourceLimits());
-            if (!resourceLimitsSpec.IsUndefined()) {
-                fluentMap.Item("resource_limits").Value(std::move(resourceLimitsSpec));
-            }
-        })
-        .DoIf(options.SecureVault_.Defined(), [&] (TFluentMap fluentMap) {
-            Y_ENSURE(options.SecureVault_->IsMap(),
-                "SecureVault must be a map node, got " << options.SecureVault_->GetType());
-            fluentMap.Item("secure_vault").Value(*options.SecureVault_);
-        })
-        .DoIf(baseSpec.Title_.Defined(), [&] (TFluentMap fluentMap) {
-            fluentMap.Item("title").Value(*baseSpec.Title_);
-        });
+    TNirvanaContext result;
+
+    const auto* url = json.GetValueByPath("meta.blockURL");
+    if (url && url->IsString()) {
+        result.BlockUrl = url->GetString();
+        result.BlockUrl.Attributes()["_type_tag"] = "url";
+    }
+
+    const auto* annotations = json.GetValueByPath("meta.annotations");
+    if (annotations && annotations->IsMap()) {
+        result.Annotations = NodeFromJsonValue(*annotations);
+    }
+
+    return result;
+}
+
+template <typename T>
+void BuildCommonOperationPart(
+    const TConfigPtr& config,
+    const TOperationSpecBase<T>& baseSpec,
+    const TOperationOptions& options,
+    TNode* specNode)
+{
+    const TProcessState* properties = TProcessState::Get();
+
+    auto& startedBySpec = (*specNode)["started_by"];
+    startedBySpec["hostname"] = properties->FqdnHostName,
+    startedBySpec["pid"] = properties->Pid;
+    startedBySpec["user"] = properties->UserName;
+    startedBySpec["wrapper_version"] = properties->ClientVersion;
+
+    startedBySpec["binary"] = properties->BinaryPath;
+    startedBySpec["binary_name"] = properties->BinaryName;
+    auto nirvanaContext = GetNirvanaContext();
+    if (!nirvanaContext.BlockUrl.IsUndefined()) {
+        startedBySpec["nirvana_block_url"] = nirvanaContext.BlockUrl;
+    }
+
+    if (!nirvanaContext.Annotations.IsUndefined()) {
+        MergeNodes((*specNode)["annotations"], nirvanaContext.Annotations);
+    }
+
+    TString pool;
+    if (baseSpec.Pool_) {
+        pool = *baseSpec.Pool_;
+    } else {
+        pool = config->Pool;
+    }
+    if (!pool.empty()) {
+        (*specNode)["pool"] = pool;
+    }
+    if (baseSpec.Weight_.Defined()) {
+        (*specNode)["weight"] = *baseSpec.Weight_;
+    }
+    if (baseSpec.TimeLimit_.Defined()) {
+        (*specNode)["time_limit"] = baseSpec.TimeLimit_->MilliSeconds();
+    }
+    if (baseSpec.PoolTrees().Defined()) {
+        TNode poolTreesSpec = TNode::CreateList();
+        for (const auto& tree : *baseSpec.PoolTrees()) {
+            poolTreesSpec.Add(tree);
+        }
+        (*specNode)["pool_trees"] = std::move(poolTreesSpec);
+    }
+    if (baseSpec.ResourceLimits().Defined()) {
+        auto resourceLimitsSpec = BuildSchedulerResourcesSpec(*baseSpec.ResourceLimits());
+        if (!resourceLimitsSpec.IsUndefined()) {
+            (*specNode)["resource_limits"] = std::move(resourceLimitsSpec);
+        }
+    }
+    if (options.SecureVault_.Defined()) {
+        Y_ENSURE(options.SecureVault_->IsMap(),
+            "SecureVault must be a map node, got " << options.SecureVault_->GetType());
+        (*specNode)["secure_vault"] = *options.SecureVault_;
+    }
+    if (baseSpec.Title_.Defined()) {
+        (*specNode)["title"] = *baseSpec.Title_;
+    }
 }
 
 template <typename TSpec>
@@ -937,12 +993,15 @@ void CreateOutputTable(
     const TRichYPath& path)
 {
     Y_ENSURE(path.Path_, "Output table is not set");
-    Create(
-        preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        preparer.GetContext(), preparer.GetTransactionId(), path.Path_, NT_TABLE,
-        TCreateOptions()
-            .IgnoreExisting(true)
-            .Recursive(true));
+    if (!path.Create_.Defined()) {
+        // If `create` attribute is defined
+        Create(
+            preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
+            preparer.GetContext(), preparer.GetTransactionId(), path.Path_, NT_TABLE,
+            TCreateOptions()
+                .IgnoreExisting(true)
+                .Recursive(true));
+    }
 }
 
 void CreateOutputTables(
@@ -962,6 +1021,7 @@ void CheckInputTablesExist(
     for (auto& path : paths) {
         auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
         Y_ENSURE_EX(
+            path.Cluster_.Defined() ||
             Exists(
                 preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
                 preparer.GetContext(),
@@ -1059,8 +1119,9 @@ void DoExecuteMap(
         .DoIf(spec.Ordered_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("ordered").Value(spec.Ordered_.GetRef());
         })
-        .Do(std::bind(BuildCommonOperationPart<T>, preparer->GetContext().Config, spec, options, std::placeholders::_1))
     .EndMap().EndMap();
+
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
 
     specNode["spec"]["job_io"]["control_attributes"]["enable_row_index"] = TNode(true);
     specNode["spec"]["job_io"]["control_attributes"]["enable_range_index"] = TNode(true);
@@ -1190,9 +1251,9 @@ void DoExecuteReduce(
         .DoIf(spec.AutoMerge_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("auto_merge").Value(BuildAutoMergeSpec(*spec.AutoMerge_));
         })
-        .Do(std::bind(BuildCommonOperationPart<T>, preparer->GetContext().Config, spec, options, std::placeholders::_1))
     .EndMap().EndMap();
 
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
     BuildCommonUserOperationPart(spec, &specNode["spec"]);
     BuildJobCountOperationPart(spec, &specNode["spec"]);
 
@@ -1304,9 +1365,9 @@ void DoExecuteJoinReduce(
                 fluent.Item("table_writer").Value(preparer->GetContext().Config->TableWriter);
             })
         .EndMap()
-        .Do(std::bind(BuildCommonOperationPart<T>, preparer->GetContext().Config, spec, options, std::placeholders::_1))
     .EndMap().EndMap();
 
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
     BuildCommonUserOperationPart(spec, &specNode["spec"]);
     BuildJobCountOperationPart(spec, &specNode["spec"]);
 
@@ -1494,13 +1555,13 @@ void DoExecuteMapReduce(
         .Do([&] (TFluentMap) {
             spec.Title_ = spec.Title_.GetOrElse(AddModeToTitleIfDebug(title + "reducer:" + reduce.GetClassName()));
         })
-        .Do(std::bind(BuildCommonOperationPart<T>, preparer->GetContext().Config, spec, options, std::placeholders::_1))
     .EndMap().EndMap();
 
     if (spec.Ordered_) {
         specNode["spec"]["ordered"] = *spec.Ordered_;
     }
 
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
     BuildCommonUserOperationPart(spec, &specNode["spec"]);
     BuildMapJobCountOperationPart(spec, &specNode["spec"]);
     BuildPartitionCountOperationPart(spec, &specNode["spec"]);
@@ -1875,9 +1936,9 @@ void ExecuteSort(
         .DoIf(spec.SchemaInferenceMode_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("schema_inference_mode").Value(ToString(*spec.SchemaInferenceMode_));
         })
-        .Do(std::bind(BuildCommonOperationPart<TSortOperationSpec>, preparer->GetContext().Config, spec, options, std::placeholders::_1))
     .EndMap().EndMap();
 
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
     BuildPartitionCountOperationPart(spec, &specNode["spec"]);
     BuildPartitionJobCountOperationPart(spec, &specNode["spec"]);
     BuildIntermediateDataPart(spec, &specNode["spec"]);
@@ -1927,9 +1988,9 @@ void ExecuteMerge(
         .DoIf(spec.SchemaInferenceMode_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("schema_inference_mode").Value(ToString(*spec.SchemaInferenceMode_));
         })
-        .Do(std::bind(BuildCommonOperationPart<TMergeOperationSpec>, preparer->GetContext().Config, spec, options, std::placeholders::_1))
     .EndMap().EndMap();
 
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
     BuildJobCountOperationPart(spec, &specNode["spec"]);
 
     auto startOperation = [
@@ -1967,9 +2028,9 @@ void ExecuteErase(
         .DoIf(spec.SchemaInferenceMode_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("schema_inference_mode").Value(ToString(*spec.SchemaInferenceMode_));
         })
-        .Do(std::bind(BuildCommonOperationPart<TEraseOperationSpec>, preparer->GetContext().Config, spec, options, std::placeholders::_1))
     .EndMap().EndMap();
 
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
     auto startOperation = [
         operation=operation.Get(),
         spec=MergeSpec(std::move(specNode), preparer->GetContext().Config->Spec, options),
@@ -2021,9 +2082,9 @@ void ExecuteRemoteCopy(
                 "doesn't make sense without CopyAttributes == true");
             fluent.Item("attribute_keys").List(spec.AttributeKeys_);
         })
-        .Do(std::bind(BuildCommonOperationPart<TRemoteCopyOperationSpec>, preparer->GetContext().Config, spec, options, std::placeholders::_1))
     .EndMap().EndMap();
 
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
     auto startOperation = [
         operation=operation.Get(),
         spec=MergeSpec(specNode, preparer->GetContext().Config->Spec, options),
@@ -2130,9 +2191,9 @@ void ExecuteVanilla(
     TNode specNode = BuildYsonNodeFluently()
     .BeginMap().Item("spec").BeginMap()
         .Item("tasks").DoMapFor(spec.Tasks_, addTask)
-        .Do(std::bind(BuildCommonOperationPart<TVanillaOperationSpec>, preparer->GetContext().Config, spec, options, std::placeholders::_1))
     .EndMap().EndMap();
 
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
     BuildCommonUserOperationPart(spec, &specNode["spec"]);
 
     auto startOperation = [operation=operation.Get(), spec=MergeSpec(std::move(specNode), preparer->GetContext().Config->Spec, options), preparer] () {
@@ -2271,7 +2332,7 @@ public:
             }
             Y_ABORT_UNLESS(attributes.BriefState,
                 "get_operation for operation %s has not returned \"state\" field",
-                GetGuidAsString(OperationImpl_->GetId()).Data());
+                GetGuidAsString(OperationImpl_->GetId()).data());
             if (*attributes.BriefState != EOperationBriefState::InProgress) {
                 OperationImpl_->AsyncFinishOperation(attributes);
                 return PollBreak;
@@ -2440,7 +2501,7 @@ EOperationBriefState TOperation::TOperationImpl::GetBriefState()
     UpdateAttributesAndCall(false, [&] (const TOperationAttributes& attributes) {
         Y_ABORT_UNLESS(attributes.BriefState,
             "get_operation for operation %s has not returned \"state\" field",
-            GetGuidAsString(*Id_).Data());
+            GetGuidAsString(*Id_).data());
         result = *attributes.BriefState;
     });
     return result;
@@ -2527,8 +2588,8 @@ void TOperation::TOperationImpl::AnalyzeUnrecognizedSpec(TNode unrecognizedSpec)
         YT_LOG_INFO(
             "WARNING! Unrecognized spec for operation %s is not empty "
             "(fields added by the YT API library are excluded): %s",
-            GetGuidAsString(*Id_).Data(),
-            NodeToYsonString(unrecognizedSpec).Data());
+            GetGuidAsString(*Id_).data(),
+            NodeToYsonString(unrecognizedSpec).data());
     }
 }
 
@@ -2537,8 +2598,8 @@ void TOperation::TOperationImpl::OnStarted(const TOperationId& operationId)
     auto guard = Guard(Lock_);
     Y_ABORT_UNLESS(!Id_,
         "OnStarted() called with operationId = %s for operation with id %s",
-        GetGuidAsString(operationId).Data(),
-        GetGuidAsString(*Id_).Data());
+        GetGuidAsString(operationId).data(),
+        GetGuidAsString(*Id_).data());
     Id_ = operationId;
 
     Y_ABORT_UNLESS(!StartedPromise_.HasValue() && !StartedPromise_.HasException());
@@ -2662,7 +2723,7 @@ void TOperation::TOperationImpl::SyncFinishOperationImpl(const TOperationAttribu
     }
     Y_ABORT_UNLESS(attributes.BriefState,
         "get_operation for operation %s has not returned \"state\" field",
-        GetGuidAsString(*Id_).Data());
+        GetGuidAsString(*Id_).data());
     Y_ABORT_UNLESS(*attributes.BriefState != EOperationBriefState::InProgress);
 
     {

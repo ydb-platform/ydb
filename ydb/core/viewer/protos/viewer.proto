@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import "ydb/core/graph/protos/graph.proto";
 import "ydb/core/protos/tablet_counters.proto";
+import "ydb/core/protos/memory_stats.proto";
 import "ydb/core/protos/node_whiteboard.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/tablet.proto";
@@ -322,6 +323,7 @@ message TClusterInfo {
     uint32 NodesTotal = 10;
     uint32 NodesAlive = 11;
     uint32 NumberOfCpus = 20;
+    uint32 CoresTotal = 24;
     double CoresUsed = 21;
     double LoadAverage = 22;
     repeated NKikimrWhiteboard.TSystemStateInfo.TPoolStats PoolStats = 23;
@@ -358,7 +360,7 @@ message TStorageUsage {
         SSD = 2;
     }
     EType Type = 1;
-    uint64 Size = 2;
+    optional uint64 Size = 2;
     uint64 Limit = 3;
     uint64 SoftQuota = 4;
     uint64 HardQuota = 5;
@@ -394,6 +396,8 @@ message TTenant {
     Ydb.Cms.DatabaseQuotas DatabaseQuotas = 42;
     repeated TStorageUsage TablesStorage = 44;
     repeated TStorageUsage DatabaseStorage = 45;
+    uint32 CoresTotal = 50;
+    optional NKikimrMemory.TMemoryStats MemoryStats = 51;
 }
 
 message TTenants {
@@ -530,10 +534,27 @@ message TNodeInfo {
     bool Disconnected = 4;
     float CpuUsage = 5;
     float DiskSpaceUsage = 6;
-    NKikimrWhiteboard.TSystemStateInfo SystemState = 10;
-    repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 20;
-    repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 30;
-    repeated TTabletStateInfo Tablets = 40;
+    optional uint32 Connections = 7; // total number of live connections
+    EFlag ConnectStatus = 10; // Max
+    optional uint64 ReceiveThroughput = 11;
+    optional uint64 SendThroughput = 12;
+    optional float NetworkUtilization = 20; // Sum
+    optional float NetworkUtilizationMin = 21;
+    optional float NetworkUtilizationMax = 22;
+    optional int64 ClockSkewUs = 30; // Avg
+    optional int64 ClockSkewMinUs = 31;
+    optional int64 ClockSkewMaxUs = 32;
+    optional int64 ReverseClockSkewUs = 33; // Avg
+    optional uint64 PingTimeUs = 40; // Avg
+    optional uint64 PingTimeMinUs = 41;
+    optional uint64 PingTimeMaxUs = 42;
+    optional uint64 ReversePingTimeUs = 43; // Avg
+    NKikimrWhiteboard.TSystemStateInfo SystemState = 50;
+    repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 51;
+    repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 52;
+    repeated TTabletStateInfo Tablets = 53;
+    repeated NKikimrWhiteboard.TNodeStateInfo Peers = 54;
+    repeated NKikimrWhiteboard.TNodeStateInfo ReversePeers = 55;
 }
 
 message TNodesInfo {
@@ -666,13 +687,14 @@ message TEvViewerRequest {
         NKikimrWhiteboard.TEvVDiskStateRequest VDiskRequest = 16;
         NKikimrWhiteboard.TEvPDiskStateRequest PDiskRequest = 17;
         NKikimrWhiteboard.TEvBSGroupStateRequest BSGroupRequest = 18;
+        NKikimrWhiteboard.TEvNodeStateRequest NodeRequest = 19;
         THttpProxyRequest QueryRequest = 13;
         THttpProxyRequest RenderRequest = 14;
         TSchemeCacheRequest AutocompleteRequest = 15;
-        bytes Reserved19 = 19;
         bytes Reserved20 = 20;
         bytes Reserved21 = 21;
         bytes Reserved22 = 22;
+        bytes Reserved23 = 23;
     }
 }
 
@@ -684,13 +706,14 @@ message TEvViewerResponse {
         NKikimrWhiteboard.TEvVDiskStateResponse VDiskResponse = 16;
         NKikimrWhiteboard.TEvPDiskStateResponse PDiskResponse = 17;
         NKikimrWhiteboard.TEvBSGroupStateResponse BSGroupResponse = 18;
+        NKikimrWhiteboard.TEvNodeStateResponse NodeResponse = 19;
         NKikimrKqp.TEvQueryResponse QueryResponse = 13;
         NKikimrGraph.TEvMetricsResult RenderResponse = 14;
         TQueryAutocomplete AutocompleteResponse = 15;
-        bytes Reserved19 = 19;
         bytes Reserved20 = 20;
         bytes Reserved21 = 21;
         bytes Reserved22 = 22;
+        bytes Reserved23 = 23;
     }
 }
 
@@ -741,11 +764,26 @@ enum EAutocompleteType {
 }
 
 message TQueryAutocomplete {
+    enum EDefaultKind {
+        None = 0;
+        Sequence = 1;
+        Literal = 2;
+        Reserved3 = 3;
+        Reserved4 = 4;
+        Reserved5 = 5;
+        Reserved6 = 6;
+        Reserved7 = 7;
+        Reserved8 = 8;
+        Reserved9 = 9;
+    }
     message TResult {
         message TEntity {
             string Name = 1;
             EAutocompleteType Type = 2;
             string Parent = 3;
+            optional uint32 PKIndex = 4;
+            optional bool NotNull = 5;
+            EDefaultKind Default = 6;
         }
         optional uint32 Total = 1;
         repeated TEntity Entities = 2;
@@ -787,3 +825,4 @@ message TFeatureFlagsConfig {
     uint32 Version = 1;
     repeated TDatabase Databases = 2;
 }
+

@@ -8,7 +8,7 @@ import pytest
 import time
 import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.public.api.protos.ydb_value_pb2 as ydb
-import ydb.tests.library.common.yatest_common as yatest_common
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_v2, yq_all
 from google.protobuf.struct_pb2 import NullValue
@@ -668,6 +668,69 @@ Pear,15,33'''
         assert result_set.rows[2].items[0].int64_value == 30
         assert sum(kikimr.control_plane.get_metering(1)) == 10
 
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_json_list_formats(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        fruits = '''[
+    { "date" : "", "datetime" : "", "timestamp" : "", "interval" : "", "date32" : "", "datetime64" : "", "timestamp64" : "", "interval64" : "", "tzDate" : "", "tzDateTime" : "", "tzTimestamp" : "" },
+    { "date" : "", "datetime" : "", "timestamp" : "", "interval" : "", "date32" : "", "datetime64" : "", "timestamp64" : "", "interval64" : "", "tzDate" : "", "tzDateTime" : "", "tzTimestamp" : "" },
+    { "date" : "", "datetime" : "", "timestamp" : "", "interval" : "", "date32" : "", "datetime64" : "", "timestamp64" : "", "interval64" : "", "tzDate" : "", "tzDateTime" : "", "tzTimestamp" : "" }
+]'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='timestamp.json', ContentType='text/plain')
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`/timestamp.json`
+            WITH (
+                format="json_list",
+                schema=(
+                    `date` date,
+                    `datetime` datetime,
+                    `timestamp` timestamp,
+                    `interval` interval,
+                    `date32` date32,
+                    `datetime64` datetime64,
+                    `timestamp64` timestamp64,
+                    `interval64` interval64,
+                    `tzDate` tzDate,
+                    `tzDateTime` tzDateTime,
+                    `tzTimestamp` tzTimestamp
+                ));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+
+        error_message = str(client.describe_query(query_id).result)
+        assert "Date, Timestamp and Interval types are not allowed in json_list format" in error_message
+        assert "Date" in error_message
+        assert "Datetime" in error_message
+        assert "Timestamp" in error_message
+        assert "Interval" in error_message
+        assert "Date32" in error_message
+        assert "Datetime64" in error_message
+        assert "Timestamp64" in error_message
+        assert "Interval64" in error_message
+        assert "TzDate" in error_message
+        assert "TzDatetime" in error_message
+        assert "TzTimestamp" in error_message
+
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_with_hopping(self, kikimr, s3, client, unique_prefix):
@@ -1029,13 +1092,13 @@ Pear,15,33'''
 
         # Check that checkpointing is finished
         def wait_checkpoints(require_query_is_on=False):
-            deadline = time.time() + yatest_common.plain_or_under_sanitizer(300, 900)
+            deadline = time.time() + plain_or_under_sanitizer(300, 900)
             while True:
                 completed = kikimr.control_plane.get_completed_checkpoints(query_id, require_query_is_on)
                 if completed >= 3:
                     break
                 assert time.time() < deadline, "Completed: {}".format(completed)
-                time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
+                time.sleep(plain_or_under_sanitizer(0.5, 2))
 
         logging.debug("Wait checkpoints")
         wait_checkpoints(True)
@@ -1051,3 +1114,56 @@ Pear,15,33'''
 
         client.abort_query(query_id)
         client.wait_query(query_id)
+
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_double_optional_types_validation(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        fruits = '''Fruit,Price,Weight
+Banana,3,100
+Apple,2,22
+Pear,15,33'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`fruits.csv`
+            WITH (format='csv_with_names', SCHEMA (
+                Name Int32??,
+            ));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+
+        assert "Double optional types are not supported" in issues, "Incorrect issues: " + issues
+
+        sql = f'''
+            INSERT INTO `{storage_connection_name}`.`insert/`
+            WITH
+            (
+                FORMAT="csv_with_names"
+            )
+            SELECT CAST(42 AS Int32??) as Weight;'''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+
+        assert "Double optional types are not supported" in issues, "Incorrect issues: " + issues

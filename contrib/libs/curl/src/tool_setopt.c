@@ -25,6 +25,8 @@
 
 #ifndef CURL_DISABLE_LIBCURL_OPTION
 
+#define ENABLE_CURLX_PRINTF
+/* use our own printf() functions */
 #include "curlx.h"
 
 #include "tool_cfgable.h"
@@ -76,6 +78,7 @@ const struct NameValueUnsigned setopt_nv_CURLAUTH[] = {
   NV(CURLAUTH_GSSNEGOTIATE),
   NV(CURLAUTH_NTLM),
   NV(CURLAUTH_DIGEST_IE),
+  NV(CURLAUTH_NTLM_WB),
   NV(CURLAUTH_ONLY),
   NV(CURLAUTH_NONE),
   NVEND,
@@ -101,16 +104,6 @@ const struct NameValue setopt_nv_CURL_SSLVERSION[] = {
   NV(CURL_SSLVERSION_TLSv1_1),
   NV(CURL_SSLVERSION_TLSv1_2),
   NV(CURL_SSLVERSION_TLSv1_3),
-  NVEND,
-};
-
-const struct NameValue setopt_nv_CURL_SSLVERSION_MAX[] = {
-  NV(CURL_SSLVERSION_MAX_NONE),
-  NV(CURL_SSLVERSION_MAX_DEFAULT),
-  NV(CURL_SSLVERSION_MAX_TLSv1_0),
-  NV(CURL_SSLVERSION_MAX_TLSv1_1),
-  NV(CURL_SSLVERSION_MAX_TLSv1_2),
-  NV(CURL_SSLVERSION_MAX_TLSv1_3),
   NVEND,
 };
 
@@ -205,7 +198,7 @@ static const struct NameValue setopt_nv_CURLNONZERODEFAULTS[] = {
 #define REM1(f,a) ADDF((&easysrc_toohard, f,a))
 #define REM3(f,a,b,c) ADDF((&easysrc_toohard, f,a,b,c))
 
-/* Escape string to C string syntax. Return NULL if out of memory.
+/* Escape string to C string syntax.  Return NULL if out of memory.
  * Is this correct for those wacky EBCDIC guys? */
 
 #define MAX_STRING_LENGTH_OUTPUT 2000
@@ -247,10 +240,14 @@ static char *c_escape(const char *str, curl_off_t len)
       if(p && *p)
         result = curlx_dyn_addn(&escaped, to + 2 * (p - from), 2);
       else {
-        result = curlx_dyn_addf(&escaped,
-                                /* Octal escape to avoid >2 digit hex. */
-                                (len > 1 && ISXDIGIT(s[1])) ?
-                                  "\\%03o" : "\\x%02x",
+        const char *format = "\\x%02x";
+
+        if(len > 1 && ISXDIGIT(s[1])) {
+          /* Octal escape to avoid >2 digit hex. */
+          format = "\\%03o";
+        }
+
+        result = curlx_dyn_addf(&escaped, format,
                                 (unsigned int) *(unsigned char *) s);
       }
     }
@@ -292,50 +289,6 @@ CURLcode tool_setopt_enum(CURL *curl, struct GlobalConfig *config,
     }
     else {
       CODE2("curl_easy_setopt(hnd, %s, (long)%s);", name, nv->name);
-    }
-  }
-
-#ifdef DEBUGBUILD
-  if(ret)
-    warnf(config, "option %s returned error (%d)", name, (int)ret);
-#endif
-nomem:
-  return ret;
-}
-
-/* setopt wrapper for CURLOPT_SSLVERSION */
-CURLcode tool_setopt_SSLVERSION(CURL *curl, struct GlobalConfig *config,
-                                const char *name, CURLoption tag,
-                                long lval)
-{
-  CURLcode ret = CURLE_OK;
-  bool skip = FALSE;
-
-  ret = curl_easy_setopt(curl, tag, lval);
-  if(!lval)
-    skip = TRUE;
-
-  if(config->libcurl && !skip && !ret) {
-    /* we only use this for real if --libcurl was used */
-    const struct NameValue *nv = NULL;
-    const struct NameValue *nv2 = NULL;
-    for(nv = setopt_nv_CURL_SSLVERSION; nv->name; nv++) {
-      if(nv->value == (lval & 0xffff))
-        break; /* found it */
-    }
-    for(nv2 = setopt_nv_CURL_SSLVERSION_MAX; nv2->name; nv2++) {
-      if(nv2->value == (lval & ~0xffff))
-        break; /* found it */
-    }
-    if(!nv->name) {
-      /* If no definition was found, output an explicit value.
-       * This could happen if new values are defined and used
-       * but the NameValue list is not updated. */
-      CODE2("curl_easy_setopt(hnd, %s, %ldL);", name, lval);
-    }
-    else {
-      CODE3("curl_easy_setopt(hnd, %s, (long)(%s | %s));",
-            name, nv->name, nv2->name);
     }
   }
 
@@ -478,7 +431,7 @@ static CURLcode libcurl_generate_mime_part(CURL *curl,
   case TOOLMIME_STDIN:
     if(!filename)
       filename = "-";
-    FALLTHROUGH();
+    /* FALLTHROUGH */
   case TOOLMIME_STDINDATA:
     /* Can only be reading stdin in the current context. */
     CODE1("curl_mime_data_cb(part%d, -1, (curl_read_callback) fread, \\",
@@ -700,7 +653,7 @@ CURLcode tool_setopt(CURL *curl, bool str, struct GlobalConfig *global,
       if(escape) {
         curl_off_t len = ZERO_TERMINATED;
         if(tag == CURLOPT_POSTFIELDS)
-          len = curlx_dyn_len(&config->postdata);
+          len = config->postfieldsize;
         escaped = c_escape(value, len);
         NULL_CHECK(escaped);
         CODE2("curl_easy_setopt(hnd, %s, \"%s\");", name, escaped);

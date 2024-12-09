@@ -35,7 +35,13 @@ private:
     const std::shared_ptr<IStoragesManager> StoragesManager;
     std::map<TLeftBucketBorder, std::shared_ptr<TPortionsBucket>> Buckets;
 
-    std::map<i64, THashSet<TWeightedPortionsBucket>> BucketsByWeight;
+    struct TReverseComparator {
+        bool operator()(const i64 l, const i64 r) const {
+            return r < l;
+        }
+    };
+
+    std::map<i64, THashSet<TWeightedPortionsBucket>, TReverseComparator> BucketsByWeight;
     THashSet<TWeightedPortionsBucket> RatedBuckets;
     TInstant CurrentWeightInstant = TInstant::Now();
 
@@ -123,8 +129,8 @@ public:
 
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
         AFL_VERIFY(BucketsByWeight.size());
-        AFL_VERIFY(BucketsByWeight.rbegin()->second.size());
-        const auto bucket = BucketsByWeight.rbegin()->second.begin()->GetBucketVerified();
+        AFL_VERIFY(BucketsByWeight.begin()->second.size());
+        const auto bucket = BucketsByWeight.begin()->second.begin()->GetBucketVerified();
         return bucket->IsLocked(dataLocksManager);
     }
 
@@ -154,7 +160,7 @@ public:
 
     i64 GetWeight() const {
         AFL_VERIFY(BucketsByWeight.size());
-        return BucketsByWeight.rbegin()->first;
+        return BucketsByWeight.begin()->first;
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
@@ -211,9 +217,9 @@ public:
 
     std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         AFL_VERIFY(BucketsByWeight.size());
-        AFL_VERIFY(BucketsByWeight.rbegin()->first);
-        AFL_VERIFY(BucketsByWeight.rbegin()->second.size());
-        const std::shared_ptr<TPortionsBucket> bucketForOptimization = BucketsByWeight.rbegin()->second.begin()->GetBucketVerified();
+        AFL_VERIFY(BucketsByWeight.begin()->first);
+        AFL_VERIFY(BucketsByWeight.begin()->second.size());
+        const std::shared_ptr<TPortionsBucket> bucketForOptimization = BucketsByWeight.begin()->second.begin()->GetBucketVerified();
         auto it = Buckets.find(bucketForOptimization->GetStart());
         AFL_VERIFY(it != Buckets.end());
         ++it;

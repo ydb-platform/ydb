@@ -184,14 +184,14 @@ public:
         RegisterType(new TBusTypesRequest);
         RegisterType(new TBusTypesResponse);
         RegisterType(new TBusHiveCreateTablet);
-        RegisterType(new TBusOldHiveCreateTablet);
-        RegisterType(new TBusHiveCreateTabletResult);
         RegisterType(new TBusLocalEnumerateTablets);
         RegisterType(new TBusOldLocalEnumerateTablets);
         RegisterType(new TBusLocalEnumerateTabletsResult);
         RegisterType(new TBusKeyValue);
         RegisterType(new TBusOldKeyValue);
         RegisterType(new TBusKeyValueResponse);
+        RegisterType(new TBusOldHiveCreateTablet);
+        RegisterType(new TBusHiveCreateTabletResult);
         RegisterType(new TBusPersQueue);
         RegisterType(new TBusTabletKillRequest);
         RegisterType(new TBusTabletStateRequest);

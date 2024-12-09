@@ -703,8 +703,8 @@ namespace NKikimr {
                 if (costSettings.HasWriteBlockSize()) {
                     str << " WriteBlockSize# " << costSettings.GetWriteBlockSize();
                 }
-                if (costSettings.HasMinREALHugeBlobInBytes()) {
-                    str << " MinREALHugeBlobInBytes# " << costSettings.GetMinREALHugeBlobInBytes();
+                if (costSettings.HasMinHugeBlobInBytes()) {
+                    str << " MinHugeBlobInBytes# " << costSettings.GetMinHugeBlobInBytes();
                 }
                 str << "}";
             }
@@ -3073,6 +3073,15 @@ namespace NKikimr {
             TLogoBlobID BlobId; // for HugeBlob/InplaceBlob
             ui64 SstId; // for IndexRecord
             ui32 Level; // for IndexRecord
+
+            TString ToString() const {
+                return TStringBuilder() << "{Location# " << Location.ToString()
+                    << " Database# " << (int)Database
+                    << " RecordType# " << (int)RecordType
+                    << " BlobId# " << BlobId.ToString()
+                    << " SstId# " << SstId
+                    << " Level# " << Level << '}';
+            }
         };
 
         std::vector<TLayoutRecord> Layout;
@@ -3190,9 +3199,9 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TEvMinHugeBlobSizeUpdate : public TEventLocal<TEvMinHugeBlobSizeUpdate, TEvBlobStorage::EvMinHugeBlobSizeUpdate> {
     public:
-        ui32 MinREALHugeBlobInBytes;
+        ui32 MinHugeBlobInBytes;
 
-        TEvMinHugeBlobSizeUpdate(ui32 minREALHugeBlobInBytes) : MinREALHugeBlobInBytes(minREALHugeBlobInBytes) {  
+        TEvMinHugeBlobSizeUpdate(ui32 minHugeBlobInBytes) : MinHugeBlobInBytes(minHugeBlobInBytes) {  
         };
     };
 } // NKikimr

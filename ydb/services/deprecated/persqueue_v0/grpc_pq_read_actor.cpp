@@ -14,6 +14,8 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/services/persqueue_v1/actors/helpers.h>
+
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 
 #include <util/string/strip.h>
@@ -655,6 +657,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
     Session = session;
     ProtocolVersion = init.GetProtocolVersion();
     CommitsDisabled = init.GetCommitsDisabled();
+    UserAgent = init.GetVersion();
 
     if (ProtocolVersion >= NPersQueue::TReadRequest::ReadParamsInInit) {
         ReadSettingsInited = true;
@@ -835,6 +838,14 @@ void TReadSessionActor::RegisterSessions(const TActorContext& ctx) {
     }
 }
 
+void TReadSessionActor::SetupBytesReadByUserAgentCounter() {
+    BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", "pqv0")
+        ->GetSubgroup("consumer", ClientPath)
+        ->GetSubgroup("user_agent", V1::DropUserAgentSuffix(V1::CleanupCounterValueString(UserAgent)))
+        ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
+}
 
 void TReadSessionActor::SetupCounters()
 {
@@ -864,6 +875,8 @@ void TReadSessionActor::SetupCounters()
     if (ProtocolVersion < NPersQueue::TReadRequest::Batching) {
         ++(*SessionsWithOldBatchingVersion);
     }
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 
@@ -884,6 +897,8 @@ void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic)
     topicCounters.Errors                 = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"PartitionsErrors"}, true);
     topicCounters.Commits                = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"Commits"}, true);
     topicCounters.WaitsForData           = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"WaitsForData"}, true);
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic, const TString& cloudId,
@@ -902,6 +917,8 @@ void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic, cons
     topicCounters.PartitionsInfly        = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.count"}, false, "name");
     topicCounters.Errors                 = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.errors"}, true, "name");
     topicCounters.Commits                = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.commits"}, true, "name");
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
@@ -1525,6 +1542,9 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
 
     Y_ABORT_UNLESS(formedResponse->RequestsInfly == 0);
     i64 diff = formedResponse->Response.ByteSize();
+
+    BytesReadByUserAgent->Add(diff);
+
     const bool hasMessages = HasMessages(formedResponse->Response.GetBatchedData());
     if (hasMessages) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " assign read id " << ReadIdToResponse << " to read request " << formedResponse->Guid);
@@ -2126,6 +2146,11 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         if (proto.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue; //TODO - no such chunks must be on prod
         }
+
+        if (!proto.has_codec()) {
+            proto.set_codec(NPersQueueCommon::RAW);
+        }
+
         TString sourceId = "";
         if (!r.GetSourceId().empty()) {
             if (!NPQ::NSourceIdEncoding::IsValidEncoded(r.GetSourceId())) {

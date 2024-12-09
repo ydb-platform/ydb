@@ -1,6 +1,5 @@
 #include "meta.h"
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 

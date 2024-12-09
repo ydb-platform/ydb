@@ -1,0 +1,222 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1f4ce2837d476b6bed69d2f0d5589b4d
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2009 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mem_fn.hpp [13:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3b5d4e054fe9088c58227f942db2f5de
+BELONGS ya.make
+    License text:
+        // Copyright 2002, 2020 Peter Dimov
+        // Copyright 2009 Steven Watanabe
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/protect.hpp [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3ca4379da2fa49ccbaaf67782ff8bd4f
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2001 Peter Dimov and Multi Media Ltd.
+        //  Copyright (c) 2008 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/detail/bind_mf2_cc.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 467be894dd93ea2733b024c6140d7af4
+BELONGS ya.make
+    License text:
+        //  Copyright 2015-2020, 2024 Peter Dimov.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/detail/tuple_for_each.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4e2b7d1f2d2c67f82f930a242a17dcd7
+BELONGS ya.make
+    License text:
+        //  Copyright 2002, 2015, 2024 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/placeholders.hpp [13:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5ecdbaa136da002e57f3b5ba003bd0db
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2006 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/is_placeholder.hpp [13:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6ccc395653453a58a493161159c73edd
+BELONGS ya.make
+    License text:
+        // Copyright 2015, 2017, 2019 Peter Dimov.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/detail/integer_sequence.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 86701cd2068050fd3f4c732c0419742e
+BELONGS ya.make
+    License text:
+        // Copyright 2001-2005, 2024 Peter Dimov
+        // Copyright 2001 David Abrahams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/bind.hpp [13:14]
+        include/boost/bind/mem_fn.hpp [13:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 945ce867abcc2380a4a604c90ec1d857
+BELONGS ya.make
+    License text:
+        //  Copyright 2006, 2020 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/detail/result_traits.hpp [15:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f416aa8f1e6678b0d6d5857d642b969
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2002 Peter Dimov and Multi Media Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/arg.hpp [13:13]
+        include/boost/bind/make_adaptable.hpp [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b5946573aa2a793324ebafe24646df01
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2001 Peter Dimov and Multi Media Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/detail/bind_cc.hpp [6:6]
+        include/boost/bind/detail/bind_mf2_cc.hpp [6:7]
+        include/boost/bind/detail/bind_mf_cc.hpp [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d40baf679ee3eac95115dae18fde0082
+BELONGS ya.make
+    License text:
+        // Copyright 2002, 2020 Peter Dimov
+        // Copyright 2009 Steven Watanabe
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/protect.hpp [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d711e141f5e071d5d3f926dd443bb35b
+BELONGS ya.make
+    License text:
+        // Copyright 2001-2005, 2024 Peter Dimov
+        // Copyright 2001 David Abrahams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/bind.hpp [13:14]
+        include/boost/bind/mem_fn.hpp [13:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dabcb5f9151e6c8bc7d7c81a00f1a164
+BELONGS ya.make
+    License text:
+        // Copyright 2002, 2003, 2024 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/apply.hpp [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL faedff635aa9f9a8a18d7c7c02b75e2d
+BELONGS ya.make
+    License text:
+        // Copyright 2021 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind/std_placeholders.hpp [10:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fb56a746a3cac247b27d3293104f2b01
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2009, 2015 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/bind.hpp [12:12]

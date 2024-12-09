@@ -59,30 +59,30 @@ namespace NActors {
     };
 
     struct TWhiteboardSessionStatus {
-        TActorSystem* ActorSystem;
-        ui32 PeerId;
-        TString Peer;
-        bool Connected;
-        bool Green;
-        bool Yellow;
-        bool Orange;
-        bool Red;
-        i64 ClockSkew;
-        bool ReportClockSkew;
+        enum class EFlag {
+            GREEN,
+            YELLOW,
+            ORANGE,
+            RED,
+        };
 
-        TWhiteboardSessionStatus(TActorSystem* actorSystem, ui32 peerId, const TString& peer, bool connected,
-                                        bool green, bool yellow, bool orange, bool red, i64 clockSkew, bool reportClockSkew)
-            : ActorSystem(actorSystem)
-            , PeerId(peerId)
-            , Peer(peer)
-            , Connected(connected)
-            , Green(green)
-            , Yellow(yellow)
-            , Orange(orange)
-            , Red(red)
-            , ClockSkew(clockSkew)
-            , ReportClockSkew(reportClockSkew)
-            {}
+        TActorSystem* ActorSystem;
+        ui32 PeerNodeId;
+        TString PeerName;
+        bool Connected;
+        // oneof {
+        bool SessionClosed = false;
+        bool SessionPendingConnection = false;
+        bool SessionConnected = false;
+        // }
+        EFlag ConnectStatus;
+        i64 ClockSkewUs;
+        bool ReportClockSkew;
+        ui64 PingTimeUs;
+        NActors::TScopeId ScopeId;
+        double Utilization;
+        ui64 ConnectTime;
+        ui64 BytesWrittenToSocket;
     };
 
     struct TChannelSettings {

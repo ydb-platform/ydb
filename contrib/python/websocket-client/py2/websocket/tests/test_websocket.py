@@ -99,8 +99,8 @@ class HeaderSockMock(SockMock):
 
     def __init__(self, fname):
         SockMock.__init__(self)
-        import yatest.common
-        path = yatest.common.source_path(os.path.join('contrib/python/websocket-client/py2/websocket/tests', fname))
+        import yatest.common as yc
+        path = os.path.join(os.path.dirname(yc.source_path(__file__)), fname)
         with open(path, "rb") as f:
             self.add_packet(f.read())
 

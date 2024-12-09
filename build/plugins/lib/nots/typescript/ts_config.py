@@ -157,7 +157,7 @@ class TsConfig(object):
         """
         extends = self.data.get(RootFields.extends)
 
-        if type(extends) == list:
+        if isinstance(extends, list):
             paths = [self.extend_one(dep_paths, ext_value) for ext_value in extends]
             flatten_paths = [item for row in paths for item in row]
         else:
@@ -276,7 +276,7 @@ class TsConfig(object):
         return ts_glob(ts_glob_config, all_files)
 
     def get_out_dirs(self):
-        # type: () -> list[str]
+        # type: () -> set[str]
         output_dirs = [self.compiler_option("outDir"), self.compiler_option("declarationDir")]
 
-        return [d for d in output_dirs if d is not None]
+        return {d for d in output_dirs if d is not None}

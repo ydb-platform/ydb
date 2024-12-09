@@ -33,8 +33,8 @@ bool TTxWrite::CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
     return true;
 }
 
-bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
-    CommitSnapshot = NOlap::TSnapshot::MaxForPlanStep(Self->GetOutdatedStep());
+bool TTxWrite::DoExecute(TTransactionContext& txc, const TActorContext&) {
+    CommitSnapshot = Self->GetCurrentSnapshotForInternalModification();
     TMemoryProfileGuard mpg("TTxWrite::Execute");
     NActors::TLogContextGuard logGuard =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "execute");
@@ -118,7 +118,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     return true;
 }
 
-void TTxWrite::Complete(const TActorContext& ctx) {
+void TTxWrite::DoComplete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxWrite::Complete");
     NActors::TLogContextGuard logGuard =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "complete");
@@ -131,10 +131,7 @@ void TTxWrite::Complete(const TActorContext& ctx) {
         i->OnCompleteTxAfterRemoving(true);
     }
 
-    AFL_VERIFY(buffer.GetAggregations().size() == Results.size() + ResultOperators.size());
-    for (auto&& i : ResultOperators) {
-        Self->GetProgressTxController().FinishProposeOnComplete(i->GetTxId(), ctx);
-    }
+    AFL_VERIFY(buffer.GetAggregations().size() == Results.size());
     for (auto&& i : Results) {
         i.DoSendReply(ctx);
     }

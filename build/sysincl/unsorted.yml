@@ -60,7 +60,6 @@
   - gdbm.h
   - gmp.h
   - hp-timing.h
-  - httpd_wrap.h
   - i86.h
   - ieeedef.h
   - in.h
@@ -115,7 +114,6 @@
   - pth.h
   - rtl.h
   - shlib-compat.h
-  - sigsegv.h
   - socket.h
   - socketshr.h
   - socklib.h
@@ -155,10 +153,6 @@
   - local-setxid.h
   - vasprintf.h
   #endif
-
-- source_filter: "^contrib/(libs/(apache|httpd|libuv)|python/uWSGI)"
-  includes:
-  - port.h
 
 - includes:
   - cpu-features.h

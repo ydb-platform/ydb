@@ -23,13 +23,15 @@
 namespace NKikimr::NDataShard::NKMeans {
 
 template <typename TRes>
-Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const float* lhs, const float* rhs, size_t length) noexcept {
+Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const float* lhs, const float* rhs, size_t length) noexcept
+{
     auto r = TriWayDotProduct(lhs, rhs, length);
     return {static_cast<TRes>(r.LL), static_cast<TRes>(r.LR), static_cast<TRes>(r.RR)};
 }
 
 template <typename TRes>
-Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const i8* lhs, const i8* rhs, size_t length) noexcept {
+Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const i8* lhs, const i8* rhs, size_t length) noexcept
+{
     const auto ll = DotProduct(lhs, lhs, length);
     const auto lr = DotProduct(lhs, rhs, length);
     const auto rr = DotProduct(rhs, rhs, length);
@@ -37,7 +39,8 @@ Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const i8* lhs, const i8* rhs,
 }
 
 template <typename TRes>
-Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const ui8* lhs, const ui8* rhs, size_t length) noexcept {
+Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const ui8* lhs, const ui8* rhs, size_t length) noexcept
+{
     const auto ll = DotProduct(lhs, lhs, length);
     const auto lr = DotProduct(lhs, rhs, length);
     const auto rr = DotProduct(rhs, rhs, length);
@@ -57,19 +60,24 @@ struct TMetric {
 
     ui32 Dimensions = 0;
 
-    bool IsExpectedSize(TArrayRef<const char> data) const noexcept {
+    bool IsExpectedSize(TArrayRef<const char> data) const noexcept
+    {
         return data.size() == 1 + sizeof(TCoord) * Dimensions;
     }
 
-    auto GetCoords(const char* coords) {
+    auto GetCoords(const char* coords)
+    {
         return std::span{reinterpret_cast<const TCoord*>(coords), Dimensions};
     }
 
-    auto GetData(char* data) {
+    auto GetData(char* data)
+    {
         return std::span{reinterpret_cast<TCoord*>(data), Dimensions};
     }
 
-    void Fill(TString& d, TSum* embedding, ui64& c) {
+    void Fill(TString& d, TSum* embedding, ui64& c)
+    {
+        Y_ASSERT(c > 0);
         const auto count = static_cast<TSum>(std::exchange(c, 0));
         auto data = GetData(d.MutRef().data());
         for (auto& coord : data) {
@@ -86,11 +94,13 @@ struct TCosineSimilarity: TMetric<T> {
     // double used to avoid precision issues
     using TRes = double;
 
-    static TRes Init() {
+    static TRes Init()
+    {
         return std::numeric_limits<TRes>::max();
     }
 
-    auto Distance(const char* cluster, const char* embedding) const noexcept {
+    auto Distance(const char* cluster, const char* embedding) const noexcept
+    {
         const auto r = CosineImpl<TRes>(reinterpret_cast<const TCoord*>(cluster),
                                         reinterpret_cast<const TCoord*>(embedding), this->Dimensions);
         // sqrt(ll) * sqrt(rr) computed instead of sqrt(ll * rr) to avoid precision issues
@@ -106,11 +116,13 @@ struct TL1Distance: TMetric<T> {
     using TSum = typename TMetric<T>::TSum;
     using TRes = std::conditional_t<std::is_floating_point_v<T>, T, ui64>;
 
-    static TRes Init() {
+    static TRes Init()
+    {
         return std::numeric_limits<TRes>::max();
     }
 
-    auto Distance(const char* cluster, const char* embedding) const noexcept {
+    auto Distance(const char* cluster, const char* embedding) const noexcept
+    {
         const auto distance = L1Distance(reinterpret_cast<const TCoord*>(cluster),
                                          reinterpret_cast<const TCoord*>(embedding), this->Dimensions);
         return distance;
@@ -123,11 +135,13 @@ struct TL2Distance: TMetric<T> {
     using TSum = typename TMetric<T>::TSum;
     using TRes = std::conditional_t<std::is_floating_point_v<T>, T, ui64>;
 
-    static TRes Init() {
+    static TRes Init()
+    {
         return std::numeric_limits<TRes>::max();
     }
 
-    auto Distance(const char* cluster, const char* embedding) const noexcept {
+    auto Distance(const char* cluster, const char* embedding) const noexcept
+    {
         const auto distance = L2SqrDistance(reinterpret_cast<const TCoord*>(cluster),
                                             reinterpret_cast<const TCoord*>(embedding), this->Dimensions);
         return distance;
@@ -140,11 +154,13 @@ struct TMaxInnerProductSimilarity: TMetric<T> {
     using TSum = typename TMetric<T>::TSum;
     using TRes = std::conditional_t<std::is_floating_point_v<T>, T, i64>;
 
-    static TRes Init() {
+    static TRes Init()
+    {
         return std::numeric_limits<TRes>::max();
     }
 
-    auto Distance(const char* cluster, const char* embedding) const noexcept {
+    auto Distance(const char* cluster, const char* embedding) const noexcept
+    {
         const TRes similarity = DotProduct(reinterpret_cast<const TCoord*>(cluster),
                                            reinterpret_cast<const TCoord*>(embedding), this->Dimensions);
         return -similarity;
@@ -153,7 +169,8 @@ struct TMaxInnerProductSimilarity: TMetric<T> {
 
 template <typename TMetric>
 struct TCalculation: TMetric {
-    ui32 FindClosest(std::span<const TString> clusters, const char* embedding) const {
+    ui32 FindClosest(std::span<const TString> clusters, const char* embedding) const
+    {
         auto min = this->Init();
         ui32 closest = std::numeric_limits<ui32>::max();
         for (size_t i = 0; const auto& cluster : clusters) {
@@ -168,19 +185,12 @@ struct TCalculation: TMetric {
     }
 };
 
-struct TStats {
-    ui64 Rows = 0;
-    ui64 Bytes = 0;
-};
-
 template <typename TMetric>
 ui32 FeedEmbedding(const TCalculation<TMetric>& calculation, std::span<const TString> clusters,
-                   const NTable::TRowState& row, NTable::TPos embeddingPos, TStats& stats)
+                   const NTable::TRowState& row, NTable::TPos embeddingPos)
 {
     Y_ASSERT(embeddingPos < row.Size());
     const auto embedding = row.Get(embeddingPos).AsRef();
-    stats.Rows += 1;
-    stats.Bytes += embedding.size(); // TODO(mbkkt) add some constant overhead?
     if (!calculation.IsExpectedSize(embedding)) {
         return std::numeric_limits<ui32>::max();
     }
@@ -195,7 +205,7 @@ void AddRowMain2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell>
 void AddRowBuild2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
 
 void AddRowBuild2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
-                       ui32 dataPos);
+                         ui32 dataPos);
 
 TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
                      const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
@@ -205,7 +215,8 @@ std::shared_ptr<NTxProxy::TUploadTypes>
 MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansRequest::EState uploadState,
                 const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data);
 
-void MakeScan(auto& record, const auto& createScan, const auto& badRequest) {
+void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
+{
     if (!record.HasEmbeddingColumn()) {
         badRequest(TStringBuilder() << "Should be specified embedding column");
         return;
@@ -233,39 +244,25 @@ void MakeScan(auto& record, const auto& createScan, const auto& badRequest) {
     };
 
     // TODO(mbkkt) unify distance and similarity to single field in proto
-    if (settings.has_similarity() && settings.has_distance()) {
-        badRequest("Shouldn't be specified similarity and distance at the same time");
-    } else if (settings.has_similarity()) {
-        switch (settings.similarity()) {
-            case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
-                handleType.template operator()<TCosineSimilarity>();
-                break;
-            case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-                handleType.template operator()<TMaxInnerProductSimilarity>();
-                break;
-            default:
-                badRequest("Wrong similarity");
-                break;
-        }
-    } else if (settings.has_distance()) {
-        switch (settings.distance()) {
-            case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
-                // We don't need to have separate implementation for distance, because clusters will be same as for
-                // similarity
-                handleType.template operator()<TCosineSimilarity>();
-                break;
-            case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-                handleType.template operator()<TL1Distance>();
-                break;
-            case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-                handleType.template operator()<TL2Distance>();
-                break;
-            default:
-                badRequest("Wrong distance");
-                break;
-        }
-    } else {
-        badRequest("Should be specified similarity or distance");
+    switch (settings.metric()) {
+        case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
+            handleType.template operator()<TMaxInnerProductSimilarity>();
+            break;
+        case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
+        case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
+            // We don't need to have separate implementation for distance,
+            // because clusters will be same as for similarity
+            handleType.template operator()<TCosineSimilarity>();
+            break;
+        case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
+            handleType.template operator()<TL1Distance>();
+            break;
+        case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
+            handleType.template operator()<TL2Distance>();
+            break;
+        default:
+            badRequest("Wrong similarity");
+            return;
     }
 }
 

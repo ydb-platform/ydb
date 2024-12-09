@@ -1,8 +1,8 @@
 #include "kqp_opt_cbo.h"
 #include "kqp_opt_log_impl.h"
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
 
 
 namespace NKikimr::NKqp::NOpt {
@@ -36,7 +36,7 @@ TMaybeNode<TKqlKeyInc> GetRightTableKeyPrefix(const TKqlKeyRange& range) {
 /**
  * KQP specific rule to check if a LookupJoin is applicable
 */
-bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNode>& node, const TVector<TString>& joinColumns, const TKqpProviderContext& ctx) {
+bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNode>& node, const TVector<TJoinColumn>& joinColumns, const TKqpProviderContext& ctx) {
 
     auto rel = std::static_pointer_cast<TKqpRelOptimizerNode>(node);
     auto expr = TExprBase(rel->Node);
@@ -45,7 +45,7 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
         return false;
     }
 
-    if (find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) { return node->Stats->KeyColumns->Data[0] == s;}) != joinColumns.end()) {
+    if (std::find_if(joinColumns.begin(), joinColumns.end(), [&] (const TJoinColumn& c) { return node->Stats.KeyColumns->Data[0] == c.AttributeName;}) != joinColumns.end()) {
         return true;
     }
 
@@ -97,8 +97,8 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
         return false;
     }
 
-    if (prefixSize < node->Stats->KeyColumns->Data.size() && (find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) {
-            return node->Stats->KeyColumns->Data[prefixSize] == s;
+    if (prefixSize < node->Stats.KeyColumns->Data.size() && (std::find_if(joinColumns.begin(), joinColumns.end(), [&] (const TJoinColumn& c) {
+            return node->Stats.KeyColumns->Data[prefixSize] == c.AttributeName;
         }) == joinColumns.end())){
             return false;
         }
@@ -108,29 +108,28 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
 
 bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left, 
     std::shared_ptr<IBaseOptimizerNode> right, 
-    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     TKqpProviderContext& ctx
 ) {
-    Y_UNUSED(left, joinConditions, leftJoinKeys);
+    Y_UNUSED(left, leftJoinKeys);
 
-    if (!(right->Stats->StorageType == EStorageType::RowStorage)) {
+    if (!(right->Stats.StorageType == EStorageType::RowStorage)) {
         return false;
     }
 
     auto rightStats = right->Stats;
 
-    if (!rightStats->KeyColumns) {
+    if (!rightStats.KeyColumns) {
         return false;
     }
     
-    if (rightStats->Type != EStatisticsType::BaseTable) {
+    if (rightStats.Type != EStatisticsType::BaseTable) {
         return false;
     }
 
     for (auto rightCol : rightJoinKeys) {
-        if (std::find(rightStats->KeyColumns->Data.begin(), rightStats->KeyColumns->Data.end(), rightCol) == rightStats->KeyColumns->Data.end()) {
+        if (find(rightStats.KeyColumns->Data.begin(), rightStats.KeyColumns->Data.end(), rightCol.AttributeName) == rightStats.KeyColumns->Data.end()) {
             return false;
         }
     }
@@ -142,30 +141,29 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
 
 bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
     const std::shared_ptr<IBaseOptimizerNode>& right, 
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
-    EJoinKind joinKind)  {
+    EJoinKind joinKind) {
 
     switch( joinAlgo ) {
         case EJoinAlgoType::LookupJoin:
-            if ((OptLevel != 3) && (left->Stats->Nrows > 1000)) {
+            if ((OptLevel != 3) && (left->Stats.Nrows > 1000)) {
                 return false;
             }
-            return IsLookupJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, *this);
+            return IsLookupJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, *this);
 
         case EJoinAlgoType::LookupJoinReverse:
             if (joinKind != EJoinKind::LeftSemi) {
                 return false;
             }
-            if ((OptLevel != 3) && (right->Stats->Nrows > 1000)) {
+            if ((OptLevel != 3) && (right->Stats.Nrows > 1000)) {
                 return false;
             }
-            return IsLookupJoinApplicable(right, left, joinConditions, rightJoinKeys, leftJoinKeys, *this);
+            return IsLookupJoinApplicable(right, left, rightJoinKeys, leftJoinKeys, *this);
 
         case EJoinAlgoType::MapJoin:
-            return joinKind != EJoinKind::OuterJoin && joinKind != EJoinKind::Exclusion && right->Stats->ByteSize < 1e8;
+            return joinKind != EJoinKind::OuterJoin && joinKind != EJoinKind::Exclusion && right->Stats.ByteSize < 1e6;
         case EJoinAlgoType::GraceJoin:
             return true;
         default:

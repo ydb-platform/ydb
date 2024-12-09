@@ -1,7 +1,7 @@
 #include "dq_opt_stat_transformer_base.h"
 
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 namespace NYql::NDq {
 
@@ -64,6 +64,9 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     }
     else if(TCoGraceJoinCore::Match(input.Get())) {
         InferStatisticsForGraceJoin(input, TypeCtx, Pctx, CardinalityHints);
+    }
+    else if (TDqJoin::Match(input.Get())) {
+        InferStatisticsForDqJoin(input, TypeCtx, Pctx, CardinalityHints);
     }
 
     // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire

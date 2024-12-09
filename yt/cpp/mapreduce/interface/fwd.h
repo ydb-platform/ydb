@@ -157,6 +157,7 @@ namespace NYT {
     using TTabletCellId = TGUID;
     using TReplicaId = TGUID;
     using TJobId = TGUID;
+    using TJobTraceId = TGUID;
 
     using TYPath = TString;
     using TLocalFilePath = TString;
@@ -369,6 +370,8 @@ namespace NYT {
     struct TGetJobOptions;
 
     struct TListJobsOptions;
+
+    struct TGetJobTraceOptions;
 
     struct IOperationClient;
 

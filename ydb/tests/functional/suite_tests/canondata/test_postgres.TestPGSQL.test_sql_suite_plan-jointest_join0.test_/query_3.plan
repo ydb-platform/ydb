@@ -37,7 +37,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-InnerJoin (MapJoin)-Filter",
+                                        "Node Type": "Aggregate-InnerJoin (MapJoin)-Filter-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -54,7 +54,7 @@
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 5
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
@@ -67,6 +67,15 @@
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.hundred)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 5
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.thousand)"
                                             }
                                         ],
                                         "PlanNodeId": 9,
@@ -95,7 +104,7 @@
                                                                                     }
                                                                                 ],
                                                                                 "Name": "Filter",
-                                                                                "Predicate": "Exist(item.thousand) And item.fivethous % 10 < 10"
+                                                                                "Predicate": "Exist(item.thousand) AND item.fivethous % 10 < 10"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 2,

@@ -1,8 +1,15 @@
 #include "abstract_scheme.h"
 
-#include <ydb/core/tx/columnshard/engines/index_info.h>
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+#include <ydb/core/tx/columnshard/splitter/batch_slice.h>
+
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -24,7 +31,6 @@ std::set<ui32> ISnapshotSchema::GetPkColumnsIds() const {
         result.emplace(GetColumnId(field->name()));
     }
     return result;
-
 }
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::NormalizeBatch(
@@ -108,8 +114,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
                 if (GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
                     return TConclusionStatus::Success();
                 } else {
-                    return TConclusionStatus::Fail(
-                        "empty field for non-default column: '" + dstSchema->field(targetIdx)->name() + "'");
+                    return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema->field(targetIdx)->name() + "'");
                 }
             }
             case NEvWrite::EModificationType::Delete:
@@ -120,8 +125,8 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     const auto nameResolver = [&](const std::string& fieldName) -> i32 {
         return GetIndexInfo().GetColumnIndexOptional(fieldName).value_or(-1);
     };
-    auto batchConclusion =
-        NArrow::TColumnOperator().SkipIfAbsent().ErrorOnDifferentFieldTypes().AdaptIncomingToDestinationExt(incomingBatch, dstSchema, pred, nameResolver);
+    auto batchConclusion = NArrow::TColumnOperator().SkipIfAbsent().ErrorOnDifferentFieldTypes().AdaptIncomingToDestinationExt(
+        incomingBatch, dstSchema, pred, nameResolver);
     if (batchConclusion.IsFail()) {
         return batchConclusion;
     }
@@ -277,4 +282,65 @@ std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
     return result;
 }
 
+TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const ui64 pathId,
+    const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
+    const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {
+    AFL_VERIFY(incomingBatch->num_rows());
+    auto itIncoming = incomingBatch->schema()->fields().begin();
+    auto itIncomingEnd = incomingBatch->schema()->fields().end();
+    auto itIndex = GetIndexInfo().ArrowSchema()->fields().begin();
+    auto itIndexEnd = GetIndexInfo().ArrowSchema()->fields().end();
+    THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks;
+
+    std::shared_ptr<TDefaultSchemaDetails> schemaDetails(
+        new TDefaultSchemaDetails(selfPtr, std::make_shared<NArrow::NSplitter::TSerializationStats>()));
+
+    while (itIncoming != itIncomingEnd && itIndex != itIndexEnd) {
+        if ((*itIncoming)->name() == (*itIndex)->name()) {
+            const ui32 incomingIndex = itIncoming - incomingBatch->schema()->fields().begin();
+            const ui32 columnIndex = itIndex - GetIndexInfo().ArrowSchema()->fields().begin();
+            const ui32 columnId = GetIndexInfo().GetColumnIdByIndexVerified(columnIndex);
+            auto loader = GetIndexInfo().GetColumnLoaderVerified(columnId);
+            auto saver = GetIndexInfo().GetColumnSaver(columnId);
+            saver.AddSerializerWithBorder(100, NArrow::NSerialization::TNativeSerializer::GetUncompressed());
+            saver.AddSerializerWithBorder(100000000, NArrow::NSerialization::TNativeSerializer::GetFast());
+            const auto& columnFeatures = GetIndexInfo().GetColumnFeaturesVerified(columnId);
+            auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(incomingBatch->column(incomingIndex));
+            std::shared_ptr<arrow::RecordBatch> rbToWrite =
+                loader->GetAccessorConstructor()->Construct(accessor, loader->BuildAccessorContext(accessor->GetRecordsCount()));
+            std::shared_ptr<NArrow::NAccessor::IChunkedArray> arrToWrite =
+                loader->GetAccessorConstructor()->Construct(rbToWrite, loader->BuildAccessorContext(accessor->GetRecordsCount())).DetachResult();
+
+            std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
+                saver.Apply(rbToWrite), arrToWrite, TChunkAddress(columnId, 0), columnFeatures) };
+            AFL_VERIFY(chunks.emplace(columnId, std::move(columnChunks)).second);
+            ++itIncoming;
+            ++itIndex;
+        } else {
+            ++itIndex;
+        }
+    }
+    AFL_VERIFY(itIncoming == itIncomingEnd);
+
+    TGeneralSerializedSlice slice(chunks, schemaDetails, splitterCounters);
+    std::vector<TSplittedBlob> blobs;
+    if (!slice.GroupBlobs(blobs, NSplitter::TEntityGroups(NSplitter::TSplitSettings(), NBlobOperations::TGlobal::DefaultStorageId))) {
+        return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
+    }
+    auto constructor =
+        TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::move(blobs), {}, pathId, GetVersion(), GetSnapshot(), storagesManager);
+
+    NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(GetIndexInfo().GetReplaceKey()));
+    const ui32 deletionsCount = (mType == NEvWrite::EModificationType::Delete) ? incomingBatch->num_rows() : 0;
+    constructor.GetPortionConstructor().MutablePortionConstructor().AddMetadata(*this, deletionsCount, primaryKeys, std::nullopt);
+    constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
+    constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(0);
+    constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::INSERTED);
+    return TWritePortionInfoWithBlobsResult(std::move(constructor));
 }
+
+ui32 ISnapshotSchema::GetIndexesCount() const {
+    return GetIndexInfo().GetIndexes().size();
+}
+
+}   // namespace NKikimr::NOlap

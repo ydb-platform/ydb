@@ -265,10 +265,9 @@ Y_UNIT_TEST_SUITE(TSequence) {
             }
         )", {NKikimrScheme::StatusInvalidParameter});
 
-        // Cannot use default from sequence for a non-key column
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
-                Name: "Table"
+                Name: "Table1"
                 Columns { Name: "key"   Type: "Uint64" }
                 Columns { Name: "value" Type: "Uint64" DefaultFromSequence: "myseq" }
                 KeyColumnNames: ["key"]
@@ -276,11 +275,13 @@ Y_UNIT_TEST_SUITE(TSequence) {
             SequenceDescription {
                 Name: "myseq"
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )");
+        env.TestWaitNotification(runtime, txId);
+        txId++;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
-                Name: "Table"
+                Name: "Table2"
                 Columns { Name: "key"   Type: "Uint64" DefaultFromSequence: "myseq" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
@@ -291,16 +292,16 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/Table/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+        TestLs(runtime, "/MyRoot/Table2/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
 
         // Cannot drop sequence used by a column
-        TestDropSequence(runtime, ++txId, "/MyRoot/Table", "myseq",
+        TestDropSequence(runtime, ++txId, "/MyRoot/Table2", "myseq",
             {NKikimrScheme::StatusNameConflict});
 
-        TestDropTable(runtime, ++txId, "/MyRoot", "Table");
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table2");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/Table", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/Table2", false, NLs::PathNotExist);
     }
 
     Y_UNIT_TEST(CreateTableWithDefaultFromSequenceAndIndex) {
@@ -533,6 +534,41 @@ Y_UNIT_TEST_SUITE(TSequence) {
             DataType: "Int16"
         )");
         env.TestWaitNotification(runtime, txId);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Restart: true
+            SetVal {
+                NextValue: 77
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 77);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Increment: 0
+        )", {{NKikimrScheme::StatusInvalidParameter, "INCREMENT must not be zero"}});
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Restart: true
+            SetVal {
+                NextValue: 650000
+            }
+        )", {{NKikimrScheme::StatusInvalidParameter, "RESTART value (650000) cannot be greater than MAXVALUE (32767)"}});
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Restart: true
+            StartValue: 305
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 305);
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"

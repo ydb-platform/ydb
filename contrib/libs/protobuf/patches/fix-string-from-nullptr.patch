@@ -1,0 +1,19 @@
+commit 556f12d15e9e59a132af2d4605b7444c4e3b623e (wip)
+author: vadim-xd
+date: 2024-09-09T01:14:56+03:00
+
+    Fix ArenaStringPtr::Set(nullptr).
+
+    TString(nullptr) is allowed (at least currently), string_view(nullptr) is UB.
+
+--- contrib/libs/protobuf/src/google/protobuf/arenastring.h	(bff10d7f3e550777570ff58e01b9ae291d02490e)
++++ contrib/libs/protobuf/src/google/protobuf/arenastring.h	(556f12d15e9e59a132af2d4605b7444c4e3b623e)
+@@ -424,7 +424,7 @@ inline void ArenaStringPtr::InitAllocated(TProtoStringType* str, Arena* arena) {
+ }
+
+ inline void ArenaStringPtr::Set(const char* s, Arena* arena) {
+-  Set(absl::string_view{s}, arena);
++  Set(TProtoStringType{s}, arena);
+ }
+
+ inline void ArenaStringPtr::Set(const char* s, size_t n, Arena* arena) {

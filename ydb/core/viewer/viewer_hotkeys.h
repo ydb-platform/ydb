@@ -6,7 +6,7 @@
 namespace NKikimr::NViewer {
 
 using namespace NActors;
-using NSchemeShard::TEvSchemeShard;
+namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
 
 class TJsonHotkeys : public TViewerPipeClient {
     static const bool WithRetry = false;

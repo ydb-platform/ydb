@@ -1,13 +1,13 @@
 #include "kqp_column_statistics_requester.h"
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
-#include <ydb/library/yql/core/yql_statistics.h>
+#include <yql/essentials/core/yql_statistics.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp {
 
@@ -93,14 +93,15 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
                 continue;
             }
 
-            if (!columns.contains(column)) {
+            if (!columnsMeta.contains(column)) {
                 YQL_CLOG(DEBUG, ProviderKikimr) << "Table: " + table + " doesn't contain " + column + " to request for column statistics";
+                continue;
             }
 
             NKikimr::NStat::TRequest req;
             req.ColumnTag = columnsMeta[column].Id;
             req.PathId = pathId;
-            getStatisticsRequest->StatRequests.push_back(req);
+            getStatisticsRequest->StatRequests.push_back(std::move(req));
 
             tableMetaByPathId[pathId].TableName = table;
             tableMetaByPathId[pathId].ColumnNameByTag[req.ColumnTag.value()] = column;
@@ -113,15 +114,14 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
 
     using TRequest = NStat::TEvStatistics::TEvGetStatistics;
     using TResponse = NStat::TEvStatistics::TEvGetStatisticsResult;
-    struct TResult : public NYql::IKikimrGateway::TGenericResult {
-        THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
-    };
 
-    auto promise = NewPromise<TResult>();
+    AsyncReadiness = NewPromise<void>();
+    auto promise = NewPromise<TColumnStatisticsResponse>();
     auto callback = [tableMetaByPathId = std::move(tableMetaByPathId)]
-    (TPromise<TResult> promise, NStat::TEvStatistics::TEvGetStatisticsResult&& response) mutable {
+    (TPromise<TColumnStatisticsResponse> promise, NStat::TEvStatistics::TEvGetStatisticsResult&& response) mutable {
         if (!response.Success) {
-            promise.SetValue(NYql::NCommon::ResultFromError<TResult>("can't get column statistics!"));
+            promise.SetValue(NYql::NCommon::ResultFromError<TColumnStatisticsResponse>("can't get column statistics!"));
+            return;
         }
         
         THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
@@ -133,30 +133,39 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
             columnStatistics.CountMinSketch = std::move(stat.CountMinSketch.CountMin);
         }
 
-        promise.SetValue(TResult{.columnStatisticsByTableName = std::move(columnStatisticsByTableName)});
+        promise.SetValue(TColumnStatisticsResponse{.ColumnStatisticsByTableName = std::move(columnStatisticsByTableName)});
     };
     auto statServiceId = NStat::MakeStatServiceID(ActorSystem->NodeId);
     IActor* requestHandler = 
-        new TActorRequestHandler<TRequest, TResponse, TResult>(statServiceId, getStatisticsRequest.Release(), promise, callback);
-    auto actorId = ActorSystem
+        new TActorRequestHandler<TRequest, TResponse, TColumnStatisticsResponse>(statServiceId, getStatisticsRequest.Release(), promise, callback);
+    ActorSystem
         ->Register(requestHandler, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
-    Y_UNUSED(actorId);
 
-    auto res = promise.GetFuture().GetValueSync();
-    if (!res.Issues().Empty()) {
-        TStringStream ss;
-        res.Issues().PrintTo(ss);
-        YQL_CLOG(DEBUG, ProviderKikimr) << "Can't load columns statistics for request: " << ss.Str();
+    promise.GetFuture().Subscribe([this](auto result){ ColumnStatisticsResponse = result.ExtractValue(); AsyncReadiness.SetValue(); });
+
+    return TStatus::Async;
+}
+
+IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoApplyAsyncChanges(TExprNode::TPtr, TExprNode::TPtr&, TExprContext&) {
+    Y_ENSURE(AsyncReadiness.IsReady() && ColumnStatisticsResponse.has_value());
+
+    if (!ColumnStatisticsResponse->Issues().Empty()) {
+        TStringStream ss; ColumnStatisticsResponse->Issues().PrintTo(ss);
+        YQL_CLOG(TRACE, ProviderKikimr) << "Can't load columns statistics for request: " << ss.Str();
         return IGraphTransformer::TStatus::Ok;
     }
 
-    for (auto&& [tableName, columnStatistics]:  res.columnStatisticsByTableName) {
+    for (auto&& [tableName, columnStatistics]:  ColumnStatisticsResponse->ColumnStatisticsByTableName) {
         TypesCtx.ColumnStatisticsByTableName.insert(
             {std::move(tableName), new TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))}
         );
     }
 
-    return IGraphTransformer::TStatus::Ok;
+    return TStatus::Ok;
+}
+
+TFuture<void> TKqpColumnStatisticsRequester::DoGetAsyncFuture(const TExprNode&) {
+    return AsyncReadiness.GetFuture();
 }
 
 bool TKqpColumnStatisticsRequester::BeforeLambdas(const TExprNode::TPtr& input) {

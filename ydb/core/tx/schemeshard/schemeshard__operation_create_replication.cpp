@@ -2,6 +2,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -336,6 +337,10 @@ public:
 
         if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
             desc.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken(BUILTIN_ACL_ROOT);
+        }
+
+        if (desc.GetConfig().GetConsistencyCase() == NKikimrReplication::TReplicationConfig::CONSISTENCY_NOT_SET) {
+            desc.MutableConfig()->MutableWeakConsistency();
         }
 
         desc.MutableState()->MutableStandBy();

@@ -20,7 +20,6 @@
 #include <util/string/escape.h>
 #include <util/string/printf.h>
 
-
 using namespace NActors;
 using namespace NKikimrClient;
 
@@ -201,6 +200,13 @@ TWriteSessionActor<UseMigrationProtocol>::TWriteSessionActor(
     , LastSourceIdUpdate(TInstant::Zero())
 {
     Y_ASSERT(Request);
+
+    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME); !values.empty()) {
+        UserAgent = values[0];
+    }
+    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER); !values.empty()) {
+        SdkBuildInfo = values[0];
+    }
 }
 
 template<bool UseMigrationProtocol>
@@ -485,7 +491,18 @@ void TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorCo
     SLITotal = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsTotal"}, true, "sensor", false);
     SLIErrors = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsError"}, true, "sensor", false);
     SLITotal.Inc();
+}
 
+template<bool UseMigrationProtocol>
+void TWriteSessionActor<UseMigrationProtocol>::SetupBytesWrittenByUserAgentCounter(const TString& topicPath) {
+    static constexpr auto protocol = UseMigrationProtocol ? "pqv1" : "topic";
+    BytesWrittenByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", protocol)
+        ->GetSubgroup("topic", topicPath)
+        ->GetSubgroup("sdk_build_info", CleanupCounterValueString(SdkBuildInfo))
+        ->GetSubgroup("user_agent", DropUserAgentSuffix(CleanupCounterValueString(UserAgent)))
+        ->GetExpiringNamedCounter("sensor", "BytesWrittenByUserAgent", true);
 }
 
 template<bool UseMigrationProtocol>
@@ -517,10 +534,12 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
     }
     SessionsCreated.Inc();
     SessionsActive.Inc();
+
+    SetupBytesWrittenByUserAgentCounter(FullConverter->GetFederationPath());
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
+void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TActorContext& ctx, const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
 {
     if (SessionsCreated) {
         return;
@@ -536,6 +555,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& clou
 
     SessionsCreated.Inc();
     SessionsActive.Inc();
+
+    SetupBytesWrittenByUserAgentCounter(NPersQueue::GetFullTopicPath(ctx, dbPath, FullConverter->GetPrimaryPath()));
 }
 
 template<bool UseMigrationProtocol>
@@ -590,7 +611,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
 
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         const auto& tabletConfig = Config.GetPQTabletConfig();
-        SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
+        SetupCounters(ctx, tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
                         tabletConfig.GetYdbDatabasePath(), entry.DomainInfo->IsServerless(),
                       tabletConfig.GetYcFolderId());
     } else {
@@ -680,7 +701,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
     auto subGroup = GetServiceCounters(Counters, "pqproxy|SLI");
 
     InitLatency = NKikimr::NPQ::CreateSLIDurationCounter(subGroup, Aggr, "WriteInit", border, {100, 200, 500, 1000, 1500, 2000, 5000, 10000, 30000, 99999999});
-    SLIBigLatency = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsBigLatency"}, true, "sesnor", false);
+    SLIBigLatency = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsBigLatency"}, true, "sensor", false);
 
     ui32 initDurationMs = (ctx.Now() - StartTime).MilliSeconds();
     InitLatency.IncFor(initDurationMs, 1);
@@ -970,7 +991,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
 
     ui32 partitionCmdWriteResultIndex = 0;
     // TODO: Send single batch write response for all user write requests up to some max size/count
-    for (const auto& userWriteRequest : writeRequest->UserWriteRequests) {
+    for (const auto& [userWriteRequest] : writeRequest->UserWriteRequests) {
         TServerMessage result;
         result.set_status(Ydb::StatusIds::SUCCESS);
 
@@ -1110,7 +1131,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     } else if constexpr (!UseMigrationProtocol) {
         Y_ABORT_UNLESS(!PendingRequests.back()->UserWriteRequests.empty());
 
-        auto& last = PendingRequests.back()->UserWriteRequests.back()->Request.write_request();
+        auto& last = PendingRequests.back()->UserWriteRequests.back().Write->Request.write_request();
 
         if (writeRequest.has_tx()) {
             if (last.has_tx()) {
@@ -1184,7 +1205,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         }
     }
 
-    pendingRequest->UserWriteRequests.push_back(std::move(ev));
+    pendingRequest->UserWriteRequests.emplace_back(std::move(ev));
     pendingRequest->ByteSize = request.ByteSize();
 
     auto msgMetaEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicMessageMeta();
@@ -1225,7 +1246,7 @@ void TWriteSessionActor<UseMigrationProtocol>::SendWriteRequest(typename TWriteR
     Y_ABORT_UNLESS(request->PartitionWriteRequest);
 
     i64 diff = 0;
-    for (const auto& w : request->UserWriteRequests) {
+    for (const auto& [w] : request->UserWriteRequests) {
         diff -= w->Request.ByteSize();
     }
 
@@ -1245,6 +1266,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SendWriteRequest(typename TWriteR
                                                                      std::move(request->PartitionWriteRequest));
 
     ctx.Send(PartitionWriterCache, std::move(event));
+
+    BytesWrittenByUserAgent->Add(request->ByteSize);
 
     SentRequests.push_back(std::move(request));
 }

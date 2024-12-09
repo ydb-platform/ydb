@@ -1,8 +1,8 @@
 #include "error.h"
 
 #include <grpcpp/impl/codegen/status_code_enum.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NYql::NConnector {

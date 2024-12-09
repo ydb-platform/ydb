@@ -1,5 +1,6 @@
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/library/security/util.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_log.h>
@@ -15,14 +16,17 @@ THandlerSessionCreateYandex::THandlerSessionCreateYandex(const NActors::TActorId
     : THandlerSessionCreate(sender, request, httpProxyId, settings)
 {}
 
-void THandlerSessionCreateYandex::RequestSessionToken(const TString& code, const NActors::TActorContext& ctx) {
+void THandlerSessionCreateYandex::RequestSessionToken(const TString& code) {
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
     httpRequest->Set("Authorization", Settings.GetAuthorizationString());
-    TStringBuilder body;
-    body << "grant_type=authorization_code&code=" << code;
-    httpRequest->Set<&NHttp::THttpRequest::Body>(body);
-    ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+
+    TCgiParameters params;
+    params.emplace("grant_type", "authorization_code");
+    params.emplace("code", code);
+    httpRequest->Set<&NHttp::THttpRequest::Body>(params());
+
+    Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     Become(&THandlerSessionCreateYandex::StateWork);
 }
 
@@ -54,29 +58,42 @@ void THandlerSessionCreateYandex::ProcessSessionToken(const TString& sessionToke
     connection->DoRequest(requestCreate, std::move(responseCb), &yandex::cloud::priv::oauth::v1::SessionService::Stub::AsyncCreate, meta);
 }
 
-void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessionResponse::TPtr event, const NActors::TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Create(): OK");
+void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessionResponse::TPtr event) {
+    BLOG_D("SessionService.Create(): OK");
     auto response = event->Get()->Response;
     NHttp::THeadersBuilder responseHeaders;
     for (const auto& cookie : response.Getset_cookie_header()) {
         responseHeaders.Set("Set-Cookie", ChangeSameSiteFieldInSessionCookie(cookie));
     }
-    RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx);
+    RetryRequestToProtectedResourceAndDie(&responseHeaders);
 }
 
-void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Create(): " << event->Get()->Status);
+void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr event) {
+    BLOG_D("SessionService.Create(): " << event->Get()->Status);
     if (event->Get()->Status == "400") {
-        RetryRequestToProtectedResourceAndDie(ctx);
+        RetryRequestToProtectedResourceAndDie();
     } else {
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
         SetCORS(Request, &responseHeaders);
-        NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details);
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-        Die(ctx);
+        ReplyAndPassAway(Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details));
     }
 }
 
-} // NOIDC
+} // NMVP
+
+template<>
+TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CreateSessionRequest& request) {
+    yandex::cloud::priv::oauth::v1::CreateSessionRequest copy = request;
+    copy.set_access_token(NKikimr::MaskTicket(copy.access_token()));
+    return copy.ShortDebugString();
+}
+
+template<>
+TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CreateSessionResponse& request) {
+    yandex::cloud::priv::oauth::v1::CreateSessionResponse copy = request;
+    copy.clear_set_cookie_header();
+    return copy.ShortDebugString();
+}
+
 } // NMVP

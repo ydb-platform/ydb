@@ -53,6 +53,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http
     ydb/library/actors/protos
+    ydb/library/security
     library/cpp/lwtrace/protos
     library/cpp/lfalloc/alloc_profiler
     ydb/core/viewer/json

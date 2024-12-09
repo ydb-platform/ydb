@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_data_provider.h>
 
 namespace NYql {
     struct TDqState;

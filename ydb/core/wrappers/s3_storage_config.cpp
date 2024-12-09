@@ -3,8 +3,6 @@
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/threading/Executor.h>
 
-#include <util/string/cast.h>
-
 #ifndef KIKIMR_DISABLE_S3_OPS
 namespace NKikimr::NWrappers::NExternalStorage {
 
@@ -12,7 +10,7 @@ namespace {
 
 namespace NPrivate {
 
-template <class TSettings>
+template <typename TSettings>
 Aws::Client::ClientConfiguration ConfigFromSettings(const TSettings& settings) {
     Aws::Client::ClientConfiguration config;
 
@@ -39,7 +37,7 @@ Aws::Client::ClientConfiguration ConfigFromSettings(const TSettings& settings) {
     return config;
 }
 
-template <class TSettings>
+template <typename TSettings>
 Aws::Auth::AWSCredentials CredentialsFromSettings(const TSettings& settings) {
     return Aws::Auth::AWSCredentials(settings.access_key(), settings.secret_key());
 }
@@ -50,21 +48,21 @@ Aws::Auth::AWSCredentials CredentialsFromSettings(const TSettings& settings) {
 
 class TS3ThreadsPoolByEndpoint {
 private:
-
     class TPool {
     public:
         std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> Executor;
         ui32 ThreadsCount = 0;
+
         TPool(const std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor>& executor, const ui32 threadsCount)
             : Executor(executor)
             , ThreadsCount(threadsCount)
         {
-
         }
     };
 
     THashMap<TString, TPool> Pools;
     TMutex Mutex;
+
     std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> GetPoolImpl(const TString& endpoint, const ui32 threadsCount) {
         TGuard<TMutex> g(Mutex);
         auto it = Pools.find(endpoint);
@@ -77,6 +75,7 @@ private:
         }
         return it->second.Executor;
     }
+
 public:
     static std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> GetPool(const TString& endpoint, const ui32 threadsCount) {
         return Singleton<TS3ThreadsPoolByEndpoint>()->GetPoolImpl(endpoint, threadsCount);
@@ -90,15 +89,17 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     if (settings.HasConnectionTimeoutMs()) {
         config.connectTimeoutMs = settings.GetConnectionTimeoutMs();
     }
+
     if (settings.HasRequestTimeoutMs()) {
         config.requestTimeoutMs = settings.GetRequestTimeoutMs();
     }
+
     if (settings.HasHttpRequestTimeoutMs()) {
         config.httpRequestTimeoutMs = settings.GetHttpRequestTimeoutMs();
     }
+
     config.executor = TS3ThreadsPoolByEndpoint::GetPool(settings.GetEndpoint(), settings.GetExecutorThreadsCount());
     config.enableTcpKeepAlive = true;
-    //    config.lowSpeedLimit = 0;
     config.maxConnections = settings.HasMaxConnectionsCount() ? settings.GetMaxConnectionsCount() : settings.GetExecutorThreadsCount();
     config.caPath = "/etc/ssl/certs";
 
@@ -184,8 +185,10 @@ TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Export::ExportToS3
     Bucket = settings.bucket();
 }
 
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Aws::Auth::AWSCredentials& credentials,
-    const Aws::Client::ClientConfiguration& config, const TString& bucket)
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(
+        const Aws::Auth::AWSCredentials& credentials,
+        const Aws::Client::ClientConfiguration& config,
+        const TString& bucket)
     : Config(config)
     , Credentials(credentials)
 {
@@ -220,6 +223,7 @@ Aws::S3::Model::StorageClass TS3ExternalStorageConfig::ConvertStorageClass(const
         case Ydb::Export::ExportToS3Settings::OUTPOSTS:
             return Aws::S3::Model::StorageClass::OUTPOSTS;
         case Ydb::Export::ExportToS3Settings::STORAGE_CLASS_UNSPECIFIED:
+            [[fallthrough]];
         default:
             return Aws::S3::Model::StorageClass::NOT_SET;
     }

@@ -7,10 +7,10 @@ from
    ,{{item}}
    ,{{date_dim}}
 where
-i_manufact_id = 356
+i_manufact_id = 350
 and i_item_sk = ws_item_sk
-and d_date between '2001-03-12'::date and
-        (cast('2001-03-12' as date) + interval '90' day)::date
+and d_date between '2000-01-27'::date and
+        (cast('2000-01-27' as date) + interval '90' day)::date
 and d_date_sk = ws_sold_date_sk
 and ws_ext_discount_amt
      > (
@@ -21,8 +21,8 @@ and ws_ext_discount_amt
            ,{{date_dim}}
          WHERE
               ws_item_sk = i_item_sk
-          and d_date between '2001-03-12'::date and
-                             (cast('2001-03-12' as date) + interval '90' day)::date
+          and d_date between '2000-01-27'::date and
+                             (cast('2000-01-27' as date) + interval '90' day)::date
           and d_date_sk = ws_sold_date_sk
       )
 order by sum(ws_ext_discount_amt)

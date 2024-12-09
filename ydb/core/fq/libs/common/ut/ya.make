@@ -14,6 +14,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/sql/pg_dummy
     ydb/core/testlib
 )
 

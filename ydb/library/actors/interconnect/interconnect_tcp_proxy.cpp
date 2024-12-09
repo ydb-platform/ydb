@@ -29,6 +29,7 @@ namespace NActors {
             Y_ABORT_UNLESS(!*DynamicPtr);
             *DynamicPtr = this;
         }
+        NumDisconnects.fill(0);
     }
 
     void TInterconnectProxyTCP::Bootstrap() {
@@ -942,4 +943,33 @@ namespace NActors {
         // TODO: unregister actor mon page
         TActor::PassAway();
     }
+
+    void TInterconnectProxyTCP::RegisterDisconnect() {
+        const TMonotonic now = TActivationContext::Monotonic();
+        ShiftDisconnectWindow(now);
+        ++NumDisconnectsInLastHour;
+        ++NumDisconnects[NumDisconnectsIndex];
+    }
+
+    ui32 TInterconnectProxyTCP::GetDisconnectCountInLastHour() {
+        ShiftDisconnectWindow(TMonotonic::Now());
+        return NumDisconnectsInLastHour;
+    }
+
+    void TInterconnectProxyTCP::ShiftDisconnectWindow(TMonotonic now) {
+        const ui64 currentMinutes = now.Minutes();
+        if (FirstDisconnectWindowMinutes) {
+            const ui32 steps = currentMinutes - FirstDisconnectWindowMinutes;
+            if (steps < NumDisconnectsSize) { // advance window by "steps" items, clearing them
+                for (ui32 i = 0; i < steps; ++i) {
+                    NumDisconnectsInLastHour -= std::exchange(NumDisconnects[++NumDisconnectsIndex %= NumDisconnectsSize], 0);
+                }
+            } else { // window has been fully flushed
+                NumDisconnects.fill(0);
+                NumDisconnectsInLastHour = 0;
+            }
+        }
+        FirstDisconnectWindowMinutes = currentMinutes;
+    }
+
 }

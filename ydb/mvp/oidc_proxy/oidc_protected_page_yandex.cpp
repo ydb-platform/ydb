@@ -1,4 +1,5 @@
 #include <ydb/library/actors/http/http.h>
+#include <ydb/library/security/util.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_log.h>
@@ -20,24 +21,22 @@ void THandlerSessionServiceCheckYandex::Bootstrap(const NActors::TActorContext& 
     Become(&THandlerSessionServiceCheckYandex::StateWork);
 }
 
-void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvCheckSessionResponse::TPtr event, const NActors::TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Check(): OK");
+void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvCheckSessionResponse::TPtr event) {
+    BLOG_D("SessionService.Check(): OK");
     auto response = event->Get()->Response;
     const auto& iamToken = response.iam_token();
     const TString authHeader = IAM_TOKEN_SCHEME + iamToken.iam_token();
-    ForwardUserRequest(authHeader, ctx);
+    ForwardUserRequest(authHeader);
 }
 
-void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Check(): " << event->Get()->Status);
+void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvErrorResponse::TPtr event) {
+    BLOG_D("SessionService.Check(): " << event->Get()->Status);
     NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Status == "400") {
-        httpResponse = GetHttpOutgoingResponsePtr(Request, Settings);
+        return ReplyAndPassAway(GetHttpOutgoingResponsePtr(Request, Settings));
     } else {
-        httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, "text/plain", event->Get()->Details);
+        return ReplyAndPassAway(Request->CreateResponse( event->Get()->Status, event->Get()->Message, "text/plain", event->Get()->Details));
     }
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-    Die(ctx);
 }
 
 void THandlerSessionServiceCheckYandex::StartOidcProcess(const NActors::TActorContext& ctx) {
@@ -85,4 +84,19 @@ bool THandlerSessionServiceCheckYandex::NeedSendSecureHttpRequest(const NHttp::T
 }
 
 }  // NOIDC
+
+template<>
+TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CheckSessionRequest& request) {
+    yandex::cloud::priv::oauth::v1::CheckSessionRequest copy = request;
+    copy.clear_cookie_header();
+    return copy.ShortDebugString();
+}
+
+template<>
+TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CheckSessionResponse& request) {
+    yandex::cloud::priv::oauth::v1::CheckSessionResponse copy = request;
+    copy.mutable_iam_token()->set_iam_token(NKikimr::MaskTicket(copy.iam_token().iam_token()));
+    return copy.ShortDebugString();
+}
+
 }  // NMVP

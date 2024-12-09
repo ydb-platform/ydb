@@ -395,6 +395,21 @@ JOIN_SRCS(
     thread/singleton.cpp
 )
 
+HEADERS(
+    datetime
+    digest
+    folder
+    generic
+    memory
+    network
+    random
+    stream
+    string
+    system
+    thread
+    EXCLUDE **/*_ut.h
+)
+
 END()
 
 RECURSE(

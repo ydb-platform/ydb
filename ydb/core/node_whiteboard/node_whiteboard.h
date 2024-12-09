@@ -7,11 +7,14 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/protos/whiteboard_disk_states.pb.h>
+#include <ydb/core/protos/whiteboard_flags.pb.h>
 #include <ydb/core/protos/memory_stats.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/tracing.h>
+#include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 
 namespace NKikimr {
 
@@ -529,6 +532,9 @@ template<>
 struct WhiteboardResponse<TEvWhiteboard::TEvNodeStateRequest> {
     using Type = TEvWhiteboard::TEvNodeStateResponse;
 };
+
+template<typename TResponseType>
+::google::protobuf::RepeatedField<int> GetDefaultWhiteboardFields();
 
 } // NNodeWhiteboard
 } // NKikimr

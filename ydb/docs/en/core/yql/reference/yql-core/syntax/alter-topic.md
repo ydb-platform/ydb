@@ -29,7 +29,7 @@ ALTER TOPIC `my_topic` ADD CONSUMER new_consumer2 WITH (important = false);
 ### Full list of available topic consumer settings
 
 * `important`: Defines an important consumer. No data will be deleted from the topic until all the important consumers read them. Value type: `boolean`, default value: `false`.
-* `read_from`: Sets up the message write time starting from which the consumer will receive data. Data written before this time will not be read. Value type: `Datetime` OR `Timestamp` OR `integer` (unix-timestamp in the numeric format). Default value: `now`.
+* `read_from`: Sets up the message write time starting from which the consumer will receive data. Data written before this time will not be read. Value type: `Datetime` OR `Timestamp` OR `integer` (unix-timestamp in the numeric format). Default value: `0` (read from the earliest available message).
 
 {% if feature_topic_codecs %}
 
@@ -141,3 +141,31 @@ ALTER TOPIC `my_topic` RESET (
 * `supported_codecs`: List of [codecs](../../../../concepts/topic#message-codec) supported by the topic. Value type: `String`.
 
 {% endif %}
+
+### Change autopartitioning strategies for the topic {#autopartitioning}
+
+The following command sets the [autopartitioning](../../../concepts/topic.md#autopartitioning) strategy to `UP`:
+
+```yql
+ALTER TOPIC `my_topic` SET (
+    min_active_partitions = 1,
+    max_active_partitions = 5,
+    auto_partitioning_strategy = 'scale_up'
+);
+```
+
+The following command pauses the topic [autopartitioning](../../../concepts/topic.md#autopartitioning):
+
+```yql
+ALTER TOPIC `my_topic` SET (
+    auto_partitioning_strategy = 'paused'
+);
+```
+
+The following command unpauses the topic [autopartitioning](../../../concepts/topic.md#autopartitioning):
+
+```yql
+ALTER TOPIC `my_topic` SET (
+    auto_partitioning_strategy = 'scale_up'
+);
+```

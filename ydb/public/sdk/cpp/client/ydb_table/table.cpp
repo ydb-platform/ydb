@@ -25,6 +25,7 @@
 
 #include <library/cpp/cache/cache.h>
 
+#include <util/generic/overloaded.h>
 #include <util/generic/map.h>
 #include <util/random/random.h>
 #include <util/string/join.h>
@@ -253,8 +254,7 @@ static void SerializeTo(const TRenameIndex& rename, Ydb::Table::RenameIndexItem&
     proto.set_replace_destination(rename.ReplaceDestination_);
 }
 
-template <typename TProto>
-TExplicitPartitions TExplicitPartitions::FromProto(const TProto& proto) {
+TExplicitPartitions TExplicitPartitions::FromProto(const Ydb::Table::ExplicitPartitions& proto) {
     TExplicitPartitions out;
     for (const auto& splitPoint : proto.split_points()) {
         TValue value(TType(splitPoint.type()), splitPoint.value());
@@ -327,28 +327,8 @@ class TTableDescription::TImpl {
         }
 
         // ttl settings
-        switch (proto.ttl_settings().mode_case()) {
-        case Ydb::Table::TtlSettings::kDateTypeColumn:
-            TtlSettings_ = TTtlSettings(
-                proto.ttl_settings().date_type_column(),
-                proto.ttl_settings().run_interval_seconds()
-            );
-            break;
-
-        case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
-            TtlSettings_ = TTtlSettings(
-                proto.ttl_settings().value_since_unix_epoch(),
-                proto.ttl_settings().run_interval_seconds()
-            );
-            break;
-
-        default:
-            break;
-        }
-
-        // tiering
-        if (proto.tiering().size()) {
-            Tiering_ = proto.tiering();
+        if (auto ttlSettings = TTtlSettings::FromProto(proto.ttl_settings())) {
+            TtlSettings_ = std::move(*ttlSettings);
         }
 
         if (proto.store_type()) {
@@ -422,9 +402,7 @@ public:
         }
 
         for (const auto& shardStats : Proto_.table_stats().partition_stats()) {
-            PartitionStats_.emplace_back(
-                TPartitionStats{shardStats.rows_estimate(), shardStats.store_size()}
-            );
+            PartitionStats_.emplace_back(TPartitionStats{ shardStats.rows_estimate(), shardStats.store_size(), shardStats.leader_node_id() });
         }
 
         TableStats.Rows = Proto_.table_stats().rows_estimate();
@@ -491,12 +469,12 @@ public:
         Indexes_.emplace_back(indexDescription);
     }
 
-    void AddVectorIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVectorIndexSettings& vectorIndexSettings) {
-        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, {}, {}, vectorIndexSettings));
+    void AddVectorKMeansTreeIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, {}, {}, indexSettings));
     }
 
-    void AddVectorIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TVectorIndexSettings& vectorIndexSettings) {
-        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, {}, vectorIndexSettings));
+    void AddVectorKMeansTreeIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, {}, indexSettings));
     }
 
     void AddChangefeed(const TString& name, EChangefeedMode mode, EChangefeedFormat format) {
@@ -581,10 +559,6 @@ public:
         return TtlSettings_;
     }
 
-    const TMaybe<TString>& GetTiering() const {
-        return Tiering_;
-    }
-
     EStoreType GetStoreType() const {
         return StoreType_;
     }
@@ -665,7 +639,6 @@ private:
     TVector<TIndexDescription> Indexes_;
     TVector<TChangefeedDescription> Changefeeds_;
     TMaybe<TTtlSettings> TtlSettings_;
-    TMaybe<TString> Tiering_;
     TString Owner_;
     TVector<NScheme::TPermissions> Permissions_;
     TVector<NScheme::TPermissions> EffectivePermissions_;
@@ -732,7 +705,7 @@ TMaybe<TTtlSettings> TTableDescription::GetTtlSettings() const {
 }
 
 TMaybe<TString> TTableDescription::GetTiering() const {
-    return Impl_->GetTiering();
+    return Nothing();
 }
 
 EStoreType TTableDescription::GetStoreType() const {
@@ -799,12 +772,12 @@ void TTableDescription::AddUniqueSecondaryIndex(const TString& indexName, const 
     AddSecondaryIndex(indexName, EIndexType::GlobalUnique, indexColumns, dataColumns);
 }
 
-void TTableDescription::AddVectorKMeansTreeSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVectorIndexSettings& vectorIndexSettings) {
-    Impl_->AddVectorIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, vectorIndexSettings);
+void TTableDescription::AddVectorKMeansTreeIndex(const TString& indexName, const TVector<TString>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, indexSettings);
 }
 
-void TTableDescription::AddVectorKMeansTreeSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TVectorIndexSettings& vectorIndexSettings) {
-    Impl_->AddVectorIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns, vectorIndexSettings);
+void TTableDescription::AddVectorKMeansTreeIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns, indexSettings);
 }
 
 void TTableDescription::AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns) {
@@ -953,10 +926,6 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
     if (const auto& ttl = Impl_->GetTtlSettings()) {
         ttl->SerializeTo(*request.mutable_ttl_settings());
-    }
-
-    if (const auto& tiering = Impl_->GetTiering()) {
-        request.set_tiering(*tiering);
     }
 
     if (Impl_->GetStoreType() == EStoreType::Column) {
@@ -1130,6 +1099,11 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompress
     return *this;
 }
 
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetKeepInMemory(bool enabled) {
+    Impl_->Proto.set_keep_in_memory(enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+    return *this;
+}
+
 TColumnFamilyDescription TColumnFamilyBuilder::Build() const {
     return TColumnFamilyDescription(Impl_->Proto);
 }
@@ -1277,13 +1251,13 @@ TTableBuilder& TTableBuilder::AddUniqueSecondaryIndex(const TString& indexName, 
     return AddSecondaryIndex(indexName, EIndexType::GlobalUnique, indexColumns);
 }
 
-TTableBuilder& TTableBuilder::AddVectorKMeansTreeSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TVectorIndexSettings& vectorIndexSettings) {
-    TableDescription_.AddVectorKMeansTreeSecondaryIndex(indexName, indexColumns, dataColumns, vectorIndexSettings);
+TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+    TableDescription_.AddVectorKMeansTreeIndex(indexName, indexColumns, dataColumns, indexSettings);
     return *this;
 }
 
-TTableBuilder& TTableBuilder::AddVectorKMeansTreeSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVectorIndexSettings& vectorIndexSettings) {
-    TableDescription_.AddVectorKMeansTreeSecondaryIndex(indexName, indexColumns, vectorIndexSettings);
+TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const TString& indexName, const TVector<TString>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+    TableDescription_.AddVectorKMeansTreeIndex(indexName, indexColumns, indexSettings);
     return *this;
 }
 
@@ -2283,6 +2257,12 @@ bool TCopyItem::OmitIndexes() const {
     return OmitIndexes_;
 }
 
+void TCopyItem::Out(IOutputStream& o) const {
+    o << "{ src: \"" << Source_ << "\""
+      << ", dst: \"" << Destination_ << "\""
+      << " }";
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TRenameItem::TRenameItem(const TString& source, const TString& destination)
@@ -2316,13 +2296,13 @@ TIndexDescription::TIndexDescription(
     const TVector<TString>& indexColumns,
     const TVector<TString>& dataColumns,
     const TVector<TGlobalIndexSettings>& globalIndexSettings,
-    const std::optional<TVectorIndexSettings>& vectorIndexSettings
+    const std::variant<std::monostate, TKMeansTreeSettings>& specializedIndexSettings
 )   : IndexName_(name)
     , IndexType_(type)
     , IndexColumns_(indexColumns)
     , DataColumns_(dataColumns)
     , GlobalIndexSettings_(globalIndexSettings)
-    , VectorIndexSettings_(vectorIndexSettings)
+    , SpecializedIndexSettings_(specializedIndexSettings)
 {}
 
 TIndexDescription::TIndexDescription(
@@ -2357,21 +2337,20 @@ const TVector<TString>& TIndexDescription::GetDataColumns() const {
     return DataColumns_;
 }
 
-const std::optional<TVectorIndexSettings>& TIndexDescription::GetVectorIndexSettings() const {
-    return VectorIndexSettings_;
+const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetVectorIndexSettings() const {
+    return SpecializedIndexSettings_;
 }
 
 ui64 TIndexDescription::GetSizeBytes() const {
-    return SizeBytes;
+    return SizeBytes_;
 }
 
-template <typename TProto>
-TGlobalIndexSettings TGlobalIndexSettings::FromProto(const TProto& proto) {
-    auto partitionsFromProto = [](const auto& proto) -> TUniformOrExplicitPartitions {
+TGlobalIndexSettings TGlobalIndexSettings::FromProto(const Ydb::Table::GlobalIndexSettings& proto) {
+    auto partitionsFromProto = [](const Ydb::Table::GlobalIndexSettings& proto) -> TUniformOrExplicitPartitions {
         switch (proto.partitions_case()) {
-        case TProto::kUniformPartitions:
+        case Ydb::Table::GlobalIndexSettings::kUniformPartitions:
             return proto.uniform_partitions();
-        case TProto::kPartitionAtKeys:
+        case Ydb::Table::GlobalIndexSettings::kPartitionAtKeys:
             return TExplicitPartitions::FromProto(proto.partition_at_keys());
         default:
             return {};
@@ -2398,34 +2377,26 @@ void TGlobalIndexSettings::SerializeTo(Ydb::Table::GlobalIndexSettings& settings
     std::visit(std::move(variantVisitor), Partitions);
 }
 
-template <typename TProto>
-TVectorIndexSettings TVectorIndexSettings::FromProto(const TProto& proto) {
-    auto convertDistance = [] (auto distance) -> auto {
-        switch (distance) {
-        case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
-            return EDistance::Cosine;
-        case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-            return EDistance::Manhattan;
-        case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-            return EDistance::Euclidean;
-        default:
-            return EDistance::Unknown;
-        }
-    };
-
-    auto convertSimilarity = [] (auto similarity) -> auto {
-        switch (similarity) {
-        case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
-            return ESimilarity::Cosine;
+TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorIndexSettings& proto) {
+    auto covertMetric = [&] {
+        switch (proto.metric()) {
         case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-            return ESimilarity::InnerProduct;
+            return EMetric::InnerProduct;
+        case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
+            return EMetric::CosineSimilarity;
+        case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
+            return EMetric::CosineDistance;
+        case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
+            return EMetric::Manhattan;
+        case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
+            return EMetric::Euclidean;
         default:
-            return ESimilarity::Unknown;
+            return EMetric::Unspecified;
         }
     };
 
-    auto convertVectorType = [] (auto vectorType) -> auto {
-        switch (vectorType) {
+    auto convertVectorType = [&] {
+        switch (proto.vector_type()) {
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
             return EVectorType::Float;
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
@@ -2435,56 +2406,37 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const TProto& proto) {
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
             return EVectorType::Bit;
         default:
-            return EVectorType::Unknown;
-        }
-    };
-
-
-    auto metricFromProto = [&](const auto& proto) -> TVectorIndexSettings::TMetric {
-        switch (proto.metric_case()) {
-        case TProto::kDistance:
-            return convertDistance(proto.distance());
-        case TProto::kSimilarity:
-            return convertSimilarity(proto.similarity());
-        default:
-            return {};
+            return EVectorType::Unspecified;
         }
     };
 
     return {
-        .Metric = metricFromProto(proto),
-        .VectorType = convertVectorType(proto.vector_type()),
-        .VectorDimension = proto.vector_dimension()
+        .Metric = covertMetric(),
+        .VectorType = convertVectorType(),
+        .VectorDimension = proto.vector_dimension(),
     };
 }
 
 void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings) const {
-    auto convertDistance = [] (auto distance) -> auto {
-        switch (distance) {
-        case EDistance::Cosine:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
-        case EDistance::Manhattan:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
-        case EDistance::Euclidean:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
-        case EDistance::Unknown:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_UNSPECIFIED;
-        }
-    };
-
-    auto convertSimilarity = [] (auto similarity) -> auto {
-        switch (similarity) {
-        case ESimilarity::Cosine:
-            return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
-        case ESimilarity::InnerProduct:
+    auto convertMetric = [&] {
+        switch (Metric) {
+        case EMetric::InnerProduct:
             return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
-        case ESimilarity::Unknown:
-            return Ydb::Table::VectorIndexSettings::SIMILARITY_UNSPECIFIED;
+        case EMetric::CosineSimilarity:
+            return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
+        case EMetric::CosineDistance:
+            return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
+        case EMetric::Manhattan:
+            return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
+        case EMetric::Euclidean:
+            return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+        case EMetric::Unspecified:
+            return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
         }
     };
 
-    auto convertVectorType = [] (auto vectorType) -> auto {
-        switch (vectorType) {
+    auto convertVectorType = [&] {
+        switch (VectorType) {
         case EVectorType::Float:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
         case EVectorType::Uint8:
@@ -2493,23 +2445,35 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
         case EVectorType::Bit:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
-        case EVectorType::Unknown:
+        case EVectorType::Unspecified:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
         }
     };
 
-
-    if (const auto* distance = std::get_if<EDistance>(&Metric)) {
-        settings.set_distance(convertDistance(*distance));
-    } else if (const auto* similarity = std::get_if<ESimilarity>(&Metric)) {
-        settings.set_similarity(convertSimilarity(*similarity));
-    }
-
-    settings.set_vector_type(convertVectorType(VectorType));
+    settings.set_metric(convertMetric());
+    settings.set_vector_type(convertVectorType());
     settings.set_vector_dimension(VectorDimension);
 }
 
 void TVectorIndexSettings::Out(IOutputStream& o) const {
+    o << *this;
+}
+
+TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeSettings& proto) {
+    return {
+        .Settings = TVectorIndexSettings::FromProto(proto.settings()),
+        .Clusters = proto.clusters(),
+        .Levels = proto.levels(),
+    };
+}
+
+void TKMeansTreeSettings::SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const {
+    Settings.SerializeTo(*settings.mutable_settings());
+    settings.set_clusters(Clusters);
+    settings.set_levels(Levels);
+}
+
+void TKMeansTreeSettings::Out(IOutputStream& o) const {
     o << *this;
 }
 
@@ -2519,7 +2483,7 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     TVector<TString> indexColumns;
     TVector<TString> dataColumns;
     TVector<TGlobalIndexSettings> globalIndexSettings;
-    std::optional<TVectorIndexSettings> vectorIndexSettings;
+    std::variant<std::monostate, TKMeansTreeSettings> specializedIndexSettings;
 
     indexColumns.assign(proto.index_columns().begin(), proto.index_columns().end());
     dataColumns.assign(proto.data_columns().begin(), proto.data_columns().end());
@@ -2542,7 +2506,7 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         const auto &vectorProto = proto.global_vector_kmeans_tree_index();
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.level_table_settings()));
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.posting_table_settings()));
-        vectorIndexSettings = TVectorIndexSettings::FromProto(vectorProto.vector_settings());
+        specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
         break;
     }
     default: // fallback to global sync
@@ -2551,9 +2515,9 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         break;
     }
 
-    auto result = TIndexDescription(proto.name(), type, indexColumns, dataColumns, globalIndexSettings, vectorIndexSettings);
+    auto result = TIndexDescription(proto.name(), type, indexColumns, dataColumns, globalIndexSettings, specializedIndexSettings);
     if constexpr (std::is_same_v<TProto, Ydb::Table::TableIndexDescription>) {
-        result.SizeBytes = proto.size_bytes();
+        result.SizeBytes_ = proto.size_bytes();
     }
 
     return result;
@@ -2595,8 +2559,8 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
             GlobalIndexSettings_[0].SerializeTo(level_settings);
             GlobalIndexSettings_[1].SerializeTo(posting_settings);
         }
-        if (VectorIndexSettings_) {
-            VectorIndexSettings_->SerializeTo(vector_settings);
+        if (const auto* settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
+            settings->SerializeTo(vector_settings);
         }
         break;
     }
@@ -2621,9 +2585,12 @@ void TIndexDescription::Out(IOutputStream& o) const {
         o << ", data_columns: [" << JoinSeq(", ", DataColumns_) << "]";
     }
 
-    if (VectorIndexSettings_) {
-        o << ", vector_settings: " << *VectorIndexSettings_ << "";
-    }
+    std::visit([&]<typename T>(const T& settings) {
+        if constexpr (!std::is_same_v<T, std::monostate>) {
+            o << ", vector_settings: " << settings;
+        }
+    }, SpecializedIndexSettings_);
+
     o << " }";
 }
 
@@ -2949,14 +2916,58 @@ bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription&
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDateTypeColumnModeSettings::TDateTypeColumnModeSettings(const TString& columnName, const TDuration& expireAfter)
+TTtlTierSettings::TTtlTierSettings(TDuration applyAfter, const TAction& action)
+    : ApplyAfter_(applyAfter)
+    , Action_(action)
+{ }
+
+TTtlTierSettings::TTtlTierSettings(const Ydb::Table::TtlTier& tier)
+    : ApplyAfter_(TDuration::Seconds(tier.apply_after_seconds())) {
+    switch (tier.action_case()) {
+        case Ydb::Table::TtlTier::kDelete:
+            Action_ = TTtlDeleteAction();
+            break;
+        case Ydb::Table::TtlTier::kEvictToExternalStorage:
+            Action_ = TTtlEvictToExternalStorageAction(tier.evict_to_external_storage().storage_name());
+            break;
+        case Ydb::Table::TtlTier::ACTION_NOT_SET:
+            break;
+    }
+}
+
+void TTtlTierSettings::SerializeTo(Ydb::Table::TtlTier& proto) const {
+    proto.set_apply_after_seconds(ApplyAfter_.Seconds());
+
+    std::visit(TOverloaded{
+            [&proto](const TTtlDeleteAction&) { proto.mutable_delete_(); },
+            [&proto](const TTtlEvictToExternalStorageAction& action) {
+                proto.mutable_evict_to_external_storage()->set_storage_name(action.StorageName);
+            },
+            [](const std::monostate) {},
+        },
+        Action_);
+}
+
+TDuration TTtlTierSettings::GetApplyAfter() const {
+    return ApplyAfter_;
+}
+
+const TTtlTierSettings::TAction& TTtlTierSettings::GetAction() const {
+    return Action_;
+}
+
+TDateTypeColumnModeSettings::TDateTypeColumnModeSettings(const TString& columnName, const TDuration& deprecatedExpireAfter)
     : ColumnName_(columnName)
-    , ExpireAfter_(expireAfter)
+    , DeprecatedExpireAfter_(deprecatedExpireAfter)
 {}
 
 void TDateTypeColumnModeSettings::SerializeTo(Ydb::Table::DateTypeColumnModeSettings& proto) const {
     proto.set_column_name(ColumnName_);
-    proto.set_expire_after_seconds(ExpireAfter_.Seconds());
+    proto.set_expire_after_seconds(DeprecatedExpireAfter_.Seconds());
+}
+
+void TDateTypeColumnModeSettings::SerializeTo(Ydb::Table::DateTypeColumnModeSettingsV1& proto) const {
+    proto.set_column_name(ColumnName_);
 }
 
 const TString& TDateTypeColumnModeSettings::GetColumnName() const {
@@ -2964,19 +2975,24 @@ const TString& TDateTypeColumnModeSettings::GetColumnName() const {
 }
 
 const TDuration& TDateTypeColumnModeSettings::GetExpireAfter() const {
-    return ExpireAfter_;
+    return DeprecatedExpireAfter_;
 }
 
-TValueSinceUnixEpochModeSettings::TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter)
+TValueSinceUnixEpochModeSettings::TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const TDuration& deprecatedExpireAfter)
     : ColumnName_(columnName)
     , ColumnUnit_(columnUnit)
-    , ExpireAfter_(expireAfter)
+    , DeprecatedExpireAfter_(deprecatedExpireAfter)
 {}
 
 void TValueSinceUnixEpochModeSettings::SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettings& proto) const {
     proto.set_column_name(ColumnName_);
     proto.set_column_unit(TProtoAccessor::GetProto(ColumnUnit_));
-    proto.set_expire_after_seconds(ExpireAfter_.Seconds());
+    proto.set_expire_after_seconds(DeprecatedExpireAfter_.Seconds());
+}
+
+void TValueSinceUnixEpochModeSettings::SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettingsV1& proto) const {
+    proto.set_column_name(ColumnName_);
+    proto.set_column_unit(TProtoAccessor::GetProto(ColumnUnit_));
 }
 
 const TString& TValueSinceUnixEpochModeSettings::GetColumnName() const {
@@ -2988,7 +3004,7 @@ TValueSinceUnixEpochModeSettings::EUnit TValueSinceUnixEpochModeSettings::GetCol
 }
 
 const TDuration& TValueSinceUnixEpochModeSettings::GetExpireAfter() const {
-    return ExpireAfter_;
+    return DeprecatedExpireAfter_;
 }
 
 void TValueSinceUnixEpochModeSettings::Out(IOutputStream& out, EUnit unit) {
@@ -3031,13 +3047,17 @@ TValueSinceUnixEpochModeSettings::EUnit TValueSinceUnixEpochModeSettings::UnitFr
     return EUnit::Unknown;
 }
 
+TTtlSettings::TTtlSettings(const TString& columnName, const TVector<TTtlTierSettings>& tiers)
+    : Mode_(TDateTypeColumnModeSettings(columnName, GetExpireAfterFrom(tiers).value_or(TDuration::Max())))
+    , Tiers_(tiers)
+{}
+
 TTtlSettings::TTtlSettings(const TString& columnName, const TDuration& expireAfter)
-    : Mode_(TDateTypeColumnModeSettings(columnName, expireAfter))
+    : TTtlSettings(columnName, {TTtlTierSettings(expireAfter, TTtlDeleteAction())})
 {}
 
 TTtlSettings::TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds)
-    : TTtlSettings(mode.column_name(), TDuration::Seconds(mode.expire_after_seconds()))
-{
+    : TTtlSettings(mode.column_name(), TDuration::Seconds(mode.expire_after_seconds())) {
     RunInterval_ = TDuration::Seconds(runIntervalSeconds);
 }
 
@@ -3045,13 +3065,17 @@ const TDateTypeColumnModeSettings& TTtlSettings::GetDateTypeColumn() const {
     return std::get<TDateTypeColumnModeSettings>(Mode_);
 }
 
+TTtlSettings::TTtlSettings(const TString& columnName, EUnit columnUnit, const TVector<TTtlTierSettings>& tiers)
+    : Mode_(TValueSinceUnixEpochModeSettings(columnName, columnUnit, GetExpireAfterFrom(tiers).value_or(TDuration::Max())))
+    , Tiers_(tiers)
+{}
+
 TTtlSettings::TTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter)
-    : Mode_(TValueSinceUnixEpochModeSettings(columnName, columnUnit, expireAfter))
+    : TTtlSettings(columnName, columnUnit, {TTtlTierSettings(expireAfter, TTtlDeleteAction())})
 {}
 
 TTtlSettings::TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds)
-    : TTtlSettings(mode.column_name(), TProtoAccessor::FromProto(mode.column_unit()), TDuration::Seconds(mode.expire_after_seconds()))
-{
+    : TTtlSettings(mode.column_name(), TProtoAccessor::FromProto(mode.column_unit()), TDuration::Seconds(mode.expire_after_seconds())) {
     RunInterval_ = TDuration::Seconds(runIntervalSeconds);
 }
 
@@ -3059,14 +3083,55 @@ const TValueSinceUnixEpochModeSettings& TTtlSettings::GetValueSinceUnixEpoch() c
     return std::get<TValueSinceUnixEpochModeSettings>(Mode_);
 }
 
+std::optional<TTtlSettings> TTtlSettings::FromProto(const Ydb::Table::TtlSettings& proto) {
+    TVector<TTtlTierSettings> tiers;
+    for (const auto& tier : proto.tiers()) {
+        tiers.emplace_back(tier);
+    }
+    TDuration legacyExpireAfter = GetExpireAfterFrom(tiers).value_or(TDuration::Max());
+
+    switch(proto.mode_case()) {
+    case Ydb::Table::TtlSettings::kDateTypeColumn:
+        return TTtlSettings(proto.date_type_column(), proto.run_interval_seconds());
+    case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
+        return TTtlSettings(proto.value_since_unix_epoch(), proto.run_interval_seconds());
+    case Ydb::Table::TtlSettings::kDateTypeColumnV1:
+        return TTtlSettings(
+            TDateTypeColumnModeSettings(proto.date_type_column_v1().column_name(), legacyExpireAfter), tiers, proto.run_interval_seconds());
+    case Ydb::Table::TtlSettings::kValueSinceUnixEpochV1:
+        return TTtlSettings(TValueSinceUnixEpochModeSettings(proto.value_since_unix_epoch_v1().column_name(),
+                                TProtoAccessor::FromProto(proto.value_since_unix_epoch_v1().column_unit()), legacyExpireAfter),
+            tiers, proto.run_interval_seconds());
+    case Ydb::Table::TtlSettings::MODE_NOT_SET:
+        return std::nullopt;
+        break;
+    }
+}
+
 void TTtlSettings::SerializeTo(Ydb::Table::TtlSettings& proto) const {
-    switch (GetMode()) {
-    case EMode::DateTypeColumn:
-        GetDateTypeColumn().SerializeTo(*proto.mutable_date_type_column());
-        break;
-    case EMode::ValueSinceUnixEpoch:
-        GetValueSinceUnixEpoch().SerializeTo(*proto.mutable_value_since_unix_epoch());
-        break;
+    if (Tiers_.size() == 1 && std::holds_alternative<TTtlDeleteAction>(Tiers_.back().GetAction())) {
+        // serialize DELETE-only TTL to legacy format for backwards-compatibility
+        switch (GetMode()) {
+        case EMode::DateTypeColumn:
+            GetDateTypeColumn().SerializeTo(*proto.mutable_date_type_column());
+            break;
+        case EMode::ValueSinceUnixEpoch:
+            GetValueSinceUnixEpoch().SerializeTo(*proto.mutable_value_since_unix_epoch());
+            break;
+        }
+    } else {
+        switch (GetMode()) {
+        case EMode::DateTypeColumn:
+            GetDateTypeColumn().SerializeTo(*proto.mutable_date_type_column_v1());
+            break;
+        case EMode::ValueSinceUnixEpoch:
+            GetValueSinceUnixEpoch().SerializeTo(*proto.mutable_value_since_unix_epoch_v1());
+            break;
+        }
+
+        for (const auto& tier : Tiers_) {
+            tier.SerializeTo(*proto.add_tiers());
+        }
     }
 
     if (RunInterval_) {
@@ -3086,6 +3151,29 @@ TTtlSettings& TTtlSettings::SetRunInterval(const TDuration& value) {
 const TDuration& TTtlSettings::GetRunInterval() const {
     return RunInterval_;
 }
+
+const TVector<TTtlTierSettings>& TTtlSettings::GetTiers() const {
+    return Tiers_;
+}
+
+std::optional<TDuration> TTtlSettings::GetExpireAfter() const {
+    return GetExpireAfterFrom(Tiers_);
+}
+
+std::optional<TDuration> TTtlSettings::GetExpireAfterFrom(const TVector<TTtlTierSettings>& tiers) {
+    for (const auto& tier : tiers) {
+        if (std::holds_alternative<TTtlDeleteAction>(tier.GetAction())) {
+            return tier.GetApplyAfter();
+        }
+    }
+    return std::nullopt;
+}
+
+TTtlSettings::TTtlSettings(TMode mode, const TVector<TTtlTierSettings>& tiers, ui32 runIntervalSeconds)
+    : Mode_(std::move(mode))
+    , Tiers_(tiers)
+    , RunInterval_(TDuration::Seconds(runIntervalSeconds))
+{}
 
 TAlterTtlSettings::EAction TAlterTtlSettings::GetAction() const {
     return static_cast<EAction>(Action_.index());

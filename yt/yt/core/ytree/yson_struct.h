@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/yson/public.h>
 
+#include <yt/yt/core/misc/bitmap.h>
+
 #include <yt/yt/library/syncmap/map.h>
 
 #include <library/cpp/yt/misc/enum.h>
@@ -107,6 +109,13 @@ public:
 
     void WriteSchema(NYson::IYsonConsumer* consumer) const;
 
+    // always returns |true| for itself
+    // else always returns |false| if one of the fields
+    // is not equality comparable.
+    // See templated operator== for explanation why it was not
+    // a member method.
+    bool IsEqual(const TYsonStructBase& rhs) const;
+
 private:
     template <class TValue>
     friend class TYsonStructParameter;
@@ -116,6 +125,7 @@ private:
     friend class TYsonStructMeta;
 
     friend class TYsonStruct;
+    friend class TYsonStructLiteWithFieldTracking;
 
     IYsonStructMeta* Meta_ = nullptr;
 
@@ -124,6 +134,8 @@ private:
     std::optional<EUnrecognizedStrategy> InstanceUnrecognizedStrategy_;
 
     bool CachedDynamicCastAllowed_ = false;
+
+    virtual TCompactBitmap* GetSetFieldsBitmap() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -134,6 +146,13 @@ class TYsonStruct
 {
 public:
     void InitializeRefCounted();
+
+    bool IsSet(const TString& key) const;
+
+private:
+    TCompactBitmap SetFields_;
+
+    virtual TCompactBitmap* GetSetFieldsBitmap() override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -155,7 +174,32 @@ protected:
 class TYsonStructLite
     : public virtual TYsonStructFinalClassHolder
     , public TYsonStructBase
-{ };
+{
+private:
+    virtual TCompactBitmap* GetSetFieldsBitmap() override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TYsonStructLiteWithFieldTracking
+    : public TYsonStructLite
+{
+public:
+    TYsonStructLiteWithFieldTracking() = default;
+
+    TYsonStructLiteWithFieldTracking(const TYsonStructLiteWithFieldTracking& other);
+    TYsonStructLiteWithFieldTracking& operator=(const TYsonStructLiteWithFieldTracking& other);
+
+    TYsonStructLiteWithFieldTracking(TYsonStructLiteWithFieldTracking&& other) = default;
+    TYsonStructLiteWithFieldTracking& operator=(TYsonStructLiteWithFieldTracking&& other) = default;
+
+    bool IsSet(const TString& key) const;
+
+private:
+    TCompactBitmap SetFields_;
+
+    virtual TCompactBitmap* GetSetFieldsBitmap() override;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -188,7 +232,7 @@ protected:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, class S>
-concept CYsonStructFieldFor =
+concept CYsonStructLoadableFieldFor =
     CYsonStructSource<S> &&
     requires (
         T& parameter,
@@ -198,10 +242,6 @@ concept CYsonStructFieldFor =
         const NYPath::TYPath& path,
         std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
     {
-        // NB(arkady-e1ppa): This alias serves no purpose other
-        // than an easy way to grep for every implementation.
-        typename T::TImplementsYsonStructField;
-
         // For YsonStruct.
         parameter.Load(
             source,
@@ -209,6 +249,15 @@ concept CYsonStructFieldFor =
             setDefaults,
             path,
             recursiveUnrecognizedStrategy);
+    };
+
+template <class T, class S>
+concept CYsonStructFieldFor =
+    CYsonStructLoadableFieldFor<T, S> &&
+    requires {
+        // NB(arkady-e1ppa): This alias serves no purpose other
+        // than an easy way to grep for every implementation.
+        typename T::TImplementsYsonStructField;
     };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -306,6 +355,9 @@ public:
         // requires std::derived_from<TStruct, TExternalizedYsonStruct<TExternal, TStruct>>
     TYsonStructParameter<TValue>& ExternalClassParameter(const TString& key, TValue(TExternal::*field));
 
+    template <class TBase, class TValue>
+    TYsonStructParameter<TValue>& ExternalBaseClassParameter(const TString& key, TValue(TBase::*field));
+
     template <class TExternalPreprocessor>
         // requires (CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
     void ExternalPreprocessor(TExternalPreprocessor preprocessor);
@@ -341,7 +393,7 @@ void Deserialize(TYsonStructBase& value, NYson::TYsonPullParserCursor* cursor);
 template <CExternallySerializable T>
 void Serialize(const T& value, NYson::IYsonConsumer* consumer);
 template <CExternallySerializable T, CYsonStructSource TSource>
-void Deserialize(T& value, TSource source, bool postprocess = true, bool setDefaults = true);
+void Deserialize(T& value, TSource source, bool postprocess = true, bool setDefaults = true, std::optional<EUnrecognizedStrategy> strategy = {});
 
 template <class T>
 TIntrusivePtr<T> UpdateYsonStruct(
@@ -372,6 +424,18 @@ template <class TSrc, class TDst>
 void UpdateYsonStructField(TDst& dst, const std::optional<TSrc>& src);
 template <class TSrc, class TDst>
 void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& src);
+
+// NB(arkady-e1ppa): Double templated parameter is chosen so that
+// templated constrained free function with 1 parameter
+// (which is the sanest use case) would always win over this one.
+// Specific overloads (for concrete type) would also win obviously.
+// Overloads which come from bases would always lose.
+// Because some people actually try using equality comparable bases
+// with trivial comparisons overload below is a free function and not
+// a member method of the TYsonStructBase.
+template <CYsonStructDerived T, CYsonStructDerived U>
+    requires std::same_as<T, U>
+bool operator==(const T& lhs, const U& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 

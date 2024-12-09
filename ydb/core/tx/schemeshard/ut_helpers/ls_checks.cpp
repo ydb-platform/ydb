@@ -471,6 +471,13 @@ void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeResourcePool);
 }
 
+void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+    const auto& pathDescr = record.GetPathDescription();
+    const auto& selfPath = pathDescr.GetSelf();
+    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeBackupCollection);
+}
+
 TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT(record.HasPathDescription());
@@ -846,23 +853,24 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
-TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Distance dist, 
-                                  Ydb::Table::VectorIndexSettings_Similarity similarity, 
+TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
                                   Ydb::Table::VectorIndexSettings_VectorType vectorType,
-                                  ui32 vectorDimension
+                                  ui32 vectorDimension,
+                                  ui32 clusters,
+                                  ui32 levels
                                   ) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         if (record.GetPathDescription().GetTableIndex().HasVectorIndexKmeansTreeDescription()) {
             const auto& settings = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
-            UNIT_ASSERT_VALUES_EQUAL(settings.distance(), dist);
-            UNIT_ASSERT_VALUES_EQUAL(settings.similarity(), similarity);
-            UNIT_ASSERT_VALUES_EQUAL(settings.vector_type(), vectorType);
-            UNIT_ASSERT_VALUES_EQUAL(settings.vector_dimension(), vectorDimension);
+            UNIT_ASSERT_VALUES_EQUAL(settings.settings().metric(), metric);
+            UNIT_ASSERT_VALUES_EQUAL(settings.settings().vector_type(), vectorType);
+            UNIT_ASSERT_VALUES_EQUAL(settings.settings().vector_dimension(), vectorDimension);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), clusters);
+            UNIT_ASSERT_VALUES_EQUAL(settings.levels(), levels);
         } else {
             UNIT_FAIL("oneof SpecializedIndexDescription should be set.");
         }
     };
-
 }
 
 
@@ -1134,6 +1142,9 @@ TCheckFunc HasTtlEnabled(const TString& columnName, const TDuration& expireAfter
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), columnName);
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnUnit(), columnUnit);
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), expireAfter.Seconds());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 1);
+        UNIT_ASSERT(ttl.GetEnabled().GetTiers(0).HasDelete());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetTiers(0).GetApplyAfterSeconds(), expireAfter.Seconds());
     };
 }
 
@@ -1207,12 +1218,22 @@ TCheckFunc HasColumnTableTtlSettingsDisabled() {
     };
 }
 
-TCheckFunc HasColumnTableTtlSettingsTiering(const TString& tieringName) {
+TCheckFunc HasColumnTableTtlSettingsTier(const TString& columnName, const TDuration& evictAfter, const std::optional<TString>& storageName) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
         UNIT_ASSERT(table.HasTtlSettings());
         const auto& ttl = table.GetTtlSettings();
-        UNIT_ASSERT_EQUAL(ttl.GetUseTiering(), tieringName);
+        UNIT_ASSERT(ttl.HasEnabled());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), columnName);
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 1);
+        const auto& tier = ttl.GetEnabled().GetTiers(0);
+        UNIT_ASSERT_VALUES_EQUAL(tier.GetApplyAfterSeconds(), evictAfter.Seconds());
+        if (storageName) {
+            UNIT_ASSERT(tier.HasEvictToExternalStorage());
+            UNIT_ASSERT_VALUES_EQUAL(tier.GetEvictToExternalStorage().GetStorageName(), storageName);
+        } else {
+            UNIT_ASSERT(tier.HasDelete());
+        }
     };
 }
 
@@ -1304,10 +1325,62 @@ TCheckFunc PartitionKeys(TVector<TString> lastShardKeys) {
         const auto& pathDescr = record.GetPathDescription();
         UNIT_ASSERT_VALUES_EQUAL(lastShardKeys.size(), pathDescr.TablePartitionsSize());
         for (size_t i = 0; i < lastShardKeys.size(); ++i) {
-            UNIT_ASSERT_STRING_CONTAINS(pathDescr.GetTablePartitions(i).GetEndOfRangeKeyPrefix(), lastShardKeys[i]);
+            const auto& partition = pathDescr.GetTablePartitions(i);
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                partition.GetEndOfRangeKeyPrefix(), lastShardKeys[i],
+                "partition index: " << i << '\n'
+                    << "actual key prefix: " << partition.GetEndOfRangeKeyPrefix().Quote() << '\n'
+                    << "expected key prefix: " << lastShardKeys[i].Quote() << '\n'
+            );
         }
     };
 }
+
+namespace {
+
+// Serializes / deserializes a value of type T to a cell vector string representation.
+template <typename T>
+struct TSplitBoundarySerializer {
+    static TString Serialize(T splitBoundary) {
+        const auto cell = TCell::Make(splitBoundary);
+        TSerializedCellVec cellVec(TArrayRef<const TCell>(&cell, 1));
+        return cellVec.ReleaseBuffer();
+    }
+
+    static TVector<T> Deserialize(const TString& serializedCells) {
+        TSerializedCellVec cells(serializedCells);
+        TVector<T> values;
+        for (const auto& cell : cells.GetCells()) {
+            if (cell.IsNull()) {
+                // the last cell
+                break;
+            }
+            values.emplace_back(cell.AsValue<T>());
+        }
+        return values;
+    }
+};
+
+}
+
+template <typename T>
+TCheckFunc SplitBoundaries(TVector<T>&& expectedBoundaries) {
+    return [expectedBoundaries = std::move(expectedBoundaries)] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& pathDescr = record.GetPathDescription();
+        UNIT_ASSERT_VALUES_EQUAL(pathDescr.TablePartitionsSize(), expectedBoundaries.size() + 1);
+        for (size_t i = 0; i < expectedBoundaries.size(); ++i) {
+            const auto& partition = pathDescr.GetTablePartitions(i);
+            const auto actualBoundary = TSplitBoundarySerializer<T>::Deserialize(partition.GetEndOfRangeKeyPrefix()).at(0);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                actualBoundary, expectedBoundaries[i],
+                "partition index: " << i << '\n'
+                    << "actual key prefix: " << partition.GetEndOfRangeKeyPrefix().Quote() << '\n'
+            );
+        }
+    };
+}
+
+template TCheckFunc SplitBoundaries<ui32>(TVector<ui32>&&);
 
 TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {

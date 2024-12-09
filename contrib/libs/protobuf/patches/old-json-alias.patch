@@ -1,0 +1,15 @@
+--- contrib/libs/protobuf/src/google/protobuf/json/json.h	(109a04575819756fff3dc3e089008c9b1e971f85)
++++ contrib/libs/protobuf/src/google/protobuf/json/json.h	(9dbbd3dce374a64a46474b4ba78bceb44689f396)
+@@ -87,6 +87,12 @@ struct PrintOptions {
+         preserve_proto_field_names(false) {}
+ };
+ 
++#ifdef USE_DEPRECATED_NAMESPACE
++using JsonParseOptions = ParseOptions;
++using JsonPrintOptions = PrintOptions;
++using JsonOptions = PrintOptions;
++#endif
++
+ // Converts from protobuf message to JSON and appends it to |output|. This is a
+ // simple wrapper of BinaryToJsonString(). It will use the DescriptorPool of the
+ // passed-in message to resolve Any types.

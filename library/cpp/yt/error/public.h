@@ -1,0 +1,19 @@
+#pragma once
+
+#include <library/cpp/yt/yson_string/string.h>
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+class TErrorOr;
+
+
+struct TErrorAttribute;
+class TErrorAttributes;
+struct TOriginAttributes;
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

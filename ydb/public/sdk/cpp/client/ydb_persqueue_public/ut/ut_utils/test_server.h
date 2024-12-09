@@ -100,7 +100,7 @@ public:
         if (NetDataFile)
             return false;
         NetDataFile = MakeHolder<TTempFileHandle>();
-        NetDataFile->Write(content.Data(), content.Size());
+        NetDataFile->Write(content.data(), content.size());
         NetDataFile->FlushData();
         ServerSettings.NetClassifierConfig.SetNetDataFilePath(NetDataFile->Name());
         return true;

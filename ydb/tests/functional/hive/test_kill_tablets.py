@@ -3,8 +3,8 @@ from hamcrest import assert_that, greater_than, has_length
 
 from ydb.tests.library.common.delayed import wait_tablets_state_by_id
 from ydb.tests.library.common.types import TabletTypes, TabletStates
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.library.harness.kikimr_http_client import SwaggerClient
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.matchers.response import is_valid_response_with_field
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 
@@ -15,7 +15,7 @@ NUMBER_OF_TABLETS = 4
 class TestKillTablets(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         host = cls.cluster.nodes[1].host
         mon_port = cls.cluster.nodes[1].mon_port

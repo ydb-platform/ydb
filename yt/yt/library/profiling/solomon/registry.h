@@ -35,62 +35,62 @@ struct TSensorInfo
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSolomonRegistry
-    : public IRegistryImpl
+    : public IRegistry
 {
 public:
     explicit TSolomonRegistry();
 
-    ICounterImplPtr RegisterCounter(
+    ICounterPtr RegisterCounter(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    ITimeCounterImplPtr RegisterTimeCounter(
+    ITimeCounterPtr RegisterTimeCounter(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    IGaugeImplPtr RegisterGauge(
+    IGaugePtr RegisterGauge(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    ITimeGaugeImplPtr RegisterTimeGauge(
+    ITimeGaugePtr RegisterTimeGauge(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    ISummaryImplPtr RegisterSummary(
+    ISummaryPtr RegisterSummary(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    IGaugeImplPtr RegisterGaugeSummary(
+    IGaugePtr RegisterGaugeSummary(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    ITimeGaugeImplPtr RegisterTimeGaugeSummary(
+    ITimeGaugePtr RegisterTimeGaugeSummary(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    ITimerImplPtr RegisterTimerSummary(
+    ITimerPtr RegisterTimerSummary(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    ITimerImplPtr RegisterTimeHistogram(
+    ITimerPtr RegisterTimeHistogram(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    IHistogramImplPtr RegisterGaugeHistogram(
+    IHistogramPtr RegisterGaugeHistogram(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
 
-    IHistogramImplPtr RegisterRateHistogram(
+    IHistogramPtr RegisterRateHistogram(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) override;
@@ -149,8 +149,8 @@ public:
     int GetWindowSize() const;
     int IndexOf(i64 iteration) const;
 
-    void Profile(const TProfiler& profiler);
-    const TProfiler& GetSelfProfiler() const;
+    void Profile(const TWeakProfiler& profiler);
+    const TWeakProfiler& GetSelfProfiler() const;
 
     NProto::TSensorDump DumpSensors();
     NProto::TSensorDump DumpSensors(std::vector<TTagId> extraTags);
@@ -160,7 +160,7 @@ private:
     i64 Iteration_ = 0;
     std::optional<int> WindowSize_;
     std::function<int(const std::string&)> GridFactor_;
-    TProfiler SelfProfiler_;
+    TWeakProfiler SelfProfiler_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, DynamicTagsLock_);
     std::vector<TTag> DynamicTags_;

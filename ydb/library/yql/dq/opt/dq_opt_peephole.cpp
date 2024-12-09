@@ -1,12 +1,12 @@
 #include "dq_opt_peephole.h"
 
-#include <ydb/library/yql/core/yql_join.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
+#include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_type_helpers.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/generic/size_literals.h>
 #include <util/generic/bitmap.h>
@@ -132,7 +132,7 @@ TExprNode::TListType OriginalJoinOutputMembers(const TDqPhyMapJoin& mapJoin, TEx
     return structMembers;
 }
 
-TExprNode::TPtr ExpandJoinInput(const TStructExprType& type, TExprNode::TPtr&& arg, TExprContext& ctx) {
+TExprNode::TPtr ExpandJoinInput(const TStructExprType& type, TExprNode::TPtr&& arg, TExprContext& ctx, std::vector<std::pair<TString, const TTypeAnnotationNode*>>& convertedItems, TPositionHandle position) {
     return ctx.Builder(arg->Pos())
             .Callable("ExpandMap")
                 .Add(0, std::move(arg))
@@ -141,10 +141,21 @@ TExprNode::TPtr ExpandJoinInput(const TStructExprType& type, TExprNode::TPtr&& a
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         auto i = 0U;
                         for (const auto& item : type.GetItems()) {
-                            parent.Callable(i++, "Member")
+                            parent.Callable(i, "Member")
                                 .Arg(0, "item")
                                 .Atom(1, item->GetName())
-                                .Seal();
+                            .Seal();
+                            i++;
+                        }
+                        for (const auto& convertedItem : convertedItems) {
+                            parent.Callable(i, "StrictCast")
+                                .Callable(0, "Member")
+                                    .Arg(0, "item")
+                                    .Atom(1, convertedItem.first)
+                                .Seal()
+                                .Add(1, ExpandType(position, *convertedItem.second, ctx))
+                            .Seal();
+                            i++;
                         }
                         return parent;
                     })
@@ -165,7 +176,6 @@ TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const TExprBase& node, TExprCont
     const TString rightTableLabel(GetTableLabel(graceJoin.RightLabel()));
 
     auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, graceJoin, leftTableLabel, rightTableLabel);
-    const auto keyWidth = leftKeyColumnNodes.size();
 
     const auto itemTypeLeft = GetSequenceItemType(graceJoin.LeftInput(), false, ctx)->Cast<TStructExprType>();
     const auto itemTypeRight = GetSequenceItemType(graceJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
@@ -195,42 +205,46 @@ TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const TExprBase& node, TExprCont
         }
     }
 
-    TTypeAnnotationNode::TListType keyTypesLeft(keyWidth);
-    TTypeAnnotationNode::TListType keyTypesRight(keyWidth);
-    TTypeAnnotationNode::TListType keyTypes(keyWidth);
-    for (auto i = 0U; i < keyTypes.size(); ++i) {
-        const auto keyTypeLeft = itemTypeLeft->FindItemType(leftKeyColumnNodes[i]->Content());
-        const auto keyTypeRight = itemTypeRight->FindItemType(rightKeyColumnNodes[i]->Content());
-        bool optKey = false;
-        keyTypes[i] = JoinDryKeyType(keyTypeLeft, keyTypeRight, optKey, ctx);
-        if (!keyTypes[i]) {
-            keyTypes.clear();
-            keyTypesLeft.clear();
-            keyTypesRight.clear();
-            break;
+    std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
+    std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
+
+    YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
+    for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
+
+        auto leftName = leftKeyColumnNodes[i]->Content();
+        auto leftIndex = itemTypeLeft->FindItem(leftName);
+        YQL_ENSURE(leftIndex);
+        const auto keyTypeLeft = itemTypeLeft->GetItems()[*leftIndex]->GetItemType();
+
+        auto rightName = rightKeyColumnNodes[i]->Content();
+        auto rightIndex = itemTypeRight->FindItem(rightName);
+        YQL_ENSURE(rightIndex);
+        const auto keyTypeRight = itemTypeRight->GetItems()[*rightIndex]->GetItemType();
+
+        bool hasOptional = false;
+        auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
+
+        if (keyTypeLeft->Equals(*dryType)) {
+            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
+        } else {
+            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size()));
+            leftConvertedItems.emplace_back(leftName, dryType);
         }
-        keyTypesLeft[i] = optKey ? ctx.MakeType<TOptionalExprType>(keyTypes[i]) : keyTypes[i];
-        keyTypesRight[i] = optKey ? ctx.MakeType<TOptionalExprType>(keyTypes[i]) : keyTypes[i];
+        if (keyTypeRight->Equals(*dryType)) {
+            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
+        } else {
+            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
+            rightConvertedItems.emplace_back(rightName, dryType);
+        }
     }
 
-    auto leftInput = ExpandJoinInput(*itemTypeLeft, ctx.NewCallable(graceJoin.LeftInput().Pos(), "ToFlow", {graceJoin.LeftInput().Ptr()}), ctx);
-    auto rightInput = ExpandJoinInput(*itemTypeRight, ctx.NewCallable(graceJoin.RightInput().Pos(), "ToFlow", {graceJoin.RightInput().Ptr()}), ctx);
-    YQL_ENSURE(!keyTypes.empty());
+    auto leftInput = ExpandJoinInput(*itemTypeLeft, ctx.NewCallable(graceJoin.LeftInput().Pos(), "ToFlow", {graceJoin.LeftInput().Ptr()}), ctx, leftConvertedItems, pos);
+    auto rightInput = ExpandJoinInput(*itemTypeRight, ctx.NewCallable(graceJoin.RightInput().Pos(), "ToFlow", {graceJoin.RightInput().Ptr()}), ctx, rightConvertedItems, pos);
 
-    for (auto i = 0U; i < leftKeyColumnNodes.size(); i++) {
-        const auto origName = TString(leftKeyColumnNodes[i]->Content());
-        auto index = itemTypeLeft->FindItem(origName);
-        YQL_ENSURE(index);
-        leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*index));
+    TExprNode::TListType flags;
+    if (auto maybeFlags = graceJoin.Flags().Maybe<TCoAtomList>()) {
+        flags = maybeFlags.Cast().Ref().ChildrenList();
     }
-    for (auto i = 0U; i < rightKeyColumnNodes.size(); i++) {
-        const auto origName = TString(rightKeyColumnNodes[i]->Content());
-        auto index = itemTypeRight->FindItem(origName);
-        YQL_ENSURE(index);
-        rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*index));
-    }
-
-    auto [leftKeyColumnNodesCopy, rightKeyColumnNodesCopy] = JoinKeysToAtoms(ctx, graceJoin, leftTableLabel, rightTableLabel);
 
     auto graceJoinCore = Build<TCoGraceJoinCore>(ctx, pos)
             .LeftInput(std::move(leftInput))
@@ -240,11 +254,10 @@ TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const TExprBase& node, TExprCont
             .RightKeysColumns(ctx.NewList(pos,  std::move(rightKeyColumnNodes)))
             .LeftRenames(ctx.NewList(pos, std::move(leftRenames)))
             .RightRenames(ctx.NewList(pos, std::move(rightRenames)))
-            .LeftKeysColumnNames(ctx.NewList(pos,  std::move(leftKeyColumnNodesCopy)))
-            .RightKeysColumnNames(ctx.NewList(pos,  std::move(rightKeyColumnNodesCopy)))
-            .Flags()
-            .Build()
-        .Done();
+            .LeftKeysColumnNames(graceJoin.LeftJoinKeyNames())
+            .RightKeysColumnNames(graceJoin.RightJoinKeyNames())
+            .Flags(ctx.NewList(pos, std::move(flags)))
+    .Done();
 
     auto graceNode = ctx.Builder(pos)
         .Callable("NarrowMap")
@@ -786,16 +799,20 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
     if (typesCtx.IsBlockEngineEnabled()) {
         return NNodes::TExprBase(ctx.Builder(node.Pos())
             .Callable("NarrowMap")
-                .Callable(0, "BlockCombineAll")
-                    .Callable(0, "WideToBlocks")
-                        .Add(0, MakeExpandMap(node.Pos(), {}, dqPhyLength.Input().Ptr(), ctx))
-                    .Seal()
-                    .Callable(1, "Void")
-                    .Seal()
-                    .List(2)
-                        .List(0)
-                            .Callable(0, "AggBlockApply")
-                                .Atom(0, "count_all")
+                .Callable(0, "ToFlow")
+                    .Callable(0, "BlockCombineAll")
+                        .Callable(0, "FromFlow")
+                            .Callable(0, "WideToBlocks")
+                                .Add(0, MakeExpandMap(node.Pos(), {}, dqPhyLength.Input().Ptr(), ctx))
+                            .Seal()
+                        .Seal()
+                        .Callable(1, "Void")
+                        .Seal()
+                        .List(2)
+                            .List(0)
+                                .Callable(0, "AggBlockApply")
+                                    .Atom(0, "count_all")
+                                .Seal()
                             .Seal()
                         .Seal()
                     .Seal()

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.34.0)
+VERSION(2.36.0)
 
 LICENSE(Apache-2.0)
 
@@ -20,6 +20,7 @@ NO_LINT()
 
 NO_CHECK_IMPORTS(
     google.auth._oauth2client
+    google.auth.aio.transport.aiohttp
     google.auth.transport._aiohttp_requests
 )
 
@@ -39,6 +40,9 @@ PY_SRCS(
     google/auth/_service_account_info.py
     google/auth/aio/__init__.py
     google/auth/aio/credentials.py
+    google/auth/aio/transport/__init__.py
+    google/auth/aio/transport/aiohttp.py
+    google/auth/aio/transport/sessions.py
     google/auth/api_key.py
     google/auth/app_engine.py
     google/auth/aws.py

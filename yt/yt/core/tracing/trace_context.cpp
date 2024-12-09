@@ -377,7 +377,7 @@ TSpanContext TTraceContext::GetSpanContext() const
         .TraceId = GetTraceId(),
         .SpanId = GetSpanId(),
         .Sampled = IsSampled(),
-        .Debug = Debug_,
+        .Debug = IsDebug(),
     };
 }
 
@@ -476,10 +476,16 @@ void TTraceContext::AddProfilingTag(const std::string& name, i64 value)
     ProfilingTags_.emplace_back(name, value);
 }
 
-std::vector<std::pair<std::string, std::variant<std::string, i64>>> TTraceContext::GetProfilingTags()
+std::vector<std::pair<std::string, TTraceContext::TProfilingTagValue>> TTraceContext::GetProfilingTags()
 {
     auto guard = Guard(Lock_);
     return ProfilingTags_;
+}
+
+void TTraceContext::SetProfilingTags(std::vector<std::pair<std::string, TTraceContext::TProfilingTagValue>> profilingTags)
+{
+    auto guard = Guard(Lock_);
+    ProfilingTags_ = std::move(profilingTags);
 }
 
 bool TTraceContext::AddAsyncChild(TTraceId traceId)

@@ -4,7 +4,7 @@
 #include <list>
 #include <unordered_map>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NDq {
 

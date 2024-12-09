@@ -10,9 +10,9 @@
 
 #include <yt/yt/core/logging/log.h>
 
-#include <yt/yt/core/misc/atomic_object.h>
-
 #include <yt/yt/core/ytree/attributes.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 
 #include <library/cpp/testing/common/network.h>
 
@@ -127,7 +127,7 @@ private:
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
     std::atomic<bool> TerminationFlag_ = false;
-    TAtomicObject<TError> TerminationError_;
+    NThreading::TAtomicObject<TError> TerminationError_;
 
     THashMap<std::pair<TString, TGuid>, TTestBusPtr> RequestToBus_;
 

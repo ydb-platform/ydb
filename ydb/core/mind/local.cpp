@@ -200,7 +200,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             }
             tabletAvailability->SetPriority(tabletInfo.Priority);
         }
-        if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.Empty()) {
+        if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.empty()) {
             request->Record.SetName(nodeName);
         }
 
@@ -654,7 +654,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             if (info.HasNumberOfCpus()) {
                 double cpuUsageSum = 0;
                 for (const auto& poolInfo : info.poolstats()) {
-                    cpuUsageSum += poolInfo.usage() * poolInfo.threads();
+                    cpuUsageSum += poolInfo.usage() * poolInfo.limit();
                 }
                 CpuUsage = cpuUsageSum / info.GetNumberOfCpus();
             }

@@ -2,7 +2,7 @@
 
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NFq {
 

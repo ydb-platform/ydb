@@ -50,6 +50,8 @@ scheme permissions grant | Предоставление разрешения
 scheme permissions remove | Удаление разрешения
 scheme permissions revoke | Удаление разрешения
 scheme permissions set | Установка разрешений
+scheme permissions clear-inheritance | Запрет наследования разрешений
+scheme permissions set-inheritance | Установка наследования разрешений
 [scheme rmdir](../commands/dir.md#rmdir) | Удаление директории
 [scripting yql](../scripting-yql.md) | Выполнение YQL-скрипта
 table attribute add | Добавление атрибута для строкой или колоночной таблицы

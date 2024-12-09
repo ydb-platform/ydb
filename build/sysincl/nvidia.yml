@@ -7,6 +7,7 @@
   - cublasLt.h
   - cublas_v2.h
   - cuda.h
+  - cuda/std/atomic
   - cuda/std/cassert
   - cuda/std/cmath
   - cuda/std/cstddef
@@ -57,6 +58,7 @@
   - nvperf_host.h
   - nvperf_target.h
   - nvrtc.h
+  - nvtx3/nvToolsExt.h
   - surface_types.h
   - texture_types.h
   - vector_types.h
@@ -67,3 +69,7 @@
   includes:
   - NvInfer.h
   - NvInferPlugin.h
+
+- source_filter: "^contrib/libs/nvidia/nccl/.*"
+  includes:
+  - nvtx3/nvToolsExt.h: "contrib/libs/nvidia/nccl/src/include/nvtx3/nvToolsExt.h"

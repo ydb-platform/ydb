@@ -1,6 +1,6 @@
 #include "ut_helpers.h"
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
 #include <ydb/core/testlib/basics/appdata.h>
@@ -243,13 +243,19 @@ std::vector<TString> UVParser(const NUdf::TUnboxedValue& item) {
     return { TString(item.AsStringRef()) };
 }
 
+std::vector<TString> UVParserWithMetadatafields(const NUdf::TUnboxedValue& item) {
+    const auto& cell = item.GetElement(0);
+    TString str(cell.AsStringRef());
+    return {str};
+}
+
 void TPqIoTestFixture::AsyncOutputWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint) {
     CaSetup->AsyncOutputWrite([data](NKikimr::NMiniKQL::THolderFactory& factory) {
         NKikimr::NMiniKQL::TUnboxedValueBatch batch;
         for (const auto& item : data) {
             NUdf::TUnboxedValue* unboxedValueForData = nullptr;
             batch.emplace_back(factory.CreateDirectArrayHolder(1, unboxedValueForData));
-            unboxedValueForData[0] = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(item.Data(), item.Size()));
+            unboxedValueForData[0] = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(item.data(), item.size()));
         }
 
         return batch;

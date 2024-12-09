@@ -35,7 +35,7 @@ TAtomicIntrusivePtr<T>::operator bool() const
     return Get();
 }
 
-#ifdef _lsan_enabled_
+#if defined(_lsan_enabled_) || defined(_asan_enabled_)
 
 template <class T>
 TAtomicIntrusivePtr<T>::TAtomicIntrusivePtr(TIntrusivePtr<T> other)
@@ -234,6 +234,12 @@ template <class T>
 typename TAtomicIntrusivePtr<T>::TRawPtr TAtomicIntrusivePtr<T>::Get() const
 {
     return TTaggedPtr<void>::Unpack(Ptr_.load()).Ptr;
+}
+
+template <class T>
+typename TAtomicIntrusivePtr<T>::TRawPtr TAtomicIntrusivePtr<T>::get() const
+{
+    return Get();
 }
 
 template <class T>

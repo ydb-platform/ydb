@@ -27,6 +27,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
     auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(params.Database, params.TopicName, params.Driver);
     NYdb::NTopic::TReadSessionSettings settings;
     settings.AutoPartitioningSupport(true);
+    //settings.MaxLag(TDuration::Seconds(30));
 
     if (!params.ReadWithoutConsumer) {
         auto consumerName = TCommandWorkloadTopicDescribe::GenerateConsumerName(params.ConsumerPrefix, params.ConsumerIdx);
@@ -92,7 +93,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
 
                 for (const auto& message : dataEvent->GetMessages()) {
                     ui64 fullTime = (now - message.GetCreateTime()).MilliSeconds();
-                    params.StatsCollector->AddReaderEvent(params.ReaderIdx, {message.GetData().Size(), fullTime});
+                    params.StatsCollector->AddReaderEvent(params.ReaderIdx, {message.GetData().size(), fullTime});
 
                     if (txSupport) {
                         txSupport->AppendRow(message.GetData());

@@ -650,14 +650,20 @@ TString TQueryPlanPrinter::JsonToString(const NJson::TJsonValue& jsonValue) {
     return jsonValue.GetStringRobust();
 }
 
-TResultSetPrinter::TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted)
-    : Format(format)
-    , IsInterrupted(isInterrupted)
+TResultSetPrinter::TResultSetPrinter(const TSettings& settings)
+    : Settings(settings)
     , ParquetPrinter(std::make_unique<TResultSetParquetPrinter>(""))
 {}
 
+TResultSetPrinter::TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted)
+    : TResultSetPrinter(TSettings()
+            .SetFormat(format)
+            .SetIsInterrupted(isInterrupted)
+       )
+{}
+
 TResultSetPrinter::~TResultSetPrinter() {
-    if (PrintedSomething && !IsInterrupted()) {
+    if (PrintedSomething && !Settings.GetIsInterrupted()()) {
         EndResultSet();
     }
 }
@@ -668,7 +674,7 @@ void TResultSetPrinter::Print(const TResultSet& resultSet) {
     }
     PrintedSomething = true;
 
-    switch (Format) {
+    switch (Settings.GetFormat()) {
     case EDataFormat::Default:
     case EDataFormat::Pretty:
         PrintPretty(resultSet);
@@ -677,13 +683,13 @@ void TResultSetPrinter::Print(const TResultSet& resultSet) {
         PrintJsonArray(resultSet, EBinaryStringEncoding::Unicode);
         break;
     case EDataFormat::JsonUnicode:
-        FormatResultSetJson(resultSet, &Cout, EBinaryStringEncoding::Unicode);
+        FormatResultSetJson(resultSet, Settings.GetOutput(), EBinaryStringEncoding::Unicode);
         break;
     case EDataFormat::JsonBase64Array:
         PrintJsonArray(resultSet, EBinaryStringEncoding::Base64);
         break;
     case EDataFormat::JsonBase64:
-        FormatResultSetJson(resultSet, &Cout, EBinaryStringEncoding::Base64);
+        FormatResultSetJson(resultSet, Settings.GetOutput(), EBinaryStringEncoding::Base64);
         break;
     case EDataFormat::Csv:
         PrintCsv(resultSet, ",");
@@ -695,7 +701,7 @@ void TResultSetPrinter::Print(const TResultSet& resultSet) {
         ParquetPrinter->Print(resultSet);
         break;
     default:
-        throw TMisuseException() << "This command doesn't support " << Format << " output format";
+        throw TMisuseException() << "This command doesn't support " << Settings.GetFormat() << " output format";
     }
 
     if (FirstPart) {
@@ -711,10 +717,10 @@ void TResultSetPrinter::Reset() {
 }
 
 void TResultSetPrinter::BeginResultSet() {
-    switch (Format) {
+    switch (Settings.GetFormat()) {
     case EDataFormat::JsonUnicodeArray:
     case EDataFormat::JsonBase64Array:
-        Cout << '[';
+        *Settings.GetOutput() << '[';
         break;
     default:
         break;
@@ -722,10 +728,10 @@ void TResultSetPrinter::BeginResultSet() {
 }
 
 void TResultSetPrinter::EndResultSet() {
-    switch (Format) {
+    switch (Settings.GetFormat()) {
     case EDataFormat::JsonUnicodeArray:
     case EDataFormat::JsonBase64Array:
-        Cout << ']' << Endl;
+        *Settings.GetOutput() << ']' << Endl;
         break;
     case EDataFormat::Parquet:
         ParquetPrinter->Reset();
@@ -736,10 +742,10 @@ void TResultSetPrinter::EndResultSet() {
 }
 
 void TResultSetPrinter::EndLineBeforeNextResult() {
-    switch (Format) {
+    switch (Settings.GetFormat()) {
     case EDataFormat::JsonUnicodeArray:
     case EDataFormat::JsonBase64Array:
-        Cout << ',' << Endl;
+        *Settings.GetOutput() << ',' << Endl;
         break;
     default:
         break;
@@ -755,19 +761,23 @@ void TResultSetPrinter::PrintPretty(const TResultSet& resultSet) {
     }
 
     TPrettyTableConfig tableConfig;
+    tableConfig.MaxWidth(Settings.GetMaxWidth());
     if (!FirstPart) {
         tableConfig.WithoutHeader();
     }
     TPrettyTable table(columnNames, tableConfig);
-
-    while (parser.TryNextRow()) {
+    for (size_t printed = 0; parser.TryNextRow(); ++printed) {
         auto& row = table.AddRow();
+        if (Settings.GetMaxRowsCount() && printed >= Settings.GetMaxRowsCount()) {
+            row.FreeText(TStringBuilder() << "And " << (resultSet.RowsCount() - printed) << " more lines, total " << resultSet.RowsCount());
+            break;
+        }
         for (ui32 i = 0; i < columns.size(); ++i) {
             row.Column(i, FormatValueJson(parser.GetValue(i), EBinaryStringEncoding::Unicode));
         }
     }
 
-    Cout << table;
+    *Settings.GetOutput() << table;
 }
 
 void TResultSetPrinter::PrintJsonArray(const TResultSet& resultSet, EBinaryStringEncoding encoding) {
@@ -775,14 +785,18 @@ void TResultSetPrinter::PrintJsonArray(const TResultSet& resultSet, EBinaryStrin
 
     TResultSetParser parser(resultSet);
     bool firstRow = true;
-    while (parser.TryNextRow()) {
+    for (size_t printed = 0; parser.TryNextRow(); ++printed) {
         if (!firstRow || !FirstPart) {
             EndLineBeforeNextResult();
         }
         if (firstRow) {
             firstRow = false;
         }
-        NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, &Cout);
+        if (Settings.GetMaxRowsCount() && printed >= Settings.GetMaxRowsCount()) {
+            *Settings.GetOutput() << "And " << (resultSet.RowsCount() - printed) << " more lines, total " << resultSet.RowsCount();
+            break;
+        }
+        NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, Settings.GetOutput());
         FormatResultRowJson(parser, columns, writer, encoding);
     }
 }
@@ -790,14 +804,27 @@ void TResultSetPrinter::PrintJsonArray(const TResultSet& resultSet, EBinaryStrin
 void TResultSetPrinter::PrintCsv(const TResultSet& resultSet, const char* delim) {
     const TVector<TColumn>& columns = resultSet.GetColumnsMeta();
     TResultSetParser parser(resultSet);
-    while (parser.TryNextRow()) {
+    if (Settings.IsCsvWithHeader()) {
         for (ui32 i = 0; i < columns.size(); ++i) {
-            Cout << FormatValueJson(parser.GetValue(i), EBinaryStringEncoding::Unicode);
+            *Settings.GetOutput() << columns[i].Name;
             if (i < columns.size() - 1) {
-                Cout << delim;
+                *Settings.GetOutput() << delim;
             }
         }
-        Cout << Endl;
+        *Settings.GetOutput() << Endl;
+    }
+    for (size_t printed = 0; parser.TryNextRow(); ++printed) {
+        if (Settings.GetMaxRowsCount() && printed >= Settings.GetMaxRowsCount()) {
+            *Settings.GetOutput() << "And " << (resultSet.RowsCount() - printed) << " more lines, total " << resultSet.RowsCount() << Endl;
+            break;
+        }
+        for (ui32 i = 0; i < columns.size(); ++i) {
+            *Settings.GetOutput() << FormatValueJson(parser.GetValue(i), EBinaryStringEncoding::Unicode);
+            if (i < columns.size() - 1) {
+                *Settings.GetOutput() << delim;
+            }
+        }
+        *Settings.GetOutput() << Endl;
     }
 }
 

@@ -1,7 +1,7 @@
 #include "dq_opt_stat.h"
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -99,7 +99,7 @@ namespace {
                 ui32 v = FromString<ui32>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
             } else if (columnType == "Utf8" || columnType == "String" || columnType == "Yson" || columnType == "Json") {
-                return countMinSketch->Probe(value.Data(), value.Size());
+                return countMinSketch->Probe(value.data(), value.size());
             } else if (columnType == "Interval" || columnType == "Timestamp64" || columnType == "Interval64") {
                 i64 v = FromString<i64>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
@@ -107,7 +107,7 @@ namespace {
                 ui64 v = FromString<ui64>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
             } else if (columnType == "Uuid") {
-                const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
+                const ui64* uuidData = reinterpret_cast<const ui64*>(value.data());
                 std::pair<ui64, ui64> v{};
                 v.first = uuidData[0]; // low128
                 v.second = uuidData[1]; // high128

@@ -15,7 +15,7 @@ template <class TItem, class THash = THash<TItem>, class TEqual = TEqualTo<TItem
 class TExpiringSet
 {
 public:
-    void SetTTl(TDuration ttl);
+    void SetTtl(TDuration ttl);
 
     void Insert(TInstant now, const TItem& item);
     template <class TItems>
@@ -33,7 +33,7 @@ public:
     int GetSize() const;
 
 private:
-    TDuration TTl_;
+    TDuration Ttl_;
 
     struct TItemPack
     {

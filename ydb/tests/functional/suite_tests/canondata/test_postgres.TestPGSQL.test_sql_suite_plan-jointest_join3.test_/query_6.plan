@@ -53,7 +53,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "Not Exist(item.qa.id) Or item.qa.id > 0"
+                                                "Predicate": "NOT Exist(item.qa.id) OR item.qa.id > 0"
                                             }
                                         ],
                                         "PlanNodeId": 6,

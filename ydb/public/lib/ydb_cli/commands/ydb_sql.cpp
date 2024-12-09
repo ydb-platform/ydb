@@ -31,6 +31,9 @@ void TCommandSql::Config(TConfig& config) {
     config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query logical plan. "
             "The query is not actually executed, thus does not affect the database.")
         .StoreTrue(&ExplainMode);
+    config.Opts->AddLongOption("explain-ast", "In addition to the query logical plan, you can get an AST (abstract syntax tree). "
+            "The AST section contains a representation in the internal miniKQL language.")
+        .StoreTrue(&ExplainAst);
     config.Opts->AddLongOption("explain-analyze", "Execute query in explain-analyze mode. Shows query execution plan. "
             "Query results are ignored.\n"
             "Important note: The query is actually executed, so any changes will be applied to the database.")
@@ -75,11 +78,19 @@ void TCommandSql::Parse(TConfig& config) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
             << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
     }
-    if (ExplainAnalyzeMode && !CollectStatsMode.Empty()) {
+    if (ExplainMode && ExplainAst) {
+        throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
+            << "and \"Explain-AST mode\" (\"--explain-ast\") were provided.";
+    }
+    if (ExplainAst && ExplainAnalyzeMode) {
+        throw TMisuseException() << "Both mutually exclusive options \"Explain-AST mode\" (\"--explain-ast\") "
+            << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
+    }
+    if (ExplainAnalyzeMode && !CollectStatsMode.empty()) {
         throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain-analyze mode. "
             "Relevant for execution mode only.";
     }
-    if (ExplainMode && !CollectStatsMode.Empty()) {
+    if (ExplainMode && !CollectStatsMode.empty()) {
         throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain mode"
             "Relevant for execution mode only.";
     }
@@ -98,7 +109,7 @@ void TCommandSql::Parse(TConfig& config) {
             Query = ReadFromFile(QueryFile, "query");
         }
     }
-    if (Query.Empty()) {
+    if (Query.empty()) {
         Cerr << "Neither text of script (\"--script\", \"-s\") "
             << "nor path to file with script text (\"--file\", \"-f\") were provided." << Endl;
         config.PrintHelpAndExit();
@@ -118,7 +129,7 @@ int TCommandSql::RunCommand(TConfig& config) {
     // Single stream execution
     NQuery::TExecuteQuerySettings settings;
 
-    if (ExplainMode) {
+    if (ExplainMode || ExplainAst) {
         // Execute explain request for the query
         settings.ExecMode(NQuery::EExecMode::Explain);
     } else {
@@ -171,6 +182,7 @@ int TCommandSql::RunCommand(TConfig& config) {
 int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     TMaybe<TString> stats;
     TMaybe<TString> plan;
+    TMaybe<TString> ast;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -187,6 +199,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             if (!streamPart.GetStats().Empty()) {
                 const auto& queryStats = *streamPart.GetStats();
                 stats = queryStats.ToString();
+                ast = queryStats.GetAst();
 
                 if (queryStats.GetPlan()) {
                     plan = queryStats.GetPlan();
@@ -194,6 +207,16 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             }
         }
     } // TResultSetPrinter destructor should be called before printing stats
+
+    if (ExplainAst) {
+        Cout << "Query AST:" << Endl << ast << Endl;
+        
+        if (IsInterrupted()) {
+            Cerr << "<INTERRUPTED>" << Endl;
+            return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+    }
 
     if (stats && !ExplainMode && !ExplainAnalyzeMode) {
         Cout << Endl << "Statistics:" << Endl << *stats;

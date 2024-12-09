@@ -7,7 +7,7 @@ import os
 import pytest
 import time
 
-import ydb.tests.library.common.yatest_common as yatest_common
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
@@ -71,7 +71,7 @@ class TestMemAlloc(TestYdsBase):
         time.sleep(2)  # Workaround race between write and read "from now". Remove when YQ-589 will be done.
         for i in range(1):
             self.write_stream([format(i, "0x")])
-        time.sleep(yatest_common.plain_or_under_sanitizer(15, 60))
+        time.sleep(plain_or_under_sanitizer(15, 60))
 
         client.abort_query(query_id)
         client.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)

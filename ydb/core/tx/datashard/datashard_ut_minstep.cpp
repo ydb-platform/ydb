@@ -130,8 +130,8 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
             auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
             auto* reply = ev->Get();
             NYql::TIssues issues;
-            NYql::IssuesFromMessage(reply->Record.GetRef().GetResponse().GetQueryIssues(), issues);
-            UNIT_ASSERT_VALUES_EQUAL_C(reply->Record.GetRef().GetYdbStatus(), expectedStatus,
+            NYql::IssuesFromMessage(reply->Record.GetResponse().GetQueryIssues(), issues);
+            UNIT_ASSERT_VALUES_EQUAL_C(reply->Record.GetYdbStatus(), expectedStatus,
                 issues.ToString());
         }
 
@@ -457,15 +457,15 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         { // handle response from data transaction
             auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
             NYql::TIssues issues;
-            NYql::IssuesFromMessage(ev->Get()->Record.GetRef().GetResponse().GetQueryIssues(), issues);
-            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetRef().GetYdbStatus(), expectedStatus, issues.ToString());
+            NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetYdbStatus(), expectedStatus, issues.ToString());
         }
 
         { // handle response from scheme transaction
             auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderScheme);
             NYql::TIssues issues;
-            NYql::IssuesFromMessage(ev->Get()->Record.GetRef().GetResponse().GetQueryIssues(), issues);
-            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS, issues.ToString());
+            NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS, issues.ToString());
         }
 
         // make sure that second table is still operationable

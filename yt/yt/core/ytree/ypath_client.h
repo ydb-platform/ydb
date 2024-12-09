@@ -58,6 +58,8 @@ public:
     const NRpc::NProto::TRequestHeader& Header() const override;
     NRpc::NProto::TRequestHeader& Header() override;
 
+    bool IsAttachmentCompressionEnabled() const override;
+
     bool IsStreamingEnabled() const override;
 
     const NRpc::TStreamingParameters& ClientAttachmentsStreamingParameters() const override;
@@ -120,7 +122,7 @@ protected:
     {
         // COPMAT(danilalexeev): legacy RPC codecs
         if (Header_.has_request_codec()) {
-            YT_VERIFY(Header_.request_codec() == NYT::ToProto<int>(NCompression::ECodec::None));
+            YT_VERIFY(Header_.request_codec() == NYT::ToProto(NCompression::ECodec::None));
             return SerializeProtoToRefWithCompression(*this);
         } else {
             return SerializeProtoToRefWithEnvelope(*this);
@@ -205,6 +207,8 @@ using TYPathMaybeRef = std::conditional_t<IsArcadiaProtobuf, const TYPath&, TYPa
 TYPathMaybeRef GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
 TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
 
+const google::protobuf::RepeatedPtrField<TProtobufString>& GetOriginalRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header);
+
 void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path);
 
 bool IsRequestMutating(const NRpc::NProto::TRequestHeader& header);
@@ -258,13 +262,15 @@ TString SyncYPathGetKey(
 TFuture<NYson::TYsonString> AsyncYPathGet(
     const IYPathServicePtr& service,
     const TYPath& path,
-    const TAttributeFilter& attributeFilter = {});
+    const TAttributeFilter& attributeFilter = {},
+    const IAttributeDictionaryPtr& options = {});
 
 //! Executes |Get| verb assuming #service handles requests synchronously. Throws if an error has occurred.
 NYson::TYsonString SyncYPathGet(
     const IYPathServicePtr& service,
     const TYPath& path,
-    const TAttributeFilter& attributeFilter = {});
+    const TAttributeFilter& attributeFilter = {},
+    const IAttributeDictionaryPtr& options = {});
 
 //! Asynchronously executes |Exists| verb.
 TFuture<bool> AsyncYPathExists(

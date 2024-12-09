@@ -8,7 +8,7 @@
 #include <ydb/core/kqp/common/shutdown/events.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/library/yql/dq/actors/dq.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -48,9 +48,6 @@ struct TEvKqp {
     using TEvDataQueryStreamPart = NPrivateEvents::TEvDataQueryStreamPart;
 
     struct TEvDataQueryStreamPartAck : public TEventLocal<TEvDataQueryStreamPartAck, TKqpEvents::EvDataQueryStreamPartAck> {};
-
-    template <typename TProto>
-    using TProtoArenaHolder = NPrivateEvents::TProtoArenaHolder<TProto>;
 
     using TEvQueryResponse = NPrivateEvents::TEvQueryResponse;
 
@@ -206,6 +203,12 @@ struct TEvKqp {
         THolder<IEventHandle> RequestEvent;
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
+    };
+
+    struct TEvProxyPingRequest : public TEventLocal<TEvProxyPingRequest, TKqpEvents::EvProxyPingRequest> {
+    };
+
+    struct TEvProxyPingResponse : public TEventLocal<TEvProxyPingResponse, TKqpEvents::EvProxyPingResponse> {
     };
 };
 

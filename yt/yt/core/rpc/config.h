@@ -132,7 +132,7 @@ public:
     std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
     TTimeHistogramConfigPtr TimeHistogram;
-    THashMap<TString, TMethodConfigPtr> Methods;
+    THashMap<std::string, TMethodConfigPtr> Methods;
     std::optional<int> AuthenticationQueueSizeLimit;
     std::optional<TDuration> PendingPayloadsTimeout;
     std::optional<bool> Pooled;
@@ -301,6 +301,11 @@ public:
     std::vector<TString> Clusters;
     TString EndpointSetId;
     TDuration UpdatePeriod;
+
+    //! Use IPv4 address of endpoint.
+    bool UseIPv4;
+    //! Use IPv6 address of endpoint.
+    bool UseIPv6;
 
     REGISTER_YSON_STRUCT(TServiceDiscoveryEndpointsConfig);
 

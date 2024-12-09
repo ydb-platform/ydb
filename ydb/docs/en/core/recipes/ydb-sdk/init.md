@@ -1,7 +1,5 @@
 # Initialize the driver
 
-{% include [work in progress message](_includes/addition.md) %}
-
 To connect to {{ ydb-short-name }}, you need to specify the required and additional parameters that define the driver's behavior (learn more in [Connecting to the {{ ydb-short-name }} server](../../concepts/connect.md)).
 
 Below are examples of the code for connecting to {{ ydb-short-name }} (driver creation) in different {{ ydb-short-name }} SDKs.
@@ -100,11 +98,6 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
   ```
 
   {% endcut %}
-
-- Java
-
-
-  {% include [work in progress message](_includes/addition.md) %}
 
 - C# (.NET)
 

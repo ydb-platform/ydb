@@ -8,7 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -134,7 +134,11 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                     YQL_ENSURE(stage.SinksSize() == 1);
                     meta.TableId = MakeTableId(settings.GetTable());
                     meta.TablePath = settings.GetTable().GetPath();
-                    meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
+                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
+                    } else {
+                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
+                    }
                     meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
                 }
             }
@@ -323,7 +327,10 @@ void BuildSequencerChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, 
         if (aic != autoIncrementColumns.end()) {
             auto sequenceIt = tableInfo->Sequences.find(column);
             if (sequenceIt != tableInfo->Sequences.end()) {
-                columnProto->SetDefaultFromSequence(sequenceIt->second);
+                auto sequencePath = sequenceIt->second.first;
+                auto sequencePathId = sequenceIt->second.second;
+                columnProto->SetDefaultFromSequence(sequencePath);
+                sequencePathId.ToMessage(columnProto->MutableDefaultFromSequencePathId());
                 columnProto->SetDefaultKind(
                     NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE);
             } else {
@@ -412,6 +419,8 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
     }
 
     settings->SetLookupStrategy(streamLookup.GetLookupStrategy());
+    settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
+    settings->SetAllowNullKeys(streamLookup.GetAllowNullKeys());
 
     TTransform streamLookupTransform;
     streamLookupTransform.Type = "StreamLookupInputTransformer";

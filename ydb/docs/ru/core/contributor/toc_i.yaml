@@ -7,6 +7,10 @@ items:
   href: manage-releases.md
 - name: Ядро
   items:
+  - name: Общая схема
+    href: general-schema.md
+  - name: Распределённое хранилище
+    href: distributed-storage.md
   - name: LocalDB
     items:
     - name: Персистентные незакомиченные изменения

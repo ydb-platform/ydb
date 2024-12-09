@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>
 
@@ -42,6 +43,7 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetRangeReadRows(tableStats.RangeReadRows);
 
     stats->SetPartCount(tableStats.PartCount);
+    stats->SetHasSchemaChanges(tableStats.HasSchemaChanges);
 
     auto* storagePoolsStats = stats->MutableStoragePools()->MutablePoolsUsage();
     for (const auto& [poolKind, stats] : tableStats.StoragePoolsStats) {
@@ -520,6 +522,31 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
                 << ", childId# " << childPathId
                 << ", childName# " << childName
                 << ", childType# " << static_cast<ui32>(childPath->PathType));
+        }
+    }
+
+    for (const auto& col : tableInfo.Columns) {
+        const auto& cinfo = col.second;
+        if (cinfo.IsDropped())
+            continue;
+
+        switch (cinfo.DefaultKind) {
+            case ETableColumnDefaultKind::None:
+                break;
+            case ETableColumnDefaultKind::FromSequence:
+                if (cinfo.DefaultValue.StartsWith('/')) {
+                    NSchemeShard::TPath sequencePath = NSchemeShard::TPath::Resolve(cinfo.DefaultValue, Self);
+                    NSchemeShard::TPath::TChecker checks = sequencePath.Check();
+                    checks
+                        .IsResolved()
+                        .NotDeleted();
+                    if (checks) {
+                        Self->DescribeSequence(sequencePath->PathId, cinfo.DefaultValue, *entry->AddSequences(), returnSetVal);
+                    }
+                }
+                break;
+            case ETableColumnDefaultKind::FromLiteral:
+                break;
         }
     }
 }
@@ -1067,6 +1094,18 @@ void TPathDescriber::DescribeResourcePool(TPathId pathId, TPathElement::TPtr pat
     entry->MutableProperties()->CopyFrom(resourcePoolInfo->Properties);
 }
 
+void TPathDescriber::DescribeBackupCollection(TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->BackupCollections.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "BackupCollections is not found");
+    TBackupCollectionInfo::TPtr backupCollectionInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableBackupCollectionDescription();
+    entry->SetName(pathEl->Name);
+    PathIdFromPathId(pathId, entry->MutablePathId());
+    entry->SetVersion(backupCollectionInfo->AlterVersion);
+    entry->CopyFrom(backupCollectionInfo->Description);
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1221,6 +1260,10 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         case NKikimrSchemeOp::EPathTypeResourcePool:
             DescribeResourcePool(base->PathId, base);
             break;
+        case NKikimrSchemeOp::EPathTypeBackupCollection:
+            DescribeDir(path);
+            DescribeBackupCollection(base->PathId, base);
+            break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();
         }
@@ -1358,16 +1401,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
 
     if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
         if (const auto* vectorIndexKmeansTreeDescription = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&indexInfo->SpecializedIndexDescription)) {
-            const auto& indexInfoSettings = vectorIndexKmeansTreeDescription->GetSettings();
-            auto entrySettings = entry.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
-            if (indexInfoSettings.has_distance())
-                entrySettings->set_distance(indexInfoSettings.distance());
-            else if (indexInfoSettings.has_similarity())
-                entrySettings->set_similarity(indexInfoSettings.similarity());
-            else
-                Y_FAIL_S("Either distance or similarity should be set in index settings: " << indexInfoSettings);
-            entrySettings->set_vector_type(indexInfoSettings.vector_type());
-            entrySettings->set_vector_dimension(indexInfoSettings.vector_dimension());
+           *entry.MutableVectorIndexKmeansTreeDescription() = *vectorIndexKmeansTreeDescription;
         } else {
             Y_FAIL_S("SpecializedIndexDescription should be set");
         }

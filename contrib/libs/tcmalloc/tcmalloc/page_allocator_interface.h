@@ -17,12 +17,11 @@
 
 #include <stddef.h>
 
-#include <limits>
-#include <utility>
-
-#include "absl/base/internal/spinlock.h"
 #include "absl/base/thread_annotations.h"
 #include "tcmalloc/common.h"
+#include "tcmalloc/internal/config.h"
+#include "tcmalloc/internal/logging.h"
+#include "tcmalloc/pages.h"
 #include "tcmalloc/span.h"
 #include "tcmalloc/stats.h"
 
@@ -38,14 +37,16 @@ class PageAllocatorInterface {
   // For testing: use a non-default pagemap.
   PageAllocatorInterface(const char* label, PageMap* map, MemoryTag tag);
   virtual ~PageAllocatorInterface();
-  // Allocate a run of "n" pages.  Returns zero if out of memory.
-  // Caller should not pass "n == 0" -- instead, n should have
-  // been rounded up already.
-  virtual Span* New(Length n) ABSL_LOCKS_EXCLUDED(pageheap_lock) = 0;
+  // Allocate a run of "n" pages. These pages would be allocated to a total of
+  // 'objects_per_span' objects. Returns zero if out of memory.  Caller should
+  // not pass "n == 0" -- instead, n should have been rounded up already.
+  virtual Span* New(Length n, SpanAllocInfo span_alloc_info)
+      ABSL_LOCKS_EXCLUDED(pageheap_lock) = 0;
 
   // As New, but the returned span is aligned to a <align>-page boundary.
   // <align> must be a power of two.
-  virtual Span* NewAligned(Length n, Length align)
+  virtual Span* NewAligned(Length n, Length align,
+                           SpanAllocInfo span_alloc_info)
       ABSL_LOCKS_EXCLUDED(pageheap_lock) = 0;
 
   // Delete the span "[p, p+n-1]".
@@ -69,19 +70,26 @@ class PageAllocatorInterface {
   // may also be larger than num_pages since page_heap might decide to
   // release one large range instead of fragmenting it into two
   // smaller released and unreleased ranges.
-  virtual Length ReleaseAtLeastNPages(Length num_pages)
+  virtual Length ReleaseAtLeastNPages(Length num_pages,
+                                      PageReleaseReason reason)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(pageheap_lock) = 0;
+
+  // Returns the number of pages that have been released from this page
+  // allocator.
+  virtual PageReleaseStats GetReleaseStats() const
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(pageheap_lock) = 0;
 
   // Prints stats about the page heap to *out.
   virtual void Print(Printer* out) ABSL_LOCKS_EXCLUDED(pageheap_lock) = 0;
 
   // Prints stats about the page heap in pbtxt format.
-  //
-  // TODO(b/130249686): Remove this one and make `Print` print in pbtxt.
   virtual void PrintInPbtxt(PbtxtRegion* region)
       ABSL_LOCKS_EXCLUDED(pageheap_lock) = 0;
 
-  const PageAllocInfo& info() const { return info_; }
+  const PageAllocInfo& info() const
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(pageheap_lock) {
+    return info_;
+  }
 
  protected:
   PageAllocInfo info_ ABSL_GUARDED_BY(pageheap_lock);

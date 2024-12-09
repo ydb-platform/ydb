@@ -55,7 +55,7 @@ class TimeSeriesTracker {
         1;
   }
 
-  bool Report(S val);
+  bool Report(const S& val);
 
   // Iterates over the time series, starting from the oldest entry. The callback
   // receives the offset of the entry, its timestamp according to the clock and
@@ -162,7 +162,7 @@ void TimeSeriesTracker<T, S, kEpochs>::IterBackwards(
   // -1 means that we are outputting all epochs.
   num_epochs = (num_epochs == -1) ? kEpochs : num_epochs;
   size_t j = current_epoch_;
-  ASSERT(num_epochs <= kEpochs);
+  TC_ASSERT_LE(num_epochs, kEpochs);
   int64_t timestamp = last_epoch_ * absl::ToInt64Nanoseconds(epoch_length_);
   for (size_t offset = 0; offset < num_epochs; ++offset) {
     // This is deliberately int64_t and not a time unit, since clock_ is not
@@ -182,7 +182,7 @@ const T TimeSeriesTracker<T, S, kEpochs>::GetEpochAtOffset(size_t offset) {
 }
 
 template <class T, class S, size_t kEpochs>
-bool TimeSeriesTracker<T, S, kEpochs>::Report(S val) {
+bool TimeSeriesTracker<T, S, kEpochs>::Report(const S& val) {
   bool updated_clock = UpdateClock();
   entries_[current_epoch_].Report(val);
   return updated_clock;

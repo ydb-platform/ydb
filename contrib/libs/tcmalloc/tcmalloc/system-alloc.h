@@ -20,19 +20,25 @@
 
 #include <stddef.h>
 
+#include "absl/base/attributes.h"
 #include "tcmalloc/common.h"
+#include "tcmalloc/internal/config.h"
 #include "tcmalloc/malloc_extension.h"
 
 GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
 namespace tcmalloc_internal {
 
+struct AddressRange {
+  void* ptr;
+  size_t bytes;
+};
+
 // REQUIRES: "alignment" is a power of two or "0" to indicate default alignment
 // REQUIRES: "alignment" and "size" <= kTagMask
 //
 // Allocate and return "bytes" of zeroed memory.  The allocator may optionally
-// return more bytes than asked for (i.e. return an entire "huge" page).  The
-// length of the returned memory area is stored in *actual_bytes.
+// return more bytes than asked for (i.e. return an entire "huge" page).
 //
 // The returned pointer is a multiple of "alignment" if non-zero. The
 // returned pointer will always be aligned suitably for holding a
@@ -41,17 +47,12 @@ namespace tcmalloc_internal {
 // aligned.
 //
 // The returned pointer is guaranteed to satisfy GetMemoryTag(ptr) == "tag".
-//
 // Returns nullptr when out of memory.
-void *SystemAlloc(size_t bytes, size_t *actual_bytes, size_t alignment,
-                  MemoryTag tag);
+AddressRange SystemAlloc(size_t bytes, size_t alignment, MemoryTag tag);
 
 // Returns the number of times we failed to give pages back to the OS after a
 // call to SystemRelease.
 int SystemReleaseErrors();
-
-void AcquireSystemAllocLock();
-void ReleaseSystemAllocLock();
 
 // This call is a hint to the operating system that the pages
 // contained in the specified range of memory will not be used for a
@@ -62,27 +63,35 @@ void ReleaseSystemAllocLock();
 // the address space next time they are touched, which can impact
 // performance.  (Only pages fully covered by the memory region will
 // be released, partial pages will not.)
-void SystemRelease(void *start, size_t length);
+//
+// Returns true on success.
+[[nodiscard]] bool SystemRelease(void* start, size_t length);
 
 // This call is the inverse of SystemRelease: the pages in this range
 // are in use and should be faulted in.  (In principle this is a
 // best-effort hint, but in practice we will unconditionally fault the
 // range.)
 // REQUIRES: [start, start + length) is a range aligned to 4KiB boundaries.
-void SystemBack(void *start, size_t length);
+inline void SystemBack(void* start, size_t length) {
+  // TODO(b/134694141): use madvise when we have better support for that;
+  // taking faults is not free.
+
+  // TODO(b/134694141): enable this, if we can avoid causing trouble for apps
+  // that routinely make large mallocs they never touch (sigh).
+}
 
 // Returns the current address region factory.
-AddressRegionFactory *GetRegionFactory();
+AddressRegionFactory* GetRegionFactory();
 
 // Sets the current address region factory to factory.
-void SetRegionFactory(AddressRegionFactory *factory);
+void SetRegionFactory(AddressRegionFactory* factory);
 
 // Reserves using mmap() a region of memory of the requested size and alignment,
 // with the bits specified by kTagMask set according to tag.
 //
 // REQUIRES: pagesize <= alignment <= kTagMask
 // REQUIRES: size <= kTagMask
-void *MmapAligned(size_t size, size_t alignment, MemoryTag tag);
+void* MmapAligned(size_t size, size_t alignment, MemoryTag tag);
 
 }  // namespace tcmalloc_internal
 }  // namespace tcmalloc

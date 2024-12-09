@@ -499,7 +499,7 @@ NTopic::TDescribeTopicResult DescribeTopic(TDriver driver, const TString& path) 
 void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& folderPath, const TString& fileName, const TString& objType = "proto") {
     TString protoStr;
     google::protobuf::TextFormat::PrintToString(proto, &protoStr);
-    LOG_D("Write " << proto << " into " << folderPath.Child(fileName).GetPath().Quote());
+    LOG_D("Write " << objType << " into " << folderPath.Child(fileName).GetPath().Quote());
     TFile outFile(folderPath.Child(fileName), CreateAlways | WrOnly);
     outFile.Write(protoStr.data(), protoStr.size());
 }

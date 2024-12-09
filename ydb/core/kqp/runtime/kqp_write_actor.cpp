@@ -127,6 +127,17 @@ struct IKqpTableWriterCallbacks {
     virtual void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) = 0;
 };
 
+struct TKqpTableWriterStatistics {
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
+    ui64 WriteRows = 0;
+    ui64 WriteBytes = 0;
+    ui64 EraseRows = 0;
+    ui64 EraseBytes = 0;
+
+    THashSet<ui64> AffectedPartitions;
+};
+
 
 class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
     using TBase = TActorBootstrapped<TKqpTableWriteActor>;
@@ -836,6 +847,15 @@ public:
             Counters->WriteActorWritesOperationsHistogram->Collect(metadata->OperationsCount);
 
             SendTime[shardId] = TInstant::Now();
+
+            Stats.ReadRows += serializationResult.ReadRows;
+            Stats.ReadBytes += serializationResult.ReadBytes;
+            Stats.WriteRows += serializationResult.WriteRows;
+            Stats.WriteBytes += serializationResult.WriteBytes;
+            Stats.EraseRows += serializationResult.EraseRows;
+            Stats.EraseBytes += serializationResult.EraseBytes;
+
+            Stats.AffectedPartitions.insert(shardId);
         } else {
             YQL_ENSURE(!isPrepare);
             Counters->WriteActorImmediateWritesRetries->Inc();
@@ -955,6 +975,32 @@ public:
         Send(this->SelfId(), new TEvPrivate::TEvTerminate{});
     }
 
+    void FillStats(NYql::NDqProto::TDqTaskStats* stats) {
+        NYql::NDqProto::TDqTableStats* tableStats = nullptr;
+        for (size_t i = 0; i < stats->TablesSize(); ++i) {
+            auto* table = stats->MutableTables(i);
+            if (table->GetTablePath() == TablePath) {
+                tableStats = table;
+            }
+        }
+        if (!tableStats) {
+            tableStats = stats->AddTables();
+            tableStats->SetTablePath(TablePath);
+        }
+
+        tableStats->SetReadRows(tableStats->GetReadRows() + Stats.ReadRows);
+        tableStats->SetReadBytes(tableStats->GetReadBytes() + Stats.ReadBytes);
+
+        tableStats->SetWriteRows(tableStats->GetWriteRows() + Stats.WriteRows);
+        tableStats->SetWriteBytes(tableStats->GetWriteBytes() + Stats.WriteBytes);
+
+        tableStats->SetEraseRows(tableStats->GetEraseRows() + Stats.EraseRows);
+        tableStats->SetEraseBytes(tableStats->GetEraseBytes() + Stats.EraseBytes);
+
+        tableStats->SetAffectedPartitions(
+            tableStats->GetAffectedPartitions() + Stats.AffectedPartitions.size());
+    }
+
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
     TString LogPrefix;
@@ -986,6 +1032,8 @@ public:
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 
     TIntrusivePtr<TKqpCounters> Counters;
+
+    TKqpTableWriterStatistics Stats;
 
     NWilson::TSpan TableWriteActorSpan;
     NWilson::TSpan TableWriteActorStateSpan;
@@ -1206,6 +1254,12 @@ private:
 
     void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) override {
         RuntimeError(message, statusCode, subIssues);
+    }
+
+    void FillExtraStats(NYql::NDqProto::TDqTaskStats* stats, bool last, const NYql::NDq::TDqMeteringStats*) override {
+        if (last && WriteTableActor) {
+            WriteTableActor->FillStats(stats);
+        }
     }
 
     TString LogPrefix;

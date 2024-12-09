@@ -85,6 +85,13 @@ public:
     struct TSerializationResult {
         i64 TotalDataSize = 0;
         TVector<ui64> PayloadIndexes;
+
+        ui64 ReadRows = 0;
+        ui64 ReadBytes = 0;
+        ui64 WriteRows = 0;
+        ui64 WriteBytes = 0;
+        ui64 EraseRows = 0;
+        ui64 EraseBytes = 0;
     };
 
     virtual TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) = 0;

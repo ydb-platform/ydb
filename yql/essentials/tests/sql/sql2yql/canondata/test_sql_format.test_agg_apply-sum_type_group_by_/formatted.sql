@@ -13,7 +13,8 @@ $p =
 ;
 
 $p =
-    PROCESS $p;
+    PROCESS $p
+;
 
 SELECT
     FormatType(TypeOf($p))

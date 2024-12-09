@@ -2,7 +2,8 @@
 USE plato;
 
 $foo =
-    PROCESS Input;
+    PROCESS Input
+;
 
 SELECT
     ListSort(EvaluateExpr($foo), ($item) -> (AsTuple($item.key, $item.subkey)))

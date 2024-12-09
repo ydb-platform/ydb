@@ -30,7 +30,8 @@ $res =
         value
     ON
         key
-    USING ALL $udf_stream(TableRows());
+    USING ALL $udf_stream(TableRows())
+;
 
 SELECT
     *

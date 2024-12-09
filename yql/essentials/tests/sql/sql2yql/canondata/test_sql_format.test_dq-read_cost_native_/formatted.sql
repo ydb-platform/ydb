@@ -13,10 +13,12 @@ $foo =
     ORDER BY
         subkey ASC,
         key DESC
-    LIMIT 10;
+    LIMIT 10
+;
 
 $x =
-    PROCESS $foo;
+    PROCESS $foo
+;
 
 SELECT
     YQL::CostsOf($x) AS costs

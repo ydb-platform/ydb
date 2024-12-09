@@ -17,7 +17,8 @@ $last_key =
         key
     FROM
         @temp
-    LIMIT 1;
+    LIMIT 1
+;
 
 SELECT
     *

@@ -8,7 +8,8 @@ $lambda = ($x) -> {
 
 $result =
     PROCESS Input, Input
-    USING $lambda(TableRow());
+    USING $lambda(TableRow())
+;
 
 SELECT
     *

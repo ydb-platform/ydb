@@ -15,4 +15,5 @@ INSERT INTO Output (
     key
 )
 VALUES
-    ($a);
+    ($a)
+;

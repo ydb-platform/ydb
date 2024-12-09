@@ -9,7 +9,8 @@ $stream =
         InputLeft AS a
     INNER JOIN
         /*+ merge() compact() */ InputRight AS b
-    USING (k, sk, v);
+    USING (k, sk, v)
+;
 
 SELECT
     k,

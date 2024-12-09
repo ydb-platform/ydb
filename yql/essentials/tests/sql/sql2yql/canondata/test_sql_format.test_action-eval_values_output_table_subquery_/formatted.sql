@@ -15,4 +15,5 @@ INSERT INTO $a (
     value
 )
 VALUES
-    (1, "foo", FALSE);
+    (1, "foo", FALSE)
+;

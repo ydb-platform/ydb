@@ -10,7 +10,8 @@ $res =
     REDUCE Input0
     ON
         key
-    USING ALL $udf_stream(TableRows());
+    USING ALL $udf_stream(TableRows())
+;
 
 SELECT
     *

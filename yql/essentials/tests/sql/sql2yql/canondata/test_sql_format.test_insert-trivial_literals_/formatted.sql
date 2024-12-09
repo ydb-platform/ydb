@@ -5,4 +5,5 @@ INSERT INTO plato.Output (
     value
 )
 VALUES
-    ("1", "2", "3");
+    ("1", "2", "3")
+;

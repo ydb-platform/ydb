@@ -34,7 +34,8 @@ $data =
             'ACTIVE' AS status,
             1111 AS user_id,
             0 AS is_proven_owner,
-    );
+    )
+;
 
 SELECT
     day,

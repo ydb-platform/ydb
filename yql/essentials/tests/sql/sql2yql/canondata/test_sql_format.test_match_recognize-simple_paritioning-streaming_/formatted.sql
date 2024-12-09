@@ -32,7 +32,8 @@ SELECT
     *
 FROM
     AS_TABLE($data) MATCH_RECOGNIZE (PARTITION BY
-        host ORDER BY
+        host
+    ORDER BY
         CAST(dt AS Timestamp)
     MEASURES Last(Q.dt) AS T, First(Y.key) AS Key ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW PATTERN ((Y Q)) DEFINE Y AS (Y.key) % 3 == 0, Q AS (Q.key) % 3 != 0) AS MR
 ORDER BY

@@ -12,7 +12,8 @@ $mapping =
         {"a": "String", "b": "Int32"}
     FROM
         Input
-    LIMIT 1;
+    LIMIT 1
+;
 
 $transformer = ($type) -> {
     $t = EvaluateType(ParseTypeHandle($type));

@@ -25,7 +25,8 @@ $small =
         Input
     ORDER BY
         key
-    LIMIT 5 OFFSET 8;
+    LIMIT 5 OFFSET 8
+;
 
 SELECT
     *

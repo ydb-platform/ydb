@@ -874,6 +874,7 @@ private:
                 PushCurrentIndent();
                 Visit(alt);
                 PopCurrentIndent();
+                NewLine();
                 break;
             }
 
@@ -992,6 +993,7 @@ private:
             switch (choice.Alt_case()) {
             case TRule_set_clause_choice::kAltSetClauseChoice1: {
                 const auto& clauses = choice.GetAlt_set_clause_choice1().GetRule_set_clause_list1();
+                NewLine();
                 PushCurrentIndent();
                 Visit(clauses.GetRule_set_clause1());
                 for (auto& block : clauses.GetBlock2()) {
@@ -1001,6 +1003,7 @@ private:
                 }
 
                 PopCurrentIndent();
+                NewLine();
                 break;
             }
             case TRule_set_clause_choice::kAltSetClauseChoice2: {
@@ -1026,6 +1029,7 @@ private:
                 switch (simpleValues.Alt_case()) {
                 case TRule_simple_values_source::kAltSimpleValuesSource1: {
                     const auto& exprs = simpleValues.GetAlt_simple_values_source1().GetRule_expr_list1();
+                    NewLine();
                     PushCurrentIndent();
                     Visit(exprs.GetRule_expr1());
                     for (const auto& block : exprs.GetBlock2()) {
@@ -1035,12 +1039,15 @@ private:
                     }
 
                     PopCurrentIndent();
+                    NewLine();
                     break;
                 }
                 case TRule_simple_values_source::kAltSimpleValuesSource2: {
+                    NewLine();
                     PushCurrentIndent();
                     Visit(simpleValues.GetAlt_simple_values_source2());
                     PopCurrentIndent();
+                    NewLine();
                     break;
                 }
                 default:
@@ -1132,6 +1139,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitAlterTable(const TRule_alter_table_stmt& msg) {
@@ -1149,6 +1157,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitAlterTableStore(const TRule_alter_table_store_stmt& msg) {
@@ -1172,6 +1181,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDo(const TRule_do_stmt& msg) {
@@ -1255,6 +1265,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitGrantPermissions(const TRule_grant_permissions_stmt& msg) {
@@ -1319,10 +1330,10 @@ private:
         Visit(msg.GetBlock3());
         Visit(msg.GetRule_topic_ref4());
         if (msg.HasBlock5()) {
-            PushCurrentIndent();
             auto& b = msg.GetBlock5().GetRule_create_topic_entries1();
             Visit(b.GetToken1());
             NewLine();
+            PushCurrentIndent();
             Visit(b.GetRule_create_topic_entry2());
             for (auto& subEntry : b.GetBlock3()) {
                 Visit(subEntry.GetToken1());
@@ -1362,6 +1373,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropTopic(const TRule_drop_topic_stmt& msg) {
@@ -1392,6 +1404,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropExternalDataSource(const TRule_drop_external_data_source_stmt& msg) {
@@ -1446,6 +1459,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropResourcePool(const TRule_drop_resource_pool_stmt& msg) {
@@ -1489,6 +1503,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropBackupCollection(const TRule_drop_backup_collection_stmt& msg) {
@@ -1519,6 +1534,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropResourcePoolClassifier(const TRule_drop_resource_pool_classifier_stmt& msg) {
@@ -1963,6 +1979,7 @@ private:
         case TRule_single_source::kAltSingleSource2: {
             const auto& alt = msg.GetAlt_single_source2();
             Visit(alt.GetToken1());
+            NewLine();
             PushCurrentIndent();
             Visit(alt.GetRule_select_stmt2());
             PopCurrentIndent();
@@ -1973,6 +1990,7 @@ private:
         case TRule_single_source::kAltSingleSource3: {
             const auto& alt = msg.GetAlt_single_source3();
             Visit(alt.GetToken1());
+            NewLine();
             PushCurrentIndent();
             Visit(alt.GetRule_values_stmt2());
             PopCurrentIndent();
@@ -2320,6 +2338,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitLambdaBody(const TRule_lambda_body& msg) {

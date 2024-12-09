@@ -9,7 +9,8 @@ $i =
 ;
 
 $i =
-    PROCESS $i;
+    PROCESS $i
+;
 
 $members = StructTypeComponents(ListItemType(TypeHandle(TypeOf($i))));
 

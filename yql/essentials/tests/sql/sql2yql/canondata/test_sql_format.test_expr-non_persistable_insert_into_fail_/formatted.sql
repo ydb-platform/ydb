@@ -8,4 +8,5 @@ INSERT INTO Output (
     value
 )
 VALUES
-    ("foo", YQL::NewMTRand(1));
+    ("foo", YQL::NewMTRand(1))
+;

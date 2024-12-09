@@ -27,7 +27,8 @@ $method = ($stream) -> {
 
 $prediction =
     PROCESS $train
-    USING $method(TableRows());
+    USING $method(TableRows())
+;
 
 SELECT
     *

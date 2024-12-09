@@ -28,7 +28,8 @@ SELECT
     *
 FROM
     AS_TABLE($data) MATCH_RECOGNIZE (PARTITION BY
-        dt ORDER BY
+        dt
+    ORDER BY
         CAST(dt AS Timestamp)
     ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW PATTERN (L) DEFINE L AS JUST(TRUE))
 ;
@@ -38,7 +39,8 @@ SELECT
     *
 FROM
     AS_TABLE($data) MATCH_RECOGNIZE (PARTITION BY
-        host ORDER BY
+        host
+    ORDER BY
         CAST(dt AS Timestamp)
     MEASURES "SomeString" AS Measure1 ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW PATTERN (Y) DEFINE Y AS TRUE)
 ;
@@ -49,7 +51,8 @@ SELECT
 FROM
     AS_TABLE($data) MATCH_RECOGNIZE (PARTITION BY
         host,
-        dt ORDER BY
+        dt
+    ORDER BY
         CAST(dt AS Timestamp)
     MEASURES "SomeString" AS S, 345 AS I ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW PATTERN (Q) DEFINE Q AS JUST(TRUE))
 ;

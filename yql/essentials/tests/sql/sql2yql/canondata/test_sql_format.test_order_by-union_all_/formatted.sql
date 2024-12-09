@@ -18,7 +18,8 @@ $list = ["a", "b"];
 $s = SubqueryUnionAllFor($list, $sample);
 
 $concated =
-    PROCESS $s();
+    PROCESS $s()
+;
 
 INSERT INTO Output
 SELECT

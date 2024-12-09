@@ -21,7 +21,8 @@ $p =
 ;
 
 $p =
-    PROCESS $p;
+    PROCESS $p
+;
 
 --select FormatType(TypeOf($p));
 SELECT
@@ -42,7 +43,8 @@ $p =
 ;
 
 $p =
-    PROCESS $p;
+    PROCESS $p
+;
 
 --select FormatType(TypeOf($p));
 SELECT
@@ -63,7 +65,8 @@ $p =
 ;
 
 $p =
-    PROCESS $p;
+    PROCESS $p
+;
 
 --select FormatType(TypeOf($p));
 SELECT
@@ -84,7 +87,8 @@ $p1 =
 ;
 
 $p1 =
-    PROCESS $p1;
+    PROCESS $p1
+;
 
 --select FormatType(TypeOf($p1));
 SELECT
@@ -110,7 +114,8 @@ $p2 =
 ;
 
 $p2 =
-    PROCESS $p2;
+    PROCESS $p2
+;
 
 --select FormatType(TypeOf($p2));
 SELECT
@@ -131,7 +136,8 @@ $p3 =
 ;
 
 $p3 =
-    PROCESS $p3;
+    PROCESS $p3
+;
 
 --select FormatType(TypeOf($p));
 SELECT

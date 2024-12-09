@@ -9,7 +9,8 @@ INSERT INTO @A (
 )
 VALUES
     ('x', 1),
-    ('y', 2);
+    ('y', 2)
+;
 
 INSERT INTO @B (
     key,
@@ -17,7 +18,8 @@ INSERT INTO @B (
 )
 VALUES
     ('y', 3),
-    ('z', 4);
+    ('z', 4)
+;
 
 COMMIT;
 

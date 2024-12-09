@@ -10,7 +10,8 @@ INSERT INTO @table1 WITH TRUNCATE (
     b
 )
 VALUES
-    ('1', '2', '3');
+    ('1', '2', '3')
+;
 
 COMMIT;
 

@@ -14,7 +14,8 @@ $foo =
         *
     FROM
         Input
-    LIMIT 2;
+    LIMIT 2
+;
 
 $bar =
     SELECT
@@ -28,7 +29,8 @@ $bar =
         FROM
             Input
         LIMIT 2
-    );
+    )
+;
 
 SELECT
     *

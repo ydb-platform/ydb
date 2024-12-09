@@ -2,7 +2,8 @@
 USE plato;
 
 $input =
-    PROCESS Input;
+    PROCESS Input
+;
 
 SELECT
     YQL::ShuffleByKeys(

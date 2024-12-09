@@ -7,7 +7,8 @@ $a =
         Input
     ORDER BY
         key
-    LIMIT 1;
+    LIMIT 1
+;
 
 $b =
     SELECT
@@ -16,7 +17,8 @@ $b =
         Input
     ORDER BY
         key
-    LIMIT 1 OFFSET 1;
+    LIMIT 1 OFFSET 1
+;
 
 INSERT INTO Output1
 SELECT

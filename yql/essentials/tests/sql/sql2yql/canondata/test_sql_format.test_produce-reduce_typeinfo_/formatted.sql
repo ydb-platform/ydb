@@ -9,19 +9,22 @@ $r1 =
     REDUCE Input0
     ON
         key
-    USING ALL SimpleUdf::GenericAsStruct(TableRows());
+    USING ALL SimpleUdf::GenericAsStruct(TableRows())
+;
 
 $r2 =
     REDUCE Input0
     ON
         key
-    USING SimpleUdf::GenericAsStruct(CAST(TableRow().subkey AS Int32));
+    USING SimpleUdf::GenericAsStruct(CAST(TableRow().subkey AS Int32))
+;
 
 $r3 =
     REDUCE Input0
     ON
         key
-    USING ALL SimpleUdf::GenericAsStruct(TableRow().key);
+    USING ALL SimpleUdf::GenericAsStruct(TableRow().key)
+;
 
 SELECT
     *

@@ -561,6 +561,7 @@ void TRowDispatcher::UpdateMetrics() {
         const auto& stats = it->second;
         if (!stats) {
             SetQueryMetrics(it->first, 0, 0, 0);
+            Metrics.Counters->RemoveSubgroup("queryId", it->first.first);
             it = AggrStats.LastQueryStats.erase(it);
             continue;
         }

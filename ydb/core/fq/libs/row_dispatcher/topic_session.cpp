@@ -129,18 +129,28 @@ private:
     struct TClientsInfo {
         TClientsInfo(
             const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev,
-            NMonitoring::TDynamicCounterPtr& counters)
+            const NMonitoring::TDynamicCounterPtr& counters,
+            const TString topicPath)
             : Settings(ev->Get()->Record)
             , ReadActorId(ev->Sender)
-            , FilteredDataRate(counters->GetCounter("FilteredDataRate", true))
-            , RestartSessionByOffsetsByQuery(counters->GetCounter("RestartSessionByOffsetsByQuery", true))
+            , Counters(counters)
         {
             if (Settings.HasOffset()) {
                 NextMessageOffset = Settings.GetOffset();
                 InitialOffset = Settings.GetOffset();
             }
             Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
+
+            auto queryGroup = Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
+            auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(topicPath));
+            FilteredDataRate = topicGroup->GetCounter("FilteredDataRate", true);
+            RestartSessionByOffsetsByQuery = counters->GetCounter("RestartSessionByOffsetsByQuery", true);
         }
+
+        ~TClientsInfo() {
+            Counters->RemoveSubgroup("queryId", Settings.GetQueryId());
+        }
+
         NFq::NRowDispatcherProto::TEvStartSession Settings;
         NActors::TActorId ReadActorId;
         std::unique_ptr<TJsonFilter> Filter;        // empty if no predicate
@@ -153,6 +163,7 @@ private:
         TVector<ui64> FieldsIds;
         TDuration ReconnectPeriod;
         TStats Stat;        // Send (filtered) to read_actor
+        const ::NMonitoring::TDynamicCounterPtr Counters;
         NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
         NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsetsByQuery;
         ui64 InitialOffset = 0;
@@ -833,12 +844,10 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto types = GetVector(ev->Get()->Record.GetSource().GetColumnTypes());
 
     try {
-        auto queryGroup = Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
-        auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(TopicPath));
         auto& clientInfo = Clients.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(ev->Sender), 
-            std::forward_as_tuple(ev, topicGroup)).first->second;
+            std::forward_as_tuple(ev, Counters, TopicPath)).first->second;
         UpdateFieldsIds(clientInfo);
 
         const auto& source = clientInfo.Settings.GetSource();

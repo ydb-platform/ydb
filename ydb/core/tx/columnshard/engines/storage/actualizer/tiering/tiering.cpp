@@ -237,14 +237,14 @@ namespace {
 class TActualizationReply: public IMetadataAccessorResultProcessor {
 private:
     std::weak_ptr<TTieringActualizer> TieringActualizer;
-    virtual void DoApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& /*engine*/) override {
+    virtual void DoApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& /*engine*/) override {
         auto locked = TieringActualizer.lock();
         if (!locked) {
             return;
         }
         TActualizationContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now());
-        for (auto&& i : result.ExtractPortionsVector()) {
-            locked->ActualizePortionInfo(i, context);
+        for (auto&& [id, portion] : result.GetValue().GetPortions()) {
+            locked->ActualizePortionInfo(portion, context);
         }
     }
 

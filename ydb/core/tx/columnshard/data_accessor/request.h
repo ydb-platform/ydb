@@ -11,27 +11,29 @@ class TDataAccessorsRequest;
 class TDataAccessorsResult : private NNonCopyable::TMoveOnly {
 private:
     THashMap<ui64, TString> ErrorsByPathId;
-    THashMap<ui64, std::vector<TPortionDataAccessor>> AccessorsByPathId;
     THashMap<ui64, TPortionDataAccessor> PortionsById;
-    std::vector<TPortionDataAccessor> Portions;
-    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
 public:
-    const std::vector<TPortionDataAccessor>& GetPortions() const {
-        return Portions;
+    const THashMap<ui64, TPortionDataAccessor>& GetPortions() const {
+        return PortionsById;
+    }
+
+    std::vector<TPortionDataAccessor> ExtractPortionsVector() {
+        std::vector<TPortionDataAccessor> portions;
+        portions.reserve(PortionsById.size());
+        for (auto&& [pathId, portionInfo] : PortionsById) {
+            portions.emplace_back(std::move(portionInfo));
+        }
+        return portions;
     }
 
     void Merge(TDataAccessorsResult&& result) {
         for (auto&& i : result.ErrorsByPathId) {
             AFL_VERIFY(ErrorsByPathId.emplace(i.first, i.second).second);
         }
-        for (auto&& i : result.AccessorsByPathId) {
-            AFL_VERIFY(AccessorsByPathId.emplace(i.first, std::move(i.second)).second);
-        }
         for (auto&& i : result.PortionsById) {
             AFL_VERIFY(PortionsById.emplace(i.first, std::move(i.second)).second);
         }
-        Portions.insert(Portions.end(), result.Portions.begin(), result.Portions.end());
     }
 
     const TPortionDataAccessor& GetPortionAccessorVerified(const ui64 portionId) const {
@@ -40,18 +42,10 @@ public:
         return it->second;
     }
 
-    std::vector<TPortionDataAccessor> ExtractPortionsVector() {
-        return std::move(Portions);
-    }
-
-    void AddData(const ui64 pathId, THashMap<ui64, TPortionDataAccessor>&& accessors) {
-        auto info = AccessorsByPathId.emplace(pathId, std::vector<TPortionDataAccessor>());
-        AFL_VERIFY(info.second);
-        auto& v = info.first->second;
+    void AddData(THashMap<ui64, TPortionDataAccessor>&& accessors) {
+        std::deque<TPortionDataAccessor> v;
         for (auto&& [portionId, i] : accessors) {
-            v.emplace_back(std::move(i));
-            AFL_VERIFY(PortionsById.emplace(portionId, v.back()).second);
-            Portions.emplace_back(v.back());
+            AFL_VERIFY(PortionsById.emplace(portionId, i).second);
         }
     }
 
@@ -61,16 +55,6 @@ public:
 
     bool HasErrors() const {
         return ErrorsByPathId.size();
-    }
-
-    void SetResourcesGuard(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) {
-        AFL_VERIFY(!ResourcesGuard);
-        AFL_VERIFY(guard);
-    }
-
-    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& ExtractResourcesGuard() {
-        AFL_VERIFY(ResourcesGuard);
-        return std::move(ResourcesGuard);
     }
 };
 
@@ -313,7 +297,7 @@ public:
             if (itStatus->second.IsFinished()) {
                 AFL_VERIFY(FetchingCount.Dec() >= 0);
                 ReadyCount.Inc();
-                AccessorsByPathId.AddData(pathId, itStatus->second.DetachAccessors());
+                AccessorsByPathId.AddData(itStatus->second.DetachAccessors());
                 PathIdStatus.erase(itStatus);
             }
         }

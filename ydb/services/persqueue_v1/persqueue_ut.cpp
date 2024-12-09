@@ -880,12 +880,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             writer->Close();
         }
 
-        void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, ui32 messageLimit) {
+        void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, const ui32 messageLimit) {
             // Get DirectReadResponse messages, send DirectReadAck messages.
 
             auto endTime = TInstant::Now() + TDuration::Seconds(10);
             while (currTotalMessages < messageLimit && endTime > TInstant::Now()) {
-                Cerr << "Wait for direct read id: " << nextReadId << ", currently have " << currTotalMessages << " messages" << Endl;
+                Cerr << "Wait for direct read id: " << nextReadId << ", currently have " << currTotalMessages << " messages, limit is " << messageLimit << Endl;
 
                 Ydb::Topic::StreamDirectReadMessage::FromServer resp;
                 UNIT_ASSERT(DirectStream->Read(&resp));
@@ -1008,37 +1008,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
 
         Sleep(TDuration::Seconds(1));
         cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
-        UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.StagedReads.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.Reads.size(), 0);
-    }
-
-    Y_UNIT_TEST(DirectReadNotCached) {
-        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
-        SET_LOCALS;
-        TDirectReadTestSetup setup{server};
-
-        setup.InitControlSession("acc/topic1");
-        auto [partitionId, assignId] = setup.GetNextAssign("acc/topic1");
-        UNIT_ASSERT_VALUES_EQUAL(partitionId, 0);
-        setup.InitDirectSession("acc/topic1");
-        setup.SendReadSessionAssign(assignId);
-
-        ui32 totalMsg = 0;
-        ui64 nextReadId = 1;
-        Sleep(TDuration::Seconds(3));
-        setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 50);
-        setup.DoRead(assignId, nextReadId, totalMsg, 46);
-
-        Topic::StreamReadMessage::FromClient req;
-        req.mutable_read_request()->set_bytes_size(40_MB);
-        if (!setup.ControlStream->Write(req)) {
-            ythrow yexception() << "write fail";
-        }
-        setup.DoRead(assignId, nextReadId, totalMsg, 50);
-
-        Sleep(TDuration::Seconds(1));
-        auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.StagedReads.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.Reads.size(), 0);

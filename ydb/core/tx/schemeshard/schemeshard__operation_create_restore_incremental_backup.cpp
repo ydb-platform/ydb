@@ -59,6 +59,7 @@ protected:
     void FillNotice(
         const TPathId& pathId,
         NKikimrTxDataShard::TFlatSchemeTransaction& tx,
+        ui64 loopStep,
         TOperationContext& context) const
     {
         Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
@@ -68,8 +69,8 @@ protected:
         auto table = context.SS->Tables.at(pathId);
 
         auto& op = *tx.MutableCreateIncrementalRestoreSrc();
-        op.MutableSrcPathId()->CopyFrom(RestoreOp.GetSrcPathIds(LoopStep));
-        op.SetSrcTablePath(RestoreOp.GetSrcTablePaths(LoopStep));
+        op.MutableSrcPathId()->CopyFrom(RestoreOp.GetSrcPathIds(loopStep));
+        op.SetSrcTablePath(RestoreOp.GetSrcTablePaths(loopStep));
         PathIdFromPathId(pathId, op.MutableDstPathId());
         op.SetDstTablePath(RestoreOp.GetDstTablePath());
     }
@@ -77,20 +78,77 @@ protected:
 public:
     explicit TConfigurePartsAtTable(
             TOperationId id,
-            const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups& restoreOp,
-            ui64 loopStep)
+            const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups& restoreOp)
         : OperationId(id)
         , RestoreOp(restoreOp)
-        , LoopStep(loopStep)
     {
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     DebugHint()
                     << " Constructed"
                     << " opId# " << id
                     << " op# " << restoreOp.ShortDebugString()
-                    << " LoopStep# " << LoopStep
                     );
         IgnoreMessages(DebugHint(), {});
+    }
+
+    bool CheckPartitioningChangedForTableModification(TTxState &txState, TOperationContext &context) {
+        THashSet<TShardIdx> shardIdxsLeft;
+
+        for (const auto& pathId : RestoreOp.GetSrcPathIds()) {
+            auto targetPathId = PathIdFromPathId(pathId);
+            Y_ABORT_UNLESS(context.SS->Tables.contains(targetPathId));
+            TTableInfo::TPtr table = context.SS->Tables.at(targetPathId);
+
+            for (auto& shard : table->GetPartitions()) {
+                shardIdxsLeft.insert(shard.ShardIdx);
+            }
+
+            for (auto& shardOp : txState.Shards) {
+                // Is this shard still on the list of partitions?
+                if (shardIdxsLeft.erase(shardOp.Idx) == 0) {
+                    return true;
+                }
+            }
+        }
+
+        // Any new partitions?
+        return !shardIdxsLeft.empty();
+    }
+
+    void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &txState, TOperationContext &context) {
+        Y_ABORT_UNLESS(!txState.TxShardsListFinalized, "Rebuilding the list of shards must not happen twice");
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        // Delete old tx shards from db
+        for (const auto& shard : txState.Shards) {
+            context.SS->PersistRemoveTxShard(db, operationId, shard.Idx);
+        }
+        txState.Shards.clear();
+        Y_ABORT_UNLESS(txState.ShardsInProgress.empty());
+
+        ui64 loopStep = 0;
+        for (const auto& pathId : RestoreOp.GetSrcPathIds()) {
+            auto targetPathId = PathIdFromPathId(pathId);
+            Y_ABORT_UNLESS(context.SS->Tables.contains(targetPathId));
+            TTableInfo::TPtr table = context.SS->Tables.at(targetPathId);
+
+            // Fill new list of tx shards
+            for (auto& shard : table->GetPartitions()) {
+                auto shardIdx = shard.ShardIdx;
+                Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
+                auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
+
+                txState.Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts, loopStep);
+
+                shardInfo.CurrentTxId = operationId.GetTxId();
+                context.SS->PersistShardTx(db, shardIdx, operationId.GetTxId());
+                context.SS->PersistUpdateTxShard(db, operationId, shardIdx, TTxState::ConfigureParts);
+            }
+            ++loopStep;
+        }
+
+        txState.TxShardsListFinalized = true;
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -101,24 +159,30 @@ public:
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(IsExpectedTxType(txState->TxType));
-        const auto& pathId = txState->TargetPathId;
 
-        if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
-            NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
+        if (CheckPartitioningChangedForTableModification(*txState, context)) {
+            UpdatePartitioningForTableModification(OperationId, *txState, context);
         }
 
-        NKikimrTxDataShard::TFlatSchemeTransaction tx;
-        context.SS->FillSeqNo(tx, context.SS->StartRound(*txState));
+        THashMap<ui64, TString> loopStepToTx;
 
-        FillNotice(txState->SourcePathId, tx, context);
+        for (ui64 loopStep = 0; loopStep < RestoreOp.SrcPathIdsSize(); ++loopStep) {
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            context.SS->FillSeqNo(tx, context.SS->StartRound(*txState)); // FIXME
+
+            FillNotice(txState->SourcePathId, tx, loopStep, context);
+            loopStepToTx[loopStep] = tx.SerializeAsString();
+        }
 
         txState->ClearShardsInProgress();
         Y_ABORT_UNLESS(txState->Shards.size());
 
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             const auto& idx = txState->Shards[i].Idx;
+            const auto loopStep = txState->Shards[i].LoopStep;
+            const auto pathId = PathIdFromPathId(RestoreOp.GetSrcPathIds(loopStep));
             const auto datashardId = context.SS->ShardInfos[idx].TabletID;
-            auto ev = context.SS->MakeDataShardProposal(pathId, OperationId, tx.SerializeAsString(), context.Ctx);
+            auto ev = context.SS->MakeDataShardProposal(pathId, OperationId, loopStepToTx[loopStep], context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, ev.Release());
         }
 
@@ -141,7 +205,6 @@ public:
 private:
     const TOperationId OperationId;
     const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups RestoreOp;
-    const ui64 LoopStep;
 }; // TConfigurePartsAtTable
 
 class TProposeAtTable : public TSubOperationState {
@@ -163,10 +226,16 @@ class TProposeAtTable : public TSubOperationState {
 public:
     explicit TProposeAtTable(
             TOperationId id,
-            const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups& restoreOp)
+            const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups& restoreOp,
+            ui64 loopStep)
         : OperationId(id)
+        , LoopStep(loopStep)
     {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " Constructed op# " << restoreOp.ShortDebugString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint()
+                    << " Constructed"
+                    << " op# " << restoreOp.ShortDebugString()
+                    << " LoopStep#" << LoopStep
+                    );
         IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
@@ -231,6 +300,7 @@ public:
 
 protected:
     const TOperationId OperationId;
+    const ui64 LoopStep;
 }; // TProposeAtTable
 
 class TDone: public TSubOperationState {
@@ -367,7 +437,7 @@ class TNewRestoreFromAtTable : public TSubOperation {
                 txState->TargetPathId = PathIdFromPathId(Transaction.GetRestoreMultipleIncrementalBackups().GetSrcPathIds(txState->LoopStep));
                 txState->TxShardsListFinalized = false;
                 // TODO preserve TxState
-                return TTxState::ConfigureParts;
+                return TTxState::Propose;
             }
             return TTxState::Done;
         }
@@ -381,13 +451,13 @@ class TNewRestoreFromAtTable : public TSubOperation {
         case TTxState::Waiting:
         case TTxState::CopyTableBarrier:
             return MakeHolder<NIncrRestore::TCopyTableBarrier>(OperationId);
-        case TTxState::ConfigureParts: {
+        case TTxState::ConfigureParts:
+            return MakeHolder<NIncrRestore::TConfigurePartsAtTable>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups());
+        case TTxState::Propose: {
             auto* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
-            return MakeHolder<NIncrRestore::TConfigurePartsAtTable>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups(), txState->LoopStep);
+            return MakeHolder<NIncrRestore::TProposeAtTable>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups(), txState->LoopStep);
         }
-        case TTxState::Propose:
-            return MakeHolder<NIncrRestore::TProposeAtTable>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups());
         case TTxState::ProposedWaitParts:
             // TODO: check the right next state always choosen
             return MakeHolder<NTableState::TProposedWaitParts>(OperationId);

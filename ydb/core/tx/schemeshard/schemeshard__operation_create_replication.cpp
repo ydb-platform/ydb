@@ -25,7 +25,11 @@ struct TReplicationStrategy : public IStrategy {
     };
 
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
-        return true;
+        if (desc.GetConfig().HasTransferSpecific()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong replication configuration");
+            return true;
+        }
+        return false;
     }
 };
 
@@ -35,7 +39,11 @@ struct TTransferStrategy : public IStrategy {
     };
 
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
-        return true;
+        if (!desc.GetConfig().HasTransferSpecific()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
+            return true;
+        }
+        return false;
     }
 };
 
@@ -306,6 +314,10 @@ public:
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
+        }
+
+        if (Strategy->Validate(*result, desc)) {
+            return result;
         }
 
         auto path = parentPath.Child(name);

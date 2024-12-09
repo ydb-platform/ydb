@@ -438,39 +438,6 @@ message EvictionToExternalStorageSettings {
     string storage_name = 1;
 }
 
-message TtlTier {
-    uint32 apply_after_seconds = 1;
-
-    oneof action {
-        google.protobuf.Empty delete = 2;
-        EvictionToExternalStorageSettings evict_to_external_storage = 3;
-    }
-}
-
-message DateTypeColumnModeSettingsV1 {
-    // The row will be assigned a tier at the moment of time, when the value
-    // stored in <column_name> is less than or equal to the current time (in epoch
-    // time format), and <tier.apply_after_seconds> has passed since that moment;
-    // i.e. the eviction threshold is the value of <column_name> plus <tier.apply_after_seconds>.
-
-    // The column type must be a date type
-    string column_name = 1;
-}
-
-message ValueSinceUnixEpochModeSettingsV1 {
-    // Same as DateTypeColumnModeSettings (above), but useful when type of the
-    // value stored in <column_name> is not a date type.
-
-    // The column type must be one of:
-    // - Uint32
-    // - Uint64
-    // - DyNumber
-    string column_name = 1;
-
-    // Interpretation of the value stored in <column_name>
-    ValueSinceUnixEpochModeSettings.Unit column_unit = 2;
-}
-
 message DateTypeColumnModeSettings {
     // The row will be assigned a tier at the moment of time, when the value
     // stored in <column_name> is less than or equal to the current time (in epoch
@@ -509,12 +476,27 @@ message ValueSinceUnixEpochModeSettings {
     uint32 expire_after_seconds = 3;
 }
 
+message TtlTier {
+    oneof expression {
+        DateTypeColumnModeSettings date_type_column = 1;
+        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2;
+    }
+
+    oneof action {
+        google.protobuf.Empty delete = 3;
+        EvictionToExternalStorageSettings evict_to_external_storage = 4;
+    }
+}
+
+message TieredModeSettings {
+    repeated TtlTier tiers = 1;
+}
+
 message TtlSettings {
     oneof mode {
-        DateTypeColumnModeSettings date_type_column = 1 [deprecated = true];
-        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2 [deprecated = true];
-        DateTypeColumnModeSettingsV1 date_type_column_v1 = 4;
-        ValueSinceUnixEpochModeSettingsV1 value_since_unix_epoch_v1 = 5;
+        DateTypeColumnModeSettings date_type_column = 1;
+        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2;
+        TieredModeSettings tiered_ttl = 4;
     }
 
     // There is no guarantee that expired row will be deleted immediately upon
@@ -530,8 +512,6 @@ message TtlSettings {
     // How often to run BRO on the same partition.
     // BRO will not be started more often, but may be started less often.
     uint32 run_interval_seconds = 3;
-
-    repeated TtlTier tiers = 6;
 }
 
 message StorageSettings {

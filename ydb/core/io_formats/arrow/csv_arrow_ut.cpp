@@ -1,4 +1,4 @@
-#include "csv_arrow.h"
+#include <ydb/core/io_formats/arrow/scheme/scheme.h>
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -64,7 +64,7 @@ TestReadSingleBatch(TArrowCSV& reader,
 std::shared_ptr<arrow::RecordBatch>
 TestReadSingleBatch(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, const TString& data,
                     char delimiter, bool header, ui32 numRows, ui32 skipRows = 0, std::optional<char> escape = {}) {
-    auto reader = TArrowCSV::Create(columns, header);
+    auto reader = TArrowCSVScheme::Create(columns, header);
     UNIT_ASSERT_C(reader.ok(), reader.status().ToString());
     reader->SetDelimiter(delimiter);
     if (skipRows) {
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
             };
             TInstant dtInstant;
             Y_ABORT_UNLESS(TInstant::TryParseIso8601(dateTimeString, dtInstant));
-            auto reader = TArrowCSV::Create(columns, false);
+            auto reader = TArrowCSVScheme::Create(columns, false);
             UNIT_ASSERT_C(reader.ok(), reader.status().ToString());
 
             TString errorMessage;
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
         TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
 
         {
-            auto reader = TArrowCSV::Create(columns, false);
+            auto reader = TArrowCSVScheme::Create(columns, false);
             UNIT_ASSERT_C(reader.ok(), reader.status().ToString());
 
             TString errorMessage;
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
                 {"i64", NScheme::TTypeInfo(NScheme::NTypeIds::Int64)}
             };
 
-            auto reader = TArrowCSV::Create(columns, false);
+            auto reader = TArrowCSVScheme::Create(columns, false);
             UNIT_ASSERT_C(reader.ok(), reader.status().ToString());
 
             TString errorMessage;
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
             csv += TString() + null + delimiter + q + null + q + delimiter + q + null + q + endLine;
             csv += TString() + null + delimiter + null + delimiter + null + endLine;
 
-            auto reader = TArrowCSV::Create(columns, false);
+            auto reader = TArrowCSVScheme::Create(columns, false);
             UNIT_ASSERT_C(reader.ok(), reader.status().ToString());
             if (!nulls.empty() || !defaultNull) {
                 reader->SetNullValue(null);

@@ -555,15 +555,14 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     }
     IngressStats.Bytes += ev->Get()->Record.GetReadBytes();
     for (auto partition : ev->Get()->Record.GetPartition()) {
-        ui64 partitionId = ev->Get()->Record.GetPartitionId();
-        SRC_LOG_T("Partition id " << partitionId << ", offset " << partition.GetNextMessageOffset());
-
+        ui64 partitionId = partition.GetPartitionId();
         auto& nextOffset = NextOffsetFromRD[partitionId];
         if (!nextOffset) {
             nextOffset = partition.GetNextMessageOffset();
         } else {
             nextOffset = std::max(*nextOffset, partition.GetNextMessageOffset());
         }
+        SRC_LOG_T("NextOffsetFromRD [" << partitionId << "]= " << nextOffset);
         if (ReadyBuffer.empty()) {
             TPartitionKey partitionKey{TString{}, partitionId};
             PartitionToOffset[partitionKey] = *nextOffset;

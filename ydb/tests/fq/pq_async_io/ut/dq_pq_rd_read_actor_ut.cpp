@@ -81,20 +81,20 @@ struct TFixture : public TPqIoTestFixture {
         for (auto p : eventHolder->Get()->Record.GetOffset()) {
             offsets[p.GetPartitionId()] = p.GetOffset();
         }
-        UNIT_ASSERT(offsets == expectedOffsets);
-        UNIT_ASSERT(eventHolder->Cookie == expectedGeneration);
+        UNIT_ASSERT_EQUAL(offsets, expectedOffsets);
+        UNIT_ASSERT_EQUAL(eventHolder->Cookie, expectedGeneration);
     }
 
     void ExpectStopSession(NActors::TActorId rowDispatcherId, ui64 expectedGeneration = 1) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStopSession>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Cookie == expectedGeneration);
+        UNIT_ASSERT_EQUAL(eventHolder->Cookie, expectedGeneration);
     }
 
     void ExpectGetNextBatch(NActors::TActorId rowDispatcherId, ui64 partitionId = PartitionId1) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->Record.GetPartitionId() == partitionId);
+        UNIT_ASSERT_EQUAL(eventHolder->Get()->Record.GetPartitionId(), partitionId);
     }
 
     void MockCoordinatorChanged(NActors::TActorId coordinatorId) {
@@ -168,8 +168,9 @@ struct TFixture : public TPqIoTestFixture {
     void MockStatistics(NActors::TActorId rowDispatcherId, ui64 nextOffset, ui64 generation, ui64 partitionId) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvStatistics();
-            event->Record.SetPartitionId(partitionId);
-            event->Record.SetNextMessageOffset(nextOffset);
+            auto* partitionsProto = event->Record.AddPartition();
+            partitionsProto->SetPartitionId(partitionId);
+            partitionsProto->SetNextMessageOffset(nextOffset);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }

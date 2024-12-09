@@ -1381,8 +1381,6 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
         jobInflightManager->ReleaseJob();
     };
 
-
-
     while (TString line = splitter.ConsumeLine()) {
         ++row;
         if (Settings.RowsToAnalyze_ && row > Settings.RowsToAnalyze_) {

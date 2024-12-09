@@ -572,7 +572,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         bool SetRequestToken(NSchemeCache::TSchemeCacheNavigate* request) const override {
             if (Request.Token.empty()) {
-                return !(AppData(ctx)->EnforceUserTokenRequirement || AppData()->PQConfig.GetRequireCredentialsInNewProtocol());
+                return !(AppData()->EnforceUserTokenRequirement || AppData()->PQConfig.GetRequireCredentialsInNewProtocol());
             } else {
                 request->UserToken = new NACLib::TUserToken(Request.Token);
                 return true;

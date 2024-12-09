@@ -93,10 +93,10 @@ struct TEvPrivate {
         }
 
         TEvMetadataAccessorsInfo(const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen,
-            NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard)
+            NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult> result)
             : Processor(processor)
             , Generation(gen)
-            , Result({std::move(result), std::move(guard)}) {
+            , Result(std::move(result)) {
         }
     };
 

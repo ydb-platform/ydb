@@ -438,6 +438,8 @@ public:
                 if (exists) {
                     try {
                         LoadTableMetaInfo(req, path, *metaData);
+                    } catch (const TErrorException& e) {
+                        throw TErrorException(e.GetCode()) << "Error loading " << req.Cluster() << '.' << req.Table() << " table metadata: " << e.what();
                     } catch (const yexception& e) {
                         throw yexception() << "Error loading " << req.Cluster() << '.' << req.Table() << " table metadata: " << e.what();
                     }
@@ -450,6 +452,8 @@ public:
                     if (metaData->SqlView.empty()) {
                         try {
                             LoadTableStatInfo(path, *statData);
+                        } catch (const TErrorException& e) {
+                            throw TErrorException(e.GetCode()) << "Error loading " << req.Cluster() << '.' << req.Table() << " table stat: " << e.what();
                         } catch (const yexception& e) {
                             throw yexception() << "Error loading " << req.Cluster() << '.' << req.Table() << " table stat: " << e.what();
                         }

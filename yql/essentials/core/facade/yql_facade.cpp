@@ -874,7 +874,7 @@ TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputS
         .AddPreTypeAnnotation()
         .AddExpressionEvaluation(*FunctionRegistry_)
         .AddIOAnnotation()
-        .AddTypeAnnotation()
+        .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
         .AddCheckExecution(false)
@@ -937,7 +937,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
             .AddPreTypeAnnotation()
             .AddExpressionEvaluation(*FunctionRegistry_)
             .AddIOAnnotation()
-            .AddTypeAnnotation()
+            .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
             .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
             .Build();
 
@@ -1012,7 +1012,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
         .AddPreTypeAnnotation()
         .AddExpressionEvaluation(*FunctionRegistry_)
         .AddIOAnnotation()
-        .AddTypeAnnotation()
+        .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
         .AddOptimization()
@@ -1080,7 +1080,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1139,7 +1139,7 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1220,7 +1220,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput");
     pipeline.AddOptimization();
@@ -1297,7 +1297,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1711,6 +1711,7 @@ TIssues TProgram::Issues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetIssues());
     }
     result.AddIssues(FinalIssues_);
+    CheckFatalIssues(result);
     return result;
 }
 
@@ -1720,7 +1721,51 @@ TIssues TProgram::CompletedIssues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetCompletedIssues());
     }
     result.AddIssues(FinalIssues_);
+    CheckFatalIssues(result);
     return result;
+}
+
+void TProgram::CheckFatalIssues(TIssues& issues) const {
+    bool isFatal = false;
+    auto checkIssue = [&](const TIssue& issue) {
+        if (issue.GetSeverity() == TSeverityIds::S_FATAL) {
+            isFatal = true;
+        }
+    };
+
+    std::function<void(const TIssuePtr& issue)> recursiveCheck = [&](const TIssuePtr& issue) {
+        if (isFatal) {
+            return;
+        }
+
+        checkIssue(*issue);
+        for (const auto& subissue : issue->GetSubIssues()) {
+            recursiveCheck(subissue);
+        }
+    };
+
+    for (const auto& issue : issues) {
+        if (isFatal) {
+            break;
+        }
+
+        checkIssue(issue);
+        // check subissues
+        for (const auto& subissue : issue.GetSubIssues()) {
+            recursiveCheck(subissue);
+        }
+    }
+
+    if (isFatal) {
+        TIssue result;
+        result.SetMessage(
+            TStringBuilder()
+                << "An abnormal situation found, so consider opening a bug report to YQL (st/YQLSUPPORT),"
+                << " because more detailed information is only available in server side logs and/or "
+                << "coredumps.");
+        result.SetCode(TIssuesIds::UNEXPECTED, TSeverityIds::S_FATAL);
+        issues.AddIssue(result);
+    }
 }
 
 TIssue MakeNoBlocksInfoIssue(const TVector<TString>& names, bool isTypes) {

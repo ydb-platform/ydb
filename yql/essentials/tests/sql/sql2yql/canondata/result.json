@@ -6215,6 +6215,27 @@
             "uri": "https://{canondata_backend}/1936273/4a1b39013e1bae40e722cff8ccef8829784964e2/resource.tar.gz#test_sql2yql.test_expr-extra_opt_try_member_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-fail_constraint]": [
+        {
+            "checksum": "f20af754fea0c44771384857ad6957f2",
+            "size": 1087,
+            "uri": "https://{canondata_backend}/1817427/9071fa74025d031d4df7af90be1dad5cebd18046/resource.tar.gz#test_sql2yql.test_expr-fail_constraint_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-fail_expr]": [
+        {
+            "checksum": "ff0f789bbd6c7a0d1a7b1461da7c8aec",
+            "size": 1081,
+            "uri": "https://{canondata_backend}/1817427/9071fa74025d031d4df7af90be1dad5cebd18046/resource.tar.gz#test_sql2yql.test_expr-fail_expr_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-fail_type]": [
+        {
+            "checksum": "bbfc80a4e0a08d8282c1e1832238f9c6",
+            "size": 1081,
+            "uri": "https://{canondata_backend}/1817427/9071fa74025d031d4df7af90be1dad5cebd18046/resource.tar.gz#test_sql2yql.test_expr-fail_type_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-fallback_filternullelements]": [
         {
             "checksum": "09b44cf52176a1186cb0c7a81b4bbb99",
@@ -24345,6 +24366,21 @@
     "test_sql_format.test[expr-extra_opt_try_member]": [
         {
             "uri": "file://test_sql_format.test_expr-extra_opt_try_member_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-fail_constraint]": [
+        {
+            "uri": "file://test_sql_format.test_expr-fail_constraint_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-fail_expr]": [
+        {
+            "uri": "file://test_sql_format.test_expr-fail_expr_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-fail_type]": [
+        {
+            "uri": "file://test_sql_format.test_expr-fail_type_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-fallback_filternullelements]": [

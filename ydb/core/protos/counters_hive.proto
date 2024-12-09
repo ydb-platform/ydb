@@ -163,6 +163,6 @@ enum ETxTypes {
     TXTYPE_MON_REBALANCE_FROM_SCRATCH = 62                [(TxTypeOpts) = {Name: "TxMonRebalanceFromScratch"}];
     TXTYPE_MON_OBJECT_STATS = 63                          [(TxTypeOpts) = {Name: "TxMonObjectStats"}];
     TXTYPE_MON_SUBACTORS = 64                             [(TxTypeOpts) = {Name: "TxMonSubactors"}];
-    TXTYPE_MON_TABLET_AVAILABILITY = 65                   [(TxTypeOpts) = {Name: "TxMonTabletAvailability"}];                  [(TxTypeOpts) = {Name: "TxUpdateDcFollowers"}];
+    TXTYPE_MON_TABLET_AVAILABILITY = 65                   [(TxTypeOpts) = {Name: "TxMonTabletAvailability"}];
     TXTYPE_CONFIGURE_SCALE_RECOMMENDER = 67               [(TxTypeOpts) = {Name: "TxConfigureScaleRecommender"}];
 }

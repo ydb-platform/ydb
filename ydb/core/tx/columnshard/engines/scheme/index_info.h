@@ -104,7 +104,7 @@ private:
     bool SchemeNeedActualization = false;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
-    bool ExternalGuaranteeExclusivePK = false;
+    std::optional<TString> ScanReaderPolicyName;
 
     ui64 Version = 0;
     std::vector<ui32> SchemaColumnIds;
@@ -215,8 +215,8 @@ public:
     std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueVerified(const ui32 colId) const;
     std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueByIndexVerified(const ui32 colIndex) const;
 
-    bool GetExternalGuaranteeExclusivePK() const {
-        return ExternalGuaranteeExclusivePK;
+    const std::optional<TString>& GetScanReaderPolicyName() const {
+        return ScanReaderPolicyName;
     }
 
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {

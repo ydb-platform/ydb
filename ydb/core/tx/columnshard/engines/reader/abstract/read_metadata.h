@@ -116,8 +116,8 @@ public:
         return ResultIndexSchema;
     }
 
-    bool HasGuaranteeExclusivePK() const {
-        return GetIndexInfo().GetExternalGuaranteeExclusivePK();
+    bool GetScanReaderPolicyName(const TString& defaultName) const {
+        return GetIndexInfo().GetScanReaderPolicyName().value_or(defaultName);
     }
 
     ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;

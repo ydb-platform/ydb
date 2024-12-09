@@ -63,8 +63,17 @@ void TTxScan::Complete(const TActorContext& ctx) {
         read.PathId = request.GetLocalPathId();
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
+
         const TString defaultReader =
-            AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "PLAIN";
+            [&]() {
+            const TString defGlobal =
+                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "PLAIN";
+            if (Self->HasIndex()) {
+                return Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetScanReaderPolicyName(defGlobal);
+            } else {
+                return defGlobal;
+            }
+        }();
         std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
             auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
             if (!sysViewPolicy) {

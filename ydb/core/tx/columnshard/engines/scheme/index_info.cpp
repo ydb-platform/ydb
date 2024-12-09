@@ -181,7 +181,9 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
 void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {
     TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Options");
     SchemeNeedActualization = optionsProto.GetSchemeNeedActualization();
-    ExternalGuaranteeExclusivePK = optionsProto.GetExternalGuaranteeExclusivePK();
+    if (optionsProto.HasScanReaderPolicyName()) {
+        ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
+    }
     if (optionsProto.HasCompactionPlannerConstructor()) {
         auto container =
             NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(optionsProto.GetCompactionPlannerConstructor());

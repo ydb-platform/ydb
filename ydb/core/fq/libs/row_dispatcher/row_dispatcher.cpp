@@ -561,7 +561,7 @@ void TRowDispatcher::UpdateMetrics() {
         const auto& stats = it->second;
         if (!stats) {
             SetQueryMetrics(it->first, 0, 0, 0);
-            Metrics.Counters->RemoveSubgroup("queryId", it->first.first);
+            Metrics.Counters->RemoveSubgroup("query_id", it->first.first);
             it = AggrStats.LastQueryStats.erase(it);
             continue;
         }
@@ -572,7 +572,7 @@ void TRowDispatcher::UpdateMetrics() {
 }
 
 void TRowDispatcher::SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax) {
-    auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryKey.first);
+    auto queryGroup = Metrics.Counters->GetSubgroup("query_id", queryKey.first);
     auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(queryKey.second));
     topicGroup->GetCounter("MaxUnreadBytes")->Set(unreadBytesMax);
     topicGroup->GetCounter("AvgUnreadBytes")->Set(unreadBytesAvg);

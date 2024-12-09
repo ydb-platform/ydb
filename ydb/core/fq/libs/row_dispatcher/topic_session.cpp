@@ -130,7 +130,7 @@ private:
         TClientsInfo(
             const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev,
             const NMonitoring::TDynamicCounterPtr& counters,
-            const TString topicPath)
+            const TString& topicPath)
             : Settings(ev->Get()->Record)
             , ReadActorId(ev->Sender)
             , Counters(counters)
@@ -141,7 +141,7 @@ private:
             }
             Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
 
-            auto queryGroup = Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
+            auto queryGroup = Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
             auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(topicPath));
             FilteredDataRate = topicGroup->GetCounter("FilteredDataRate", true);
             RestartSessionByOffsetsByQuery = counters->GetCounter("RestartSessionByOffsetsByQuery", true);

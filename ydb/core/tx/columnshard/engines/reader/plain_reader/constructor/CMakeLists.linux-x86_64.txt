@@ -20,6 +20,7 @@ target_link_libraries(reader-plain_reader-constructor PUBLIC
   contrib-libs-cxxsupp
   yutil
   engines-reader-abstract
+  reader-common_reader-constructor
   core-kqp-compute_actor
 )
 
@@ -38,6 +39,7 @@ target_link_libraries(reader-plain_reader-constructor.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   engines-reader-abstract
+  reader-common_reader-constructor
   core-kqp-compute_actor
 )
 

@@ -12,36 +12,17 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(reader-simple_reader-constructor)
+add_library(reader-common_reader-constructor)
 
 
-target_link_libraries(reader-simple_reader-constructor PUBLIC
+target_link_libraries(reader-common_reader-constructor PUBLIC
   contrib-libs-cxxsupp
   yutil
   engines-reader-abstract
-  reader-common_reader-constructor
   core-kqp-compute_actor
 )
 
-target_sources(reader-simple_reader-constructor PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/resolver.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/read_metadata.cpp
-)
-
-
-add_global_library_for(reader-simple_reader-constructor.global
-  reader-simple_reader-constructor)
-
-
-target_link_libraries(reader-simple_reader-constructor.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  engines-reader-abstract
-  reader-common_reader-constructor
-  core-kqp-compute_actor
-)
-
-target_sources(reader-simple_reader-constructor.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/constructor.cpp
+target_sources(reader-common_reader-constructor PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.cpp
 )
 

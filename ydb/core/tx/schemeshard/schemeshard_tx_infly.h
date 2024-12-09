@@ -331,7 +331,7 @@ struct TTxState {
 
     void UpdateShardsInProgress(ETxState operation = Invalid) {
         for (auto shard : Shards) {
-            if (!operation || operation == shard.Operation) {
+            if ((!operation || operation == shard.Operation) && shard.LoopStep == LoopStep) {
                 ShardsInProgress.insert(shard.Idx);
             }
         }

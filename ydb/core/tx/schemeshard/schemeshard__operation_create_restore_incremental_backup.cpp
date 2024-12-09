@@ -168,7 +168,7 @@ public:
 
         for (ui64 loopStep = 0; loopStep < RestoreOp.SrcPathIdsSize(); ++loopStep) {
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
-            context.SS->FillSeqNo(tx, context.SS->StartRound(*txState)); // FIXME
+            context.SS->FillSeqNo(tx, context.SS->StartRound(*txState));
 
             FillNotice(txState->SourcePathId, tx, loopStep, context);
             loopStepToTx[loopStep] = tx.SerializeAsString();
@@ -250,8 +250,10 @@ public:
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
-            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
-            shardSet.insert(context.SS->ShardInfos.at(shard.Idx).TabletID);
+            if (shard.LoopStep == LoopStep) {
+                Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
+                shardSet.insert(context.SS->ShardInfos.at(shard.Idx).TabletID);
+            }
         }
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, txState->MinStep, shardSet);
@@ -431,11 +433,11 @@ class TNewRestoreFromAtTable : public TSubOperation {
             Y_ABORT_UNLESS(txState);
             ++(txState->LoopStep);
             if (txState->LoopStep < Transaction.GetRestoreMultipleIncrementalBackups().SrcPathIdsSize()) {
-                txState->Shards.clear();
                 txState->SchemeChangeNotificationReceived.clear();
                 txState->ReadyForNotifications = false;
                 txState->TargetPathId = PathIdFromPathId(Transaction.GetRestoreMultipleIncrementalBackups().GetSrcPathIds(txState->LoopStep));
-                txState->TxShardsListFinalized = false;
+                txState->ClearShardsInProgress();
+                txState->UpdateShardsInProgress(TTxState::ConfigureParts);
                 // TODO preserve TxState
                 return TTxState::Propose;
             }

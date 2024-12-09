@@ -417,10 +417,6 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasUseNoopScheduler()) {
             UseNoopScheduler = cfg->GetUseNoopScheduler();
         }
-        
-        if (cfg->HasReadOnly()) {
-            ReadOnly = cfg->GetReadOnly();
-        }
     }
 };
 

@@ -94,6 +94,4 @@ message TPDiskConfig {
 
     optional uint32 CompletionThreadsCount = 2003;
     optional bool UseNoopScheduler = 2004;
-
-    optional bool ReadOnly = 2004;
 };

@@ -404,6 +404,11 @@ message TRestartPDisk {
     NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
 }
 
+message TSetPDiskReadOnly {
+    NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+    bool Value = 2;
+}
+
 message TSetScrubPeriodicity {
     uint32 ScrubPeriodicity = 1; // in seconds; 0 = disable
 }
@@ -537,6 +542,7 @@ message TConfigRequest {
             TCancelVirtualGroup CancelVirtualGroup = 44;
             TSetVDiskReadOnly SetVDiskReadOnly = 47;
             TRestartPDisk RestartPDisk = 48;
+            TSetPDiskReadOnly SetPDiskReadOnly = 49;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

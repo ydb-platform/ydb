@@ -44,6 +44,10 @@ namespace NKikimr::NStorage {
         }
         pdiskConfig->MaxCommonLogChunks = deviceType == NPDisk::DEVICE_TYPE_ROT ? MaxCommonLogChunksHDD : MaxCommonLogChunksSSD;
 
+        if (pdisk.HasReadOnly()) {
+            pdiskConfig->ReadOnly = pdisk.GetReadOnly();
+        }
+
         // Path scheme: "SectorMap:unique_name[:3000]"
         // where '3000' is device size of in GiB.
         if (path.Contains(":")) {
@@ -381,11 +385,22 @@ namespace NKikimr::NStorage {
                 continue;
             }
 
-            const NKikimrBlobStorage::EEntityStatus entityStatus = pdisk.HasEntityStatus()
+            NKikimrBlobStorage::EEntityStatus entityStatus = pdisk.HasEntityStatus()
                 ? pdisk.GetEntityStatus()
                 : NKikimrBlobStorage::INITIAL;
 
             const TPDiskKey key(pdisk);
+
+            if (pdisk.HasReadOnly()) {
+                if (auto it = LocalPDisks.find({pdisk.GetNodeID(), pdisk.GetPDiskID()}); it != LocalPDisks.end()) {
+                    auto& record = it->second;
+
+                    if (!record.Record.HasReadOnly() || record.Record.GetReadOnly() != pdisk.GetReadOnly()) {
+                        // Changing read-only flag requires restart.
+                        entityStatus = NKikimrBlobStorage::RESTART;
+                    }
+                }
+            }
 
             switch (entityStatus) {
                 case NKikimrBlobStorage::RESTART:

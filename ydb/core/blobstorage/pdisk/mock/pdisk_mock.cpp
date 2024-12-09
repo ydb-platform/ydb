@@ -996,6 +996,7 @@ public:
         hFunc(NPDisk::TEvChunkForget, ErrorHandle);
         hFunc(NPDisk::TEvReadMetadata, ErrorHandle);
         hFunc(NPDisk::TEvWriteMetadata, ErrorHandle);
+        hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
 
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
         cFunc(EvBecomeNormal, HandleMoveToNormalState);

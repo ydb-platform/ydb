@@ -472,6 +472,13 @@ public:
                 const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
                 std::shared_ptr<TPDiskCtx> pCtx = std::get<3>(*params);
 
+                if (cfg->ReadOnly) {
+                    TString readOnlyError = "PDisk is in read-only mode";
+                    STLOGX(*pCtx->ActorSystem, PRI_ERROR, BS_PDISK, BSP01, "Formatting error", (What, readOnlyError));
+                    pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
+                    return nullptr;
+                }
+
                 THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(pCtx, cfg, counters));
 
                 pDisk->Initialize();

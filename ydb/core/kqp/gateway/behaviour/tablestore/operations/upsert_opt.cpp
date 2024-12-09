@@ -10,7 +10,7 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
         return TConclusionStatus::Fail("Incorrect value for SCHEME_NEED_ACTUALIZATION: cannot parse as boolean");
     }
     SchemeNeedActualization = *value;
-    ScanReaderPolicyName = features.Extract<bool>("SCAN_READER_POLICY_NAME");
+    ScanReaderPolicyName = features.Extract<TString>("SCAN_READER_POLICY_NAME");
     if (ScanReaderPolicyName) {
         if (*ScanReaderPolicyName != "PLAIN" && *ScanReaderPolicyName != "SIMPLE") {
             return TConclusionStatus::Fail("SCAN_READER_POLICY_NAME have to be in ['PLAIN', 'SIMPLE']");

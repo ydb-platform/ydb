@@ -617,15 +617,16 @@ public:
 };
 
 class TDataAccessorsSubscriberBase: public NOlap::IDataAccessorRequestsSubscriber {
-protected:
+private:
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
-
-    virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) = 0;
 
     virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override final {
         AFL_VERIFY(ResourcesGuard);
         DoOnRequestsFinished(std::move(result), std::move(ResourcesGuard));
     }
+
+protected:
+    virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) = 0;
 
 public:
     void SetResourcesGuard(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& guard) {

@@ -572,8 +572,8 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
-        for (const auto& table : tx.GetRestoreMultipleIncrementalBackups().GetSrcTableNames()) {
-            result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), table}));
+        for (const auto& table : tx.GetRestoreMultipleIncrementalBackups().GetSrcTablePaths()) {
+            result.emplace_back(table);
         }
         result.emplace_back(tx.GetRestoreMultipleIncrementalBackups().GetDstTablePath());
         break;

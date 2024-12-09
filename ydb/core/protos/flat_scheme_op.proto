@@ -986,7 +986,7 @@ message TDropContinuousBackup {
 }
 
 message TRestoreIncrementalBackup {
-    optional string SrcTableName = 1;
+    optional string SrcTablePath = 1; // Absolute path
     optional NKikimrProto.TPathID SrcPathId = 3;
 
     optional string DstTablePath = 2; // Absolute path
@@ -994,7 +994,7 @@ message TRestoreIncrementalBackup {
 }
 
 message TRestoreMultipleIncrementalBackups {
-    repeated string SrcTableNames = 1;
+    repeated string SrcTablePaths = 1; // Absolute path
     repeated NKikimrProto.TPathID SrcPathIds = 3;
 
     optional string DstTablePath = 2; // Absolute path

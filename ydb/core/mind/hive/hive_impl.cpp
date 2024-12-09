@@ -577,6 +577,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         }
         SendToRootHivePipe(request.Release());
     }
+    UpdateCounterNodesConnected(+1); // self node
     Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
     ProcessPendingOperations();
 }
@@ -3483,34 +3484,33 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
     Execute(CreateUpdateDcFollowers(ev->Get()->DataCenter));
 }
 
-template <typename TIt>
-ui32 THive::CalculateRecommendedNodes(TIt windowBegin, TIt windowEnd, size_t readyNodes, double target) {
-    double maxOnWindow = *std::max_element(windowBegin, windowEnd);
-    double ratio = maxOnWindow / target;
-    return std::ceil(readyNodes * ratio);
-}
-
 void THive::MakeScaleRecommendation() {
-    BLOG_D("[MSR] Started making scale recommendation");
+    BLOG_D("[MSR] Started");
+    
+    if (AreWeRootHive()) {
+        return;
+    }
 
-    // TODO(pixcc): make following variables as configurable settings
-    constexpr TDuration NODE_INITILIZATION_TIME = TDuration::Seconds(30);
-    constexpr size_t MAX_HISTORY_SIZE = 15;
-    constexpr size_t SCALE_IN_WINDOW_SIZE = 5;
-    constexpr size_t SCALE_OUT_WINDOW_SIZE = 15;
-    constexpr double TARGET_AVG_CPU_USAGE_PERCENT = 0.66;
-    constexpr double CPU_USAGE_MARGIN = 0.2;
+    auto subdomainKey = GetMySubDomainKey();
+    auto it = Domains.find(subdomainKey);
+    if (it == Domains.end()) {
+        BLOG_ERROR("[MSR] Can't find domain " << subdomainKey);
+        Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
+        return;
+    }
+    auto& domain = it->second;
+
+    if (domain.ScaleRecommenderPolicies.empty() && CurrentConfig.GetDryRunTargetTrackingCPU() == 0) {
+        BLOG_TRACE("[MSR] No scaling policies configured, rescheduled");
+        Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
+        return;
+    }
 
     double cpuUsageSum = 0;
-    size_t readyNodesCount = 0;
+    ui32 readyNodesCount = 0;
     for (auto& [id, node] : Nodes) {
         if (!node.IsAlive()) {
             BLOG_TRACE("[MSR] Skip node " << id << ", not alive");
-            continue;
-        }
-
-        if (node.StartTime + NODE_INITILIZATION_TIME > TActivationContext::Now()) {
-            BLOG_TRACE("[MSR] Skip node " << id << ", in initialization");
             continue;
         }
 
@@ -3519,85 +3519,51 @@ void THive::MakeScaleRecommendation() {
             continue;
         }
 
-        if (node.GetServicedDomain() != GetMySubDomainKey()) {
+        if (node.GetServicedDomain() != subdomainKey) {
             BLOG_TRACE("[MSR] Skip node " << id << ", serviced domain doesn't match");
             continue;
         }
 
         double avgCpuUsage = node.AveragedNodeTotalCpuUsage.GetValue();
-        BLOG_TRACE("[MSR] Node " << id << " is ready, Avg CPU Usage " << avgCpuUsage);
+        BLOG_TRACE("[MSR] Node " << id << " is ready, avg CPU usage: " << avgCpuUsage);
         ++readyNodesCount;
 
         cpuUsageSum += avgCpuUsage;
         node.AveragedNodeTotalCpuUsage.Clear();
     }
 
-    auto& domain = Domains[GetMySubDomainKey()];
-    auto& avgCpuUsageHistory = domain.AvgCpuUsageHistory;
-
     double avgCpuUsage = readyNodesCount != 0 ? cpuUsageSum / readyNodesCount : 0;
-    BLOG_TRACE("[MSR] Total Avg CPU Usage " << avgCpuUsage);
+    BLOG_TRACE("[MSR] Total avg CPU usage: " << avgCpuUsage << ", ready nodes: " << readyNodesCount);
+    TabletCounters->Simple()[NHive::COUNTER_AVG_CPU_UTILIZATION].Set(avgCpuUsage * 100);
 
+    auto& avgCpuUsageHistory = domain.AvgCpuUsageHistory;
     avgCpuUsageHistory.push_back(avgCpuUsage);
-    while (avgCpuUsageHistory.size() > MAX_HISTORY_SIZE) {
+    size_t maxHistorySize = std::max(CurrentConfig.GetScaleInWindowSize(), CurrentConfig.GetScaleOutWindowSize());
+    while (avgCpuUsageHistory.size() > maxHistorySize) {
         avgCpuUsageHistory.pop_front();
     }
-    BLOG_TRACE("[MSR] Avg CPU Usage history " << '[' << JoinSeq(", ", avgCpuUsageHistory) << ']');
+    BLOG_TRACE("[MSR] Avg CPU usage history: " << '[' << JoinSeq(", ", avgCpuUsageHistory) << ']');
 
-    ui32 recommendedNodes = 0;
-
-    if (avgCpuUsageHistory.size() >= SCALE_IN_WINDOW_SIZE) {
-        auto scaleInWindowBegin = avgCpuUsageHistory.end() - SCALE_IN_WINDOW_SIZE;
-        auto scaleInWindowEnd = avgCpuUsageHistory.end();
-        double usageBottomThreshold = TARGET_AVG_CPU_USAGE_PERCENT - CPU_USAGE_MARGIN;
-
-        bool needScaleIn = std::all_of(
-            scaleInWindowBegin,
-            scaleInWindowEnd,
-            [usageBottomThreshold](double value){ return value < usageBottomThreshold; }
-        );
-
-        if (needScaleIn) {
-            recommendedNodes = CalculateRecommendedNodes(
-                scaleInWindowBegin,
-                scaleInWindowEnd,
-                readyNodesCount,
-                TARGET_AVG_CPU_USAGE_PERCENT
-            );
-            BLOG_D("[MSR] Need scale in: " << readyNodesCount << " -> " << recommendedNodes);
+    if (!domain.ScaleRecommenderPolicies.empty()) {
+        ui32 recommendedNodes = 1;
+        for (auto& policy : domain.ScaleRecommenderPolicies) {
+            recommendedNodes = std::max(recommendedNodes, policy->MakeScaleRecommendation(readyNodesCount, CurrentConfig));
         }
-    } else {
-        BLOG_D("[MSR] Not enough history data to scale in");
-    }
 
-    if (recommendedNodes == 0 && avgCpuUsageHistory.size() >= SCALE_OUT_WINDOW_SIZE) {
-        auto scaleOutWindowBegin = avgCpuUsageHistory.end() - SCALE_OUT_WINDOW_SIZE;
-        auto scaleOutWindowEnd = avgCpuUsageHistory.end();
-
-        bool needScaleOut = std::all_of(
-            scaleOutWindowBegin,
-            scaleOutWindowEnd,
-            [](double value){ return value > TARGET_AVG_CPU_USAGE_PERCENT; }
-        );
-
-        if (needScaleOut) {
-            recommendedNodes = CalculateRecommendedNodes(
-                scaleOutWindowBegin,
-                scaleOutWindowEnd,
-                readyNodesCount,
-                TARGET_AVG_CPU_USAGE_PERCENT
-            );
-            BLOG_D("[MSR] Need scale out: " << readyNodesCount << " -> " << recommendedNodes);
-        }
-    } else {
-        BLOG_D("[MSR] Not enough history data to scale out");
-    }
-
-    if (recommendedNodes != 0) {
         domain.LastScaleRecommendation = TScaleRecommendation{
             .Nodes = recommendedNodes,
             .Timestamp = TActivationContext::Now()
         };
+        TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED].Set(recommendedNodes);
+        BLOG_TRACE("[MSR] Recommended nodes: " << recommendedNodes << ", current nodes: " << readyNodesCount);
+    }
+
+    if (CurrentConfig.GetDryRunTargetTrackingCPU() != 0) {
+        ui32 dryRunRecommendedNodes = 1;
+        TTargetTrackingPolicy dryRunPolicy(CurrentConfig.GetDryRunTargetTrackingCPU(), avgCpuUsageHistory, TabletID(), true);
+        dryRunRecommendedNodes = std::max(dryRunRecommendedNodes, dryRunPolicy.MakeScaleRecommendation(readyNodesCount, CurrentConfig));
+        TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED_DRY_RUN].Set(dryRunRecommendedNodes);
+        BLOG_TRACE("[MSR] Dry run recommended nodes: " << dryRunRecommendedNodes << ", current nodes: " << readyNodesCount);
     }
 
     Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
@@ -3645,6 +3611,7 @@ void THive::Handle(TEvPrivate::TEvGenerateTestData::TPtr&) {
 
 void THive::Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev) {
     BLOG_D("Handle TEvHive::TEvConfigureScaleRecommender(" << ev->Get()->Record.ShortDebugString() << ")");
+    Execute(CreateConfigureScaleRecommender(ev));
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

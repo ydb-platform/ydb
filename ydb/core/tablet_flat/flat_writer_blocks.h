@@ -68,10 +68,9 @@ namespace NWriter {
             }
 
             if (NTable::TLoader::NeedIn(type) || Cache == ECache::Ever || StickyFlatIndex && type == EPage::FlatIndex) {
-                // Note: we mark flat index pages sticky after we load them
                 Result.StickyPages.emplace_back(pageId, std::move(raw));
             } else if (bool(Cache) && type == EPage::DataPage || type == EPage::BTreeIndex) {
-                // Note: we save b-tree index pages to shared cache regardless of a cache mode
+                // Note: save b-tree index pages to shared cache regardless of a cache mode
                 Result.RegularPages.emplace_back(pageId, std::move(raw));
             }
 

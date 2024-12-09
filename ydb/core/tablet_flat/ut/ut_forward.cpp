@@ -114,7 +114,7 @@ namespace {
             Shuffle(load.begin(), load.end(), Rnd);
 
             for (auto &page : load) {
-                Cache->Fill(page, EPage::Opaque);
+                Cache->Fill(page, {}, EPage::Opaque);
             }
 
             UNIT_ASSERT(Cache->Stat.Saved == Cache->Stat.Fetch);
@@ -196,7 +196,7 @@ namespace {
             Shuffle(load.begin(), load.end(), Rnd);
 
             for (auto &page : load) {
-                Cache->Fill(page, Part->GetPageType(page.PageId, {}));
+                Cache->Fill(page, {}, Part->GetPageType(page.PageId, {}));
             }
 
             UNIT_ASSERT_VALUES_EQUAL_C(Cache->Stat, stat, CurrentStepStr());
@@ -237,7 +237,7 @@ namespace {
             Shuffle(load.begin(), load.end(), Rnd);
 
             for (auto &page : load) {
-                Cache->Fill(page, Part->GetPageType(page.PageId, {}));
+                Cache->Fill(page, {}, Part->GetPageType(page.PageId, {}));
             }
 
             UNIT_ASSERT_VALUES_EQUAL_C(Cache->Stat, stat, CurrentStepStr());

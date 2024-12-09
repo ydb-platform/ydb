@@ -1763,7 +1763,8 @@ public:
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->FlushBuffers();
         }
-        if (TxManager->IsReadOnly()) {
+
+        if (!TxManager->NeedCommit()) {
             Rollback();
             State = EState::FINISHED;
             Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});

@@ -25,8 +25,7 @@ static Y_FORCE_INLINE void ValidateNumericRange(TNumber value, TNumber min, TNum
 {
     static_assert(std::is_same_v<TNumber, i64> || std::is_same_v<TNumber, ui64> || std::is_same_v<TNumber, double>);
     if (value < min || value > max) {
-        THROW_ERROR_EXCEPTION(
-            EErrorCode::SchemaViolation,
+        THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
             "Value %v is out of allowed range [%v, %v]",
             value,
             min,
@@ -206,14 +205,12 @@ void ValidateSimpleLogicalType(TStringBuf value)
         // do nothing
     } else if constexpr (type == ESimpleLogicalValueType::Utf8) {
         if (UTF8Detect(value.data(), value.size()) == NotUTF8) {
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Not a valid utf8 string");
         }
     } else if constexpr (type == ESimpleLogicalValueType::Uuid) {
         if (value.size() != 16) {
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Not a valid Uuid");
         }
     } else {

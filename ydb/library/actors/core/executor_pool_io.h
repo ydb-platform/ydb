@@ -3,9 +3,9 @@
 #include "actorsystem.h"
 #include "executor_thread.h"
 #include "executor_thread_ctx.h"
+#include "harmonizer.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
-#include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <ydb/library/actors/actor_type/indexes.h>
 #include <ydb/library/actors/util/ticket_lock.h>
 #include <ydb/library/actors/util/unordered_cache.h>

@@ -1,6 +1,13 @@
+* Made `--consumer` flag in `ydb topic read` command optional. Now if this flag is not specified, reading is performed in no-consumer mode. In this mode partition IDs should be specified with `--partition-ids` option. 
+* Fixed a bug in `ydb import file csv` where multiple columns with escaped quotes in the same row were parsed incorrectly
+* Truncate query results output in benchmarks
+
+## 2.17.0 ##
+
 * Fixed a bug in TPC-H tables schema where the `partsupp` table had incorrect list of key columns
 * Enhanced parallelism of data restoring in `ydb tools restore`
 * Fixed a bug where `ydb tools restore` was failing with `Too much data` if `--upload-batch-bytes` option value was set exactly to it's maximum possible value (16MiB)
+* Added `ydb debug ping` command for performance and connectivity debugging
 
 ## 2.16.0 ##
 

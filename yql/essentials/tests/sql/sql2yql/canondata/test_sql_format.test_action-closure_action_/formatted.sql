@@ -14,6 +14,10 @@ DEFINE ACTION $action($b, $c) AS
 END DEFINE;
 
 DEFINE ACTION $closure_action($a) AS
-    DO $a(3, 4);
+    DO
+        $a(3, 4)
+    ;
 END DEFINE;
-DO $closure_action($action);
+DO
+    $closure_action($action)
+;

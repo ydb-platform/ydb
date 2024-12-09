@@ -364,9 +364,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
             return *modifyScheme.MutableCreateResourcePool()->MutableName();
 
-        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
-            return *modifyScheme.MutableRestoreIncrementalBackup()->MutableSrcTableName();
+        // TODO verify all logic based on this, it may be irrelevant
+            return *modifyScheme.MutableRestoreMultipleIncrementalBackups()->MutableSrcTableNames(0);
 
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
             return *modifyScheme.MutableCreateBackupCollection()->MutableName();
@@ -382,6 +383,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection:
             return *modifyScheme.MutableBackupIncrementalBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
+            return *modifyScheme.MutableRestoreBackupCollection()->MutableName();
         }
     }
 
@@ -642,7 +646,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
-        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
         case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
@@ -770,6 +774,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;
             auto collectionPath = SplitPath(pbModifyScheme.GetBackupIncrementalBackupCollection().GetName());
+            std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequiredAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection: {
+            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            toResolve.Path = workingDir;
+            auto collectionPath = SplitPath(pbModifyScheme.GetRestoreBackupCollection().GetName());
             std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
             toResolve.RequiredAccess = NACLib::EAccessRights::GenericWrite;
             ResolveForACL.push_back(toResolve);

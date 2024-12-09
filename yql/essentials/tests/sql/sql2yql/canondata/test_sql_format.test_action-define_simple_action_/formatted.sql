@@ -12,4 +12,6 @@ DEFINE ACTION $action($b, $c) AS
     SELECT
         $d;
 END DEFINE;
-DO $action(1, 2);
+DO
+    $action(1, 2)
+;

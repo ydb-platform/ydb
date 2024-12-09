@@ -10,6 +10,8 @@
 
 #include <stddef.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_linked_list_node {
     struct aws_linked_list_node *next;
     struct aws_linked_list_node *prev;
@@ -184,5 +186,6 @@ AWS_STATIC_IMPL void aws_linked_list_move_all_front(
 #    include <aws/common/linked_list.inl>
 #endif /* AWS_NO_STATIC_IMPL */
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_LINKED_LIST_H */

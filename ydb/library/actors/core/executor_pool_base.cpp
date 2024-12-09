@@ -1,5 +1,4 @@
 #include "actorsystem.h"
-#include "activity_guard.h"
 #include "actor.h"
 #include "executor_pool_base.h"
 #include "executor_pool_basic_feature_flags.h"

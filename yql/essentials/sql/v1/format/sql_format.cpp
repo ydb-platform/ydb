@@ -1166,10 +1166,11 @@ private:
     }
 
     void VisitDo(const TRule_do_stmt& msg) {
-        NewLine();
         VisitKeyword(msg.GetToken1());
         switch (msg.GetBlock2().Alt_case()) {
         case TRule_do_stmt_TBlock2::kAlt1: { // CALL
+            PushCurrentIndent();
+            NewLine();
             const auto& alt = msg.GetBlock2().GetAlt1().GetRule_call_action1();
             Visit(alt.GetBlock1());
             AfterInvokeExpr = true;
@@ -1177,8 +1178,9 @@ private:
             if (alt.HasBlock3()) {
                 Visit(alt.GetBlock3());
             }
-
             Visit(alt.GetToken4());
+            PopCurrentIndent();
+            NewLine();
             break;
         }
         case TRule_do_stmt_TBlock2::kAlt2: { // INLINE
@@ -1222,52 +1224,12 @@ private:
 
     void VisitIf(const TRule_if_stmt& msg) {
         NewLine();
-        if (msg.HasBlock1()) {
-            Visit(msg.GetBlock1());
-        }
-
-        Visit(msg.GetToken2());
-        Visit(msg.GetRule_expr3());
-        NewLine();
-        PushCurrentIndent();
-        Visit(msg.GetRule_do_stmt4());
-        PopCurrentIndent();
-        if (msg.HasBlock5()) {
-            NewLine();
-            Visit(msg.GetBlock5().GetToken1());
-            NewLine();
-            PushCurrentIndent();
-            Visit(msg.GetBlock5().GetRule_do_stmt2());
-            PopCurrentIndent();
-        }
+        VisitAllFields(TRule_if_stmt::GetDescriptor(), msg);
     }
 
     void VisitFor(const TRule_for_stmt& msg) {
         NewLine();
-        if (msg.HasBlock1()) {
-            Visit(msg.GetBlock1());
-        }
-
-        if (msg.HasBlock2()) {
-            Visit(msg.GetBlock2());
-        }
-
-        Visit(msg.GetToken3());
-        Visit(msg.GetRule_bind_parameter4());
-        Visit(msg.GetToken5());
-        Visit(msg.GetRule_expr6());
-        NewLine();
-        PushCurrentIndent();
-        Visit(msg.GetRule_do_stmt7());
-        PopCurrentIndent();
-        if (msg.HasBlock8()) {
-            NewLine();
-            Visit(msg.GetBlock8().GetToken1());
-            NewLine();
-            PushCurrentIndent();
-            Visit(msg.GetBlock8().GetRule_do_stmt2());
-            PopCurrentIndent();
-        }
+        VisitAllFields(TRule_for_stmt::GetDescriptor(), msg);
     }
 
     void VisitValues(const TRule_values_stmt& msg) {

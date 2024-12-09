@@ -21,4 +21,6 @@ DEFINE ACTION $bar() AS
     ORDER BY
         key;
 END DEFINE;
-DO $bar();
+DO
+    $bar()
+;

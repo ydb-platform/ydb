@@ -287,6 +287,7 @@ message TBlobStorageConfig {
 
         // some extra settings
         optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically
+        optional bool AutomaticBootstrap = 9; // whether bootstrap should be performed automatically; PROHIBITED for production
 
         // filled in by config parser, not by user; required for automatic static group creation
         repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 5;
@@ -1645,6 +1646,10 @@ message THiveConfig {
     optional string CutHistoryDenyList = 76 [default = "ColumnShard,KeyValue,PersQueue,BlobDepot"];
     optional string CutHistoryAllowList = 79 [default = "DataShard"];
     optional uint64 ScaleRecommendationRefreshFrequency = 80 [default = 60000]; // calculate scale recommendation every x milliseconds
+    optional uint64 ScaleOutWindowSize = 81 [default = 15]; // buckets
+    optional uint64 ScaleInWindowSize = 82 [default = 5]; // buckets
+    optional double TargetTrackingCPUMargin = 83 [default = 0.1]; // percent
+    optional double DryRunTargetTrackingCPU = 84; // percent
 }
 
 message TBlobCacheConfig {
@@ -1702,6 +1707,7 @@ message TColumnShardConfig {
     optional bool ColumnChunksV1Usage = 26 [default = true];
     optional uint64 MemoryLimitScanPortion = 27 [default = 100000000];
     optional string ReaderClassName = 28;
+    optional bool AllowNullableColumnsInPK = 29 [default = false];
 }
 
 message TSchemeShardConfig {

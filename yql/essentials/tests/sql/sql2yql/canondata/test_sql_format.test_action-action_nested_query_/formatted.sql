@@ -15,4 +15,6 @@ DEFINE ACTION $action() AS
     ORDER BY
         key;
 END DEFINE;
-DO $action();
+DO
+    $action()
+;

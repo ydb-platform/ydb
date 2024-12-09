@@ -339,7 +339,7 @@ private:
 
     TLimitsAdjuster() = default;
 
-    using TAllocatorMemoryLimit = tcmalloc::MallocExtension::MemoryLimit;
+    using TAllocatorMemoryLimit = std::pair<bool, i64>;
 
     TAllocatorMemoryLimit AppliedLimit_;
     i64 AggressiveReleaseThreshold_ = 0;
@@ -349,14 +349,14 @@ private:
     {
         auto proposed = ProposeHeapMemoryLimit(totalMemory, config);
 
-        if (proposed.limit == AppliedLimit_.limit && proposed.hard == AppliedLimit_.hard) {
+        if (proposed.second == AppliedLimit_.second && proposed.first == AppliedLimit_.first) {
             // Already applied.
             return;
         }
 
         YT_LOG_INFO("Changing TCMalloc memory limit (Limit: %v, Hard: %v)",
-            proposed.limit,
-            proposed.hard);
+            proposed.second,
+            proposed.first);
 
         tcmalloc::MallocExtension::SetMemoryLimit(proposed);
         AppliedLimit_ = proposed;
@@ -385,12 +385,12 @@ private:
         }
 
         TAllocatorMemoryLimit proposed;
-        proposed.hard = heapSizeConfig->Hard;
+        proposed.first = heapSizeConfig->Hard;
 
         if (heapSizeConfig->ContainerMemoryMargin) {
-            proposed.limit = totalMemory - *heapSizeConfig->ContainerMemoryMargin;
+            proposed.second = totalMemory - *heapSizeConfig->ContainerMemoryMargin;
         } else {
-            proposed.limit = *heapSizeConfig->ContainerMemoryRatio * totalMemory;
+            proposed.second = *heapSizeConfig->ContainerMemoryRatio * totalMemory;
         }
 
         return proposed;

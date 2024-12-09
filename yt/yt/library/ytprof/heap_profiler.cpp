@@ -22,95 +22,95 @@ namespace NYT::NYTProf {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NProto::Profile ConvertAllocationProfile(const tcmalloc::ProfileBase& snapshot)
+NProto::Profile ConvertAllocationProfile(const tcmalloc::Profile& snapshot)
 {
     NProto::Profile profile;
-    // profile.add_string_table();
+    profile.add_string_table();
 
-    // auto addString = [&] (const std::string& str) {
-    //     auto index = profile.string_table_size();
-    //     profile.add_string_table(ToProto(str));
-    //     return index;
-    // };
+    auto addString = [&] (const std::string& str) {
+        auto index = profile.string_table_size();
+        profile.add_string_table(ToProto(str));
+        return index;
+    };
 
-    // auto bytesUnitId = addString("bytes");
+    auto bytesUnitId = addString("bytes");
 
-    // {
-    //     auto* sampleType = profile.add_sample_type();
-    //     sampleType->set_type(addString("allocations"));
-    //     sampleType->set_unit(addString("count"));
-    // }
+    {
+        auto* sampleType = profile.add_sample_type();
+        sampleType->set_type(addString("allocations"));
+        sampleType->set_unit(addString("count"));
+    }
 
-    // {
-    //     auto* sampleType = profile.add_sample_type();
-    //     sampleType->set_type(addString("space"));
-    //     sampleType->set_unit(bytesUnitId);
+    {
+        auto* sampleType = profile.add_sample_type();
+        sampleType->set_type(addString("space"));
+        sampleType->set_unit(bytesUnitId);
 
-    //     auto* periodType = profile.mutable_period_type();
-    //     periodType->set_type(sampleType->type());
-    //     periodType->set_unit(sampleType->unit());
-    // }
+        auto* periodType = profile.mutable_period_type();
+        periodType->set_type(sampleType->type());
+        periodType->set_unit(sampleType->unit());
+    }
 
     // profile.set_period(snapshot.Period());
 
-    // auto allocatedSizeId = addString("allocated_size");
-    // auto requestedSizeId = addString("requested_size");
-    // auto requestedAlignmentId = addString("requested_alignment");
+    auto allocatedSizeId = addString("allocated_size");
+    auto requestedSizeId = addString("requested_size");
+    auto requestedAlignmentId = addString("requested_alignment");
 
-    // THashMap<void*, ui64> locations;
-    // snapshot.Iterate([&] (const tcmalloc::Profile::Sample& sample) {
-    //     auto* protoSample = profile.add_sample();
-    //     protoSample->add_value(sample.count);
-    //     protoSample->add_value(sample.sum);
+    THashMap<void*, ui64> locations;
+    snapshot.Iterate([&] (const tcmalloc::Profile::Sample& sample) {
+        auto* protoSample = profile.add_sample();
+        protoSample->add_value(sample.count);
+        protoSample->add_value(sample.sum);
 
-    //     auto* allocatedSizeLabel = protoSample->add_label();
-    //     allocatedSizeLabel->set_key(allocatedSizeId);
-    //     allocatedSizeLabel->set_num(sample.allocated_size);
-    //     allocatedSizeLabel->set_num_unit(bytesUnitId);
+        auto* allocatedSizeLabel = protoSample->add_label();
+        allocatedSizeLabel->set_key(allocatedSizeId);
+        allocatedSizeLabel->set_num(sample.allocated_size);
+        allocatedSizeLabel->set_num_unit(bytesUnitId);
 
-    //     auto* requestedSizeLabel = protoSample->add_label();
-    //     requestedSizeLabel->set_key(requestedSizeId);
-    //     requestedSizeLabel->set_num(sample.requested_size);
-    //     requestedSizeLabel->set_num_unit(bytesUnitId);
+        auto* requestedSizeLabel = protoSample->add_label();
+        requestedSizeLabel->set_key(requestedSizeId);
+        requestedSizeLabel->set_num(sample.requested_size);
+        requestedSizeLabel->set_num_unit(bytesUnitId);
 
-    //     auto* requestedAlignmentLabel = protoSample->add_label();
-    //     requestedAlignmentLabel->set_key(requestedAlignmentId);
-    //     requestedAlignmentLabel->set_num(sample.requested_alignment);
-    //     requestedAlignmentLabel->set_num_unit(bytesUnitId);
+        auto* requestedAlignmentLabel = protoSample->add_label();
+        requestedAlignmentLabel->set_key(requestedAlignmentId);
+        requestedAlignmentLabel->set_num(sample.requested_alignment);
+        requestedAlignmentLabel->set_num_unit(bytesUnitId);
 
-    //     for (int i = 0; i < sample.depth; i++) {
-    //         auto ip = sample.stack[i];
+        for (int i = 0; i < sample.depth; i++) {
+            auto ip = sample.stack[i];
 
-    //         auto it = locations.find(ip);
-    //         if (it != locations.end()) {
-    //             protoSample->add_location_id(it->second);
-    //             continue;
-    //         }
+            auto it = locations.find(ip);
+            if (it != locations.end()) {
+                protoSample->add_location_id(it->second);
+                continue;
+            }
 
-    //         auto locationId = locations.size() + 1;
+            auto locationId = locations.size() + 1;
 
-    //         auto* location = profile.add_location();
-    //         location->set_address(reinterpret_cast<ui64>(ip));
-    //         location->set_id(locationId);
+            auto* location = profile.add_location();
+            location->set_address(reinterpret_cast<ui64>(ip));
+            location->set_id(locationId);
 
-    //         protoSample->add_location_id(locationId);
-    //         locations[ip] = locationId;
-    //     }
+            protoSample->add_location_id(locationId);
+            locations[ip] = locationId;
+        }
 
-    //     // TODO(gepardo): Deduplicate values in string table
-    //     for (const auto& [key, value] : GetAllocationTagsHooks().ReadAllocationTags(sample.user_data)) {
-    //         auto* label = protoSample->add_label();
-    //         label->set_key(addString(key));
-    //         label->set_str(addString(value));
-    //     }
-    // });
+        // TODO(gepardo): Deduplicate values in string table
+        // for (const auto& [key, value] : GetAllocationTagsHooks().ReadAllocationTags(sample.user_data)) {
+        //     auto* label = protoSample->add_label();
+        //     label->set_key(addString(key));
+        //     label->set_str(addString(value));
+        // }
+    });
 
-    // profile.set_drop_frames(addString(JoinSeq("|", {
-    //     ".*SampleifyAllocation",
-    //     ".*AllocSmall",
-    //     "slow_alloc",
-    //     "TBasicString::TBasicString",
-    // })));
+    profile.set_drop_frames(addString(JoinSeq("|", {
+        ".*SampleifyAllocation",
+        ".*AllocSmall",
+        "slow_alloc",
+        "TBasicString::TBasicString",
+    })));
 
     Symbolize(&profile, true);
     return profile;
@@ -196,9 +196,10 @@ TMemoryUsageSnapshotPtr CollectMemoryUsageSnapshot()
 
     auto snapshot = tcmalloc::MallocExtension::SnapshotCurrent(tcmalloc::ProfileType::kHeap);
     snapshot.Iterate([&] (const tcmalloc::Profile::Sample& sample) {
-        for (const auto& [tagKey, tagValue] : GetAllocationTagsHooks().ReadAllocationTags(sample.user_data)) {
-            usage[tagKey][tagValue] += sample.sum;
-        }
+        Y_UNUSED(sample);
+        // for (const auto& [tagKey, tagValue] : GetAllocationTagsHooks().ReadAllocationTags(sample.user_data)) {
+        //     usage[tagKey][tagValue] += sample.sum;
+        // }
     });
 
     return New<TMemoryUsageSnapshot>(std::move(usage));
@@ -219,10 +220,11 @@ void EnableMemoryProfilingTags(std::optional<TDuration> snapshotUpdatePeriod)
     static std::once_flag onceFlag;
     std::call_once(onceFlag, [&] {
         const auto& hooks = GetAllocationTagsHooks();
-        tcmalloc::MallocExtension::SetSampleUserDataCallbacks(
-            hooks.CreateAllocationTags,
-            hooks.CopyAllocationTags,
-            hooks.DestroyAllocationTags);
+        Y_UNUSED(hooks);
+        // tcmalloc::MallocExtension::SetSampleUserDataCallbacks(
+        //     hooks.CreateAllocationTags,
+        //     hooks.CopyAllocationTags,
+        //     hooks.DestroyAllocationTags);
 
         if (snapshotUpdatePeriod) {
             std::thread thread([snapshotUpdatePeriod] {

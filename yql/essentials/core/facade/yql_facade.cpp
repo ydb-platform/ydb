@@ -1725,49 +1725,6 @@ TIssues TProgram::CompletedIssues() const {
     return result;
 }
 
-void TProgram::CheckFatalIssues(TIssues& issues) const {
-    bool isFatal = false;
-    auto checkIssue = [&](const TIssue& issue) {
-        if (issue.GetSeverity() == TSeverityIds::S_FATAL) {
-            isFatal = true;
-        }
-    };
-
-    std::function<void(const TIssuePtr& issue)> recursiveCheck = [&](const TIssuePtr& issue) {
-        if (isFatal) {
-            return;
-        }
-
-        checkIssue(*issue);
-        for (const auto& subissue : issue->GetSubIssues()) {
-            recursiveCheck(subissue);
-        }
-    };
-
-    for (const auto& issue : issues) {
-        if (isFatal) {
-            break;
-        }
-
-        checkIssue(issue);
-        // check subissues
-        for (const auto& subissue : issue.GetSubIssues()) {
-            recursiveCheck(subissue);
-        }
-    }
-
-    if (isFatal) {
-        TIssue result;
-        result.SetMessage(
-            TStringBuilder()
-                << "An abnormal situation found, so consider opening a bug report to YQL (st/YQLSUPPORT),"
-                << " because more detailed information is only available in server side logs and/or "
-                << "coredumps.");
-        result.SetCode(TIssuesIds::UNEXPECTED, TSeverityIds::S_FATAL);
-        issues.AddIssue(result);
-    }
-}
-
 TIssue MakeNoBlocksInfoIssue(const TVector<TString>& names, bool isTypes) {
     TIssue result;
     TString msg = TStringBuilder() << "Most frequent " << (isTypes ? "types " : "callables ")

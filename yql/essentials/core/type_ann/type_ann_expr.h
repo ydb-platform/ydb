@@ -33,4 +33,6 @@ TExprNode::TPtr ParseAndAnnotate(
         TExprContext& exprCtx, bool instant, bool wholeProgram,
         TTypeAnnotationContext& typeAnnotationContext);
 
+void CheckFatalTypeError(IGraphTransformer::TStatus status);
+
 }

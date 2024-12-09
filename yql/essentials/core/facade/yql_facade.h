@@ -375,7 +375,6 @@ private:
 
 private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
-    void CheckFatalIssues(TIssues& issues) const;
     void HandleSourceCode(TString& sourceCode);
     void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
         const NSQLTranslation::TTranslationSettings*& currentSettings);

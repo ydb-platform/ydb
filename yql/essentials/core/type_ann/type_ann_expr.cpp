@@ -70,8 +70,8 @@ public:
             IsComplete = true;
         }
 
-        if (Mode == ETypeCheckMode::Repeat && status == TStatus::Error) {
-            throw yexception() << "Detected a type error after initial validation";
+        if (Mode == ETypeCheckMode::Repeat) {
+            CheckFatalTypeError(status);
         }
 
         return status;
@@ -108,6 +108,10 @@ public:
         CallableInputs.clear();
         if (combinedStatus.Level == TStatus::Ok) {
             Processed.clear();
+        }
+
+        if (Mode == ETypeCheckMode::Repeat) {
+            CheckFatalTypeError(combinedStatus);
         }
 
         return combinedStatus;
@@ -710,6 +714,12 @@ TExprNode::TPtr ParseAndAnnotate(
     }
 
     return exprRoot;
+}
+
+void CheckFatalTypeError(IGraphTransformer::TStatus status) {
+    if (status == IGraphTransformer::TStatus::Error) {
+        throw yexception() << "Detected a type error after initial validation";
+    }
 }
 
 } // namespace NYql

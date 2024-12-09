@@ -43,6 +43,8 @@ public:
     TTransformationPipeline& AddTableMetadataLoaderTransformer(EYqlIssueCode issueCode = TIssuesIds::CORE_TABLE_METADATA_LOADER);
     TTransformationPipeline& AddTypeAnnotationTransformer(TAutoPtr<IGraphTransformer> callableTransformer, EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN,
         ETypeCheckMode mode = ETypeCheckMode::Single);
+    TTransformationPipeline& AddTypeAnnotationTransformerWithMode(EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN,
+        ETypeCheckMode mode = ETypeCheckMode::Single);
     TTransformationPipeline& AddTypeAnnotationTransformer(EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN, bool twoStages = false);
 
     TTransformationPipeline& Add(TAutoPtr<IGraphTransformer> transformer, const TString& stageName,

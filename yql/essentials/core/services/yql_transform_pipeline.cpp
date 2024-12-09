@@ -259,6 +259,12 @@ TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer(
     return *this;
 }
 
+TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformerWithMode(EYqlIssueCode issueCode, ETypeCheckMode mode) {
+    auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_);
+    AddTypeAnnotationTransformer(callableTransformer, issueCode, mode);
+    return *this;
+}
+
 TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer(EYqlIssueCode issueCode, bool twoStages)
 {
     if (twoStages) {

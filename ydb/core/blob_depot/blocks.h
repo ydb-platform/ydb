@@ -44,6 +44,7 @@ namespace NKikimr::NBlobDepot {
         void OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
             std::unique_ptr<IEventHandle> response);
         void Handle(TEvBlobDepot::TEvBlock::TPtr ev);
+        void Handle(TEvBlobDepot::TEvGetBlock::TPtr ev);
         void Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev);
 
         bool CheckBlock(ui64 tabletId, ui32 generation) const;

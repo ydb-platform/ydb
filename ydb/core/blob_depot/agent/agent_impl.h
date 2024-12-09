@@ -11,6 +11,7 @@ namespace NKikimr::NBlobDepot {
         XX(EvPut) \
         XX(EvGet) \
         XX(EvBlock) \
+        XX(EvGetBlock) \
         XX(EvDiscover) \
         XX(EvRange) \
         XX(EvCollectGarbage) \
@@ -124,6 +125,7 @@ namespace NKikimr::NBlobDepot {
             TEvBlobDepot::TEvRegisterAgentResult*,
             TEvBlobDepot::TEvAllocateIdsResult*,
             TEvBlobDepot::TEvBlockResult*,
+            TEvBlobDepot::TEvGetBlockResult*,
             TEvBlobDepot::TEvQueryBlocksResult*,
             TEvBlobDepot::TEvCollectGarbageResult*,
             TEvBlobDepot::TEvCommitBlobSeqResult*,
@@ -228,6 +230,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobDepot::TEvRegisterAgentResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvAllocateIdsResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvBlockResult, HandleTabletResponse);
+                hFunc(TEvBlobDepot::TEvGetBlockResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvQueryBlocksResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvCollectGarbageResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvCommitBlobSeqResult, HandleTabletResponse);

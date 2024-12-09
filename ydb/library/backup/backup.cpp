@@ -3,9 +3,12 @@
 #include "util.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+#include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -32,16 +35,39 @@
 
 namespace NYdb::NBackup {
 
-static constexpr const char *SCHEME_FILE_NAME = "scheme.pb";
-static constexpr const char *PERMISSIONS_FILE_NAME = "permissions.pb";
-static constexpr const char *INCOMPLETE_DATA_FILE_NAME = "incomplete.csv";
-static constexpr const char *INCOMPLETE_FILE_NAME = "incomplete";
-static constexpr const char *EMPTY_FILE_NAME = "empty_dir";
+enum FilesType {
+    SCHEME = 0,
+    PERMISSIONS,
+    CHANGEFEED_DESCRIPTION,
+    TOPIC_DESCRIPTION,
+    INCOMPLETE_DATA,
+    INCOMPLETE,
+    EMPTY
+};
+
+static constexpr const char* const FILE_NAME[] = {
+    "scheme.pb",
+    "permissions.pb",
+    "changefeed_description.pb",
+    "topic_description.pb",
+    "incomplete.csv",
+    "incomplete",
+    "empty_dir"
+};
+
+static constexpr const char* const OBJ_TYPE[] = {
+    "scheme",
+    "ACL",
+    "changefeed.pb",
+    "topic.pb",
+    "incomplete",
+    "incomplete",
+    "empty_dir"
+};
 
 static constexpr size_t IO_BUFFER_SIZE = 2 << 20; // 2 MiB
 static constexpr i64 FILE_SPLIT_THRESHOLD = 128 << 20; // 128 MiB
 static constexpr i64 READ_TABLE_RETRIES = 100;
-
 
 ////////////////////////////////////////////////////////////////////////////////
 //                               Util
@@ -284,7 +310,7 @@ TMaybe<TValue> TryReadTable(TDriver driver, const NTable::TTableDescription& des
         VerifyStatus(resultSetStreamPart, TStringBuilder() << "Read next part of " << fullTablePath.Quote() << " failed");
         TResultSet resultSetCurrent = resultSetStreamPart.ExtractPart();
 
-        auto tmpFile = TFile(folderPath.Child(INCOMPLETE_DATA_FILE_NAME), CreateAlways | WrOnly);
+        auto tmpFile = TFile(folderPath.Child(FILE_NAME[INCOMPLETE_DATA]), CreateAlways | WrOnly);
         TStringStream ss;
         ss.Reserve(IO_BUFFER_SIZE);
 
@@ -322,7 +348,7 @@ TMaybe<TValue> TryReadTable(TDriver driver, const NTable::TTableDescription& des
             }
             if (tmpFile.GetLength() > FILE_SPLIT_THRESHOLD) {
                 CloseAndRename(tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
-                tmpFile = TFile(folderPath.Child(INCOMPLETE_DATA_FILE_NAME), CreateAlways | WrOnly);
+                tmpFile = TFile(folderPath.Child(FILE_NAME[INCOMPLETE_DATA]), CreateAlways | WrOnly);
             }
         }
         Flush(tmpFile, ss, lastWrittenPK, lastReadPK);
@@ -458,17 +484,27 @@ void DropTable(TDriver driver, const TString& path) {
     VerifyStatus(status, TStringBuilder() << "Drop table " << path.Quote() << " failed");
 }
 
+TFsPath CreateDirectory(const TFsPath& folderPath, const TString& name) {
+    TFsPath childFolderPath = folderPath.Child(name);
+    LOG_D("Process " << childFolderPath.GetPath().Quote());
+    childFolderPath.MkDir();
+    return childFolderPath;
+}
+
+void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& folderPath, FilesType type) {
+    TString protoStr;
+    google::protobuf::TextFormat::PrintToString(proto, &protoStr);
+    LOG_D("Write " << OBJ_TYPE[type] << " into " << folderPath.Child(FILE_NAME[type]).GetPath().Quote());
+    TFile outFile(folderPath.Child(FILE_NAME[type]), CreateAlways | WrOnly);
+    outFile.Write(protoStr.data(), protoStr.size());
+}
+
 void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
     auto entry = DescribePath(driver, JoinDatabasePath(dbPrefix, path));
     Ydb::Scheme::ModifyPermissionsRequest proto;
     entry.SerializeTo(proto);
 
-    TString permissionsStr;
-    google::protobuf::TextFormat::PrintToString(proto, &permissionsStr);
-    LOG_D("Write ACL into " << folderPath.Child(PERMISSIONS_FILE_NAME).GetPath().Quote());
-
-    TFile outFile(folderPath.Child(PERMISSIONS_FILE_NAME), CreateAlways | WrOnly);
-    outFile.Write(permissionsStr.data(), permissionsStr.size());
+    WriteProtoToFile(proto, folderPath, PERMISSIONS);
 }
 
 void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, const TString& path,
@@ -483,12 +519,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     auto desc = DescribeTable(driver, fullPath);
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
 
-    TString schemaStr;
-    google::protobuf::TextFormat::PrintToString(proto, &schemaStr);
-    LOG_D("Write scheme into " << folderPath.Child(SCHEME_FILE_NAME).GetPath().Quote());
-    TFile outFile(folderPath.Child(SCHEME_FILE_NAME), CreateAlways | WrOnly);
-    outFile.Write(schemaStr.data(), schemaStr.size());
-
+    WriteProtoToFile(proto, folderPath, SCHEME);
     BackupPermissions(driver, dbPrefix, path, folderPath);
 
     if (!schemaOnly) {
@@ -535,15 +566,15 @@ static bool IsExcluded(const TString& path, const TVector<TRegExMatch>& exclusio
 static void MaybeCreateEmptyFile(const TFsPath& folderPath) {
     TVector<TString> children;
     folderPath.ListNames(children);
-    if (children.empty() || (children.size() == 1 && children[0] == INCOMPLETE_FILE_NAME)) {
-        TFile(folderPath.Child(EMPTY_FILE_NAME), CreateAlways);
+    if (children.empty() || (children.size() == 1 && children[0] == FILE_NAME[INCOMPLETE])) {
+        TFile(folderPath.Child(FILE_NAME[EMPTY]), CreateAlways);
     }
 }
 
 void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& backupPrefix,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered) {
-    TFile(folderPath.Child(INCOMPLETE_FILE_NAME), CreateAlways);
+    TFile(folderPath.Child(FILE_NAME[INCOMPLETE]), CreateAlways);
 
     TMap<TString, TAsyncStatus> copiedTablesStatuses;
     TVector<NTable::TCopyItem> tablesToCopy;
@@ -557,15 +588,13 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                 continue;
             }
 
-            TFsPath childFolderPath = folderPath.Child(dbIt.GetRelPath());
-            LOG_D("Process " << childFolderPath.GetPath().Quote());
-            childFolderPath.MkDir();
-            TFile(childFolderPath.Child(INCOMPLETE_FILE_NAME), CreateAlways).Close();
+            auto childFolderPath = CreateDirectory(folderPath, dbIt.GetRelPath());
+            TFile(childFolderPath.Child(FILE_NAME[INCOMPLETE]), CreateAlways).Close();
             if (schemaOnly) {
                 if (dbIt.IsTable()) {
                     BackupTable(driver, dbIt.GetTraverseRoot(), backupPrefix, dbIt.GetRelPath(),
                             childFolderPath, schemaOnly, preservePoolKinds, ordered);
-                    childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
+                    childFolderPath.Child(FILE_NAME[INCOMPLETE]).DeleteIfExists();
                 }
             } else if (!avoidCopy) {
                 if (dbIt.IsTable()) {
@@ -597,16 +626,16 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
             if (dbIt.IsTable()) {
                 // If table backup was not successful exception should be thrown,
                 // so control flow can't reach this line. Check it just to be sure
-                Y_ENSURE(!childFolderPath.Child(INCOMPLETE_FILE_NAME).Exists());
+                Y_ENSURE(!childFolderPath.Child(FILE_NAME[INCOMPLETE]).Exists());
             } else if (dbIt.IsDir()) {
                 MaybeCreateEmptyFile(childFolderPath);
                 BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
             }
 
-            childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
+            childFolderPath.Child(FILE_NAME[INCOMPLETE]).DeleteIfExists();
             dbIt.Next();
         }
-        folderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
+        folderPath.Child(FILE_NAME[INCOMPLETE]).DeleteIfExists();
         return;
     }
 
@@ -646,13 +675,13 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                 }
             }
 
-            childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
+            childFolderPath.Child(FILE_NAME[INCOMPLETE]).DeleteIfExists();
             dbIt.Next();
         }
     }
     Y_ENSURE(copiedTablesStatuses.empty(), "Some tables was copied but not backuped, example of such table, path# "
             << copiedTablesStatuses.begin()->first.Quote());
-    folderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
+    folderPath.Child(FILE_NAME[INCOMPLETE]).DeleteIfExists();
 }
 
 void CheckedCreateBackupFolder(const TFsPath& folderPath) {

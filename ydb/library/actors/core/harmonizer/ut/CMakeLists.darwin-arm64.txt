@@ -42,6 +42,7 @@ target_link_options(ydb-library-actors-core-harmonizer-ut PRIVATE
 
 target_sources(ydb-library-actors-core-harmonizer-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/harmonizer/ut/harmonizer_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/harmonizer/ut/history_ut.cpp
 )
 
 
@@ -50,7 +51,7 @@ set_property(
   ydb-library-actors-core-harmonizer-ut
   PROPERTY
   SPLIT_FACTOR
-  10
+  1
 )
 
 add_yunittest(

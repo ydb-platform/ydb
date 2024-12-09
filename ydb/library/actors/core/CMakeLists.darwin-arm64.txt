@@ -19,6 +19,7 @@ get_built_tool_path(
   enum_parser
 )
 
+add_subdirectory(harmonizer)
 add_subdirectory(ut)
 add_subdirectory(ut_fat)
 
@@ -30,6 +31,7 @@ target_link_libraries(library-actors-core PUBLIC
   yutil
   tools-enum_parser-enum_serialization_runtime
   library-actors-actor_type
+  actors-core-harmonizer
   library-actors-memory_log
   library-actors-prof
   library-actors-protos
@@ -67,7 +69,6 @@ target_sources(library-actors-core PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/executor_pool_io.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/executor_pool_shared.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/executor_thread.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/harmonizer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/interconnect.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/io_dispatcher.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/log.cpp
@@ -106,7 +107,6 @@ target_sources(library-actors-core PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/executor_pool_io.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/executor_pool_shared.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/executor_thread.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/harmonizer.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/hfunc.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/interconnect.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/invoke.h

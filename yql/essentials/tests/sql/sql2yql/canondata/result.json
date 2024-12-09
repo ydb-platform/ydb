@@ -6908,6 +6908,13 @@
             "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql2yql.test_expr-uuid_order_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-variant_builtins_opt]": [
+        {
+            "checksum": "00f7f7ba82bd2474f7b1bfd7771323f9",
+            "size": 3847,
+            "uri": "https://{canondata_backend}/1936842/4ad1682e9f564ef555f5e0180b972a1adad2fc43/resource.tar.gz#test_sql2yql.test_expr-variant_builtins_opt_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-variant_list_sort]": [
         {
             "checksum": "abd93bfb65a1cb17235be843d4cbd2c3",
@@ -6915,11 +6922,25 @@
             "uri": "https://{canondata_backend}/1936273/4a1b39013e1bae40e722cff8ccef8829784964e2/resource.tar.gz#test_sql2yql.test_expr-variant_list_sort_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-variant_struct_builtins]": [
+        {
+            "checksum": "cb90540556b74bdbb9a95959c62a3cbf",
+            "size": 5780,
+            "uri": "https://{canondata_backend}/1936842/4ad1682e9f564ef555f5e0180b972a1adad2fc43/resource.tar.gz#test_sql2yql.test_expr-variant_struct_builtins_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-variant_struct_comp]": [
         {
             "checksum": "3f85119441280a8729ef912910ac7745",
             "size": 9664,
             "uri": "https://{canondata_backend}/1936273/4a1b39013e1bae40e722cff8ccef8829784964e2/resource.tar.gz#test_sql2yql.test_expr-variant_struct_comp_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-variant_tuple_builtins]": [
+        {
+            "checksum": "41d01afdf58dcca513a44186a279efcb",
+            "size": 5682,
+            "uri": "https://{canondata_backend}/1936842/4ad1682e9f564ef555f5e0180b972a1adad2fc43/resource.tar.gz#test_sql2yql.test_expr-variant_tuple_builtins_/sql.yql"
         }
     ],
     "test_sql2yql.test[expr-variant_tuple_comp]": [
@@ -24821,14 +24842,29 @@
             "uri": "file://test_sql_format.test_expr-uuid_order_/formatted.sql"
         }
     ],
+    "test_sql_format.test[expr-variant_builtins_opt]": [
+        {
+            "uri": "file://test_sql_format.test_expr-variant_builtins_opt_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[expr-variant_list_sort]": [
         {
             "uri": "file://test_sql_format.test_expr-variant_list_sort_/formatted.sql"
         }
     ],
+    "test_sql_format.test[expr-variant_struct_builtins]": [
+        {
+            "uri": "file://test_sql_format.test_expr-variant_struct_builtins_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[expr-variant_struct_comp]": [
         {
             "uri": "file://test_sql_format.test_expr-variant_struct_comp_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-variant_tuple_builtins]": [
+        {
+            "uri": "file://test_sql_format.test_expr-variant_tuple_builtins_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-variant_tuple_comp]": [

@@ -1,13 +1,8 @@
 {%- set publish = target.publish -%}
 {%- set libraries = target.consumer|selectattr('type', 'eq', 'library') -%}
-
 import com.google.protobuf.gradle.*
 
-val baseBuildDir = "{{ export_root }}/gradle.build/"
-buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", "."))
-subprojects {
-    buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", "."))
-}
+{% include "[generator]/builddir.jinja" %}
 
 val mainProtosDir = File(buildDir, "main_protos")
 {%- if libraries|length %}
@@ -22,26 +17,9 @@ plugins {
     `signing`
 {%- endif %}
 }
-{%- if publish %}
+{%- include "[generator]/publish.jinja" %}
 
-group = "{{ target.publish_group }}"
-version = {% if target.publish_version -%}"{{ target.publish_version }}"{%- else -%}project.properties["version"]{%- endif %}
-{%- endif %}
-
-val bucketUsername: String by project
-val bucketPassword: String by project
-repositories {
-    repositories {
-        maven {
-            url = uri("https://bucket.yandex-team.ru/v1/maven/central")
-            credentials {
-                username = "$bucketUsername"
-                password = "$bucketPassword"
-            }
-        }
-    }
-}
-
+{% include "[generator]/bucket.jinja" %}
 val project_root = "{{ arcadia_root }}"
 
 sourceSets {

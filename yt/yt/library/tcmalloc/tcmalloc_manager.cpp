@@ -358,7 +358,7 @@ private:
             proposed.second,
             proposed.first);
 
-        tcmalloc::MallocExtension::SetMemoryLimit(proposed);
+        tcmalloc::MallocExtension::SetMemoryLimit(proposed.second, proposed.first ? tcmalloc::MallocExtension::LimitKind::kHard : tcmalloc::MallocExtension::LimitKind::kSoft);
         AppliedLimit_ = proposed;
     }
 
@@ -419,7 +419,7 @@ public:
         tcmalloc::MallocExtension::SetMaxPerCpuCacheSize(config->MaxPerCpuCacheSize);
 
         if (config->GuardedSamplingRate) {
-            tcmalloc::MallocExtension::SetGuardedSamplingRate(*config->GuardedSamplingRate);
+            tcmalloc::MallocExtension::SetGuardedSamplingInterval(*config->GuardedSamplingRate);
             tcmalloc::MallocExtension::ActivateGuardedSampling();
         }
 

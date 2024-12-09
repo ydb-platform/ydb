@@ -349,15 +349,15 @@ void ConfigureAllocator(const TAllocatorOptions& options)
 
     absl::SetStackUnwinder(NYTProf::AbslStackUnwinder);
     // TODO(prime@): tune parameters.
-    tcmalloc::MallocExtension::SetProfileSamplingRate(2_MB);
+    tcmalloc::MallocExtension::SetProfileSamplingInterval(2_MB);
     if (options.TCMallocGuardedSamplingRate) {
-        tcmalloc::MallocExtension::SetGuardedSamplingRate(*options.TCMallocGuardedSamplingRate);
+        tcmalloc::MallocExtension::SetGuardedSamplingInterval(*options.TCMallocGuardedSamplingRate);
         tcmalloc::MallocExtension::ActivateGuardedSampling();
     }
     tcmalloc::MallocExtension::SetMaxPerCpuCacheSize(3_MB);
     tcmalloc::MallocExtension::SetMaxTotalThreadCacheBytes(24_MB);
     tcmalloc::MallocExtension::SetBackgroundReleaseRate(tcmalloc::MallocExtension::BytesPerSecond{32_MB});
-    tcmalloc::MallocExtension::EnableForkSupport();
+    // tcmalloc::MallocExtension::EnableForkSupport();
 #else
     Y_UNUSED(options);
 #endif

@@ -2891,17 +2891,17 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::ChangefeedDescription& prot
     proto.set_aws_region(AwsRegion_);
 
     switch (State_) {
-        case EChangefeedState::Enabled:
-            proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_ENABLED);
-            break;
-        case EChangefeedState::Disabled:
-            proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_DISABLED);
-            break;
-        case EChangefeedState::InitialScan:
-            proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_INITIAL_SCAN);
-            break;
-        case EChangefeedState::Unknown:
-            break; 
+    case EChangefeedState::Enabled:
+        proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_ENABLED);
+        break;
+    case EChangefeedState::Disabled:
+        proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_DISABLED);
+        break;
+    case EChangefeedState::InitialScan:
+        proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_INITIAL_SCAN);
+        break;
+    case EChangefeedState::Unknown:
+        break; 
     }
 
     switch (Mode_) {

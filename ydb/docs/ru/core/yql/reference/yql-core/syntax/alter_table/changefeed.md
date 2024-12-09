@@ -27,7 +27,7 @@
 
     * `DEBEZIUM_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
 * `VIRTUAL_TIMESTAMPS` — включение-выключение {% if oss == true and backend_name == "YDB" %}[виртуальных меток времени](../../../../concepts/cdc.md#virtual-timestamps){% else %}виртуальных меток времени{% endif %}.
-* `RESOLVED_TIMESTAMPS` — периодичность выгрузки [меток-барьеров](../../../../concepts/cdc.md#resolved-timestamps). Тип значения — `Interval`. По умолчанию выключено.
+* `BARRIES_INTERVAL` — периодичность выгрузки [барьеров](../../../../concepts/cdc.md#barriers). Тип значения — `Interval`. По умолчанию выключено.
 * `RETENTION_PERIOD` — {% if oss == true and backend_name == "YDB" %}[время хранения записей](../../../../concepts/cdc.md#retention-period){% else %}время хранения записей{% endif %}. Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
 * `TOPIC_MIN_ACTIVE_PARTITIONS` — {% if oss == true and backend_name == "YDB" %}[количество партиций топика](../../../../concepts/cdc.md#topic-partitions){% else %}количество партиций топика{% endif %}. По умолчанию количество партиций топика равно количеству партиций таблицы.
 * `INITIAL_SCAN` — включение-выключение {% if oss == true and backend_name == "YDB" %}[первоначального сканирования](../../../../concepts/cdc.md#initial-scan){% else %}первоначального сканирования{% endif %} таблицы. По умолчанию выключено.
@@ -67,14 +67,14 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 );
 ```
 
-Пример создания потока изменений с виртуальными метками времени и метками-барьерами раз в 10 секунд:
+Пример создания потока изменений с виртуальными метками времени и барьерами раз в 10 секунд:
 
 ```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
     VIRTUAL_TIMESTAMPS = TRUE,
-    RESOLVED_TIMESTAMPS = Interval('PT10S')
+    BARRIERS_INTERVAL = Interval('PT10S')
 );
 ```
 

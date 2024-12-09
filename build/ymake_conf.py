@@ -1449,7 +1449,6 @@ class GnuCompiler(Compiler):
                 '-fcolor-diagnostics',
                 # Enable aligned allocation
                 '-faligned-allocation',
-                '-fdebug-default-version=4',
             ]
         elif self.tc.is_gcc:
             if self.target.is_xtensa or self.target.is_tc32:

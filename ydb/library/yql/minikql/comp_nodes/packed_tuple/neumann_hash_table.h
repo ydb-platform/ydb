@@ -122,7 +122,7 @@ class TNeumannHashTable {
     using OnMatchCallback = void(const ui8 *tuple);
 
     TNeumannHashTable(const TTupleLayout *layout)
-        : Layout_(layout), IsInplace_(layout->TotalRowSize <= 32),
+        : Layout_(layout), IsInplace_(layout->TotalRowSize <= 16),
           BufferSlotSize_(IsInplace_ ? layout->TotalRowSize
                                      : sizeof(TOutplace)) {
         Clear();
@@ -210,6 +210,10 @@ class TNeumannHashTable {
         for (auto it = begin; it != end; it += BufferSlotSize_) {
             const ui8 *row;
             if (IsInplace_) {
+                const Hash rowHash = ReadUnaligned<Hash>(it);
+                if (rowHash != hash) {
+                    continue;
+                }
                 row = it;
             } else {
                 const auto *const outRow =

@@ -3,7 +3,9 @@
 #include "util.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+#include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -487,11 +489,11 @@ Ydb::Table::ChangefeedDescription ProtoFromChangefeedDesc(const NTable::TChangef
     return protoChangeFeedDesc;
 }
 
-NTopic::TTopicDescription GetTopicDescription(TDriver driver, const TString& path) {
+NTopic::TDescribeTopicResult GetTopicDescription(TDriver driver, const TString& path) {
     NYdb::NTopic::TTopicClient client(driver);
-    auto result =
-        client.DescribeTopic(path).GetValueSync();
-    return result.GetTopicDescription();
+    return NConsoleClient::RetryFunction([&]() {
+        return client.DescribeTopic(path).GetValueSync();
+    });
 }
 
 void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& folderPath, const TString& fileName) {
@@ -511,8 +513,9 @@ void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& p
         TFsPath changefeedDirPath = CreateDirectory(folderPath, changefeedDesc.GetName());
         
         auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
-        const auto topicDescription = GetTopicDescription(driver, JoinDatabasePath(dirPath, changefeedDesc.GetName()));
-        Cout << topicDescription.GetOwner() << Endl;
+        const auto descTopicResult = GetTopicDescription(driver, JoinDatabasePath(dirPath, changefeedDesc.GetName()));
+        NConsoleClient::ThrowOnError(descTopicResult);
+        const auto& topicDescription = descTopicResult.GetTopicDescription();
         const auto protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
 
         WriteProtoToFile(protoChangeFeedDesc, changefeedDirPath, CHANGEFEED_DESCRIPTION_FILE_NAME);

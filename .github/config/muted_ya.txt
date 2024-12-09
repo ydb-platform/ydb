@@ -7,8 +7,8 @@ ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
 ydb/core/blobstorage/ut_mirror3of4 Mirror3of4.ReplicationSmall
-ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsLocalRecovery.WriteRestartReadHugeDecreased
+ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
 ydb/core/blobstorage/ut_vdisk [*/*] chunk chunk
 ydb/core/blobstorage/ut_vdisk2 VDiskTest.HugeBlobWrite
@@ -57,6 +57,7 @@ ydb/core/kqp/ut/scheme [*/*]+chunk+chunk
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*]+chunk+chunk
+ydb/core/mind/hive/ut THiveTest.TestHiveBalancerNodeRestarts
 ydb/core/persqueue/ut TPQTest.TestReadAndDeleteConsumer
 ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.CDC_Write

@@ -106,10 +106,10 @@ class Runner:
             self.prepare_queries_dir([
                 f"dq.MaxTasksPerStage={self.args.tasks}",
                 "dq.OptLLVM=ON"
-            ] + [
+            ] + ([
                 "dq.UseFinalizeByKey=true",
                 "dq.EnableSpillingNodes=All",
-            ] if self.enable_spilling else [])
+            ] if self.enable_spilling else []))
         self.tpc_dir = pathlib.Path(f"{self.args.downloaders_dir}/tpc/{self.args.variant}/{self.args.datasize}")
         if not self.tpc_dir.exists():
             self.prepare_tpc_dir()

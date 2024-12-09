@@ -2419,8 +2419,11 @@ void TSchemeShard::ChangeTxState(NIceDb::TNiceDb& db, const TOperationId opId, T
 
     const auto& ctx = TActivationContext::AsActorContext();
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Change state for txid " << opId << " "
-                 << (int)TxInFlight[opId].State << " -> " << (int)newState);
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Change state for txid# " << opId
+                 << " stateChange# " << (int)TxInFlight[opId].State << " -> " << (int)newState
+                 << " stateChangeName# " << TTxState::StateName(TxInFlight[opId].State) << " -> " << TTxState::StateName(newState)
+                 );
 
     FindTx(opId)->State = newState;
     db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(

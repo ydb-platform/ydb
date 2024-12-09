@@ -42,8 +42,8 @@ namespace NIncrRestore {
 class TConfigurePartsAtTable : public TSubOperationState {
     TString DebugHint() const override {
         return TStringBuilder()
-            << "NIncrRestoreState::TConfigurePartsAtTable"
-            << " operationId: " << OperationId;
+            << "NIncrRestore::TConfigurePartsAtTable"
+            << " operationId# " << OperationId;
     }
 
     static bool IsExpectedTxType(TTxState::ETxType txType) {
@@ -83,7 +83,13 @@ public:
         , RestoreOp(restoreOp)
         , LoopStep(loopStep)
     {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " Constructed op# " << restoreOp.ShortDebugString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint()
+                    << " Constructed"
+                    << " opId# " << id
+                    << " op# " << restoreOp.ShortDebugString()
+                    << " LoopStep# " << LoopStep
+                    );
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -141,8 +147,8 @@ private:
 class TProposeAtTable : public TSubOperationState {
     TString DebugHint() const override {
         return TStringBuilder()
-            << "NIncrRestoreState::TProposeAtTable"
-            << " operationId: " << OperationId;
+            << "NIncrRestore::TProposeAtTable"
+            << " operationId# " << OperationId;
     }
 
     static bool IsExpectedTxType(TTxState::ETxType txType) {
@@ -240,8 +246,8 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TRestoreMultipleIncrementalBackups TDone"
-            << ", operationId: " << OperationId;
+            << "NIncrRestore::TDone"
+            << ", operationId# " << OperationId;
     }
 public:
     explicit TDone(
@@ -284,8 +290,8 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-                << "NIncrRestoreState::TCopyTableBarrier"
-                << " operationId: " << OperationId;
+                << "NIncrRestore::TCopyTableBarrier"
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -355,6 +361,9 @@ class TNewRestoreFromAtTable : public TSubOperation {
             Y_ABORT_UNLESS(txState);
             ++(txState->LoopStep);
             if (txState->LoopStep < Transaction.GetRestoreMultipleIncrementalBackups().SrcPathIdsSize()) {
+                txState->Shards.clear();
+                txState->SchemeChangeNotificationReceived.clear();
+                txState->ReadyForNotifications = false;
                 txState->TargetPathId = PathIdFromPathId(Transaction.GetRestoreMultipleIncrementalBackups().GetSrcPathIds(txState->LoopStep));
                 txState->TxShardsListFinalized = false;
                 // TODO preserve TxState

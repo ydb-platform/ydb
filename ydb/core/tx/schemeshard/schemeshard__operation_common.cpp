@@ -541,6 +541,22 @@ bool CollectProposeTxResults(
                     << ", shardIdx: " << shardIdx
                     << ", operationId: " << operationId
                     << ", left await: " << txState.ShardsInProgress.size()
+                    << ", shardsLeft: " << [&](){
+                        TStringBuilder result;
+                        result << "[";
+                        auto it = txState.ShardsInProgress.begin();
+                        for (ui32 i = 0; i < 8 && i < txState.ShardsInProgress.size(); ++i, ++it) {
+                            if (i != 0) {
+                                result << ",";
+                            }
+                            result << *it;
+                        }
+                        if (txState.ShardsInProgress.size() > 8) {
+                            result << ",...";
+                        }
+                        result << "]";
+                        return result;
+                    }()
                     << ", at schemeshard: " << ssId);
 
     if (txState.ShardsInProgress.empty()) {
@@ -646,6 +662,22 @@ bool CollectSchemaChanged(
                     << ", shardIdx: " << shardIdx
                     << ", datashard: " << datashardId
                     << ", left await: " << txState.ShardsInProgress.size()
+                    << ", shardsLeft: " << [&](){
+                        TStringBuilder result;
+                        result << "[";
+                        auto it = txState.ShardsInProgress.begin();
+                        for (ui32 i = 0; i < 8 && i < txState.ShardsInProgress.size(); ++i, ++it) {
+                            if (i != 0) {
+                                result << ",";
+                            }
+                            result << *it;
+                        }
+                        if (txState.ShardsInProgress.size() > 8) {
+                            result << ",...";
+                        }
+                        result << "]";
+                        return result;
+                    }()
                     << ", txState.State: " << TTxState::StateName(txState.State)
                     << ", txState.ReadyForNotifications: " << txState.ReadyForNotifications
                     << ", at schemeshard: " << ssId);
@@ -653,8 +685,23 @@ bool CollectSchemaChanged(
     if (txState.ShardsInProgress.empty()) {
         AckAllSchemaChanges(operationId, txState, context);
 
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->ChangeTxState(db, operationId, TTxState::Done);
+        if (txState.TxType != TTxState::TxRestoreIncrementalBackupAtTable) {
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->ChangeTxState(db, operationId, TTxState::Done);
+        } else {
+            // Y_ABORT("found ya!");
+            // ++(txState->LoopStep);
+            // if (txState->LoopStep < Transaction.GetRestoreMultipleIncrementalBackups().SrcPathIdsSize()) {
+            //     txState->Shards.clear();
+            //     txState->SchemeChangeNotificationReceived.clear();
+            //     txState->ReadyForNotifications = false;
+            //     txState->TargetPathId = PathIdFromPathId(Transaction.GetRestoreMultipleIncrementalBackups().GetSrcPathIds(txState->LoopStep));
+            //     txState->TxShardsListFinalized = false;
+            //     // TODO preserve TxState
+            //     return TTxState::ConfigureParts;
+            // }
+        }
+
         return true;
     }
 
@@ -1028,8 +1075,10 @@ bool TProposedWaitParts::ProgressState(TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
 
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " ProgressState"
-                    << " at tablet: " << ssId);
+                    DebugHint()
+                    << " ProgressState"
+                    << " at tablet: " << ssId
+                    );
 
     TTxState* txState = context.SS->FindTx(OperationId);
 
@@ -1042,7 +1091,7 @@ bool TProposedWaitParts::ProgressState(TOperationContext& context) {
             context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
         }
         Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
-        context.OnComplete.RouteByTablet(OperationId,  context.SS->ShardInfos.at(shard.Idx).TabletID);
+        context.OnComplete.RouteByTablet(OperationId, context.SS->ShardInfos.at(shard.Idx).TabletID);
     }
     txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
 
@@ -1054,10 +1103,23 @@ bool TProposedWaitParts::ProgressState(TOperationContext& context) {
 
     // Got notifications from all datashards?
     if (txState->ShardsInProgress.empty()) {
+        LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint()
+                    << " ProgressState got all notifications"
+                    << " at tablet# " << ssId
+                    << " NextState# " << (ui32)NextState
+                    );
         AckAllSchemaChanges(OperationId, *txState, context);
         context.SS->ChangeTxState(db, OperationId, NextState);
         return true;
     }
+
+    LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint()
+                << " ProgressState waiting for notifications"
+                << " ShardsInProgress# " << txState->ShardsInProgress.size()
+                << " TotalShards# " << txState->Shards.size()
+                );
 
     return false;
 }

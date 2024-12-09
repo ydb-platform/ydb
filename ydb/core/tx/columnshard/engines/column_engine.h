@@ -49,7 +49,7 @@ struct TSelectInfo {
 
     TStats Stats() const;
 
-    void DebugStream(IOutputStream& out);
+    TString DebugString() const;
 };
 
 class TColumnEngineStats {

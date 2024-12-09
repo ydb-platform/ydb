@@ -699,26 +699,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
         << ", offset# " << partitionIt->second.Offset);
     WriteToStreamOrDie(ctx, std::move(result));
 
-    if (ev->Get()->Offset == partitionIt->second.EndOffset && partitionIt->second.HasChildren) {
-        partitionIt->second.CommitedToFinish = true;
-
-        auto topicName = partitionIt->second.Topic->GetInternalName();
-        auto topicIt = Topics.find(partitionIt->second.Topic->GetInternalName());
-        if (topicIt == Topics.end()) {
-            return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
-                << "unknown topic partition_session_id: " << assignId, ctx);
-        }
-
-        auto& topic = topicIt->second;
-        for (auto& child: topic.PartitionGraph->GetPartition(partitionIt->second.Partition.Partition)->DirectChildren) {
-            for (auto& otherPartitions: Partitions) {
-                if (otherPartitions.second.Partition.Partition == child->Id) {
-                    ctx.Send(otherPartitions.second.Actor, new TEvPQProxy::TEvParentCommitedToFinish(partitionIt->second.Partition.Partition));
-                }
-            }
-        }
-
-    }
 }
 
 template <bool UseMigrationProtocol>
@@ -1114,7 +1094,13 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
                 return CloseSession(PersQueue::ErrorCode::OVERLOAD, TStringBuilder()
                     << "metering mode of topic: " << name << " has been changed", ctx);
             }
+            it->second.PartitionGraph = t.PartitionGraph;
         }
+    }
+
+    while (!Locks.empty()) {
+        ctx.Send(ctx.SelfID, std::move(Locks.front()));
+        Locks.pop_front();
     }
 }
 
@@ -1233,6 +1219,14 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     }
 
     auto& topic = topicIt->second;
+
+    auto* partitionNode = topic.PartitionGraph->GetPartition(record.GetPartition());
+    if (!partitionNode) {
+        Locks.push_back(ev->Release());
+        ForceACLCheck = true;
+        RecheckACL(ctx);
+        return;
+    }
 
     // TODO: counters
     if (NumPartitionsFromTopic[name]++ == 0) {
@@ -2395,6 +2389,15 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
 
     auto& topic = it->second;
     NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
+
+    std::unordered_set<ui64> childs(msg->ChildPartitionIds.begin(), msg->ChildPartitionIds.end());
+    for (auto& partition: Partitions) {
+        if (partition.second.Partition.Partition == msg->PartitionId) {
+            partition.second.CommitedToFinish = true;
+        } else if (childs.contains(partition.second.Partition.Partition)) {
+            ctx.Send(partition.second.Actor, new TEvPQProxy::TEvParentCommitedToFinish(msg->PartitionId));
+        }
+    }
 
     if constexpr (!UseMigrationProtocol) {
         if (AutoPartitioningSupport) {

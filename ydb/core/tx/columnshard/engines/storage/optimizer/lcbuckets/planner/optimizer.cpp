@@ -27,6 +27,7 @@ TOptimizerPlanner::TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IS
         for (auto it = levelConstructors.rbegin(); it != levelConstructors.rend(); ++it) {
             --idx;
             Levels.emplace_back((*it)->BuildLevel(nextLevel, idx, Counters->GetLevelCounters(idx)));
+            nextLevel = Levels.back();
         }
     } else {
         Levels.emplace_back(std::make_shared<TZeroLevelPortions>(2, nullptr, Counters->GetLevelCounters(2), TDuration::Max(), 1 << 20));

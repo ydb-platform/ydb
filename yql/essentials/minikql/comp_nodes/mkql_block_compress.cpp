@@ -1,4 +1,5 @@
 #include "mkql_block_compress.h"
+#include "mkql_counters.h"
 
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
@@ -522,6 +523,8 @@ private:
         std::vector<std::shared_ptr<arrow::ArrayData>> Arrays_;
         std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
 
+        NYql::NUdf::TCounter CounterOutputRows_;
+
         TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TBlockType*>& types)
             : TBlockState(memInfo, types.size() + 1U)
             , MaxLength_(CalcBlockLen(std::accumulate(types.cbegin(), types.cend(), 0ULL, [](size_t max, const TBlockType* type){ return std::max(max, CalcMaxBlockItemSize(type->GetItemType())); })))
@@ -532,6 +535,11 @@ private:
                 if (types[i]->GetShape() != TBlockType::EShape::Scalar) {
                     Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i]->GetItemType(), ctx.ArrowMemoryPool, MaxLength_, &ctx.Builder->GetPgBuilder());
                 }
+            }
+            if (ctx.CountersProvider) {
+                // id will be assigned externally in future versions
+                TString id = TString(Operator_Filter) + "0";
+                CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
             }
         }
 
@@ -552,6 +560,9 @@ private:
                 return EStep::Skip;
 
             const auto popCount = GetBitmapPopCount(bitmap);
+
+            CounterOutputRows_.Add(popCount);
+
             if (!popCount)
                 return EStep::Skip;
 

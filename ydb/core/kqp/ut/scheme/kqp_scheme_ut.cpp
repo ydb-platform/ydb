@@ -5310,7 +5310,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
 
-        { // no partition by
+        { // nullable pk columns are disabled by default
+            kikimr.GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetAllowNullableColumnsInPK(false);
             auto query = TStringBuilder() << R"(
                 --!syntax_v1
                 CREATE TABLE `)" << tableName << R"(` (

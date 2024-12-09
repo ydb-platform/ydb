@@ -34,6 +34,22 @@ jobs:
         mainsha=$(git rev-parse HEAD)
         git checkout cmakebuild
         prevsha=$(git rev-parse HEAD)
+        
+        conflicts_file=$(mktemp)
+        for i in $(seq 1 10);do
+          (git merge main --no-commit --no-ff main > $conflicts_file) | true
+          git reset HEAD --hard > /dev/null
+          git clean -fd > /dev/null
+          if [ -s $conflicts_file ];then
+            echo "Conflicts detected, trying to remove referenced CMakeLists* files"
+            grep -E -o '\s\S*CMakeLists\S*\s' $conflicts_file | xargs rm
+            git add .
+            git commit -m "Remove conflicted CMakeLists"
+          else
+            break
+          fi
+        done
+        
         git merge main --no-edit
         currsha=$(git rev-parse HEAD)
         if [ ${prevsha} == ${currsha} ];then

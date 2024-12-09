@@ -97,6 +97,7 @@ private:
     void Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
 
@@ -133,6 +134,7 @@ private:
     class TTxResolveSecretResult;
     class TTxWorkerError;
     class TTxAssignTxId;
+    class TTxHeartbeat;
 
     // tx runners
     void RunTxInitSchema(const TActorContext& ctx);
@@ -153,6 +155,7 @@ private:
     void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
     void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx);
     void RunTxAssignTxId(const TActorContext& ctx);
+    void RunTxHeartbeat(const TActorContext& ctx);
 
     // other
     template <typename T>
@@ -207,6 +210,11 @@ private:
     TMap<TRowVersion, ui64> AssignedTxIds; // tx ids assigned to version
     TMap<TRowVersion, THashSet<ui32>> PendingTxId;
     bool AssignTxIdInFlight = false;
+
+    THashSet<TWorkerId> WorkersWithHeartbeat;
+    TMap<TRowVersion, THashSet<TWorkerId>> WorkersByHeartbeat;
+    THashMap<TWorkerId, TRowVersion> PendingHeartbeats;
+    bool ProcessHeartbeatsInFlight = false;
 
 }; // TController
 

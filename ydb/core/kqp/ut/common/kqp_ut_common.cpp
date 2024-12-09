@@ -123,7 +123,6 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
-    ServerSettings->FeatureFlags.SetEnableImmediateWritingOnBulkUpsert(true);
     ServerSettings->SetNodeCount(settings.NodeCount);
     ServerSettings->SetEnableKqpSpilling(enableSpilling);
     ServerSettings->SetEnableDataColumnForIndexTable(true);

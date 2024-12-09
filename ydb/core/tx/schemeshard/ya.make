@@ -104,6 +104,7 @@ SRCS(
     schemeshard__operation_assign_bsv.cpp
     schemeshard__operation_backup_backup_collection.cpp
     schemeshard__operation_backup_incremental_backup_collection.cpp
+    schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_blob_depot.cpp
     schemeshard__operation_cancel_tx.cpp
     schemeshard__operation_cansel_build_index.cpp

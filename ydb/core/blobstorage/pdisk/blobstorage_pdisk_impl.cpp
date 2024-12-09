@@ -2864,6 +2864,13 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 delete request;
                 return false;
             }
+            if (ev.Offset % GetChunkAppendBlockSize() != 0) {
+                err << Sprintf("Can't write chunkIdx# %" PRIu32 " with not aligned offset# %" PRIu32 " ownerId# %"
+                        PRIu32, ev.ChunkIdx, ev.Offset, (ui32)ev.Owner);
+                SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                delete request;
+                return false;
+            }
             if (ev.ChunkIdx > ChunkState.size()) {
                 err << Sprintf("Can't write chunk: chunkIdx# %" PRIu32
                         " is too large (total# %" PRIu32 ") ownerId# %" PRIu32,

@@ -255,8 +255,16 @@ struct TTestSchema {
 
     static bool InitTiersAndTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle* ttlSettings) {
         ttlSettings->SetVersion(1);
-        if (specials.HasTiers()) {
-            ttlSettings->SetUseTiering("Tiering1");
+        if (!specials.HasTiers() && !specials.HasTtl()) {
+            return false;
+        }
+        ttlSettings->MutableEnabled()->SetColumnName(specials.TtlColumn);
+        for (const auto& tier : specials.Tiers) {
+            UNIT_ASSERT(tier.EvictAfter);
+            UNIT_ASSERT_EQUAL(specials.TtlColumn, tier.TtlColumn);
+            auto* tierSettings = ttlSettings->MutableEnabled()->AddTiers();
+            tierSettings->MutableEvictToExternalStorage()->SetStorage(tier.Name);
+            tierSettings->SetApplyAfterSeconds(tier.EvictAfter->Seconds());
         }
         if (specials.HasTtl()) {
             InitTtl(specials, ttlSettings->MutableEnabled());

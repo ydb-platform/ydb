@@ -480,7 +480,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Name: "Table3"
             ColumnShardCount: 1
             TtlSettings {
-                UseTiering : "Tiering1"
+                Enabled: {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    Tiers: {
+                        ApplyAfterSeconds: 360
+                        EvictToExternalStorage {
+                            Storage: "Tier1"
+                        }
+                    }
+                }
             }
         )";
 
@@ -497,7 +506,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Name: "Table4"
             ColumnShardCount: 1
             TtlSettings {
-                UseTiering : "Tiering1"
+                Enabled: {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    Tiers: {
+                        ApplyAfterSeconds: 3600000000
+                        EvictToExternalStorage {
+                            Storage: "Tier1"
+                        }
+                    }
+                }
             }
         )";
 
@@ -642,7 +660,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"
             AlterTtlSettings {
-                UseTiering : "Tiering1"
+                Enabled: {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    Tiers: {
+                        ApplyAfterSeconds: 3600000000
+                        EvictToExternalStorage {
+                            Storage: "Tier1"
+                        }
+                    }
+                }
             }
         )");
         env.TestWaitNotification(runtime, txId);

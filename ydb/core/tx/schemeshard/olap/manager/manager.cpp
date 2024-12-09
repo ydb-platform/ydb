@@ -3,9 +3,19 @@
 namespace NKikimr::NSchemeShard {
 
 void TTablesStorage::OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
-    const TString& tieringId = object->Description.GetTtlSettings().GetUseTiering();
-    if (!!tieringId) {
-        PathsByTieringId[tieringId].emplace(pathId);
+    for (const auto& tier : object->Description.GetTtlSettings().GetEnabled().GetTiers()) {
+        std::optional<TString> usedExternalStorage;
+        switch (tier.GetActionCase()) {
+            case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
+                usedExternalStorage = tier.GetEvictToExternalStorage().GetStorage();
+                break;
+            case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
+            case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
+                break;
+        }
+        if (usedExternalStorage) {
+            AFL_VERIFY(PathsByTier[*usedExternalStorage].emplace(pathId).second);
+        }
     }
     for (auto&& s : object->GetColumnShards()) {
         TablesByShard[s].AddId(pathId);
@@ -13,11 +23,15 @@ void TTablesStorage::OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr o
 }
 
 void TTablesStorage::OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
-    const TString& tieringId = object->Description.GetTtlSettings().GetUseTiering();
-    if (!!tieringId) {
-        auto it = PathsByTieringId.find(tieringId);
-        if (PathsByTieringId.end() == it) {
-            return;
+    for (const auto& tier : object->Description.GetTtlSettings().GetEnabled().GetTiers()) {
+        std::optional<TString> usedExternalStorage;
+        switch (tier.GetActionCase()) {
+            case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
+                usedExternalStorage = tier.GetEvictToExternalStorage().GetStorage();
+                break;
+            case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
+            case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
+                break;
         }
         it->second.erase(pathId);
         if (it->second.empty()) {

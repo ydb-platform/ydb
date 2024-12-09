@@ -4651,9 +4651,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto desc = session.DescribeTable(tableName).ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
-            auto tiering = desc.GetTableDescription().GetTiering();
-            UNIT_ASSERT(tiering);
-            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering1");
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(ttl->GetTiers()[0].GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
         }
 #endif
         auto query2 = TStringBuilder() << R"(
@@ -4666,9 +4668,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto desc = session.DescribeTable(tableName).ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
-            auto tiering = desc.GetTableDescription().GetTiering();
-            UNIT_ASSERT(tiering);
-            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering2");
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "tier2");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(ttl->GetTiers()[0].GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
         }
 
         auto query3 = TStringBuilder() << R"(
@@ -4695,9 +4699,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto desc = session.DescribeTable(tableName).ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
-            auto tiering = desc.GetTableDescription().GetTiering();
-            UNIT_ASSERT(tiering);
-            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering1");
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(ttl->GetTiers()[0].GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
         }
 
         auto query5 = TStringBuilder() << R"(

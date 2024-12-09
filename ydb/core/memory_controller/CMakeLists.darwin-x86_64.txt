@@ -25,13 +25,14 @@ target_link_libraries(ydb-core-memory_controller PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-base
-  library-actors-core
-  ydb-library-services
-  yql-essentials-minikql
   core-cms-console
   ydb-core-mon_alloc
   ydb-core-node_whiteboard
   ydb-core-tablet
+  library-actors-core
+  ydb-library-services
+  yql-essentials-minikql
+  essentials-utils-memory_profiling
 )
 
 target_sources(ydb-core-memory_controller PRIVATE

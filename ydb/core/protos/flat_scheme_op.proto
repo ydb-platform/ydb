@@ -223,7 +223,7 @@ message TTTLSettings {
     }
 
     message TEvictionToExternalStorageSettings {
-        optional string StorageName = 1;
+        optional string Storage = 1;
     }
 
     message TTier {

@@ -2943,7 +2943,7 @@ std::optional<TTtlTierSettings> TTtlTierSettings::FromProto(const Ydb::Table::Tt
         action = TTtlDeleteAction();
         break;
         case Ydb::Table::TtlTier::kEvictToExternalStorage:
-            action = TTtlEvictToExternalStorageAction(tier.evict_to_external_storage().storage_name());
+            action = TTtlEvictToExternalStorageAction(tier.evict_to_external_storage().storage());
             break;
         case Ydb::Table::TtlTier::ACTION_NOT_SET:
             return std::nullopt;
@@ -3057,15 +3057,15 @@ TValueSinceUnixEpochModeSettings::EUnit TValueSinceUnixEpochModeSettings::UnitFr
 }
 
 TTtlEvictToExternalStorageAction::TTtlEvictToExternalStorageAction(const TString& storageName)
-    : StorageName_(storageName) {
+    : Storage_(storageName) {
 }
 
 void TTtlEvictToExternalStorageAction::SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const {
-    proto.set_storage_name(StorageName_);
+    proto.set_storage(Storage_);
 }
 
-TString TTtlEvictToExternalStorageAction::GetStorageName() const {
-    return StorageName_;
+TString TTtlEvictToExternalStorageAction::GetStorage() const {
+    return Storage_;
 }
 
 TTtlSettings::TTtlSettings(const TVector<TTtlTierSettings>& tiers)

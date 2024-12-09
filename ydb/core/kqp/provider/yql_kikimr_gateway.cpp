@@ -321,7 +321,7 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
             expr.set_expire_after_seconds(tier.ApplyAfter.Seconds());
         }
         if (tier.StorageName) {
-            outTier->mutable_evict_to_external_storage()->set_storage_name(*tier.StorageName);
+            outTier->mutable_evict_to_external_storage()->set_storage(*tier.StorageName);
         } else {
             outTier->mutable_delete_();
         }

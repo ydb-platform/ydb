@@ -472,10 +472,10 @@ public:
     TTtlEvictToExternalStorageAction(const TString& storageName);
     void SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const;
 
-    TString GetStorageName() const;
+    TString GetStorage() const;
 
 private:
-    TString StorageName_;
+    TString Storage_;
 };
 
 class TTtlTierSettings {

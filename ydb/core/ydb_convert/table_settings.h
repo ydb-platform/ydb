@@ -24,7 +24,7 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
 bool FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TTTLSettings::TEnabled& in, Ydb::StatusIds::StatusCode& code, TString& error);
 bool FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& in, Ydb::StatusIds::StatusCode& code, TString& error);
 // in
-bool FillTtlSettings(const NKikimrSchemeOp::TTTLSettings::TEnabled& out, const Ydb::Table::TtlSettings& in, Ydb::StatusIds::StatusCode& code, TString& error);
+bool FillTtlSettings(NKikimrSchemeOp::TTTLSettings::TEnabled& out, const Ydb::Table::TtlSettings& in, Ydb::StatusIds::StatusCode& code, TString& error);
 bool FillTtlSettings(NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& out, const Ydb::Table::TtlSettings& in, Ydb::StatusIds::StatusCode& code, TString& error);
 
 bool FillIndexTablePartitioning(

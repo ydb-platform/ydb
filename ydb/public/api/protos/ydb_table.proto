@@ -435,7 +435,7 @@ message ColumnMeta {
 
 message EvictionToExternalStorageSettings {
     // Path to external data source
-    string storage_name = 1;
+    string storage = 1;
 }
 
 message DateTypeColumnModeSettings {

@@ -537,7 +537,7 @@ bool FillPublicTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb
                 outTier.mutable_delete_();
                 break;
             case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
-                outTier.mutable_evict_to_external_storage()->set_storage_name(inTier.GetEvictToExternalStorage().GetStorageName());
+                outTier.mutable_evict_to_external_storage()->set_storage(inTier.GetEvictToExternalStorage().GetStorage());
                 break;
             case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
                 return bad_request("Undefined tier action");
@@ -663,7 +663,7 @@ bool FillSchemeTtlSettingsImpl(TTtl& out, const Ydb::Table::TtlSettings& in, Ydb
                         outTier->MutableDelete();
                         break;
                     case Ydb::Table::TtlTier::kEvictToExternalStorage:
-                        outTier->MutableEvictToExternalStorage()->SetStorageName(inTier.evict_to_external_storage().storage_name());
+                        outTier->MutableEvictToExternalStorage()->SetStorage(inTier.evict_to_external_storage().storage());
                         break;
                     case Ydb::Table::TtlTier::ACTION_NOT_SET:
                         return bad_request("Tier action is undefined");

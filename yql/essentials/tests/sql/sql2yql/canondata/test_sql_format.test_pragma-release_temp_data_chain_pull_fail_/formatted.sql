@@ -94,5 +94,6 @@ DEFINE ACTION $action($param) AS
     PROCESS $g;
 END DEFINE;
 
-EVALUATE FOR $param IN ListFromRange(1, 3)
-    DO $action($param);
+EVALUATE FOR $param IN ListFromRange(1, 3) DO
+    $action($param)
+;

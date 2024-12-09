@@ -8,6 +8,7 @@ import time
 import threading
 import queue
 
+from .base import QueryClientSettings
 from .session import (
     QuerySession,
 )
@@ -27,10 +28,17 @@ logger = logging.getLogger(__name__)
 class QuerySessionPool:
     """QuerySessionPool is an object to simplify operations with sessions of Query Service."""
 
-    def __init__(self, driver: common_utils.SupportedDriverType, size: int = 100):
+    def __init__(
+        self,
+        driver: common_utils.SupportedDriverType,
+        size: int = 100,
+        *,
+        query_client_settings: Optional[QueryClientSettings] = None,
+    ):
         """
         :param driver: A driver instance.
         :param size: Max size of Session Pool.
+        :param query_client_settings: ydb.QueryClientSettings object to configure QueryService behavior
         """
 
         self._driver = driver
@@ -39,9 +47,10 @@ class QuerySessionPool:
         self._size = size
         self._should_stop = threading.Event()
         self._lock = threading.RLock()
+        self._query_client_settings = query_client_settings
 
     def _create_new_session(self, timeout: Optional[float]):
-        session = QuerySession(self._driver)
+        session = QuerySession(self._driver, settings=self._query_client_settings)
         session.create(settings=BaseRequestSettings().with_timeout(timeout))
         logger.debug(f"New session was created for pool. Session id: {session._state.session_id}")
         return session

@@ -4310,6 +4310,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         {
+            // Empty replace
+            auto prepareResult = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/DataShard2` SELECT * FROM `/Root/DataShard` WHERE Col2 == 'not exists';
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
             auto it = client.StreamExecuteQuery(R"(
                 SELECT COUNT(*) FROM `/Root/DataShard2`;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();

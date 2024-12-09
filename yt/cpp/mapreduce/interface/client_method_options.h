@@ -1484,6 +1484,9 @@ struct TSkyShareTableOptions
 
     /// @brief Allow skynet manager to return fastbone links to skynet. See YT-11437
     FLUENT_FIELD_OPTION(bool, EnableFastbone);
+
+    /// @brief Custom pool.
+    FLUENT_FIELD_OPTION(TString, Pool);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -2,6 +2,7 @@ import yatest.common
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 
 
 class FunctionalTestBase:
@@ -16,27 +17,19 @@ class FunctionalTestBase:
         ))
         cls.cluster.start()
         node = cls.cluster.nodes[1]
-        YdbCluster.ydb_endpoint = cls.get_endpoint()
-        YdbCluster.ydb_database = cls.get_database()
+        YdbCluster.ydb_endpoint = f'grpc://{node.host}:{node.grpc_port}'
+        YdbCluster.ydb_database = f'{cls.cluster.domain_name}/test_db'
         YdbCluster.ydb_mon_port = node.mon_port
-
-    @classmethod
-    def get_endpoint(cls) -> str:
-        node = cls.cluster.nodes[1]
-        return f'grpc://{node.host}:{node.grpc_port}'
-
-    @classmethod
-    def get_database(cls) -> str:
-        return cls.cluster.domain_name
+        db = f'/{YdbCluster.ydb_database}'
+        cls.cluster.create_database(
+            db,
+            storage_pool_units_count={
+                'hdd': 1
+            }
+        )
+        cls.cluster.register_and_start_slots(db, count=1)
+        cls.cluster.wait_tenant_up(db)
 
     @classmethod
     def run_cli(cls, argv: list[str]) -> yatest.common.process._Execution:
-        return yatest.common.execute(
-            [
-                yatest.common.binary_path('ydb/apps/ydb/ydb'),
-                '--endpoint',
-                cls.get_endpoint(),
-                '--database',
-                f'/{cls.get_database()}',
-            ] + argv
-        )
+        return yatest.common.execute(YdbCliHelper.get_cli_command() + argv)

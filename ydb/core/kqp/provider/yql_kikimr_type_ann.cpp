@@ -1251,14 +1251,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     "Can't reset TTL settings"));
                 return TStatus::Error;
-            } else if (name == "setTiering") {
-                meta->TableSettings.Tiering.Set(TString(
-                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                ));
-            } else if (name == "resetTiering") {
-                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    "Can't reset TIERING"));
-                return TStatus::Error;
             } else if (name == "storeType") {
                 TMaybe<TString> storeType = TString(setting.Value().Cast<TCoAtom>().Value());
                 if (storeType && to_lower(storeType.GetRef()) == "column") {
@@ -2188,6 +2180,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleBackupIncremental(TKiBackupIncremental node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleRestore(TKiRestore node, TExprContext&) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

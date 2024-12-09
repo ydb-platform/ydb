@@ -222,9 +222,14 @@ struct TTtlSettings {
         Nanoseconds = 4,
     };
 
+    struct TTier {
+        TDuration ApplyAfter;
+        std::optional<TString> StorageName;
+    };
+
     TString ColumnName;
-    TDuration ExpireAfter;
     TMaybe<EUnit> ColumnUnit;
+    std::vector<TTier> Tiers;
 
     static bool TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error);
 };
@@ -242,7 +247,6 @@ struct TTableSettings {
     TMaybe<TString> KeyBloomFilter;
     TMaybe<TString> ReadReplicasSettings;
     TResetableSetting<TTtlSettings, void> TtlSettings;
-    TResetableSetting<TString, void> Tiering;
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
 
@@ -1101,6 +1105,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> Backup(const TString& cluster, const TBackupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> BackupIncremental(const TString& cluster, const TBackupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> Restore(const TString& cluster, const TBackupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;
 

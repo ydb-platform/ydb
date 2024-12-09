@@ -624,13 +624,7 @@ namespace NOps {
                 return Terminate(EAbort::Host);
             }
 
-            // TODO: would want to postpone pinning until usage
-            TVector<NPageCollection::TLoadedPage> pinned(Reserve(msg.Loaded.size()));
-            for (auto& loaded : msg.Loaded) {
-                pinned.emplace_back(loaded.PageId, TPinnedPageRef(loaded.Page).GetData());
-            }
-
-            Cache->DoSave(std::move(msg.Origin), msg.Cookie, pinned);
+            Cache->DoSave(std::move(msg.Origin), msg.Cookie, std::move(msg.Loaded));
 
             if (MayProgress()) {
                 Spent->Alter(true /* resource available again */);

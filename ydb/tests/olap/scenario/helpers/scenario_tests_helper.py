@@ -395,6 +395,26 @@ class ScenarioTestHelper:
         allure.attach(json.dumps(rows), 'result', allure.attachment_type.JSON)
         return ret
 
+    @allure.step('Execute query')
+    def execute_query(
+        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS
+    ):
+        """Run a query on the tested database.
+
+        Args:
+            yql: Query text.
+            expected_status: Expected status or set of database response statuses. If the response status is not in the expected set, an exception is thrown.
+
+        Example:
+            tablename = 'testTable'
+            sth = ScenarioTestHelper(ctx)
+            sth.execute_query(f'INSERT INTO `{sth.get_full_path("tablename") }` (key, c) values(1, 100)')
+        """
+
+        allure.attach(yql, 'request', allure.attachment_type.TEXT)
+        with ydb.QuerySessionPool(YdbCluster.get_ydb_driver()) as pool:
+            self._run_with_expected_status(lambda: pool.execute_with_retries(yql), expected_status)
+
     def drop_if_exist(self, names: List[str], operation) -> None:
         """Erase entities in the tested database, if it exists.
 

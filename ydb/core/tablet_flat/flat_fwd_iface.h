@@ -3,6 +3,7 @@
 #include "flat_page_iface.h"
 #include "flat_sausage_fetch.h"
 #include "flat_fwd_misc.h"
+#include "shared_handle.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -32,7 +33,7 @@ namespace NFwd {
 
         virtual TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) noexcept = 0;
         virtual void Forward(IPageLoadingQueue *head, ui64 upper) noexcept = 0;
-        virtual void Fill(NPageCollection::TLoadedPage& page, EPage type) noexcept = 0;
+        virtual void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage type) noexcept = 0;
 
         IPageLoadingQueue* Head = nullptr; /* will be set outside of IPageLoadingLogic impl */
         TStat Stat;

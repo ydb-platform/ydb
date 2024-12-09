@@ -163,7 +163,7 @@ class YQHttpClient(object):
         )
 
         self._validate_http_error(response, expected_code)
-        return response.json()["status"]
+        return response
 
     def get_query_status(self, query_id, request_id=None, expected_code=200) -> Any:
         response = self.session.get(

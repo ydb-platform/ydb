@@ -432,25 +432,25 @@ public:
             auto* typedResponse = static_cast<FederatedQuery::DescribeQueryResponse*>(resp);
             if (!typedResponse->operation().result().template Is<FederatedQuery::DescribeQueryResult>()) {                                   
                 TStringStream json;                                                                             
-                auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());     
+                auto httpResult = std::unique_ptr<FQHttp::Error>(new FQHttp::Error());     
                 FqConvert(typedResponse->operation(), *httpResult);                                             
                 FqPackToJson(json, *httpResult, jsonSettings);                                                  
                 requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());     
                 return;                                                                                         
             }
 
-            FederatedQuery::DescribeQueryResult* describeResult = google::protobuf::Arena::CreateMessage<FederatedQuery::DescribeQueryResult>(resp->GetArena());
-            if(!typedResponse->operation().result().UnpackTo(describeResult)) {
+            std::unique_ptr<FederatedQuery::DescribeQueryResult> describeResult = std::unique_ptr<FederatedQuery::DescribeQueryResult>(google::protobuf::Arena::CreateMessage<FederatedQuery::DescribeQueryResult>(resp->GetArena()));
+            if(!typedResponse->operation().result().UnpackTo(&*describeResult)) {
                 requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Error in response unpack");
                 return;
             }
 
             // modify
-            auto modifyRequest = std::unique_ptr<FederatedQuery::ModifyQueryRequest>(google::protobuf::Arena::CreateMessage<FederatedQuery::ModifyQueryRequest>(resp->GetArena()));
+            auto modifyRequest = std::make_unique<FederatedQuery::ModifyQueryRequest>();
 
             modifyRequest->set_query_id(query_id);
-            auto content = describeResult->Getquery().content();
-            modifyRequest->set_allocated_content(&content);
+            modifyRequest->set_query_id(query_id);
+            modifyRequest->Mutablecontent()->CopyFrom(describeResult->Getquery().content());
             modifyRequest->set_execute_mode(::FederatedQuery::ExecuteMode::RUN);
             modifyRequest->set_allocated_disposition(nullptr);
             modifyRequest->set_state_load_mode(::FederatedQuery::StateLoadMode::STATE_LOAD_MODE_UNSPECIFIED);
@@ -465,10 +465,10 @@ public:
 
             // new event -> new EventFactory
             auto factory = &NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall;
-            actorSystem->Send(NGRpcService::CreateGRpcRequestProxyId(), factory(requestContextModify).release());
+            actorSystem->Send(NGRpcService::CreateGRpcRequestProxyId(), factory(std::move(requestContextModify)).release());
         });
 
-        ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContext).release());
+        ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(std::move(requestContext)).release());
         this->Die(ctx);
     }
 };

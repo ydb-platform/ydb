@@ -17,7 +17,7 @@ bool TPortionsIndex::HasOlderIntervals(const TPortionInfo& inputPortion, const T
         if (skipPortions.contains(p->GetPortionId())) {
             continue;
         }
-        if (inputPortion.GetRecordSnapshotMax() < p->GetRecordSnapshotMin()) {
+        if (inputPortion.RecordSnapshotMax() < p->RecordSnapshotMin()) {
             continue;
         }
         return true;

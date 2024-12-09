@@ -264,7 +264,7 @@ std::vector<TCSMetadataRequest> TTieringActualizer::BuildMetadataRequests(
         return {};
     }
 
-    const ui64 batchMemorySoftLimit = !NYDBTest::TControllers::GetColumnShardController()->GetMetadataRequestSoftMemoryLimit();
+    const ui64 batchMemorySoftLimit = NYDBTest::TControllers::GetColumnShardController()->GetMetadataRequestSoftMemoryLimit();
     std::vector<TCSMetadataRequest> requests;
     std::shared_ptr<TDataAccessorsRequest> currentRequest;
     for (auto&& i : NewPortionIds) {

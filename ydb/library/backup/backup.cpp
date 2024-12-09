@@ -489,31 +489,29 @@ Ydb::Table::ChangefeedDescription ProtoFromChangefeedDesc(const NTable::TChangef
     return protoChangeFeedDesc;
 }
 
-NTopic::TDescribeTopicResult GetTopicDescription(TDriver driver, const TString& path) {
+NTopic::TDescribeTopicResult DescribeTopic(TDriver driver, const TString& path) {
     NYdb::NTopic::TTopicClient client(driver);
     return NConsoleClient::RetryFunction([&]() {
         return client.DescribeTopic(path).GetValueSync();
     });
 }
 
-void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& folderPath, const TString& fileName) {
-    TString changefeedStr;
-    google::protobuf::TextFormat::PrintToString(proto, &changefeedStr);
-    LOG_D("Write changefeed into " << folderPath.Child(fileName).GetPath().Quote());
+void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& folderPath, const TString& fileName, const TString& objType = "proto") {
+    TString protoStr;
+    google::protobuf::TextFormat::PrintToString(proto, &protoStr);
+    LOG_D("Write " << proto << " into " << folderPath.Child(fileName).GetPath().Quote());
     TFile outFile(folderPath.Child(fileName), CreateAlways | WrOnly);
-    outFile.Write(changefeedStr.data(), changefeedStr.size());
+    outFile.Write(protoStr.data(), protoStr.size());
 }
 
-void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
-
+void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath, const NTable::TTableDescription& desc) {
     const auto dirPath = JoinDatabasePath(dbPrefix, path);
-    auto desc = DescribeTable(driver, dirPath);
 
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
         TFsPath changefeedDirPath = CreateDirectory(folderPath, changefeedDesc.GetName());
         
         auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
-        const auto descTopicResult = GetTopicDescription(driver, JoinDatabasePath(dirPath, changefeedDesc.GetName()));
+        const auto descTopicResult = DescribeTopic(driver, JoinDatabasePath(dirPath, changefeedDesc.GetName()));
         NConsoleClient::ThrowOnError(descTopicResult);
         const auto& topicDescription = descTopicResult.GetTopicDescription();
         const auto protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
@@ -541,7 +539,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     TFile outFile(folderPath.Child(SCHEME_FILE_NAME), CreateAlways | WrOnly);
     outFile.Write(schemaStr.data(), schemaStr.size());
 
-    BackupChangefeeds(driver, dbPrefix, path, folderPath);
+    BackupChangefeeds(driver, dbPrefix, path, folderPath, desc);
     BackupPermissions(driver, dbPrefix, path, folderPath);
 
     if (!schemaOnly) {

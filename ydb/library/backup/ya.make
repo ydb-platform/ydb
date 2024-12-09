@@ -13,6 +13,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_result
     ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/client/ydb_topic
     ydb/public/sdk/cpp/client/ydb_value
 )
 

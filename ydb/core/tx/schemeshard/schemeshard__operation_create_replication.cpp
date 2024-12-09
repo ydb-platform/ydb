@@ -29,6 +29,11 @@ struct TReplicationStrategy : public IStrategy {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong replication configuration");
             return true;
         }
+        if (desc.HasState()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Cannot create replication with explicit state");
+            return true;
+        }
+
         return false;
     }
 };
@@ -43,6 +48,11 @@ struct TTransferStrategy : public IStrategy {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
             return true;
         }
+        if (desc.HasState()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Cannot create transfer with explicit state");
+            return true;
+        }
+
         return false;
     }
 };
@@ -359,7 +369,7 @@ public:
         }
 
         if (Strategy->Validate(*result.Get(), desc)) {
-
+            return result;
         }
 
         TString errStr;
@@ -372,11 +382,6 @@ public:
         if (!context.SS->ResolveTabletChannels(0, parentPath.GetPathIdForDomain(), channelsBindings)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter,
                 "Unable to construct channel binding for replication controller with the storage pool");
-            return result;
-        }
-
-        if (desc.HasState()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot create replication with explicit state");
             return result;
         }
 

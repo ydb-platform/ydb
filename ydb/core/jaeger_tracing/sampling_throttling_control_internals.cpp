@@ -32,7 +32,10 @@ NWilson::TTraceId TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTra
         ForEachMatchingRule(
             Setup.ExternalThrottlingRules[requestType], database,
             [&level](auto& throttlingRule) {
-                if (!level && !throttlingRule.Throttler->Throttle()) {
+                if (throttlingRule.Throttler->Throttle()) {
+                    return;
+                }
+                if (!level || throttlingRule.Level > *level) {
                     level = throttlingRule.Level;
                 }
             }

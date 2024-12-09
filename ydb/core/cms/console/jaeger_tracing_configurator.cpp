@@ -198,6 +198,7 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         ui64 maxRatePerMinute = throttlingRule.GetMaxTracesPerMinute();
         ui64 maxBurst = throttlingRule.GetMaxTracesBurst();
         TExternalThrottlingRule<TWithTag<TThrottlingSettings>> rule {
+            .Level = static_cast<ui8>(level),
             .Throttler = TWithTag<TThrottlingSettings> {
                 .Value = TThrottlingSettings {
                     .MaxTracesPerMinute = maxRatePerMinute,

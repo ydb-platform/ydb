@@ -10,6 +10,7 @@
 namespace NKikimr::NJaegerTracing {
 
 struct TThrottlingSettings {
+    ui8 Level;
     ui64 MaxTracesPerMinute;
     ui64 MaxTracesBurst;
 };

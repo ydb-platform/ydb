@@ -347,4 +347,6 @@ message TTableServiceConfig {
     }
 
     optional EBlockTrackingMode BlockTrackingMode = 73 [ default = BLOCK_TRACKING_SERIALIZE ];
+
+    optional bool AllowOlapDataQuery = 74 [default = false];
 };

@@ -69,7 +69,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
             const TString defGlobal =
                 AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "PLAIN";
             if (Self->HasIndex()) {
-                return Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetScanReaderPolicyName(defGlobal);
+                return Self->GetIndexAs<TColumnEngineForLogs>()
+                    .GetVersionedIndex()
+                    .GetLastSchema()
+                    ->GetIndexInfo()
+                    .GetScanReaderPolicyName()
+                    .value_or(defGlobal);
             } else {
                 return defGlobal;
             }

@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_NUMPY_NDARRAY_TOFILE_HPP
 #define PYTHONIC_NUMPY_NDARRAY_TOFILE_HPP
 
-#include "pythonic/include/numpy/ndarray/tofile.hpp"
 #include "pythonic/builtins/FileNotFoundError.hpp"
+#include "pythonic/include/numpy/ndarray/tofile.hpp"
 
 #include "pythonic/types/ndarray.hpp"
 #include "pythonic/types/str.hpp"
@@ -35,8 +35,8 @@ namespace numpy
       fs.write((char *)expr.buffer, sizeof(T) * expr.flat_size());
     }
     NUMPY_EXPR_TO_NDARRAY0_IMPL(tofile);
-  }
-}
+  } // namespace ndarray
+} // namespace numpy
 
 PYTHONIC_NS_END
 

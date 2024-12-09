@@ -1,5 +1,5 @@
 diff --git a/include/ostream b/include/ostream
-index f30cfe2..f0e90cf 100644
+index ef74f5d..e9437be 100644
 --- a/include/ostream
 +++ b/include/ostream
 @@ -1139,7 +1139,7 @@ operator<<(basic_ostream<_CharT, _Traits>& __os, const bitset<_Size>& __x)
@@ -12,7 +12,7 @@ index f30cfe2..f0e90cf 100644
  #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
  template <class _Traits>
 diff --git a/src/iostream.cpp b/src/iostream.cpp
-index 13e6aee..b0686c9 100644
+index 83ee7a6..4ac686e 100644
 --- a/src/iostream.cpp
 +++ b/src/iostream.cpp
 @@ -21,72 +21,112 @@
@@ -141,7 +141,7 @@ index 13e6aee..b0686c9 100644
 +    ostream* cerr_ptr = ::new(&cerr) ostream(::new(__cerr) __stdoutbuf<char>(stderr, &mb_cerr));
 +                        ::new(&clog) ostream(cerr_ptr->rdbuf());
      cin_ptr->tie(cout_ptr);
-     _VSTD::unitbuf(*cerr_ptr);
+     std::unitbuf(*cerr_ptr);
      cerr_ptr->tie(cout_ptr);
  
  #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
@@ -155,7 +155,7 @@ index 13e6aee..b0686c9 100644
 +                          ::new(&wclog) wostream(wcerr_ptr->rdbuf());
  
      wcin_ptr->tie(wcout_ptr);
-     _VSTD::unitbuf(*wcerr_ptr);
+     std::unitbuf(*wcerr_ptr);
 @@ -143,15 +183,15 @@ DoIOSInit::DoIOSInit()
  
  DoIOSInit::~DoIOSInit()

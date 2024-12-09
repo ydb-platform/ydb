@@ -1,6 +1,5 @@
 import os
 
-
 from ..base import BasePackageManager, PackageManagerError
 from ..base.constants import NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
 from ..base.node_modules_bundler import bundle_node_modules
@@ -157,7 +156,7 @@ class NpmPackageManager(BasePackageManager):
         env = os.environ.copy()
         env.update({"NPM_CONFIG_CACHE": os.path.join(self.build_path, ".npm-cache")})
 
-        self._exec_command(install_cmd, env=env)
+        self._exec_command(install_cmd, cwd=self.build_path, env=env)
 
     def _prepare_workspace(self):
         lf = self.load_lockfile(build_pre_lockfile_path(self.build_path))

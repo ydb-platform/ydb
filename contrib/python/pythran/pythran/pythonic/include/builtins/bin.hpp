@@ -16,7 +16,7 @@ namespace builtins
   bin(T const &v);
 
   DEFINE_FUNCTOR(pythonic::builtins, bin);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

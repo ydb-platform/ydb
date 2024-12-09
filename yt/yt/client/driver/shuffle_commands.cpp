@@ -1,13 +1,15 @@
 #include "shuffle_commands.h"
 
+#include <yt/yt/client/driver/config.h>
+
+#include <yt/yt/library/formats/format.h>
+
+#include <yt/yt/client/formats/config.h>
+
 #include <yt/yt/client/table_client/adapters.h>
 #include <yt/yt/client/table_client/table_output.h>
 #include <yt/yt/client/table_client/value_consumer.h>
 
-#include <yt/yt/client/driver/config.h>
-#include <yt/yt/client/formats/config.h>
-
-#include <yt/yt/library/formats/format.h>
 
 namespace NYT::NDriver {
 
@@ -22,31 +24,28 @@ void TStartShuffleCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("account", &TThis::Account);
     registrar.Parameter("partition_count", &TThis::PartitionCount);
+    registrar.Parameter("parent_transaction_id", &TThis::ParentTransactionId);
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "medium_name",
+        [] (TThis* command) -> auto& {
+            return command->Options.MediumName;
+        })
+        .Default();
+    registrar.ParameterWithUniversalAccessor<std::optional<int>>(
+        "replication_factor",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicationFactor;
+        })
+        .Default();
 }
 
 void TStartShuffleCommand::DoExecute(ICommandContextPtr context)
 {
     auto client = context->GetClient();
-    auto asyncResult = client->StartShuffle(Account, PartitionCount, Options);
+    auto asyncResult = client->StartShuffle(Account, PartitionCount, ParentTransactionId, Options);
     auto shuffleHandle = WaitFor(asyncResult).ValueOrThrow();
 
     context->ProduceOutputValue(ConvertToYsonString(shuffleHandle));
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
-void TFinishShuffleCommand::Register(TRegistrar registrar)
-{
-    registrar.Parameter("shuffle_handle", &TThis::ShuffleHandle);
-}
-
-void TFinishShuffleCommand::DoExecute(ICommandContextPtr context)
-{
-    auto client = context->GetClient();
-    auto asyncResult = client->FinishShuffle(ShuffleHandle, Options);
-    WaitFor(asyncResult).ThrowOnError();
-
-    ProduceEmptyOutput(context);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -73,6 +72,7 @@ void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
         format,
         reader->GetNameTable(),
         /*tableSchemas*/ {New<TTableSchema>()},
+        /*columns*/ {std::nullopt},
         context->Request().OutputStream,
         /*enableContextSaving*/ false,
         New<TControlAttributesConfig>(),

@@ -1,5 +1,6 @@
 #include "http_request.h"
 
+#include <ydb/core/statistics/service/service.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
 #include <ydb/core/statistics/database/database.h>
@@ -118,15 +119,17 @@ void THttpRequest::Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev) {
     }
 }
 
-void THttpRequest::Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& ev) {
+void THttpRequest::Handle(TEvStatistics::TEvGetStatisticsResult::TPtr& ev) {
     const auto msg = ev->Get();
-    if (!msg->Success || !msg->Data) {
-        const auto status = std::to_string(static_cast<ui32>(msg->Status));
-        HttpReply("Error occurred while loading statistics. Status: " + status);
+
+    if (!msg->Success
+            || msg->StatResponses.empty() || !msg->StatResponses[0].Success
+            || msg->StatResponses[0].CountMinSketch.CountMin == nullptr) {
+        HttpReply("Error occurred while loading statistics.");
         return;
     }
 
-    const auto typeId = static_cast<NScheme::TTypeId>(msg->Cookie);
+    const auto typeId = static_cast<NScheme::TTypeId>(ev->Cookie);
     const NScheme::TTypeInfo typeInfo(typeId);
     const TStringBuf value(Params[EParamType::CELL_VALUE]);
     TMemoryPool pool(64);
@@ -138,7 +141,7 @@ void THttpRequest::Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& e
         return;
     }
 
-    auto countMinSketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(msg->Data->data(), msg->Data->size()));
+    const auto countMinSketch = msg->StatResponses[0].CountMinSketch.CountMin.get();
     const auto probe = countMinSketch->Probe(cell.Data(), cell.Size());
     HttpReply(Params[EParamType::PATH] + "[" + Params[EParamType::COLUMN_NAME] + "]=" + std::to_string(probe));
 }
@@ -217,10 +220,16 @@ void THttpRequest::DoCountMinSketchProbe(const TNavigate::TEntry& entry) {
 
     for (const auto& [_, tableInfo]: entry.Columns) {
         if (tableInfo.Name == columnName) {
-            const auto columnTag = tableInfo.Id;
+            auto request = std::make_unique<TEvStatistics::TEvGetStatistics>();
+            request->StatType = EStatType::COUNT_MIN_SKETCH;
+            TRequest req;
+            req.PathId = entry.TableId.PathId;
+            req.ColumnTag = tableInfo.Id;
+            request->StatRequests.emplace_back(std::move(req));
+
             const auto typeId = tableInfo.PType.GetTypeId();
-            const auto& pathId = entry.TableId.PathId;
-            Register(CreateLoadStatisticsQuery(SelfId(), Params[EParamType::DATABASE], pathId, EStatType::COUNT_MIN_SKETCH, columnTag, typeId));
+            const auto statService = MakeStatServiceID(SelfId().NodeId());
+            Send(statService, request.release(), 0, typeId);
             return;
         }
     }

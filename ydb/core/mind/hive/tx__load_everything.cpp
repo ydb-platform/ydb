@@ -201,7 +201,7 @@ public:
             auto end = owners.GetValue<Schema::TabletOwners::End>();
             auto ownerId = owners.GetValue<Schema::TabletOwners::OwnerId>();
 
-            Self->Keeper.AddOwnedSequence(ownerId, {begin, end});
+           Self->Keeper.AddOwnedSequence(ownerId, {begin, end});
             if (!owners.Next()) {
                 return false;
             }
@@ -489,6 +489,9 @@ public:
                 if (tablet) {
                     ui32 channelId = tabletChannelRowset.GetValue<Schema::TabletChannel::Channel>();
                     TString storagePool = tabletChannelRowset.GetValue<Schema::TabletChannel::StoragePool>();
+                    if (storagePool.empty()) {
+                        storagePool = TLeaderTabletInfo::DEFAULT_STORAGE_POOL_NAME;
+                    }
                     Y_ABORT_UNLESS(tablet->BoundChannels.size() == channelId);
                     tablet->BoundChannels.emplace_back();
                     NKikimrStoragePool::TChannelBind& bind = tablet->BoundChannels.back();

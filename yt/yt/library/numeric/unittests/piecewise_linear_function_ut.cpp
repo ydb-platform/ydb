@@ -810,7 +810,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestCompose)
         {
             /* Name */ "compositionLinearWithLinearInjection",
             /* Lhs */ TPiecewiseLinearFunction<double>::Linear(0.1, 17, 1.2, 42),
-            /* Rhs */ TPiecewiseLinearFunction<double>::Linear(0, 0.3, 100, 0.98),
+            /* Rhs */ TPiecewiseLinearFunction<double>::Linear(0, 0.3, 100, 0.87),
             /* Samples */ {
                 {
                     /* Argument */ 0,
@@ -819,15 +819,15 @@ TEST_F(TPiecewiseLinearFunctionTest, TestCompose)
                 },
                 {
                     /* Argument */ 100,
-                    /* ExpectedLeftLimit */ 37,
-                    /* ExpectedRightLimit */ 37,
+                    /* ExpectedLeftLimit */ 34.5,
+                    /* ExpectedRightLimit */ 34.5,
                 }
             }
         },
         {
             /* Name */ "compositionLinearWithDiscontinuous",
             /* Lhs */ TPiecewiseLinearFunction<double>::Linear(0.1, 17, 1.2, 42),
-            /* Rhs */ BuildFunctionFromPoints<double>({{0, 0.1}, {1, 0.3}, {1, 0.98}, {2, 1.2}}),
+            /* Rhs */ BuildFunctionFromPoints<double>({{0, 0.1}, {1, 0.3}, {1, 0.87}, {2, 1.2}}),
             /* Samples */ {
                 {
                     /* Argument */ 0,
@@ -837,7 +837,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestCompose)
                 {
                     /* Argument */ 1,
                     /* ExpectedLeftLimit */ 21.5454545454545454545454545454545454545454545454,
-                    /* ExpectedRightLimit */ 37,
+                    /* ExpectedRightLimit */ 34.5,
                 },
                 {
                     /* Argument */ 2,

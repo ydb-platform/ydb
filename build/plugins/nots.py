@@ -828,7 +828,7 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
                     ymake.report_configure_error(
                         "Project is configured to use @yatool/prebuilder. \n"
                         + "Some packages in the pnpm-lock.yaml are misconfigured.\n"
-                        + "Run {COLORS.green}`ya tool nots update-lockfile`{COLORS.reset} to fix lockfile.\n"
+                        + f"Run {COLORS.green}`ya tool nots update-lockfile`{COLORS.reset} to fix lockfile.\n"
                         + "All packages with `requiresBuild:true` have to be marked with `hasAddons:true/false`.\n"
                         + "Misconfigured keys: \n"
                         + "  - "
@@ -843,7 +843,7 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
                     ymake.report_configure_error(
                         "Project is configured to use @yatool/prebuilder. \n"
                         + "Some packages are misconfigured.\n"
-                        + "Run {COLORS.green}`ya tool nots update-lockfile`{COLORS.reset} to fix pnpm-lock.yaml and package.json.\n"
+                        + f"Run {COLORS.green}`ya tool nots update-lockfile`{COLORS.reset} to fix pnpm-lock.yaml and package.json.\n"
                         + "Validation details: \n"
                         + "\n".join(validation_messages)
                     )

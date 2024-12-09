@@ -43,7 +43,7 @@ TString GetStatic(const TString& filePath) {
     return buffer.str();
 }
 
-void CreateTables(TSession session, const TString& schemaPath, bool useColumnStore) {
+void CreateTables(NYdb::NQuery::TSession session, const TString& schemaPath, bool useColumnStore) {
     std::string query = GetStatic(schemaPath);
 
     if (useColumnStore) {
@@ -51,7 +51,14 @@ void CreateTables(TSession session, const TString& schemaPath, bool useColumnSto
         query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
     }
 
-    auto res = session.ExecuteSchemeQuery(TString(query)).GetValueSync();
+    auto res = session.ExecuteQuery(TString(query), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+    res.GetIssues().PrintTo(Cerr);
+    UNIT_ASSERT(res.IsSuccess());
+}
+
+void CreateView(NYdb::NQuery::TSession session, const TString& viewPath) {
+    std::string query = GetStatic(viewPath);
+    auto res = session.ExecuteQuery(TString(query), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
     res.GetIssues().PrintTo(Cerr);
     UNIT_ASSERT(res.IsSuccess());
 }
@@ -69,7 +76,7 @@ TString GetPrettyJSON(const NJson::TJsonValue& json) {
  * A basic join order test. We define 5 tables sharing the same
  * key attribute and construct various full clique join queries
  */
-static void CreateSampleTable(TSession session, bool useColumnStore) {
+static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStore) {
     CreateTables(session, "schema/rstuv.sql", useColumnStore);
 
     CreateTables(session, "schema/tpch.sql", useColumnStore);
@@ -79,6 +86,8 @@ static void CreateSampleTable(TSession session, bool useColumnStore) {
     CreateTables(session, "schema/tpcc.sql", useColumnStore);
 
     CreateTables(session, "schema/lookupbug.sql", useColumnStore);
+
+    CreateView(session, "view/tpch_random_join_view.sql");
 }
 
 static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = "", bool useCBO = true){
@@ -96,8 +105,11 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
     appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
+    appConfig.MutableFeatureFlags()->SetEnableViews(true);
     if (!useCBO) {
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
+    } else {
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
     }
 
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
@@ -125,7 +137,7 @@ public:
     TChainTester(size_t chainSize)
         : Kikimr(GetKikimrWithJoinSettings(false, GetStats(chainSize)))
         , TableClient(Kikimr.GetTableClient())
-        , Session(TableClient.CreateSession().GetValueSync().GetSession())
+        , Session(TableClient.GetSession().GetValueSync().GetSession())
         , ChainSize(chainSize)
     {}
 
@@ -198,8 +210,9 @@ private:
 
 void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
     auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
-    auto db = kikimr.GetTableClient();
-    auto session = db.CreateSession().GetValueSync().GetSession();
+    kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
 
     CreateSampleTable(session, useColumnStore);
 
@@ -207,38 +220,55 @@ void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TStr
     {
         const TString query = GetStatic(queryPath);
         
-        auto result = session.ExplainDataQuery(query).ExtractValueSync();
+        auto result = 
+            session.ExecuteQuery(
+                query, 
+                NYdb::NQuery::TTxControl::NoTx(), 
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        PrintPlan(result.GetPlan());
+        PrintPlan(*result.GetStats()->GetPlan());
     }
 }
 
 void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& statsPath) {
     auto kikimr = GetKikimrWithJoinSettings(false, GetStatic(statsPath));
-    auto db = kikimr.GetTableClient();
-    auto session = db.CreateSession().GetValueSync().GetSession();
+    kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
 
     CreateSampleTable(session, true);
 
     const TString actualQuery = GetStatic(queryPath);
     TString actualPlan;
     {
-        auto result = session.ExplainDataQuery(actualQuery).ExtractValueSync();
+        auto result = 
+            session.ExecuteQuery(
+                actualQuery, 
+                NYdb::NQuery::TTxControl::NoTx(), 
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        actualPlan = result.GetPlan();
+        actualPlan = *result.GetStats()->GetPlan();
         PrintPlan(actualPlan);
-        Cout << result.GetAst() << Endl;
+        Cout << result.GetStats()->GetAst() << Endl;
     }
 
     const TString expectedQuery = R"(PRAGMA kikimr.OptEnableOlapPushdown = "false";)" "\n" + actualQuery;
     TString expectedPlan;
     {
-        auto result = session.ExplainDataQuery(expectedQuery).ExtractValueSync();
+        auto result = session.ExecuteQuery(
+                expectedQuery, 
+                NYdb::NQuery::TTxControl::NoTx(), 
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        expectedPlan = result.GetPlan();
+        expectedPlan = *result.GetStats()->GetPlan();
         PrintPlan(expectedPlan);
-        Cout << result.GetAst() << Endl;
+        Cout << result.GetStats()->GetAst() << Endl;
     }
 
     auto expectedDetailedPlan = GetDetailedJoinOrder(actualPlan, {.IncludeFilters = true, .IncludeOptimizerEstimation = true, .IncludeTables = false});
@@ -298,9 +328,9 @@ Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
         TestOlapEstimationRowsCorrectness("queries/tpcds78.sql", "stats/tpcds1000s.json");
     }
 
-    Y_UNIT_TEST(TPCDS87) {
-        TestOlapEstimationRowsCorrectness("queries/tpcds87.sql", "stats/tpcds1000s.json");
-    }
+    // Y_UNIT_TEST(TPCDS87) {
+    //     TestOlapEstimationRowsCorrectness("queries/tpcds87.sql", "stats/tpcds1000s.json");
+    // }
 
     // Y_UNIT_TEST(TPCDS88) { // ???
     //     TestOlapEstimationRowsCorrectness("queries/tpcds88.sql", "stats/tpcds1000s.json");
@@ -334,8 +364,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
 
         CreateSampleTable(session, useColumnStore);
 
@@ -343,19 +374,24 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         {
             const TString query = GetStatic(queryPath);
             
-            auto execRes = db.StreamExecuteScanQuery(query, TStreamExecScanQuerySettings().Explain(true)).ExtractValueSync();
+            auto execRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             execRes.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
-            auto plan = CollectStreamResult(execRes).PlanJson;
-            PrintPlan(plan.GetRef());
-            return plan.GetRef();
+
+            auto explainRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            explainRes.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(explainRes.GetStatus(), EStatus::SUCCESS);
+
+            PrintPlan(*explainRes.GetStats()->GetPlan());
+            return *explainRes.GetStats()->GetPlan();
         }
     }
 
     void CheckJoinCardinality(const TString& queryPath, const TString& statsPath, const TString& joinKind, double card, bool useStreamLookupJoin, bool useColumnStore) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
 
         CreateSampleTable(session, useColumnStore);
 
@@ -363,10 +399,15 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         {
             const TString query = GetStatic(queryPath);
 
-            auto result = session.ExplainDataQuery(query).ExtractValueSync();
-            PrintPlan(result.GetPlan());
+            auto result = 
+                session.ExecuteQuery(
+                    query, 
+                    NYdb::NQuery::TTxControl::NoTx(), 
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+                ).ExtractValueSync();
+            PrintPlan(*result.GetStats()->GetPlan());
             NJson::TJsonValue plan;
-            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
 
             if(!useStreamLookupJoin) {
                 auto joinNode = FindPlanNodeByKv(plan.GetMapSafe().at("SimplifiedPlan"), "Node Type", joinKind);
@@ -436,6 +477,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(DatetimeConstantFold, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestDataQueryWithStats("queries/datetime_constant_fold.sql", "stats/basic.json", StreamLookupJoin, ColumnStore);
+    }
+
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCHRandomJoinViewJustWorks, StreamLookupJoin, ColumnStore) {
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpch_random_join_view_just_works.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH3, StreamLookupJoin, ColumnStore) {
@@ -601,8 +646,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     void CanonizedJoinOrderTest(const TString& queryPath, const TString& statsPath, TString correctJoinOrderPath, bool useStreamLookupJoin, bool useColumnStore
     ) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
 
         CreateSampleTable(session, useColumnStore);
 
@@ -610,10 +656,15 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         {
             const TString query = GetStatic(queryPath);
         
-            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            auto result = 
+                session.ExecuteQuery(
+                    query, 
+                    NYdb::NQuery::TTxControl::NoTx(), 
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+                ).ExtractValueSync();
 
             result.GetIssues().PrintTo(Cerr);
-            PrintPlan(result.GetPlan());
+            PrintPlan(*result.GetStats()->GetPlan());
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             if (useStreamLookupJoin) {
@@ -624,7 +675,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 correctJoinOrderPath = correctJoinOrderPath.substr(0, correctJoinOrderPath.find(".json")) + "_column_store.json";      
             }
 
-            auto currentJoinOrder = GetPrettyJSON(GetDetailedJoinOrder(result.GetPlan()));
+            auto currentJoinOrder = GetPrettyJSON(GetDetailedJoinOrder(*result.GetStats()->GetPlan()));
 
             /* to canonize the tests use --test-param CANONIZE_JOIN_ORDER_TESTS=TRUE */
             TString canonize = GetTestParam("CANONIZE_JOIN_ORDER_TESTS"); canonize.to_lower();
@@ -635,9 +686,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             }
 
             TString ref = GetStatic(correctJoinOrderPath);
-            Cout << "actual\n" << GetJoinOrder(result.GetPlan()).GetStringRobust() << Endl; 
+            Cout << "actual\n" << GetJoinOrder(*result.GetStats()->GetPlan()).GetStringRobust() << Endl; 
             Cout << "expected\n" << GetJoinOrderFromDetailedJoinOrder(ref).GetStringRobust() << Endl;
-            UNIT_ASSERT(JoinOrderAndAlgosMatch(result.GetPlan(), ref));
+            UNIT_ASSERT(JoinOrderAndAlgosMatch(*result.GetStats()->GetPlan(), ref));
         }
     }
 

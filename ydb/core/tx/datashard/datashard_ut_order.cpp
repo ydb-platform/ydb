@@ -17,7 +17,7 @@
 #include <ydb/library/actors/util/memory_tracker.h>
 #include <util/system/valgrind.h>
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 namespace NKikimr {
 

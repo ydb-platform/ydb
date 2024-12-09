@@ -29,10 +29,10 @@ namespace numpy
     }
 
     inline auto weibull(double a, long size)
-        -> decltype(weibull(a, types::array<long, 1>{{size}}))
+        -> decltype(weibull(a, types::array_tuple<long, 1>{{size}}))
     {
 
-      return weibull(a, types::array<long, 1>{{size}});
+      return weibull(a, types::array_tuple<long, 1>{{size}});
     }
 
     inline double weibull(double a, types::none_type d)

@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/cumprod.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/numpy/partial_sum.hpp"
 #include "pythonic/operator_/imul.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -13,7 +13,7 @@ namespace numpy
 {
 
   template <class E, class... Opts>
-  auto cumprod(E &&e, Opts &&... opts)
+  auto cumprod(E &&e, Opts &&...opts)
       -> decltype(partial_sum<operator_::functor::imul>(
           std::forward<E>(e), std::forward<Opts>(opts)...))
   {
@@ -22,7 +22,7 @@ namespace numpy
   }
 
   NUMPY_EXPR_TO_NDARRAY0_IMPL(cumprod);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

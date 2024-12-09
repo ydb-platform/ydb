@@ -27,6 +27,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     ui32 RepliesToWait;
     TVector<ui32> YellowMoveChannels;
     TVector<ui32> YellowStopChannels;
+    THashMap<ui32, float> ApproximateFreeSpaceShareByChannel;
 
     NWilson::TSpan RequestSpan;
     TMap<TLogoBlobID, NWilson::TSpan> BlobSpans;
@@ -38,19 +39,22 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     void Handle(TEvBlobStorage::TEvPutResult::TPtr &ev, const TActorContext &ctx) {
         TEvBlobStorage::TEvPutResult *msg = ev->Get();
 
+        ui32 channel = msg->Id.Channel();
+
         if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
-            YellowMoveChannels.push_back(msg->Id.Channel());
+            YellowMoveChannels.push_back(channel);
         }
         if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
-            YellowStopChannels.push_back(msg->Id.Channel());
+            YellowStopChannels.push_back(channel);
         }
+        ApproximateFreeSpaceShareByChannel[channel] = msg->ApproximateFreeSpaceShare;
 
         switch (msg->Status) {
         case NKikimrProto::OK:
             LOG_DEBUG_S(ctx, NKikimrServices::TABLET_MAIN, "Put Result: " << msg->Print(false));
 
-            GroupWrittenBytes[std::make_pair(msg->Id.Channel(), msg->GroupId)] += msg->Id.BlobSize();
-            GroupWrittenOps[std::make_pair(msg->Id.Channel(), msg->GroupId)] += 1;
+            GroupWrittenBytes[std::make_pair(channel, msg->GroupId)] += msg->Id.BlobSize();
+            GroupWrittenOps[std::make_pair(channel, msg->GroupId)] += 1;
 
             ResponseCookies ^= ev->Cookie;
 
@@ -120,6 +124,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
             LogEntryID,
             std::move(YellowMoveChannels),
             std::move(YellowStopChannels),
+            std::move(ApproximateFreeSpaceShareByChannel),
             std::move(GroupWrittenBytes),
             std::move(GroupWrittenOps),
             reason));

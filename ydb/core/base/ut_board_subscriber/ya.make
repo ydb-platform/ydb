@@ -4,8 +4,6 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
-TIMEOUT(600)
-
 PEERDIR(
     ydb/library/actors/interconnect
     ydb/library/actors/core
@@ -13,7 +11,7 @@ PEERDIR(
     ydb/core/testlib/basics
     ydb/core/base
     ydb/core/testlib/basics/default
-    ydb/library/yql/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm14
 )
 
 YQL_LAST_ABI_VERSION()

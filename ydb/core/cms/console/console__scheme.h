@@ -51,6 +51,7 @@ struct Schema : NIceDb::Schema {
         struct DatabaseQuotas : Column<27, NScheme::NTypeIds::String> {};
         struct IsExternalStatisticsAggregator : Column<28, NScheme::NTypeIds::Bool> {};
         struct IsExternalBackupController : Column<29, NScheme::NTypeIds::Bool> {};
+        struct ScaleRecommenderPolicies : Column<30, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Path>;
         using TColumns = TableColumns<Path, State, Coordinators, Mediators, PlanResolution,
@@ -58,7 +59,7 @@ struct Schema : NIceDb::Schema {
             Attributes, Generation, SchemeShardId, PathId, ErrorCode, IsExternalSubDomain, IsExternalHive,
             AreResourcesShared, SharedDomainSchemeShardId, SharedDomainPathId, IsExternalSysViewProcessor,
             SchemaOperationQuotas, CreateIdempotencyKey, AlterIdempotencyKey, DatabaseQuotas, IsExternalStatisticsAggregator,
-            IsExternalBackupController>;
+            IsExternalBackupController, ScaleRecommenderPolicies>;
     };
 
     struct TenantPools : Table<3> {

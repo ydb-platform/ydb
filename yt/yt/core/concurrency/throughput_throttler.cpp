@@ -214,6 +214,18 @@ public:
         DoReconfigure(limit, Period_);
     }
 
+    std::optional<double> GetLimit() const override
+    {
+        VERIFY_THREAD_AFFINITY_ANY();
+
+        auto limit = Limit_.load();
+        if (limit == -1) {
+            return std::nullopt;
+        }
+
+        return limit;
+    }
+
     i64 GetQueueTotalAmount() const override
     {
         VERIFY_THREAD_AFFINITY_ANY();
@@ -653,6 +665,13 @@ public:
     void SetLimit(std::optional<double> /*limit*/) override
     {
         VERIFY_THREAD_AFFINITY_ANY();
+    }
+
+    std::optional<double> GetLimit() const override
+    {
+        VERIFY_THREAD_AFFINITY_ANY();
+
+        return std::nullopt;
     }
 
     TFuture<void> GetAvailableFuture() override

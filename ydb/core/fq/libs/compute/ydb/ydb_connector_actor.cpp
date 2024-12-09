@@ -6,7 +6,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -48,7 +48,7 @@ public:
         const auto& event = *ev->Get();
         NYdb::NQuery::TExecuteScriptSettings settings;
         settings.ResultsTtl(event.ResultTtl);
-        settings.OperationTimeout(event.OperationTimeout);
+        settings.OperationTimeout(event.OperationDeadline - TInstant::Now());
         settings.Syntax(event.Syntax);
         settings.ExecMode(event.ExecMode);
         settings.StatsMode(event.StatsMode);

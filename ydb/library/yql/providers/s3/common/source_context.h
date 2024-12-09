@@ -9,8 +9,6 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 
-#include <ydb/core/kqp/common/kqp_tx.h>
-
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 
@@ -106,68 +104,5 @@ private:
     std::atomic_uint64_t DecodedRows;
 };
 
-// per split context to pass params to load/decoding implementation
-
-struct TSplitReadContext {
-    using TPtr = std::shared_ptr<TSplitReadContext>;
-
-    TSplitReadContext(
-        TSourceContext::TPtr sourceContext,
-        IHTTPGateway::TPtr gateway,
-        TString url,
-        std::size_t splitOffset, std::size_t splitSize, std::size_t fileSize,
-        std::size_t pathIndex,
-        IHTTPGateway::THeaders headers,
-        IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
-        TTxId txId, TString requestId)
-        : SourceContext(sourceContext)
-        , Gateway(gateway)
-        , Url(url)
-        , SplitOffset(splitOffset), SplitSize(splitSize), FileSize(fileSize)
-        , PathIndex(pathIndex)
-        , Headers(headers)
-        , RetryPolicy(retryPolicy)
-        , TxId(txId), RequestId(requestId)
-    {
-
-    }
-
-    TSourceContext::TPtr SourceContext;
-
-    const IHTTPGateway::TPtr Gateway;
-    const TString Url;
-    const std::size_t SplitOffset;
-    const std::size_t SplitSize;
-    const std::size_t FileSize;
-    const std::size_t PathIndex;
-    const IHTTPGateway::THeaders Headers;
-    IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
-    IHTTPGateway::TRetryPolicy::IRetryState::TPtr RetryState;
-    IHTTPGateway::TCancelHook CancelHook;
-    TMaybe<TDuration> NextRetryDelay;
-    std::atomic_bool Cancelled = false;
-
-    const TTxId TxId;
-    const TString RequestId;
-
-    const IHTTPGateway::TRetryPolicy::IRetryState::TPtr& GetRetryState() {
-        if (!RetryState) {
-            RetryState = RetryPolicy->CreateRetryState();
-        }
-        return RetryState;
-    }
-
-    void Cancel() {
-        Cancelled.store(true);
-        if (const auto cancelHook = std::move(CancelHook)) {
-            CancelHook = {};
-            cancelHook(TIssue("Request cancelled."));
-        }
-    }
-
-    bool IsCancelled() {
-        return Cancelled.load();
-    }
-};
 
 } // namespace NYql::NDq

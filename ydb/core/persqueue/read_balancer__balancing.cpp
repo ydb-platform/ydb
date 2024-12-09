@@ -1,4 +1,5 @@
 #include "read_balancer__balancing.h"
+#include "read_balancer_log.h"
 
 #define DEBUG(message)
 
@@ -148,9 +149,9 @@ ui32 TPartitionFamily::NextStep() {
     return Consumer.NextStep();
 }
 
-TString TPartitionFamily::GetPrefix() const {
+TString TPartitionFamily::LogPrefix() const {
     TStringBuilder sb;
-    sb << Consumer.GetPrefix() << "family " << Id << " status " << Status
+    sb << Consumer.LogPrefix() << "family " << Id << " status " << Status
         << " partitions [" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "] ";
     if (Session) {
         sb << "session \"" << Session->SessionName << "\" sender " << Session->Sender << " ";
@@ -161,19 +162,16 @@ TString TPartitionFamily::GetPrefix() const {
 
 void TPartitionFamily::Release(const TActorContext& ctx, ETargetStatus targetStatus) {
     if (Status != EStatus::Active) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "releasing the family " << DebugStr() << " that isn't active");
+        PQ_LOG_CRIT("releasing the family " << DebugStr() << " that isn't active");
         return;
     }
 
     if (!Session) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "releasing the family " << DebugStr() << " that does not have a session");
+        PQ_LOG_CRIT("releasing the family " << DebugStr() << " that does not have a session");
         return;
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << " release partitions [" << JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end())
+    PQ_LOG_I(" release partitions [" << JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end())
             << "]. Target status " << targetStatus);
 
     Status = EStatus::Releasing;
@@ -193,20 +191,17 @@ void TPartitionFamily::Release(const TActorContext& ctx, ETargetStatus targetSta
 
 bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
     if (!Session || Session->Pipe != sender) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "try unlock the partition " << partitionId << " from other sender");
+        PQ_LOG_D("try unlock the partition " << partitionId << " from other sender");
         return false;
     }
 
     if (Status != EStatus::Releasing) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "try unlock partition " << partitionId << " but family status is " << Status);
+        PQ_LOG_CRIT("try unlock partition " << partitionId << " but family status is " << Status);
         return false;
     }
 
     if (!LockedPartitions.erase(partitionId)) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "try unlock partition " << partitionId << " but partition isn't locked."
+        PQ_LOG_CRIT("try unlock partition " << partitionId << " but partition isn't locked."
                 << " Locked partitions are [" << JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end()) << "]");
         return false;
     }
@@ -214,8 +209,7 @@ bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TA
     --Session->ReleasingPartitionCount;
 
     if (!LockedPartitions.empty()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "partition " << partitionId << " was unlocked but wait else [" << JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end()) << "]");
+        PQ_LOG_D("partition " << partitionId << " was unlocked but wait else [" << JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end()) << "]");
         return false;
     }
 
@@ -242,8 +236,7 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
             return false;
 
         case ETargetStatus::Free:
-            LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << " is free.");
+            PQ_LOG_T(" is free.");
 
             Status = EStatus::Free;
             AfterRelease();
@@ -256,8 +249,7 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
 
             auto it = Consumer.Families.find(MergeTo);
             if (it == Consumer.Families.end()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                        GetPrefix() << " has been released for merge but target family is not exists.");
+                PQ_LOG_D(" has been released for merge but target family is not exists.");
                 return true;
             }
             auto* targetFamily = it->second.get();
@@ -271,9 +263,8 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
     }
 }
 
-void TPartitionFamily::Destroy(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << " destroyed.");
+void TPartitionFamily::Destroy(const TActorContext&) {
+    PQ_LOG_D(" destroyed.");
 
     if (Session) {
         Session->Families.erase(Id);
@@ -308,13 +299,11 @@ void TPartitionFamily::AfterRelease() {
 
 void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx) {
     if (Status != EStatus::Free) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "try start reading but the family status is " << Status);
+        PQ_LOG_CRIT("try start reading but the family status is " << Status);
         return;
     }
 
-    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "start reading");
+    PQ_LOG_T("start reading");
 
     Status = EStatus::Active;
 
@@ -336,8 +325,7 @@ void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx)
 }
 
 void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "attaching partitions [" << JoinRange(", ", partitions.begin(), partitions.end()) << "]");
+    PQ_LOG_D("attaching partitions [" << JoinRange(", ", partitions.begin(), partitions.end()) << "]");
 
     std::unordered_set<ui32> existedPartitions;
     existedPartitions.insert(Partitions.begin(), Partitions.end());
@@ -387,15 +375,13 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
 }
 
 void TPartitionFamily::ActivatePartition(ui32 partitionId) {
-    ALOG_DEBUG(NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "activating partition " << partitionId);
+    PQ_LOG_D("activating partition " << partitionId);
 
     ChangePartitionCounters(1, -1);
 }
 
 void TPartitionFamily::InactivatePartition(ui32 partitionId) {
-    ALOG_DEBUG(NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "inactivating partition " << partitionId);
+    PQ_LOG_D("inactivating partition " << partitionId);
 
     ChangePartitionCounters(-1, 1);
 }
@@ -414,8 +400,7 @@ void TPartitionFamily::InactivatePartition(ui32 partitionId) {
  }
 
 void TPartitionFamily::Merge(TPartitionFamily* other) {
-    ALOG_DEBUG(NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "merge family with  " << other->DebugStr());
+    PQ_LOG_D("merge family with  " << other->DebugStr());
 
     Y_VERIFY(this != other);
 
@@ -556,8 +541,7 @@ void TPartitionFamily::UpdateSpecialSessions() {
 void TPartitionFamily::LockPartition(ui32 partitionId, const TActorContext& ctx) {
     auto step = NextStep();
 
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "lock partition " << partitionId << " for " << Session->DebugStr()
+    PQ_LOG_I("lock partition " << partitionId << " for " << Session->DebugStr()
             << " generation " << TabletGeneration() << " step " << step);
 
     ctx.Send(Session->Sender, MakeEvLockPartition(partitionId, step).release());
@@ -648,8 +632,7 @@ ui32 TConsumer::NextStep() {
 void TConsumer::RegisterPartition(ui32 partitionId, const TActorContext& ctx) {
     auto [_, inserted] = Partitions.try_emplace(partitionId, TPartition());
     if (inserted && IsReadable(partitionId)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "register readable partition " << partitionId);
+        PQ_LOG_D("register readable partition " << partitionId);
 
         CreateFamily({partitionId}, ctx);
     }
@@ -669,7 +652,7 @@ TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, const 
     return CreateFamily(std::move(partitions), TPartitionFamily::EStatus::Free, ctx);
 }
 
-TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, TPartitionFamily::EStatus status, const TActorContext& ctx) {
+TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, TPartitionFamily::EStatus status, const TActorContext&) {
     auto id = ++NextFamilyId;
     auto [it, _] = Families.emplace(id, std::make_unique<TPartitionFamily>(*this, id, std::move(partitions)));
     auto* family = it->second.get();
@@ -679,8 +662,7 @@ TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, TParti
         UnreadableFamilies[id] = family;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "family created " << family->DebugStr());
+    PQ_LOG_D("family created " << family->DebugStr());
 
     return family;
 }
@@ -720,8 +702,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
     std::vector<TPartitionFamily*> newFamilies;
 
     if (!family->IsLonely()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "break up " << family->DebugStr() << " partition=" << partitionId);
+        PQ_LOG_D("break up " << family->DebugStr() << " partition=" << partitionId);
 
         std::unordered_set<ui32> partitions;
         partitions.insert(family->Partitions.begin(), family->Partitions.end());
@@ -801,8 +782,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                 }
             }
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << "can't break up " << family->DebugStr() << " because partition=" << partitionId << " is not root of family");
+            PQ_LOG_D("can't break up " << family->DebugStr() << " because partition=" << partitionId << " is not root of family");
         }
     }
 
@@ -884,8 +864,7 @@ TPartitionFamily* TConsumer::FindFamily(ui32 partitionId) {
 }
 
 void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "register reading session " << session->DebugStr());
+    PQ_LOG_I("register reading session " << session->DebugStr());
 
     Sessions[session->Pipe] = session;
 
@@ -969,8 +948,7 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
 bool TConsumer::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
     auto* family = FindFamily(partitionId);
     if (!family) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "unlocking the partition " << partitionId << " from unknown family.");
+        PQ_LOG_CRIT("unlocking the partition " << partitionId << " from unknown family.");
         return false;
     }
 
@@ -1012,8 +990,8 @@ bool TConsumer::ScalingSupport() const {
     return Balancer.ScalingSupport();
 }
 
-TString TConsumer::GetPrefix() const {
-    return TStringBuilder() << Balancer.GetPrefix() << "consumer " << ConsumerName << " ";
+TString TConsumer::LogPrefix() const {
+    return TStringBuilder() << Balancer.LogPrefix() << "consumer " << ConsumerName << " ";
 }
 
 bool TConsumer::SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie) {
@@ -1052,8 +1030,7 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
     });
 
     if (partition.NeedReleaseChildren()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "Attache partitions [" << JoinRange(", ", newPartitions.begin(), newPartitions.end()) << "] to " << family->DebugStr());
+        PQ_LOG_D("Attache partitions [" << JoinRange(", ", newPartitions.begin(), newPartitions.end()) << "] to " << family->DebugStr());
         for (auto id : newPartitions) {
             if (family->CanAttach(std::vector{id})) {
                 auto* node = GetPartitionGraph().GetPartition(id);
@@ -1085,8 +1062,7 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
                     }
                 }
             } else {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                        GetPrefix() << "Can't attache partition " << id << " to " << family->DebugStr());
+                PQ_LOG_D("Can't attache partition " << id << " to " << family->DebugStr());
             }
         }
     } else {
@@ -1103,21 +1079,18 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
 
 void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
     if (!GetPartitionInfo(partitionId)) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "start reading for deleted partition " << partitionId);
+        PQ_LOG_CRIT("start reading for deleted partition " << partitionId);
         return;
     }
 
     auto* partition = GetPartition(partitionId);
     if (!partition) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "Reading of the partition " << partitionId << " was started by " << ConsumerName << ".");
+        PQ_LOG_D("Reading of the partition " << partitionId << " was started by " << ConsumerName << ".");
     }
 
     auto wasInactive = partition->IsInactive();
     if (partition->StartReading()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "Reading of the partition " << partitionId << " was started by " << ConsumerName << ". We stop reading from child partitions.");
+        PQ_LOG_D("Reading of the partition " << partitionId << " was started by " << ConsumerName << ". We stop reading from child partitions.");
 
         auto* family = FindFamily(partitionId);
         if (!family) {
@@ -1160,33 +1133,29 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
     auto partitionId = r.GetPartitionId();
 
     if (!IsReadable(partitionId)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << ConsumerName
-                    << " but the partition isn't readable");
+        PQ_LOG_D("Reading of the partition " << partitionId << " was finished by " << ConsumerName
+                << " but the partition isn't readable");
         return;
     }
 
     auto* family = FindFamily(partitionId);
     if (!family) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << ConsumerName
-                    << " but the partition hasn't family");
+        PQ_LOG_D("Reading of the partition " << partitionId << " was finished by " << ConsumerName
+                << " but the partition hasn't family");
         return;
     }
 
     if (!family->Session) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << ConsumerName
-                    << " but the partition hasn't reading session");
+        PQ_LOG_D("Reading of the partition " << partitionId << " was finished by " << ConsumerName
+                << " but the partition hasn't reading session");
         return;
     }
 
     auto& partition = Partitions[partitionId];
 
     if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset())) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
-                    << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
+        PQ_LOG_D("Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
+                << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
 
         if (ProccessReadingFinished(partitionId, false, ctx)) {
             ScheduleBalance(ctx);
@@ -1194,10 +1163,9 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
     } else if (!partition.IsInactive()) {
         auto delay = std::min<size_t>(1ul << partition.Iteration, Balancer.GetLifetimeSeconds()); // TODO use split/merge time
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
-                    << ". Scheduled release of the partition for re-reading. Delay=" << delay << " seconds,"
-                    << " firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
+        PQ_LOG_D("Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
+                << ". Scheduled release of the partition for re-reading. Delay=" << delay << " seconds,"
+                << " firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
 
         ctx.Schedule(TDuration::Seconds(delay), new TEvPQ::TEvWakeupReleasePartition(ConsumerName, partitionId, partition.Cookie));
     }
@@ -1205,15 +1173,13 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
 
 void TConsumer::ScheduleBalance(const TActorContext& ctx) {
     if (BalanceScheduled) {
-        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "rebalancing already was scheduled");
+        PQ_LOG_T("rebalancing already was scheduled");
         return;
     }
 
     BalanceScheduled = true;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "rebalancing was scheduled");
+    PQ_LOG_D("rebalancing was scheduled");
 
     ctx.Send(Balancer.TopicActor.SelfId(), new TEvPQ::TEvBalanceConsumer(ConsumerName));
 }
@@ -1283,8 +1249,7 @@ size_t GetMaxFamilySize(const std::unordered_map<size_t, const std::unique_ptr<T
 }
 
 void TConsumer::Balance(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "balancing. Sessions=" << Sessions.size() << ", Families=" << Families.size()
+    PQ_LOG_D("balancing. Sessions=" << Sessions.size() << ", Families=" << Families.size()
             << ", UnradableFamilies=" << UnreadableFamilies.size() << " [" << DebugStr(UnreadableFamilies)
             << "], RequireBalancing=" << FamiliesRequireBalancing.size() << " [" << DebugStr(FamiliesRequireBalancing) << "]");
 
@@ -1300,8 +1265,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             continue;
         }
         if (!family->SpecialSessions.contains(family->Session->Pipe)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "rebalance " << family->DebugStr() << " because exists the special session for it");
+            PQ_LOG_D("rebalance " << family->DebugStr() << " because exists the special session for it");
             family->Release(ctx);
         }
     }
@@ -1324,8 +1288,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             }
 
             if (sit == sessions.end()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                        GetPrefix() << "balancing of the " << family->DebugStr() << " failed because there are no suitable reading sessions.");
+                PQ_LOG_D("balancing of the " << family->DebugStr() << " failed because there are no suitable reading sessions.");
 
                 continue;
             }
@@ -1335,8 +1298,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             // Reorder sessions
             sessions.erase(sit);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << "balancing " << family->DebugStr() << " for " << session->DebugStr());
+            PQ_LOG_D("balancing " << family->DebugStr() << " for " << session->DebugStr());
             family->StartReading(*session, ctx);
 
             // Reorder sessions
@@ -1355,8 +1317,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         auto desiredFamilyCount = familyCount / commonSessions.size();
         auto allowPlusOne = familyCount % commonSessions.size();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "start rebalancing. familyCount=" << familyCount << ", sessionCount=" << commonSessions.size()
+        PQ_LOG_D("start rebalancing. familyCount=" << familyCount << ", sessionCount=" << commonSessions.size()
                 << ", desiredFamilyCount=" << desiredFamilyCount << ", allowPlusOne=" << allowPlusOne);
 
         if (!OrderedSessions) {
@@ -1386,8 +1347,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             auto* family = it->second;
 
             if (!family->IsActive()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                        GetPrefix() << "skip balancing " << family->DebugStr() << " because it is not active.");
+                PQ_LOG_D("skip balancing " << family->DebugStr() << " because it is not active.");
 
                 it = FamiliesRequireBalancing.erase(it);
                 continue;
@@ -1399,16 +1359,14 @@ void TConsumer::Balance(const TActorContext& ctx) {
             }
 
             if (family->Session->ActiveFamilyCount == 1) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                        GetPrefix() << "skip balancing " << family->DebugStr() << " because it is considered a session that does not read anything else.");
+                PQ_LOG_D("skip balancing " << family->DebugStr() << " because it is considered a session that does not read anything else.");
 
                 it = FamiliesRequireBalancing.erase(it);
                 continue;
             }
 
             if (family->SpecialSessions.size() <= 1) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                        GetPrefix() << "skip balancing " << family->DebugStr() << " because there are no other suitable reading sessions.");
+                PQ_LOG_D("skip balancing " << family->DebugStr() << " because there are no other suitable reading sessions.");
 
                 it = FamiliesRequireBalancing.erase(it);
                 continue;
@@ -1430,16 +1388,14 @@ void TConsumer::Balance(const TActorContext& ctx) {
                 family->Release(ctx);
                 it = FamiliesRequireBalancing.erase(it);
             } else {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                        GetPrefix() << "skip balancing " << family->DebugStr() << " because it is already being read by the best session.");
+                PQ_LOG_D("skip balancing " << family->DebugStr() << " because it is already being read by the best session.");
                 ++it;
             }
         }
     }
 
     auto duration = TInstant::Now() - startTime;
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "balancing duration: " << duration);
+    PQ_LOG_D("balancing duration: " << duration);
 }
 
 void TConsumer::Release(ui32 partitionId, const TActorContext& ctx) {
@@ -1555,8 +1511,7 @@ const std::unordered_map<TActorId, std::unique_ptr<TSession>>& TBalancer::GetSes
 
 
 void TBalancer::UpdateConfig(std::vector<ui32> addedPartitions, std::vector<ui32> deletedPartitions, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "updating configuration. Deleted partitions [" << JoinRange(", ", deletedPartitions.begin(), deletedPartitions.end())
+    PQ_LOG_D("updating configuration. Deleted partitions [" << JoinRange(", ", deletedPartitions.begin(), deletedPartitions.end())
             << "]. Added partitions [" << JoinRange(", ", addedPartitions.begin(), addedPartitions.end()) << "]");
 
     for (auto partitionId : deletedPartitions) {
@@ -1583,16 +1538,14 @@ bool TBalancer::SetCommittedState(const TString& consumerName, ui32 partitionId,
     }
 
     if (!consumer->IsReadable(partitionId)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "The offset of the partition " << partitionId << " was commited by " << consumerName
+        PQ_LOG_D("The offset of the partition " << partitionId << " was commited by " << consumerName
                 << " but the partition isn't readable");
         return false;
     }
 
     auto wasInactive = consumer->IsInactive(partitionId);
     if (consumer->SetCommittedState(partitionId, generation, cookie)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "The offset of the partition " << partitionId << " was commited by " << consumerName);
+        PQ_LOG_D("The offset of the partition " << partitionId << " was commited by " << consumerName);
 
         if (consumer->ProccessReadingFinished(partitionId, wasInactive, ctx)) {
             consumer->ScheduleBalance(ctx);
@@ -1616,8 +1569,7 @@ void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev
 
     auto consumer = GetConsumer(r.GetConsumer());
     if (!consumer) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "Received TEvReadingPartitionStartedRequest from unknown consumer " << r.GetConsumer());
+        PQ_LOG_D("Received TEvReadingPartitionStartedRequest from unknown consumer " << r.GetConsumer());
         return;
     }
 
@@ -1629,8 +1581,7 @@ void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& e
 
     auto consumer = GetConsumer(r.GetConsumer());
     if (!consumer) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "Received TEvReadingPartitionFinishedRequest from unknown consumer " << r.GetConsumer());
+        PQ_LOG_D("Received TEvReadingPartitionFinishedRequest from unknown consumer " << r.GetConsumer());
         return;
     }
 
@@ -1645,19 +1596,16 @@ void TBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActo
 
     auto* partitionInfo = GetPartitionInfo(partitionId);
     if (!partitionInfo) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "client " << r.GetClientId() << " pipe " << sender << " got deleted partition " << r);
+        PQ_LOG_CRIT("client " << r.GetClientId() << " pipe " << sender << " got deleted partition " << r);
         return;
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "client " << r.GetClientId() << " released partition from pipe " << sender
+    PQ_LOG_I("client " << r.GetClientId() << " released partition from pipe " << sender
             << " session " << r.GetSession() << " partition " << partitionId);
 
     auto* consumer = GetConsumer(consumerName);
     if (!consumer) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "client " << r.GetClientId() << " pipe " << sender
+        PQ_LOG_CRIT("client " << r.GetClientId() << " pipe " << sender
                 << " is not connected and got release partitions request for session " << r.GetSession());
         return;
     }
@@ -1680,18 +1628,16 @@ void TBalancer::Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, const TActorC
     }
 
     if (partition->Commited) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "skip releasing partition " << msg->PartitionId << " of consumer \"" << msg->Consumer << "\" by reading finished timeout because offset is commited");
+        PQ_LOG_D("skip releasing partition " << msg->PartitionId << " of consumer \"" << msg->Consumer << "\" by reading finished timeout because offset is commited");
         return;
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "releasing partition " << msg->PartitionId << " of consumer \"" << msg->Consumer << "\" by reading finished timeout");
+    PQ_LOG_I("releasing partition " << msg->PartitionId << " of consumer \"" << msg->Consumer << "\" by reading finished timeout");
 
     consumer->Release(msg->PartitionId, ctx);
 }
 
-void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx) {
+void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
     const TActorId& sender = ev->Get()->ClientId;
 
     auto it = Sessions.find(sender);
@@ -1702,21 +1648,18 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActor
     auto& session = it->second;
     ++session->ServerActors;
 
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "pipe " << sender << " connected; active server actors: " << session->ServerActors);
+    PQ_LOG_I("pipe " << sender << " connected; active server actors: " << session->ServerActors);
 }
 
 void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
     auto it = Sessions.find(ev->Get()->ClientId);
 
     if (it == Sessions.end()) {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "pipe " << ev->Get()->ClientId << " disconnected but there aren't sessions exists.");
+        PQ_LOG_ERROR("pipe " << ev->Get()->ClientId << " disconnected but there aren't sessions exists.");
         return;
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "pipe " << ev->Get()->ClientId << " disconnected; active server actors: "
+    PQ_LOG_I("pipe " << ev->Get()->ClientId << " disconnected; active server actors: "
             << (it != Sessions.end() ? it->second->ServerActors : -1));
 
     auto& session = it->second;
@@ -1725,8 +1668,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
     }
 
     if (!session->SessionName.empty()) {
-        LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "pipe " << ev->Get()->ClientId << " client "
+        PQ_LOG_NOTICE("pipe " << ev->Get()->ClientId << " client "
                 << session->ClientId << " disconnected session " << session->SessionName);
 
         auto* consumer = GetConsumer(session->ClientId);
@@ -1742,8 +1684,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
 
         Sessions.erase(it);
     } else {
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "pipe " << ev->Get()->ClientId << " disconnected no session");
+        PQ_LOG_I("pipe " << ev->Get()->ClientId << " disconnected no session");
 
         Sessions.erase(it);
     }
@@ -1754,31 +1695,26 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     auto& consumerName = r.GetClientId();
 
     TActorId pipe = ActorIdFromProto(r.GetPipeClient());
-    LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "consumer \"" << consumerName << "\" register session for pipe " << pipe << " session " << r.GetSession());
+    PQ_LOG_NOTICE("consumer \"" << consumerName << "\" register session for pipe " << pipe << " session " << r.GetSession());
 
     if (consumerName.empty()) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "ignored the session registration with empty consumer name.");
+        PQ_LOG_CRIT("ignored the session registration with empty consumer name.");
         return;
     }
 
     if (r.GetSession().empty()) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "ignored the session registration with empty session name.");
+        PQ_LOG_CRIT("ignored the session registration with empty session name.");
         return;
     }
 
     if (!pipe) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "ignored the session registration with empty Pipe.");
+        PQ_LOG_CRIT("ignored the session registration with empty Pipe.");
         return;
     }
 
     auto jt = Sessions.find(pipe);
     if (jt == Sessions.end()) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "client \"" << consumerName << "\" pipe " << pipe
+        PQ_LOG_CRIT("client \"" << consumerName << "\" pipe " << pipe
                         << " is not connected and got register session request for session " << r.GetSession());
         return;
     }
@@ -1883,8 +1819,7 @@ void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorCo
 }
 
 void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "ProcessPendingStats. PendingUpdates size " << PendingUpdates.size());
+    PQ_LOG_D("ProcessPendingStats. PendingUpdates size " << PendingUpdates.size());
 
     GetPartitionGraph().Travers([&](ui32 id) {
         for (auto& d : PendingUpdates[id]) {
@@ -1898,8 +1833,8 @@ void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
     PendingUpdates.clear();
 }
 
-TString TBalancer::GetPrefix() const {
-    return TStringBuilder() << "balancer: [" << TopicActor.TabletID() << "] topic " << Topic() << " ";
+TString TBalancer::LogPrefix() const {
+    return TStringBuilder() << "[" << TopicActor.TabletID() << "][" << Topic() << "] ";
 }
 
 ui32 TBalancer::NextStep() {

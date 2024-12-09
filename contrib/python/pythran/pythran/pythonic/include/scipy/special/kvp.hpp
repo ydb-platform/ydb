@@ -21,8 +21,8 @@ namespace scipy
 #define NUMPY_NARY_FUNC_NAME kvp
 #define NUMPY_NARY_FUNC_SYM details::kvp
 #include "pythonic/include/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

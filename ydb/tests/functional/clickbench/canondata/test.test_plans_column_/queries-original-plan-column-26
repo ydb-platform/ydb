@@ -54,7 +54,8 @@
                                                             }
                                                         ],
                                                         "Name": "Filter",
-                                                        "Predicate": "SearchPhrase != "
+                                                        "Predicate": "SearchPhrase != \"\"",
+                                                        "Pushdown": "True"
                                                     },
                                                     {
                                                         "Inputs": [],

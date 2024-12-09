@@ -24,16 +24,12 @@ std::shared_ptr<TColumnEngineChanges> TPortionsBucket::BuildOptimizationTask(std
     ui64 size = 0;
     for (auto&& i : context.GetPortions()) {
         size += i->GetTotalBlobBytes();
-        AFL_VERIFY(!locksManager->IsLocked(*i));
+        AFL_VERIFY(!locksManager->IsLocked(*i, NDataLocks::ELockCategory::Compaction));
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("size", size)("next", Finish.DebugString())("count", context.GetPortions().size())(
         "event", "start_optimization");
     TSaverContext saverContext(storagesManager);
-    std::vector<TPortionDataAccessor> accessors;
-    for (auto&& i : context.GetPortions()) {
-        accessors.emplace_back(i);
-    }
-    auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, accessors, saverContext);
+    auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, context.GetPortions(), saverContext);
     for (auto&& i : context.GetSplitRightOpenIntervalPoints()) {
         NArrow::NMerger::TSortableBatchPosition pos(i.ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
         result->AddCheckPoint(pos, false);
@@ -43,7 +39,7 @@ std::shared_ptr<TColumnEngineChanges> TPortionsBucket::BuildOptimizationTask(std
 
 bool TPortionsBucket::IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
     for (auto&& i : Portions) {
-        if (dataLocksManager->IsLocked(*i.second.GetPortionInfo())) {
+        if (dataLocksManager->IsLocked(*i.second.GetPortionInfo(), NDataLocks::ELockCategory::Compaction)) {
             return true;
         }
     }

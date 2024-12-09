@@ -17,24 +17,19 @@
 #include "query_commands.h"
 #include "queue_commands.h"
 #include "scheduler_commands.h"
+#include "shuffle_commands.h"
 #include "table_commands.h"
 #include "transaction_commands.h"
-#include "shuffle_commands.h"
+
+#include <yt/yt/library/formats/format.h>
 
 #include <yt/yt/client/api/client_cache.h>
 #include <yt/yt/client/api/connection.h>
 #include <yt/yt/client/api/sticky_transaction_pool.h>
-#include <yt/yt/client/api/transaction.h>
-
-#include <yt/yt/client/api/rpc_proxy/connection_impl.h>
-
-#include <yt/yt/client/node_tracker_client/node_directory.h>
 
 #include <yt/yt/core/yson/null_consumer.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
-
-#include <yt/yt/library/formats/format.h>
 
 #include <yt/yt/library/tvm/tvm_base.h>
 
@@ -235,6 +230,7 @@ public:
         REGISTER    (TGetTablePivotKeysCommand,            "get_table_pivot_keys",            Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TGetTabletInfosCommand,               "get_tablet_infos",                Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TGetTabletErrorsCommand,              "get_tablet_errors",               Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TGetTableMountInfoCommand,             "get_table_mount_info",           Null,       Structured, false, false, ApiVersion4);
 
         REGISTER    (TCreateTableBackupCommand,            "create_table_backup",             Null,       Null,       true,  false, ApiVersion3);
         REGISTER    (TRestoreTableBackupCommand,           "restore_table_backup",            Null,       Null,       true,  false, ApiVersion3);
@@ -361,7 +357,7 @@ public:
         REGISTER    (TAdvanceQueueConsumerCommand,         "advance_queue_consumer",          Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TCreateQueueProducerSessionCommand,   "create_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TRemoveQueueProducerSessionCommand,   "remove_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
-        REGISTER    (TPushQueueProducerCommand,            "push_queue_producer",             Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TPushQueueProducerCommand,            "push_queue_producer",             Tabular,    Structured, true,  false, ApiVersion4);
 
         REGISTER    (TStartQueryCommand,                   "start_query",                     Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbortQueryCommand,                   "abort_query",                     Null,       Structured, true,  false, ApiVersion4);
@@ -388,7 +384,6 @@ public:
         REGISTER    (TGetFlowViewCommand,                  "get_flow_view",                   Null,       Structured, false, false, ApiVersion4);
 
         REGISTER    (TStartShuffleCommand,                 "start_shuffle",                   Null,       Structured, true,  false, ApiVersion4);
-        REGISTER    (TFinishShuffleCommand,                "finish_shuffle",                  Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TReadShuffleDataCommand,              "read_shuffle_data",               Null,       Tabular,    false,  true, ApiVersion4);
         REGISTER    (TWriteShuffleDataCommand,             "write_shuffle_data",              Tabular,    Structured, false,  true, ApiVersion4);
 
@@ -437,6 +432,7 @@ public:
             identity.User);
 
         auto options = TClientOptions::FromAuthenticationIdentity(identity);
+        options.RequirePasswordInAuthenticationCommands = Config_->RequirePasswordInAuthenticationCommands;
         options.Token = request.UserToken;
         options.ServiceTicketAuth = request.ServiceTicket
             ? std::make_optional(New<NAuth::TServiceTicketFixedAuth>(*request.ServiceTicket))

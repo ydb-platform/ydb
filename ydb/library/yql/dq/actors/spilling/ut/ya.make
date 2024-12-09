@@ -3,7 +3,6 @@ UNITTEST_FOR(ydb/library/yql/dq/actors/spilling)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-TIMEOUT(180)
 
 SRCS(
     spilling_file_ut.cpp
@@ -15,8 +14,8 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/library/actors/testlib
     ydb/library/services
-    ydb/library/yql/sql/pg_dummy
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 END()

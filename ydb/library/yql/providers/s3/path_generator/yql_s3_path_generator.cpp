@@ -10,10 +10,10 @@
 #include <util/string/split.h>
 #include <util/string/strip.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_value_builder.h>
-#include <ydb/library/yql/minikql/datetime/datetime.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/public/udf/udf_value_builder.h>
+#include <yql/essentials/minikql/computation/mkql_value_builder.h>
+#include <yql/essentials/minikql/datetime/datetime.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/public/udf/udf_value_builder.h>
 
 namespace NYql::NPathGenerator {
 

@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/ndim.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -16,7 +16,7 @@ namespace numpy
   {
     return std::tuple_size<decltype(shape(e))>::value;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

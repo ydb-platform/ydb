@@ -62,6 +62,7 @@ namespace NKikimr {
             TVector<ui32>    CommitChunks;      // chunks to commit within this log entry
             TVector<ui32>    DeleteChunks;      // chunks to delete
             TDiskPartVec     RemovedHugeBlobs;  // freed huge blobs
+            TDiskPartVec     AllocatedHugeBlobs;
             TLevelSegmentPtr ReplSst;           // pointer to replicated SST
             ui32             NumRecoveredBlobs; // number of blobs in this SST (valid only for replicated tables)
             bool             DeleteToDecommitted;
@@ -70,10 +71,12 @@ namespace NKikimr {
             THullCommitMeta(TVector<ui32>&& chunksAdded,
                             TVector<ui32>&& chunksDeleted,
                             TDiskPartVec&&  removedHugeBlobs,
+                            TDiskPartVec&&  allocatedHugeBlobs,
                             bool            prevSliceActive)
                 : CommitChunks(std::move(chunksAdded))
                 , DeleteChunks(std::move(chunksDeleted))
                 , RemovedHugeBlobs(std::move(removedHugeBlobs))
+                , AllocatedHugeBlobs(std::move(allocatedHugeBlobs))
                 , NumRecoveredBlobs(0)
                 , DeleteToDecommitted(prevSliceActive)
             {}
@@ -140,9 +143,9 @@ namespace NKikimr {
             // notify delayed deleter when log record is actually written; we MUST ensure that updates are coming in
             // order of increasing LSN's; this is achieved automatically as all actors reside on the same mailbox
             LevelIndex->DelayedCompactionDeleterInfo->Update(LsnSeg.Last, std::move(Metadata.RemovedHugeBlobs),
-                CommitRecord.DeleteToDecommitted ? CommitRecord.DeleteChunks : TVector<TChunkIdx>(),
-                PDiskSignatureForHullDbKey<TKey>(), WId, ctx, Ctx->HugeKeeperId, Ctx->SkeletonId, Ctx->PDiskCtx,
-                Ctx->HullCtx->VCtx);
+                std::move(Metadata.AllocatedHugeBlobs), CommitRecord.DeleteToDecommitted ? CommitRecord.DeleteChunks :
+                TVector<TChunkIdx>(), PDiskSignatureForHullDbKey<TKey>(), WId, ctx, Ctx->HugeKeeperId, Ctx->SkeletonId,
+                Ctx->PDiskCtx, Ctx->HullCtx->VCtx);
 
             NPDisk::TEvLogResult* msg = ev->Get();
 
@@ -223,6 +226,7 @@ namespace NKikimr {
             NKikimrVDiskData::THullDbEntryPoint pb;
             LevelIndex->SerializeToProto(*pb.MutableLevelIndex());
             Metadata.RemovedHugeBlobs.SerializeToProto(*pb.MutableRemovedHugeBlobs());
+            Metadata.AllocatedHugeBlobs.SerializeToProto(*pb.MutableAllocatedHugeBlobs());
             return THullDbSignatureRoutines::Serialize(pb);
         }
 
@@ -323,7 +327,7 @@ namespace NKikimr {
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
-                    {TVector<ui32>(), TVector<ui32>(), TDiskPartVec(), false},
+                    {TVector<ui32>(), TVector<ui32>(), TDiskPartVec(), TDiskPartVec(), false},
                     callerInfo,
                     0)
         {}
@@ -351,6 +355,7 @@ namespace NKikimr {
                 TVector<ui32>&& chunksAdded,
                 TVector<ui32>&& chunksDeleted,
                 TDiskPartVec&& removedHugeBlobs,
+                TDiskPartVec&& allocatedHugeBlobs,
                 const TString &callerInfo,
                 ui64 wId)
             : TBase(std::move(hullLogCtx),
@@ -358,7 +363,7 @@ namespace NKikimr {
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
-                    {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), false},
+                    {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), std::move(allocatedHugeBlobs), false},
                     callerInfo,
                     wId)
         {}
@@ -383,13 +388,14 @@ namespace NKikimr {
                 TVector<ui32>&& chunksAdded,
                 TVector<ui32>&& chunksDeleted,
                 TDiskPartVec&& removedHugeBlobs,
+                TDiskPartVec&& allocatedHugeBlobs,
                 ui64 wId)
             : TBase(std::move(hullLogCtx),
                     std::move(ctx),
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
-                    {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), true},
+                    {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), std::move(allocatedHugeBlobs), true},
                     TString(),
                     wId)
         {}

@@ -43,6 +43,9 @@ TStringBuf GetServiceHostName(TStringBuf address);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Constructs an address of the form |[address]:port|.
+TString FormatNetworkAddress(TStringBuf address, int port);
+
 class TIP6Address;
 
 //! An opaque wrapper for |sockaddr| type.

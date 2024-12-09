@@ -1,5 +1,6 @@
 #include "base_table_writer.h"
 #include "logging.h"
+#include "service.h"
 #include "worker.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
@@ -16,6 +17,7 @@
 
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
+#include <util/generic/set.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NReplication::NService {
@@ -409,6 +411,8 @@ class TLocalTableWriter
         CreateSenders(NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
 
         if (!Initialized) {
+            LOG_D("Send handshake"
+                << ": worker# " << Worker);
             Send(Worker, new TEvWorker::TEvHandshake());
             Initialized = true;
         }
@@ -426,16 +430,71 @@ class TLocalTableWriter
 
         Y_ABORT_UNLESS(PendingRecords.empty());
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records(::Reserve(ev->Get()->Records.size()));
+        TSet<TRowVersion> versionsWithoutTxId;
 
-        for (auto& record : ev->Get()->Records) {
-            records.emplace_back(record.Offset, TablePathId, record.Data.size());
-            auto res = PendingRecords.emplace(
-                record.Offset, Parser->Parse(ev->Get()->Source, record.Offset, std::move(record.Data))
-            );
-            Y_ABORT_UNLESS(res.second);
+        for (auto& [offset, data, _] : ev->Get()->Records) {
+            auto record = Parser->Parse(ev->Get()->Source, offset, std::move(data));
+
+            if (Mode == EWriteMode::Consistent) {
+                const auto version = TRowVersion(record->GetStep(), record->GetTxId());
+
+                if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcHeartbeat) {
+                    TxIds.erase(TxIds.begin(), TxIds.upper_bound(version));
+                    Send(Worker, new TEvService::TEvHeartbeat(version));
+                    continue;
+                } else if (record->GetKind() != NChangeExchange::IChangeRecord::EKind::CdcDataChange) {
+                    Y_ABORT("Unexpected record kind");
+                }
+
+                if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
+                    record->RewriteTxId(it->second);
+                } else {
+                    versionsWithoutTxId.insert(version);
+                    PendingTxId[version].push_back(std::move(record));
+                    continue;
+                }
+            }
+
+            records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
+            Y_ABORT_UNLESS(PendingRecords.emplace(record->GetOrder(), std::move(record)).second);
         }
 
-        EnqueueRecords(std::move(records));
+        if (versionsWithoutTxId) {
+            Send(Worker, new TEvService::TEvGetTxId(versionsWithoutTxId));
+        }
+
+        if (records) {
+            EnqueueRecords(std::move(records));
+        }
+    }
+
+    void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
+
+        for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
+            const auto version = TRowVersion::Parse(kv.GetVersion());
+            TxIds.emplace(version, kv.GetTxId());
+
+            for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
+                if (it->first >= version) {
+                    break;
+                }
+
+                for (auto& record : it->second) {
+                    record->RewriteTxId(kv.GetTxId());
+                    records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
+                    Y_ABORT_UNLESS(PendingRecords.emplace(record->GetOrder(), std::move(record)).second);
+                }
+
+                PendingTxId.erase(it++);
+            }
+        }
+
+        if (records) {
+            EnqueueRecords(std::move(records));
+        }
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
@@ -502,12 +561,14 @@ public:
     }
 
     explicit TLocalTableWriter(
+            EWriteMode mode,
             const TPathId& tablePathId,
             THolder<IChangeRecordParser>&& parser,
             THolder<IChangeRecordSerializer>&& serializer,
             std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn)
         : TActor(&TThis::StateWork)
         , TChangeSender(this, this, this, this, TActorId())
+        , Mode(mode)
         , TablePathId(tablePathId)
         , Parser(std::move(parser))
         , Serializer(std::move(serializer))
@@ -523,6 +584,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, Handle);
+            hFunc(TEvService::TEvTxIdResult, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
@@ -536,6 +598,7 @@ public:
 
 private:
     mutable TMaybe<TString> LogPrefix;
+    const EWriteMode Mode;
     const TPathId TablePathId;
     THolder<IChangeRecordParser> Parser;
     THolder<IChangeRecordSerializer> Serializer;
@@ -549,6 +612,8 @@ private:
     bool Initialized = false;
 
     TMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
+    TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
+    TMap<TRowVersion, TVector<NChangeExchange::IChangeRecord::TPtr>> PendingTxId;
 
 }; // TLocalTableWriter
 
@@ -556,9 +621,10 @@ IActor* CreateLocalTableWriter(
         const TPathId& tablePathId,
         THolder<IChangeRecordParser>&& parser,
         THolder<IChangeRecordSerializer>&& serializer,
-        std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn)
+        std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
+        EWriteMode mode)
 {
-    return new TLocalTableWriter(tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn));
+    return new TLocalTableWriter(mode, tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn));
 }
 
 } // namespace NKikimr::NReplication::NService

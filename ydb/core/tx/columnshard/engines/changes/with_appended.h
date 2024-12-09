@@ -15,6 +15,10 @@ private:
 protected:
     std::optional<ui64> TargetCompactionLevel;
     TSaverContext SaverContext;
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
+
+    }
+
     virtual void DoCompile(TFinalizationContext& context) override;
     virtual void DoOnAfterCompile() override;
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
@@ -37,10 +41,12 @@ protected:
             AFL_VERIFY(portions.emplace(i.first).second);
         }
         if (actLock) {
-            auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier() + "::REMOVE/MOVE", portions);
-            return std::make_shared<NDataLocks::TCompositeLock>(TypeString() + "::" + GetTaskIdentifier(), std::vector<std::shared_ptr<NDataLocks::ILock>>({actLock, selfLock}));
+            auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier() + "::REMOVE/MOVE", portions, GetLockCategory());
+            return std::make_shared<NDataLocks::TCompositeLock>(
+                TypeString() + "::" + GetTaskIdentifier(), std::vector<std::shared_ptr<NDataLocks::ILock>>({ actLock, selfLock }));
         } else {
-            auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), portions);
+            auto selfLock =
+                std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), portions, GetLockCategory());
             return selfLock;
         }
     }
@@ -56,6 +62,7 @@ public:
         for (auto&& i : portions) {
             AFL_VERIFY(i);
             AFL_VERIFY(PortionsToMove.emplace(i->GetAddress(), i).second)("portion_id", i->GetPortionId());
+            PortionsToAccess->AddPortion(i);
         }
     }
 
@@ -75,9 +82,12 @@ public:
         TargetCompactionLevel = level;
     }
 
-    void AddPortionToRemove(const TPortionInfo::TConstPtr& info) {
+    void AddPortionToRemove(const TPortionInfo::TConstPtr& info, const bool addIntoDataAccessRequest = true) {
         AFL_VERIFY(!info->HasRemoveSnapshot());
         AFL_VERIFY(PortionsToRemove.emplace(info->GetAddress(), info).second);
+        if (addIntoDataAccessRequest) {
+            PortionsToAccess->AddPortion(info);
+        }
     }
 
     std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;

@@ -1,7 +1,7 @@
 #include "dq_tasks_runner.h"
 
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_multihopping.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
@@ -10,19 +10,19 @@
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/core/user_data/yql_user_data.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/core/user_data/yql_user_data.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <util/generic/scope.h>
 

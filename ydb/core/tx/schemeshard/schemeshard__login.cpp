@@ -1,7 +1,6 @@
 #include <ydb/library/security/util.h>
 #include <ydb/core/protos/auth.pb.h>
 
-#include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
 namespace NKikimr {
@@ -84,9 +83,8 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
             }
             if (loginResponse.Token) {
                 result->Record.SetToken(loginResponse.Token);
+                result->Record.SetSanitizedToken(loginResponse.SanitizedToken);
             }
-
-            AuditLogLogin(Request->Get()->Record, result->Record, Self);
 
         } else {
             result->Record.SetError("Login authentication is disabled");

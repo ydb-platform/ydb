@@ -9,7 +9,7 @@ import yatest
 
 from ydb.tests.library.common.local_db_scheme import get_scheme
 from ydb.tests.library.common.types import TabletTypes
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.kv.helpers import create_tablets_and_wait_for_start
 from ydb.tests.oss.canonical import set_canondata_root
 
@@ -51,7 +51,7 @@ class TestTabletSchemes(object):
 
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.client = cls.cluster.client
         cls.shard_index = itertools.count(start=1)

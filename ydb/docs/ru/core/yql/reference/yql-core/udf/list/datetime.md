@@ -187,20 +187,28 @@ SELECT
     DateTime::ToDays(cast('2018-01-01' as date) - cast('2017-12-31' as date)); --1
 ```
 
-## StartOf... / TimeOfDay {#startof}
+## StartOf... / EndOf... / TimeOfDay {#startof}
 
-Получить начало периода, содержащего дату/время. При некорректном результате возвращается NULL. Если таймзона не GMT, то начало периода будет в указанной временной зоне.
+Получить начало (конец) периода, содержащего дату/время. При некорректном результате возвращается NULL. Если таймзона не GMT, то начало (конец) периода будет в указанной временной зоне.
 
 ### Список функций
 
 * `DateTime::StartOfYear(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::EndOfYear(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
 * `DateTime::StartOfQuarter(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::EndOfQuarter(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
 * `DateTime::StartOfMonth(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::EndOfMonth(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
 * `DateTime::StartOfWeek(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::EndOfWeek(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
 * `DateTime::StartOfDay(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::EndOfDay(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
 * `DateTime::StartOf(Resource<TM>{Flags:AutoMap}, Interval{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::EndOf(Resource<TM>{Flags:AutoMap}, Interval{Flags:AutoMap}) -> Resource<TM>?`
 
-Функция `StartOf` предназначена для группировки в пределах суток по произвольному периоду. Результат отличается от входного значения только компонентами времени. Период более суток трактуется как сутки (эквивалентно `StartOfDay`). Если в сутках не содержится целого числа периодов, производится округление к ближайшему времени от начала суток, кратному указанному периоду. При нулевом интервале выход совпадает со входом. Отрицательный интервал трактуется как положительный.
+Функции `StartOf`/`EndOf` предназначены для группировки в пределах суток по произвольному периоду. Результат отличается от входного значения только компонентами времени. Период более суток трактуется как сутки (эквивалентно `StartOfDay`/`EndOfDay`). Если в сутках не содержится целого числа периодов, производится округление к ближайшему времени от начала суток, кратному указанному периоду. При нулевом интервале выход совпадает со входом. Отрицательный интервал трактуется как положительный.
+
+Функции `EndOf...` предназначены для получения последнего момента времени, находящегося в том же выбранном интервале, что и заданный.
 
 Поведение функций с периодами больше дня отличается от поведения одноимённых функций в старой библиотеке. Компоненты времени всегда обнуляются (это логично, поскольку эти функции в основном используются для группировки по периоду). Отдельно существует возможность выделить время в пределах суток:
 

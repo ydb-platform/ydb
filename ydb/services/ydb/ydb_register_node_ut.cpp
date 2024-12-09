@@ -23,9 +23,9 @@
 
 #include <google/protobuf/any.h>
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>

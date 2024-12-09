@@ -131,6 +131,11 @@ struct TTraits
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TThis>
+using TVersionFilter = bool (*)(typename TTraits<TThis>::TVersion version);
+
+////////////////////////////////////////////////////////////////////////////////
+
 #define PHOENIX_REGISTRAR_NODISCARD [[nodiscard("Did you forget to call operator()?")]]
 
 class PHOENIX_REGISTRAR_NODISCARD TDummyFieldRegistrar
@@ -357,8 +362,9 @@ public:
         return TFieldSaveRegistrar(std::move(*this));
     }
 
-    auto InVersions(auto /*filter*/) &&
+    auto InVersions(TVersionFilter<TThis> filter) &&
     {
+        VersionFilter_ = filter;
         return TFieldSaveRegistrar(std::move(*this));
     }
 
@@ -375,7 +381,9 @@ public:
 
     void operator()() &&
     {
-        TFieldSerializer::Save(Context_, This_->*Member);
+        if (!VersionFilter_ || VersionFilter_(Context_.GetVersion())) {
+            TFieldSerializer::Save(Context_, This_->*Member);
+        }
     }
 
 private:
@@ -384,6 +392,8 @@ private:
 
     const TThis* const This_;
     TContext& Context_;
+
+    TVersionFilter<TThis> VersionFilter_ = nullptr;
 };
 
 template <class TThis, class TContext>
@@ -556,9 +566,7 @@ public:
         return TFieldLoadRegistrar(std::move(*this));
     }
 
-    using TVersionFilter = bool (*)(TVersion version);
-
-    auto InVersions(TVersionFilter filter) &&
+    auto InVersions(TVersionFilter<TThis> filter) &&
     {
         VersionFilter_ = filter;
         return TFieldLoadRegistrar(std::move(*this));
@@ -592,7 +600,7 @@ private:
     const TStringBuf Name_;
 
     TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
-    TVersionFilter VersionFilter_ = nullptr;
+    TVersionFilter<TThis> VersionFilter_ = nullptr;
     TFieldMissingHandler<TThis, TContext> MissingHandler_ = nullptr;
 };
 
@@ -1047,6 +1055,12 @@ struct TSerializer
     }
 
     template <class T, class C>
+    static void Save(C& context, const TWeakPtr<T>& ptr)
+    {
+        SaveImpl(context, ptr.Lock().Get());
+    }
+
+    template <class T, class C>
     static void SaveImpl(C& context, T* ptr)
     {
         using NYT::Save;
@@ -1119,6 +1133,14 @@ struct TSerializer
         LoadImpl</*Inplace*/ true>(context, rawPtr);
     }
 
+    template <class T, class C>
+    static void Load(C& context, TWeakPtr<T>& ptr)
+    {
+        T* rawPtr = nullptr;
+        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        ptr.Reset(rawPtr);
+    }
+
     template <bool Inplace, class T, class C>
     static void LoadImpl(C& context, T*& rawPtr)
     {
@@ -1180,7 +1202,8 @@ template <class T, class C>
     requires (std::derived_from<C, NPhoenix2::NDetail::TContextBase>) && (
         std::same_as<T, TIntrusivePtr<typename T::TUnderlying>> ||
         std::same_as<T, std::unique_ptr<typename T::element_type>> ||
-        std::is_pointer_v<T>)
+        std::is_pointer_v<T> ||
+        std::same_as<T, TWeakPtr<typename T::TUnderlying>>)
 struct TSerializerTraits<T, C>
 {
     using TSerializer = NPhoenix2::NDetail::TSerializer;

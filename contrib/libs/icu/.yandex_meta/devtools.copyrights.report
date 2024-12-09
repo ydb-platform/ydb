@@ -1601,7 +1601,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        LICENSE [440:441]
+        LICENSE [468:469]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 5f05b10e1950e5d7e3ebd28e04ee09d5
 BELONGS ya.make
@@ -2156,7 +2156,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        LICENSE [440:441]
+        LICENSE [468:469]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 863ed5a91853ff39803980ae8c89be56
 BELONGS ya.make
@@ -2334,7 +2334,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        LICENSE [504:504]
+        LICENSE [532:532]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8bbce99b686530a3582b17254424cf52
 BELONGS ya.make
@@ -2531,8 +2531,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 93c4a85915c1f800bd94a4e22b075152
 BELONGS ya.make
     License text:
-          <i>© 2016 and later: Unicode, Inc. and others. License &amp; terms of use: http://www.unicode.org/copyright.html</i> 
-          <i>© 1995-2016 International Business Machines Corporation and others</i>
+        (c) 2016 and later Unicode, Inc. and others
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -3451,7 +3450,18 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        i18n/messageformat2.cpp [547:549]
+        i18n/messageformat2.cpp [523:525]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a021d3bd6d6cbb97cbccc0ab1586c491
+BELONGS ya.make
+    License text:
+        Copyright (c) 2013-2022 Niels Lohmann
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [442:442]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a2e73c1b5033a91a4568b306596e332b
 BELONGS ya.make
@@ -3830,7 +3840,19 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        APIChangeReport.html [1624:1626]
+        APIChangeReport.html [1173:1175]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c1b7297fc443f46a1d1de36f8b788822
+BELONGS ya.make
+    License text:
+                _this->toUBytes[_this->toULength++] = static_cast<uint8_t>(c);
+                value = getKey_2022(c, reinterpret_cast<int32_t*>(&key), &offset);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/ucnv2022.cpp [841:842]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c23d9e061ec6d06fc6dd96a82a5984cc
 BELONGS ya.make
@@ -4332,7 +4354,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        i18n/messageformat2.cpp [605:615]
+        i18n/messageformat2.cpp [581:591]
 
 KEEP     COPYRIGHT_SERVICE_LABEL eed7e8b3d80757822970ac3a50dd6716
 BELONGS ya.make

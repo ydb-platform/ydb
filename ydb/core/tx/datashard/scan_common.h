@@ -80,4 +80,9 @@ using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
 
 TColumnsTypes GetAllTypes(const TUserTable& tableInfo);
 
+// TODO(mbkkt) unfortunately key can have same columns as row
+// I can detect this but maybe better
+// if IScan will provide for us "how much data did we read"?
+ui64 CountBytes(TArrayRef<const TCell> key, const NTable::TRowState& row);
+
 }

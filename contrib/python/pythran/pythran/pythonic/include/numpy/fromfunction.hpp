@@ -1,9 +1,9 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_FROMFUNCTION_HPP
 #define PYTHONIC_INCLUDE_NUMPY_FROMFUNCTION_HPP
 
-#include "pythonic/include/utils/functor.hpp"
-#include "pythonic/include/types/ndarray.hpp"
 #include "pythonic/include/builtins/None.hpp"
+#include "pythonic/include/types/ndarray.hpp"
+#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/utils/tags.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -41,7 +41,7 @@ namespace numpy
 
   /* TODO: must specialize for higher order */
   DEFINE_FUNCTOR(pythonic::numpy, fromfunction);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

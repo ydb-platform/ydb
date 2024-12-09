@@ -7,11 +7,8 @@ LIBRARY()
 SRCS(
     column_engine_logs.cpp
     column_engine.cpp
-    column_features.cpp
     db_wrapper.cpp
-    index_info.cpp
     filter.cpp
-    tier_info.cpp
     defs.cpp
 )
 
@@ -32,11 +29,12 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/changes
     ydb/core/tx/columnshard/engines/portions
     ydb/core/tx/columnshard/engines/protos
+    ydb/core/tx/columnshard/engines/loading
     ydb/core/tx/program
     ydb/core/tx/columnshard/common
 
     # for NYql::NUdf alloc stuff used in binary_json
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 YQL_LAST_ABI_VERSION()

@@ -7,7 +7,7 @@
 
 #include <optional>
 
-namespace NKikimr::NSchemeShard {
+namespace NKikimr::NSchemeShard::NBackup {
 
 struct TBackupCollectionPaths {
     TPath RootPath;
@@ -19,6 +19,15 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
     const TString& name,
     bool preValidateDst,
     TOperationContext& context,
-    THolder<TProposeResponse>& result);
+    THolder<TProposeResponse>& result,
+    bool enforceBackupCollectionsDirExists = true);
 
-}  // namespace NKikimr::NSchemeShard
+std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths(
+    const TTxTransaction& tx,
+    const TString& targetDir,
+    const TString& targetName,
+    const TOperationContext& context);
+
+TString ToX509String(const TInstant& datetime);
+
+}  // namespace NKikimr::NSchemeShard::NBackup

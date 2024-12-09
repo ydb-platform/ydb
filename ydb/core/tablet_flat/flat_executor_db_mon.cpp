@@ -1,7 +1,7 @@
 #include "flat_executor.h"
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/stream/hex.h>
 #include <util/string/escape.h>

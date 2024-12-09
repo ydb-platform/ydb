@@ -60,7 +60,7 @@ PEERDIR(
     library/cpp/testing/common
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/sql/pg_dummy
     ydb/public/sdk/cpp/client/ydb_types/operation
     ydb/library/actors/core
 )

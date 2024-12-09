@@ -31,6 +31,7 @@ one_time_waiter = OneTimeWaiter(
         "unsupported_types",
         "json",
         "dummy_table",
+        "json_document",
     ],
 )
 

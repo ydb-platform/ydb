@@ -13,7 +13,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/util
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

@@ -167,6 +167,7 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxSyncLogChunksInFlightHDD;
         TControlWrapper MaxSyncLogChunksInFlightSSD;
         TControlWrapper DefaultHugeGarbagePerMille;
+        TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
 
@@ -178,10 +179,19 @@ namespace NKikimr::NStorage {
         class TPDiskMetadataInteractionActor;
 
         TControlWrapper SlowDiskThreshold;
+        TControlWrapper SlowDiskThresholdHDD;
+        TControlWrapper SlowDiskThresholdSSD;
+
         TControlWrapper PredictedDelayMultiplier;
+        TControlWrapper PredictedDelayMultiplierHDD;
+        TControlWrapper PredictedDelayMultiplierSSD;
+    
+        TControlWrapper MaxNumOfSlowDisks;
+        TControlWrapper MaxNumOfSlowDisksHDD;
+        TControlWrapper MaxNumOfSlowDisksSSD;
+
         TControlWrapper LongRequestThresholdMs;
         TControlWrapper LongRequestReportingDelayMs;
-        TControlWrapper MaxNumOfSlowDisks;
 
     public:
         struct TGroupRecord;

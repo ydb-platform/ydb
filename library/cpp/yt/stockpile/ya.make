@@ -8,4 +8,11 @@ ELSE()
     SRCS(stockpile_other.cpp)
 ENDIF()
 
+PEERDIR(
+    library/cpp/yt/misc
+    library/cpp/yt/threading
+    library/cpp/yt/logging
+    library/cpp/yt/memory
+)
+
 END()

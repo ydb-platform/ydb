@@ -7,7 +7,6 @@ namespace NYdbWorkload {
 
 class TTpchWorkloadParams final: public TTpcBaseWorkloadParams {
 public:
-    void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
@@ -18,8 +17,8 @@ public:
     explicit TTpchWorkloadGenerator(const TTpchWorkloadParams& params);
 
 protected:
-    TString DoGetDDLQueries() const override;
-    TVector<TString> GetTablesList() const override;
+    TString GetTablesYaml() const override;
+    TWorkloadGeneratorBase::TSpecialDataTypes GetSpecialDataTypes() const override;
 
 private:
     const TTpchWorkloadParams& Params;

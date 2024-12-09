@@ -274,9 +274,8 @@ private:
 
             YT_VERIFY(!attachments.empty());
 
-            NCompression::ECodec codec;
-            int intCodec = header.codec();
-            YT_VERIFY(TryEnumCast(intCodec, &codec));
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
+            YT_VERIFY(codecId);
 
             YT_LOG_DEBUG("Response streaming payload received (RequestId: %v, SequenceNumber: %v, Sizes: %v, "
                 "Codec: %v, Closed: %v)",
@@ -285,13 +284,13 @@ private:
                 MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
                     builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
                 }),
-                codec,
+                *codecId,
                 !attachments.back());
 
             TStreamingPayload payload{
-                codec,
+                *codecId,
                 sequenceNumber,
-                std::move(attachments)
+                std::move(attachments),
             };
             Handler_->HandleStreamingPayload(payload);
         }

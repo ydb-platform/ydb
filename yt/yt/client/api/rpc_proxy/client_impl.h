@@ -570,13 +570,10 @@ public:
 
     // Shuffle service client
     TFuture<TShuffleHandlePtr> StartShuffle(
-        const TString& account,
+        const std::string& account,
         int partitionCount,
+        NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) override;
-
-    TFuture<void> FinishShuffle(
-        const TShuffleHandlePtr& shuffleHandle,
-        const TFinishShuffleOptions& options) override;
 
     TFuture<IRowBatchReaderPtr> CreateShuffleReader(
         const TShuffleHandlePtr& shuffleHandle,
@@ -585,7 +582,7 @@ public:
 
     TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
         const TShuffleHandlePtr& shuffleHandle,
-        const TString& partitionColumn,
+        const std::string& partitionColumn,
         const NTableClient::TTableWriterConfigPtr& config) override;
 
 private:

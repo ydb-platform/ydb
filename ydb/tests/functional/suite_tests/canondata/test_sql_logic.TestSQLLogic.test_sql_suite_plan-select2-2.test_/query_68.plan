@@ -66,7 +66,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "Not Exist(item.a) Or item.b > item.c Or item.c >= item.b - 2 And item.c <= item.d + 2"
+                                                "Predicate": "NOT Exist(item.a) OR item.b > item.c OR item.c >= item.b - 2 AND item.c <= item.d + 2"
                                             }
                                         ],
                                         "PlanNodeId": 2,

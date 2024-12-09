@@ -8,7 +8,7 @@ class IRequestProxyCtx;
 class IRequestCtxMtSafe;
 
 // grpc "connections" log
-void AuditLogConn(const IRequestProxyCtx* reqCtx, const TString& database, const TString& userSID);
+void AuditLogConn(const IRequestProxyCtx* reqCtx, const TString& database, const TString& userSID, const TString& sanitizedToken);
 
 using TAuditLogParts = TVector<std::pair<TString, TString>>;
 

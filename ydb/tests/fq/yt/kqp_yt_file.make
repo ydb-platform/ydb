@@ -16,19 +16,20 @@ ELSE()
 ENDIF()
 
 DEPENDS(
-    ydb/library/yql/tests/common/test_framework/udfs_deps
-    ydb/library/yql/udfs/test/test_import
+    yql/essentials/tests/common/test_framework/udfs_deps
+    yql/essentials/udfs/test/test_import
     ydb/tests/tools/kqprun
 )
 
 DATA(
     arcadia/ydb/library/yql/tests/sql
+    arcadia/yql/essentials/tests/sql/suites
     arcadia/ydb/tests/fq/yt
     arcadia/ydb/tests/fq/yt/cfg
 )
 
 PEERDIR(
-    ydb/library/yql/tests/common/test_framework
+    yql/essentials/tests/common/test_framework
 )
 
 NO_CHECK_IMPORTS()

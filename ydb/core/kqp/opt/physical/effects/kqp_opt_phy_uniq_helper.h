@@ -1,7 +1,7 @@
 #pragma once
 
 #include "kqp_opt_phy_effects_impl.h"
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 namespace NYql {
     class TKikimrTableDescription;

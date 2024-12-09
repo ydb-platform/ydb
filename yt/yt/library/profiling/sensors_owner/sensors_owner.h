@@ -77,13 +77,16 @@ public:
     const TCounter& GetCounter(const std::string& name) const;
 
     //! ~ .Counter(str).Increment(delta)
-    void Inc(const std::string& name, i64 delta) const;
+    void Increment(const std::string& name, i64 delta) const;
 
     //! Gets owned gauge with given metric suffix.
     const TGauge& GetGauge(const std::string& name) const;
 
     //! Gets owned time gauge with given metric suffix.
     const TTimeGauge& GetTimeGauge(const std::string& name) const;
+
+    //! Gets owned timer with given metric suffix.
+    const TEventTimer& GetTimer(const std::string& name) const;
 
     //! Gets owned TimeHistogram with given metric suffix using bounds as a constructor argument.
     const TEventTimer& GetTimeHistogram(const std::string& name, std::vector<TDuration> bounds) const;

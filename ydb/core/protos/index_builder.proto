@@ -124,7 +124,6 @@ message TEvUploadSampleKResponse {
     optional Ydb.StatusIds.StatusCode UploadStatus = 2;
     repeated Ydb.Issue.IssueMessage Issues = 3;
 
-    optional uint64 RowsDelta = 4;
-    optional uint64 BytesDelta = 5;
+    optional uint64 UploadRows = 4;
+    optional uint64 UploadBytes = 5;
 }
-

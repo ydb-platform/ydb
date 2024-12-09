@@ -12,9 +12,12 @@
 
 #include <util/generic/set.h>
 #include <util/stream/str.h>
+#include <util/string/cast.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/join.h>
+
+#define TIMESTAMP_FORMAT_OPTION_DESCRIPTION "Timestamp may be specified in unix time format (seconds from 1970.01.01) or in ISO-8601 format (like 2020-07-10T15:00:00Z)"
 
 namespace NYdb::NConsoleClient {
     namespace {
@@ -98,36 +101,55 @@ namespace NYdb::NConsoleClient {
         }
     } // namespace
 
-
-        TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs) {
-            TStringStream description;
-            description << descriptionPrefix << ". Available codecs: ";
-            NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-            for (const auto& codec : codecs) {
-                auto findResult = CodecsDescriptions.find(codec);
-                Y_ABORT_UNLESS(findResult != CodecsDescriptions.end(),
-                         "Couldn't find description for %s codec", (TStringBuilder() << codec).c_str());
-                description << "\n  " << colors.BoldColor() << codec << colors.OldColor()
-                            << "\n    " << findResult->second;
+    std::function<void(const TString& opt)> TimestampOptionHandler(TMaybe<TInstant>* destination) {
+        return [destination](const TString& opt) {
+            ui64 seconds = 0;
+            if (TryFromString(opt, seconds)) { // unix time
+                destination->ConstructInPlace(TInstant::Seconds(seconds));
+                return;
             }
 
-            return description.Str();
-        }
-
-namespace {
-            NTopic::ECodec ParseCodec(const TString& codecStr, const TVector<NTopic::ECodec>& allowedCodecs) {
-                auto exists = ExistingCodecs.find(to_lower(codecStr));
-                if (exists == ExistingCodecs.end()) {
-                    throw TMisuseException() << "Codec " << codecStr << " is not available for this command";
-                }
-
-                if (std::find(allowedCodecs.begin(), allowedCodecs.end(), exists->second) == allowedCodecs.end()) {
-                    throw TMisuseException() << "Codec " << codecStr << " is not available for this command";
-                }
-
-                return exists->second;
+            TInstant time;
+            if (TInstant::TryParseIso8601(opt, time)) {
+                destination->ConstructInPlace(time);
+                return;
             }
+
+            TStringBuilder err;
+            err << "failed to parse \"" << opt << "\" as a timestamp. It must be either unix time format or ISO-8601 format";
+            throw std::runtime_error(err);
+        };
+    }
+
+    TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs) {
+        TStringStream description;
+        description << descriptionPrefix << ". Available codecs: ";
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        for (const auto& codec : codecs) {
+            auto findResult = CodecsDescriptions.find(codec);
+            Y_ABORT_UNLESS(findResult != CodecsDescriptions.end(),
+                        "Couldn't find description for %s codec", (TStringBuilder() << codec).c_str());
+            description << "\n  " << colors.BoldColor() << codec << colors.OldColor()
+                        << "\n    " << findResult->second;
         }
+
+        return description.Str();
+    }
+
+    namespace {
+        NTopic::ECodec ParseCodec(const TString& codecStr, const TVector<NTopic::ECodec>& allowedCodecs) {
+            auto exists = ExistingCodecs.find(to_lower(codecStr));
+            if (exists == ExistingCodecs.end()) {
+                throw TMisuseException() << "Codec " << codecStr << " is not available for this command";
+            }
+
+            if (std::find(allowedCodecs.begin(), allowedCodecs.end(), exists->second) == allowedCodecs.end()) {
+                throw TMisuseException() << "Codec " << codecStr << " is not available for this command";
+            }
+
+            return exists->second;
+        }
+    }
 
     void TCommandWithSupportedCodecs::AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NYdb::NTopic::ECodec>& supportedCodecs) {
         TString description = PrepareAllowedCodecsDescription("Comma-separated list of supported codecs", supportedCodecs);
@@ -524,9 +546,10 @@ namespace {
         config.Opts->AddLongOption("consumer", "New consumer for topic")
             .Required()
             .StoreResult(&ConsumerName_);
-        config.Opts->AddLongOption("starting-message-timestamp", "Unix timestamp starting from '1970-01-01 00:00:00' from which read is allowed")
+        config.Opts->AddLongOption("starting-message-timestamp", "'Written_at' timestamp from which read is allowed. " TIMESTAMP_FORMAT_OPTION_DESCRIPTION)
+            .RequiredArgument("TIMESTAMP")
             .Optional()
-            .StoreResult(&StartingMessageTimestamp_);
+            .Handler1T<TString>(TimestampOptionHandler(&StartingMessageTimestamp_));
         config.Opts->AddLongOption("important", "Is consumer important")
             .Optional()
             .DefaultValue(false)
@@ -553,7 +576,7 @@ namespace {
         NYdb::NTopic::TConsumerSettings<NYdb::NTopic::TAlterTopicSettings> consumerSettings(readRuleSettings);
         consumerSettings.ConsumerName(ConsumerName_);
         if (StartingMessageTimestamp_.Defined()) {
-            consumerSettings.ReadFrom(TInstant::Seconds(*StartingMessageTimestamp_));
+            consumerSettings.ReadFrom(*StartingMessageTimestamp_);
         }
 
         auto codecs = GetCodecs();
@@ -780,9 +803,10 @@ namespace {
             .Optional()
             .NoArgument()
             .StoreValue(&Wait_, true);
-        config.Opts->AddLongOption("timestamp", "Timestamp from which messages will be read. If not specified, messages are read from the last commit point for the chosen consumer.")
+        config.Opts->AddLongOption("timestamp", "'Written_at' timestamp from which messages will be read. If not specified, messages are read from the last commit point for the chosen consumer. " TIMESTAMP_FORMAT_OPTION_DESCRIPTION)
+            .RequiredArgument("TIMESTAMP")
             .Optional()
-            .StoreResult(&Timestamp_);
+            .Handler1T<TString>(TimestampOptionHandler(&Timestamp_));
         config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions.")
             .Optional()
             .SplitHandler(&PartitionIds_, ',');
@@ -841,7 +865,7 @@ namespace {
         settings.ConsumerName(Consumer_);
         // settings.ReadAll(); // TODO(shmel1k@): change to read only original?
         if (Timestamp_.Defined()) {
-            settings.ReadFromTimestamp(TInstant::Seconds(*(Timestamp_.Get())));
+            settings.ReadFromTimestamp(*Timestamp_);
         }
 
         // TODO(shmel1k@): partition can be added here.

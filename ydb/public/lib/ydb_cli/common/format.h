@@ -7,6 +7,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/set.h>
 
@@ -104,7 +105,22 @@ private:
 
 class TResultSetPrinter {
 public:
-    TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted = []() { return false; }, IOutputStream& output = Cout, size_t maxWidth = 0);
+    class TSettings {
+        YDB_ACCESSOR(EDataFormat, Format, EDataFormat::Pretty);
+        YDB_ACCESSOR(std::function<bool()>, IsInterrupted, []() { return false; });
+        YDB_ACCESSOR(size_t, MaxWidth, 0);
+        YDB_ACCESSOR(size_t, MaxRowsCount, 0);
+        YDB_FLAG_ACCESSOR(CsvWithHeader, false);
+        YDB_READONLY(IOutputStream*, Output, &Cout);
+    public:
+        TSettings& SetOutput(IOutputStream* value) {
+            Output = value;
+            return *this;
+        }
+    };
+
+    TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted = []() { return false; });
+    explicit TResultSetPrinter(const TSettings& settings);
     ~TResultSetPrinter();
 
     void Print(const TResultSet& resultSet);
@@ -123,11 +139,8 @@ private:
 
     bool FirstPart = true;
     bool PrintedSomething = false;
-    EDataFormat Format;
-    std::function<bool()> IsInterrupted;
+    TSettings Settings;
     std::unique_ptr<TResultSetParquetPrinter> ParquetPrinter;
-    IOutputStream& Output;
-    size_t MaxWidth;
 };
 
 class TQueryPlanPrinter {

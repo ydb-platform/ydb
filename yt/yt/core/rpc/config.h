@@ -302,6 +302,11 @@ public:
     TString EndpointSetId;
     TDuration UpdatePeriod;
 
+    //! Use IPv4 address of endpoint.
+    bool UseIPv4;
+    //! Use IPv6 address of endpoint.
+    bool UseIPv6;
+
     REGISTER_YSON_STRUCT(TServiceDiscoveryEndpointsConfig);
 
     static void Register(TRegistrar registrar);

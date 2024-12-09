@@ -2,6 +2,7 @@
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/flat_dbase_apply.h>
 #include <ydb/core/tablet_flat/flat_exec_commit.h>
 #include <ydb/core/testlib/test_client.h>

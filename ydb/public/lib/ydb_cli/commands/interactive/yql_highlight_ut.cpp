@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     TVector<YQLHighlight::Color> Apply(YQLHighlight& highlight,
                                        const TStringBuf& queryUtf8) {
         const auto queryUtf32 = UTF8ToUTF32</* robust = */ false>(queryUtf8);
-        TVector<YQLHighlight::Color> colors(queryUtf32.Size(),
+        TVector<YQLHighlight::Color> colors(queryUtf32.size(),
                                             YQLHighlight::Color::DEFAULT);
         highlight.Apply(queryUtf8, colors);
         return colors;
@@ -153,10 +153,63 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "SELECT \\\"\xF0\x9F\x98\x8A\\\" FROM test", "kkkkkk uuuuu uuuu uuuu");
     }
 
+    Y_UNIT_TEST(MultilineString) {
+        YQLHighlight highlight(Coloring);
+
+        Check(highlight, "@@", "oo");
+        Check(highlight, "@@@", "ooo");
+        Check(highlight, "@@@@", "ssss");
+        Check(highlight, "@@@@@", "sssss");
+        Check(highlight, "@@test@@@", "sssssssss");
+
+        Check(
+            highlight,
+            ("$txt = @@some\n"
+             "multiline\n"
+             "text@@;"),
+            ("ovvv o sssssss"
+             "ssssssssss"
+             "sssssso"));
+        Check(
+            highlight,
+            ("$txt = @@some\n"
+             "multiline with double at: @@@@\n"
+             "text@@;"),
+            ("ovvv o sssssss"
+             "sssssssssssssssssssssssssssssss"
+             "sssssso"));
+    }
+
+    Y_UNIT_TEST(TypedString) {
+        YQLHighlight highlight(Coloring);
+        Check(
+            highlight,
+            "SELECT \"foo\"u, '[1;2]'y, @@{\"a\":null}@@j;",
+            "kkkkkk sssssso sssssssso ssssssssssssssso");
+    }
+
     Y_UNIT_TEST(Number) {
         YQLHighlight highlight(Coloring);
+
         Check(highlight, "1234", "nnnn");
         Check(highlight, "-123", "onnn");
+
+        Check(
+            highlight,
+            ("SELECT "
+             "123l AS `Int64`, "
+             "0b01u AS `Uint32`, "
+             "0xfful AS `Uint64`, "
+             "0o7ut AS `Uint8`, "
+             "456s AS `Int16`, "
+             "1.2345f AS `Float`;"),
+            ("kkkkkk "
+             "nnnn kk qqqqqqqo "
+             "nnnnn kk qqqqqqqqo "
+             "nnnnnn kk qqqqqqqqo "
+             "nnnnn kk qqqqqqqo "
+             "nnnn kk qqqqqqqo "
+             "nnnnnnn kk qqqqqqqo"));
     }
 
     Y_UNIT_TEST(SQL) {
@@ -250,5 +303,66 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
             "SELECT *\r\n"
             "FROM test\n",
             "kkkkkk o  kkkk vvvv ");
+    }
+
+    Y_UNIT_TEST(ANSI) {
+        YQLHighlight highlight(Coloring);
+
+        Check(
+            highlight,
+            "--!ansi_lexer\n"
+            "SELECT * FROM T; /* this is a comment /* this is a nested comment */ */",
+            "cccccccccccccc"
+            "kkkkkk o kkkk vo cccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        Check(
+            highlight,
+            "--!ansi_lexer\n"
+            "SELECT 1 as \"column with \"\" double quote\";",
+            "cccccccccccccc"
+            "kkkkkk n kk ssssssssssssssssssssssssssssso");
+        Check(
+            highlight,
+            "--!ansi_lexer\n"
+            "SELECT 'string with '' quote';",
+            "cccccccccccccc"
+            "kkkkkk sssssssssssssssssssssso");
+
+        Check(
+            highlight,
+            " \t\n --!ansi_lexer \n"
+            "/* /* */ */",
+            "    ccccccccccccccc"
+            "ccccccccccc");
+
+        Check(
+            highlight,
+            (
+                "\n"
+                "\t --!ansi_lexer \n"
+                "-- Some comment\n"
+                "pragma SimpleColumns;\n"
+                "select 1, '''' as empty;"),
+            (
+                " "
+                "  ccccccccccccccc"
+                "cccccccccccccccc"
+                "kkkkkk vvvvvvvvvvvvvo "
+                "kkkkkk no ssss kk kkkkko"));
+        Check(
+            highlight,
+            (
+                "$str = '\n"
+                "--!ansi_lexer\n"
+                "--!syntax_v1\n"
+                "';\n"
+                "\n"
+                "select 1, $str, \"\" as empty;"),
+            (
+                "ovvv o ss"
+                "ssssssssssssss"
+                "sssssssssssss"
+                "so "
+                " "
+                "kkkkkk no ovvvo ss kk kkkkko"));
     }
 }

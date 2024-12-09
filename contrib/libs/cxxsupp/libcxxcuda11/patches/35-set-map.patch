@@ -1,0 +1,44 @@
+diff --git a/include/map b/include/map
+index 17bb715..77f2068 100644
+--- a/include/map
++++ b/include/map
+@@ -1456,7 +1456,7 @@ public:
+     _LIBCPP_INLINE_VISIBILITY
+     iterator  erase(const_iterator __f, const_iterator __l)
+         {return __tree_.erase(__f.__i_, __l.__i_);}
+-    _LIBCPP_INLINE_VISIBILITY
++    _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_INLINE_VISIBILITY
+     void clear() _NOEXCEPT {__tree_.clear();}
+ 
+ #if _LIBCPP_STD_VER >= 17
+@@ -2253,7 +2253,7 @@ public:
+     }
+ #endif
+ 
+-    _LIBCPP_INLINE_VISIBILITY
++    _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_INLINE_VISIBILITY
+     void clear() _NOEXCEPT {__tree_.clear();}
+ 
+     _LIBCPP_INLINE_VISIBILITY
+diff --git a/include/set b/include/set
+index 75be1e1..3422d43 100644
+--- a/include/set
++++ b/include/set
+@@ -839,7 +839,7 @@ public:
+     _LIBCPP_INLINE_VISIBILITY
+     iterator  erase(const_iterator __f, const_iterator __l)
+         {return __tree_.erase(__f, __l);}
+-    _LIBCPP_INLINE_VISIBILITY
++    _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_INLINE_VISIBILITY
+     void clear() _NOEXCEPT {__tree_.clear();}
+ 
+ #if _LIBCPP_STD_VER >= 17
+@@ -1429,7 +1429,7 @@ public:
+     _LIBCPP_INLINE_VISIBILITY
+     iterator  erase(const_iterator __f, const_iterator __l)
+         {return __tree_.erase(__f, __l);}
+-    _LIBCPP_INLINE_VISIBILITY
++    _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_INLINE_VISIBILITY
+     void clear() _NOEXCEPT {__tree_.clear();}
+ 
+ #if _LIBCPP_STD_VER >= 17

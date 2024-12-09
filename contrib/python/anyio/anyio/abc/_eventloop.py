@@ -3,7 +3,8 @@ from __future__ import annotations
 import math
 import sys
 from abc import ABCMeta, abstractmethod
-from collections.abc import AsyncIterator, Awaitable
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from contextlib import AbstractContextManager
 from os import PathLike
 from signal import Signals
 from socket import AddressFamily, SocketKind, socket
@@ -11,9 +12,6 @@ from typing import (
     IO,
     TYPE_CHECKING,
     Any,
-    Callable,
-    ContextManager,
-    Sequence,
     TypeVar,
     Union,
     overload,
@@ -352,7 +350,7 @@ class AsyncBackend(metaclass=ABCMeta):
     @abstractmethod
     def open_signal_receiver(
         cls, *signals: Signals
-    ) -> ContextManager[AsyncIterator[Signals]]:
+    ) -> AbstractContextManager[AsyncIterator[Signals]]:
         pass
 
     @classmethod

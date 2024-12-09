@@ -10,15 +10,15 @@
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/minikql/dom/yson.h>
-#include <ydb/library/yql/minikql/dom/json.h>
-#include <ydb/library/yql/utils/utf8.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/minikql/dom/yson.h>
+#include <yql/essentials/minikql/dom/json.h>
+#include <yql/essentials/utils/utf8.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
@@ -82,8 +82,8 @@ class TReadRowsRPC : public TActorBootstrapped<TReadRowsRPC> {
 
     static constexpr TDuration DEFAULT_TIMEOUT = TDuration::Seconds(60);
 public:
-    explicit TReadRowsRPC(std::unique_ptr<IRequestNoOpCtx> request)
-        : Request(std::move(request))
+    explicit TReadRowsRPC(IRequestNoOpCtx* request)
+        : Request(request)
         , PipeCache(MakePipePerNodeCacheID(true))
         , Span(TWilsonGrpc::RequestActor, Request->GetWilsonTraceId(), "ReadRowsRpc")
     {}
@@ -745,8 +745,13 @@ private:
     NWilson::TSpan Span;
 };
 
-void DoReadRowsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TReadRowsRPC(std::move(p)));
+ void DoReadRowsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TReadRowsRPC(p.release()));
+}
+
+template<>
+IActor* TEvReadRowsRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return new TReadRowsRPC(msg);
 }
 
 } // namespace NKikimr::NGRpcService

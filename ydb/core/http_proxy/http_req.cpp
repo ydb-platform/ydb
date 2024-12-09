@@ -29,7 +29,7 @@
 
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/api/iam_token_service.h>
 #include <ydb/library/grpc/actor_client/grpc_service_cache.h>
@@ -462,17 +462,18 @@ namespace NKikimr::NHttpProxy {
 
         public:
             void Bootstrap(const TActorContext& ctx) {
+                PoolId = ctx.SelfID.PoolID();
                 StartTime = ctx.Now();
                 try {
                     HttpContext.RequestBodyToProto(&Request);
                     auto queueUrl = QueueUrlExtractor(Request);
                     if (!queueUrl.empty()) {
                         auto cloudIdAndResourceId = NKikimr::NYmq::CloudIdAndResourceIdFromQueueUrl(queueUrl);
-                        if(cloudIdAndResourceId.Empty()) {
+                        if (cloudIdAndResourceId.first.empty()) {
                             return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Invalid queue url");
                         }
-                        CloudId = cloudIdAndResourceId.Get()->first;
-                        ResourceId = cloudIdAndResourceId.Get()->second;
+                        CloudId = cloudIdAndResourceId.first;
+                        ResourceId = cloudIdAndResourceId.second;
                     }
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
@@ -553,15 +554,14 @@ namespace NKikimr::NHttpProxy {
                         .Counters = nullptr,
                         .AWSSignature = std::move(HttpContext.GetSignature()),
                         .IAMToken = HttpContext.IamToken,
-                        .FolderID = HttpContext.FolderId
+                        .FolderID = HttpContext.FolderId,
+                        .RequestFormat = NSQS::TAuthActorData::Json,
+                        .Requester = ctx.SelfID
                     };
 
-                    auto authRequestProxy = MakeHolder<NSQS::THttpProxyAuthRequestProxy>(
-                        std::move(data),
-                        "",
-                        ctx.SelfID);
-
-                    ctx.RegisterWithSameMailbox(authRequestProxy.Release());
+                    AppData(ctx.ActorSystem())->SqsAuthFactory->RegisterAuthActor(
+                        *ctx.ActorSystem(),
+                        std::move(data));
                 }
 
                 ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup());

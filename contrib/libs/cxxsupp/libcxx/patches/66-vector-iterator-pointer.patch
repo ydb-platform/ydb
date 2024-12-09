@@ -1,8 +1,8 @@
 diff --git a/include/vector b/include/vector
-index 559b7fd..659b035 100644
+index 40b248b..15297a1 100644
 --- a/include/vector
 +++ b/include/vector
-@@ -396,9 +396,14 @@ public:
+@@ -400,9 +400,14 @@ public:
      typedef typename __alloc_traits::difference_type        difference_type;
      typedef typename __alloc_traits::pointer                pointer;
      typedef typename __alloc_traits::const_pointer          const_pointer;
@@ -17,7 +17,7 @@ index 559b7fd..659b035 100644
      typedef std::reverse_iterator<iterator>               reverse_iterator;
      typedef std::reverse_iterator<const_iterator>         const_reverse_iterator;
  
-@@ -823,9 +828,9 @@ private:
+@@ -827,9 +832,9 @@ private:
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __append(size_type __n);
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __append(size_type __n, const_reference __x);
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI
@@ -29,7 +29,7 @@ index 559b7fd..659b035 100644
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __swap_out_circular_buffer(__split_buffer<value_type, allocator_type&>& __v);
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI pointer __swap_out_circular_buffer(__split_buffer<value_type, allocator_type&>& __v, pointer __p);
      _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __move_range(pointer __from_s, pointer __from_e, pointer __to);
-@@ -1497,6 +1502,34 @@ void vector<_Tp, _Allocator>::__assign_with_size(_ForwardIterator __first, _Sent
+@@ -1504,6 +1509,34 @@ void vector<_Tp, _Allocator>::__assign_with_size(_ForwardIterator __first, _Sent
      }
  }
  

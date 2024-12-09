@@ -1,6 +1,6 @@
-from ydb.tests.library.harness.kikimr_client import kikimr_client_factory
-from ydb.tests.library.harness.kikimr_keyvalue_client import keyvalue_client_factory
-from ydb.tests.library.harness.kikimr_scheme_client import scheme_client_factory
+from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
+from ydb.tests.library.clients.kikimr_keyvalue_client import keyvalue_client_factory
+from ydb.tests.library.clients.kikimr_scheme_client import scheme_client_factory
 
 
 def value_for(key, tablet_id):

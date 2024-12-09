@@ -1542,10 +1542,10 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
 
 TColorPalette::TColorPalette() {
     StageMain     = "var(--stage-main, #F2F2F2)";
-    StageClone    = "var(--stage-clone, #D9D9D9";
+    StageClone    = "var(--stage-clone, #D9D9D9)";
     StageText     = "var(--stage-text, #262626)";
     StageTextHighlight = "var(--stage-texthl, #EA0703)";
-    StageGrid     = "var(--stage-grid, #B2B2B2";
+    StageGrid     = "var(--stage-grid, #B2B2B2)";
     IngressDark   = "var(--ingress-dark, #574F38)";
     IngressMedium = "var(--ingress-medium, #82723C)";
     IngressLight  = "var(--ingress-light, #C0A645)";

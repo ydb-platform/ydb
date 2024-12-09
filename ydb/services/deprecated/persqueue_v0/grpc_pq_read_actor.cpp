@@ -843,7 +843,7 @@ void TReadSessionActor::SetupBytesReadByUserAgentCounter() {
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", "pqv0")
         ->GetSubgroup("consumer", ClientPath)
-        ->GetSubgroup("user_agent", V1::CleanupCounterValueString(UserAgent))
+        ->GetSubgroup("user_agent", V1::DropUserAgentSuffix(V1::CleanupCounterValueString(UserAgent)))
         ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
 }
 

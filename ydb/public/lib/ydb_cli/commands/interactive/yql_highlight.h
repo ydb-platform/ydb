@@ -1,9 +1,10 @@
 #pragma once
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
-#include <ydb/library/yql/parser/lexer_common/lexer.h>
+#include <yql/essentials/parser/lexer_common/lexer.h>
 
 #include <util/generic/fwd.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 
 #include <regex>
 
@@ -46,6 +47,7 @@ namespace NYdb {
 
         private:
             TParsedTokenList Tokenize(const TString& queryUtf8);
+            ILexer::TPtr& SuitableLexer(const TString& queryUtf8);
             YQLHighlight::Color ColorOf(const TParsedToken& token, size_t index);
             bool IsKeyword(const TParsedToken& token) const;
             bool IsOperation(const TParsedToken& token) const;
@@ -62,7 +64,9 @@ namespace NYdb {
             std::regex BuiltinFunctionRegex;
             std::regex TypeRegex;
 
-            ILexer::TPtr Lexer;
+            ILexer::TPtr CppLexer;
+            ILexer::TPtr ANSILexer;
+
             TParsedTokenList Tokens;
         };
 

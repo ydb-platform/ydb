@@ -5,7 +5,7 @@
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <ydb/library/grpc/server/grpc_request.h>
 #include <ydb/library/grpc/server/grpc_server.h>

@@ -7,16 +7,16 @@
 
 namespace NKikimr::NOlap {
 
-class TTTLColumnEngineChanges: public TChangesWithAppend {
+class TTTLColumnEngineChanges: public TChangesWithAppend, public NColumnShard::TMonitoringObjectsCounter<TTTLColumnEngineChanges> {
 private:
     using TBase = TChangesWithAppend;
 
     class TPortionForEviction {
     private:
-        TPortionDataAccessor PortionInfo;
+        TPortionInfo::TConstPtr PortionInfo;
         TPortionEvictionFeatures Features;
     public:
-        TPortionForEviction(const TPortionDataAccessor& portion, TPortionEvictionFeatures&& features)
+        TPortionForEviction(const TPortionInfo::TConstPtr& portion, TPortionEvictionFeatures&& features)
             : PortionInfo(portion)
             , Features(std::move(features)) {
         };
@@ -29,7 +29,7 @@ private:
             return Features;
         }
 
-        const TPortionDataAccessor& GetPortionInfo() const {
+        const TPortionInfo::TConstPtr& GetPortionInfo() const {
             return PortionInfo;
         }
     };
@@ -49,16 +49,34 @@ protected:
         auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : PortionsToEvict) {
-            result = predictor->AddPortion(p.GetPortionInfo().GetPortionInfoPtr());
+            result = predictor->AddPortion(p.GetPortionInfo());
         }
         return result;
     }
+    virtual NDataLocks::ELockCategory GetLockCategory() const override {
+        return NDataLocks::ELockCategory::Actualization;
+    }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
         const auto pred = [](const TPortionForEviction& p) {
-            return p.GetPortionInfo().GetPortionInfo().GetAddress();
+            return p.GetPortionInfo()->GetAddress();
         };
-        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred);
+        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(),
+            PortionsToEvict, pred, GetLockCategory());
     }
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) override {
+        TBase::OnDataAccessorsInitialized(context);
+        THashMap<TString, THashSet<TBlobRange>> blobRanges;
+        for (const auto& p : PortionsToEvict) {
+            GetPortionDataAccessor(p.GetPortionInfo()->GetPortionId()).FillBlobRangesByStorage(blobRanges, *context.GetVersionedIndex());
+        }
+        for (auto&& i : blobRanges) {
+            auto action = BlobsAction.GetReading(i.first);
+            for (auto&& b : i.second) {
+                action->AddRange(b);
+            }
+        }
+    }
+
 public:
     class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
     private:
@@ -88,9 +106,10 @@ public:
     ui32 GetPortionsToEvictCount() const {
         return PortionsToEvict.size();
     }
-    void AddPortionToEvict(const TPortionDataAccessor& info, TPortionEvictionFeatures&& features) {
-        AFL_VERIFY(!info.GetPortionInfo().HasRemoveSnapshot());
+    void AddPortionToEvict(const TPortionInfo::TConstPtr& info, TPortionEvictionFeatures&& features) {
+        AFL_VERIFY(!info->HasRemoveSnapshot());
         PortionsToEvict.emplace_back(info, std::move(features));
+        PortionsToAccess->AddPortion(info);
     }
 
     static TString StaticTypeName() {

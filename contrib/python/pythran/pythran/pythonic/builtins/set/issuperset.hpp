@@ -25,7 +25,7 @@ namespace builtins
     {
       return false;
     }
-  }
-}
+  } // namespace set
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

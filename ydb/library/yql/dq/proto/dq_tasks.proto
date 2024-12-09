@@ -161,7 +161,7 @@ message TTaskOutput {
 message TDqTransform {
     string Type = 1;
 
-    // binary YSON(codec ydb/library/yql/providers/common/schema/mkql)
+    // binary YSON(codec yql/essentials/providers/common/schema/mkql)
     bytes InputType = 2;
     bytes OutputType = 3;
 

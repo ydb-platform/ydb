@@ -101,6 +101,8 @@ BELONGS ya.make
         include/aws/auth/private/credentials_utils.h [6:6]
         include/aws/auth/private/key_derivation.h [6:6]
         include/aws/auth/private/sigv4_http_request.h [6:6]
+        include/aws/auth/private/sso_token_providers.h [6:6]
+        include/aws/auth/private/sso_token_utils.h [6:6]
         include/aws/auth/signing.h [6:6]
         include/aws/auth/signing_config.h [6:6]
         include/aws/auth/signing_result.h [6:6]
@@ -120,6 +122,7 @@ BELONGS ya.make
         source/credentials_provider_imds.c [3:3]
         source/credentials_provider_process.c [3:3]
         source/credentials_provider_profile.c [3:3]
+        source/credentials_provider_sso.c [3:3]
         source/credentials_provider_static.c [3:3]
         source/credentials_provider_sts.c [3:3]
         source/credentials_provider_sts_web_identity.c [3:3]
@@ -134,6 +137,9 @@ BELONGS ya.make
         source/signing_config.c [3:3]
         source/signing_result.c [3:3]
         source/sigv4_http_request.c [3:3]
+        source/sso_token_utils.c [3:3]
+        source/token_provider_sso_profile.c [3:3]
+        source/token_provider_sso_session.c [3:3]
 
 SKIP     LicenseRef-scancode-generic-cla ee24fdc60600747c7d12c32055b0011d
 BELONGS ya.make

@@ -213,7 +213,7 @@ struct TPropagatingStorageInfo
     TSourceLocation PrevLocation;
 };
 
-YT_DEFINE_GLOBAL(TFlsSlot<TPropagatingStorageInfo>, PropagatingStorageSlot);
+static YT_DEFINE_GLOBAL(TFlsSlot<TPropagatingStorageInfo>, PropagatingStorageSlot);
 
 ////////////////////////////////////////////////////////////////////////////////
 

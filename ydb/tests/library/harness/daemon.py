@@ -6,12 +6,10 @@ import signal
 import sys
 import subprocess
 
-import yatest
 from yatest.common import process
 import six
 
 from ydb.tests.library.common.wait_for import wait_for
-from . import param_constants
 
 
 logger = logging.getLogger(__name__)
@@ -53,14 +51,6 @@ class SeveralDaemonErrors(RuntimeError):
         super(SeveralDaemonErrors, self).__init__("\n".join(str(x) for x in exceptions))
 
 
-def _work_path(name):
-    # TODO: remove yatest dependency from harness
-    try:
-        return yatest.common.work_path(name)
-    except (AttributeError, yatest.common.NoRuntimeFormed):
-        return name
-
-
 class Daemon(object):
     """Local process executed as process in current host"""
     def __init__(
@@ -68,8 +58,8 @@ class Daemon(object):
         command,
         cwd,
         timeout,
-        stdout_file=_work_path('stdout'),
-        stderr_file=_work_path('stderr'),
+        stdout_file="/dev/null",
+        stderr_file="/dev/null",
         stderr_on_error_lines=0,
         core_pattern=None,
     ):
@@ -109,8 +99,6 @@ class Daemon(object):
         if self.is_alive():
             return
         stderr_stream = self.__stderr_file
-        if param_constants.kikimr_stderr_to_console():
-            stderr_stream = sys.stderr
         self.__daemon = process.execute(
             self.__command,
             check_exit_code=False,
@@ -218,9 +206,9 @@ class Daemon(object):
 @six.add_metaclass(abc.ABCMeta)
 class ExternalNodeDaemon(object):
     """External daemon, executed as process in separate host, managed via ssh"""
-    def __init__(self, host):
+    def __init__(self, host, ssh_username):
         self._host = host
-        self._ssh_username = param_constants.ssh_username
+        self._ssh_username = ssh_username
         self._ssh_options = [
             "-o",
             "UserKnownHostsFile=/dev/null",

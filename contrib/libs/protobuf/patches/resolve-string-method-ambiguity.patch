@@ -1,0 +1,30 @@
+commit 4a55ea8892270807a046eb33fd5bc336b5fa93cb (HEAD)
+author: vadim-xd
+date: 2024-10-28T12:47:03+03:00
+
+    Resolve ambiguity in ArenaStringPtr methods with std::string&&
+
+--- contrib/libs/protobuf/src/google/protobuf/arenastring.h	(e2819444222a1e9154b9c7b701eff6427206db7c)
++++ contrib/libs/protobuf/src/google/protobuf/arenastring.h	(4a55ea8892270807a046eb33fd5bc336b5fa93cb)
+@@ -266,6 +266,10 @@ struct PROTOBUF_EXPORT ArenaStringPtr {
+   void Set(const char* s, Arena* arena);
+   void Set(const char* s, size_t n, Arena* arena);
+
++  void Set(std::string&& value, Arena* arena) {
++    return Set(TProtoStringType(std::move(value)), arena);
++  }
++
+   void SetBytes(absl::string_view value, Arena* arena);
+   void SetBytes(TProtoStringType&& value, Arena* arena);
+   template <typename... OverloadDisambiguator>
+@@ -273,6 +277,10 @@ struct PROTOBUF_EXPORT ArenaStringPtr {
+   void SetBytes(const char* s, Arena* arena);
+   void SetBytes(const void* p, size_t n, Arena* arena);
+
++  void SetBytes(std::string&& value, Arena* arena) {
++    return SetBytes(TProtoStringType(std::move(value)), arena);
++  }
++
+   template <typename RefWrappedType>
+   void Set(std::reference_wrapper<RefWrappedType> const_string_ref,
+            ::google::protobuf::Arena* arena) {

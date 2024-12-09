@@ -11,6 +11,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     using TPtr = TIntrusivePtr<TOperation>;
 
     const TTxId TxId;
+    ui32 PreparedParts = 0;
     TVector<ISubOperation::TPtr> Parts;
 
     THashSet<TActorId> Subscribers;
@@ -67,6 +68,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
         NKikimrScheme::EStatus Status = NKikimrScheme::StatusSuccess;
         TString Reason;
         TVector<TTxTransaction> Transactions;
+        std::optional<TTxTransaction> Transaction;
     };
 
     TOperation(TTxId txId)
@@ -144,7 +146,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     }
 
     TOperationId NextPartId() const {
-        return TOperationId(TxId, TSubTxId(Parts.size()));
+        return TOperationId(TxId, TSubTxId(PreparedParts));
     }
 };
 

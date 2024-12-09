@@ -9,7 +9,7 @@ using namespace NYTree;
 TError TCheckPermissionResult::ToError(
     const std::string& user,
     EPermission permission,
-    const std::optional<TString>& column) const
+    const std::optional<std::string>& column) const
 {
     switch (Action) {
         case NSecurityClient::ESecurityAction::Allow:

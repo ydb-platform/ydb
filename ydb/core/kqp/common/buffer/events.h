@@ -1,0 +1,47 @@
+#pragma once
+
+#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+
+
+namespace NKikimr {
+namespace NKqp {
+
+struct TEvKqpBuffer {
+
+struct TEvPrepare : public TEventLocal<TEvPrepare, TKqpBufferWriterEvents::EvPrepare> {
+    TActorId ExecuterActorId;
+};
+
+struct TEvCommit : public TEventLocal<TEvCommit, TKqpBufferWriterEvents::EvCommit> {
+    TActorId ExecuterActorId;
+    ui64 TxId;
+};
+
+struct TEvRollback : public TEventLocal<TEvRollback, TKqpBufferWriterEvents::EvRollback> {
+    TActorId ExecuterActorId;
+};
+
+struct TEvFlush : public TEventLocal<TEvFlush, TKqpBufferWriterEvents::EvFlush> {
+    TActorId ExecuterActorId;
+};
+
+struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResult> {
+};
+
+struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> {
+    TString Message;
+    NYql::NDqProto::StatusIds::StatusCode StatusCode;
+    NYql::TIssues SubIssues;
+
+    TEvError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues);
+};
+
+struct TEvTerminate : public TEventLocal<TEvTerminate, TKqpBufferWriterEvents::EvTerminate> {
+};
+
+};
+
+}
+}

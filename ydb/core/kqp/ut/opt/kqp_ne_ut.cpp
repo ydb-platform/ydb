@@ -4020,24 +4020,124 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     Y_UNIT_TEST(AutoChooseIndexOrderByLimit) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_ONLY_POINTS);
+        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTablesWithIndex(session);
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/ComplexKey` (
+                    Key1 Int32,
+                    Key2 Int32,
+                    Key3 Int32,
+                    Value Int32,
+                    PRIMARY KEY (Key1, Key2, Key3),
+                    INDEX Index GLOBAL ON (Key2)
+                );
+            )").GetValueSync());
+
+            auto result2 = session.ExecuteDataQuery(R"(
+                REPLACE INTO `/Root/ComplexKey` (Key1, Key2, Key3, Value) VALUES
+                    (1, 1, 101, 1),
+                    (2, 2, 102, 1),
+                    (2, 2, 103, 3),
+                    (3, 3, 103, 2);
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result2.IsSuccess(), result2.GetIssues().ToString());
+        }
+
+        NYdb::NTable::TExecDataQuerySettings querySettings;
+        querySettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                SELECT Key1, Key2, Key3 FROM `/Root/ComplexKey`
+                WHERE Key1 = 2 and Key2 = 2;
+            )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
+            AssertSuccessResult(result);
+            AssertTableReads(result, "/Root/ComplexKey/Index/indexImplTable", 2);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                SELECT Key1, Key2, Key3 FROM `/Root/ComplexKey`
+                WHERE Key1 = 2 and Key2 = 2
+                ORDER BY Key1 DESC
+                LIMIT 1;
+            )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
+            AssertSuccessResult(result);
+            AssertTableReads(result, "/Root/ComplexKey/Index/indexImplTable", 0);
+        }
+    }
+
+    Y_UNIT_TEST(AutoChooseIndexOrderByLambda) {
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/ComplexKey` (
+                    Key Int32,
+                    Fk Int32,
+                    Value String,
+                    Value2 String,
+                    PRIMARY KEY (Key, Fk),
+                    INDEX Index GLOBAL ON (Value),
+                    INDEX ByPk GLOBAL ON (Key)
+                );
+            )").GetValueSync());
+
+            auto result2 = session.ExecuteDataQuery(R"(
+                REPLACE INTO `/Root/ComplexKey` (Key, Fk, Value) VALUES
+                    (null, null, "NullValue"),
+                    (1, 101, "Value1"),
+                    (2, 102, "Value1"),
+                    (2, 103, "Value3"),
+                    (3, 103, "Value2"),
+                    (4, 104, "Value2"),
+                    (5, 105, "Value3");
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result2.IsSuccess(), result2.GetIssues().ToString());
+        }
 
         NYdb::NTable::TExecDataQuerySettings querySettings;
         querySettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            SELECT Fk, Key FROM `/Root/SecondaryKeys` WHERE Fk = 1 ORDER BY Key DESC LIMIT 1;
+            SELECT Key, Fk, Value FROM `/Root/ComplexKey`
+            WHERE Key = 2
+            ORDER BY Value DESC
+            LIMIT 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
         AssertSuccessResult(result);
-        AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 0);
+        AssertTableReads(result, "/Root/ComplexKey", 2);
+
+        result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            SELECT Key, Fk, Value FROM `/Root/ComplexKey`
+            WHERE Key = 2
+            ORDER BY Value DESC, Value2 DESC
+            LIMIT 1;
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
+        AssertSuccessResult(result);
+        AssertTableReads(result, "/Root/ComplexKey", 2);
+        AssertTableReads(result, "/Root/ComplexKey/ByPk/indexImplTable", 0);
     }
 
     Y_UNIT_TEST(MultipleBroadcastJoin) {
@@ -4235,7 +4335,46 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(SequentialReadsPragma, Enabled) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
+        NYdb::NTable::TExecDataQuerySettings querySettings;
+        querySettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        TString query = R"(
+            SELECT Key, Data FROM `/Root/EightShard` 
+                WHERE Text = "Value1" 
+                ORDER BY Key 
+                LIMIT 1;
+        )";
+
+        if (Enabled) {
+            TString pragma = TString(R"(
+                PRAGMA ydb.MaxSequentialReadsInFlight = "1";
+            )");
+
+            query = pragma + query;
+        }
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), querySettings).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([[[101u];[1]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        for (const auto& phase : stats.query_phases()) {
+            for (const auto& access : phase.table_access()) {
+                if (access.name() == "/Root/EightShard") {
+                    if (Enabled) {
+                        UNIT_ASSERT_LT(access.partitions_count(), 8);
+                    } else {
+                        UNIT_ASSERT_EQUAL(access.partitions_count(), 8);
+                    }
+                }
+            }
+        }
+    }
 
 }
 

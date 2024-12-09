@@ -1609,6 +1609,11 @@ void THive::DeleteTablet(TTabletId tabletId) {
             }
             Y_ENSURE_LOG(nt->second.LockedTablets.count(&tablet) == 0, " Deleting tablet found on node " << nt->first << " in locked set");
         }
+        for (const auto& followerGroup : tablet.FollowerGroups) {
+            for (auto& [_, dataCenter] : DataCenters) {
+                dataCenter.Followers.erase({tabletId, followerGroup.Id});
+            }
+        }
         const i64 tabletsTotalDiff = -1 - (tablet.Followers.size());
         UpdateCounterTabletsTotal(tabletsTotalDiff);
         UpdateDomainTabletsTotal(tablet.ObjectDomain, tabletsTotalDiff);
@@ -3064,7 +3069,9 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvRequestTabletDistribution, Handle);
         hFunc(TEvPrivate::TEvUpdateDataCenterFollowers, Handle);
         hFunc(TEvHive::TEvRequestScaleRecommendation, Handle);
-        hFunc(TEvPrivate::TEvRefreshScaleRecommendation, Handle)
+        hFunc(TEvPrivate::TEvGenerateTestData, Handle);
+        hFunc(TEvPrivate::TEvRefreshScaleRecommendation, Handle);
+        hFunc(TEvHive::TEvConfigureScaleRecommender, Handle);
     }
 }
 
@@ -3169,7 +3176,9 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvRequestTabletDistribution::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvUpdateDataCenterFollowers::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvRequestScaleRecommendation::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvGenerateTestData::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvRefreshScaleRecommendation::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvConfigureScaleRecommender::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3626,6 +3635,16 @@ void THive::Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev) {
     response->Record.SetStatus(NKikimrProto::OK);
     response->Record.SetRecommendedNodes(domainInfo.LastScaleRecommendation->Nodes);
     Send(ev->Sender, response.release());
+}
+
+void THive::Handle(TEvPrivate::TEvGenerateTestData::TPtr&) {
+    for (int i = 0; i < 4; ++i) {
+        Execute(CreateGenerateTestData(i));
+    }
+}
+
+void THive::Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev) {
+    BLOG_D("Handle TEvHive::TEvConfigureScaleRecommender(" << ev->Get()->Record.ShortDebugString() << ")");
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

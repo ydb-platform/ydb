@@ -33,10 +33,12 @@ public:
     TConstArrayRef<TCell> GetKey() const;
 
     void Accept(NChangeExchange::IVisitor& visitor) const override;
+    void RewriteTxId(ui64 value) override;
 
 private:
     NJson::TJsonValue JsonBody;
     TLightweightSchema::TCPtr Schema;
+    ui64 WriteTxId = 0;
 
     mutable TMaybe<TOwnedCellVec> Key;
 

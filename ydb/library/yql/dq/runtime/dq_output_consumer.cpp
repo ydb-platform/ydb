@@ -1,17 +1,17 @@
 #include "dq_output_consumer.h"
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
-#include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/computation/mkql_block_builder.h>
+#include <yql/essentials/minikql/computation/mkql_block_reader.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 
-#include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
-#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
+#include <yql/essentials/public/udf/arrow/args_dechunker.h>
+#include <yql/essentials/public/udf/arrow/memory_pool.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NDq {
 
@@ -346,9 +346,6 @@ public:
                 blockTypes.emplace_back(blockType->GetItemType());
             }
         }
-        ui64 maxBlockLen = CalcMaxBlockLength(blockTypes.begin(), blockTypes.end(), helper);
-        YQL_ENSURE(maxBlockLen > 0);
-        MakeBuilders(maxBlockLen);
 
         TBlockTypeHelper blockHelper;
         for (auto& column : KeyColumns_) {
@@ -391,15 +388,6 @@ private:
             outputBlockIndexes[GetHashPartitionIndex(datums.data(), i)].push_back(i);
         }
 
-        ui64 maxLen = 0;
-        for (auto& indexes : outputBlockIndexes) {
-            maxLen = std::max(maxLen, indexes.size());
-        }
-
-        if (maxLen > MaxOutputBlockLen_) {
-            MakeBuilders(maxLen);
-        }
-
         TVector<std::unique_ptr<TArgsDechunker>> outputData;
         for (size_t i = 0; i < Outputs_.size(); ++i) {
             ui64 outputBlockLen = outputBlockIndexes[i].size();
@@ -407,6 +395,7 @@ private:
                 outputData.emplace_back();
                 continue;
             }
+            MakeBuilders(outputBlockLen);
             const ui64* indexes = outputBlockIndexes[i].data();
 
             std::vector<arrow::Datum> output;
@@ -419,7 +408,7 @@ private:
                     dataItem.Data = src->array().get();
                     dataItem.StartOffset = 0;
                     Builders_[j]->AddMany(&dataItem, 1, indexes, outputBlockLen);
-                    output.emplace_back(Builders_[j]->Build(false));
+                    output.emplace_back(Builders_[j]->Build(true));
                 }
             }
             outputData.emplace_back(std::make_unique<TArgsDechunker>(std::move(output)));
@@ -528,7 +517,6 @@ private:
                 Builders_.emplace_back();
             }
         }
-        MaxOutputBlockLen_ = maxBlockLen;
     }
 
 private:
@@ -546,7 +534,6 @@ private:
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     TVector<std::unique_ptr<IArrayBuilder>> Builders_;
 
-    ui64 MaxOutputBlockLen_ = 0;
     mutable bool IsWaitingFlag_ = false;
 };
 

@@ -29,7 +29,7 @@ namespace builtins
       s.add(value);
       return builtins::None;
     }
-  }
-}
+  } // namespace set
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

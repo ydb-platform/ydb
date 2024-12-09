@@ -47,7 +47,6 @@ def post_install(self):
     # in the name of selective checkout
     # https://st.yandex-team.ru/DTCC-615
     def fix_selective_checkout():
-        self.yamakes["."].PEERDIR.remove("contrib/restricted/abseil-cpp-tstring")
         self.yamakes["."].PEERDIR |= {
             "contrib/restricted/abseil-cpp-tstring/y_absl/algorithm",
             "contrib/restricted/abseil-cpp-tstring/y_absl/functional",
@@ -91,13 +90,11 @@ def post_install(self):
 
     # fix path for protos
     with self.yamakes["grpc++_reflection"] as m:
-        m.PEERDIR.remove("contrib/restricted/abseil-cpp-tstring")
         m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/reflection/v1alpha")
         m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/reflection/v1alpha")
         m.ADDINCL.remove("contrib/libs/grpc/protos")
 
     with self.yamakes["grpcpp_channelz"] as m:
-        m.PEERDIR.remove("contrib/restricted/abseil-cpp-tstring")
         m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/channelz")
         m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/channelz")
         m.ADDINCL.remove("contrib/libs/grpc/protos")

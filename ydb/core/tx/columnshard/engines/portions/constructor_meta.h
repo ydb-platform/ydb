@@ -1,5 +1,7 @@
 #pragma once
+#include "common.h"
 #include "meta.h"
+
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
@@ -24,12 +26,43 @@ private:
     std::optional<ui32> IndexBlobBytes;
 
     std::optional<ui32> DeletionsCount;
+
+    std::vector<TUnifiedBlobId> BlobIds;
+
     friend class TPortionInfoConstructor;
-    void FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const ui32 deletionsCount, const std::optional<NArrow::TMinMaxSpecialKeys>& snapshotKeys, const TIndexInfo& indexInfo);
+    friend class TPortionAccessorConstructor;
+    void FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const ui32 deletionsCount,
+        const std::optional<NArrow::TMinMaxSpecialKeys>& snapshotKeys, const TIndexInfo& indexInfo);
 
 public:
     TPortionMetaConstructor() = default;
-    TPortionMetaConstructor(const TPortionMeta& meta);
+    TPortionMetaConstructor(const TPortionMeta& meta, const bool withBlobs);
+
+    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
+        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
+    }
+
+    ui32 GetBlobIdsCount() const {
+        return BlobIds.size();
+    }
+
+    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
+        AFL_VERIFY(linkId < BlobIds.size());
+        return BlobIds[linkId];
+    }
+
+    TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId) {
+        AFL_VERIFY(blobId.IsValid());
+        TBlobRangeLink16::TLinkId idx = 0;
+        for (auto&& i : BlobIds) {
+            if (i == blobId) {
+                return idx;
+            }
+            ++idx;
+        }
+        BlobIds.emplace_back(blobId);
+        return idx;
+    }
 
     void SetCompactionLevel(const ui64 level) {
         CompactionLevel = level;
@@ -47,8 +80,8 @@ public:
 
     TPortionMeta Build();
 
-    [[nodiscard]] bool LoadMetadata(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo);
-
+    [[nodiscard]] bool LoadMetadata(
+        const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector);
 };
 
-}
+}   // namespace NKikimr::NOlap

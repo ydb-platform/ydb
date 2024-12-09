@@ -17,14 +17,16 @@ template="build.gradle.kts.jinja"
 template={ path="build.gradle.kts.proto.jinja", dest="build.gradle.kts" }
 
 [attrs.target]
+# DEPRECATED
+annotation_processors="list"
+
 required_jdk="str"
 add_vcs_info_to_mf="bool"
 junit4_test="flag"
 junit5_test="flag"
 app_main_class="str"
 enable_preview="flag"
-annotation_processors="list"
-use_annotation_processor="str"
+use_annotation_processor="list"
 
 publish="flag"
 publish_group="str"
@@ -41,10 +43,10 @@ proto_grpc_version="str"
 
 kotlin_version="str"
 with_kotlin="flag"
-with_kotlinc_plugin_allopen="flag"
-with_kotlinc_plugin_lombok="flag"
-with_kotlinc_plugin_noarg="flag"
-with_kotlinc_plugin_serialization="flag"
+with_kotlinc_plugin_allopen="set"
+with_kotlinc_plugin_lombok="set"
+with_kotlinc_plugin_noarg="set"
+with_kotlinc_plugin_serialization="set"
 
 [attrs.root]
 

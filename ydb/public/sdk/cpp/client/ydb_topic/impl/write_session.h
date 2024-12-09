@@ -85,9 +85,6 @@ protected:
 
 private:
     TMaybe<TContinuationToken> WaitForToken(const TDuration& timeout);
-    void HandleAck(TWriteSessionEvent::TAcksEvent&);
-    void HandleReady(TWriteSessionEvent::TReadyToAcceptEvent&);
-    void HandleClosed(const TSessionClosedEvent&);
 
     std::atomic_bool Closed = false;
 };

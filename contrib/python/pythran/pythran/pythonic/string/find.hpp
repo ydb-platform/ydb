@@ -3,8 +3,8 @@
 
 #include "pythonic/include/string/find.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/str.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -16,7 +16,7 @@ namespace string
   {
     return s.find(std::forward<T>(val));
   }
-}
+} // namespace string
 PYTHONIC_NS_END
 
 #endif

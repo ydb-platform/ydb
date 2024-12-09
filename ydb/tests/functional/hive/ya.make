@@ -12,13 +12,11 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(1200)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(ram:32 cpu:2)
     SPLIT_FACTOR(20)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
     SPLIT_FACTOR(20)
 ENDIF()
@@ -29,6 +27,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/clients
 )
 
 FORK_SUBTESTS()

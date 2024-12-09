@@ -2,7 +2,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
 
-namespace NKikimr::NCache {
+namespace NKikimr::NSharedCache {
 
 Y_UNIT_TEST_SUITE(TCacheCacheTest) {
 

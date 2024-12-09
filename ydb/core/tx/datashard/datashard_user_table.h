@@ -126,12 +126,12 @@ struct TUserTable : public TThrRefBase {
             return MainChannelByStorageEnum();
         }
 
-        ui32 ExternalChannel() const {
+        TSet<ui32> ExternalChannels() const {
             if (!*Room) {
-                return ExternalChannelByStorageEnum();
+                return {ExternalChannelByStorageEnum()};
             }
 
-            return Room->GetChannel(NKikimrStorageSettings::TChannelPurpose::External, 1);
+            return Room->GetExternalChannels(1);
         }
 
         ui32 ExternalChannelByStorageEnum() const {
@@ -394,6 +394,7 @@ struct TUserTable : public TThrRefBase {
         THashSet<ui64> PartOwners;
         ui64 PartCount = 0;
         ui64 SearchHeight = 0;
+        bool HasSchemaChanges = false;
         TInstant StatsUpdateTime;
         ui64 DataSizeResolution = 0;
         ui64 RowCountResolution = 0;

@@ -10,13 +10,13 @@
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 

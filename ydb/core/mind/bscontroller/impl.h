@@ -996,6 +996,10 @@ public:
                 std::tie(BoxId, Fqdn, IcPort) = std::move(key);
             }
 
+            THostKey ChangeBox(Schema::BoxHostV2::BoxId::Type newBoxId) const {
+                return {{newBoxId, Fqdn, IcPort}};
+            }
+
             auto GetKey() const {
                 return std::tie(BoxId, Fqdn, IcPort);
             }
@@ -2326,6 +2330,7 @@ public:
         std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
         TMonotonic VDiskStatusTimestamp;
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
+        bool MetricsDirty = false;
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
                 std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)

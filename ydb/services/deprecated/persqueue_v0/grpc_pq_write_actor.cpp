@@ -262,7 +262,7 @@ void TWriteSessionActor::SetupBytesWrittenByUserAgentCounter() {
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", "pqv0")
         ->GetSubgroup("topic", FullConverter->GetFederationPath())
-        ->GetSubgroup("user_agent", V1::CleanupCounterValueString(UserAgent))
+        ->GetSubgroup("user_agent", V1::DropUserAgentSuffix(V1::CleanupCounterValueString(UserAgent)))
         ->GetExpiringNamedCounter("sensor", "BytesWrittenByUserAgent", true);
 }
 

@@ -12,7 +12,7 @@ namespace __dispatch__
   auto conjugate(Any const &any) -> decltype(numpy::functor::conjugate{}(any));
 
   DEFINE_FUNCTOR(pythonic::__dispatch__, conjugate);
-}
+} // namespace __dispatch__
 PYTHONIC_NS_END
 
 #endif

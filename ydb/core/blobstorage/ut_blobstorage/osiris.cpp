@@ -4,6 +4,8 @@
 #include <util/system/condvar.h>
 #include <util/system/info.h>
 
+#include <bit>
+
 #define SINGLE_THREAD 1
 
 namespace {
@@ -241,7 +243,7 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
                     v.push_back(1 << i); // main
                 } else {
                     for (ui32 j = 1; j < (1 << type.TotalPartCount()); ++j) {
-                        if (PopCount(j) <= 1) {
+                        if (std::popcount(j) <= 1) {
                             v.push_back(j); // handoff
                         }
                     }

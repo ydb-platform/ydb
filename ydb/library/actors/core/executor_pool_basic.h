@@ -231,17 +231,17 @@ namespace NActors {
         ~TBasicExecutorPool();
 
         void Initialize(TWorkerContext& wctx) override;
-        ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
-        ui32 GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingReadCounter);
-        ui32 GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
+        TMailbox* GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
 
-        void ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) override;
-        void ScheduleActivationExCommon(ui32 activation, ui64 revolvingWriteCounter, TAtomic semaphoreValue);
-        void ScheduleActivationExLocalQueue(ui32 activation, ui64 revolvingWriteCounter);
+        void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
+        void ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingWriteCounter, TAtomic semaphoreValue);
+        void ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter);
 
         void SetLocalQueueSize(ui16 size);
 

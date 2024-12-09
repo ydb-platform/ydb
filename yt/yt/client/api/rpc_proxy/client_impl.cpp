@@ -10,47 +10,34 @@
 #include "timestamp_provider.h"
 #include "transaction.h"
 
-#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/helpers.h>
-#include <yt/yt/client/api/rowset.h>
-#include <yt/yt/client/api/transaction.h>
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
-
-#include <yt/yt/client/transaction_client/remote_timestamp_provider.h>
 
 #include <yt/yt/client/scheduler/operation_id_or_alias.h>
 
 #include <yt/yt/client/table_client/columnar_statistics.h>
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/row_base.h>
-#include <yt/yt/client/table_client/row_buffer.h>
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/unversioned_row.h>
 #include <yt/yt/client/table_client/wire_protocol.h>
 
-#include <yt/yt/client/tablet_client/table_mount_cache.h>
+#include <yt/yt/client/api/distributed_table_session.h>
 
 #include <yt/yt/client/ypath/rich.h>
 
 #include <yt/yt/library/auth/credentials_injecting_channel.h>
 
-#include <yt/yt/core/net/address.h>
-
-#include <yt/yt/core/rpc/dynamic_channel_pool.h>
 #include <yt/yt/core/rpc/retrying_channel.h>
 #include <yt/yt/core/rpc/stream.h>
 
 #include <yt/yt/core/ytree/convert.h>
 
-#include <util/generic/cast.h>
-
 namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using NYT::ToProto;
 using NYT::FromProto;
+using NYT::ToProto;
 
 using namespace NAuth;
 using namespace NChaosClient;
@@ -125,7 +112,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool
 IChannelPtr TClient::CreateNonRetryingChannelByAddress(const std::string& address) const
 {
     return CreateCredentialsInjectingChannel(
-        Connection_->CreateChannelByAddress(TString(address)),
+        Connection_->CreateChannelByAddress(address),
         ClientOptions_);
 }
 
@@ -642,7 +629,7 @@ TFuture<std::vector<TTabletInfo>> TClient::GetTabletInfos(
                 auto& currentReplica = tabletInfo.TableReplicaInfos->emplace_back();
                 currentReplica.ReplicaId = FromProto<TGuid>(protoReplicaInfo.replica_id());
                 currentReplica.LastReplicationTimestamp = protoReplicaInfo.last_replication_timestamp();
-                currentReplica.Mode = CheckedEnumCast<ETableReplicaMode>(protoReplicaInfo.mode());
+                currentReplica.Mode = FromProto<ETableReplicaMode>(protoReplicaInfo.mode());
                 currentReplica.CurrentReplicationRowIndex = protoReplicaInfo.current_replication_row_index();
                 currentReplica.CommittedReplicationRowIndex = protoReplicaInfo.committed_replication_row_index();
                 currentReplica.ReplicationError = FromProto<TError>(protoReplicaInfo.replication_error());
@@ -1499,6 +1486,15 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
     }
+    if (options.FromTime) {
+        req->set_from_time(NYT::ToProto(*options.FromTime));
+    }
+    if (options.ToTime) {
+        req->set_to_time(NYT::ToProto(*options.ToTime));
+    }
+    if (options.ContinuationToken) {
+        req->set_continuation_token(*options.ContinuationToken);
+    }
 
     req->set_sort_field(static_cast<NProto::EJobSortField>(options.SortField));
     req->set_sort_order(static_cast<NProto::EJobSortDirection>(options.SortOrder));
@@ -2079,16 +2075,16 @@ TFuture<TMaintenanceCountsPerTarget> TClient::RemoveMaintenance(
                 counts[EMaintenanceType::DisableTabletCells] = rspValue->disable_tablet_cells();
                 counts[EMaintenanceType::PendingRestart] = rspValue->pending_restart();
             } else {
-                for (const auto& [type, count] : rspValue->removed_maintenance_counts()) {
-                    counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
+                for (auto [type, count] : rspValue->removed_maintenance_counts()) {
+                    counts[FromProto<EMaintenanceType>(type)] = count;
                 }
             }
         } else {
             result.reserve(rspValue->removed_maintenance_counts_per_target_size());
             for (const auto& [target, protoCounts] : rspValue->removed_maintenance_counts_per_target()) {
                 auto& counts = result[target];
-                for (const auto& [type, count] : protoCounts.counts()) {
-                    counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
+                for (auto [type, count] : protoCounts.counts()) {
+                    counts[FromProto<EMaintenanceType>(type)] = count;
                 }
             }
         }
@@ -2323,7 +2319,7 @@ TFuture<IUnversionedRowsetPtr> TClient::ReadQueryResult(
     if (options.Columns) {
         auto* protoColumns = req->mutable_columns();
         for (const auto& column : *options.Columns) {
-            protoColumns->add_items(column);
+            protoColumns->add_items(ToProto(column));
         }
     }
     if (options.LowerRowIndex) {
@@ -2457,8 +2453,8 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
         return TGetQueryTrackerInfoResult{
-            .QueryTrackerStage = rsp->query_tracker_stage(),
-            .ClusterName = rsp->cluster_name(),
+            .QueryTrackerStage = FromProto<TString>(rsp->query_tracker_stage()),
+            .ClusterName = FromProto<TString>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
         };
@@ -2680,8 +2676,9 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
 }
 
 TFuture<TShuffleHandlePtr> TClient::StartShuffle(
-    const TString& account,
+    const std::string& account,
     int partitionCount,
+    TTransactionId parentTransactionId,
     const TStartShuffleOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -2691,24 +2688,17 @@ TFuture<TShuffleHandlePtr> TClient::StartShuffle(
 
     req->set_account(account);
     req->set_partition_count(partitionCount);
+    ToProto(req->mutable_parent_transaction_id(), parentTransactionId);
+    if (options.MediumName) {
+        req->set_medium_name(*options.MediumName);
+    }
+    if (options.ReplicationFactor) {
+        req->set_replication_factor(*options.ReplicationFactor);
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
         return ConvertTo<TShuffleHandlePtr>(TYsonString(rsp->shuffle_handle()));
     }));
-}
-
-TFuture<void> TClient::FinishShuffle(
-    const TShuffleHandlePtr& shuffleHandle,
-    const TFinishShuffleOptions& options)
-{
-    auto proxy = CreateApiServiceProxy();
-
-    auto req = proxy.FinishShuffle();
-    SetTimeoutOptions(*req, options);
-
-    req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
-
-    return req->Invoke().AsVoid();
 }
 
 TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
@@ -2733,7 +2723,7 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
 
 TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
     const TShuffleHandlePtr& shuffleHandle,
-    const TString& partitionColumn,
+    const std::string& partitionColumn,
     const TTableWriterConfigPtr& config)
 {
     auto proxy = CreateApiServiceProxy();
@@ -2741,7 +2731,7 @@ TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
     InitStreamingRequest(*req);
 
     req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
-    req->set_partition_column(partitionColumn);
+    req->set_partition_column(ToProto(partitionColumn));
     req->set_writer_config(ConvertToYsonString(config).ToString());
 
     return CreateRpcClientOutputStream(std::move(req))

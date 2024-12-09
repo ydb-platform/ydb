@@ -29,52 +29,21 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Filter-TopSort-Filter",
+                                        "Node Type": "TopSort-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 2
+                                                        "InternalOperatorId": 1
                                                     },
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 1
                                                     },
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 1
                                                     },
                                                     {
-                                                        "InternalOperatorId": 3
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 3
-                                                    }
-                                                ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": ""
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "ExternalPlanNodeId": 5
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.y.y2)"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 3
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 3
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 3
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",

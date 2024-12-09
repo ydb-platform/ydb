@@ -15,7 +15,7 @@ TDiagnosableInvokerPoolPtr CreateEnumIndexedProfiledFairShareInvokerPool(
     TFairShareCallbackQueueFactory callbackQueueFactory,
     TDuration actionTimeRelevancyHalflife,
     const TString& poolName,
-    NProfiling::IRegistryImplPtr registry)
+    NProfiling::IRegistryPtr registry)
 {
     using TTraits = TEnumTraits<EInvoker>;
 

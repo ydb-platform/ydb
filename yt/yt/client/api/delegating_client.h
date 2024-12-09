@@ -863,15 +863,11 @@ public:
 
     // Shuffle Service
     DELEGATE_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (
-        const TString& account,
+        const std::string& account,
         int partitionCount,
+        NObjectClient::TTransactionId transactionId,
         const TStartShuffleOptions& options),
-        (account, partitionCount, options))
-
-    DELEGATE_METHOD(TFuture<void>, FinishShuffle, (
-        const TShuffleHandlePtr& shuffleHandle,
-        const TFinishShuffleOptions& options),
-        (shuffleHandle, options))
+        (account, partitionCount, transactionId, options))
 
     DELEGATE_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
         const TShuffleHandlePtr& shuffleHandle,
@@ -881,7 +877,7 @@ public:
 
     DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TShuffleHandlePtr& shuffleHandle,
-        const TString& partitionColumn,
+        const std::string& partitionColumn,
         const NTableClient::TTableWriterConfigPtr& config),
         (shuffleHandle, partitionColumn, config))
 

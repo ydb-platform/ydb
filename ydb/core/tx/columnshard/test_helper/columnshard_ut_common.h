@@ -246,22 +246,25 @@ struct TTestSchema {
                            const TTableSpecials& specials,
                            NKikimrSchemeOp::TColumnTableSchema* schema);
 
-    static void InitTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle::TTtl* ttl) {
-        Y_ABORT_UNLESS(specials.HasTtl());
-        Y_ABORT_UNLESS(!specials.TtlColumn.empty());
-        ttl->SetColumnName(specials.TtlColumn);
-        ttl->SetExpireAfterSeconds((*specials.EvictAfter).Seconds());
-    }
-
     static bool InitTiersAndTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle* ttlSettings) {
         ttlSettings->SetVersion(1);
-        if (specials.HasTiers()) {
-            ttlSettings->SetUseTiering("Tiering1");
+        if (!specials.HasTiers() && !specials.HasTtl()) {
+            return false;
+        }
+        ttlSettings->MutableEnabled()->SetColumnName(specials.TtlColumn);
+        for (const auto& tier : specials.Tiers) {
+            UNIT_ASSERT(tier.EvictAfter);
+            UNIT_ASSERT_EQUAL(specials.TtlColumn, tier.TtlColumn);
+            auto* tierSettings = ttlSettings->MutableEnabled()->AddTiers();
+            tierSettings->MutableEvictToExternalStorage()->SetStorageName(tier.Name);
+            tierSettings->SetApplyAfterSeconds(tier.EvictAfter->Seconds());
         }
         if (specials.HasTtl()) {
-            InitTtl(specials, ttlSettings->MutableEnabled());
+            auto* tier = ttlSettings->MutableEnabled()->AddTiers();
+            tier->MutableDelete();
+            tier->SetApplyAfterSeconds((*specials.EvictAfter).Seconds());
         }
-        return specials.HasTiers() || specials.HasTtl();
+        return true;
     }
 
     static TString CreateTableTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
@@ -408,11 +411,11 @@ void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSna
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds,
-    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert);
+    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert, const ui64 lockId = 1);
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr,
-    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert);
+    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert, const ui64 lockId = 1);
 
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
                               ui64 tableId, const ui64 writePartId, const TString& data,
@@ -423,8 +426,8 @@ ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>
 void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds,
                     NOlap::TSnapshot snap, ui64 scanId = 0);
 
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds);
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds);
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
 
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 planStep, const TSet<ui64>& txIds);
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, const TSet<ui64>& txIds);

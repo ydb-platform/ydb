@@ -11,8 +11,12 @@
 #define _LIBCPP_EXPERIMENTAL___SIMD_VEC_EXT_H
 
 #include <__bit/bit_ceil.h>
+#include <__utility/forward.h>
+#include <__utility/integer_sequence.h>
 #include <cstddef>
+#include <experimental/__config>
 #include <experimental/__simd/internal_declaration.h>
+#include <experimental/__simd/traits.h>
 #include <experimental/__simd/utility.h>
 
 #if _LIBCPP_STD_VER >= 17 && defined(_LIBCPP_ENABLE_EXPERIMENTAL)
@@ -25,6 +29,9 @@ struct __vec_ext {
   static constexpr size_t __simd_size = _Np;
 };
 } // namespace simd_abi
+
+template <int _Np>
+inline constexpr bool is_abi_tag_v<simd_abi::__vec_ext<_Np>> = _Np > 0 && _Np <= 32;
 
 template <class _Tp, int _Np>
 struct __simd_storage<_Tp, simd_abi::__vec_ext<_Np>> {
@@ -55,6 +62,16 @@ struct __simd_operations<_Tp, simd_abi::__vec_ext<_Np>> {
       __result.__set(__i, __v);
     }
     return __result;
+  }
+
+  template <class _Generator, size_t... _Is>
+  static _LIBCPP_HIDE_FROM_ABI _SimdStorage __generate_init(_Generator&& __g, std::index_sequence<_Is...>) {
+    return _SimdStorage{{__g(std::integral_constant<size_t, _Is>())...}};
+  }
+
+  template <class _Generator>
+  static _LIBCPP_HIDE_FROM_ABI _SimdStorage __generate(_Generator&& __g) noexcept {
+    return __generate_init(std::forward<_Generator>(__g), std::make_index_sequence<_Np>());
   }
 };
 

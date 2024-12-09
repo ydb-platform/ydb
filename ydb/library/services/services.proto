@@ -298,6 +298,8 @@ enum EServiceKikimr {
     S3_WRAPPER = 803;
     CONTINUOUS_BACKUP = 804;
 
+    TX_COLUMNSHARD_ACTUALIZATION = 850;
+
     // System views
     SYSTEM_VIEWS = 900;
 
@@ -403,6 +405,8 @@ enum EServiceKikimr {
     DATA_INTEGRITY = 3000;
 
     TX_PRIORITIES_QUEUE = 3100;
+
+    BSCONFIG = 3200;
 };
 
 message TActivity {
@@ -1061,5 +1065,6 @@ message TActivity {
         CHANGE_SENDER_INCR_RESTORE_ACTOR_MAIN = 649;
         RESHUFFLE_KMEANS_SCAN_ACTOR = 650;
         FEATURE_FLAGS_CONFIGURATOR = 651;
+        DATASHARD_READ_SCAN = 652;
     };
 };

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 #include <ydb/core/kqp/opt/kqp_opt.h>
 

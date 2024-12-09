@@ -2,6 +2,8 @@ import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
+import "ydb/core/protos/whiteboard_disk_states.proto";
+import "ydb/core/protos/whiteboard_flags.proto";
 import "ydb/core/protos/memory_stats.proto";
 import "google/protobuf/descriptor.proto";
 import "ydb/core/protos/tracing.proto";
@@ -13,14 +15,6 @@ extend google.protobuf.FieldOptions {
     optional uint64 InsignificantChangeAmount = 70553;
     optional uint32 InsignificantChangePercent = 70554;
     optional bool DefaultField = 70555;
-}
-
-enum EFlag {
-    Grey = 0;
-    Green = 1;
-    Yellow = 2;
-    Orange = 3;
-    Red = 4;
 }
 
 message TCustomTabletAttribute {
@@ -91,6 +85,11 @@ message TNodeClockSkew {
 }
 
 message TNodeStateInfo {
+    enum ESessionState {
+        CLOSED = 0;
+        PENDING_CONNECTION = 1;
+        CONNECTED = 2;
+    }
     optional string PeerName = 1 [(DefaultField) = true];
     optional bool Connected = 2 [(DefaultField) = true];
     optional uint32 NodeId = 3; // filled during merge
@@ -100,12 +99,13 @@ message TNodeStateInfo {
     optional uint64 ConnectTime = 7; // changed every time the connection changes it state
     optional uint32 PeerNodeId = 8 [(DefaultField) = true]; // node if of the peer
     optional int64 ClockSkewUs = 9; // a positive value means the peer is ahead in time; a negative value means it's behind
-    optional uint32 PingTimeUs = 10; // RTT for the peer
+    optional uint64 PingTimeUs = 10; // RTT for the peer
     optional float Utilization = 11; // network utilization 0-1
     optional NActorsInterconnect.TScopeId ScopeId = 12; // scope id of the peer
     optional uint32 Count = 13; // filled during group count
     optional uint64 BytesWritten = 14; // bytes written to the socket
     optional uint64 WriteThroughput = 15; // bytes written per second
+    optional ESessionState SessionState = 16;
 }
 
 message TEvNodeStateRequest {
@@ -155,15 +155,6 @@ message TEvPDiskStateResponse {
     repeated TPDiskStateInfo PDiskStateInfo = 1;
     optional uint64 ResponseTime = 2;
     optional uint32 ResponseDuration = 3; // filled during collect
-}
-
-enum EVDiskState {
-    Initial = 1;
-    LocalRecoveryError = 2;
-    SyncGuidRecovery = 3;
-    SyncGuidRecoveryError = 4;
-    OK = 5;
-    PDiskError = 6;
 }
 
 // The structure reports VDisk compaction satisfaction rank, i.e.

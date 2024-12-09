@@ -27,7 +27,7 @@ namespace bisect
                   std::upper_bound<typename X::const_iterator, A>);
 
   DEFINE_FUNCTOR(pythonic::bisect, bisect);
-}
+} // namespace bisect
 PYTHONIC_NS_END
 
 #endif

@@ -11,10 +11,6 @@
 
 #include <type_traits>
 
-namespace NKikimr::NOlap {
-class TColumnChunkLoadContext;
-}
-
 namespace NKikimr::NColumnShard {
 
 using NOlap::TInsertWriteId;
@@ -59,7 +55,9 @@ struct Schema : NIceDb::Schema {
         ShardingInfoTableId,
         RepairsTableId,
         NormalizersTableId,
-        NormalizerEventsTableId
+        NormalizerEventsTableId,
+        ColumnsV1TableId,
+        ColumnsV2TableId
     };
 
     enum class ETierTables: ui32 {
@@ -558,6 +556,29 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<NormalizerId, EventId, Instant, EventType, Description>;
     };
 
+    struct IndexColumnsV1: Table<ColumnsV1TableId> {
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SSColumnId: Column<3, NScheme::NTypeIds::Uint32> {};
+        struct ChunkIdx: Column<4, NScheme::NTypeIds::Uint32> {};
+        struct Metadata: Column<5, NScheme::NTypeIds::String> {};   // NKikimrTxColumnShard.TIndexColumnMeta
+        struct BlobIdx: Column<6, NScheme::NTypeIds::Uint32> {};
+        struct Offset: Column<7, NScheme::NTypeIds::Uint32> {};
+        struct Size: Column<8, NScheme::NTypeIds::Uint32> {};
+
+        using TKey = TableKey<PathId, PortionId, SSColumnId, ChunkIdx>;
+        using TColumns = TableColumns<PathId, PortionId, SSColumnId, ChunkIdx, Metadata, BlobIdx, Offset, Size>;
+    };
+
+    struct IndexColumnsV2: Table<ColumnsV2TableId> {
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Metadata: Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<PathId, PortionId>;
+        using TColumns = TableColumns<PathId, PortionId, Metadata>;
+    };
+
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -595,7 +616,9 @@ struct Schema : NIceDb::Schema {
         InFlightSnapshots,
         TxDependencies,
         TxStates,
-        TxEvents
+        TxEvents,
+        IndexColumnsV1,
+        IndexColumnsV2
         >;
 
     //
@@ -758,10 +781,8 @@ struct Schema : NIceDb::Schema {
         db.Table<SchemaPresetInfo>().Key(id).Delete();
     }
 
-    static void SaveTableInfo(NIceDb::TNiceDb& db, const ui64 pathId, const TString tieringUsage) {
-        db.Table<TableInfo>().Key(pathId).Update(
-            NIceDb::TUpdate<TableInfo::TieringUsage>(tieringUsage)
-        );
+    static void SaveTableInfo(NIceDb::TNiceDb& db, const ui64 pathId) {
+        db.Table<TableInfo>().Key(pathId).Update();
     }
 
 
@@ -906,6 +927,7 @@ private:
     YDB_READONLY(ui64, PathId, 0);
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexPortionMeta, MetaProto);
+    YDB_READONLY_DEF(std::optional<NOlap::TSnapshot>, DeprecatedMinSnapshot);
 
 public:
     template <class TSource>
@@ -913,6 +935,11 @@ public:
         PathId = rowset.template GetValue<NColumnShard::Schema::IndexPortions::PathId>();
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexPortions::PortionId>();
         const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexPortions::Metadata>();
+        AFL_VERIFY(rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotPlanStep>() == rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotTxId>());
+        if (rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotPlanStep>()) {
+            DeprecatedMinSnapshot = NOlap::TSnapshot(rowset.template GetValue<NColumnShard::Schema::IndexPortions::MinSnapshotPlanStep>(),
+                rowset.template GetValue<NColumnShard::Schema::IndexPortions::MinSnapshotTxId>());
+        }
         AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
     }
 };
@@ -928,8 +955,16 @@ private:
     YDB_READONLY(TSnapshot, MinSnapshotDeprecated, TSnapshot::Zero());
 
 public:
+    TPortionAddress GetPortionAddress() const {
+        return TPortionAddress(PathId, PortionId);
+    }
+
     const TChunkAddress& GetAddress() const {
         return Address;
+    }
+
+    TFullChunkAddress GetFullChunkAddress() const {
+        return TFullChunkAddress(PathId, PortionId, Address.GetEntityId(), Address.GetChunkIdx());
     }
 
     TColumnChunkLoadContext(const ui64 pathId, const ui64 portionId, const TChunkAddress& address, const TBlobRange& bRange,
@@ -963,6 +998,88 @@ public:
 
         const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Metadata>();
         AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+    }
+};
+
+class TColumnChunkLoadContextV1 {
+private:
+    TChunkAddress Address;
+    YDB_READONLY_DEF(TBlobRangeLink16, BlobRange);
+    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(ui64, PortionId, 0);
+    YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
+
+public:
+    TPortionAddress GetPortionAddress() const {
+        return TPortionAddress(PathId, PortionId);
+    }
+
+    NKikimrTxColumnShard::TColumnChunkInfo SerializeToDBProto() const {
+        NKikimrTxColumnShard::TColumnChunkInfo proto;
+        proto.SetSSColumnId(Address.GetColumnId());
+        proto.SetChunkIdx(Address.GetChunkIdx());
+        *proto.MutableChunkMetadata() = MetaProto;
+        *proto.MutableBlobRangeLink() = BlobRange.SerializeToProto();
+        return proto;
+    }
+
+    TFullChunkAddress GetFullChunkAddress() const {
+        return TFullChunkAddress(PathId, PortionId, Address.GetEntityId(), Address.GetChunkIdx());
+    }
+
+    const TChunkAddress& GetAddress() const {
+        return Address;
+    }
+
+    TColumnChunkLoadContextV1(const ui64 pathId, const ui64 portionId, const TChunkAddress& address, const TBlobRangeLink16& bRange,
+        const NKikimrTxColumnShard::TIndexColumnMeta& metaProto)
+        : Address(address)
+        , BlobRange(bRange)
+        , PathId(pathId)
+        , PortionId(portionId)
+        , MetaProto(metaProto) {
+    }
+
+    template <class TSource>
+    TColumnChunkLoadContextV1(const TSource& rowset)
+        : Address(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::SSColumnId>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::ChunkIdx>())
+        , BlobRange(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::BlobIdx>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Offset>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Size>())
+    {
+        AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
+        PathId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PathId>();
+        PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PortionId>();
+        const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Metadata>();
+        AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+    }
+};
+
+class TColumnChunkLoadContextV2 {
+private:
+    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(ui64, PortionId, 0);
+    YDB_READONLY_DEF(TString, MetadataProto);
+
+public:
+    template <class TSource>
+    TColumnChunkLoadContextV2(const TSource& rowset) {
+        PathId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>();
+        PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>();
+        MetadataProto = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
+    }
+
+    std::vector<TColumnChunkLoadContextV1> BuildRecordsV1() const {
+        std::vector<TColumnChunkLoadContextV1> records;
+        NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
+        AFL_VERIFY(metaProto.ParseFromArray(MetadataProto.data(), MetadataProto.size()))("event", "cannot parse metadata as protobuf");
+        for (auto&& i : metaProto.GetChunks()) {
+            TColumnChunkLoadContextV1 result(PathId, PortionId, TChunkAddress(i.GetSSColumnId(), i.GetChunkIdx()),
+                TBlobRangeLink16::BuildFromProto(i.GetBlobRangeLink()).DetachResult(), i.GetChunkMetadata());
+            records.emplace_back(std::move(result));
+        }
+        return records;
     }
 };
 

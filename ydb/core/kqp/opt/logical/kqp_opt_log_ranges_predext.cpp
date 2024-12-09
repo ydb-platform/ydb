@@ -6,9 +6,9 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
+#include <yql/essentials/core/extract_predicate/extract_predicate.h>
 #include <ydb/core/protos/config.pb.h>
 
 
@@ -57,6 +57,18 @@ TMaybeNode<TCoLambda> ExtractTopSortKeySelector(TExprBase node, const NYql::TPar
         }
     }
     return {};
+}
+
+bool IsIdLambda(TExprBase body) {
+    if (auto cond = body.Maybe<TCoConditionalValueBase>()) {
+        if (auto boolLit = cond.Cast().Predicate().Maybe<TCoBool>()) {
+            return boolLit.Literal().Cast().Value() == "true" && cond.Value().Maybe<TCoArgument>();
+        }
+    }
+    if (body.Maybe<TCoArgument>()) {
+        return true;
+    }
+    return false;
 }
 
 } // namespace
@@ -156,7 +168,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
             const NYql::TKikimrTableDescription & tableDesc) -> TIndexComparisonKey
         {
             return std::make_tuple(
-                keySelector.IsValid() && IsSortKeyPrimary(keySelector.Cast(), tableDesc),
+                keySelector.IsValid() && IsSortKeyPrimary(keySelector.Cast(), tableDesc) && IsIdLambda(TCoLambda(buildResult.PrunedLambda).Body()),
                 buildResult.PointPrefixLen >= descriptionKeyColumns,
                 buildResult.PointPrefixLen >= descriptionKeyColumns ? 0 : buildResult.PointPrefixLen,
                 buildResult.UsedPrefixLen >= descriptionKeyColumns,
@@ -170,8 +182,23 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         if (primaryBuildResult.PointPrefixLen < mainTableDesc.Metadata->KeyColumnNames.size()) {
             auto maxKey = calcKey(primaryBuildResult, mainTableDesc.Metadata->KeyColumnNames.size(), false, mainTableDesc);
             for (auto& index : mainTableDesc.Metadata->Indexes) {
-                if (index.Type != TIndexDescription::EType::GlobalAsync) {
+                if (index.Type != TIndexDescription::EType::GlobalAsync && index.State == TIndexDescription::EIndexState::Ready) {
                     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(index.Name)).first->Name);
+
+                    bool uselessIndex = true;
+                    for (size_t i = 0; i < mainTableDesc.Metadata->KeyColumnNames.size(); ++i) {
+                        if (i >= tableDesc.Metadata->KeyColumnNames.size()) {
+                            break;
+                        }
+                        if (mainTableDesc.Metadata->KeyColumnNames[i] != tableDesc.Metadata->KeyColumnNames[i]) {
+                            uselessIndex = false;
+                            break;
+                        }
+                    }
+                    if (uselessIndex) {
+                        continue;
+                    }
+
                     auto buildResult = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
                     bool needsJoin = calcNeedsJoin(tableDesc.Metadata);
 

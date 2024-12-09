@@ -425,7 +425,7 @@ namespace NKikimr::NPersQueueTests {
                             } else {
                                 UNIT_FAIL("Neither topic nor consumer were provided");
                             }
-                            UNIT_ASSERT_VALUES_EQUAL(labels["user_agent"].GetString(), NGRpcProxy::V1::CleanupCounterValueString(userAgent));
+                            UNIT_ASSERT_VALUES_EQUAL(labels["user_agent"].GetString(), NGRpcProxy::V1::DropUserAgentSuffix(NGRpcProxy::V1::CleanupCounterValueString(userAgent)));
                         }
                     };
 
@@ -439,7 +439,7 @@ namespace NKikimr::NPersQueueTests {
                     UNIT_ASSERT(result.IsSuccess());
                 }
 
-                static constexpr auto userAgent = "test-client/v0.1 ' ?*'\"`| ";
+                static constexpr auto userAgent = "test-client/v0.1 ' ?*'\"`| (some build info (codename); os 1.0)";
 
                 {
                     auto newDriverCfg = driverCfg;
@@ -624,7 +624,7 @@ namespace NKikimr::NPersQueueTests {
                             } else {
                                 UNIT_FAIL("Neither topic nor consumer were provided");
                             }
-                            UNIT_ASSERT_VALUES_EQUAL(labels["user_agent"].GetString(), NGRpcProxy::V1::CleanupCounterValueString(userAgent));
+                            UNIT_ASSERT_VALUES_EQUAL(labels["user_agent"].GetString(), NGRpcProxy::V1::DropUserAgentSuffix(NGRpcProxy::V1::CleanupCounterValueString(userAgent)));
                         }
                     };
 
@@ -638,7 +638,7 @@ namespace NKikimr::NPersQueueTests {
                     UNIT_ASSERT(result.IsSuccess());
                 }
 
-                static constexpr auto userAgent = "test-client/v0.1 ' ?*'\"`| ";
+                static constexpr auto userAgent = "test-client/v0.1 ' ?*'\"`| (some build info (codename); os 1.0)";
 
                 {
                     auto newDriverCfg = driverCfg;

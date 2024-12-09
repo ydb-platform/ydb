@@ -786,7 +786,6 @@ private:
                             TABLEH() {str << "DebugMessage";}
                             TABLEH() {str << "SeqNo";}
                             TABLEH() {str << "Processed";}
-                            TABLEH() {str << "Billed";}
                         }
                     }
                     for (auto item : info.Shards) {

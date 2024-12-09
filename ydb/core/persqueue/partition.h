@@ -116,6 +116,7 @@ class TPartition : public TActorBootstrapped<TPartition> {
     friend TInitInfoRangeStep;
     friend TInitDataRangeStep;
     friend TInitDataStep;
+    friend TInitEndWriteTimestampStep;
 
     friend TPartitionSourceManager;
 
@@ -416,6 +417,9 @@ private:
     void HandleOnInit(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx);
     void HandleOnInit(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx);
     void HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext& ctx);
+    void HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx);
+    void HandleOnInit(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx);
 
     void ChangePlanStepAndTxId(ui64 step, ui64 txId);
 
@@ -440,6 +444,7 @@ private:
     void HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
 
+    ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -470,6 +475,8 @@ public:
     // Minimal offset, the data from which cannot be deleted, because it is required by an important consumer
     ui64 ImportantClientsMinOffset() const;
 
+    TInstant GetEndWriteTimestamp() const; // For tests only
+    THead& GetHead(); // For tests only
 
     //Bootstrap sends kvRead
     //Become StateInit
@@ -523,10 +530,10 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
-            HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, HandleOnInit);
 
-            HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, Handle);
-            HFuncTraced(TEvPQ::TEvGetWriteInfoError, Handle);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, HandleOnInit);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoError, HandleOnInit);
             HFuncTraced(TEvPQ::TEvDeletePartition, HandleOnInit);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
         default:
@@ -618,6 +625,7 @@ private:
         ui64 CurOffset;
         bool OldPartsCleared;
         bool HeadCleared;
+        bool FirstCommitWriteOperations = true;
     };
 
     static void RemoveMessages(TMessageQueue& src, TMessageQueue& dst);
@@ -666,6 +674,8 @@ private:
 //                          [DataKeysBody  ][DataKeysHead                      ]
     ui64 StartOffset;
     ui64 EndOffset;
+    TInstant EndWriteTimestamp;
+    TInstant PendingWriteTimestamp;
 
     ui64 WriteInflightSize;
     TActorId Tablet;
@@ -956,6 +966,10 @@ private:
                            TEvKeyValue::TEvRequest* request,
                            const TActorContext& ctx);
     ui32 RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request);
+
+    void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
+
+    size_t WriteNewSizeFromSupportivePartitions = 0;
 };
 
 } // namespace NKikimr::NPQ

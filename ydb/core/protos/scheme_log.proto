@@ -43,8 +43,9 @@ message TAlterRecord {
     //_ Table: Attributes of storage (page collection)
 
     optional uint32 Main = 9;       // Default channel for main data
-    optional uint32 Blobs = 15;     // Channel for external blobs
+    optional uint32 Blobs = 15 [deprecated = true];     // Channel for external blobs
     optional uint32 Outer = 19;     // Channel for outer packed values
+    repeated uint32 ExternalBlobs = 26; // Channels for external blobs
 
     //_ Table: Attributes of family columns
 

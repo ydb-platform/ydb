@@ -55,9 +55,15 @@ IF (BUILD_TYPE == "PROFILE")
         yt/yt/library/ytprof
     )
 
-    SRCS(
-        job_profiler.cpp
-    )
+    IF (OPENSOURCE)
+        SRCS(
+            dummy_job_profiler.cpp
+        )
+    ELSE()
+        SRCS(
+            job_profiler.cpp
+        )    
+    ENDIF()
 ELSE()
     SRCS(
         dummy_job_profiler.cpp

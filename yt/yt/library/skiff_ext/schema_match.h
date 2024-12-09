@@ -76,8 +76,8 @@ struct TSkiffTableColumnIds
 
 std::vector<TSkiffTableDescription> CreateTableDescriptionList(
     const std::vector<std::shared_ptr<NSkiff::TSkiffSchema>>& skiffSchema,
-    const TString& rangeIndexColumnName,
-    const TString& rowIndexColumnName);
+    const std::string& rangeIndexColumnName,
+    const std::string& rowIndexColumnName);
 
 std::vector<std::shared_ptr<NSkiff::TSkiffSchema>> ParseSkiffSchemas(
     const NYTree::IMapNodePtr& skiffSchemaRegistry,

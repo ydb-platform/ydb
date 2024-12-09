@@ -464,6 +464,8 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("enable_column_meta_in_chunk_meta", &TThis::EnableColumnMetaInChunkMeta)
         .Default(true);
+    registrar.Parameter("consider_min_row_range_data_weight", &TThis::ConsiderMinRowRangeDataWeight)
+        .Default(true);
 
     registrar.Parameter("schema_modification", &TThis::SchemaModification)
         .Default(ETableSchemaModification::None);

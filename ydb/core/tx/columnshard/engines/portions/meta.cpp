@@ -9,13 +9,14 @@
 namespace NKikimr::NOlap {
 
 NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
+    FullValidation();
     NKikimrTxColumnShard::TIndexPortionMeta portionMeta;
     portionMeta.SetTierName(TierName);
     portionMeta.SetCompactionLevel(CompactionLevel);
     portionMeta.SetDeletionsCount(DeletionsCount);
-    portionMeta.SetRecordsCount(TValidator::CheckNotNull(RecordsCount));
-    portionMeta.SetColumnRawBytes(TValidator::CheckNotNull(ColumnRawBytes));
-    portionMeta.SetColumnBlobBytes(TValidator::CheckNotNull(ColumnBlobBytes));
+    portionMeta.SetRecordsCount(RecordsCount);
+    portionMeta.SetColumnRawBytes(ColumnRawBytes);
+    portionMeta.SetColumnBlobBytes(ColumnBlobBytes);
     portionMeta.SetIndexRawBytes(IndexRawBytes);
     portionMeta.SetIndexBlobBytes(IndexBlobBytes);
     switch (Produced) {
@@ -43,6 +44,9 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());
     RecordSnapshotMax.SerializeToProto(*portionMeta.MutableRecordSnapshotMax());
+    for (auto&& i : BlobIds) {
+        *portionMeta.AddBlobIds() = i.GetLogoBlobId().AsBinaryString();
+    }
     return portionMeta;
 }
 

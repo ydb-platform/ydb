@@ -7,7 +7,7 @@ import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Tuple, TypeVar
+from typing import Any, TypeVar
 
 from .. import (
     BrokenResourceError,
@@ -25,8 +25,8 @@ else:
 
 T_Retval = TypeVar("T_Retval")
 PosArgsT = TypeVarTuple("PosArgsT")
-_PCTRTT = Tuple[Tuple[str, str], ...]
-_PCTRTTT = Tuple[_PCTRTT, ...]
+_PCTRTT = tuple[tuple[str, str], ...]
+_PCTRTTT = tuple[_PCTRTT, ...]
 
 
 class TLSAttribute(TypedAttributeSet):

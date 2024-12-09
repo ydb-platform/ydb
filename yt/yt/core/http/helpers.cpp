@@ -12,6 +12,8 @@
 #include <yt/yt/core/json/json_parser.h>
 #include <yt/yt/core/json/config.h>
 
+#include <yt/yt/core/net/address.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <util/stream/buffer.h>
@@ -308,8 +310,9 @@ std::optional<TString> FindBalancerRealIP(const IRequestPtr& req)
     auto forwardedFor = headers->Find(XForwardedForYHeaderName);
     auto sourcePort = headers->Find(XSourcePortYHeaderName);
 
-    if (forwardedFor && sourcePort) {
-        return Format("[%v]:%v", *forwardedFor, *sourcePort);
+    int port = 0;
+    if (forwardedFor && sourcePort && TryIntFromString<10>(*sourcePort, port)) {
+        return NNet::FormatNetworkAddress(*forwardedFor, port);
     }
 
     return {};

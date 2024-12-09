@@ -2,7 +2,7 @@
 // detail/io_uring_service.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -28,7 +28,6 @@
 #include <boost/asio/detail/object_pool.hpp>
 #include <boost/asio/detail/op_queue.hpp>
 #include <boost/asio/detail/reactor.hpp>
-#include <boost/asio/detail/scheduler.hpp>
 #include <boost/asio/detail/scheduler_task.hpp>
 #include <boost/asio/detail/timer_queue_base.hpp>
 #include <boost/asio/detail/timer_queue_set.hpp>
@@ -214,8 +213,9 @@ private:
   BOOST_ASIO_DECL void free_io_object(io_object* s);
 
   // Helper function to cancel all operations associated with the given I/O
-  // object. This function does not acquire the I/O object's mutex.
-  BOOST_ASIO_DECL void do_cancel_ops(
+  // object. This function must be called while the I/O object's mutex is held.
+  // Returns true if there are operations for which cancellation is pending.
+  BOOST_ASIO_DECL bool do_cancel_ops(
       per_io_object_data& io_obj, op_queue<operation>& ops);
 
   // Helper function to add a new timer queue.

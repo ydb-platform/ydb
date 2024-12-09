@@ -12,6 +12,7 @@
 
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/moody_camel_concurrent_queue.h>
+#include <yt/yt/core/concurrency/throughput_throttler.h>
 
 #include <yt/yt/core/logging/log.h>
 
@@ -203,17 +204,16 @@ public:
         std::optional<NCompression::ECodec> bodyCodecId;
         NCompression::ECodec attachmentCodecId;
         if (requestHeader.has_request_codec()) {
-            int intCodecId = requestHeader.request_codec();
-            NCompression::ECodec codecId;
-            if (!TryEnumCast(intCodecId, &codecId)) {
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(requestHeader.request_codec());
+            if (!codecId) {
                 underlyingContext->Reply(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Request codec %v is not supported",
-                    intCodecId));
+                    requestHeader.request_codec()));
                 return false;
             }
-            bodyCodecId = codecId;
-            attachmentCodecId = codecId;
+            bodyCodecId = *codecId;
+            attachmentCodecId = *codecId;
         } else {
             bodyCodecId = std::nullopt;
             attachmentCodecId = NCompression::ECodec::None;
@@ -328,7 +328,7 @@ protected:
     struct TSerializedResponse
     {
         TSharedRef Body;
-        std::vector<TSharedRef> Attachments;
+        TFuture<std::vector<TSharedRef>> AttachmentsFuture;
     };
 
     TSerializedResponse SerializeResponse()
@@ -336,18 +336,24 @@ protected:
         const auto& underlyingContext = this->GetUnderlyingContext();
         const auto& requestHeader = underlyingContext->GetRequestHeader();
 
-        auto codecId = underlyingContext->GetResponseCodec();
-        auto serializedBody = SerializeProtoToRefWithCompression(*Response_, codecId);
-        underlyingContext->SetResponseBodySerializedWithCompression();
+        // COMPAT(danilalexeev): legacy RPC codecs.
+        NCompression::ECodec attachmentCodecId = NCompression::ECodec::None;
+        auto bodyCodecId = underlyingContext->GetResponseCodec();
+        TSharedRef serializedBody;
+        if (requestHeader.has_response_codec()) {
+            serializedBody = SerializeProtoToRefWithCompression(*Response_, bodyCodecId);
+            attachmentCodecId = bodyCodecId;
+            underlyingContext->SetResponseBodySerializedWithCompression();
+        } else {
+            serializedBody = SerializeProtoToRefWithEnvelope(*Response_, bodyCodecId);
+        }
 
         if (requestHeader.has_response_format()) {
-            int intFormat = requestHeader.response_format();
-            EMessageFormat format;
-            if (!TryEnumCast(intFormat, &format)) {
-                THROW_ERROR_EXCEPTION(
-                    EErrorCode::ProtocolError,
+            auto format = TryCheckedEnumCast<EMessageFormat>(requestHeader.response_format());
+            if (!format) {
+                THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError,
                     "Message format %v is not supported",
-                    intFormat);
+                    requestHeader.response_format());
             }
 
             NYson::TYsonString formatOptionsYson;
@@ -355,20 +361,20 @@ protected:
                 formatOptionsYson = NYson::TYsonString(requestHeader.response_format_options());
             }
 
-            if (format != EMessageFormat::Protobuf) {
+            if (*format != EMessageFormat::Protobuf) {
                 serializedBody = ConvertMessageToFormat(
                     serializedBody,
-                    format,
+                    *format,
                     NYson::ReflectProtobufMessageType<TResponseMessage>(),
                     formatOptionsYson);
             }
         }
 
-        auto responseAttachments = CompressAttachments(Response_->Attachments(), codecId);
+        auto responseAttachmentsFuture = AsyncCompressAttachments(Response_->Attachments(), attachmentCodecId);
 
         return TSerializedResponse{
             .Body = std::move(serializedBody),
-            .Attachments = std::move(responseAttachments),
+            .AttachmentsFuture = std::move(responseAttachmentsFuture),
         };
     }
 
@@ -385,11 +391,18 @@ protected:
                 return;
             }
 
-            underlyingContext->SetResponseBody(std::move(response.Body));
-            underlyingContext->ResponseAttachments() = std::move(response.Attachments);
+            response.AttachmentsFuture.SubscribeUnique(
+                BIND([this, this_ = MakeStrong(this), responseBody = std::move(response.Body)] (TErrorOr<std::vector<TSharedRef>>&& compressedAttachments) {
+                    const auto& underlyingContext = this->GetUnderlyingContext();
+                    if (compressedAttachments.IsOK()) {
+                        underlyingContext->SetResponseBody(std::move(responseBody));
+                        underlyingContext->ResponseAttachments() = std::move(compressedAttachments.Value());
+                    }
+                    underlyingContext->Reply(TError(std::move(compressedAttachments)));
+                }));
+        } else {
+            underlyingContext->Reply(error);
         }
-
-        underlyingContext->Reply(error);
     }
 };
 
@@ -464,44 +477,35 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+extern const NConcurrency::TThroughputThrottlerConfigPtr InfiniteRequestThrottlerConfig;
+
 TRequestQueuePtr CreateRequestQueue(
-    const std::string& name,
+    std::string name,
+    std::any tag,
+    NConcurrency::IReconfigurableThroughputThrottlerPtr weightThrottler,
+    NConcurrency::IReconfigurableThroughputThrottlerPtr bytesThrottler);
+
+TRequestQueuePtr CreateRequestQueue(
+    std::string name,
     const NProfiling::TProfiler& profiler = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TValue>
 class TDynamicConcurrencyLimit
 {
 public:
     DEFINE_SIGNAL(void(), Updated);
 
-    void Reconfigure(int limit);
-    int GetLimitFromConfiguration() const;
+    void Reconfigure(TValue limit);
+    TValue GetLimitFromConfiguration() const;
 
-    int GetDynamicLimit() const;
-    void SetDynamicLimit(std::optional<int> dynamicLimit);
-
-private:
-    std::atomic<int> ConfigLimit_ = 0;
-    std::atomic<int> DynamicLimit_ = 0;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TDynamicConcurrencyByteLimit
-{
-public:
-    DEFINE_SIGNAL(void(), Updated);
-
-    void Reconfigure(i64 limit);
-    i64 GetByteLimitFromConfiguration() const;
-
-    i64 GetDynamicByteLimit() const;
-    void SetDynamicByteLimit(std::optional<i64> dynamicLimit);
+    TValue GetDynamicLimit() const;
+    void SetDynamicLimit(std::optional<TValue> dynamicLimit);
 
 private:
-    std::atomic<i64> ConfigByteLimit_ = 0;
-    std::atomic<i64> DynamicByteLimit_ = 0;
+    std::atomic<TValue> ConfigLimit_{};
+    std::atomic<TValue> DynamicLimit_{};
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -750,13 +754,13 @@ protected:
         std::atomic<int> QueueSizeLimit = 0;
         std::atomic<i64> QueueByteSizeLimit = 0;
 
-        TDynamicConcurrencyLimit ConcurrencyLimit;
-        TDynamicConcurrencyByteLimit ConcurrencyByteLimit;
+        TDynamicConcurrencyLimit<int> ConcurrencyLimit;
+        TDynamicConcurrencyLimit<i64> ConcurrencyByteLimit;
         std::atomic<double> WaitingTimeoutFraction = 0;
 
         NProfiling::TCounter RequestQueueSizeLimitErrorCounter;
         NProfiling::TCounter RequestQueueByteSizeLimitErrorCounter;
-        NProfiling::TCounter UnauthenticatedRequestsCounter;
+        NProfiling::TCounter UnauthenticatedRequestCounter;
 
         std::atomic<NLogging::ELogLevel> LogLevel = {};
         std::atomic<TDuration> LoggingSuppressionTimeout = {};
@@ -851,10 +855,10 @@ protected:
 
     //! Returns a (non-owning!) pointer to TRuntimeMethodInfo for a given method's name
     //! or |nullptr| if no such method is registered.
-    TRuntimeMethodInfo* FindMethodInfo(const std::string& method);
+    TRuntimeMethodInfo* FindMethodInfo(TStringBuf method);
 
     //! Similar to #FindMethodInfo but throws if no method is found.
-    TRuntimeMethodInfo* GetMethodInfoOrThrow(const std::string& method);
+    TRuntimeMethodInfo* GetMethodInfoOrThrow(TStringBuf method);
 
     //! Returns the default invoker passed during construction.
     const IInvokerPtr& GetDefaultInvoker() const;
@@ -901,12 +905,9 @@ protected:
     virtual std::optional<TError> GetThrottledError(const NProto::TRequestHeader& requestHeader);
 
 protected:
-    void ReplyError(
-        TError error,
-        const NProto::TRequestHeader& header,
-        const NYT::NBus::IBusPtr& replyBus);
-
-    virtual void OnMethodError(const TError& error, const TString& method);
+    virtual void OnMethodError(
+        const TError& error,
+        const TString& method);
 
 private:
     friend class TRequestQueue;
@@ -992,19 +993,24 @@ private:
     THashMap<TString, TDiscoverRequestSet> DiscoverRequestsByPayload_;
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, DiscoverRequestsByPayloadLock_);
 
-    TPerformanceCountersPtr PerformanceCounters_;
+    const TPerformanceCountersPtr PerformanceCounters_;
+    const TMethodPerformanceCountersPtr UnknownMethodPerformanceCounters_;
 
-    struct TAcceptedRequest
+    struct TIncomingRequest
     {
         TInstant ArriveInstant;
         TRequestId RequestId;
         NYT::NBus::IBusPtr ReplyBus;
-        TRuntimeMethodInfo* RuntimeInfo;
+        TRuntimeMethodInfo* RuntimeInfo = nullptr;
         NTracing::TTraceContextPtr TraceContext;
         std::unique_ptr<NRpc::NProto::TRequestHeader> Header;
+        TStringBuf UserAgent;
+        TStringBuf Method;
+        TStringBuf User;
+        TStringBuf UserTag;
         TSharedRefArray Message;
-        TRequestQueue* RequestQueue;
-        TMethodPerformanceCounters* MethodPerformanceCounters;
+        TRequestQueue* RequestQueue = nullptr;
+        TMethodPerformanceCounters* MethodPerformanceCounters = nullptr;
         std::optional<TError> ThrottledError;
         TMemoryUsageTrackerGuard MemoryGuard;
         IMemoryUsageTrackerPtr MemoryUsageTracker;
@@ -1019,12 +1025,14 @@ private:
     void OnRequestTimeout(TRequestId requestId, ERequestProcessingStage stage, bool aborted);
     void OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& busWeak, const TError& error);
 
+    void DoHandleRequest(TIncomingRequest&& incomingRequest);
+    void ReplyError(TError error, TIncomingRequest&& incomingRequest);
     void OnRequestAuthenticated(
         const NProfiling::TWallTimer& timer,
-        TAcceptedRequest&& acceptedRequest,
+        TIncomingRequest&& incomingRequest,
         const TErrorOr<TAuthenticationResult>& authResultOrError);
-    bool IsAuthenticationNeeded(const TAcceptedRequest& acceptedRequest);
-    void HandleAuthenticatedRequest(TAcceptedRequest&& acceptedRequest);
+    bool IsAuthenticationNeeded(const TIncomingRequest& incomingRequest);
+    void HandleAuthenticatedRequest(TIncomingRequest&& incomingRequest);
 
     TRequestQueue* GetRequestQueue(
         TRuntimeMethodInfo* runtimeInfo,
@@ -1051,14 +1059,14 @@ private:
     std::vector<TStreamingPayload> GetAndErasePendingPayloads(TRequestId requestId);
     void OnPendingPayloadsLeaseExpired(TRequestId requestId);
 
+    TMethodPerformanceCountersPtr CreateUnknownMethodPerformanceCounters();
     TMethodPerformanceCountersPtr CreateMethodPerformanceCounters(
         TRuntimeMethodInfo* runtimeInfo,
         const TRuntimeMethodInfo::TNonowningPerformanceCountersKey& key);
     TMethodPerformanceCounters* GetMethodPerformanceCounters(
-        TRuntimeMethodInfo* runtimeInfo,
-        const TRuntimeMethodInfo::TNonowningPerformanceCountersKey& key);
-
+        const TIncomingRequest& incomingRequest);
     TPerformanceCounters* GetPerformanceCounters();
+    void ProfileRequest(TIncomingRequest* incomingRequest);
 
     void SetActive();
     void ValidateInactive();
@@ -1075,7 +1083,6 @@ private:
     static TString GetDiscoverRequestPayload(const TCtxDiscoverPtr& context);
 
     void OnServiceLivenessCheck();
-
 };
 
 DEFINE_REFCOUNTED_TYPE(TServiceBase)
@@ -1087,8 +1094,10 @@ class TRequestQueue
 {
 public:
     TRequestQueue(
-        const std::string& name,
-        const NProfiling::TProfiler& profiler);
+        std::string name,
+        std::any tag,
+        NConcurrency::IReconfigurableThroughputThrottlerPtr bytesThrottler,
+        NConcurrency::IReconfigurableThroughputThrottlerPtr weightThrottler);
 
     bool Register(TServiceBase* service, TServiceBase::TRuntimeMethodInfo* runtimeInfo);
     void Configure(const TMethodConfigPtr& config);
@@ -1101,16 +1110,18 @@ public:
     int GetConcurrency() const;
     i64 GetConcurrencyByte() const;
 
-    void OnRequestArrived(const TServiceBase::TServiceContextPtr& context);
+    void OnRequestArrived(TServiceBase::TServiceContextPtr context);
     void OnRequestFinished(i64 requestTotalSize);
 
     void ConfigureWeightThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
     void ConfigureBytesThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
 
     const std::string& GetName() const;
+    const std::any& GetTag() const;
 
 private:
     const std::string Name_;
+    const std::any Tag_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, RegisterLock_);
     std::atomic<bool> Registered_ = false;
@@ -1140,10 +1151,10 @@ private:
     void ScheduleRequestsFromQueue();
     void RunRequest(TServiceBase::TServiceContextPtr context);
 
-    void IncrementQueueSize(const TServiceBase::TServiceContextPtr& context);
-    void DecrementQueueSize(const TServiceBase::TServiceContextPtr& context);
+    void IncrementQueueSize(i64 requestTotalSize);
+    void DecrementQueueSize(i64 requestTotalSize);
 
-    bool IncrementConcurrency(const TServiceBase::TServiceContextPtr& context);
+    bool IncrementConcurrency(i64 requestTotalSize);
     void DecrementConcurrency(i64 requestTotalSize);
 
     bool AreThrottlersOverdrafted() const;

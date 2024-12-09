@@ -1,4 +1,7 @@
 #include "partition_scale_request.h"
+#include "read_balancer_log.h"
+
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -36,7 +39,7 @@ void TPartitionScaleRequest::SendProposeRequest(const NActors::TActorContext &ct
     ctx.Send(MakeTxProxyID(), proposal.release());
 }
 
-void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const NActors::TActorContext &ctx) {
+void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const NActors::TActorContext&) {
     auto workingDir = TopicPath.substr(0, TopicPath.size() - Topic.size());
 
     auto& modifyScheme = *proposal.Record.MutableTransaction()->MutableModifyScheme();
@@ -58,7 +61,7 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
         logMessage << "partition: " << split.GetPartition() << " boundary: '" << split.GetSplitBoundary() << "' ";
         *newSplit = split;
     }
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, logMessage);
+    PQ_LOG_D( logMessage);
 
     for(const auto& merge: Merges) {
         auto* newMerge = groupDescription.AddMerge();
@@ -106,8 +109,7 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
         for (auto& issue : ev->Get()->Record.GetIssues()) {
             issues << issue.ShortDebugString() + ", ";
         }
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleRequest "
-            << "SchemaShard error when trying to execute a split request: " << issues);
+        PQ_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a split request: " << issues);
         Send(ParentActorId, scaleRequestResult.release());
         Die(ctx);
     } else {

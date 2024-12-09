@@ -84,11 +84,7 @@ static TString GetDefaultTransactionTitle()
 
     res << "User transaction. Created by: " << processState->UserName << " on " << processState->FqdnHostName
         << " client: " << processState->ClientVersion << " pid: " << processState->Pid;
-    if (!processState->CommandLine.empty()) {
-        res << " program: " << processState->CommandLine[0];
-    } else {
-        res << " command line is unknown probably NYT::Initialize was never called";
-    }
+    res << " program: " << processState->BinaryName;
 
 #ifndef NDEBUG
     res << " build: debug";
@@ -562,6 +558,15 @@ TNode SerializeParamsForListJobs(
     if (options.WithMonitoringDescriptor_) {
         result["with_monitoring_descriptor"] = *options.WithMonitoringDescriptor_;
     }
+    if (options.FromTime_) {
+        result["from_time"] = ToString(options.FromTime_);
+    }
+    if (options.ToTime_) {
+        result["to_time"] = ToString(options.ToTime_);
+    }
+    if (options.ContinuationToken_) {
+        result["continuation_token"] = *options.ContinuationToken_;
+    }
 
     if (options.SortField_) {
         result["sort_field"] = ToString(*options.SortField_);
@@ -826,6 +831,10 @@ TNode SerializeParamsForSkyShareTable(
 
     if (options.EnableFastbone_) {
         result["enable_fastbone"] = *options.EnableFastbone_;
+    }
+
+    if (options.Pool_) {
+        result["pool"] = *options.Pool_;
     }
 
     return result;

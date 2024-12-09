@@ -152,7 +152,7 @@ private:
         TMaybe<ui64> ProcessedNextMessageOffset;        // offset of fully processed data (to save to checkpoint)
         TVector<ui64> FieldsIds;
         TDuration ReconnectPeriod;
-        TStats Stat;        // Send (filtered) to read_actor
+        TStats FilteredStat;
         NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
         NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsetsByQuery;
         ui64 InitialOffset = 0;
@@ -748,7 +748,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
         LOG_ROW_DISPATCHER_TRACE("SendData to " << info.ReadActorId << ", batch size " << event->Record.MessagesSize());
         Send(RowDispatcherActorId, event.release());
     } while(!info.Buffer.empty());
-    info.Stat.Add(dataSize, eventsSize);
+    info.FilteredStat.Add(dataSize, eventsSize);
     info.FilteredDataRate->Add(dataSize);
     info.ProcessedNextMessageOffset = *info.NextMessageOffset;
 }
@@ -1022,7 +1022,6 @@ void TTopicSession::SendStatistics() {
     commonStatistic.ReadEvents = Statistics.Events;
     commonStatistic.ParseAndFilterLatency = Statistics.ParseAndFilterLatency;
     commonStatistic.LastReadedOffset = LastMessageOffset;
-    Statistics.Clear();
 
     sessionStatistic.SessionKey = TopicSessionParams{Endpoint, Database, TopicPath, PartitionId};
     sessionStatistic.Clients.reserve(Clients.size());
@@ -1033,13 +1032,15 @@ void TTopicSession::SendStatistics() {
         clientStatistic.UnreadRows = info.Buffer.size();
         clientStatistic.UnreadBytes = info.UnreadBytes;
         clientStatistic.Offset = info.ProcessedNextMessageOffset.GetOrElse(0);
-        clientStatistic.ReadBytes = info.Stat.Bytes;
+        clientStatistic.FilteredReadBytes = info.FilteredStat.Bytes;
+        clientStatistic.ReadBytes = Statistics.Bytes;
         clientStatistic.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.GetOrElse(0);
         clientStatistic.ReadLagMessages = info.NextMessageOffset.GetOrElse(0) - LastMessageOffset - 1;
         clientStatistic.InitialOffset = info.InitialOffset;
-        info.Stat.Clear();
+        info.FilteredStat.Clear();
         sessionStatistic.Clients.emplace_back(std::move(clientStatistic));
     }
+    Statistics.Clear();
     auto event = std::make_unique<TEvRowDispatcher::TEvSessionStatistic>(sessionStatistic);
     Send(RowDispatcherActorId, event.release());
 }

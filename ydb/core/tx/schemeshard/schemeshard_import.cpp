@@ -112,7 +112,7 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
             for (ui32 itemIdx : xrange(importInfo->Items.size())) {
                 FillItemProgress(this, importInfo, itemIdx, *import.AddItemsProgress());
             }
-            import.SetProgress(importInfo->IsDone())
+            import.SetProgress(importInfo->IsDone()
                 ? Ydb::Import::ImportProgress::PROGRESS_DONE
                 : Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA);
             break;

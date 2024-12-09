@@ -98,6 +98,7 @@ public:
         const auto compileServiceActorId = Runtime.Register(new TPurecalcCompileServiceMock(CompileNotifier));
 
         TopicSession = Runtime.Register(NewTopicSession(
+            "read_group",
             topicPath,
             GetDefaultPqEndpoint(),
             GetDefaultPqDatabase(),

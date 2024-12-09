@@ -82,7 +82,7 @@ public:
             return arrow::Status::Invalid("Negative buffer resize: ", newSize);
         }
         uint8_t* ptr = mutable_data();
-        if (ptr && shrink_to_fit && newSize <= size_) {
+        if (ptr && shrink_to_fit && newSize <= capacity_) {
             int64_t newCapacity = arrow::BitUtil::RoundUpToMultipleOf64(newSize);
             if (capacity_ != newCapacity) {
                 ARROW_RETURN_NOT_OK(Pool->Reallocate(capacity_, newCapacity, &ptr));
@@ -204,7 +204,7 @@ public:
     }
 
     inline std::shared_ptr<arrow::Buffer> Finish() {
-        bool shrinkToFit = MinFillPercentage ? Buffer->size() <= Buffer->capacity() / 100 * *MinFillPercentage: false;
+        bool shrinkToFit = MinFillPercentage ? Buffer->size() <= Buffer->capacity() * *MinFillPercentage / 100 : false;
         ARROW_OK(Buffer->Resize(Len * sizeof(T), shrinkToFit));
         std::shared_ptr<arrow::ResizableBuffer> result;
         std::swap(result, Buffer);

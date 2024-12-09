@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         {
             auto alterQuery = TStringBuilder() <<
                 R"(
-                ALTER OBJECT `/Root/olapStore/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+                ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();

@@ -4,11 +4,13 @@ GLOBAL_SRCS(
 
     # Common Sources
     tcmalloc/arena.cc
+    tcmalloc/allocation_sampling.cc
+    tcmalloc/allocation_sample.cc
+    tcmalloc/deallocation_profiler.cc
     tcmalloc/background.cc
     tcmalloc/central_freelist.cc
     tcmalloc/common.cc
     tcmalloc/cpu_cache.cc
-    tcmalloc/experimental_pow2_below64_size_class.cc
     tcmalloc/experimental_pow2_size_class.cc
     tcmalloc/legacy_size_classes.cc
     tcmalloc/guarded_page_allocator.cc
@@ -16,14 +18,15 @@ GLOBAL_SRCS(
     tcmalloc/huge_allocator.cc
     tcmalloc/huge_cache.cc
     tcmalloc/huge_page_aware_allocator.cc
+    tcmalloc/global_stats.cc
     tcmalloc/page_allocator.cc
     tcmalloc/page_allocator_interface.cc
-    tcmalloc/page_heap.cc
     tcmalloc/pagemap.cc
     tcmalloc/parameters.cc
     tcmalloc/peak_heap_tracker.cc
     tcmalloc/sampler.cc
     tcmalloc/size_classes.cc
+    tcmalloc/sizemap.cc
     tcmalloc/span.cc
     tcmalloc/stack_trace_table.cc
     tcmalloc/static_vars.cc
@@ -31,10 +34,10 @@ GLOBAL_SRCS(
     tcmalloc/system-alloc.cc
     tcmalloc/thread_cache.cc
     tcmalloc/transfer_cache.cc
+    tcmalloc/reuse_size_classes.cc
 
     # Common deps
     tcmalloc/experiment.cc
-    tcmalloc/noruntime_size_classes.cc
 
     # Internal libraries
     tcmalloc/internal/cache_topology.cc
@@ -43,10 +46,13 @@ GLOBAL_SRCS(
     tcmalloc/internal/memory_stats.cc
     tcmalloc/internal/mincore.cc
     tcmalloc/internal/numa.cc
+    tcmalloc/internal/page_size.cc
+    tcmalloc/internal/pageflags.cc
     tcmalloc/internal/percpu.cc
     tcmalloc/internal/percpu_rseq_asm.S
     tcmalloc/internal/percpu_rseq_unsupported.cc
     tcmalloc/internal/util.cc
+    tcmalloc/internal/sysinfo.cc
 )
 
 PEERDIR(

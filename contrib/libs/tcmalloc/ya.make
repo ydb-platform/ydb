@@ -5,9 +5,9 @@ LICENSE(Apache-2.0)
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 ALLOCATOR_IMPL()
 
-VERSION(2021-10-04-45c59ccbc062ac96d83710205033c656e490d376)
+VERSION(2024-12-07-253603d9e83f545984e0a593851693a8ae34993f)
 
-ORIGINAL_SOURCE(https://github.com/google/tcmalloc/archive/45c59ccbc062ac96d83710205033c656e490d376.tar.gz)
+ORIGINAL_SOURCE(https://github.com/google/tcmalloc/archive/253603d9e83f545984e0a593851693a8ae34993f.tar.gz)
 
 SRCS(
     # Options

@@ -18,8 +18,8 @@ static struct TInitTCMallocCallbacks {
     }
 
     TInitTCMallocCallbacks() {
-        tcmalloc::MallocExtension::SetSampleUserDataCallbacks(
-            CreateTag, CopyTag, DestroyTag);
+        // tcmalloc::MallocExtension::SetSampleUserDataCallbacks(
+        //     CreateTag, CopyTag, DestroyTag);
     }
 } InitTCMallocCallbacks;
 

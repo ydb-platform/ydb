@@ -122,10 +122,10 @@ struct TAllocationStats {
         Sizes[index] += sample.sum;
         Counts[index] += sample.count;
 
-        ui32 tag = reinterpret_cast<uintptr_t>(sample.user_data);
-        tag = (tag < MaxTag) ? tag : NProfiling::GetOverlimitCountersTag();
-        TagSizes[tag] += sample.sum;
-        TagCounts[tag] += sample.count;
+        // ui32 tag = reinterpret_cast<uintptr_t>(sample.user_data);
+        // tag = (tag < MaxTag) ? tag : NProfiling::GetOverlimitCountersTag();
+        // TagSizes[tag] += sample.sum;
+        // TagCounts[tag] += sample.count;
     }
 
     void DumpSizeStats(IOutputStream& out, const char* marker, const char* sep) const {
@@ -338,7 +338,7 @@ public:
             stats.Samples.push_back(sample);
             stats.Size += sample.sum;
             stats.Count += sample.count;
-            stats.Tag = reinterpret_cast<uintptr_t>(sample.user_data);
+            // stats.Tag = reinterpret_cast<uintptr_t>(sample.user_data);
 
             allocations.Add(sample);
 
@@ -507,8 +507,8 @@ public:
 
 private:
     TTcMallocLimitHandler() {
-        tcmalloc::MallocExtension::EnableForkSupport();
-        tcmalloc::MallocExtension::SetSoftMemoryLimitHandler(&HandleTcMallocSoftLimit);
+        // tcmalloc::MallocExtension::EnableForkSupport();
+        // tcmalloc::MallocExtension::SetSoftMemoryLimitHandler(&HandleTcMallocSoftLimit);
         Thread_ = std::thread(&TTcMallocLimitHandler::Handle, this);
     }
 
@@ -587,7 +587,7 @@ class TTcMallocMonitor : public IAllocMonitor {
         TControlWrapper PageCacheReleaseRate;
 
         TControls()
-            : ProfileSamplingRate(tcmalloc::MallocExtension::GetProfileSamplingRate(),
+            : ProfileSamplingRate(tcmalloc::MallocExtension::GetProfileSamplingInterval(),
                 64 << 10, MaxSamplingRate)
             , GuardedSamplingRate(MaxSamplingRate,
                 64 << 10, MaxSamplingRate)
@@ -654,18 +654,18 @@ private:
     }
 
     void UpdateControls() {
-        tcmalloc::MallocExtension::SetProfileSamplingRate(Controls.ProfileSamplingRate);
+        tcmalloc::MallocExtension::SetProfileSamplingInterval(Controls.ProfileSamplingRate);
 
         if (Controls.GuardedSamplingRate != TControls::MaxSamplingRate) {
             tcmalloc::MallocExtension::ActivateGuardedSampling();
         }
-        tcmalloc::MallocExtension::SetGuardedSamplingRate(Controls.GuardedSamplingRate);
+        tcmalloc::MallocExtension::SetGuardedSamplingInterval(Controls.GuardedSamplingRate);
 
-        tcmalloc::MallocExtension::MemoryLimit limit;
-        limit.hard = false;
-        limit.limit = Controls.MemoryLimit ?
+        // tcmalloc::MallocExtension::MemoryLimit limit;
+        // limit.hard = false;
+        ui64 limit = Controls.MemoryLimit ?
             (size_t)Controls.MemoryLimit : std::numeric_limits<size_t>::max();
-        tcmalloc::MallocExtension::SetMemoryLimit(limit);
+        tcmalloc::MallocExtension::SetMemoryLimit(limit, tcmalloc::MallocExtension::LimitKind::kSoft);
     }
 
     void ReleaseMemoryIfNecessary(TDuration interval) {

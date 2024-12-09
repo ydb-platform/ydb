@@ -1385,8 +1385,14 @@ void TKikimrRunner::InitializeActorSystem(
     }
 
     if (runConfig.AppConfig.HasGRpcConfig()) {
-        if (const ui32 grpcPort = runConfig.AppConfig.GetGRpcConfig().GetPort()) {
-            auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << grpcPort);
+        ui32 port = runConfig.AppConfig.GetGRpcConfig().GetPort();
+
+        if (!port) {
+            port = runConfig.AppConfig.GetGRpcConfig().GetSslPort();
+        }
+
+        if (port) {
+            auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << port);
             YdbDriver.Reset(new NYdb::TDriver(driverConfig));
             AppData->YdbDriver = YdbDriver.Get();
         }

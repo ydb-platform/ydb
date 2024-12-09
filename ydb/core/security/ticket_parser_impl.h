@@ -119,6 +119,7 @@ protected:
         static constexpr const char* BuiltinAuthType = "Builtin";
         static constexpr const char* LoginAuthType = "Login";
         static constexpr const char* AccessServiceAuthType = "AccessService";
+        static constexpr const char* NebiusAccessServiceAuthType = "NebiusAccessService";
         static constexpr const char* ApiKeyAuthType = "ApiKey";
         static constexpr const char* CertificateAuthType = "Certificate";
 
@@ -141,12 +142,14 @@ protected:
         TStackVec<TString> AdditionalSIDs;
         bool RefreshRetryableErrorImmediately = false;
         TExternalAuthInfo ExternalAuthInfo;
+        bool IsLowAccessServiceRequestPriority = false;
 
         TTokenRecordBase(const TStringBuf ticket)
             : Ticket(ticket)
         {}
 
         void SetToken(const TIntrusivePtr<NACLib::TUserToken>& token) {
+            token->SetSanitizedToken(GetSanitizedTicket());
             // saving serialization info into the token instance.
             token->SaveSerializationInfo();
             Token = token;
@@ -210,6 +213,8 @@ protected:
                     return LoginAuthType;
                 case TDerived::ETokenType::AccessService:
                     return AccessServiceAuthType;
+                case TDerived::ETokenType::NebiusAccessService:
+                    return NebiusAccessServiceAuthType;
                 case TDerived::ETokenType::ApiKey:
                     return ApiKeyAuthType;
                 case TDerived::ETokenType::Certificate:
@@ -242,12 +247,30 @@ protected:
             ExternalAuthInfo.Type = response.ExternalAuth;
         }
 
+        // Ticket for logs
         TString GetMaskedTicket() const {
             if (Signature.AccessKeyId) {
                 return MaskTicket(Signature.AccessKeyId);
             }
             if (TokenType == TDerived::ETokenType::Certificate) {
                 return GetCertificateFingerprint(Ticket);
+            }
+            if (TokenType == TDerived::ETokenType::NebiusAccessService) {
+                return MaskNebiusTicket(Ticket);
+            }
+            return MaskTicket(Ticket);
+        }
+
+        // Ticket for audit logs
+        TString GetSanitizedTicket() const {
+            if (Signature.AccessKeyId) {
+                return MaskTicket(Signature.AccessKeyId);
+            }
+            if (TokenType == TDerived::ETokenType::Certificate) {
+                return GetCertificateFingerprint(Ticket);
+            }
+            if (TokenType == TDerived::ETokenType::NebiusAccessService) {
+                return SanitizeNebiusTicket(Ticket);
             }
             return MaskTicket(Ticket);
         }
@@ -264,7 +287,7 @@ protected:
 
     template <typename TTokenRecord>
     TInstant GetExpireTime(const TTokenRecord& record, TInstant now) const {
-        if ((record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey) && record.Signature.AccessKeyId) {
+        if ((record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::NebiusAccessService || record.TokenType == TDerived::ETokenType::ApiKey) && record.Signature.AccessKeyId) {
             return GetAsSignatureExpireTime(now);
         }
         if (record.TokenType == TDerived::ETokenType::Login) {
@@ -392,6 +415,11 @@ private:
             } else {
                 request->Request.set_iam_token(record.Ticket);
             }
+        }
+
+        if (record.IsLowAccessServiceRequestPriority) {
+            auto& headers = request->Headers;
+            headers["x-ya-priority"] = "low";
         }
 
         return request;
@@ -910,11 +938,11 @@ private:
     }
 
     static auto GetTokenType(TEvNebiusAccessServiceAuthenticateRequest*) {
-        return TDerived::ETokenType::AccessService; // the only supported
+        return TDerived::ETokenType::NebiusAccessService; // the only supported
     }
 
     static auto GetTokenType(TEvNebiusAccessServiceAuthorizeRequest*) {
-        return TDerived::ETokenType::AccessService; // the only supported
+        return TDerived::ETokenType::NebiusAccessService; // the only supported
     }
 
     template <typename TTokenRecord>
@@ -980,7 +1008,7 @@ private:
                     SetError(key, record, {.Message = errorMessage, .Retryable = false});
                 }
             } else {
-                if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
+                if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::NebiusAccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
                     bool retryable = IsRetryableGrpcError(response->Status);
                     SetError(key, record, {.Message = response->Status.Msg, .Retryable = retryable});
                 }
@@ -1185,7 +1213,7 @@ private:
                             BLOG_W("Received response with not all permissions. Absent permissions: " << printAbsentPermissions());
                             SetAccessServiceBulkAuthorizeError(key, record, TStringBuilder() << "Internal error: not all permissions in authorize response", false);
                         } else if (permissionDeniedCount < examinedPermissions.size() && !hasRequiredPermissionFailed) {
-                            record.TokenType = TDerived::ETokenType::AccessService;
+                            record.TokenType = TDerived::ETokenType::NebiusAccessService;
                             SetToken(key, record, new NACLib::TUserToken({
                                 .OriginalUserToken = record.Ticket,
                                 .UserSID = record.Subject,
@@ -1570,7 +1598,7 @@ protected:
         }
         if (tokenType == "Bearer" || tokenType == "IAM") {
             if (AccessServiceEnabled()) {
-                return TDerived::ETokenType::AccessService;
+                return NebiusAccessServiceValidator ? TDerived::ETokenType::NebiusAccessService : TDerived::ETokenType::AccessService;
             } else {
                 return TDerived::ETokenType::Unsupported;
             }
@@ -1655,6 +1683,7 @@ protected:
         switch(record.TokenType) {
             case TDerived::ETokenType::Unknown:
             case TDerived::ETokenType::AccessService:
+            case TDerived::ETokenType::NebiusAccessService:
                 return true;
             case TDerived::ETokenType::ApiKey:
                 return Config.GetUseAccessServiceApiKey();
@@ -1704,6 +1733,7 @@ protected:
         CounterTicketsBuildTime->Collect((now - record.InitTime).MilliSeconds());
         BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
                     << record.PeerName << ") has now valid token of " << record.Subject);
+        record.IsLowAccessServiceRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
     }
 
@@ -1732,6 +1762,7 @@ protected:
                         << record.PeerName << ") has now permanent error message '" << error.Message << "'");
         }
         CounterTicketsErrors->Inc();
+        record.IsLowAccessServiceRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
     }
 
@@ -1802,7 +1833,7 @@ protected:
         if (!AccessServiceValidatorV1 && AccessServiceValidatorV2) {
             return false;
         }
-        if (record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey) {
+        if (record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::NebiusAccessService || record.TokenType == TDerived::ETokenType::ApiKey) {
             return (record.Error && record.Error.Retryable) || !record.Signature.AccessKeyId;
         }
         return record.TokenType == TDerived::ETokenType::Unknown;

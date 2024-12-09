@@ -134,7 +134,11 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                     YQL_ENSURE(stage.SinksSize() == 1);
                     meta.TableId = MakeTableId(settings.GetTable());
                     meta.TablePath = settings.GetTable().GetPath();
-                    meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
+                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
+                    } else {
+                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
+                    }
                     meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
                 }
             }
@@ -415,6 +419,7 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
     }
 
     settings->SetLookupStrategy(streamLookup.GetLookupStrategy());
+    settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
 
     TTransform streamLookupTransform;
     streamLookupTransform.Type = "StreamLookupInputTransformer";

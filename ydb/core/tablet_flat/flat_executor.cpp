@@ -414,6 +414,8 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
     RecreatePageCollectionsCache();
     ReflectSchemeSettings();
 
+    RequestInMemPagesForDatabase();
+
     Become(&TThis::StateFollower);
     Stats->IsActive = true;
     Stats->IsFollower = true;
@@ -663,16 +665,21 @@ void TExecutor::TranslateCacheTouchesToSharedCache() {
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvTouch(std::move(touches)));
 }
 
-void TExecutor::RequestInMemPagesForDatabase() {
-    const auto &scheme = Scheme();
-    for (auto &sxpair : scheme.Tables) {
-        auto stickyColumns = GetStickyColumns(sxpair.first);
+void TExecutor::RequestInMemPagesForDatabase(bool pendingOnly) {
+    const auto& scheme = Scheme();
+    for (auto& pr : scheme.Tables) {
+        const ui32 tid = pr.first;
+        if (pendingOnly && !pr.second.PendingCacheEnable) {
+            continue;
+        }
+        auto stickyColumns = GetStickyColumns(tid);
         if (stickyColumns) {
-            auto subset = Database->Subset(sxpair.first, NTable::TEpoch::Max(), { } , { });
+            auto subset = Database->Subset(tid, NTable::TEpoch::Max(), { } , { });
 
             for (auto &partView: subset->Flatten)
-                RequestInMemPagesForPartStore(sxpair.first, partView, stickyColumns);
+                RequestInMemPagesForPartStore(tid, partView, stickyColumns);
         }
+        pr.second.PendingCacheEnable = false;
     }
 }
 
@@ -983,6 +990,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
         if (schemeUpdate) {
             ReadResourceProfile();
             ReflectSchemeSettings();
+            RequestInMemPagesForDatabase(/* pendingOnly */ true);
             Owner->OnFollowerSchemaUpdated();
         }
 
@@ -1360,6 +1368,7 @@ void TExecutor::RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartV
             for (ui32 pageId : req->Pages)
                 PrivatePageCache->MarkSticky(pageId, info);
 
+            // TODO: only request missing pages
             RequestFromSharedCache(req, NBlockIO::EPriority::Bkgr, EPageCollectionRequest::CacheSync);
         }
     }
@@ -2080,6 +2089,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
 
             ReadResourceProfile();
             ReflectSchemeSettings();
+            RequestInMemPagesForDatabase(/* pendingOnly */ true);
 
             // For every table that changed strategy we need to generate a
             // special part switch that notifies bootlogic about new strategy

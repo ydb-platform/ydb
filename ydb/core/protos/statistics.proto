@@ -14,10 +14,12 @@ message TPathEntry {
     optional uint64 RowCount = 2;
     optional uint64 BytesSize = 3;
     optional bool IsColumnTable = 4;
+    optional bool AreStatsFull = 5;
 }
 
 message TSchemeShardStats {
     repeated TPathEntry Entries = 1;
+    optional bool AreAllStatsFull = 2;
 }
 
 // SS -> SA

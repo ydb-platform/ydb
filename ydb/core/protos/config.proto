@@ -1316,6 +1316,58 @@ message TImmediateControlsConfig {
             DefaultValue: 256 }];
     }
 
+    message TDSProxyControls {
+        optional uint64 SlowDiskThreshold = 1 [(ControlOptions) = {
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 2000 }];
+        optional uint64 PredictedDelayMultiplier = 2 [(ControlOptions) = {
+            Description: "Predicted time of VDisk's response multiplier, promille",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+        reserved 3;
+        reserved 4;
+        optional uint64 MaxNumOfSlowDisks = 5 [(ControlOptions) = {
+            Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations",
+            MinValue: 1,
+            MaxValue: 2,
+            DefaultValue: 2 }];
+
+        optional uint64 SlowDiskThresholdHDD = 6 [(ControlOptions) = {
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille, option for HDD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 2000 }];
+        optional uint64 PredictedDelayMultiplierHDD = 7 [(ControlOptions) = {
+            Description: "Predicted time of VDisk's response multiplier, promille, option for HDD",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+        optional uint64 MaxNumOfSlowDisksHDD = 8 [(ControlOptions) = {
+            Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations, option for HDD",
+            MinValue: 1,
+            MaxValue: 2,
+            DefaultValue: 1 }];
+
+        optional uint64 SlowDiskThresholdSSD = 9 [(ControlOptions) = {
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille, option for SSD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 2000 }];
+        optional uint64 PredictedDelayMultiplierSSD = 10 [(ControlOptions) = {
+            Description: "Predicted time of VDisk's response multiplier, promille, option for SSD",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+        optional uint64 MaxNumOfSlowDisksSSD = 11 [(ControlOptions) = {
+            Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations, option for SSD",
+            MinValue: 1,
+            MaxValue: 2,
+            DefaultValue: 2 }];
+    }
+
     message TBlobStorageControllerControls {
         optional uint64 EnableSelfHealWithDegraded = 1 [(ControlOptions) = {
             Description: "Should SelfHeal automatically process groups that are in DEGRADED status (one step from nonworking)",
@@ -1332,6 +1384,7 @@ message TImmediateControlsConfig {
     reserved 6;
     optional TVDiskControls VDiskControls = 7;
     optional TTabletControls TabletControls = 8;
+    optional TDSProxyControls DSProxyControls = 9;
     optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
 };
 
@@ -1344,22 +1397,26 @@ message TMeteringConfig {
 
 message TAuditConfig {
     enum EFormat {
-        JSON = 1;
-        TXT = 2;
+        JSON = 1;                // Outputs audit log in format: "<time>: {"k1": "v1", "k2": "v2", ...}" where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
+        TXT = 2;                 // Outputs audit log in format: "<time>: k1=v1, k2=v2, ..." where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
+        JSON_LOG_COMPATIBLE = 3; // Outputs audit log in format: "{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}" where @timestamp is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values // Suitable for output both debug log and audit log to the same destination (stderr)
     }
 
     message TStderrBackend {
         optional EFormat Format = 1 [default = JSON];
+        optional string LogJsonEnvelope = 2; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
     message TFileBackend {
         optional EFormat Format = 1 [default = JSON];
         optional string FilePath = 2;
+        optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
     message TUnifiedAgentBackend {
         optional EFormat Format = 1 [default = JSON];
         optional string LogName = 2;
+        optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
     optional TStderrBackend StderrBackend = 1;

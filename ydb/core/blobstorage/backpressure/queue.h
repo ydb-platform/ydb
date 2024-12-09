@@ -51,7 +51,8 @@ class TBlobStorageQueue {
         const ui64 QueueCookie;
         ui64 Cost;
         bool DirtyCost;
-        THPTimer ProcessingTimer;
+        TBSQueueTimer ProcessingTimer;
+
         TTrackableList<TItem>::iterator Iterator;
 
         template<typename TEvent>
@@ -59,7 +60,7 @@ class TBlobStorageQueue {
                 const ::NMonitoring::TDynamicCounters::TCounterPtr& serItems,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr& serBytes,
                 const TBSProxyContextPtr& bspctx, ui32 interconnectChannel,
-                bool local)
+                bool local, bool useActorSystemTime)
             : Queue(EItemQueue::NotSet)
             , CostEssence(*event->Get())
             , Span(TWilson::VDiskTopLevel, std::move(event->TraceId), "Backpressure.InFlight")
@@ -70,6 +71,7 @@ class TBlobStorageQueue {
             , QueueCookie(RandomNumber<ui64>())
             , Cost(0)
             , DirtyCost(true)
+            , ProcessingTimer(useActorSystemTime)
         {
             if (Span) {
                 Span
@@ -129,6 +131,8 @@ class TBlobStorageQueue {
 
     const ui32 InterconnectChannel;
 
+    const bool UseActorSystemTime;
+
 public:
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueWaitingItems;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueWaitingBytes;
@@ -156,7 +160,8 @@ public:
     TBlobStorageQueue(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, TString& logPrefix,
             const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, ui32 interconnectChannel,
             const TBlobStorageGroupType &gType,
-            NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public);
+            NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public,
+            bool useActorSystemTime = false);
 
     ~TBlobStorageQueue();
 
@@ -213,7 +218,8 @@ public:
         TItemList::iterator newIt;
         if (Queues.Unused.empty()) {
             newIt = Queues.Waiting.emplace(Queues.Waiting.end(), event, deadline,
-                QueueSerializedItems, QueueSerializedBytes, BSProxyCtx, InterconnectChannel, local);
+                QueueSerializedItems, QueueSerializedBytes, BSProxyCtx, InterconnectChannel, local,
+                UseActorSystemTime);
             ++*QueueSize;
         } else {
             newIt = Queues.Unused.begin();
@@ -222,7 +228,7 @@ public:
             TItem& item = *newIt;
             item.~TItem();
             new(&item) TItem(event, deadline, QueueSerializedItems, QueueSerializedBytes, BSProxyCtx,
-                InterconnectChannel, local);
+                InterconnectChannel, local, UseActorSystemTime);
         }
 
         newIt->Iterator = newIt;

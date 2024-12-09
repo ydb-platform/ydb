@@ -81,7 +81,7 @@ TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) 
 
 }  // anonymous namespace
 
-void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request, const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS, const TString& userSID) {
+void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request, const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS, const TString& userSID, const TString& sanitizedToken) {
     // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
     // (even if it was packed into a single TxProxy transaction with some other operations).
     for (const auto& operation : request.GetTransaction()) {
@@ -96,6 +96,7 @@ void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransac
             AUDIT_PART("tx_id", std::to_string(request.GetTxId()))
             AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue))
             AUDIT_PART("subject", (!userSID.empty() ? userSID : EmptyValue))
+            AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
             AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
             AUDIT_PART("operation", logEntry.Operation)
             AUDIT_PART("paths", RenderList(logEntry.Paths), !logEntry.Paths.empty())
@@ -188,6 +189,7 @@ struct TXxportRecord {
     TString Uid;
     TString RemoteAddress;
     TString UserSID;
+    TString SanitizedToken;
     TString DatabasePath;
     TString Status;
     Ydb::StatusIds::StatusCode DetailedStatus;
@@ -208,6 +210,7 @@ void AuditLogXxport(TXxportRecord&& record) {
         AUDIT_PART("uid", record.Uid);
         AUDIT_PART("remote_address", (!record.RemoteAddress.empty() ? record.RemoteAddress : EmptyValue))
         AUDIT_PART("subject", (!record.UserSID.empty() ? record.UserSID : EmptyValue))
+        AUDIT_PART("sanitized_token", (!record.SanitizedToken.empty() ? record.SanitizedToken : EmptyValue))
         AUDIT_PART("database", (!record.DatabasePath.empty() ? record.DatabasePath : EmptyValue))
         AUDIT_PART("operation", record.OperationName)
         AUDIT_PART("status", record.Status)
@@ -299,6 +302,7 @@ void _AuditLogXxportStart(const Request& request, const Response& response, cons
         .Uid = GetUid(request.GetRequest().GetOperationParams()),
         .RemoteAddress = peerName,
         .UserSID = request.GetUserSID(),
+        .SanitizedToken = request.GetSanitizedToken(),
         .DatabasePath = databasePath.PathString(),
         .Status = (entry.GetStatus() == Ydb::StatusIds::SUCCESS ? "SUCCESS" : "ERROR"),
         .DetailedStatus = entry.GetStatus(),

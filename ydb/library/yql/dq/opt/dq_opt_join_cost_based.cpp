@@ -335,7 +335,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     int& equiJoinCounter,
     const TOptimizerHints& hints
 ) {
-    if (optLevel == 0) {
+    if (optLevel <= 1) {
         return node;
     }
 

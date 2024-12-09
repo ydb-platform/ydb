@@ -67,6 +67,7 @@ public:
         , Request(static_cast<TBusSchemeDescribe*>(msg->MsgContext.ReleaseMessage()))
     {
         TBase::SetSecurityToken(Request->Record.GetSecurityToken());
+        TBase::SetPeerName(msg->MsgContext.GetPeerName());
     }
 
     //STFUNC(StateWork)

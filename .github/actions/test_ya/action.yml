@@ -103,7 +103,7 @@ runs:
           debug)
             TESTMO_SOURCE="ya-${ARCH}-debug"
             ;;
-          release-*)
+          release*)
             TESTMO_SOURCE="ya-${ARCH}-${BUILD_PRESET/release-/}"
             ;;
           *)
@@ -179,6 +179,9 @@ runs:
             ;;
           relwithdebinfo)
             params+=(--build "relwithdebinfo")
+            ;;
+          release)
+            params+=(--build "release")
             ;;
           release-asan)
             params+=(

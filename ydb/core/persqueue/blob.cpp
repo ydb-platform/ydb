@@ -399,6 +399,10 @@ void TBatch::Pack() {
         Header.SetPayloadSize(PackedData.size());
     }
 
+    for (auto& b : Blobs) {
+        EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
+    }
+
 
     TVector<TClientBlob> tmp;
     Blobs.swap(tmp);
@@ -414,11 +418,14 @@ void TBatch::Unpack() {
     UnpackTo(&Blobs);
     Y_ABORT_UNLESS(InternalPartsPos.empty());
     for (ui32 i = 0; i < Blobs.size(); ++i) {
-        if (!Blobs[i].IsLastPart())
+        auto& b = Blobs[i];
+        if (!b.IsLastPart()) {
             InternalPartsPos.push_back(i);
+        }
+        EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
     }
     Y_ABORT_UNLESS(InternalPartsPos.size() == GetInternalPartsCount());
-    
+
     PackedData.Clear();
 }
 
@@ -459,7 +466,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) const {
     ui32 sourceIdCount = 0;
     TVector<TString> sourceIds;
 
-    NScheme::TTypeCodecs ui32Codecs(NScheme::NTypeIds::Uint32), ui64Codecs(NScheme::NTypeIds::Uint64), stringCodecs(NScheme::NTypeIds::String);
+    static const NScheme::TTypeCodecs ui32Codecs(NScheme::NTypeIds::Uint32), ui64Codecs(NScheme::NTypeIds::Uint64), stringCodecs(NScheme::NTypeIds::String);
     //read order
     {
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
@@ -978,4 +985,3 @@ bool TPartitionedBlob::IsNextPart(const TString& sourceId, const ui64 seqNo, con
 
 }// NPQ
 }// NKikimr
-

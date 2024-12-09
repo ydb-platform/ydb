@@ -179,8 +179,8 @@
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Name": "ToFlow",
-                                                                "ToFlow": "precompute_1_0"
+                                                                "Iterator": "precompute_1_0",
+                                                                "Name": "Iterator"
                                                             }
                                                         ],
                                                         "PlanNodeId": 13
@@ -193,7 +193,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Stage",
+                                                        "Node Type": "Collect",
                                                         "PlanNodeId": 11,
                                                         "Plans": [
                                                             {

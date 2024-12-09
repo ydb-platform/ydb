@@ -331,7 +331,7 @@ bool IsParameterToListOfStructsRepack(const TExprBase& expr) {
     return true;
 }
 
-//#define DBG(...) YQL_CLOG(DEBUG, ProviderKqp) << __VA_ARGS__
+// #define DBG(...) YQL_CLOG(DEBUG, ProviderKqp) << __VA_ARGS__
 #define DBG(...)
 
 TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
@@ -935,7 +935,38 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
 
 } // anonymous namespace
 
-TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, bool useCBO)
+TVector<TString> CollectLabels(const TExprBase& node) {
+    TVector<TString> rels;
+    
+    if (node.Maybe<TDqPrecompute>()) {
+        auto precompute = node.Cast<TDqPrecompute>();
+        return CollectLabels(precompute.Input());
+    }
+
+    if (node.Maybe<TDqJoin>()) {
+        auto join = node.Cast<TDqJoin>();
+
+        if (join.LeftLabel().Maybe<TCoAtom>()) {
+            rels.push_back(join.LeftLabel().Cast<TCoAtom>().StringValue());
+        } else { 
+            auto lhs = CollectLabels(join.LeftInput());
+            rels.insert(rels.end(), std::make_move_iterator(lhs.begin()), std::make_move_iterator(lhs.end()));
+        }
+
+        if (join.RightLabel().Maybe<TCoAtom>()) {
+            rels.push_back(join.RightLabel().Cast<TCoAtom>().StringValue());
+        } else { 
+            auto rhs = CollectLabels(join.RightInput());
+            rels.insert(rels.end(), std::make_move_iterator(rhs.begin()), std::make_move_iterator(rhs.end()));
+        }
+
+        return rels;
+    }
+
+    return {};
+}
+
+TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, bool useCBO, const TOptimizerHints& hints)
 {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -952,11 +983,26 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
         return node;
     }
 
-    if (useCBO){
-         
-         if (algo != EJoinAlgoType::LookupJoin && algo != EJoinAlgoType::LookupJoinReverse) {
+    if (useCBO && algo != EJoinAlgoType::LookupJoin && algo != EJoinAlgoType::LookupJoinReverse){
+        return node;
+    }
+
+    /* 
+     * this cycle looks for applied hints for these join labels. if we've found one then we will leave the function.
+     * But if it is a LookupJoin we will rewrite it with KqpJoinToIndexLookupImpl because lookup join needs to be rewritten
+     */
+    auto joinLabels = CollectLabels(node);
+    for (const auto& hint: hints.JoinAlgoHints->Hints) {
+        if (
+            std::unordered_set<TString>(hint.JoinLabels.begin(), hint.JoinLabels.end()) == 
+            std::unordered_set<TString>(joinLabels.begin(), joinLabels.end()) && hint.Applied
+        ) {
+            if (hint.Algo == EJoinAlgoType::LookupJoin || hint.Algo == EJoinAlgoType::LookupJoinReverse) {
+                break;
+            }
+
             return node;
-         }
+        }
     }
 
     DBG("-- Join: " << KqpExprToPrettyString(join, ctx));
@@ -964,8 +1010,6 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
     // SqlIn support (preferred lookup direction)
     if (join.JoinType().Value() == "LeftSemi") {
         auto flipJoin = FlipLeftSemiJoin(join, ctx);
-        DBG("-- Flip join");
-
         if (auto indexLookupJoin = KqpJoinToIndexLookupImpl(flipJoin, ctx, kqpCtx)) {
             return indexLookupJoin.Cast();
         }

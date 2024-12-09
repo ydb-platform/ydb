@@ -528,7 +528,7 @@ class TExecutor
     void DropSingleCache(const TLogoBlobID&) noexcept;
 
     void TranslateCacheTouchesToSharedCache();
-    void RequestInMemPagesForDatabase();
+    void RequestInMemPagesForDatabase(bool pendingOnly = false);
     void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView, const THashSet<NTable::TTag> &stickyColumns);
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     void RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,

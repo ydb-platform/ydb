@@ -200,14 +200,14 @@ protected:
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) >= 2;
-        TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.JoinsCount);
+        TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
         DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> JoinToIndexLookup(TExprBase node, TExprContext& ctx) {
         bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) >= 2;
-        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx, useCBO);
+        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx, useCBO, KqpCtx.GetOptimizerHints());
         DumpAppliedRule("JoinToIndexLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

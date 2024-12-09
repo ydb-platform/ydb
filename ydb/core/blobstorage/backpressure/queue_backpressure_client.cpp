@@ -77,12 +77,13 @@ public:
             NKikimrBlobStorage::EVDiskQueueId queueId,const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, const TString& queueName,
             ui32 interconnectChannel, bool /*local*/, TDuration watchdogTimeout,
-            TIntrusivePtr<NBackpressure::TFlowRecord> &flowRecord, NMonitoring::TCountableBase::EVisibility visibility)
+            TIntrusivePtr<NBackpressure::TFlowRecord> &flowRecord, NMonitoring::TCountableBase::EVisibility visibility,
+            bool useActorSystemTime)
         : BSProxyCtx(bspctx)
         , QueueName(queueName)
         , Counters(counters->GetSubgroup("queue", queueName))
         , Queue(Counters, LogPrefix, bspctx, clientId, interconnectChannel,
-                (info ? info->Type : TErasureType::ErasureNone), visibility)
+                (info ? info->Type : TErasureType::ErasureNone), visibility, useActorSystemTime)
         , VDiskIdShort(vdiskId)
         , QueueId(queueId)
         , QueueWatchdogTimeout(watchdogTimeout)
@@ -975,9 +976,10 @@ IActor* CreateVDiskBackpressureClient(const TIntrusivePtr<TBlobStorageGroupInfo>
         NKikimrBlobStorage::EVDiskQueueId queueId,const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, const TString& queueName,
         ui32 interconnectChannel, bool local, TDuration watchdogTimeout,
-        TIntrusivePtr<NBackpressure::TFlowRecord> &flowRecord, NMonitoring::TCountableBase::EVisibility visibility) {
+        TIntrusivePtr<NBackpressure::TFlowRecord> &flowRecord, NMonitoring::TCountableBase::EVisibility visibility,
+        bool useActorSystemTime) {
     return new NBsQueue::TVDiskBackpressureClientActor(info, vdiskId, queueId, counters, bspctx, clientId, queueName,
-        interconnectChannel, local, watchdogTimeout, flowRecord, visibility);
+        interconnectChannel, local, watchdogTimeout, flowRecord, visibility, useActorSystemTime);
 }
 
 } // NKikimr

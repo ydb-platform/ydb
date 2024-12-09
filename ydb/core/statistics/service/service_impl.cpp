@@ -744,6 +744,7 @@ private:
         entry.Operation = TNavigate::EOp::OpPath;
         entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
         entry.RedirectRequired = redirectRequired;
+        entry.ShowPrivatePath = true;
     }
 
     void Handle(TEvStatistics::TEvGetStatistics::TPtr& ev) {

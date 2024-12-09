@@ -81,14 +81,11 @@ static void CreateSampleTable(TSession session, bool useColumnStore) {
     CreateTables(session, "schema/lookupbug.sql", useColumnStore);
 }
 
-static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = ""){
+static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = "", bool useCBO = true){
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
 
-    setting.SetName("CostBasedOptimizationLevel");
-    setting.SetValue("4");
-    settings.push_back(setting);
 
     if (stats != "") {
         setting.SetName("OptOverrideStatistics");
@@ -100,6 +97,14 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
     appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
+    if (!useCBO) {
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
+    } else {
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        setting.SetName("CostBasedOptimizationLevel");
+        setting.SetValue("4");
+        settings.push_back(setting);
+    }
 
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     serverSettings.SetKqpSettings(settings);
@@ -197,8 +202,8 @@ private:
     size_t ChainSize; 
 };
 
-void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore) {
-    auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
+void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
+    auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -333,8 +338,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     //    TChainTester(65).Test();
     //}
 
-    TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore) {
-        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
+    TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
+        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -463,6 +468,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestDataQueryWithStats("queries/tpch21.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
     }
 
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS9, StreamLookupJoin, ColumnStore) {
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds9.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);       
+    }
+
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS9_SMALL, StreamLookupJoin, ColumnStore) {
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds9_small.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);       
+    }
+
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS16, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds16.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);       
     }
@@ -516,6 +529,69 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint2, StreamLookupJoin, ColumnStore) {
         CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, StreamLookupJoin, ColumnStore);
+    }
+
+
+    class TFindJoinWithLabels {
+    public:
+        TFindJoinWithLabels(
+            const NJson::TJsonValue& plan
+        )
+            : Plan(plan)
+        {}
+
+        TString Find(const TVector<TString>& labels) {
+            Labels = labels;
+            std::sort(Labels.begin(), Labels.end());
+            TVector<TString> dummy;
+            auto res = FindImpl(Plan, dummy);
+            return res;
+        }
+
+    private:
+        TString FindImpl(const NJson::TJsonValue& plan, TVector<TString>& subtreeLabels) {
+            auto planMap = plan.GetMapSafe();
+            if (!planMap.contains("table")) {
+                TString opName = planMap.at("op_name").GetStringSafe();
+
+                auto inputs = planMap.at("args").GetArraySafe();
+                for (size_t i = 0; i < inputs.size(); ++i) {
+                    TVector<TString> childLabels;
+                    if (auto maybeOpName = FindImpl(inputs[i], childLabels) ) {
+                        return maybeOpName;
+                    }
+                    subtreeLabels.insert(subtreeLabels.end(), childLabels.begin(), childLabels.end());
+                }
+
+                if (AreRequestedLabels(subtreeLabels)) {
+                    return opName;
+                }
+
+                return "";
+            }
+
+            subtreeLabels = {planMap.at("table").GetStringSafe()};
+            return "";
+        }
+
+        bool AreRequestedLabels(TVector<TString> labels) {
+            std::sort(labels.begin(), labels.end());
+            return Labels == labels;
+        }
+
+        NJson::TJsonValue Plan;
+        TVector<TString> Labels;
+    };
+
+    Y_UNIT_TEST(OltpJoinTypeHintCBOTurnOFF) {
+        auto plan = ExecuteJoinOrderTestDataQueryWithStats("queries/oltp_join_type_hint_cbo_turnoff.sql", "stats/basic.json", false, false, false);
+        auto detailedPlan = GetDetailedJoinOrder(plan);
+
+        auto joinFinder = TFindJoinWithLabels(detailedPlan);
+        UNIT_ASSERT(joinFinder.Find({"R", "S"}) == "InnerJoin (Grace)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T"}) == "InnerJoin (MapJoin)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U"}) == "InnerJoin (Grace)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}) == "InnerJoin (MapJoin)");
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinOrderHintsSimple, StreamLookupJoin, ColumnStore) {

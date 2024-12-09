@@ -80,7 +80,8 @@ public:
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests) override {
+            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) override {
         // Check if the work is already done.
         if (state.WholeSituation == TBlobState::ESituation::Absent) {
             return EStrategyOutcome::DONE; // nothing to restore
@@ -125,25 +126,13 @@ public:
             return *res;
         }
 
-        TStackVec<ui32, 2> slowDiskSubgroupIdxs;
-        if (info.GetTotalVDisksNum() > 1) {
-            // Find the slowest disk, if there are more than 1
-            TDiskDelayPredictions worstDisks;
-            state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                    HandleClassToQueueId(blackboard.PutHandleClass), 1,
-                    &worstDisks);
-
-            // Check if the slowest disk exceptionally slow, or just not very fast
-            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * 2) {
-                slowDiskSubgroupIdxs.push_back(worstDisks[0].DiskIdx);
-            }
-        }
+        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, blackboard, true, accelerationParams);
 
         bool isDone = false;
-        if (!slowDiskSubgroupIdxs.empty()) {
+        if (slowDiskSubgroupMask != 0) {
             // If there is an exceptionally slow disk, try not touching it, mark isDone
             TBlobStorageGroupType::TPartLayout layout;
-            PreparePartLayout(state, info, &layout, slowDiskSubgroupIdxs);
+            PreparePartLayout(state, info, &layout, slowDiskSubgroupMask);
 
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
@@ -157,7 +146,7 @@ public:
         if (!isDone) {
             // Fill in the part layout
             TBlobStorageGroupType::TPartLayout layout;
-            PreparePartLayout(state, info, &layout, {});
+            PreparePartLayout(state, info, &layout, 0);
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
             Y_ABORT_UNLESS(isCorrectable);

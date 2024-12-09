@@ -1,7 +1,12 @@
 #include "ut_utils/topic_sdk_test_setup.h"
 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/testlib/common_helper.h>
+#include <ydb/core/driver_lib/run/run.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
@@ -184,6 +189,8 @@ protected:
     void Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
                                             const TString& consumerName,
                                             size_t count);
+    
+    virtual bool GetEnableOltpSink() const;
 
 private:
     template<class E>
@@ -226,6 +233,7 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
     NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetEnableTopicServiceTx(true);
     settings.SetEnablePQConfigTransactionsAtSchemeShard(true);
+    settings.SetEnableOltpSink(GetEnableOltpSink());
 
     Setup = std::make_unique<TTopicSdkTestSetup>(TEST_CASE_NAME, settings);
 
@@ -1021,6 +1029,10 @@ void TFixture::Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
     }
 
     UNIT_ASSERT_VALUES_EQUAL(count, limit);
+}
+
+bool TFixture::GetEnableOltpSink() const {
+    return false;
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
@@ -2265,6 +2277,365 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
     ExecuteDataQuery(tableSession, "SELECT 2", NTable::TTxControl::Tx(tx).CommitTx(true));
 
     Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
+}
+
+class TFixtureOltpSink : public TFixture {
+protected:
+    bool GetEnableOltpSink() const override;
+};
+
+bool TFixtureOltpSink::GetEnableOltpSink() const {
+    return true;
+}
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopic_1, TFixtureOltpSink)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #1", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #2", &tx);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, "message #3");
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, "message #4");
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #5", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #6", &tx);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #3");
+        UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #4");
+    }
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+        UNIT_ASSERT_VALUES_EQUAL(messages[3], "message #6");
+    }
+}
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopic_2, TFixtureOltpSink)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+
+    {
+        NTable::TTransaction tx_1 = BeginTx(tableSession);
+
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx_1);
+
+        CommitTx(tx_1, EStatus::SUCCESS);
+    }
+
+    {
+        NTable::TTransaction tx_2 = BeginTx(tableSession);
+
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx_2);
+
+        CommitTx(tx_2, EStatus::SUCCESS);
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+        UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
+    }
+}
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopic_3, TFixtureOltpSink)
+{
+    const ui32 PARTITION_0 = 0;
+    const ui32 PARTITION_1 = 1;
+
+    CreateTopic("topic_A", TEST_CONSUMER, 2);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", nullptr, PARTITION_0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", nullptr, PARTITION_0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3", nullptr, PARTITION_0);
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx, PARTITION_0);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+
+    for (const auto& m : messages) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, m, &tx, PARTITION_1);
+    }
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), nullptr, PARTITION_1);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+}
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopics_1, TFixtureOltpSink)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #4", &tx);
+
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #5", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #6", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #7", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #8", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #9", &tx);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+    }
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+        UNIT_ASSERT_VALUES_EQUAL(messages[3], "message #4");
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #5");
+        UNIT_ASSERT_VALUES_EQUAL(messages[4], "message #9");
+    }
+}
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopics_2, TFixtureOltpSink)
+{
+    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_B", TEST_CONSUMER);
+    CreateTopic("topic_C", TEST_CONSUMER);
+
+    for (size_t i = 0; i < 2; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", nullptr, 0);
+        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", nullptr, 0);
+
+        NTable::TSession tableSession = CreateTableSession();
+        NTable::TTransaction tx = BeginTx(tableSession);
+
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+
+        WriteToTopic("topic_C", TEST_MESSAGE_GROUP_ID, messages[0], &tx, 0);
+
+        messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+
+        WriteToTopic("topic_C", TEST_MESSAGE_GROUP_ID, messages[0], &tx, 0);
+
+        CommitTx(tx, EStatus::SUCCESS);
+
+        messages = ReadFromTopic("topic_C", TEST_CONSUMER, TDuration::Seconds(2), nullptr, 0);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+
+        DumpPQTabletKeys("topic_A");
+        DumpPQTabletKeys("topic_B");
+        DumpPQTabletKeys("topic_C");
+    }
+}
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopics_3, TFixtureOltpSink)
+{
+    for (auto endOfTransaction : {Commit, Rollback, CloseTableSession}) {
+        TestTheCompletionOfATransaction({.Topics={"topic_A"}, .EndOfTransaction = endOfTransaction});
+        TestTheCompletionOfATransaction({.Topics={"topic_A", "topic_B"}, .EndOfTransaction = endOfTransaction});
+    }
+}
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopics_4, TFixtureOltpSink)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx_1 = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx_1);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", &tx_1);
+
+    NTable::TTransaction tx_2 = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3", &tx_2);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #4", &tx_2);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+
+    messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+
+    CommitTx(tx_2, EStatus::SUCCESS);
+    CommitTx(tx_1, EStatus::ABORTED);
+
+    messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #3");
+
+    messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #4");
+}
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_1, TFixtureOltpSink)
+{
+    CreateTopic("topic_A");
+    CreateTable("/Root/table_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    auto records = MakeTableRecords();
+    WriteToTable("table_A", records, &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], MakeJsonDoc(records));
+
+    UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), records.size());
+
+    CheckTabletKeys("topic_A");
+}
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_2, TFixtureOltpSink)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+    CreateTable("/Root/table_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    auto records = MakeTableRecords();
+
+    WriteToTable("table_A", records, &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
+    
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #3", &tx);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], MakeJsonDoc(records));
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+        UNIT_ASSERT_VALUES_EQUAL(messages[2], "message #3");
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), records.size());
+
+    CheckTabletKeys("topic_A");
+    CheckTabletKeys("topic_B");
+}
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_3, TFixtureOltpSink)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    CreateTable("/Root/table_A");
+    CreateTable("/Root/table_B");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    auto records = MakeTableRecords();
+
+    WriteToTable("table_A", records, &tx);
+    WriteToTable("table_B", records, &tx);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
+    
+    size_t topicMsgCnt = 10;
+    for (size_t i = 1; i <= topicMsgCnt; ++i) {
+        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #" + std::to_string(i), &tx);
+    }
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], MakeJsonDoc(records));
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), topicMsgCnt);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+        UNIT_ASSERT_VALUES_EQUAL(messages[topicMsgCnt - 1], "message #" + std::to_string(topicMsgCnt));
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), records.size());
+    UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_B"), records.size());
+
+    CheckTabletKeys("topic_A");
+    CheckTabletKeys("topic_B");
+}
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_4, TFixtureOltpSink)
+{
+    CreateTopic("topic_A");
+    CreateTable("/Root/table_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    auto records = MakeTableRecords();
+
+    NTable::TTransaction tx1 = BeginTx(tableSession);
+    WriteToTable("table_A", records, &tx1);
+    // TString query = Sprintf(R"(SELECT * FROM `%s`)", "table_A");
+    // auto result = tableSession.ExecuteDataQuery(query, NTable::TTxControl::Tx(tx1)).GetValueSync();
+    // UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    NTable::TTransaction tx2 = BeginTx(tableSession);
+    WriteToTable("table_A", records, &tx2);
+
+    // WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx1);
+
+    CommitTx(tx2, EStatus::SUCCESS);
+    CommitTx(tx1, EStatus::SUCCESS);
+
+    // auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    // UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+    // UNIT_ASSERT_VALUES_EQUAL(messages[0], MakeJsonDoc(records));
+
+    UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), records.size());
+
+    // CheckTabletKeys("topic_A");
 }
 
 }

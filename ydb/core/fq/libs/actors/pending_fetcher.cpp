@@ -359,14 +359,22 @@ private:
         const TString cloudId = task.sensor_labels().at("cloud_id");
         const TString queryId = task.query_id().value();
 
+        TString queryIdLabel = queryId;
+        if (task.automatic()) {
+            queryIdLabel = (task.query_type() == FederatedQuery::QueryContent::STREAMING) ? "streaming" : "automatic";
+        } else {
+            if (task.query_type() == FederatedQuery::QueryContent::ANALYTICS) {
+                queryIdLabel = "analytics";
+            }
+        }
+
         ::NYql::NCommon::TServiceCounters queryCounters(ServiceCounters);
         auto publicCountersParent = ServiceCounters.PublicCounters;
 
         if (cloudId && folderId) {
             publicCountersParent = publicCountersParent->GetSubgroup("cloud_id", cloudId)->GetSubgroup("folder_id", folderId);
         }
-        queryCounters.PublicCounters = publicCountersParent->GetSubgroup("query_id",
-            task.automatic() ? (task.query_name() ? task.query_name() : "automatic") : queryId);
+        queryCounters.PublicCounters = publicCountersParent->GetSubgroup("query_id", queryIdLabel);
 
         auto rootCountersParent = ServiceCounters.RootCounters;
         std::set<std::pair<TString, TString>> sensorLabels(task.sensor_labels().begin(), task.sensor_labels().end());
@@ -374,8 +382,7 @@ private:
             rootCountersParent = rootCountersParent->GetSubgroup(label, item);
         }
 
-        queryCounters.RootCounters = rootCountersParent->GetSubgroup("query_id",
-            task.automatic() ? (folderId ? "automatic_" + folderId : "automatic") : queryId);
+        queryCounters.RootCounters = rootCountersParent->GetSubgroup("query_id", queryIdLabel);
         queryCounters.Counters = queryCounters.RootCounters;
 
         queryCounters.InitUptimeCounter();

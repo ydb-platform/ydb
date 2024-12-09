@@ -281,7 +281,14 @@ public:
             .SetMapAsObject(true);
     }
 
+    static void SegmentationFaultHandler(int) {
+        Cerr << "segmentation fault call stack:" << Endl;
+        FormatBackTrace(&Cerr);
+        abort();
+    }
+
     void Bootstrap(const TActorContext& ctx) {
+        signal(SIGSEGV, &SegmentationFaultHandler);
         Bootstrap_wrapper(ctx);
     }
 
@@ -449,7 +456,6 @@ public:
             auto modifyRequest = std::make_unique<FederatedQuery::ModifyQueryRequest>();
 
             modifyRequest->set_query_id(query_id);
-            modifyRequest->set_query_id(query_id);
             modifyRequest->Mutablecontent()->CopyFrom(describeResult->Getquery().content());
             modifyRequest->set_execute_mode(::FederatedQuery::ExecuteMode::RUN);
             modifyRequest->set_allocated_disposition(nullptr);
@@ -465,7 +471,7 @@ public:
 
             // new event -> new EventFactory
             auto factory = &NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall;
-            actorSystem->Send(NGRpcService::CreateGRpcRequestProxyId(), factory(std::move(requestContextModify)).release());
+            actorSystem->Send(NGRpcService::CreateGRpcRequestProxyId(), std::move(factory)(std::move(requestContextModify)).release());
         });
 
         ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(std::move(requestContext)).release());

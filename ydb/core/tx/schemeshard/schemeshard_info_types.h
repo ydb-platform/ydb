@@ -2867,6 +2867,10 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
     void AddNotifySubscriber(const TActorId& actorId);
 
+    bool IsDone() const {
+      return State == EState::Done;
+    }
+
 }; // TImportInfo
 // } // NImport
 

@@ -1,16 +1,15 @@
-PY2TEST()
+PY3TEST()
 
 PEERDIR(
-    contrib/python/PySocks
     contrib/python/websocket-client
 )
 
 DATA(
-    arcadia/contrib/python/websocket-client/py2/websocket/tests/data
+    arcadia/contrib/python/websocket-client/websocket/tests/data
 )
 
 SRCDIR(
-    contrib/python/websocket-client/py2/websocket/tests
+    contrib/python/websocket-client/websocket/tests
 )
 
 TEST_SRCS(

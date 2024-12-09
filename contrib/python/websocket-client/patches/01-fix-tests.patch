@@ -1,5 +1,5 @@
---- contrib/python/websocket-client/py3/websocket/tests/test_http.py	(index)
-+++ contrib/python/websocket-client/py3/websocket/tests/test_http.py	(working tree)
+--- contrib/python/websocket-client/websocket/tests/test_http.py	(index)
++++ contrib/python/websocket-client/websocket/tests/test_http.py	(working tree)
 @@ -74,7 +74,8 @@ class HeaderSockMock(SockMock):
  
      def __init__(self, fname):
@@ -10,8 +10,8 @@
          with open(path, "rb") as f:
              self.add_packet(f.read())
  
---- contrib/python/websocket-client/py3/websocket/tests/test_websocket.py	(index)
-+++ contrib/python/websocket-client/py3/websocket/tests/test_websocket.py	(working tree)
+--- contrib/python/websocket-client/websocket/tests/test_websocket.py	(index)
++++ contrib/python/websocket-client/websocket/tests/test_websocket.py	(working tree)
 @@ -86,7 +86,8 @@ class HeaderSockMock(SockMock):
  
      def __init__(self, fname):

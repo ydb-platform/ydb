@@ -35,7 +35,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TMoveSequence TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -153,7 +153,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TMoveSequence TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -364,7 +364,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TMoveSequence TProposedMoveSequence"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
     void UpdateSequenceDescription(NKikimrSchemeOp::TSequenceDescription& descr) {
         descr.SetStartValue(GetSequenceResult.GetStartValue());
@@ -542,7 +542,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TMoveSequence TDropParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

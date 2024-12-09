@@ -15,7 +15,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "MkDir::TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:

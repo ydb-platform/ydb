@@ -143,7 +143,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCopyTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

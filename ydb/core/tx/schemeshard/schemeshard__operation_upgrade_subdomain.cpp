@@ -1299,7 +1299,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TDecisionDone operationId#" << OperationId;
+            << "TDecisionDone operationId# " << OperationId;
     }
 
 public:

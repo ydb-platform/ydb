@@ -19,7 +19,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TFinalizeBuildIndex TConfigureParts"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -105,7 +105,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TFinalizeBuildIndex TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:

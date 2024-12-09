@@ -8,7 +8,7 @@ namespace NKikimr::NOlap {
 
 class TDataAccessorsRequest;
 
-class TDataAccessorsResult : private NNonCopyable::TMoveOnly {
+class TDataAccessorsResult: private NNonCopyable::TMoveOnly {
 private:
     THashMap<ui64, TString> ErrorsByPathId;
     THashMap<ui64, TPortionDataAccessor> PortionsById;
@@ -21,7 +21,7 @@ public:
     std::vector<TPortionDataAccessor> ExtractPortionsVector() {
         std::vector<TPortionDataAccessor> portions;
         portions.reserve(PortionsById.size());
-        for (auto&& [pathId, portionInfo] : PortionsById) {
+        for (auto&& [_, portionInfo] : PortionsById) {
             portions.emplace_back(std::move(portionInfo));
         }
         return portions;

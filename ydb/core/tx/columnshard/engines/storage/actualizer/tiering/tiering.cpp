@@ -243,7 +243,7 @@ private:
             return;
         }
         TActualizationContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now());
-        for (auto&& [id, portion] : result.GetValue().GetPortions()) {
+        for (auto&& [_, portion] : result.GetValue().GetPortions()) {
             locked->ActualizePortionInfo(portion, context);
         }
     }

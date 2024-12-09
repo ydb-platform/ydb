@@ -13,7 +13,8 @@ public:
         Size,
         Minus,
         Abs,
-        Just
+        Just,
+        Exists
     };
 
     enum class EBinaryOp {

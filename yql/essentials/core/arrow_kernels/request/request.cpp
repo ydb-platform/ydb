@@ -34,6 +34,9 @@ ui32 TKernelRequestBuilder::AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* a
     case EUnaryOp::Just:
         Items_.emplace_back(Pb_.BlockJust(arg));
         break;
+    case EUnaryOp::Exists:
+        Items_.emplace_back(Pb_.BlockExists(arg));
+        break;
     case EUnaryOp::Size:
     case EUnaryOp::Minus:
     case EUnaryOp::Abs:

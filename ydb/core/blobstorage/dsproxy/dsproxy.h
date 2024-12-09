@@ -486,6 +486,16 @@ struct TBlobStorageGroupBlockParameters {
 };
 IActor* CreateBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters params);
 
+struct TBlobStorageGroupGetBlockParameters {
+    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvVGetBlock> Common;
+    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+        .LogComponent = NKikimrServices::BS_PROXY_GETBLOCK,
+        .Name = "DSProxy.GetBlock",
+        .Activity = NKikimrServices::TActivity::BS_GROUP_GETBLOCK,
+    };
+};
+IActor* CreateBlobStorageGroupGetBlockRequest(TBlobStorageGroupGetBlockParameters params);
+
 struct TBlobStorageGroupStatusParameters {
     TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvStatus> Common;
     TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {

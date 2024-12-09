@@ -481,6 +481,7 @@ struct TEvBlobStorage {
         // user <-> proxy interface
         EvPut = EventSpaceBegin(TKikimrEvents::ES_BLOBSTORAGE), /// 268 632 064
         EvGet,
+        EvGetBlock,
         EvBlock,
         EvDiscover,
         EvRange,
@@ -497,6 +498,7 @@ struct TEvBlobStorage {
         //
         EvPutResult = EvPut + 512,                              /// 268 632 576
         EvGetResult,
+        EvGetBlockResult,
         EvBlockResult,
         EvDiscoverResult,
         EvRangeResult,
@@ -915,6 +917,7 @@ struct TEvBlobStorage {
 
     struct TEvPutResult;
     struct TEvGetResult;
+    struct TEvGetBlockResult;
     struct TEvBlockResult;
     struct TEvDiscoverResult;
     struct TEvRangeResult;
@@ -1327,6 +1330,70 @@ struct TEvBlobStorage {
                 size += Responses[i].Buffer.size();
             }
             return size;
+        }
+    };
+
+    struct TEvGetBlock : public TEventLocal<TEvGetBlock, EvGetBlock> {
+        const TInstant Deadline;
+        const ui64 TabletId;
+        ui32 RestartCounter = 0;
+        std::shared_ptr<TExecutionRelay> ExecutionRelay;
+
+        TEvGetBlock(TInstant deadline, ui64 tabletId)
+            : Deadline(deadline)
+            , TabletId(tabletId)
+        {}
+
+        TString Print(bool isFull) const {
+            Y_UNUSED(isFull);
+            TStringStream str;
+            str << "TEvGetBlock {TabletId# " << TabletId
+                << " Deadline# " << Deadline.MilliSeconds()
+                << "}";
+            return str.Str();
+        }
+
+        TString ToString() const {
+            return Print(false);
+        }
+
+        ui32 CalculateSize() const {
+            return sizeof(*this);
+        }
+
+        void ToSpan(NWilson::TSpan& span) const;
+
+        std::unique_ptr<TEvGetBlockResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
+            TGroupId groupId);
+    };
+
+    struct TEvGetBlockResult : public TEventLocal<TEvGetBlockResult, EvGetBlockResult> {
+        NKikimrProto::EReplyStatus Status;
+        ui64 TabletId;
+        ui32 BlockedGeneration;
+        TString ErrorReason;
+        std::shared_ptr<TExecutionRelay> ExecutionRelay;
+
+        TEvGetBlockResult(NKikimrProto::EReplyStatus status, ui64 tabletId, ui32 blockedGeneration)
+            : Status(status)
+            , TabletId(tabletId)
+            , BlockedGeneration(blockedGeneration)
+        {}
+
+        TString Print(bool isFull) const {
+            Y_UNUSED(isFull);
+            TStringStream str;
+            str << "TEvGetBlockResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
+            str << " TabletId# " << TabletId << " BlockedGeneration# " << BlockedGeneration;
+            if (ErrorReason.size()) {
+                str << " ErrorReason# \"" << ErrorReason << "\"";
+            }
+            str << "}";
+            return str.Str();
+        }
+
+        TString ToString() const {
+            return Print(false);
         }
     };
 

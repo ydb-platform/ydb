@@ -68,6 +68,7 @@ struct TDsProxyNodeMon : public TThrRefBase {
     // restart counters
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartPut;
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RestartGetBlock;
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartBlock;
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartDiscover;
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartRange;

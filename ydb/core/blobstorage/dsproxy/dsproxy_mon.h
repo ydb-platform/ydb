@@ -230,6 +230,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ActivePut;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActivePutCapacity;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveGetBlock;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveGetCapacity;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveBlock;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveDiscover;

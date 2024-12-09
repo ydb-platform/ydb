@@ -5,7 +5,7 @@
 | `Json` | [JSON](https://en.wikipedia.org/wiki/JSON) represented as text | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
 | `JsonDocument` | [JSON](https://en.wikipedia.org/wiki/JSON) in an indexed binary representation | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
 | `Yson` | [YSON](../../udf/list/yson.md) in a textual or binary representation. | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
-| `Uuid` | Universally unique identifier [UUID](https://tools.ietf.org/html/rfc4122) | 
+| `Uuid` | Universally unique identifier [UUID](https://tools.ietf.org/html/rfc4122) |
 
 {% note info "Cell size restrictions" %}
 

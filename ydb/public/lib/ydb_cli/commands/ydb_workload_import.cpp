@@ -30,7 +30,6 @@ void TWorkloadCommandImport::Config(TConfig& config) {
         .DefaultValue(UploadParams.MaxInFlight).StoreResult(&UploadParams.MaxInFlight);
     config.Opts->AddLongOption('f', "file-output-path", "Path to a directory to save tables into as files instead of uploading it to db.")
         .StoreResult(&UploadParams.FileOutputPath);
-    config.Opts->AddLongOption("parquet", "Use parquet for upload").NoArgument().StoreTrue(&UploadParams.Parquet);
 }
 
 TWorkloadCommandImport::TUploadParams::TUploadParams()
@@ -54,10 +53,8 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
     InFlightSemaphore = MakeHolder<TFastSemaphore>(UploadParams.MaxInFlight);
     if (UploadParams.FileOutputPath.IsDefined()) {
         Writer = MakeHolder<TFileWriter>(*this);
-    } else if (UploadParams.Parquet) {
-        Writer = MakeHolder<TParquetWriter>(*this, workloadGen, config);
     } else {
-        Writer = MakeHolder<TDbWriter>(*this);
+        Writer = MakeHolder<TDbWriter>(*this, workloadGen, config);
     }
     for (auto dataGen : dataGeneratorList) {
         TThreadPoolParams params;
@@ -84,11 +81,21 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
 }
 class TWorkloadCommandImport::TUploadCommand::TDbWriter: public IWriter {
 public:
-    TDbWriter(const TWorkloadCommandImport::TUploadCommand& owner)
+    TDbWriter(TWorkloadCommandImport::TUploadCommand& owner, NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config)
         : IWriter(owner)
     {
         RetrySettings.RetryUndefined(true);
         RetrySettings.MaxRetries(30);
+        for(const auto& path: workloadGen.GetCleanPaths()) {
+            const auto list = NConsoleClient::RecursiveList(*owner.SchemeClient, config.Database + "/" + path.c_str());
+            for (const auto& entry : list.Entries) {
+                if (entry.Type == NScheme::ESchemeEntryType::ColumnTable || entry.Type == NScheme::ESchemeEntryType::Table) {
+                    const auto tableDescr = owner.TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync().GetSession().DescribeTable(entry.Name).ExtractValueSync().GetTableDescription();
+                    auto& params = ArrowCsvParams[entry.Name];
+                    params.Columns = tableDescr.GetTableColumns();
+                }
+            }
+        }
     }
 
     TAsyncStatus WriteDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) override {
@@ -110,52 +117,27 @@ public:
         Y_FAIL_S("Invalid data portion");
     }
 
-protected:
-    virtual TAsyncStatus WriteCsv(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) {
-        return Owner.TableClient->RetryOperation([portion, value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TCsv>(&portion->MutableData())](NTable::TTableClient& client) {
-            NTable::TBulkUpsertSettings settings;
-            settings.FormatSettings(value->FormatString);
-            return client.BulkUpsert(portion->GetTable(), NTable::EDataFormat::CSV, value->Data, TString(), settings)
-                .Apply(ConvertResult);
-        }, RetrySettings);
-    }
-
-    static TStatus ConvertResult(const NTable::TAsyncBulkUpsertResult& result) {
-        return TStatus(result.GetValueSync());
-    }
-
-    NRetry::TRetryOperationSettings RetrySettings;
-};
-
-class TWorkloadCommandImport::TUploadCommand::TParquetWriter: public TDbWriter {
-public:
-    TParquetWriter(TWorkloadCommandImport::TUploadCommand& owner, NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config)
-        : TDbWriter(owner)
-    {
-        for(const auto& path: workloadGen.GetCleanPaths()) {
-            const auto list = NConsoleClient::RecursiveList(*owner.SchemeClient, config.Database + "/" + path.c_str());
-            for (const auto& entry : list.Entries) {
-                if (entry.Type == NScheme::ESchemeEntryType::ColumnTable || entry.Type == NScheme::ESchemeEntryType::Table) {
-                    const auto tableDescr = owner.TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync().GetSession().DescribeTable(entry.Name).ExtractValueSync().GetTableDescription();
-                    auto& params = ArrowCsvParams[entry.Name];
-                    params.Columns = tableDescr.GetTableColumns();
-                }
-            }
-        }
-    }
-
-protected:
-    TAsyncStatus WriteCsv(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) override {
+private:
+    TAsyncStatus WriteCsv(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) {
         const auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TCsv>(&portion->MutableData());
-        auto arrowCsv = CreateArrowCSV(portion->GetTable(), value->FormatString, value->Data.size());
+        const auto* param = MapFindPtr(ArrowCsvParams, portion->GetTable());
+        if (!param) {
+            return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue("Table does not exist: " + portion->GetTable())})));
+        }
+        auto arrowCsv = NKikimr::NFormats::TArrowCSVTable::Create(param->Columns, true);
         if (!arrowCsv.ok()) {
             return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(arrowCsv.status().ToString())})));
         }
+        Ydb::Formats::CsvSettings csvSettings;
+        if (!csvSettings.ParseFromString(value->FormatString)) {
+            return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue("Invalid format string")})));
+        };
+
         auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
         constexpr auto codecType = arrow::Compression::type::ZSTD;
         writeOptions.codec = *arrow::util::Codec::Create(codecType);
         TString error;
-        if (auto batch = arrowCsv->ReadSingleBatch(value->Data, error)) {
+        if (auto batch = arrowCsv->ReadSingleBatch(value->Data, csvSettings, error)) {
             if (error) {
                 return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(error)})));
             }
@@ -173,40 +155,16 @@ protected:
         return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
     }
 
-private:
-    arrow::Result<NKikimr::NFormats::TArrowCSV> CreateArrowCSV(const TString& table, const TString& settingsString, size_t dataSize) const {
-        Ydb::Formats::CsvSettings cvsSettings;
-        cvsSettings.ParseFromStringOrThrow(settingsString);
-        const auto& param = *MapFindPtr(ArrowCsvParams, table);
-        auto reader = NKikimr::NFormats::TArrowCSVTable::Create(param.Columns, true);
-        if (!reader.ok()) {
-            return reader;
-        }
-        const auto& quoting = cvsSettings.quoting();
-        const char qchar = quoting.quote_char().empty() ? '"' : quoting.quote_char().front();
-        reader->SetQuoting(!quoting.disabled(), qchar, !quoting.double_quote_disabled());
-        if (cvsSettings.delimiter()) {
-            if (cvsSettings.delimiter().size() != 1) {
-                return arrow::Status::Invalid("Invalid delimitr in csv: %s", cvsSettings.delimiter().c_str());
-            }
-            reader->SetDelimiter(cvsSettings.delimiter().front());
-        }
-
-        if (cvsSettings.null_value()) {
-            reader->SetNullValue(cvsSettings.null_value());
-        }
-
-        if (dataSize > NKikimr::NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE) {
-            ui32 blockSize = NKikimr::NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
-            blockSize *= dataSize / blockSize + 1;
-            reader->SetBlockSize(blockSize);
-        }
-        return reader;
+    static TStatus ConvertResult(const NTable::TAsyncBulkUpsertResult& result) {
+        return TStatus(result.GetValueSync());
     }
+
     struct TArrowCSVParams {
         TVector<NYdb::NTable::TTableColumn> Columns;
     };
+
     TMap<TString, TArrowCSVParams> ArrowCsvParams;
+    NRetry::TRetryOperationSettings RetrySettings;
 };
 
 class TWorkloadCommandImport::TUploadCommand::TFileWriter: public IWriter {

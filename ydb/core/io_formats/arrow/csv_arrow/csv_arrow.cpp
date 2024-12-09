@@ -235,5 +235,34 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadSingleBatch(const TString& cs
     }
     return batch;
 }
+std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadSingleBatch(const TString& csv, const Ydb::Formats::CsvSettings& csvSettings, TString& errString) {
+    const auto& quoting = csvSettings.quoting();
+    if (quoting.quote_char().length() > 1) {
+        errString = "Wrong quote char '" + quoting.quote_char() + "'";
+        return {};
+    }
+
+    const char qchar = quoting.quote_char().empty() ? '"' : quoting.quote_char().front();
+    SetQuoting(!quoting.disabled(), qchar, !quoting.double_quote_disabled());
+    if (csvSettings.delimiter()) {
+        if (csvSettings.delimiter().size() != 1) {
+            errString = "Invalid delimitr in csv: " + csvSettings.delimiter();
+            return {};
+        }
+        SetDelimiter(csvSettings.delimiter().front());
+    }
+    SetSkipRows(csvSettings.skip_rows());
+
+    if (csvSettings.null_value()) {
+        SetNullValue(csvSettings.null_value());
+    }
+
+    if (csv.size() > NKikimr::NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE) {
+        ui32 blockSize = NKikimr::NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
+        blockSize *= csv.size() / blockSize + 1;
+        SetBlockSize(blockSize);
+    }
+    return ReadSingleBatch(csv, errString);
+}
 
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
 #include <util/generic/string.h>
@@ -16,6 +17,7 @@ public:
 
     std::shared_ptr<arrow::RecordBatch> ReadNext(const TString& csv, TString& errString);
     std::shared_ptr<arrow::RecordBatch> ReadSingleBatch(const TString& csv, TString& errString);
+    std::shared_ptr<arrow::RecordBatch> ReadSingleBatch(const TString& csv, const Ydb::Formats::CsvSettings& csvSettings, TString& errString);
 
     void Reset() {
         Reader = {};

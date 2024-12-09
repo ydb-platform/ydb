@@ -6,8 +6,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
+    ydb/public/api/protos
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

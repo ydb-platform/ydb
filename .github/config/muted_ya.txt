@@ -49,6 +49,7 @@ ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*]+chunk+chunk
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/core/mind/hive/ut THiveTest.DrainWithHiveRestart
+ydb/core/mind/hive/ut THiveTest.TestHiveBalancerNodeRestarts
 ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData

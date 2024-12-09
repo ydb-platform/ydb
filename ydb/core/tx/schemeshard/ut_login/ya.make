@@ -6,9 +6,7 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    SIZE(LARGE)
-    TAG(ya:fat)
-    TIMEOUT(3600)
+    SIZE(MEDIUM)
 ENDIF()
 
 PEERDIR(

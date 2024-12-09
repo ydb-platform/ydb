@@ -304,7 +304,4 @@ message TTableServiceConfig {
     optional bool EnableQueryServiceSpilling = 63 [ default = true ];
 
     optional bool EnableImplicitQueryParameterTypes = 66 [ default = false ];
-
-    optional bool DisableSimplifiedPlans = 67 [ default = false ];
-
 };

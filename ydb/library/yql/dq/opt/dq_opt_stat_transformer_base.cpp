@@ -67,6 +67,7 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     }
     else if (TDqJoin::Match(input.Get())) {
         InferStatisticsForDqJoin(input, TypeCtx, Pctx, CardinalityHints);
+    }
     else if(TDqPhyCrossJoin::Match(input.Get())) {
         InferStatisticsForDqPhyCrossJoin(input, TypeCtx);
     }
@@ -119,4 +120,3 @@ bool TDqStatisticsTransformerBase::AfterLambdas(const TExprNode::TPtr& input, TE
 void TDqStatisticsTransformerBase::Rewind() { }
 
 } // namespace NYql::NDq
-

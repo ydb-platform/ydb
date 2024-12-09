@@ -80,7 +80,6 @@ TOptimizerStatistics::TOptimizerStatistics(
     TIntrusivePtr<TKeyColumns> keyColumns,
     TIntrusivePtr<TColumnStatMap> columnMap,
     EStorageType storageType,
-    TIntrusivePtr<TSortColumns> sortColumns,
     std::shared_ptr<IProviderStatistics> specific)
     : Type(type)
     , Nrows(nrows)
@@ -90,7 +89,6 @@ TOptimizerStatistics::TOptimizerStatistics(
     , KeyColumns(keyColumns)
     , ColumnStatistics(columnMap)
     , StorageType(storageType)
-    , SortColumns(sortColumns)
     , Specific(std::move(specific))
 {
 }
@@ -104,7 +102,8 @@ TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistic
 }
 
 std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOptimizerStatistics& s, const TStringBuf& tablePath, const std::shared_ptr<NJson::TJsonValue>& stats) {
-    auto res = std::make_shared<TOptimizerStatistics>(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics, s.StorageType, s.SortColumns, s.Specific);
+    auto res = std::make_shared<TOptimizerStatistics>(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics, s.StorageType, s.Specific);
+    res->SortColumns = s.SortColumns;
 
     auto dbStats = stats->GetMapSafe();
 

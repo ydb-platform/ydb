@@ -366,7 +366,7 @@ private:
                         specific->Compression = setting->Tail().Content();
                     }
                 }
-                auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0.0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(), TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(), EStorageType::NA, TIntrusivePtr<TOptimizerStatistics::TSortColumns>(), specific);
+                auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0.0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(), TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(), EStorageType::NA, specific);
                 State_->Types->SetStats(read.DataSource().Raw(), stats);
 
                 for (auto& entry: listEntries.Objects) {

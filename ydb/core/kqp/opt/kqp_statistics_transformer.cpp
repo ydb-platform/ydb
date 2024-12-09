@@ -97,8 +97,8 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         0.0, 
         keyColumns,
         inputStats->ColumnStatistics,
-        inputStats->StorageType,
-        sortedPrefixPtr);
+        inputStats->StorageType);
+    stats->SortColumns = sortedPrefixPtr; 
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table" << stats->ToString();
 
@@ -205,8 +205,8 @@ void InferStatisticsForSteamLookup(const TExprNode::TPtr& input, TTypeAnnotation
         0, 
         inputStats->KeyColumns,
         inputStats->ColumnStatistics,
-        inputStats->StorageType,
-        inputStats->SortColumns);
+        inputStats->StorageType);
+    res->SortColumns = inputStats->SortColumns;
 
     typeCtx->SetStats(input.Get(), res); 
 
@@ -301,8 +301,8 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
         cost, 
         keyColumns, 
         inputStats->ColumnStatistics,
-        inputStats->StorageType,
-        sortedPrefixPtr);
+        inputStats->StorageType);
+    outputStats->SortColumns = std::move(sortedPrefixPtr);
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for source settings: " << outputStats->ToString();
 
@@ -367,8 +367,8 @@ void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeA
         inputStats->Cost, 
         indexColumnsPtr,
         inputStats->ColumnStatistics,
-        inputStats->StorageType,
-        sortedPrefixPtr);
+        inputStats->StorageType);
+    stats->SortColumns = sortedPrefixPtr;
 
     typeCtx->SetStats(input.Get(), stats);
 
@@ -727,7 +727,9 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
                 auto rowType = wrapBase.Cast().RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 if (specific->FullRawRowAvgSize == 0.0) {
                     auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
-                    stats = std::make_shared<TOptimizerStatistics>(stats->Type, stats->Nrows, stats->Ncols, stats->ByteSize, stats->Cost, stats->KeyColumns, stats->ColumnStatistics, stats->StorageType, stats->SortColumns, newSpecific);
+                    auto sortColumns = stats->SortColumns;
+                    stats = std::make_shared<TOptimizerStatistics>(stats->Type, stats->Nrows, stats->Ncols, stats->ByteSize, stats->Cost, stats->KeyColumns, stats->ColumnStatistics, stats->StorageType, newSpecific);
+                    stats->SortColumns = std::move(sortColumns);
                     newSpecific->FullRawRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, false);
                     newSpecific->FullDecodedRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, true);
                     specific = newSpecific.get();
@@ -743,7 +745,10 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
 
                 if (stats->Ncols == 0 || stats->Ncols > static_cast<int>(rowType->GetSize()) || stats->Nrows == 0 || stats->ByteSize == 0.0 || stats->Cost == 0.0) {
                     auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
-                    stats = std::make_shared<TOptimizerStatistics>(stats->Type, stats->Nrows, stats->Ncols, stats->ByteSize, stats->Cost, stats->KeyColumns, stats->ColumnStatistics, stats->StorageType, stats->SortColumns, newSpecific);
+                    
+                    auto sortColumns = stats->SortColumns;
+                    stats = std::make_shared<TOptimizerStatistics>(stats->Type, stats->Nrows, stats->Ncols, stats->ByteSize, stats->Cost, stats->KeyColumns, stats->ColumnStatistics, stats->StorageType, newSpecific);
+                    stats->SortColumns = std::move(sortColumns);
 
                     if (stats->Nrows == 0 && newSpecific->FullRawRowAvgSize) {
                         stats->Nrows = newSpecific->RawByteSize / newSpecific->FullRawRowAvgSize;

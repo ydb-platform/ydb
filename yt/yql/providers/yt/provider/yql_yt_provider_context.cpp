@@ -206,7 +206,7 @@ TOptimizerStatistics TYtProviderContext::ComputeJoinStats(
         leftStats.Ncols + rightStats.Ncols,
         outputByteSize,
         outputCost,
-        {}, {}, EStorageType::NA, {}, std::move(resultSpecific));
+        {}, {}, EStorageType::NA, std::move(resultSpecific));
 
     return result;
 }

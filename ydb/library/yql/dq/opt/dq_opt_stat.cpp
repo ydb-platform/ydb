@@ -480,9 +480,9 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
             inputStats->Cost, 
             inputStats->KeyColumns,
             inputStats->ColumnStatistics,
-            inputStats->StorageType,
-            inputStats->SortColumns);
+            inputStats->StorageType);
 
+        outputStats.SortColumns = inputStats->SortColumns;
         outputStats.Labels = inputStats->Labels;
         outputStats.Selectivity *= (inputStats->Selectivity * selectivity);
 
@@ -534,8 +534,9 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
         inputStats->Cost, 
         inputStats->KeyColumns,
         inputStats->ColumnStatistics,
-        inputStats->StorageType,
-        inputStats->SortColumns);
+        inputStats->StorageType
+    );
+    outputStats.SortColumns = inputStats->SortColumns;
 
     outputStats.Selectivity *= (selectivity * inputStats->Selectivity);
     outputStats.Labels = inputStats->Labels;

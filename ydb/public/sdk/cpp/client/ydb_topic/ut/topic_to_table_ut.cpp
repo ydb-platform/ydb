@@ -2616,26 +2616,24 @@ Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_4, TFixtureOltpSink)
     auto records = MakeTableRecords();
 
     NTable::TTransaction tx1 = BeginTx(tableSession);
-    WriteToTable("table_A", records, &tx1);
-    // TString query = Sprintf(R"(SELECT * FROM `%s`)", "table_A");
-    // auto result = tableSession.ExecuteDataQuery(query, NTable::TTxControl::Tx(tx1)).GetValueSync();
-    // UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    TString query = Sprintf(R"(SELECT * FROM `%s`)", "table_A");
+    auto result = tableSession.ExecuteDataQuery(query, NTable::TTxControl::Tx(tx1)).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
     NTable::TTransaction tx2 = BeginTx(tableSession);
     WriteToTable("table_A", records, &tx2);
 
-    // WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx1);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx1);
 
     CommitTx(tx2, EStatus::SUCCESS);
-    CommitTx(tx1, EStatus::SUCCESS);
+    CommitTx(tx1, EStatus::ABORTED);
 
-    // auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-    // UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
-    // UNIT_ASSERT_VALUES_EQUAL(messages[0], MakeJsonDoc(records));
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
 
     UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), records.size());
 
-    // CheckTabletKeys("topic_A");
+    CheckTabletKeys("topic_A");
 }
 
 }

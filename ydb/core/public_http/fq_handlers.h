@@ -429,10 +429,10 @@ public:
         TProtoStringType qid =  describeRequest->Getquery_id();
 
         TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = new TGrpcRequestContextWrapper(
-            std::move(RequestContext),
+            RequestContext,
             std::move(describeRequest),
             [query_id = std::move(qid), actorSystem = TActivationContext::ActorSystem()](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
-        
+
             Y_ABORT_UNLESS(resp);
             Y_ABORT_UNLESS(resp->GetArena());
 
@@ -446,14 +446,14 @@ public:
                 return;                                                                                         
             }
 
-            std::unique_ptr<FederatedQuery::DescribeQueryResult> describeResult = std::unique_ptr<FederatedQuery::DescribeQueryResult>(google::protobuf::Arena::CreateMessage<FederatedQuery::DescribeQueryResult>(resp->GetArena()));
+            std::unique_ptr<FederatedQuery::DescribeQueryResult> describeResult = std::unique_ptr<FederatedQuery::DescribeQueryResult>(new FederatedQuery::DescribeQueryResult());
             if(!typedResponse->operation().result().UnpackTo(&*describeResult)) {
                 requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Error in response unpack");
                 return;
             }
 
             // modify
-            auto modifyRequest = std::make_unique<FederatedQuery::ModifyQueryRequest>();
+            auto modifyRequest = std::unique_ptr<FederatedQuery::ModifyQueryRequest>(new FederatedQuery::ModifyQueryRequest());
 
             modifyRequest->set_query_id(query_id);
             modifyRequest->Mutablecontent()->CopyFrom(describeResult->Getquery().content());

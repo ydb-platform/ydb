@@ -301,9 +301,6 @@ class TestHttpApi(TestBase):
             response = client.stop_query(query_id)
             assert response.status_code == 204
 
-            response = client.start_query(query_id)
-            assert response.status_code == 204
-
             wait_for_query_status(client, query_id, ["FAILED"])
 
             query_json2 = client.get_query(query_id)

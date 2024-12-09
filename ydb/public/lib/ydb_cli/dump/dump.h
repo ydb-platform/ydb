@@ -100,7 +100,6 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
     FLUENT_SETTING_DEFAULT(bool, DryRun, false);
     FLUENT_SETTING_DEFAULT(bool, RestoreData, true);
     FLUENT_SETTING_DEFAULT(bool, RestoreIndexes, true);
-    FLUENT_SETTING_DEFAULT(bool, RestoreChangefeed, true);
     FLUENT_SETTING_DEFAULT(bool, RestoreACL, true);
     FLUENT_SETTING_DEFAULT(bool, SkipDocumentTables, false);
     FLUENT_SETTING_DEFAULT(bool, SavePartialResult, false);

@@ -238,7 +238,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadSingleBatch(const TString& cs
 std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadSingleBatch(const TString& csv, const Ydb::Formats::CsvSettings& csvSettings, TString& errString) {
     const auto& quoting = csvSettings.quoting();
     if (quoting.quote_char().length() > 1) {
-        errString = "Wrong quote char '" + quoting.quote_char() + "'";
+        errString = ErrorPrefix() + "Wrong quote char '" + quoting.quote_char() + "'";
         return {};
     }
 
@@ -246,7 +246,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadSingleBatch(const TString& cs
     SetQuoting(!quoting.disabled(), qchar, !quoting.double_quote_disabled());
     if (csvSettings.delimiter()) {
         if (csvSettings.delimiter().size() != 1) {
-            errString = "Invalid delimitr in csv: " + csvSettings.delimiter();
+            errString = ErrorPrefix() + "Invalid delimitr in csv: " + csvSettings.delimiter();
             return {};
         }
         SetDelimiter(csvSettings.delimiter().front());

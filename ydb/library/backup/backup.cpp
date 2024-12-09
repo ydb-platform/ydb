@@ -12,6 +12,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>

@@ -328,10 +328,17 @@ namespace NYql {
             request.set_schema(schema);
         }
 
-        void GetOracleServiceName(NYql::NConnector::NApi::TOracleDataSourceOptions& request, const TGenericClusterConfig& clusterConfig) {
+        void SetOracleServiceName(NYql::NConnector::NApi::TOracleDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
             const auto it = clusterConfig.GetDataSourceOptions().find("service_name");
             if (it != clusterConfig.GetDataSourceOptions().end()) {
-                request.set_service_name(it->second);
+                options.set_service_name(it->second);
+            }
+        }
+
+        void SetLoggingFolderId(NYql::NConnector::NApi::TLoggingDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
+            const auto it = clusterConfig.GetDataSourceOptions().find("folder_id");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                options.set_folder_id(it->second);
             }
         }
 
@@ -356,10 +363,12 @@ namespace NYql {
                 } break;
                 case NYql::NConnector::NApi::ORACLE: {
                     auto* options = request.mutable_data_source_instance()->mutable_oracle_options();
-                    GetOracleServiceName(*options, clusterConfig);
+                    SetOracleServiceName(*options, clusterConfig);
                 } break;
-                case NYql::NConnector::NApi::LOGGING:
-                    break;
+                case NYql::NConnector::NApi::LOGGING: {
+                    auto* options = request.mutable_data_source_instance()->mutable_logging_options();
+                    SetLoggingFolderId(*options, clusterConfig);
+                } break;
                 default:
                     ythrow yexception() << "Unexpected data source kind: '" << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind)
                                         << "'";

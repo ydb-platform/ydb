@@ -10,14 +10,15 @@ namespace NYql::NDq {
     }
 
     TGenericTokenProvider::TGenericTokenProvider(
-        const TString& serviceAccountId, const TString& ServiceAccountIdSignature,
+        const TString& serviceAccountId, 
+        const TString& serviceAccountIdSignature,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
-        Y_ENSURE(!serviceAccountId.Empty(), "No service account provided");
-        Y_ENSURE(!ServiceAccountIdSignature.Empty(), "No service account signature provided");
+        Y_ENSURE(!serviceAccountId.empty(), "No service account provided");
+        Y_ENSURE(!serviceAccountIdSignature.empty(), "No service account signature provided");
         Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
 
         auto structuredTokenJSON =
-            TStructuredTokenBuilder().SetServiceAccountIdAuth(serviceAccountId, ServiceAccountIdSignature).ToJson();
+            TStructuredTokenBuilder().SetServiceAccountIdAuth(serviceAccountId, serviceAccountIdSignature).ToJson();
 
         Y_ENSURE(structuredTokenJSON, "empty structured token");
 
@@ -58,7 +59,8 @@ namespace NYql::NDq {
     }
 
     TGenericTokenProvider::TPtr
-    CreateGenericTokenProvider(const TString& staticIamToken, const TString& serviceAccountId,
+    CreateGenericTokenProvider(const TString& staticIamToken,
+                               const TString& serviceAccountId,
                                const TString& serviceAccountIdSignature,
                                const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
         if (!staticIamToken.Empty()) {

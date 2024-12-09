@@ -1839,12 +1839,7 @@ class MSVCToolchainOptions(ToolchainOptions):
             # TODO(somov): Определять автоматически self.version в этом случае
 
         else:
-            if self.version_at_least(2019):
-                self.sdk_version = '10.0.18362.0'
-                if is_positive('MSVC20'):  # XXX: temporary flag, remove after DTCC-123 is completed
-                    self.cxx_std = 'c++latest'
-            else:
-                self.sdk_version = '10.0.16299.0'
+            self.sdk_version = '10.0.18362.0'
             sdk_dir = '$WINDOWS_KITS_RESOURCE_GLOBAL'
 
             self.vc_root = self.name_marker if not self.use_clang else '$MSVC_FOR_CLANG_RESOURCE_GLOBAL'
@@ -1915,9 +1910,6 @@ class MSVCToolchain(MSVC, Toolchain):
         super(MSVCToolchain, self).print_toolchain()
 
         emit('TOOLCHAIN_ENV', format_env(self.tc.get_env(), list_separator=';'))
-
-        if self.tc.sdk_version:
-            emit('WINDOWS_KITS_VERSION', self.tc.sdk_version)
 
         if self.tc.under_wine_tools:
             emit('_UNDER_WINE_TOOLS', 'yes')

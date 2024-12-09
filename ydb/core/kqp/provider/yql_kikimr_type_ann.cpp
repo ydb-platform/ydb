@@ -227,6 +227,10 @@ private:
             {
                 return TStatus::Ok;
             }
+            case TKikimrKey::Type::Sequence:
+            {
+                return TStatus::Ok;
+            }
         }
 
         return TStatus::Error;

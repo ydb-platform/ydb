@@ -97,6 +97,7 @@ public:
         PGObject,
         Replication,
         BackupCollection,
+        Sequence,
     };
 
     struct TViewDescription {
@@ -127,6 +128,12 @@ public:
     TString GetTopicPath() const {
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Topic);
+        return Target;
+    }
+
+    TString GetSequencePath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Sequence);
         return Target;
     }
 

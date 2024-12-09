@@ -521,10 +521,10 @@ bool FillPublicTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb
         for (const auto& inTier : in.GetTiers()) {
             auto& outTier = *out.mutable_tiered_ttl()->add_tiers();
             auto exprStatus = FillTtlExpressionImpl(
-                [outTier]() mutable {
+                [&outTier]() mutable {
                     return outTier.mutable_date_type_column();
                 },
-                [outTier]() mutable {
+                [&outTier]() mutable {
                     return outTier.mutable_value_since_unix_epoch();
                 },
                 in.GetColumnName(), in.GetColumnUnit(), inTier.GetApplyAfterSeconds());

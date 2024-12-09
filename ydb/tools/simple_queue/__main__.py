@@ -80,7 +80,7 @@ def get_table_description(table_name):
     return """
         CREATE TABLE `{table_name}` (
             key Uint64 NOT NULL,
-            `timestamp` Timestamp, -- NOT NULL, -- not working for now 
+            `timestamp` Timestamp, -- NOT NULL, -- not working for now
             value Utf8 FAMILY lz4_family NOT NULL,
             PRIMARY KEY (key),
             FAMILY lz4_family (

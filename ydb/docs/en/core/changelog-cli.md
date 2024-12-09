@@ -11,8 +11,8 @@ Released on December 4, 2024. To update to version **2.17.0**, select the [Downl
 
 ### Bug fixes
 
-* Fixed a bug in the table schema created by the command `{{ ydb-cli }} workload tpch` where the `partsupp` table contained an incorrect list of key columns.
-* Resolved an issue where the `{{ ydb-cli }} tools restore` command failed with the error "Too much data" if the maximum value of the `--upload-batchbytes` option (16 MB) was set.
+* Fixed a bug in the table schema created by the `{{ ydb-cli }} workload tpch` command where the `partsupp` table contained an incorrect list of key columns.
+* Resolved an issue where the `{{ ydb-cli }} tools restore` command failed with the error "Too much data" if the maximum value of the `--upload-batchbytes` option was set to 16 MB.
 
 ## Version 2.16.0 {#2-16-0}
 

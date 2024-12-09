@@ -1,4 +1,4 @@
-from conftest import BaseTestSet
+from conftest import BaseTestSet 
 from ydb.tests.olap.scenario.helpers import (
     ScenarioTestHelper,
     TestContext,
@@ -15,7 +15,7 @@ from ydb.tests.olap.scenario.helpers import (
     AlterColumn,
     AlterFamily,
 )
-
+from helpers.thread_helper import TestThread
 from typing import List, Dict, Any
 from ydb import PrimitiveType
 from ydb.tests.olap.lib.utils import get_external_param
@@ -37,20 +37,6 @@ class TestAlterCompression(BaseTestSet):
         .with_column(name="Doub", type=PrimitiveType.Double, not_null=True)
         .with_key_columns("Key")
     )
-
-    class TestThread(threading.Thread):
-        def run(self) -> None:
-            self.exc = None
-            try:
-                self.ret = self._target(*self._args, **self._kwargs)
-            except BaseException as e:
-                self.exc = e
-
-        def join(self, timeout=None):
-            super().join(timeout)
-            if self.exc:
-                raise self.exc
-            return self.ret
 
     def _loop_upsert(
         self,
@@ -117,7 +103,7 @@ class TestAlterCompression(BaseTestSet):
         threads = []
         if not is_standalone_tables:
             threads.append(
-                self.TestThread(
+                TestThread(
                     target=self._loop_alter_table,
                     args=[ctx, AlterTableStore(table_store), duration],
                 )
@@ -127,13 +113,13 @@ class TestAlterCompression(BaseTestSet):
             start_index = sth.get_table_rows_count(table)
             if is_standalone_tables:
                 threads.append(
-                    self.TestThread(
+                    TestThread(
                         target=self._loop_alter_table,
                         args=[ctx, AlterTable(table), duration],
                     )
                 )
             threads.append(
-                self.TestThread(
+                TestThread(
                     target=self._loop_upsert,
                     args=[ctx, table, start_index, count_rows, duration],
                 )

@@ -710,10 +710,10 @@ class ScenarioTestHelper:
             else:
                 pytest.fail(f'Cannot remove type {repr(e.type)} for path {os.path.join(root_path, e.name)}')
 
-    def get_volumes_columns(self, table_name: str, name_colmn: str) -> tuple[int, int]:
+    def get_volumes_columns(self, table_name: str, name_column: str) -> tuple[int, int]:
         query = f'''SELECT * FROM `{ScenarioTestHelper(self.test_context).get_full_path(table_name)}/.sys/primary_index_stats` WHERE Activity == 1'''
-        if (len(name_colmn)):
-            query += f' AND EntityName = \"{name_colmn}\"'
+        if (len(name_column)):
+            query += f' AND EntityName = \"{name_column}\"'
         result_set = self.execute_scan_query(query, {ydb.StatusCode.SUCCESS}).result_set
         raw_bytes = 0
         bytes = 0

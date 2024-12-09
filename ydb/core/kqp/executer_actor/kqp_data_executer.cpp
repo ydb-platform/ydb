@@ -140,6 +140,7 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
+        , AllowOlapDataQuery(tableServiceConfig.GetAllowOlapDataQuery())
     {
         Target = creator;
 
@@ -1857,7 +1858,7 @@ private:
     }
 
     bool HasDmlOperationOnOlap(NKqpProto::TKqpPhyTx_EType queryType, const NKqpProto::TKqpPhyStage& stage) {
-        if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA) {
+        if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA && !AllowOlapDataQuery) {
             return true;
         }
 
@@ -2850,6 +2851,7 @@ private:
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;
+    const bool AllowOlapDataQuery = false;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;

@@ -421,9 +421,10 @@ TReadAnswer TReadInfo::FormAnswer(
                 size -= lastBlobSize;
             }
             lastBlobSize = 0;
-            return (size >= Size || cnt >= Count);
+            return cnt >= Count;
         }
-        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (size >= Size || cnt >= Count);
+        // For backward compatibility, we keep the behavior for older clients for non-FirstClassCitizen
+        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && cnt >= Count;
     };
 
     Y_ABORT_UNLESS(blobs.size() == Blobs.size());
@@ -466,7 +467,7 @@ TReadAnswer TReadInfo::FormAnswer(
         Y_ABORT_UNLESS(offset < Offset || partNo <= PartNo);
         TKey key(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount, false);
         ui64 firstHeaderOffset = GetFirstHeaderOffset(key, blobValue);
-        for (TBlobIterator it(key, blobValue); it.IsValid(); it.Next()) {
+        for (TBlobIterator it(key, blobValue); it.IsValid() && !needStop; it.Next()) {
             TBatch batch = it.GetBatch();
             auto& header = batch.Header;
             batch.Unpack();
@@ -510,7 +511,10 @@ TReadAnswer TReadInfo::FormAnswer(
                     ++PartNo;
                 }
 
-                needStop = updateUsage(res);
+                if (updateUsage(res)) {
+                    needStop = true;
+                    break;
+                }
             }
         }
     }

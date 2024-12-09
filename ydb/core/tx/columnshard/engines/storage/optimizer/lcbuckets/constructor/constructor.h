@@ -12,12 +12,20 @@ private:
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& json) = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) const = 0;
+    virtual bool IsEqualToSameClass(const ILevelConstructor& item) const = 0;
 
 public:
     using TFactory = NObjectFactory::TObjectFactory<ILevelConstructor, TString>;
     using TProto = NKikimrSchemeOp::TCompactionLevelConstructorContainer;
 
     virtual ~ILevelConstructor() = default;
+
+    bool IsEqualTo(const ILevelConstructor& item) const {
+        if (GetClassName() != item.GetClassName()) {
+            return false;
+        }
+        return IsEqualToSameClass(item);
+    }
 
     std::shared_ptr<IPortionsLevel> BuildLevel(
         const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const TLevelCounters& counters) const {

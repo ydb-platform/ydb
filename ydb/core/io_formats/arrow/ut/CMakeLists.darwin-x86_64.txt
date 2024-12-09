@@ -28,7 +28,7 @@ target_link_libraries(ydb-core-io_formats-arrow-ut PUBLIC
   yutil
   library-cpp-cpuid_check
   cpp-testing-unittest_main
-  core-io_formats-arrow
+  io_formats-arrow-scheme
   udf-service-exception_policy
   essentials-sql-pg_dummy
 )

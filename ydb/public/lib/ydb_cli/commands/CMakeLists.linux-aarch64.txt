@@ -67,6 +67,7 @@ target_link_libraries(clicommands PUBLIC
   cpp-client-ydb_table
   cpp-client-ydb_topic
   ydb_types-credentials-login
+  io_formats-arrow-table
   tools-enum_parser-enum_serialization_runtime
 )
 

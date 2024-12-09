@@ -398,6 +398,14 @@ protected:
         }
 
         if (status != ERunStatus::Finished) {
+            for (auto& [id, inputTransform] : InputTransformsMap) {
+                if (!inputTransform.Buffer->Empty()) {
+                    ContinueExecute(EResumeSource::CAPendingInput);
+                }
+            }
+        }
+
+        if (status != ERunStatus::Finished) {
             // If the incoming channel's buffer was full at the moment when last ChannelDataAck event had been sent,
             // there will be no attempts to send a new piece of data from the other side of this channel.
             // So, if there is space in the channel buffer (and on previous step is was full), we send ChannelDataAck

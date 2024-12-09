@@ -516,8 +516,8 @@ void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& p
         const auto& topicDescription = descTopicResult.GetTopicDescription();
         const auto protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
 
-        WriteProtoToFile(protoChangeFeedDesc, changefeedDirPath, CHANGEFEED_DESCRIPTION_FILE_NAME);
-        WriteProtoToFile(protoTopicDescription, changefeedDirPath, TOPIC_DESCRIPTION_FILE_NAME);
+        WriteProtoToFile(protoChangeFeedDesc, changefeedDirPath, CHANGEFEED_DESCRIPTION_FILE_NAME, "changefeed");
+        WriteProtoToFile(protoTopicDescription, changefeedDirPath, TOPIC_DESCRIPTION_FILE_NAME, "topic");
     }
 }
 

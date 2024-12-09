@@ -1691,29 +1691,87 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         const auto& rightProgram = rightIn.Stage().Program();
         YQL_ENSURE(rightProgram.Args().Size() == rightIn.Stage().Inputs().Size());
 
-        stageInputs.reserve(leftIn.Stage().Inputs().Size() + rightIn.Stage().Inputs().Size());
-        stageInputs.insert(stageInputs.end(), leftIn.Stage().Inputs().begin(), leftIn.Stage().Inputs().end());
-        stageInputs.insert(stageInputs.end(), rightIn.Stage().Inputs().begin(), rightIn.Stage().Inputs().end());
+        int inputCountDelta = 0;
+
+        for (const auto input : leftIn.Stage().Inputs()) {
+            if (const auto map = input.Maybe<TDqCnMap>()) {
+                inputCountDelta += map.Cast().Output().Stage().Inputs().Size();
+                inputCountDelta -= 1;
+            }
+        }
+
+        for (const auto input : rightIn.Stage().Inputs()) {
+            if (const auto map = input.Maybe<TDqCnMap>()) {
+                inputCountDelta += map.Cast().Output().Stage().Inputs().Size();
+                inputCountDelta -= 1;
+            }
+        }
+
+        stageInputs.reserve(leftIn.Stage().Inputs().Size() + rightIn.Stage().Inputs().Size() + inputCountDelta);
 
         size_t argIndex = 0;
 
         TNodeOnNodeOwnedMap leftReplaces(leftProgram.Args().Size());
-        for (const auto& arg : leftProgram.Args()) {
-            TCoArgument newArg{ctx.NewArgument(join.Pos(), TStringBuilder() << "_dq_join_fuse_" << argIndex++ << "_left")};
-            YQL_ENSURE(leftReplaces.emplace(arg.Raw(), newArg.Ptr()).second);
-            inputArgs.emplace_back(newArg);
-        };
+        for (size_t i = 0; i < leftIn.Stage().Inputs().Size(); i++) {
+            const auto input = leftIn.Stage().Inputs().Item(i);
+            if (const auto map = input.Maybe<TDqCnMap>()) {
+                const auto mapStage = map.Cast().Output().Stage();
+                const auto& mapProgram = mapStage.Program();
+                YQL_ENSURE(mapProgram.Args().Size() == mapStage.Inputs().Size());
+
+                TNodeOnNodeOwnedMap mapReplaces(mapProgram.Args().Size());
+                for (const auto& arg : mapProgram.Args()) {
+                    TCoArgument newArg{ctx.NewArgument(join.Pos(), TStringBuilder() << "_dq_join_fuse_" << argIndex++ << "_left")};
+                    YQL_ENSURE(mapReplaces.emplace(arg.Raw(), newArg.Ptr()).second);
+                    inputArgs.emplace_back(std::move(newArg));
+                }
+                stageInputs.insert(stageInputs.end(), mapStage.Inputs().begin(), mapStage.Inputs().end());
+                auto mapBody = ctx.ReplaceNodes(mapProgram.Body().Ptr(), mapReplaces);
+                if (TCoFromFlow::Match(mapBody.Get())) {
+                    mapBody = TExprNode::TPtr(&mapBody->Head());
+                }
+
+                leftReplaces.emplace(leftProgram.Args().Arg(i).Raw(), mapBody);
+            } else {
+                TCoArgument newArg{ctx.NewArgument(join.Pos(), TStringBuilder() << "_dq_join_fuse_" << argIndex++ << "_left")};
+                YQL_ENSURE(leftReplaces.emplace(leftProgram.Args().Arg(i).Raw(), newArg.Ptr()).second);
+                inputArgs.emplace_back(newArg);
+                stageInputs.push_back(input);
+            }
+        }
         auto leftBody = ctx.ReplaceNodes(leftProgram.Body().Ptr(), leftReplaces);
         if (TCoFromFlow::Match(leftBody.Get())) {
             leftBody = TExprNode::TPtr(&leftBody->Head());
         }
 
         TNodeOnNodeOwnedMap rightReplaces(rightProgram.Args().Size());
-        for (const auto& arg : rightProgram.Args()) {
-            TCoArgument newArg{ctx.NewArgument(join.Pos(), TStringBuilder() << "_dq_join_fuse_" << argIndex++ << "_right")};
-            YQL_ENSURE(rightReplaces.emplace(arg.Raw(), newArg.Ptr()).second);
-            inputArgs.emplace_back(std::move(newArg));
-        };
+        for (size_t i = 0; i < rightIn.Stage().Inputs().Size(); i++) {
+            const auto input = rightIn.Stage().Inputs().Item(i);
+            if (const auto map = input.Maybe<TDqCnMap>()) {
+                const auto mapStage = map.Cast().Output().Stage();
+                const auto& mapProgram = mapStage.Program();
+                YQL_ENSURE(mapProgram.Args().Size() == mapStage.Inputs().Size());
+
+                TNodeOnNodeOwnedMap mapReplaces(mapProgram.Args().Size());
+                for (const auto& arg : mapProgram.Args()) {
+                    TCoArgument newArg{ctx.NewArgument(join.Pos(), TStringBuilder() << "_dq_join_fuse_" << argIndex++ << "_left")};
+                    YQL_ENSURE(mapReplaces.emplace(arg.Raw(), newArg.Ptr()).second);
+                    inputArgs.emplace_back(std::move(newArg));
+                }
+                stageInputs.insert(stageInputs.end(), mapStage.Inputs().begin(), mapStage.Inputs().end());
+                auto mapBody = ctx.ReplaceNodes(mapProgram.Body().Ptr(), mapReplaces);
+                if (TCoFromFlow::Match(mapBody.Get())) {
+                    mapBody = TExprNode::TPtr(&mapBody->Head());
+                }
+
+                rightReplaces.emplace(rightProgram.Args().Arg(i).Raw(), mapBody);
+            } else {
+                TCoArgument newArg{ctx.NewArgument(join.Pos(), TStringBuilder() << "_dq_join_fuse_" << argIndex++ << "_right")};
+                YQL_ENSURE(rightReplaces.emplace(rightProgram.Args().Arg(i).Raw(), newArg.Ptr()).second);
+                inputArgs.emplace_back(std::move(newArg));
+                stageInputs.push_back(input);
+            }
+        }
         auto rightBody = ctx.ReplaceNodes(rightProgram.Body().Ptr(), rightReplaces);
         if (TCoFromFlow::Match(rightBody.Get())) {
             rightBody = TExprNode::TPtr(&rightBody->Head());

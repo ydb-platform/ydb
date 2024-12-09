@@ -37,6 +37,8 @@ public:
 
     virtual void AddShard(ui64 shardId, bool isOlap, const TString& path) = 0;
     virtual void AddAction(ui64 shardId, ui8 action) = 0;
+    virtual void AddTopic(ui64 topicId, const TString& path) = 0;
+    virtual void AddTopicsToShards() = 0;
     virtual bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock) = 0;
 
     virtual void BreakLock(ui64 shardId) = 0;
@@ -48,6 +50,10 @@ public:
 
     virtual EShardState GetState(ui64 shardId) const = 0;
     virtual void SetState(ui64 shardId, EShardState state) = 0;
+
+    virtual NTopic::TTopicOperations& GetTopicOperations() = 0;
+
+    virtual bool HasTopics() const = 0;
 
     virtual bool IsTxPrepared() const = 0;
     virtual bool IsTxFinished() const = 0;

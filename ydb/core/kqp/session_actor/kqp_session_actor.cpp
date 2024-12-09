@@ -1222,7 +1222,7 @@ public:
                     request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
                 }
 
-                if (hasLocks) {
+                if (hasLocks || txCtx.TopicOperations.HasOperations()) {
                     if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
                         LOG_D("TExecPhysicalRequest, tx has commit locks");
                         request.LocksOp = ELocksOp::Commit;
@@ -1317,7 +1317,12 @@ public:
         if (Settings.TableService.GetEnableOltpSink() && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();
         }
-        if (Settings.TableService.GetEnableOltpSink() && !txCtx->BufferActorId && txCtx->HasTableWrite) {
+
+        if (Settings.TableService.GetEnableOltpSink()
+            && !txCtx->BufferActorId
+            && (txCtx->HasTableWrite || request.TopicOperations.GetSize() != 0)) {
+            txCtx->TxManager->GetTopicOperations() = std::move(request.TopicOperations);
+
             TKqpBufferWriterSettings settings {
                 .SessionActorId = SelfId(),
                 .TxManager = txCtx->TxManager,
@@ -1328,6 +1333,7 @@ public:
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
         }
+
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService,

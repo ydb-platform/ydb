@@ -19,6 +19,7 @@
 #include <ydb/core/tx/data_events/shards_splitter.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -1262,6 +1263,7 @@ struct TEvBufferWriteResult : public TEventLocal<TEvBufferWriteResult, TKqpEvent
 
 class TKqpBufferWriteActor :public TActorBootstrapped<TKqpBufferWriteActor>, public IKqpTableWriterCallbacks {
     using TBase = TActorBootstrapped<TKqpBufferWriteActor>;
+    using TTopicTabletTxs = NTopic::TTopicOperationTransactions;
 
 public:
     enum class EState {
@@ -1290,6 +1292,7 @@ public:
         State = EState::WRITING;
         Alloc->Release();
         Counters->BufferActorsCount->Inc();
+        TxManager->AddTopicsToShards();
     }
 
     void Bootstrap() {
@@ -1310,6 +1313,7 @@ public:
                 hFunc(TEvBufferWrite, Handle);
 
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, Handle);
+                hFunc(TEvPersQueue::TEvProposeTransactionResult, Handle);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             default:
@@ -1491,6 +1495,7 @@ public:
         Close();
         Process();
         SendToExternalShards(false);
+        SendToTopics();
     }
 
     void ImmediateCommit() {
@@ -1585,6 +1590,50 @@ public:
                 new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
                 IEventHandle::FlagTrackDelivery,
                 0);
+        }
+    }
+
+    void SendToTopics() {
+        if (!TxManager->HasTopics()) {
+            return;
+        }
+
+        TTopicTabletTxs topicTxs;
+        TxManager->GetTopicOperations().BuildTopicTxs(topicTxs);
+
+        TMaybe<ui64> writeId;
+        if (TxManager->GetTopicOperations().HasWriteId()) {
+            writeId = TxManager->GetTopicOperations().GetWriteId();
+        }
+
+        for (auto& [tabletId, t] : topicTxs) {
+            auto& transaction = t.tx;
+
+            auto ev = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
+
+            if (t.hasWrite && writeId.Defined()) {
+                auto* w = transaction.MutableWriteId();
+                w->SetNodeId(SelfId().NodeId());
+                w->SetKeyId(*writeId);
+            }
+            transaction.SetImmediate(false);
+
+            ActorIdToProto(SelfId(), ev->Record.MutableSourceActor());
+            ev->Record.MutableData()->Swap(&transaction);
+            ev->Record.SetTxId(*TxId);
+
+            SendTime[tabletId] = TInstant::Now();
+            auto traceId = BufferWriteActor.GetTraceId();
+
+            CA_LOG_D("SendToTopics traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
+            CA_LOG_D("Preparing KQP transaction on topic tablet: " << tabletId << ", writeId: " << writeId);
+
+            Send(
+                MakePipePerNodeCacheID(false),
+                new TEvPipeCache::TEvForward(ev.release(), tabletId, /* subscribe */ true),
+                IEventHandle::FlagTrackDelivery,
+                0,
+                std::move(traceId));
         }
     }
 
@@ -1716,6 +1765,42 @@ public:
         }
     }
 
+    void Handle(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+        auto& event = ev->Get()->Record;
+        const ui64 tabletId = event.GetOrigin();
+        
+        CA_LOG_D("Got ProposeTransactionResult" <<
+              ", PQ tablet: " << tabletId <<
+              ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
+
+        switch (event.GetStatus()) {
+        case NKikimrPQ::TEvProposeTransactionResult::PREPARED:
+            ProcessPreparedTopic(ev);
+            return;
+        case NKikimrPQ::TEvProposeTransactionResult::COMPLETE:
+            ProcessCompletedTopic(ev);
+            return;
+        case NKikimrPQ::TEvProposeTransactionResult::ABORTED:
+            CA_LOG_E("Got ABORTED ProposeTransactionResult for PQ."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
+            ReplyErrorAndDie(
+                TStringBuilder() << "Aborted proposal status for PQ. ",
+                NYql::NDqProto::StatusIds::ABORTED,
+                {});
+            return;
+        default:
+            CA_LOG_E("Got undefined ProposeTransactionResult for PQ."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
+            ReplyErrorAndDie(
+                TStringBuilder() << "Undefined proposal status for PQ. ",
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                {});
+            return;
+        }
+    }
+
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         ReplyErrorAndDie(TStringBuilder() << "Failed to deviler message.", NYql::NDqProto::StatusIds::UNAVAILABLE, {});
@@ -1742,7 +1827,7 @@ public:
             Rollback();
             State = EState::FINISHED;
             Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
-        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && !WriteInfos.empty()) {
+        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && !WriteInfos.empty() && !TxManager->HasTopics()) {
             TxManager->StartExecute();
             ImmediateCommit();
         } else {
@@ -1919,6 +2004,47 @@ public:
             Counters->WriteActorWritesLatencyHistogram->Collect((TInstant::Now() - it->second).MilliSeconds());
             SendTime.erase(it);
         }
+    }
+
+    void ProcessPreparedTopic(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+        if (State != EState::PREPARING) {
+            CA_LOG_D("Ignored topic prepared event.");
+            return;
+        }
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
+        CA_LOG_D("Got propose prepared result TxId=" << ev->Get()->Record.GetTxId()
+            << ", TabletId=" << ev->Get()->Record.GetOrigin()
+            << ", Cookie=" << ev->Cookie);
+
+        const auto& record = ev->Get()->Record;
+        IKqpTransactionManager::TPrepareResult preparedInfo;
+        preparedInfo.ShardId = record.GetOrigin();
+        preparedInfo.MinStep = record.GetMinStep();
+        preparedInfo.MaxStep = record.GetMaxStep();
+
+        preparedInfo.Coordinator = 0;
+        if (record.DomainCoordinatorsSize()) {
+            auto domainCoordinators = TCoordinators(TVector<ui64>(record.GetDomainCoordinators().begin(),
+                                                                  record.GetDomainCoordinators().end()));
+            preparedInfo.Coordinator = domainCoordinators.Select(*TxId);
+        }
+
+        OnPrepared(std::move(preparedInfo), 0);
+    }
+
+    void ProcessCompletedTopic(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+        NKikimrPQ::TEvProposeTransactionResult& event = ev->Get()->Record;
+
+        if (State != EState::COMMITTING) {
+            CA_LOG_D("Ignored completed event.");
+            return;
+        }
+        OnMessageReceived(event.GetOrigin());
+        CA_LOG_D("Got propose completed result" <<
+              ", topic tablet: " << event.GetOrigin() <<
+              ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
+
+        OnCommitted(event.GetOrigin(), 0);
     }
 
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {

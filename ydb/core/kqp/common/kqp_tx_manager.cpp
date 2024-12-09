@@ -53,6 +53,33 @@ public:
         }
     }
 
+    void AddTopic(ui64 topicId, const TString& path) override {
+        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING);
+        ShardsIds.insert(topicId);
+        auto& shardInfo = ShardsInfo[topicId];
+        shardInfo.IsTopic = true;
+
+        const auto [stringsIter, _] = TablePathes.insert(path);
+        const TStringBuf pathBuf = *stringsIter;
+        shardInfo.Pathes.insert(pathBuf);
+    }
+
+    void AddTopicsToShards() override {
+        if (!HasTopics()) {
+            return;
+        }
+
+        for (auto& topicId : TopicOperations.GetSendingTabletIds()) {
+            AddTopic(topicId, *TopicOperations.GetTabletName(topicId));
+            AddAction(topicId, EAction::READ);
+        }
+
+        for (auto& topicId : TopicOperations.GetReceivingTabletIds()) {
+            AddTopic(topicId, *TopicOperations.GetTabletName(topicId));
+            AddAction(topicId, EAction::WRITE);
+        }
+    }
+
     bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lockProto) override {
         Y_ABORT_UNLESS(State == ETransactionState::COLLECTING);
         TKqpLock lock(lockProto);
@@ -123,6 +150,10 @@ public:
         ShardsInfo.at(shardId).State = state;
     }
 
+    NTopic::TTopicOperations& GetTopicOperations() override {
+        return TopicOperations;
+    }
+
     TVector<NKikimrDataEvents::TLock> GetLocks() const override {
         TVector<NKikimrDataEvents::TLock> locks;
         for (const auto& [_, shardInfo] : ShardsInfo) {
@@ -149,6 +180,10 @@ public:
             }
         }
         return true;
+    }
+
+    bool HasTopics() const override {
+        return TopicOperations.GetSize() != 0;
     }
 
     bool IsTxFinished() const override {
@@ -186,7 +221,7 @@ public:
     }
 
     bool IsVolatile() const override {
-        return !HasOlapTable();
+        return !HasOlapTable() && !HasTopics();
     }
 
     bool HasSnapshot() const override {
@@ -224,11 +259,14 @@ public:
         for (auto& [shardId, shardInfo] : ShardsInfo) {
             if ((shardInfo.Flags & EAction::WRITE)) {
                 ReceivingShards.insert(shardId);
-                if (IsVolatile()) {
-                    SendingShards.insert(shardId);
-                }
-                if (shardInfo.IsOlap) {
-                    sendingColumnShardsSet.insert(shardId);
+                
+                if (!shardInfo.IsTopic) {
+                    if (IsVolatile()) {
+                        SendingShards.insert(shardId);
+                    }
+                    if (shardInfo.IsOlap) {
+                        sendingColumnShardsSet.insert(shardId);
+                    }
                 }
             }
             if (!shardInfo.Locks.empty()) {
@@ -333,7 +371,7 @@ public:
             shardInfo.State = EShardState::EXECUTING;
         }
 
-        AFL_ENSURE(ReceivingShards.empty() || !IsSingleShard() || HasOlapTable());
+        AFL_ENSURE(ReceivingShards.empty() || HasTopics() || !IsSingleShard() || HasOlapTable());
     }
 
     TCommitInfo GetCommitInfo() override {
@@ -382,6 +420,7 @@ private:
         THashMap<TKqpLock::TKey, TLockInfo> Locks;
 
         bool IsOlap = false;
+        bool IsTopic = false;
         THashSet<TStringBuf> Pathes;
     };
 
@@ -415,6 +454,8 @@ private:
     std::optional<ui64> ArbiterColumnShard;
 
     THashSet<ui64> ShardsToWaitPrepare;
+
+    NTopic::TTopicOperations TopicOperations;
 
     ui64 MinStep = 0;
     ui64 MaxStep = 0;

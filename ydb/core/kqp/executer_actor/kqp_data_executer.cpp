@@ -1531,7 +1531,12 @@ private:
 
 private:
     bool IsReadOnlyTx() const {
-        if (Request.TopicOperations.HasOperations()) {
+        if (BufferActorId && TxManager->GetTopicOperations().HasOperations()) {
+            YQL_ENSURE(!Request.UseImmediateEffects);
+            return false;
+        }
+
+        if (!BufferActorId && Request.TopicOperations.HasOperations()) {
             YQL_ENSURE(!Request.UseImmediateEffects);
             return false;
         }
@@ -2101,7 +2106,8 @@ private:
         }
 
         // Single-shard datashard transactions are always immediate
-        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1
+        auto topicSize = (BufferActorId) ? TxManager->GetTopicOperations().GetSize() : Request.TopicOperations.GetSize();
+        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + topicSize + sourceScanPartitionsCount) <= 1
                     && !UnknownAffectedShardCount
                     && evWriteTxs.empty()
                     && !HasOlapTable;
@@ -2381,7 +2387,11 @@ private:
             }
         }
 
-        Request.TopicOperations.BuildTopicTxs(topicTxs);
+        if (BufferActorId) {
+            TxManager->GetTopicOperations().BuildTopicTxs(topicTxs);
+        } else {
+            Request.TopicOperations.BuildTopicTxs(topicTxs);
+        }
 
         const bool needRollback = Request.LocksOp == ELocksOp::Rollback;
 
@@ -2416,9 +2426,16 @@ private:
             !topicTxs.empty() ||
             // HTAP transactions always use generic readsets
             !evWriteTxs.empty());
+        
+        auto hasReadOperations = (BufferActorId)
+            ? TxManager->GetTopicOperations().HasReadOperations()
+            : Request.TopicOperations.HasReadOperations();
+        
+        auto hasWriteOperations = (BufferActorId)
+            ? TxManager->GetTopicOperations().HasWriteOperations()
+            : Request.TopicOperations.HasWriteOperations();
 
-        if (!locksMap.empty() || VolatileTx ||
-            Request.TopicOperations.HasReadOperations() || Request.TopicOperations.HasWriteOperations())
+        if (!locksMap.empty() || VolatileTx || hasReadOperations || hasWriteOperations)
         {
             YQL_ENSURE(Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback || VolatileTx);
 
@@ -2471,12 +2488,16 @@ private:
                     }
                 }
 
-                if (auto tabletIds = Request.TopicOperations.GetSendingTabletIds()) {
+                if (auto tabletIds = (BufferActorId)
+                    ? TxManager->GetTopicOperations().GetSendingTabletIds()
+                    : Request.TopicOperations.GetSendingTabletIds()) {
                     sendingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                     receivingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                 }
 
-                if (auto tabletIds = Request.TopicOperations.GetReceivingTabletIds()) {
+                if (auto tabletIds = (BufferActorId)
+                    ? TxManager->GetTopicOperations().GetReceivingTabletIds()
+                    : Request.TopicOperations.GetReceivingTabletIds()) {
                     sendingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                     receivingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                 }
@@ -2740,11 +2761,12 @@ private:
             ExecuteTopicTabletTransactions(TopicTxs);
         }
 
+        auto topicSize = (BufferActorId) ? TxManager->GetTopicOperations().GetSize() : Request.TopicOperations.GetSize();
         LOG_I("Total tasks: " << TasksGraph.GetTasks().size()
             << ", readonly: " << ReadOnlyTx
             << ", datashardTxs: " << DatashardTxs.size()
             << ", evWriteTxs: " << EvWriteTxs.size()
-            << ", topicTxs: " << Request.TopicOperations.GetSize()
+            << ", topicTxs: " << topicSize
             << ", volatile: " << VolatileTx
             << ", immediate: " << ImmediateTx
             << ", pending compute tasks" << (Planner ? Planner->GetPendingComputeTasks().size() : 0)
@@ -2764,7 +2786,12 @@ private:
     void ExecuteTopicTabletTransactions(TTopicTabletTxs& topicTxs) {
         YQL_ENSURE(!TxManager);
         TMaybe<ui64> writeId;
-        if (Request.TopicOperations.HasWriteId()) {
+
+        if (BufferActorId && TxManager->GetTopicOperations().HasWriteId()) {
+            writeId = TxManager->GetTopicOperations().GetWriteId();
+        }
+
+        if (!BufferActorId && Request.TopicOperations.HasWriteId()) {
             writeId = Request.TopicOperations.GetWriteId();
         }
 
@@ -2802,7 +2829,9 @@ private:
             state.DatashardState.ConstructInPlace();
             state.DatashardState->Follower = false;
 
-            state.DatashardState->ShardReadLocks = Request.TopicOperations.TabletHasReadOperations(tabletId);
+            state.DatashardState->ShardReadLocks = (BufferActorId)
+                ? TxManager->GetTopicOperations().TabletHasReadOperations(tabletId)
+                : Request.TopicOperations.TabletHasReadOperations(tabletId);
 
             auto result = ShardStates.emplace(tabletId, std::move(state));
             YQL_ENSURE(result.second);

@@ -63,19 +63,6 @@ void CreateView(NYdb::NQuery::TSession session, const TString& viewPath) {
     UNIT_ASSERT(res.IsSuccess());
 }
 
-void CreateTablesGeneric(NYdb::NQuery::TSession session, const TString& schemaPath, bool useColumnStore) {
-    std::string query = GetStatic(schemaPath);
-
-    if (useColumnStore) {
-        std::regex pattern(R"(CREATE TABLE [^\(]+ \([^;]*\))", std::regex::multiline);
-        query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
-    }
-
-    auto res = session.ExecuteQuery(TString(query), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-    res.GetIssues().PrintTo(Cerr);
-    UNIT_ASSERT(res.IsSuccess());
-}
-
 TString GetPrettyJSON(const NJson::TJsonValue& json) {
     TStringStream ss;
     NJsonWriter::TBuf writer;
@@ -92,13 +79,15 @@ TString GetPrettyJSON(const NJson::TJsonValue& json) {
 static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStore) {
     CreateTables(session, "schema/rstuv.sql", useColumnStore);
 
-    CreateTablesGeneric(session, "schema/tpch.sql", useColumnStore);
+    CreateTables(session, "schema/tpch.sql", useColumnStore);
 
-    CreateTablesGeneric(session, "schema/tpcds.sql", useColumnStore);
+    CreateTables(session, "schema/tpcds.sql", useColumnStore);
 
-    CreateTablesGeneric(session, "schema/tpcc.sql", useColumnStore);
+    CreateTables(session, "schema/tpcc.sql", useColumnStore);
 
-    CreateTablesGeneric(session, "schema/lookupbug.sql", useColumnStore);
+    CreateTables(session, "schema/lookupbug.sql", useColumnStore);
+
+    CreateTables(session, "schema/general_priorities_bug.sql", useColumnStore);
 
     CreateView(session, "view/tpch_random_join_view.sql");
 }
@@ -557,20 +546,20 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST(GPB) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb.sql", "stats/gpb.json", true, false);
+    Y_UNIT_TEST(GeneralPrioritiesBug) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug.sql", "stats/general_priorities_bug.json", true, false);
     }
 
-    Y_UNIT_TEST(GPB2) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb2.sql", "stats/gpb.json", true, false);
+    Y_UNIT_TEST(GeneralPrioritiesBug2) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug2.sql", "stats/general_priorities_bug.json", true, false);
     }
 
-    Y_UNIT_TEST(GPB3) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb3.sql", "stats/gpb.json", true, false);
+    Y_UNIT_TEST(GeneralPrioritiesBug3) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug3.sql", "stats/general_priorities_bug.json", true, false);
     }
 
-    Y_UNIT_TEST(GPB4) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb4.sql", "stats/gpb.json", true, false);
+    Y_UNIT_TEST(GeneralPrioritiesBug4) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug4.sql", "stats/general_priorities_bug.json", true, false);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS34, StreamLookupJoin, ColumnStore) {

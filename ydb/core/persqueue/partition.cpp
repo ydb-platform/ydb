@@ -686,7 +686,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     bool filterConsumers = !ev->Get()->Consumers.empty();
     TSet<TString> requiredConsumers(ev->Get()->Consumers.begin(), ev->Get()->Consumers.end());
     for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
-        auto& userInfo = userInfoPair.second;
+        const auto& userInfo = userInfoPair.second;
         auto& clientId = ev->Get()->ClientId;
         bool consumerShouldBeProcessed = filterConsumers
             ? requiredConsumers.contains(userInfo.User)
@@ -708,19 +708,36 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             }
             continue;
         }
+
+        auto estimateWriteTimestamp = [&]() {
+            auto timestamp = userInfo.GetWriteTimestamp(EndOffset);
+            if (!timestamp) {
+                timestamp = GetWriteTimeEstimate(userInfo.Offset);
+            }
+            return timestamp;
+        };
+
+        auto estimateReadWriteTimestamp = [&]() {
+            auto timestamp = userInfo.GetReadWriteTimestamp(EndOffset);
+            if (!timestamp) {
+                timestamp = GetWriteTimeEstimate(userInfo.GetReadOffset());
+            };
+            return timestamp;
+        };
+
         if (clientId == userInfo.User) { //fill lags
             NKikimrPQ::TClientInfo* clientInfo = result.MutableLagsInfo();
             clientInfo->SetClientId(userInfo.User);
 
             auto write = clientInfo->MutableWritePosition();
             write->SetOffset(userInfo.Offset);
-            write->SetWriteTimestamp((userInfo.GetWriteTimestamp(EndOffset) ? userInfo.GetWriteTimestamp(EndOffset) : GetWriteTimeEstimate(userInfo.Offset)).MilliSeconds());
+            write->SetWriteTimestamp(estimateWriteTimestamp().MilliSeconds());
             write->SetCreateTimestamp(userInfo.GetCreateTimestamp(EndOffset).MilliSeconds());
             write->SetSize(GetSizeLag(userInfo.Offset));
 
             auto read = clientInfo->MutableReadPosition();
             read->SetOffset(userInfo.GetReadOffset());
-            read->SetWriteTimestamp((userInfo.GetReadWriteTimestamp(EndOffset) ? userInfo.GetReadWriteTimestamp(EndOffset) : GetWriteTimeEstimate(userInfo.GetReadOffset())).MilliSeconds());
+            read->SetWriteTimestamp(estimateReadWriteTimestamp().MilliSeconds());
             read->SetCreateTimestamp(userInfo.GetReadCreateTimestamp(EndOffset).MilliSeconds());
             read->SetSize(GetSizeLag(userInfo.GetReadOffset()));
 
@@ -745,9 +762,8 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             clientInfo->SetConsumer(userInfo.User);
 
             if (IsActive() || userInfo.GetReadOffset() < (i64)EndOffset) {
-                auto readTimestamp = (userInfo.GetReadWriteTimestamp(EndOffset) ? userInfo.GetReadWriteTimestamp(EndOffset) : GetWriteTimeEstimate(userInfo.GetReadOffset())).MilliSeconds();
                 clientInfo->SetReadLagMs(userInfo.GetReadOffset() < (i64)EndOffset
-                                            ? (userInfo.GetReadTimestamp() - TInstant::MilliSeconds(readTimestamp)).MilliSeconds()
+                                            ? (userInfo.GetReadTimestamp() - estimateReadWriteTimestamp()).MilliSeconds()
                                             : 0);
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
                 clientInfo->SetLastReadTimestampMs(userInfo.GetReadTimestamp().MilliSeconds());

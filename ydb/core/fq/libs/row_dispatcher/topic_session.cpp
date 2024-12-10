@@ -190,6 +190,7 @@ private:
 
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
+    const TString ReadGroup;
     const TString TopicPath;
     const TString TopicPathPartition;
     const TString Endpoint;
@@ -225,6 +226,7 @@ private:
 
 public:
     explicit TTopicSession(
+        const TString& readGroup,
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
@@ -322,6 +324,7 @@ private:
 };
 
 TTopicSession::TTopicSession(
+    const TString& readGroup,
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
@@ -334,7 +337,8 @@ TTopicSession::TTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize)
-    : TopicPath(topicPath)
+    : ReadGroup(readGroup)
+    , TopicPath(topicPath)
     , TopicPathPartition(TStringBuilder() << topicPath << "/" << partitionId)
     , Endpoint(endpoint)
     , Database(database)
@@ -833,12 +837,16 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto types = GetVector(ev->Get()->Record.GetSource().GetColumnTypes());
 
     try {
-        auto queryGroup = Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
-        auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(TopicPath));
+        if (Parser) {
+            // Parse remains data before adding new client
+            DoParsing(true);
+        }
+        auto queryGroup = Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
+        auto readGroup = queryGroup->GetSubgroup("read_group", CleanupCounterValueString(ReadGroup));
         auto& clientInfo = Clients.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(ev->Sender), 
-            std::forward_as_tuple(ev, topicGroup)).first->second;
+            std::forward_as_tuple(ev, readGroup)).first->second;
         UpdateFieldsIds(clientInfo);
 
         const auto& source = clientInfo.Settings.GetSource();
@@ -1044,7 +1052,7 @@ void TTopicSession::SendStatisticToRowDispatcher() {
     commonStatistic.LastReadedOffset = LastMessageOffset;
     SessionStats.Clear();
 
-    sessionStatistic.SessionKey = TopicSessionParams{Endpoint, Database, TopicPath, PartitionId};
+    sessionStatistic.SessionKey = TopicSessionParams{ReadGroup, Endpoint, Database, TopicPath, PartitionId};
     sessionStatistic.Clients.reserve(Clients.size());
     for (auto& [readActorId, info] : Clients) {
         TopicSessionClientStatistic clientStatistic;
@@ -1155,6 +1163,7 @@ TString TTopicSession::GetAnyQueryIdByFieldName(const TString& fieldName) {
 ////////////////////////////////////////////////////////////////////////////////
     
 std::unique_ptr<NActors::IActor> NewTopicSession(
+    const TString& readGroup,
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
@@ -1167,7 +1176,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize) {
-    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, pqGateway, maxBufferSize));
+    return std::unique_ptr<NActors::IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, pqGateway, maxBufferSize));
 }
 
 } // namespace NFq

@@ -85,7 +85,7 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
             break;
         }
     }
-    if ((MergingContext->IsExclusiveInterval() || Context->GetCommonContext()->GetReadMetadata()->HasGuaranteeExclusivePK()) &&
+    if ((MergingContext->IsExclusiveInterval()) &&
         sourcesInMemory) {
         TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::EXCLUSIVE", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         auto& container = Sources.begin()->second->GetStageResult().GetBatch();

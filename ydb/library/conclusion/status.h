@@ -1,5 +1,7 @@
 #pragma once
-#include <ydb/library/conclusion/generic/status.h>
+
+#include <ydb/library/conclusion/generic/string_status.h>
+#include <ydb/library/conclusion/generic/yql_status.h>
 
 namespace NKikimr {
 

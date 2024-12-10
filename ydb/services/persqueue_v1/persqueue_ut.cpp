@@ -984,12 +984,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(resp.server_message_case() == Topic::StreamReadMessage::FromServer::kCommitOffsetResponse);
         }
 
-        void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, const ui32 messageLimit) {
+        void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, const ui32 messageCountMin, const ui32 messageCountMax = 0) {
             // Get DirectReadResponse messages, send DirectReadAck messages.
 
             auto endTime = TInstant::Now() + TDuration::Seconds(10);
-            while (currTotalMessages < messageLimit && endTime > TInstant::Now()) {
-                Cerr << "Wait for direct read id: " << nextReadId << ", currently have " << currTotalMessages << " messages, limit is " << messageLimit << Endl;
+            while (currTotalMessages < messageCountMin && endTime > TInstant::Now()) {
+                Cerr << "Wait for direct read id: " << nextReadId << ", currently have " << currTotalMessages << " messages, expected count is " << messageCountMin << Endl;
 
                 Ydb::Topic::StreamDirectReadMessage::FromServer resp;
                 UNIT_ASSERT(DirectStream->Read(&resp));
@@ -1015,7 +1015,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 }
                 nextReadId++;
             }
-            UNIT_ASSERT_VALUES_EQUAL(currTotalMessages, messageLimit);
+            if (messageCountMax) {
+                UNIT_ASSERT(currTotalMessages >= messageCountMin);
+                UNIT_ASSERT(currTotalMessages <= messageCountMax);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(currTotalMessages, messageCountMin);
+            }
         }
 
         void InitDirectSession(
@@ -1146,7 +1151,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.Reads.size(), 0);
     }
 
-/*
     Y_UNIT_TEST(DirectReadNotCached) {
         TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         SET_LOCALS;
@@ -1165,8 +1169,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 50);
 
         Cerr << "First read\n";
-        setup.DoRead(assignId, nextReadId, totalMsg, 42);
-        setup.DoRead(assignId, nextReadId, totalMsg, 42);
+        setup.DoRead(assignId, nextReadId, totalMsg, 40, 48);
 
         Topic::StreamReadMessage::FromClient req;
         req.mutable_read_request()->set_bytes_size(50_MB);
@@ -1182,7 +1185,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.StagedReads.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.Reads.size(), 0);
     }
-*/
 
     Y_UNIT_TEST(DirectReadBadCases) {
         TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};

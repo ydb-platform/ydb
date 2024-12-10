@@ -158,6 +158,8 @@ public:
         }
     }
 
+    // This function shows which external data sources are currently supported by the open-source YDB
+    // and which ones are not yet supported.
     bool IsConnectionCaseEnabled(
         const FederatedQuery::ConnectionSetting::ConnectionCase& connectionCase) const {
         switch (connectionCase) {
@@ -167,6 +169,7 @@ public:
             case FederatedQuery::ConnectionSetting::kGreenplumCluster:
             case FederatedQuery::ConnectionSetting::kMysqlCluster:
             case FederatedQuery::ConnectionSetting::kYdbDatabase:
+            case FederatedQuery::ConnectionSetting::kLogging:
                 return true;
             case FederatedQuery::ConnectionSetting::kDataStreams:
             case FederatedQuery::ConnectionSetting::kMonitoring:

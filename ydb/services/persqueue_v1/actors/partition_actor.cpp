@@ -108,7 +108,7 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
     if (it != NextCommits.end() && *it == 0) { //commit of readed in prev session data
         NextCommits.erase(NextCommits.begin());
         if (ClientReadOffset <= ClientCommitOffset) {
-            ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(Partition.AssignId, 0, 0, CommittedOffset));
+            ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(Partition.AssignId, 0, 0, CommittedOffset, EndOffset));
         } else {
             ClientCommitOffset = ClientReadOffset;
             CommitsInfly.emplace_back(0, TCommitInfo{0, ClientReadOffset, ctx.Now()});
@@ -925,7 +925,7 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
 
     CommittedOffset = CommitsInfly.front().second.Offset;
     ui64 startReadId = CommitsInfly.front().second.StartReadId;
-    ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(Partition.AssignId, startReadId, readId, CommittedOffset));
+    ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(Partition.AssignId, startReadId, readId, CommittedOffset, EndOffset));
 
     Kqps.erase(CommitsInfly.front().first);
     CommitsInfly.pop_front();

@@ -691,6 +691,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
     }
 
     partitionIt->second.Offset = ev->Get()->Offset;
+    partitionIt->second.EndOffset = ev->Get()->EndOffset;
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " replying for commits"
         << ": assignId# " << ev->Get()->AssignId
@@ -698,6 +699,25 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
         << ", to# " << ev->Get()->LastCookie
         << ", offset# " << partitionIt->second.Offset);
     WriteToStreamOrDie(ctx, std::move(result));
+
+    if (ev->Get()->Offset == ev->Get()->EndOffset) {
+        auto topicName = partitionIt->second.Topic->GetInternalName();
+        auto topicIt = Topics.find(partitionIt->second.Topic->GetInternalName());
+        if (topicIt == Topics.end()) {
+            return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+                << "unknown topic partition_session_id: " << assignId, ctx);
+        }
+
+        auto& topic = topicIt->second;
+        for (auto& child: topic.PartitionGraph->GetPartition(partitionIt->second.Partition.Partition)->DirectChildren) {
+            for (auto& otherPartitions: Partitions) {
+                if (otherPartitions.second.Partition.Partition == child->Id) {
+                    ctx.Send(otherPartitions.second.Actor, new TEvPQProxy::TEvParentCommitedToFinish(partitionIt->second.Partition.Partition));
+                }
+            }
+        }
+
+    }
 
 }
 
@@ -1223,8 +1243,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     auto* partitionNode = topic.PartitionGraph->GetPartition(record.GetPartition());
     if (!partitionNode) {
         Locks.push_back(ev->Release());
-        ForceACLCheck = true;
-        RecheckACL(ctx);
+        if (!AuthInitActor) {
+            RunAuthActor(ctx);
+        }
         return;
     }
 
@@ -1257,7 +1278,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     std::unordered_set<ui64> notCommitedToFinishParents; // savnik: если сначала придет лок на детей, все сломается. Плохо?
     for (auto& parent: topic.PartitionGraph->GetPartition(record.GetPartition())->DirectParents) {
         for (auto& otherPartitions: Partitions) { // savnik: to map
-            if (otherPartitions.second.Partition.Partition == parent->Id && !otherPartitions.second.CommitedToFinish) {
+            if (otherPartitions.second.Partition.Partition == parent->Id && otherPartitions.second.Offset != otherPartitions.second.EndOffset) {
                 notCommitedToFinishParents.emplace(otherPartitions.second.Partition.Partition);
             }
         }
@@ -1311,8 +1332,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
             << "unknown topic partition_session_id: " << assignId, ctx);
     }
 
-    auto& topic = topicIt->second;
-
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
     if (ev->Get()->Init) {
@@ -1324,7 +1343,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
         it->second.LockSent = true;
         it->second.Offset = ev->Get()->Offset;
         it->second.ConsumerHasAnyCommits = ev->Get()->ClientHasAnyCommits;
-        it->second.HasChildren = topic.PartitionGraph->GetPartition(it->second.Partition.Partition)->DirectChildren.size() > 0;
         it->second.EndOffset = ev->Get()->EndOffset;
 
         if constexpr (UseMigrationProtocol) {
@@ -2389,15 +2407,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
 
     auto& topic = it->second;
     NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
-
-    std::unordered_set<ui64> childs(msg->ChildPartitionIds.begin(), msg->ChildPartitionIds.end());
-    for (auto& partition: Partitions) {
-        if (partition.second.Partition.Partition == msg->PartitionId) {
-            partition.second.CommitedToFinish = true;
-        } else if (childs.contains(partition.second.Partition.Partition)) {
-            ctx.Send(partition.second.Actor, new TEvPQProxy::TEvParentCommitedToFinish(msg->PartitionId));
-        }
-    }
 
     if constexpr (!UseMigrationProtocol) {
         if (AutoPartitioningSupport) {

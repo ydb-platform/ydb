@@ -17,6 +17,7 @@ add_library(yt-library-program)
 
 target_compile_options(yt-library-program PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-library-program PUBLIC
@@ -30,12 +31,14 @@ target_link_libraries(yt-library-program PUBLIC
   library-profiling-solomon
   library-profiling-tcmalloc
   library-profiling-perf
+  yt-library-stockpile
   yt-library-ytprof
   yt-library-tcmalloc
   library-tracing-jaeger
   cpp-yt-mlock
   cpp-yt-stockpile
   cpp-yt-string
+  yt-backtrace-absl_unwinder
   cpp-getopt-small
 )
 
@@ -44,6 +47,7 @@ target_sources(yt-library-program PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/library/program/config.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/library/program/helpers.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/library/program/program.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/program/program_mixin.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/library/program/program_config_mixin.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/library/program/program_pdeathsig_mixin.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/library/program/program_setsid_mixin.cpp

@@ -24,6 +24,7 @@ add_library(mapreduce-interface-logging)
 
 target_compile_options(mapreduce-interface-logging PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(mapreduce-interface-logging PUBLIC

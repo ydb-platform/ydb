@@ -19,6 +19,7 @@ add_library(yt-library-profiling)
 
 target_compile_options(yt-library-profiling PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-library-profiling PUBLIC

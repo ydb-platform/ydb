@@ -17,6 +17,7 @@ add_library(cpp-yt-mlock)
 
 target_compile_options(cpp-yt-mlock PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(cpp-yt-mlock PUBLIC

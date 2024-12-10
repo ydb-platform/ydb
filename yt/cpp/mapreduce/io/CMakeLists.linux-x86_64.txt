@@ -17,6 +17,7 @@ add_library(cpp-mapreduce-io)
 
 target_compile_options(cpp-mapreduce-io PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(cpp-mapreduce-io PUBLIC

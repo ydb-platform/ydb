@@ -17,6 +17,7 @@ add_library(backtrace-cursors-interop)
 
 target_compile_options(backtrace-cursors-interop PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(backtrace-cursors-interop PUBLIC

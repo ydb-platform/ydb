@@ -17,6 +17,7 @@ add_library(backtrace-cursors-frame_pointer)
 
 target_compile_options(backtrace-cursors-frame_pointer PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(backtrace-cursors-frame_pointer PUBLIC

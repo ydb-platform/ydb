@@ -31,6 +31,7 @@ add_library(library-tracing-jaeger)
 
 target_compile_options(library-tracing-jaeger PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(library-tracing-jaeger PUBLIC
@@ -75,6 +76,7 @@ add_global_library_for(library-tracing-jaeger.global
 
 target_compile_options(library-tracing-jaeger.global PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(library-tracing-jaeger.global PUBLIC

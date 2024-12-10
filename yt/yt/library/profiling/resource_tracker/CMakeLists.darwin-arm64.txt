@@ -17,6 +17,7 @@ add_library(library-profiling-resource_tracker)
 
 target_compile_options(library-profiling-resource_tracker PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(library-profiling-resource_tracker PUBLIC
@@ -27,6 +28,7 @@ target_link_libraries(library-profiling-resource_tracker PUBLIC
 )
 
 target_sources(library-profiling-resource_tracker PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/resource_tracker/config.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/resource_tracker/resource_tracker.cpp
 )
 

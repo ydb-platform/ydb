@@ -19,6 +19,7 @@ add_library(yt-library-tvm)
 
 target_compile_options(yt-library-tvm PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-library-tvm PUBLIC

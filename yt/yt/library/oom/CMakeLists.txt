@@ -17,6 +17,7 @@ add_library(yt-library-oom)
 
 target_compile_options(yt-library-oom PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-library-oom PUBLIC

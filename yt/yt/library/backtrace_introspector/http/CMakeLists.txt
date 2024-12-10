@@ -17,6 +17,7 @@ add_library(library-backtrace_introspector-http)
 
 target_compile_options(library-backtrace_introspector-http PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(library-backtrace_introspector-http PUBLIC

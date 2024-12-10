@@ -17,6 +17,7 @@ add_library(yt-library-tcmalloc)
 
 target_compile_options(yt-library-tcmalloc PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-library-tcmalloc PUBLIC

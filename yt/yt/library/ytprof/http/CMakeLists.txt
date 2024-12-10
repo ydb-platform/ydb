@@ -17,6 +17,7 @@ add_library(library-ytprof-http)
 
 target_compile_options(library-ytprof-http PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(library-ytprof-http PUBLIC

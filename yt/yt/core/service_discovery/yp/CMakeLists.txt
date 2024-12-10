@@ -17,6 +17,7 @@ add_library(core-service_discovery-yp)
 
 target_compile_options(core-service_discovery-yp PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(core-service_discovery-yp PUBLIC

@@ -17,6 +17,7 @@ add_library(cpp-yt-stockpile)
 
 target_compile_options(cpp-yt-stockpile PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(cpp-yt-stockpile PUBLIC

@@ -17,6 +17,7 @@ add_library(backtrace-cursors-libunwind)
 
 target_compile_options(backtrace-cursors-libunwind PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(backtrace-cursors-libunwind PUBLIC

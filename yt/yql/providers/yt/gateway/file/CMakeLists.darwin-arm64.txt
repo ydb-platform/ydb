@@ -29,6 +29,7 @@ target_link_libraries(yt-gateway-file PUBLIC
   essentials-core-file_storage
   core-file_storage-proto
   core-file_storage-http_download
+  essentials-core-issue
   essentials-minikql-comp_nodes
   essentials-public-udf
   yql-essentials-utils

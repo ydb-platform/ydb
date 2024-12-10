@@ -17,6 +17,7 @@ add_library(yt-library-monitoring)
 
 target_compile_options(yt-library-monitoring PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-library-monitoring PUBLIC

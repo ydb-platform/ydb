@@ -17,6 +17,7 @@ add_library(library-ytprof-api)
 
 target_compile_options(library-ytprof-api PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(library-ytprof-api PUBLIC

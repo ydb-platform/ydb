@@ -17,6 +17,7 @@ add_library(library-profiling-perf)
 
 target_compile_options(library-profiling-perf PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(library-profiling-perf PUBLIC

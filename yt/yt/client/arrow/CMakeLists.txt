@@ -19,6 +19,7 @@ add_library(yt-client-arrow)
 
 target_compile_options(yt-client-arrow PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-client-arrow PUBLIC

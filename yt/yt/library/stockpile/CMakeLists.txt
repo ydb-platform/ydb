@@ -12,26 +12,23 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(yt-library-undumpable)
+add_library(yt-library-stockpile)
 
 
-target_compile_options(yt-library-undumpable PRIVATE
+target_compile_options(yt-library-stockpile PRIVATE
   -Wdeprecated-this-capture
   -Wimplicit-fallthrough
 )
 
-target_link_libraries(yt-library-undumpable PUBLIC
+target_link_libraries(yt-library-stockpile PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-yt-assert
-  cpp-yt-threading
-  cpp-yt-memory
-  yt-library-profiling
+  yt-yt-core
+  cpp-yt-stockpile
 )
 
-target_sources(yt-library-undumpable PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/undumpable/undumpable.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/undumpable/ref.cpp
+target_sources(yt-library-stockpile PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/stockpile/config.cpp
 )
 

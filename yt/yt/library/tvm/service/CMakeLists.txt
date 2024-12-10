@@ -17,6 +17,7 @@ add_library(library-tvm-service)
 
 target_compile_options(library-tvm-service PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(library-tvm-service PUBLIC

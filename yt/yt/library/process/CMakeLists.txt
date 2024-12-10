@@ -17,6 +17,7 @@ add_library(yt-library-process)
 
 target_compile_options(yt-library-process PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-library-process PUBLIC

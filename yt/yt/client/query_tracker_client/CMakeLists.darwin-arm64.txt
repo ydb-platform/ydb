@@ -17,6 +17,7 @@ add_library(yt-client-query_tracker_client)
 
 target_compile_options(yt-client-query_tracker_client PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-client-query_tracker_client PUBLIC

@@ -31,6 +31,7 @@ add_library(yt-library-quantile_digest)
 
 target_compile_options(yt-library-quantile_digest PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-library-quantile_digest PUBLIC

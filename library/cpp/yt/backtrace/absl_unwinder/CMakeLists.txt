@@ -12,26 +12,23 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(yt-library-undumpable)
+add_library(yt-backtrace-absl_unwinder)
 
 
-target_compile_options(yt-library-undumpable PRIVATE
+target_compile_options(yt-backtrace-absl_unwinder PRIVATE
   -Wdeprecated-this-capture
   -Wimplicit-fallthrough
 )
 
-target_link_libraries(yt-library-undumpable PUBLIC
+target_link_libraries(yt-backtrace-absl_unwinder PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-yt-assert
-  cpp-yt-threading
-  cpp-yt-memory
-  yt-library-profiling
+  backtrace-cursors-libunwind
+  libs-tcmalloc-malloc_extension
 )
 
-target_sources(yt-library-undumpable PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/undumpable/undumpable.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/undumpable/ref.cpp
+target_sources(yt-backtrace-absl_unwinder PRIVATE
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/backtrace/absl_unwinder/absl_unwinder.cpp
 )
 

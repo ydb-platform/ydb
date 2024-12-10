@@ -19,6 +19,7 @@ add_library(yt-library-backtrace_introspector)
 
 target_compile_options(yt-library-backtrace_introspector PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-library-backtrace_introspector PUBLIC

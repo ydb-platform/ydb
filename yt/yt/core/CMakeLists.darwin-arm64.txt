@@ -21,6 +21,7 @@ add_library(yt-yt-core)
 
 target_compile_options(yt-yt-core PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-yt-core PUBLIC
@@ -119,6 +120,7 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/fair_throttler.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/fiber_scheduler_thread.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/fiber.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/fiber_manager.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/fls.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/invoker_alarm.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/invoker_queue.cpp
@@ -265,7 +267,6 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/threading/spin_wait_slow_path_logger.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/threading/thread.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/tracing/allocation_tags.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/tracing/config.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/tracing/public.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/utilex/random.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/ypath/stack.cpp
@@ -346,6 +347,7 @@ add_global_library_for(yt-yt-core.global
 
 target_compile_options(yt-yt-core.global PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(yt-yt-core.global PUBLIC

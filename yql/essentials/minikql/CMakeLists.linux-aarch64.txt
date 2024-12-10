@@ -43,9 +43,11 @@ target_link_libraries(yql-essentials-minikql PUBLIC
   library-cpp-yson
   essentials-core-pg_settings
   essentials-core-sql_types
+  essentials-core-issue
   essentials-minikql-dom
   essentials-parser-pg_catalog
   parser-pg_wrapper-interface
+  essentials-public-issue
   essentials-public-udf
   public-udf-tz
   essentials-types-binary_json

@@ -31,6 +31,7 @@ add_library(library-profiling-solomon)
 
 target_compile_options(library-profiling-solomon PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(library-profiling-solomon PUBLIC

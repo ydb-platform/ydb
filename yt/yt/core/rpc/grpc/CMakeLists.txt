@@ -31,6 +31,7 @@ add_library(core-rpc-grpc)
 
 target_compile_options(core-rpc-grpc PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_include_directories(core-rpc-grpc PUBLIC

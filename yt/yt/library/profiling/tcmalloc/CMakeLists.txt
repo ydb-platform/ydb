@@ -17,6 +17,7 @@ add_library(library-profiling-tcmalloc)
 
 target_compile_options(library-profiling-tcmalloc PRIVATE
   -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
 )
 
 target_link_libraries(library-profiling-tcmalloc PUBLIC

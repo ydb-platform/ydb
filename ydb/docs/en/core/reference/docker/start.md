@@ -30,7 +30,7 @@ docker run \
     -e GRPC_PORT=2136 \ # grpc port, needs to match what's published above
     -e MON_PORT=8765 \ # http port, needs to match what's published above
     -e YDB_USE_IN_MEMORY_PDISKS=0 \ # change to 1 to make all data volatile and stored only in RAM
-    ydbplatform/local-ydb:latest # docker image name and tag
+    {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }} # docker image name and tag
 ```
 
 For more information about environment variables available when running a Docker container with {{ ydb-short-name }}, see [{#T}](environment.md).

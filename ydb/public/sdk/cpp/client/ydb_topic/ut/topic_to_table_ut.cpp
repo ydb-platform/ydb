@@ -192,6 +192,10 @@ protected:
     
     virtual bool GetEnableOltpSink() const;
 
+    void TryReadFromTable(const TString& tablePath,
+                          NTable::TSession* session,
+                          NTable::TTransaction* tx);
+
 private:
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader, NTable::TTransaction& tx);
@@ -1034,6 +1038,15 @@ void TFixture::Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
 bool TFixture::GetEnableOltpSink() const
 {
     return false;
+}
+
+void TFixture::TryReadFromTable(const TString& tablePath,
+                                        NTable::TSession* session,
+                                        NTable::TTransaction* tx)
+{
+    TString query = Sprintf(R"(SELECT COUNT(*) FROM `%s`)", tablePath.data());
+    auto result = session->ExecuteDataQuery(query, NTable::TTxControl::Tx(*tx)).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
@@ -2283,24 +2296,11 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
 class TFixtureOltpSink : public TFixture {
 protected:
     bool GetEnableOltpSink() const override;
-
-    void TryReadFromTable(const TString& tablePath,
-                          NTable::TSession* session,
-                          NTable::TTransaction* tx);
 };
 
 bool TFixtureOltpSink::GetEnableOltpSink() const
 {
     return true;
-}
-
-void TFixtureOltpSink::TryReadFromTable(const TString& tablePath,
-                                        NTable::TSession* session,
-                                        NTable::TTransaction* tx)
-{
-    TString query = Sprintf(R"(SELECT COUNT(*) FROM `%s`)", tablePath.data());
-    auto result = session->ExecuteDataQuery(query, NTable::TTxControl::Tx(*tx)).GetValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
 Y_UNIT_TEST_F(OltpSink_WriteToTopic_1, TFixtureOltpSink)
@@ -2391,6 +2391,34 @@ Y_UNIT_TEST_F(OltpSink_WriteToTopic_3, TFixtureOltpSink)
 
     messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), nullptr, PARTITION_1);
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+}
+
+Y_UNIT_TEST_F(OltpSink_WriteToTopic_4, TFixtureOltpSink)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx_1 = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx_1);
+
+    NTable::TTransaction tx_2 = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx_2);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+    }
+
+    CommitTx(tx_2, EStatus::SUCCESS);
+    CommitTx(tx_1, EStatus::ABORTED);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #2");
+    }
 }
 
 Y_UNIT_TEST_F(OltpSink_WriteToTopics_1, TFixtureOltpSink)

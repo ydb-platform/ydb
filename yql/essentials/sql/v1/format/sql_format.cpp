@@ -562,6 +562,10 @@ private:
             WriteComments(true);
         }
 
+        if (AfterComment && Comments[LastComment - 1].Content.StartsWith("--")) {
+            return;
+        }
+
         if (OutColumn) {
             Out('\n');
         }

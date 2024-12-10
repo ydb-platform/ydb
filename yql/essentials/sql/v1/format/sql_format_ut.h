@@ -867,8 +867,10 @@ Y_UNIT_TEST(Select) {
             "SELECT\n\t1\nLIMIT 10;\n"},
         {"select 1 limit 10 offset 5",
             "SELECT\n\t1\nLIMIT 10 OFFSET 5;\n"},
-        { "select 1 union all select 2",
+        {"select 1 union all select 2",
             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\n;\n" },
+        {"select * from $user where key == 1 -- comment",
+            "SELECT\n\t*\nFROM\n\t$user\nWHERE\n\tkey == 1 -- comment\n;\n"},
     };
 
     TSetup setup;

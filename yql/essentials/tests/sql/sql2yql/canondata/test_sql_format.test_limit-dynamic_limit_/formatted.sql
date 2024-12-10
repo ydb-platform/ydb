@@ -4,10 +4,12 @@ USE plato;
 $avg = (
     SELECT
         AVG(Length(key))
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
     key
-FROM Input
+FROM
+    Input
 LIMIT CAST($avg AS Uint64) ?? 0;

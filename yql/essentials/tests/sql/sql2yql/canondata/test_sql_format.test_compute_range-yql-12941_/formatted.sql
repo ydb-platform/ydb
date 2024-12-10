@@ -2,6 +2,7 @@
 /* postgres can not */
 /* yt can not */
 PRAGMA warning("disable", "4510");
+
 $opt_type = Struct<x: UInt32?, y: Int32?>;
 $xy_keys = AsTuple(AsAtom("x"), AsAtom("y"));
 $range_for = ($pred) -> (YQL::RangeComputeFor($opt_type, $pred, $xy_keys));
@@ -10,4 +11,5 @@ $pred2 = ($row) -> (($row.y > 300 AND $row.x == 3u OR $row.x == 3u AND $row.y ==
 
 SELECT
     $range_for($pred1),
-    $range_for($pred2),;
+    $range_for($pred2),
+;

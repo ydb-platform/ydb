@@ -4,7 +4,9 @@ USE plato;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
     date,
-    double;
+    double
+;

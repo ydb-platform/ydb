@@ -3,9 +3,9 @@ SELECT
 FROM (
     SELECT
         a.key AS sortkey
-    FROM plato.Input
-        AS a
-)
-    AS b
+    FROM
+        plato.Input AS a
+) AS b
 ORDER BY
-    b.sortkey DESC;
+    b.sortkey DESC
+;

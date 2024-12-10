@@ -16,6 +16,7 @@ PEERDIR(
     yql/essentials/core/file_storage
     yql/essentials/core/file_storage/proto
     yql/essentials/core/file_storage/http_download
+    yql/essentials/core/issue
     yql/essentials/minikql/comp_nodes
     yql/essentials/public/udf
     yql/essentials/utils

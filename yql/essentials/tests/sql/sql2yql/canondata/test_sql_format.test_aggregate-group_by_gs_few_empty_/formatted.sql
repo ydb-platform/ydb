@@ -6,14 +6,17 @@ SELECT
     subkey,
     value,
     grouping(key, subkey, value)
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     GROUPING SETS (
         (),
         value,
         ROLLUP (key, subkey),
-        ())
+        ()
+    )
 ORDER BY
     key,
     subkey,
-    value;
+    value
+;

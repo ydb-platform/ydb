@@ -6,4 +6,6 @@ SELECT
     key,
     CAST(key AS int32) IN $l,
     CAST(key AS int32) IN $d
-FROM plato.Input;
+FROM
+    plato.Input
+;

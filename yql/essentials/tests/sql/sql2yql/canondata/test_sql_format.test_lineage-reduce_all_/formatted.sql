@@ -1,4 +1,5 @@
 USE plato;
+
 $r = ($s) -> ($s);
 
 INSERT INTO Output

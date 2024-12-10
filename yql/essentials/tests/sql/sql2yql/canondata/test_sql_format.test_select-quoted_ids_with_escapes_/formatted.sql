@@ -2,4 +2,6 @@
 SELECT
     `A\\a`,
     `\"A\\b\"`
-FROM plato.Input;
+FROM
+    plato.Input
+;

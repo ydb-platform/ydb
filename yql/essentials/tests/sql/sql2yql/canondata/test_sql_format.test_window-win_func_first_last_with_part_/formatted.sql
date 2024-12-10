@@ -5,7 +5,8 @@ $input = (
         CAST(key AS int32) AS key,
         CAST(subkey AS int32) AS subkey,
         value
-    FROM plato.Input
+    FROM
+        plato.Input
 );
 
 SELECT
@@ -16,7 +17,8 @@ SELECT
     LAST_VALUE(CAST(subkey AS uint32)) OVER w1 AS last_res_null,
     LAST_VALUE(CAST(subkey AS uint32)) IGNORE NULLS OVER w1 AS last_esc_null,
     subkey
-FROM $input
+FROM
+    $input
 WINDOW
     w1 AS (
         PARTITION BY
@@ -27,4 +29,5 @@ WINDOW
 ORDER BY
     key_hundred,
     key,
-    subkey;
+    subkey
+;

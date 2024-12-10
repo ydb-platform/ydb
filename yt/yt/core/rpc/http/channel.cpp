@@ -182,9 +182,16 @@ private:
 
             TSharedRef httpRequestBody;
             try {
+                THROW_ERROR_EXCEPTION_IF(
+                    request->IsAttachmentCompressionEnabled(),
+                    "Compression codecs are not supported in HTTP");
                 auto requestBody = request->Serialize();
                 THROW_ERROR_EXCEPTION_UNLESS(requestBody.Size() == 2, "Attachments are not supported in HTTP");
-                httpRequestBody = NGrpc::ExtractMessageFromEnvelopedMessage(requestBody[1]);
+                if (request->IsLegacyRpcCodecsEnabled()) {
+                    httpRequestBody = NGrpc::ExtractMessageFromEnvelopedMessage(requestBody[1]);
+                } else {
+                    httpRequestBody = requestBody[1];
+                }
             } catch (const std::exception& ex) {
                 responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Request serialization failed")
                     << ex);

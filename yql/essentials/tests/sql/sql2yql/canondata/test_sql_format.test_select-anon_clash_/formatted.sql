@@ -3,13 +3,19 @@ USE plato;
 
 INSERT INTO @a
 SELECT
-    1 AS t;
+    1 AS t
+;
+
 COMMIT;
 
 SELECT
     *
-FROM @a;
+FROM
+    @a
+;
 
 SELECT
     *
-FROM a;
+FROM
+    a
+;

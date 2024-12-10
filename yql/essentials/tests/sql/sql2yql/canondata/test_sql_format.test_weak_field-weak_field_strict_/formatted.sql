@@ -8,4 +8,6 @@ SELECT
     WeakField(first_null, "uint32", 42) AS null_def,
     WeakField(val, "string") AS missed_nodef,
     WeakField(val, "string", "no value") AS missed_def
-FROM Input;
+FROM
+    Input
+;

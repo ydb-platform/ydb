@@ -6,9 +6,13 @@ USE plato;
 $var =
     SELECT
         *
-    FROM Input;
+    FROM
+        Input
+;
 
 SELECT
     *
-FROM $var
-    TABLESAMPLE BERNOULLI (50);
+FROM
+    $var
+    TABLESAMPLE BERNOULLI (50)
+;

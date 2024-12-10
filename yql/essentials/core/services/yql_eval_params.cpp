@@ -27,6 +27,7 @@ bool BuildParameterValuesAsNodes(const THashMap<TStringBuf, const TTypeAnnotatio
     TTypeEnvironment env(alloc);
     TMemoryUsageInfo memInfo("Parameters");
     THolderFactory holderFactory(alloc.Ref(), memInfo);
+    NCommon::TMemoizedTypesMap typesMemoization;
     bool isOk = true;
     auto& paramDataMap = paramData.AsMap();
     for (auto& p : paramTypes) {
@@ -34,7 +35,7 @@ bool BuildParameterValuesAsNodes(const THashMap<TStringBuf, const TTypeAnnotatio
 
         TStringStream err;
         TProgramBuilder pgmBuilder(env, functionRegistry);
-        TType* mkqlType = NCommon::BuildType(*p.second, pgmBuilder, err);
+        TType* mkqlType = NCommon::BuildType(*p.second, pgmBuilder, typesMemoization, err);
         if (!mkqlType) {
             ctx.AddError(TIssue({}, TStringBuilder() << "Failed to process type for parameter: " << name << ", reason: " << err.Str()));
             isOk = false;

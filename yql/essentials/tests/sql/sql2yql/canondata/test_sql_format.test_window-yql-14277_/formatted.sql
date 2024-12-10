@@ -14,8 +14,8 @@ SELECT
     a.*,
     count(value) OVER w1 AS w1,
     max(value) OVER w2 AS w2,
-FROM as_table($data)
-    AS a
+FROM
+    as_table($data) AS a
 WINDOW
     w1 AS (
         ORDER BY
@@ -28,4 +28,5 @@ WINDOW
     )
 ORDER BY
     id,
-    time;
+    time
+;

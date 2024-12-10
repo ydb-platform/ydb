@@ -4,5 +4,6 @@ PRAGMA yt.InferSchemaTableCountThreshold = "0";
 
 SELECT
     *
-FROM plato.Input
-    WITH inferscheme;
+FROM
+    plato.Input WITH inferscheme
+;

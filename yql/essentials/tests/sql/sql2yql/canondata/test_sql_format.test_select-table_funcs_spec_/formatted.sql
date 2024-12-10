@@ -10,5 +10,8 @@ SELECT
     TableName("foo/bar") AS table_name1,
     TableName("baz") AS table_name2,
     TableName() AS table_name3
-FROM Input
-WHERE key == '800';
+FROM
+    Input
+WHERE
+    key == '800'
+;

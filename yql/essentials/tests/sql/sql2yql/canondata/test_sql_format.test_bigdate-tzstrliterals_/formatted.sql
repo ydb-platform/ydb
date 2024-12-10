@@ -12,7 +12,8 @@ SELECT
     TzDate32("1-01-02,Europe/Moscow"),
     CAST(Date32("-1-12-31") AS string),
     TzDate32("-1-12-31,UTC"),
-    TzDate32("1-01-01,Europe/Moscow");
+    TzDate32("1-01-01,Europe/Moscow")
+;
 
 SELECT
     CAST(Datetime64("-144169-01-01T00:00:00Z") AS string),
@@ -28,7 +29,8 @@ SELECT
     TzDatetime64("1-01-01T02:30:17,Europe/Moscow"),
     CAST(Datetime64("-1-12-31T23:59:59Z") AS string),
     TzDatetime64("-1-12-31T23:59:59,UTC"),
-    TzDatetime64("1-01-01T02:30:16,Europe/Moscow");
+    TzDatetime64("1-01-01T02:30:16,Europe/Moscow")
+;
 
 SELECT
     CAST(Timestamp64("-144169-01-01T00:00:00Z") AS string),
@@ -44,4 +46,5 @@ SELECT
     TzTimestamp64("1-01-01T02:30:17,Europe/Moscow"),
     CAST(Timestamp64("-1-12-31T23:59:59.999999Z") AS string),
     TzTimestamp64("-1-12-31T23:59:59.999999,UTC"),
-    TzTimestamp64("1-01-01T02:30:16.999999,Europe/Moscow");
+    TzTimestamp64("1-01-01T02:30:16.999999,Europe/Moscow")
+;

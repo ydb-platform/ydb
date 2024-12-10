@@ -10,4 +10,6 @@ $zones = CAST(
 
 SELECT
     *
-FROM AS_TABLE($zones);
+FROM
+    AS_TABLE($zones)
+;

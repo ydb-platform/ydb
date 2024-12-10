@@ -6,4 +6,6 @@ SELECT
     c,
     d,
     len(d)
-FROM Input;
+FROM
+    Input
+;

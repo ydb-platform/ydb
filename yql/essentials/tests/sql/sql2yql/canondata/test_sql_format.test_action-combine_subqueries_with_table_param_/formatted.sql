@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 $combineQueries = ($query, $list) -> {
     RETURN EvaluateCode(
         LambdaCode(
@@ -19,10 +20,15 @@ $combineQueries = ($query, $list) -> {
 DEFINE SUBQUERY $calc($table) AS
     SELECT
         *
-    FROM $table;
+    FROM
+        $table
+    ;
 END DEFINE;
+
 $fullQuery = $combineQueries($calc, AsList("Input", "Input"));
 
 SELECT
     count(*)
-FROM $fullQuery();
+FROM
+    $fullQuery()
+;

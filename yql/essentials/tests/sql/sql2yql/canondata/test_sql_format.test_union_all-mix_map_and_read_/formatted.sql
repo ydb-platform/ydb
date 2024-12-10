@@ -5,19 +5,23 @@ FROM (
         key,
         subkey,
         '' AS value
-    FROM plato.Input
+    FROM
+        plato.Input
     UNION ALL
     SELECT
         *
-    FROM plato.Input
+    FROM
+        plato.Input
     UNION ALL
     SELECT
         '' AS key,
         subkey,
         value
-    FROM plato.Input
+    FROM
+        plato.Input
 )
 ORDER BY
     key,
     subkey,
-    value;
+    value
+;

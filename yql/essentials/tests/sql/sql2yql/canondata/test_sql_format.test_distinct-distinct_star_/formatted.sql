@@ -3,27 +3,32 @@ USE plato;
 
 SELECT DISTINCT
     *
-FROM Input2
+FROM
+    Input2
 ORDER BY
     key,
-    subkey;
+    subkey
+;
 
 SELECT DISTINCT
     *
 WITHOUT
     subkey
-FROM Input2
+FROM
+    Input2
 ORDER BY
     key,
-    value;
+    value
+;
 
 SELECT DISTINCT
     a.*,
     TableName() AS tn,
 WITHOUT
     subkey
-FROM Input2
-    AS a
+FROM
+    Input2 AS a
 ORDER BY
     key,
-    value;
+    value
+;

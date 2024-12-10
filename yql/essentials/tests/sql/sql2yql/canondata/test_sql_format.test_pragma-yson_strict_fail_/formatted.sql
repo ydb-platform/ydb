@@ -3,4 +3,5 @@
 PRAGMA yson.Strict;
 
 SELECT
-    Yson::ConvertToString(Yson("122"));
+    Yson::ConvertToString(Yson("122"))
+;

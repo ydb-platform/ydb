@@ -7,16 +7,20 @@ $src =
         Just(key) AS key,
         "ZZZ" || subkey AS subkey,
         value
-    FROM Input
-        AS u
+    FROM
+        Input AS u
     ASSUME ORDER BY
         key,
         subkey,
-        value;
+        value
+;
 
 SELECT
     *
-FROM $src
-WHERE key > "023" AND key < "150"
+FROM
+    $src
+WHERE
+    key > "023" AND key < "150"
 ORDER BY
-    key;
+    key
+;

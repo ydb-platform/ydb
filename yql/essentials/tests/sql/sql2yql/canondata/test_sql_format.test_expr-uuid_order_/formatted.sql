@@ -69,7 +69,7 @@ FROM (
     SELECT
         17 AS a,
         Uuid('00000000-0000-0000-0000-000000000001') AS x
-)
-    AS s
+) AS s
 ORDER BY
-    x;
+    x
+;

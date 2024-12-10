@@ -46,9 +46,6 @@ DEFINE_REFCOUNTED_TYPE(THeapSizeLimitConfig)
 struct TTCMallocConfig
     : public NYTree::TYsonStruct
 {
-    i64 BackgroundReleaseRate;
-    int MaxPerCpuCacheSize;
-
     //! Threshold in bytes
     i64 AggressiveReleaseThreshold;
 
@@ -61,6 +58,11 @@ struct TTCMallocConfig
     //! Approximately 1/#GuardedSamplingRate of all allocations of
     //! size <= 256 KiB will be under GWP-ASAN.
     std::optional<i64> GuardedSamplingRate;
+
+    i64 ProfileSamplingRate;
+    i64 MaxPerCpuCacheSize;
+    i64 MaxTotalThreadCacheBytes;
+    i64 BackgroundReleaseRate;
 
     THeapSizeLimitConfigPtr HeapSizeLimit;
 

@@ -6,15 +6,21 @@ USE plato;
 $count =
     SELECT
         COUNT(*)
-    FROM Input;
+    FROM
+        Input
+;
 
 -- $count = 10
 $var =
     SELECT
         *
-    FROM Input;
+    FROM
+        Input
+;
 
 SELECT
     *
-FROM $var
-    TABLESAMPLE BERNOULLI (5 * $count);
+FROM
+    $var
+    TABLESAMPLE BERNOULLI (5 * $count)
+;

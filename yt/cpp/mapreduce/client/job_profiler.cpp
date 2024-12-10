@@ -66,12 +66,12 @@ public:
         }
 
         if (MemoryProfilingToken_) {
-            auto profile = ConvertAllocationProfile(std::move(*MemoryProfilingToken_).Stop());
+            auto profile = TCMallocProfileToProtoProfile(std::move(*MemoryProfilingToken_).Stop());
             SymbolizeAndWriteProfile(&profile);
         }
 
         if (ProfilePeakMemoryUsage_) {
-            auto profile = ReadHeapProfile(tcmalloc::ProfileType::kPeakHeap);
+            auto profile = CaptureHeapProfile(tcmalloc::ProfileType::kPeakHeap);
             SymbolizeAndWriteProfile(&profile);
         }
     }
@@ -120,7 +120,9 @@ private:
             });
         }
 
-        auto serializedProfile = SerializeProfile(*profile);
+        TStringStream profileStream;
+        WriteCompressedProfile(&profileStream, *profile);
+        const auto& serializedProfile = profileStream.Str();
 
         constexpr int ProfileFileDescriptor = 8;
         TFile profileFile(ProfileFileDescriptor);

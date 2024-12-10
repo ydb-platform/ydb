@@ -11,7 +11,8 @@ SELECT
     TryMember($s, "z", 'qqq'),
     TryMember($js, "z", NULL),
     TryMember($es, "z", Just(Just('qqq'))),
-    TryMember($js, "z", 'zzz'),;
+    TryMember($js, "z", 'zzz'),
+;
 
 -- fully equivalent to <struct>.<name>
 SELECT
@@ -23,7 +24,8 @@ SELECT
     TryMember($js, "c", NULL),
     TryMember($es, "a", NULL),
     TryMember($es, "b", NULL),
-    TryMember($es, "c", NULL),;
+    TryMember($es, "c", NULL),
+;
 
 -- TypeOf TryMember is type of third argument
 -- field type should either match third type exactly, or (if the third type is optional) 
@@ -40,4 +42,5 @@ SELECT
     TryMember($es, "a", 999),
     TryMember($es, "a", Just(999)),
     TryMember($es, "b", Just(999u)),
-    TryMember($es, "c", Just(Just(999))),;
+    TryMember($es, "c", Just(Just(999))),
+;

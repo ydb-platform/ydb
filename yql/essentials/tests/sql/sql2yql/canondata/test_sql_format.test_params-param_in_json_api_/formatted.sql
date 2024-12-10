@@ -27,4 +27,5 @@ SELECT
     JSON_QUERY (
         $input_json,
         "strict $var" PASSING $json_param AS var
-    );
+    )
+;

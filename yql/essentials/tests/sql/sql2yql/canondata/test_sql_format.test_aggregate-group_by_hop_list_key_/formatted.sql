@@ -8,8 +8,10 @@ SELECT
     user,
     HOP_START() AS ts,
     SUM(payload) AS payload
-FROM plato.Input
+FROM
+    plato.Input
 GROUP COMPACT BY
     HOP (DateTime::FromSeconds(CAST(ts AS Uint32)), "PT10S", "PT10S", "PT10S"),
     user,
-    AsList(user, "1");
+    AsList(user, "1")
+;

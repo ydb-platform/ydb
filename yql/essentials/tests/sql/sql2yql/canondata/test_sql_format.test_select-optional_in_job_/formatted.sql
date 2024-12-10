@@ -13,7 +13,9 @@ SELECT
     Yql::Optional(OptionalType(OptionalType(OptionalType(DataType("String")))), Yql::Nothing(OptionalType(OptionalType(DataType("String"))))) AS level3_just_null,
     Yql::Optional(OptionalType(OptionalType(OptionalType(DataType("String")))), Yql::Just(Yql::Nothing(OptionalType(DataType("String"))))) AS level3_just_just_null,
     Yql::Optional(OptionalType(OptionalType(OptionalType(DataType("String")))), Yql::Just(Yql::Just("val"))) AS level3_just_just_just_val,
-    "const" AS const;
+    "const" AS const
+;
+
 COMMIT;
 
 -- Everything should be True
@@ -28,5 +30,8 @@ SELECT
     Yql::Unwrap(Yql::Unwrap(level3_just_just_null)) IS NULL,
     Yql::Unwrap(Yql::Unwrap(Yql::Unwrap(level3_just_just_just_val))) == "val",
     TRUE
-FROM @a
-WHERE const == "const";
+FROM
+    @a
+WHERE
+    const == "const"
+;

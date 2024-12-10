@@ -23,7 +23,9 @@ SELECT
         PARTITION BY
             day
     ) AS col2
-FROM AS_TABLE($t1);
+FROM
+    AS_TABLE($t1)
+;
 
 SELECT
     CUME_DIST() OVER (
@@ -36,7 +38,9 @@ SELECT
         PARTITION BY
             day
     ) AS col2
-FROM AS_TABLE($t1);
+FROM
+    AS_TABLE($t1)
+;
 
 SELECT
     NTILE(2) OVER (
@@ -49,4 +53,6 @@ SELECT
         PARTITION BY
             day
     ) AS col2
-FROM AS_TABLE($t1);
+FROM
+    AS_TABLE($t1)
+;

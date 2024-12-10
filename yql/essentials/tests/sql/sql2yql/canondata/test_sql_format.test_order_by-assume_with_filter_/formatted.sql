@@ -8,8 +8,11 @@ SELECT
     "3" || key AS key,
     subkey,
     value
-FROM Input
-WHERE key >= "0"
+FROM
+    Input
+WHERE
+    key >= "0"
 ASSUME ORDER BY
     key,
-    subkey;
+    subkey
+;

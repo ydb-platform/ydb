@@ -7,4 +7,6 @@ SELECT
     c * 10p,
     Pg::upper(a),
     Pg::concat(a, 99)
-FROM Input;
+FROM
+    Input
+;

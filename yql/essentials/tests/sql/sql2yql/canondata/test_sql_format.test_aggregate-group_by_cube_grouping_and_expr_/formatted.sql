@@ -10,7 +10,8 @@ FROM (
         subkey,
         value,
         CAST(key AS Int32) AS opt,
-    FROM plato.Input
+    FROM
+        plato.Input
 )
 GROUP BY
     Unwrap(opt) AS key,
@@ -18,4 +19,5 @@ GROUP BY
 ORDER BY
     key,
     subkey,
-    value;
+    value
+;

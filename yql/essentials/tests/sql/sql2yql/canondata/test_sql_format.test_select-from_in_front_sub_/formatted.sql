@@ -3,9 +3,9 @@ FROM (
     SELECT
         CAST(subkey AS Double) / CAST(key AS Double) AS val,
         value
-    FROM plato.Input2
-)
-    AS res
+    FROM
+        plato.Input2
+) AS res
 SELECT
     count(val) AS subkey,
     CAST(avg(val) AS int) AS value,
@@ -14,4 +14,5 @@ GROUP BY
     value
 ORDER BY
     subkey,
-    value;
+    value
+;

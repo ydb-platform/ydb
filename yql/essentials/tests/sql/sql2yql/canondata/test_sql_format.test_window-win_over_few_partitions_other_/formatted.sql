@@ -4,7 +4,8 @@ $input = (
         CAST(key AS uint32) AS key,
         CAST(subkey AS uint32) AS subkey,
         value
-    FROM plato.Input
+    FROM
+        plato.Input
 );
 
 SELECT
@@ -14,7 +15,8 @@ SELECT
     count(key) OVER w1 AS c,
     min(key) OVER w1 AS mink,
     max(key) OVER w1 AS maxk
-FROM $input
+FROM
+    $input
 WINDOW
     w1 AS (
         PARTITION BY
@@ -32,4 +34,5 @@ WINDOW
 ORDER BY
     subkey,
     x,
-    dbl_sum;
+    dbl_sum
+;

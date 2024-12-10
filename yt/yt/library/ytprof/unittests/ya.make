@@ -16,6 +16,7 @@ PEERDIR(
     yt/yt/library/ytprof
     yt/yt/library/profiling
     yt/yt/core
+    library/cpp/yt/backtrace/absl_unwinder
 )
 
 IF (OS_LINUX)

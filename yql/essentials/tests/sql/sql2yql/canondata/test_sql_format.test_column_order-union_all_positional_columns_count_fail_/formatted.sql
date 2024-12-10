@@ -10,4 +10,5 @@ SELECT
 UNION ALL
 SELECT
     1 AS c,
-    2 AS b;
+    2 AS b
+;

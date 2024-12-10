@@ -15,6 +15,14 @@ void TProgram::Abort(E exitCode) noexcept
     Abort(ToUnderlying(exitCode));
 }
 
+template <class E>
+    requires std::is_enum_v<E>
+[[noreturn]]
+void TProgram::Exit(E exitCode) noexcept
+{
+    Exit(ToUnderlying(exitCode));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

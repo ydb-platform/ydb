@@ -19,4 +19,6 @@ SELECT
     decimal("26.91", 7, 2) <= cs_ext_tax,
     decimal("26.91", 7, 2) > cs_ext_tax,
     decimal("26.91", 7, 2) >= cs_ext_tax,
-FROM Input;
+FROM
+    Input
+;

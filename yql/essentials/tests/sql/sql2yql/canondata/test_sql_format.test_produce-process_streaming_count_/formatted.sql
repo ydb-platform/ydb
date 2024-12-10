@@ -4,7 +4,8 @@
 $input = (
     SELECT
         String::JoinFromList(AsList(key, subkey, value), ",") AS Data
-    FROM plato.Input1
+    FROM
+        plato.Input1
 );
 
 $processed = (
@@ -14,8 +15,12 @@ $processed = (
 
 SELECT
     *
-FROM $processed;
+FROM
+    $processed
+;
 
 SELECT
     COUNT(*)
-FROM $processed;
+FROM
+    $processed
+;

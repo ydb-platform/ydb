@@ -4,7 +4,8 @@ USE plato;
 SELECT
     key,
     value
-FROM Input
+FROM
+    Input
 ORDER BY
     value
 LIMIT 1;

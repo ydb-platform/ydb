@@ -4,8 +4,10 @@ USE plato;
 
 DEFINE ACTION $action1($x) AS
     SELECT
-        $x;
+        $x
+    ;
 END DEFINE;
+
 $f = ($i) -> {
     RETURN CAST(Unicode::ToUpper(CAST($i AS Utf8)) AS String);
 };

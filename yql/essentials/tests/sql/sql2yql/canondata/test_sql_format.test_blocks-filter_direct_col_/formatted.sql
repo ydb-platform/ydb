@@ -1,6 +1,9 @@
 SELECT
     *
-FROM plato.Input
-WHERE value
+FROM
+    plato.Input
+WHERE
+    value
 ORDER BY
-    key;
+    key
+;

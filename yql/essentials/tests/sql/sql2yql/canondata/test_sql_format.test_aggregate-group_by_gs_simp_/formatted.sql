@@ -5,12 +5,15 @@ SELECT
     key,
     subkey,
     grouping(key, subkey)
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     GROUPING SETS (
         (key, subkey),
         key,
-        subkey)
+        subkey
+    )
 ORDER BY
     key,
-    subkey;
+    subkey
+;

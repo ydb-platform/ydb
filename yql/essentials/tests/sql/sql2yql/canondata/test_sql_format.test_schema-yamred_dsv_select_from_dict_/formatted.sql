@@ -6,4 +6,6 @@ SELECT
     Input.`dict`["b"] AS b,
     Input.`dict`["c"] AS c,
     Input.`dict`["d"] AS d
-FROM plato.Input;
+FROM
+    plato.Input
+;

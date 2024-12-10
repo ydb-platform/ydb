@@ -20,4 +20,6 @@ $table = (
 
 SELECT
     AGGREGATE_LIST($subst(names, indices))
-FROM $table;
+FROM
+    $table
+;

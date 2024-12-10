@@ -5,7 +5,8 @@ USE plato;
 $q = (
     SELECT
         key
-    FROM Input
+    FROM
+        Input
     ORDER BY
         key
     LIMIT 100
@@ -14,7 +15,8 @@ $q = (
 $q1 = (
     SELECT
         *
-    FROM $q
+    FROM
+        $q
     ORDER BY
         key
     LIMIT 100
@@ -22,32 +24,43 @@ $q1 = (
 
 SELECT
     *
-FROM Input
-WHERE key IN (
-    SELECT
-        *
-    FROM $q
-    ORDER BY
-        key
-    LIMIT 100
-)
+FROM
+    Input
+WHERE
+    key IN (
+        SELECT
+            *
+        FROM
+            $q
+        ORDER BY
+            key
+        LIMIT 100
+    )
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     *
-FROM Input
-WHERE key IN $q1
+FROM
+    Input
+WHERE
+    key IN $q1
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     EXISTS (
         SELECT
             key
-        FROM $q
+        FROM
+            $q
     )
-FROM Input;
+FROM
+    Input
+;
 
 SELECT
-    $q;
+    $q
+;

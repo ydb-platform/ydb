@@ -6,4 +6,5 @@ SELECT
     CurrentTzTimestamp("Europe/Moscow"),
     CurrentUtcDate(),
     CurrentUtcDatetime(),
-    CurrentUtcTimestamp();
+    CurrentUtcTimestamp()
+;

@@ -1,20 +1,27 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 $x = AsStruct(1 AS a);
 
 SELECT
-    $x.a;
+    $x.a
+;
+
 $y = AsTuple(2, 3);
 
 SELECT
-    $y.1;
+    $y.1
+;
 
 SELECT
-    length("foo");
+    length("foo")
+;
 
 SELECT
-    Math::Pi();
+    Math::Pi()
+;
+
 $f = () -> {
     RETURN () -> {
         RETURN AsDict(AsTuple("foo", AsList(AsStruct(AsTuple(1) AS bar))));
@@ -22,13 +29,17 @@ $f = () -> {
 };
 
 SELECT
-    $f()()["foo"][0].bar.0;
+    $f()()["foo"][0].bar.0
+;
 
 SELECT
     () -> {
         RETURN 1
-    }();
+    }()
+;
+
 $type = Callable<() -> List<Int32>>;
+
 $g = AsStruct(
     Yql::Callable(
         $type, () -> {
@@ -38,4 +49,5 @@ $g = AsStruct(
 );
 
 SELECT
-    $g.foo()[0];
+    $g.foo()[0]
+;

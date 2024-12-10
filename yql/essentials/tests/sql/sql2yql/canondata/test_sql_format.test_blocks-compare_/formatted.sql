@@ -18,6 +18,8 @@ SELECT
     1 / 0 <= ui8opt,
     0 > i64,
     ui64 >= 8u,
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    i8;
+    i8
+;

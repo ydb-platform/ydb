@@ -130,7 +130,7 @@ private:
         TClientsInfo(
             const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev,
             const NMonitoring::TDynamicCounterPtr& counters,
-            const TString& topicPath)
+            const TString& readGroup)
             : Settings(ev->Get()->Record)
             , ReadActorId(ev->Sender)
             , Counters(counters)
@@ -140,9 +140,8 @@ private:
                 InitialOffset = Settings.GetOffset();
             }
             Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
-
             auto queryGroup = Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
-            auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(topicPath));
+            auto topicGroup = queryGroup->GetSubgroup("read_group", CleanupCounterValueString(readGroup));
             FilteredDataRate = topicGroup->GetCounter("FilteredDataRate", true);
             RestartSessionByOffsetsByQuery = counters->GetCounter("RestartSessionByOffsetsByQuery", true);
         }
@@ -158,8 +157,8 @@ private:
         TQueue<std::pair<ui64, TString>> Buffer;
         ui64 UnreadBytes = 0;
         bool DataArrivedSent = false;
-        TMaybe<ui64> NextMessageOffset;
-        ui64 LastSendedNextMessageOffset = 0;
+        TMaybe<ui64> NextMessageOffset;                 // offset to restart topic session
+        TMaybe<ui64> ProcessedNextMessageOffset;        // offset of fully processed data (to save to checkpoint)
         TVector<ui64> FieldsIds;
         TDuration ReconnectPeriod;
         TStats Stat;        // Send (filtered) to read_actor
@@ -201,6 +200,7 @@ private:
 
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
+    const TString ReadGroup;
     const TString TopicPath;
     const TString TopicPathPartition;
     const TString Endpoint;
@@ -236,6 +236,7 @@ private:
 
 public:
     explicit TTopicSession(
+        const TString& readGroup,
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
@@ -333,6 +334,7 @@ private:
 };
 
 TTopicSession::TTopicSession(
+    const TString& readGroup,
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
@@ -345,7 +347,8 @@ TTopicSession::TTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize)
-    : TopicPath(topicPath)
+    : ReadGroup(readGroup)
+    , TopicPath(topicPath)
     , TopicPathPartition(TStringBuilder() << topicPath << "/" << partitionId)
     , Endpoint(endpoint)
     , Database(database)
@@ -516,16 +519,15 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatisticToReadActor::TPtr&) 
     
     auto readBytes = ClientsStats.Bytes;
     for (auto& [actorId, info] : Clients) {
-        if (!info.NextMessageOffset) {
+        if (!info.ProcessedNextMessageOffset) {
             continue;
         }
         auto event = std::make_unique<TEvRowDispatcher::TEvStatistics>();
         event->Record.SetPartitionId(PartitionId);
-        event->Record.SetNextMessageOffset(*info.NextMessageOffset);
+        event->Record.SetNextMessageOffset(*info.ProcessedNextMessageOffset);
         event->Record.SetReadBytes(readBytes);
-        info.LastSendedNextMessageOffset = *info.NextMessageOffset;
         event->ReadActorId = info.ReadActorId;
-        LOG_ROW_DISPATCHER_TRACE("Send status to " << info.ReadActorId << ", offset " << *info.NextMessageOffset);
+        LOG_ROW_DISPATCHER_TRACE("Send status to " << info.ReadActorId << ", offset " << info.ProcessedNextMessageOffset);
         Send(RowDispatcherActorId, event.release());
     }
     ClientsStats.Clear();
@@ -547,6 +549,11 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr& ev) {
     for (auto& [actorId, info] : Clients) {
         if (!info.NextMessageOffset || *info.NextMessageOffset < ev->Get()->Offset + 1) {
             info.NextMessageOffset = ev->Get()->Offset + 1;
+        }
+        if (info.Buffer.empty()) {
+            if (!info.ProcessedNextMessageOffset || *info.ProcessedNextMessageOffset < ev->Get()->Offset + 1) {
+                info.ProcessedNextMessageOffset = ev->Get()->Offset + 1;
+            }
         }
     }
 }
@@ -783,7 +790,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
     } while(!info.Buffer.empty());
     info.Stat.Add(dataSize, eventsSize);
     info.FilteredDataRate->Add(dataSize);
-    info.LastSendedNextMessageOffset = *info.NextMessageOffset;
+    info.ProcessedNextMessageOffset = *info.NextMessageOffset;
 }
 
 void TTopicSession::UpdateFieldsIds(TClientsInfo& info) {
@@ -844,10 +851,15 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto types = GetVector(ev->Get()->Record.GetSource().GetColumnTypes());
 
     try {
+        if (Parser) {
+            // Parse remains data before adding new client
+            DoParsing(true);
+        }
+
         auto& clientInfo = Clients.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(ev->Sender), 
-            std::forward_as_tuple(ev, Counters, TopicPath)).first->second;
+            std::forward_as_tuple(ev, Counters, readGroup)).first->second;
         UpdateFieldsIds(clientInfo);
 
         const auto& source = clientInfo.Settings.GetSource();
@@ -1053,7 +1065,7 @@ void TTopicSession::SendStatisticToRowDispatcher() {
     commonStatistic.LastReadedOffset = LastMessageOffset;
     SessionStats.Clear();
 
-    sessionStatistic.SessionKey = TopicSessionParams{Endpoint, Database, TopicPath, PartitionId};
+    sessionStatistic.SessionKey = TopicSessionParams{ReadGroup, Endpoint, Database, TopicPath, PartitionId};
     sessionStatistic.Clients.reserve(Clients.size());
     for (auto& [readActorId, info] : Clients) {
         TopicSessionClientStatistic clientStatistic;
@@ -1164,6 +1176,7 @@ TString TTopicSession::GetAnyQueryIdByFieldName(const TString& fieldName) {
 ////////////////////////////////////////////////////////////////////////////////
     
 std::unique_ptr<NActors::IActor> NewTopicSession(
+    const TString& readGroup,
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
@@ -1176,7 +1189,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize) {
-    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, pqGateway, maxBufferSize));
+    return std::unique_ptr<NActors::IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, pqGateway, maxBufferSize));
 }
 
 } // namespace NFq

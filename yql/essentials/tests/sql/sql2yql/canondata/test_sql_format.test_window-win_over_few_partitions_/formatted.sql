@@ -5,7 +5,8 @@ $data = (
         CAST(key AS uint32) / 10 AS age_decade,
         CAST(subkey AS uint32) AS region,
         value AS name
-    FROM plato.Input
+    FROM
+        plato.Input
 );
 
 SELECT
@@ -14,7 +15,8 @@ SELECT
     name,
     sum(age) OVER w1 AS sum1,
     sum(age) OVER w2 AS sum2
-FROM $data
+FROM
+    $data
 WINDOW
     w1 AS (
         PARTITION BY
@@ -30,4 +32,5 @@ WINDOW
     )
 ORDER BY
     region,
-    age;
+    age
+;

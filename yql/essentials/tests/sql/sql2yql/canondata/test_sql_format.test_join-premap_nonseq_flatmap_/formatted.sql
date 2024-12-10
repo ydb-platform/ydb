@@ -1,4 +1,5 @@
 PRAGMA DisableSimpleColumns;
+
 USE plato;
 
 $hashes = (
@@ -8,17 +9,17 @@ $hashes = (
         SELECT
             ListFromRange(0, 3) AS multiplier
     )
-        FLATTEN BY
-            multiplier
+        FLATTEN BY multiplier
 );
 
 SELECT
     *
-FROM Input1
-    AS a
-CROSS JOIN $hashes
-    AS h
+FROM
+    Input1 AS a
+CROSS JOIN
+    $hashes AS h
 ORDER BY
     a.key,
     a.subkey,
-    h.hash;
+    h.hash
+;

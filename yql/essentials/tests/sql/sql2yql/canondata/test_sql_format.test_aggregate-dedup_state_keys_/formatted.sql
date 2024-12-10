@@ -4,11 +4,13 @@ SELECT
     key,
     value,
     count(*) AS c
-FROM Input
+FROM
+    Input
 GROUP BY
     key,
     value
 ORDER BY
     c,
     key,
-    value;
+    value
+;

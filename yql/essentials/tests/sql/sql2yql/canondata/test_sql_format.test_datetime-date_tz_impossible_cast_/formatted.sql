@@ -6,4 +6,5 @@ SELECT
             CAST(75599 AS DateTime),
             "Europe/Moscow"
         ) AS TzDate
-    );
+    )
+;

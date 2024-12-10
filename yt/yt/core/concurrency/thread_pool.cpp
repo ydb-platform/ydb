@@ -154,7 +154,7 @@ public:
             options.PollingPeriod))
         , Invoker_(Queue_)
     {
-        Configure(threadCount);
+        SetThreadCount(threadCount);
     }
 
     ~TThreadPool()
@@ -168,14 +168,14 @@ public:
         return Invoker_;
     }
 
-    void Configure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        TThreadPoolBase::Configure(threadCount);
+        TThreadPoolBase::SetThreadCount(threadCount);
     }
 
-    void Configure(TDuration pollingPeriod) override
+    void SetPollingPeriod(TDuration pollingPeriod) override
     {
-        Queue_->Reconfigure(pollingPeriod);
+        Queue_->SetPollingPeriod(pollingPeriod);
     }
 
     int GetThreadCount() override

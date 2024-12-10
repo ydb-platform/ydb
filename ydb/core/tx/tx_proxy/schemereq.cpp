@@ -145,6 +145,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
         case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
+        case NKikimrSchemeOp::ESchemeOpDropTransfer:
+        case NKikimrSchemeOp::ESchemeOpDropTransferCascade:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
@@ -325,6 +327,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpCreateReplication:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
+        case NKikimrSchemeOp::ESchemeOpCreateTransfer:
+        case NKikimrSchemeOp::ESchemeOpAlterTransfer:
             return *modifyScheme.MutableReplication()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
@@ -367,7 +371,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
         // TODO verify all logic based on this, it may be irrelevant
-            return *modifyScheme.MutableRestoreMultipleIncrementalBackups()->MutableSrcTableNames(0);
+            return *modifyScheme.MutableRestoreMultipleIncrementalBackups()->MutableSrcTablePaths(0);
 
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
             return *modifyScheme.MutableCreateBackupCollection()->MutableName();
@@ -387,6 +391,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
             return *modifyScheme.MutableRestoreBackupCollection()->MutableName();
         }
+    }
+
+    static void SetPathNameForScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& name) {
+        GetPathNameForScheme(modifyScheme) = name;
     }
 
     static bool IsCreateRequest(const NKikimrSchemeOp::TModifyScheme& modifyScheme) {
@@ -420,8 +428,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return IsCreateRequest(modifyScheme);
     }
 
+    static TVector<TString> GetFullPath(NKikimrSchemeOp::TModifyScheme& scheme) {
+        switch (scheme.GetOperationType()) {
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
+            return SplitPath(GetPathNameForScheme(scheme));
+        default:
+            return Merge(SplitPath(scheme.GetWorkingDir()), SplitPath(GetPathNameForScheme(scheme)));
+        }
+    }
+
     static THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForAdjustPathNames(NKikimrSchemeOp::TModifyScheme& scheme) {
-        auto parts = Merge(SplitPath(scheme.GetWorkingDir()), SplitPath(GetPathNameForScheme(scheme)));
+        auto parts = GetFullPath(scheme);
         if (parts.size() < 2) {
             return {};
         }
@@ -639,6 +657,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterColumnTable:
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
+        case NKikimrSchemeOp::ESchemeOpAlterTransfer:
         case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
         case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
         case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
@@ -646,11 +665,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
-        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
         case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            toResolve.Path = SplitPath(GetPathNameForScheme(pbModifyScheme));
             toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
@@ -667,6 +693,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
         case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
+        case NKikimrSchemeOp::ESchemeOpDropTransfer:
+        case NKikimrSchemeOp::ESchemeOpDropTransferCascade:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
@@ -730,6 +758,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSolomonVolume:
         case NKikimrSchemeOp::ESchemeOpCreateSequence:
         case NKikimrSchemeOp::ESchemeOpCreateReplication:
+        case NKikimrSchemeOp::ESchemeOpCreateTransfer:
         case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
         case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
@@ -1336,7 +1365,7 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
         }
     }
 
-    auto parts = Merge(SplitPath(GetModifyScheme().GetWorkingDir()), SplitPath(GetPathNameForScheme(GetModifyScheme())));
+    auto parts = GetFullPath(GetModifyScheme());
 
     if (!workingDir || workingDir->size() >= parts.size()) {
         const TString errText = TStringBuilder()
@@ -1352,7 +1381,7 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
     }
 
     GetModifyScheme().SetWorkingDir(CombinePath(workingDir->begin(), workingDir->end()));
-    GetPathNameForScheme(GetModifyScheme()) = CombinePath(parts.begin() + workingDir->size(), parts.end(), false);
+    SetPathNameForScheme(GetModifyScheme(), CombinePath(parts.begin() + workingDir->size(), parts.end(), false));
 
     ProcessRequest(ctx);
 }

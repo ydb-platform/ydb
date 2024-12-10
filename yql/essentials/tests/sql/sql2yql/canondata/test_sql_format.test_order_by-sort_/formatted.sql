@@ -1,8 +1,10 @@
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
     d,
     a,
     b,
-    c;
+    c
+;

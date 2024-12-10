@@ -13,7 +13,8 @@ $input =
             4,
             Just(5),
             Just(6)
-        ) AS nums;
+        ) AS nums
+;
 
 SELECT
     MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("count")) AS count,
@@ -24,4 +25,6 @@ SELECT
     MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("stddev")) AS stddev,
     MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("percentile", 0.5)) AS p50,
     MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("aggregate_list")) AS agg_list,
-FROM $input;
+FROM
+    $input
+;

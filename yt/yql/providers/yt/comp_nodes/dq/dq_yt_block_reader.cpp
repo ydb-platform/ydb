@@ -44,6 +44,8 @@
 #include <util/generic/size_literals.h>
 #include <util/stream/output.h>
 
+#include <mutex>
+
 namespace NYql::NDqs {
 
 using namespace NKikimr::NMiniKQL;
@@ -284,7 +286,7 @@ public:
         , std::shared_ptr<std::vector<TType*>> columnTypes
         , std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes
         , arrow::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder
-        , bool isNative, NKikimr::NMiniKQL::IStatsRegistry* jobStats) 
+        , bool isNative, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
         : Consumer_(consumer)
         , ColumnTypes_(columnTypes)
         , JobStats_(jobStats)
@@ -561,7 +563,7 @@ public:
         , Result_(width)
     {
     }
-    
+
     NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
         if (GotFinish_) {
             return NUdf::EFetchStatus::Finish;
@@ -574,7 +576,7 @@ public:
                 Source_->Finish();
                 return NUdf::EFetchStatus::Finish;
             }
-            
+
             for (size_t i = 0; i < Width_; ++i) {
                 YQL_ENSURE(batch->Columns[i].type()->Equals(Types_->at(i)));
                 output[i] = Source_->HolderFactory.CreateArrowBlock(std::move(batch->Columns[i]));
@@ -663,7 +665,7 @@ IComputationNode* CreateDqYtReadBlockWrapper(const TComputationNodeFactoryContex
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
         TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
-        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets) 
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets)
 {
     return new TDqYtReadBlockWrapper(ctx, clusterName, token, inputSpec, samplingSpec, inputGroups, itemType,
                                                 tableNames, std::move(tables), jobStats, inflight, timeout, tableOffsets);

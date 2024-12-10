@@ -8,12 +8,14 @@ $dictList = (
         AsDict(AsTuple("z", "a"), AsTuple("y", "b")) AS d,
         subkey,
         value
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
     d["z"] AS static,
     input.`dict`[input.value] AS dynamic,
     input.`dict` AS `dict`
-FROM $dictList
-    AS input;
+FROM
+    $dictList AS input
+;

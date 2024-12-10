@@ -5,11 +5,14 @@ $var =
     SELECT
         key,
         value
-    FROM plato.Input;
+    FROM
+        plato.Input
+;
 
 SELECT
     *
-FROM $var
+FROM
+    $var
     TABLESAMPLE BERNOULLI (10)
 ORDER BY
     key ASC,

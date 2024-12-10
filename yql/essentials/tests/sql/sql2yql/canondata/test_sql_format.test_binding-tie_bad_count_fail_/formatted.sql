@@ -5,4 +5,5 @@ $i, $j = AsTuple(1, 5u, "test");
 
 SELECT
     $i,
-    $j;
+    $j
+;

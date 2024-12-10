@@ -95,4 +95,5 @@ SELECT
     ListMin(Just([])),
     ListMax(Just([])),
     ListSum(Just([])),
-    ListAvg(Just([])),;
+    ListAvg(Just([])),
+;

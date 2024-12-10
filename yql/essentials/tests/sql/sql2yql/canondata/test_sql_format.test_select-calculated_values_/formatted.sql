@@ -5,6 +5,8 @@ SELECT
     (value || "ab"),
     (value || "a"),
     value
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key;
+    key
+;

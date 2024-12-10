@@ -1,13 +1,15 @@
 name: Regression-run
 
 on:
+  schedule:
+    - cron: "0 1 * * *"  # At 01:00 every day
   workflow_dispatch:
 
 jobs:
   main:
     name: Build and run tests
     runs-on: [ self-hosted, "${{ inputs.runner_label || 'auto-provisioned' }}", "${{ format('build-preset-{0}', inputs.build_preset || 'relwithdebinfo') }}" ]
-    timeout-minutes: 480
+    timeout-minutes: 600
     strategy:
       fail-fast: false # do not stop wf if the tests in one of the configurations failed
       matrix:
@@ -17,15 +19,27 @@ jobs:
           - build_preset: relwithdebinfo
             threads_count: 52
             timeout: 300
+            build_target: "ydb/"
+            test_size: small,medium,large
+            test_type: unittest,py3test,py2test,pytest
           - build_preset: release-asan
             threads_count: 20
-            timeout: 420
+            timeout: 480
+            build_target: "ydb/"
+            test_size: small,medium,large
+            test_type: unittest,py3test,py2test,pytest
           - build_preset: release-msan
             threads_count: 20
-            timeout: 420
+            timeout: 480
+            build_target: "ydb/"
+            test_size: small,medium,large
+            test_type: unittest,py3test,py2test,pytest
           - build_preset: release-tsan
             threads_count: 20
-            timeout: 420
+            timeout: 480
+            build_target: "ydb/"
+            test_size: small,medium,large
+            test_type: unittest,py3test,py2test,pytest
 
     steps:
     - name: Checkout
@@ -49,12 +63,12 @@ jobs:
       with:
         build_preset: ${{ matrix.build_preset }}
         increment: false
-        build_target: "ydb/"
+        build_target: ${{ matrix.build_target }}
         run_build: true
         run_tests: true
         test_retry_count: 3
-        test_size: small,medium,large
-        test_type: unittest,py3test,py2test,pytest
+        test_size: ${{ matrix.test_size }}
+        test_type: ${{ matrix.test_type }}
         test_threads: ${{ matrix.threads_count }}
         put_build_results_to_cache: false
         additional_ya_make_args: -DDEBUGINFO_LINES_ONLY  # we don't need full symbols in CI checks

@@ -95,7 +95,7 @@ CREATE TABLE `orderLines`(
 Создание БД с 10 видами товаров, где каждого товара 100 штук, есть 10 заказов и минимальное количество шардов 100:
 
 ```bash
-{{ ydb-cli }} workload stock init -p 10 -q 100 -o 10 ----min-partitions 100
+{{ ydb-cli }} workload stock init -p 10 -q 100 -o 10 --min-partitions 100
 ```
 
 ## Запуск нагрузочного теста {#run}

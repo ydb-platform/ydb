@@ -56,10 +56,10 @@ void OomWatchdog(TOomWatchdogOptions options)
         auto rss = GetProcessMemoryUsage().Rss;
 
         if (options.MemoryLimit && static_cast<i64>(rss) > *options.MemoryLimit) {
-            auto profile = NYTProf::ReadHeapProfile(tcmalloc::ProfileType::kHeap);
+            auto profile = NYTProf::CaptureHeapProfile(tcmalloc::ProfileType::kHeap);
 
             TFileOutput output(options.HeapDumpPath);
-            NYTProf::WriteProfile(&output, profile);
+            NYTProf::WriteCompressedProfile(&output, profile);
             output.Finish();
 
             auto rctDump = TRefCountedTracker::Get()->GetDebugInfo();

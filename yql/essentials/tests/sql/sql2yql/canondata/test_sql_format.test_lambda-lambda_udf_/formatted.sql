@@ -1,7 +1,9 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 $shiftSteps = 1;
+
 $linear = ($x, $z) -> {
     $v = 10 * $z + $x;
     $shift = ($item) -> {
@@ -15,5 +17,6 @@ $linear = ($x, $z) -> {
 SELECT
     t.*,
     $linear(CAST(key AS uint64), CAST(subkey AS uint64)) AS linear
-FROM Input
-    AS t;
+FROM
+    Input AS t
+;

@@ -4,7 +4,9 @@ USE plato;
 INSERT INTO Output
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
     key DESC,
-    subkey DESC;
+    subkey DESC
+;

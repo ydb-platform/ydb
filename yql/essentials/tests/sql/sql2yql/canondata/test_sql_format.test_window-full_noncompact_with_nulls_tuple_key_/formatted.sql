@@ -3,8 +3,10 @@
 $input = (
     SELECT
         *
-    FROM plato.Input
-    WHERE key == '1'
+    FROM
+        plato.Input
+    WHERE
+        key == '1'
     UNION ALL
     SELECT
         NULL AS key,
@@ -22,7 +24,8 @@ SELECT
     subkey,
     value,
     AGGREGATE_LIST(value) OVER w1 AS agglist1,
-FROM $input
+FROM
+    $input
 WINDOW
     w1 AS (
         PARTITION BY
@@ -32,4 +35,5 @@ WINDOW
         ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
     )
 ORDER BY
-    value;
+    value
+;

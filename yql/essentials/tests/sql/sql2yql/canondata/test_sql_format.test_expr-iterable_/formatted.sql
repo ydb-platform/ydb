@@ -5,19 +5,24 @@ $a = Yql::ToList(() -> (Yql::Iterator([1, 2, 3])));
 SELECT
     ListExtend($a, $a),
     ListHasItems($a),
-    ListLength($a);
+    ListLength($a)
+;
+
 $b = Yql::ToList(() -> (Yql::EmptyIterator(Stream<Int32>)));
 
 SELECT
     ListExtend($b, $b),
     ListHasItems($b),
-    ListLength($b);
+    ListLength($b)
+;
+
 $c = Yql::ToList(() -> (Yql::EmptyIterator(Stream<Int32>)));
 
 SELECT
     ListExtend($b, $b),
     ListLength($c),
-    ListHasItems($c);
+    ListHasItems($c)
+;
 
 SELECT
     ListMap(
@@ -25,4 +30,5 @@ SELECT
             $y = Yql::ToList(() -> (Yql::Iterator([1, 2, $x])));
             RETURN ListExtend($y, $y);
         }
-    );
+    )
+;

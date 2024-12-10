@@ -3,4 +3,6 @@
 INSERT INTO plato.Output WITH truncate
 SELECT
     *
-FROM plato.Input;
+FROM
+    plato.Input
+;

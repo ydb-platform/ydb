@@ -12,7 +12,8 @@ SELECT
         Struct<a: PgInt4, b: PgText>,
         ($row) -> (FromPg(PgOp(">", $row.a, 2p)) ?? FALSE),
         AsTuple(AsAtom("a"))
-    );
+    )
+;
 
 -- a >= 2
 SELECT
@@ -20,7 +21,8 @@ SELECT
         Struct<a: PgInt4, b: PgText>,
         ($row) -> (($row.a >= 2p) ?? FALSE),
         AsTuple(AsAtom("a"))
-    );
+    )
+;
 
 -- b < 2
 SELECT
@@ -28,7 +30,8 @@ SELECT
         Struct<a: PgInt4, b: PgText>,
         ($row) -> (('2'p > $row.b) ?? FALSE),
         AsTuple(AsAtom("b"))
-    );
+    )
+;
 
 -- b <= 2
 SELECT
@@ -36,4 +39,5 @@ SELECT
         Struct<a: PgInt4, b: PgText>,
         ($row) -> (FromPg(PgOp(">=", '2'p, $row.b)) ?? FALSE),
         AsTuple(AsAtom("b"))
-    );
+    )
+;

@@ -1,2 +1,3 @@
 SELECT
-    PgProc::upper('a'u);
+    PgProc::upper('a'u)
+;

@@ -7,7 +7,9 @@ SELECT
     Just('foo') AS driver_license_pd_id,
     'bar' AS order_id,
     '1' AS user_phone_pd_id,
-    '2' AS utc_order_dttm;
+    '2' AS utc_order_dttm
+;
+
 COMMIT;
 
 SELECT
@@ -33,4 +35,6 @@ SELECT
         ORDER BY
             utc_order_dttm
     ) AS next_driver_order,
-FROM @tmp;
+FROM
+    @tmp
+;

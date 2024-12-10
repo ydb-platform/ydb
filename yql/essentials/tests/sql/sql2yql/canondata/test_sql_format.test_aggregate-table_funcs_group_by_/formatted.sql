@@ -6,9 +6,11 @@ USE plato;
 SELECT
     groupTribit,
     count(*) AS count
-FROM Input
+FROM
+    Input
 GROUP BY
     TableRecordIndex() % 3 AS groupTribit
 ORDER BY
     groupTribit,
-    count;
+    count
+;

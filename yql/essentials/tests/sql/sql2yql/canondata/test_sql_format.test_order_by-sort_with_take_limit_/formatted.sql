@@ -7,7 +7,8 @@ SELECT
 FROM (
     SELECT
         *
-    FROM Input
+    FROM
+        Input
     LIMIT 3
 )
 ORDER BY

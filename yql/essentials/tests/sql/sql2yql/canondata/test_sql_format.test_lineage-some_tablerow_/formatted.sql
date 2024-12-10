@@ -4,6 +4,8 @@ SELECT
 FROM (
     SELECT
         some(TableRow())
-    FROM plato.Input
+    FROM
+        plato.Input
 )
-    FLATTEN COLUMNS;
+    FLATTEN COLUMNS
+;

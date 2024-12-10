@@ -10,6 +10,8 @@ SELECT
     k1 / 0 ?? 1,
     k1 / 0 ?? k1,
     k1 / 2 ?? 0,
-FROM Input
+FROM
+    Input
 ORDER BY
-    k1;
+    k1
+;

@@ -9,8 +9,11 @@ $src =
     SELECT
         1,
         2,
-        3;
+        3
+;
 
 SELECT DISTINCT
     *
-FROM $src;
+FROM
+    $src
+;

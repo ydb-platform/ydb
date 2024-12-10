@@ -6,31 +6,41 @@ SELECT
     key AS key,
     "" AS subkey,
     "value:" || value AS value
-FROM Input
-WHERE key < "100"
+FROM
+    Input
+WHERE
+    key < "100"
 ORDER BY
-    key;
+    key
+;
 
 INSERT INTO Output2
 SELECT
     key AS key,
     "" AS subkey,
     "value:" || value AS value
-FROM Input
-WHERE key < "200"
+FROM
+    Input
+WHERE
+    key < "200"
 ORDER BY
-    key;
+    key
+;
 
 INSERT INTO Output1
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;
 
 INSERT INTO Output2
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;

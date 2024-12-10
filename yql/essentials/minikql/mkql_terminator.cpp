@@ -1,11 +1,17 @@
 #include "defs.h"
 #include "mkql_terminator.h"
 
+#include <yql/essentials/core/issue/yql_issue.h>
+
 #include <util/string/builder.h>
 
 namespace NKikimr {
 
 namespace NMiniKQL {
+
+TTerminateException::TTerminateException()
+    : TErrorException(NYql::EYqlIssueCode::TIssuesIds_EIssueCode_CORE_RUNTIME_ERROR)
+{}
 
 thread_local ITerminator* TBindTerminator::Terminator = nullptr;
 
@@ -29,7 +35,7 @@ void TThrowingBindTerminator::Terminate(const char* message) const {
     TStringBuf reason = (message ? TStringBuf(message) : TStringBuf("(unknown)"));
     TString fullMessage = TStringBuilder() <<
         "Terminate was called, reason(" << reason.size() << "): " << reason << Endl;
-    ythrow yexception() << fullMessage;
+    ythrow TTerminateException() << fullMessage;
 }
 
 TOnlyThrowingBindTerminator::TOnlyThrowingBindTerminator()
@@ -38,7 +44,7 @@ TOnlyThrowingBindTerminator::TOnlyThrowingBindTerminator()
 }
 
 void TOnlyThrowingBindTerminator::Terminate(const char* message) const {
-    ythrow yexception() << message;
+    ythrow TTerminateException() << message;
 }
 
 

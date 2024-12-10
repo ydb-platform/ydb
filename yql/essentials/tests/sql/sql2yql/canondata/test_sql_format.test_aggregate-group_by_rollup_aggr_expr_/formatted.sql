@@ -7,7 +7,8 @@ $input = (
         key,
         subkey,
         substring(value, 0, 1) == substring(value, 2, 1) AS value_from_a
-    FROM Input
+    FROM
+        Input
 );
 
 --insert into Output
@@ -17,9 +18,11 @@ SELECT
     count_if(value_from_a) AS approved,
     CAST(count_if(value_from_a) AS double) / count(*) AS approved_share,
     count(*) AS total
-FROM $input
+FROM
+    $input
 GROUP BY
     ROLLUP (key, subkey)
 ORDER BY
     key,
-    subkey;
+    subkey
+;

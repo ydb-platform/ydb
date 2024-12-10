@@ -4,8 +4,10 @@ SELECT
     key,
     min(subkey),
     max(subkey),
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

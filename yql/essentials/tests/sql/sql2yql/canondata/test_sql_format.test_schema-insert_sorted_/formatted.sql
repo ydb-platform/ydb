@@ -2,14 +2,19 @@
 INSERT INTO plato.Output
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
     d,
     a,
     b,
-    c;
+    c
+;
+
 COMMIT;
 
 SELECT
     *
-FROM plato.Output;
+FROM
+    plato.Output
+;

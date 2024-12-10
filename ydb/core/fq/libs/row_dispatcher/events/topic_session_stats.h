@@ -51,6 +51,7 @@ struct TopicSessionCommonStatistic {
 };
 
 struct TopicSessionParams {
+    TString ReadGroup;
     TString Endpoint;
     TString Database;
     TString TopicPath;

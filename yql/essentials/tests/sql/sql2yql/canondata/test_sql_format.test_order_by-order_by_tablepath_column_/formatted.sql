@@ -3,7 +3,9 @@ USE plato;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
     TablePath(),
-    key;
+    key
+;

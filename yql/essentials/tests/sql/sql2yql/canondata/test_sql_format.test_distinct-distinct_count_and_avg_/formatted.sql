@@ -6,10 +6,11 @@ FROM (
         key,
         CAST(key AS int) AS numKey,
         value
-    FROM plato.Input2
-)
-    AS x
+    FROM
+        plato.Input2
+) AS x
 GROUP BY
     value
 ORDER BY
-    count;
+    count
+;

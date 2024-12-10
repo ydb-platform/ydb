@@ -13,7 +13,8 @@ SELECT
         Struct<a: PgInt4, b: PgText>,
         ($row) -> (($row.a IN (3p, 2p, 1p)) ?? FALSE),
         AsTuple(AsAtom("a"))
-    );
+    )
+;
 
 -- b == 'foo'
 SELECT
@@ -21,4 +22,5 @@ SELECT
         Struct<a: PgInt4, b: PgText>,
         ($row) -> (($row.b IN ('foo'p, 'bar'p, 'baz'p)) ?? FALSE),
         AsTuple(AsAtom("b"))
-    );
+    )
+;

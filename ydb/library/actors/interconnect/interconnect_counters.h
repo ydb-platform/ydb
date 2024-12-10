@@ -35,7 +35,7 @@ public:
     virtual void IncDisconnectByReason(const TString& s) = 0;
     virtual void IncUsefulReadWakeups() = 0;
     virtual void IncSpuriousReadWakeups() = 0;
-    virtual void SetPeerInfo(const TString& name, const TString& dataCenterId) = 0;
+    virtual void SetPeerInfo(ui32 nodeId, const TString& name, const TString& dataCenterId) = 0;
     virtual void AddInputChannelsIncomingTraffic(ui16 channel, ui64 incomingTraffic) = 0;
     virtual void IncInputChannelsIncomingEvents(ui16 channel) = 0;
     virtual void IncRecvSyscalls(ui64 ns) = 0;
@@ -50,6 +50,7 @@ public:
 
 protected:
     std::optional<TString> DataCenterId;
+    std::optional<ui32> PeerNodeId;
     std::optional<TString> HumanFriendlyPeerHostName;
 };
 

@@ -15,4 +15,5 @@ SELECT
             AND (len($row.z) == 1 OR len($row.z || 'x') == 2)
         ),
         AsTuple(AsAtom("x"), AsAtom("y"), AsAtom("z"))
-    );
+    )
+;

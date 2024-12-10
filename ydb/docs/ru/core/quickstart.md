@@ -70,7 +70,7 @@
       -e grpc://localhost:2136 -d /Root/test
       ```
 
-- Docker
+- Docker x86_64
 
    1. Создайте каталог для тестирования {{ ydb-short-name }} и используйте его в качестве текущего рабочего каталога:
 
@@ -85,21 +85,18 @@
       ```bash
       docker run -d --rm --name ydb-local -h localhost \
         --platform linux/amd64 \
-        -p 2135:2135 -p 2136:2136 -p 8765:8765 \
+        -p 2135:2135 -p 2136:2136 -p 8765:8765 -p 9092:9092 \
         -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
         -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
+        -e YDB_KAFKA_PROXY_PORT=9092 \
         {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
       ```
 
       Если контейнер успешно запустился, вы увидите его идентификатор. Контейнеру может потребоваться несколько секунд для инициализации. База данных будет недоступна до окончания инициализации.
 
-      {% note warning %}
+      {% note info %}
 
-      В настоящее время сохранение данных на диск поддерживается только на x86_64 процессорах.
-
-      Чтобы отключить сохранение данных на диск и сделать все данные волатильными, хранящимися только в оперативной памяти, добавьте в команду запуска Docker-контейнера параметр `-e YDB_USE_IN_MEMORY_PDISKS=true`.
-
-      В ином случае, при запуске контейнера Docker на Mac с процессором Apple Silicon, необходимо эмулировать набор инструкций x86_64, используя технологию виртуализации [Rosetta](https://support.apple.com/en-us/102527):
+      При использовании Mac с процессором Apple Silicon, набор процессорных инструкций x86_64 можно эмулировать с помощью [Rosetta](https://support.apple.com/en-us/102527):
 
       - [colima](https://github.com/abiosoft/colima) c параметрами `colima start --arch aarch64 --vm-type=vz --vz-rosetta`;
       - [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) с установленной и включённой Rosetta 2.

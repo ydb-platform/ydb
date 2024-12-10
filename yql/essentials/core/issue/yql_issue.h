@@ -48,4 +48,6 @@ inline TIssue YqlIssue(const TPosition& position, EYqlIssueCode id) {
     return YqlIssue(position, id, IssueCodeToString(id));
 }
 
+void CheckFatalIssues(TIssues& issues);
+
 }

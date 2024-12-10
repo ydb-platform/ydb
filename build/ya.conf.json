@@ -558,8 +558,7 @@
                 "simctl": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/SystemRoot/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simctl",
                 "strip": "$(CLANG)/bin/llvm-strip",
                 "type": "clang",
-                "use_bundle": true,
-                "werror_mode": "all"
+                "use_bundle": true
             },
             "platforms": [
                 {
@@ -1126,8 +1125,7 @@
                 "type": "msvc",
                 "use_bundle": true,
                 "use_clang": true,
-                "version": "2019",
-                "werror_mode": "all"
+                "version": "2019"
             },
             "platforms": [
                 {
@@ -1237,8 +1235,7 @@
                 "simctl": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/SystemRoot/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simctl",
                 "strip": "$(CLANG)/bin/llvm-strip",
                 "type": "clang",
-                "use_bundle": true,
-                "werror_mode": "all"
+                "use_bundle": true
             },
             "platforms": [
                 {
@@ -1805,8 +1802,7 @@
                 "type": "msvc",
                 "use_bundle": true,
                 "use_clang": true,
-                "version": "2019",
-                "werror_mode": "all"
+                "version": "2019"
             },
             "platforms": [
                 {

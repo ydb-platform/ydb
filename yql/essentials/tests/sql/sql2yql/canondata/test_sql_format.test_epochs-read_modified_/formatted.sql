@@ -5,29 +5,43 @@ USE plato;
 INSERT INTO Output
 SELECT
     *
-FROM Output;
+FROM
+    Output
+;
 
 INSERT INTO Output
 SELECT
     *
-FROM Output;
+FROM
+    Output
+;
+
 COMMIT;
 
 SELECT
     count(*)
-FROM Output;
+FROM
+    Output
+;
 
 INSERT INTO Output
 SELECT
     *
-FROM Output;
+FROM
+    Output
+;
 
 INSERT INTO Output
 SELECT
     *
-FROM Output;
+FROM
+    Output
+;
+
 COMMIT;
 
 SELECT
     count(*)
-FROM Output;
+FROM
+    Output
+;

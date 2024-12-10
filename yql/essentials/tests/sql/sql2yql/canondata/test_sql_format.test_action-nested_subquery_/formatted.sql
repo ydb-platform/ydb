@@ -5,7 +5,8 @@ USE plato;
 DEFINE SUBQUERY $q($name) AS
     DEFINE SUBQUERY $nested() AS
         SELECT
-            $name;
+            $name
+        ;
     END DEFINE;
 
     PROCESS $nested();

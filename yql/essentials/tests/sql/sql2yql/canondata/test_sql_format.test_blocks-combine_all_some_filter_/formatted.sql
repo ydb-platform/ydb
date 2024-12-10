@@ -2,5 +2,8 @@ USE plato;
 
 SELECT
     some(key)
-FROM Input
-WHERE subkey != 5;
+FROM
+    Input
+WHERE
+    subkey != 5
+;

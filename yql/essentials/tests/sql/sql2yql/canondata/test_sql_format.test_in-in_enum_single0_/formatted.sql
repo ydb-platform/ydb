@@ -1,4 +1,7 @@
 SELECT
     *
-FROM plato.Input
-WHERE key IN ("023");
+FROM
+    plato.Input
+WHERE
+    key IN ("023")
+;

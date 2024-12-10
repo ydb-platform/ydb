@@ -9,6 +9,7 @@ simdjson = CMakeNinjaNixProject(
         "CppCoreCheck\\Warnings.h",
         "simdjson/nonstd/string_view.hpp",
         "simdjson/ppc64/",
+        "sys/byteorder.h",
         "ppc64.cpp",
         "lasx.cpp",
         "lasxintrin.h",

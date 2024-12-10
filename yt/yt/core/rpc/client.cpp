@@ -326,10 +326,7 @@ TClientContextPtr TClientRequest::CreateClientContext()
     auto traceContext = CreateCallTraceContext(GetService(), GetMethod());
     if (traceContext) {
         auto* tracingExt = Header().MutableExtension(NRpc::NProto::TRequestHeader::tracing_ext);
-        ToProto(tracingExt, traceContext);
-        if (!SendBaggage_) {
-            tracingExt->clear_baggage();
-        }
+        ToProto(tracingExt, traceContext, SendBaggage_ && TDispatcher::Get()->ShouldSendTracingBaggage());
         if (traceContext->IsSampled()) {
             TraceRequest(traceContext);
         }

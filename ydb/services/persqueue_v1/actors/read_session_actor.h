@@ -46,8 +46,6 @@ struct TPartitionActorInfo {
     TDisjointIntervalTree<ui64> NextRanges;
     ui64 Offset;
     bool ConsumerHasAnyCommits;
-    bool HasChildren;
-    bool CommitedToFinish;
 
     TInstant AssignTimestamp;
 

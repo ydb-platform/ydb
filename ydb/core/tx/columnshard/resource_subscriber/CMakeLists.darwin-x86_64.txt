@@ -28,5 +28,6 @@ target_sources(tx-columnshard-resource_subscriber PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/resource_subscriber/counters.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/resource_subscriber/task.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/resource_subscriber/events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/resource_subscriber/container.cpp
 )
 

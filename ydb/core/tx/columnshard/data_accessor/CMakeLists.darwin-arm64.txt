@@ -26,6 +26,7 @@ target_link_libraries(tx-columnshard-data_accessor PUBLIC
   columnshard-engines-portions
   columnshard-data_accessor-abstract
   columnshard-data_accessor-local_db
+  tx-columnshard-resource_subscriber
 )
 
 target_sources(tx-columnshard-data_accessor PRIVATE

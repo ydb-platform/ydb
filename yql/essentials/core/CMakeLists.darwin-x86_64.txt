@@ -84,7 +84,6 @@ target_sources(yql-essentials-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_aggregate_expander.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_callable_transform.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_cost_function.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_csv.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_execution.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_expr_constraint.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_expr_csee.cpp
@@ -111,7 +110,6 @@ target_sources(yql-essentials-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_user_data.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_user_data_storage.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_callable_transform.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_csv.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_data_provider.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_execution.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_expr_constraint.h

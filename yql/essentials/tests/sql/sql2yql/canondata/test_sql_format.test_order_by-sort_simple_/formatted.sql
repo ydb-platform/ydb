@@ -1,29 +1,39 @@
 SELECT
     a
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    a;
+    a
+;
 
 SELECT
     b
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    b;
+    b
+;
 
 SELECT
     c
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    c;
+    c
+;
 
 SELECT
     d
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    d;
+    d
+;
 
 SELECT
     e
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    e;
+    e
+;

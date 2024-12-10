@@ -9,4 +9,5 @@ SELECT
     SimpleUdf::NamedArgs(100, 500, 55 AS C, 505 AS D) AS named_args6,
     SimpleUdf::NamedArgs(100, 500, 25 AS C) AS named_args7,
     SimpleUdf::NamedArgs(100, 500, 606 AS D) AS named_args8,
-    SimpleUdf::NamedArgs(100, 500, 64, 512 AS D) AS named_args9;
+    SimpleUdf::NamedArgs(100, 500, 64, 512 AS D) AS named_args9
+;

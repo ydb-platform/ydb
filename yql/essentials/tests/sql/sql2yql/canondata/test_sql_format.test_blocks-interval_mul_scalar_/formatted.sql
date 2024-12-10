@@ -17,7 +17,9 @@ SELECT
     wi * Int64("16"),
     ni * Uint64("17"),
     wi * Uint64("17"),
-FROM Dates;
+FROM
+    Dates
+;
 
 SELECT
     Int8("10") * ni,
@@ -36,7 +38,9 @@ SELECT
     Int64("16") * wi,
     Uint64("17") * ni,
     Uint64("17") * wi
-FROM Dates;
+FROM
+    Dates
+;
 
 SELECT
     Interval("P1D") * i8,
@@ -55,7 +59,9 @@ SELECT
     Interval64("P1D") * i64,
     Interval("P1D") * u64,
     Interval64("P1D") * u64
-FROM Dates;
+FROM
+    Dates
+;
 
 SELECT
     i8 * Interval("P1D"),
@@ -74,4 +80,6 @@ SELECT
     i64 * Interval64("P1D"),
     u64 * Interval("P1D"),
     u64 * Interval64("P1D")
-FROM Dates;
+FROM
+    Dates
+;

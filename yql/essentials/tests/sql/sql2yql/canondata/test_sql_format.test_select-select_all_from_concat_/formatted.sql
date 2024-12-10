@@ -1,4 +1,6 @@
 /* postgres can not */
 SELECT
     *
-FROM plato.concat(Input2, Input3);
+FROM
+    plato.concat(Input2, Input3)
+;

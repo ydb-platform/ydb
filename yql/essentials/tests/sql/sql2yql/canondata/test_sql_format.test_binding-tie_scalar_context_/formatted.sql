@@ -15,8 +15,10 @@ $ids = (
             "2" AS id
     )
 );
+
 $first_ids, $second_ids = $foo(unwrap($ids));
 
 SELECT
     $first_ids AS one,
-    $second_ids AS two;
+    $second_ids AS two
+;

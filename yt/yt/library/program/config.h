@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <yt/yt/core/tracing/config.h>
+#include <yt/yt/core/concurrency/config.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
@@ -15,8 +15,6 @@
 
 #include <yt/yt/core/logging/config.h>
 
-#include <yt/yt/core/tracing/config.h>
-
 #include <yt/yt/core/service_discovery/yp/config.h>
 
 #include <yt/yt/core/yson/config.h>
@@ -25,45 +23,13 @@
 
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
+#include <yt/yt/library/profiling/resource_tracker/config.h>
+
 #include <yt/yt/library/tcmalloc/config.h>
 
-#include <library/cpp/yt/stockpile/stockpile.h>
+#include <yt/yt/library/stockpile/config.h>
 
 namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TStockpileConfig
-    : public TStockpileOptions
-    , public NYTree::TYsonStruct
-{
-public:
-    TStockpileConfigPtr ApplyDynamic(const TStockpileDynamicConfigPtr& dynamicConfig) const;
-
-    REGISTER_YSON_STRUCT(TStockpileConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TStockpileConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TStockpileDynamicConfig
-    : public NYTree::TYsonStruct
-{
-public:
-    std::optional<i64> BufferSize;
-    std::optional<int> ThreadCount;
-    std::optional<EStockpileStrategy> Strategy;
-    std::optional<TDuration> Period;
-
-    REGISTER_YSON_STRUCT(TStockpileDynamicConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TStockpileDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -91,8 +57,7 @@ class TSingletonsConfig
     : public virtual NYTree::TYsonStruct
 {
 public:
-    TDuration SpinWaitSlowPathLoggingThreshold;
-    THashMap<TString, int> FiberStackPoolSizes;
+    NConcurrency::TFiberManagerConfigPtr FiberManager;
     NNet::TAddressResolverConfigPtr AddressResolver;
     NBus::TTcpDispatcherConfigPtr TcpDispatcher;
     NPipes::TIODispatcherConfigPtr IODispatcher;
@@ -101,12 +66,10 @@ public:
     NServiceDiscovery::NYP::TServiceDiscoveryConfigPtr YPServiceDiscovery;
     NLogging::TLogManagerConfigPtr Logging;
     NTracing::TJaegerTracerConfigPtr Jaeger;
-    NTracing::TTracingTransportConfigPtr TracingTransport;
     NTCMalloc::TTCMallocConfigPtr TCMalloc;
     TStockpileConfigPtr Stockpile;
     bool EnableRefCountedTrackerProfiling;
-    bool EnableResourceTracker;
-    std::optional<double> ResourceTrackerVCpuFactor;
+    NProfiling::TResourceTrackerConfigPtr ResourceTracker;
     THeapProfilerConfigPtr HeapProfiler;
     NYson::TProtobufInteropConfigPtr ProtobufInterop;
 
@@ -123,14 +86,12 @@ class TSingletonsDynamicConfig
     : public virtual NYTree::TYsonStruct
 {
 public:
-    std::optional<TDuration> SpinWaitSlowPathLoggingThreshold;
-    ui64 MaxIdleFibers;
+    NConcurrency::TFiberManagerDynamicConfigPtr FiberManager;
     NBus::TTcpDispatcherDynamicConfigPtr TcpDispatcher;
     NPipes::TIODispatcherConfigPtr IODispatcher;
     NRpc::TDispatcherDynamicConfigPtr RpcDispatcher;
     NLogging::TLogManagerDynamicConfigPtr Logging;
     NTracing::TJaegerTracerDynamicConfigPtr Jaeger;
-    NTracing::TTracingTransportConfigPtr TracingTransport;
     NTCMalloc::TTCMallocConfigPtr TCMalloc;
     TStockpileDynamicConfigPtr Stockpile;
     NYson::TProtobufInteropDynamicConfigPtr ProtobufInterop;

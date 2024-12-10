@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 PRAGMA yt.UseNativeYtTypes = "1";
 
 INSERT INTO Output
@@ -13,9 +14,13 @@ FROM (
     SELECT
         Float("1.2") AS f
 );
+
 COMMIT;
 
 SELECT
     *
-FROM Output
-WHERE f != Float("5.3");
+FROM
+    Output
+WHERE
+    f != Float("5.3")
+;

@@ -1,5 +1,6 @@
 /* postgres can not */
 USE plato;
+
 $list = AsList(
     AsList(3, 1),
     AsList(1, 1),
@@ -13,12 +14,15 @@ FROM (
     SELECT
         $list AS x
 )
-    FLATTEN BY
-        x;
+    FLATTEN BY x
+;
+
 COMMIT;
 
 SELECT
     *
-FROM @foo
+FROM
+    @foo
 ORDER BY
-    x ASC;
+    x ASC
+;

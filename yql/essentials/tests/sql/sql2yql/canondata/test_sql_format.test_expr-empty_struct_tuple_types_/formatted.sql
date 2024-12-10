@@ -9,4 +9,5 @@ SELECT
             -- whitespace
              
         >
-    );
+    )
+;

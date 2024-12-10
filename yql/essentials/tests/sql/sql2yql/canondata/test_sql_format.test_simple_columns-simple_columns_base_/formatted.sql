@@ -4,5 +4,6 @@ PRAGMA SimpleColumns;
 SELECT
     100500 AS magic,
     t.*
-FROM plato.Input
-    AS t;
+FROM
+    plato.Input AS t
+;

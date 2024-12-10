@@ -4,4 +4,6 @@ SELECT
     key,
     subkey,
     NOT key
-FROM Input;
+FROM
+    Input
+;

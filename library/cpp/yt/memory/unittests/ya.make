@@ -11,11 +11,12 @@ SRCS(
     free_list_ut.cpp
     function_view_ut.cpp
     intrusive_ptr_ut.cpp
-    shared_range_ut.cpp
-    weak_ptr_ut.cpp
+    non_null_ptr_ut.cpp
     ref_ut.cpp
     range_protobuf_repeated_field_ut.cpp
+    shared_range_ut.cpp
     type_erasure_ut.cpp
+    weak_ptr_ut.cpp
 )
 
 IF (NOT OS_WINDOWS)

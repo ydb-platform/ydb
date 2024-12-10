@@ -7,7 +7,8 @@ $data = (
         CAST(key AS uint32) AS age,
         CAST(subkey AS uint32) AS region,
         value AS name
-    FROM Input
+    FROM
+        Input
 );
 
 -- insert into Output
@@ -16,7 +17,8 @@ $data2 = (
         region,
         name,
         avg(CAST(age AS Interval)) OVER w1 AS avg_age,
-    FROM $data
+    FROM
+        $data
     WINDOW
         w1 AS (
             PARTITION BY
@@ -28,4 +30,6 @@ $data2 = (
 
 DISCARD SELECT
     EnsureType(avg_age, Interval?) AS avg_age
-FROM $data2;
+FROM
+    $data2
+;

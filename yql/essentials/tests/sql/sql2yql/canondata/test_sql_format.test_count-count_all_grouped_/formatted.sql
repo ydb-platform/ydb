@@ -1,8 +1,10 @@
 SELECT
     key,
     count(*)
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

@@ -1,4 +1,5 @@
 PRAGMA warning("disable", "4510");
+
 $date32_min = unwrap(CAST(-53375809 AS date32));
 $date32_max = unwrap(CAST(53375807 AS date32));
 $datetime64_min = unwrap(CAST(-4611669897600 AS datetime64));
@@ -38,4 +39,5 @@ SELECT
     14,
     ListFromRange($timestamp64_min, $timestamp64_max, interval64("P53375808D")),
     15,
-    ListFromRange($interval64_min, $interval64_max, interval64("P53375808D"));
+    ListFromRange($interval64_min, $interval64_max, interval64("P53375808D"))
+;

@@ -10,4 +10,5 @@ SELECT
                 RETURN 3 + 4
             }
         )
-    );
+    )
+;

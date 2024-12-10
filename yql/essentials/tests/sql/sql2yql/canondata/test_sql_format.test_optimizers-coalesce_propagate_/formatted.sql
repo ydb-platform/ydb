@@ -11,5 +11,8 @@ $src = [
 
 SELECT
     *
-FROM as_table($src)
-WHERE NOT (x < 3 OR y > 3);
+FROM
+    as_table($src)
+WHERE
+    NOT (x < 3 OR y > 3)
+;

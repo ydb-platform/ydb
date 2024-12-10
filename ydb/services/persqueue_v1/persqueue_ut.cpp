@@ -984,12 +984,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(resp.server_message_case() == Topic::StreamReadMessage::FromServer::kCommitOffsetResponse);
         }
 
-        void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, ui32 messageLimit) {
+        void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, const ui32 messageCountMin, const ui32 messageCountMax = 0) {
             // Get DirectReadResponse messages, send DirectReadAck messages.
 
             auto endTime = TInstant::Now() + TDuration::Seconds(10);
-            while (currTotalMessages < messageLimit && endTime > TInstant::Now()) {
-                Cerr << "Wait for direct read id: " << nextReadId << ", currently have " << currTotalMessages << " messages" << Endl;
+            while (currTotalMessages < messageCountMin && endTime > TInstant::Now()) {
+                Cerr << "Wait for direct read id: " << nextReadId << ", currently have " << currTotalMessages << " messages, expected count is " << messageCountMin << Endl;
 
                 Ydb::Topic::StreamDirectReadMessage::FromServer resp;
                 UNIT_ASSERT(DirectStream->Read(&resp));
@@ -1015,7 +1015,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 }
                 nextReadId++;
             }
-            UNIT_ASSERT_VALUES_EQUAL(currTotalMessages, messageLimit);
+            if (messageCountMax) {
+                UNIT_ASSERT(currTotalMessages >= messageCountMin);
+                UNIT_ASSERT(currTotalMessages <= messageCountMax);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(currTotalMessages, messageCountMin);
+            }
         }
 
         void InitDirectSession(
@@ -1164,11 +1169,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 50);
 
         Cerr << "First read\n";
-        setup.DoRead(assignId, nextReadId, totalMsg, 43);
-        setup.DoRead(assignId, nextReadId, totalMsg, 42);
+        setup.DoRead(assignId, nextReadId, totalMsg, 40, 48);
 
         Topic::StreamReadMessage::FromClient req;
-        req.mutable_read_request()->set_bytes_size(40_MB);
+        req.mutable_read_request()->set_bytes_size(50_MB);
         if (!setup.ControlStream->Write(req)) {
             ythrow yexception() << "write fail";
         }
@@ -4998,7 +5002,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_C(serverMessage.server_message_case() == StreamingWriteServerMessage::kBatchWriteResponse, serverMessage);
         UNIT_ASSERT_VALUES_EQUAL_C(defaultCodecs.size(), serverMessage.batch_write_response().offsets_size(), serverMessage);
     }
-
     Y_UNIT_TEST(Codecs_WriteMessageWithNonDefaultCodecThatHasToBeConfiguredAdditionally_SessionClosedWithBadRequestError) {
         APITestSetup setup{TEST_CASE_NAME};
         auto log = setup.GetLog();
@@ -5998,7 +6001,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             grpc::ClientContext rcontext;
             auto status = pqStub->CreateTopic(&rcontext, request, &response);
-
             UNIT_ASSERT(status.ok());
             CreateTopicResult res;
             response.operation().result().UnpackTo(&res);

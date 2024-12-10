@@ -5,13 +5,14 @@
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/core/misc/intrusive_mpsc_stack.h>
-#include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/library/profiling/producer.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <util/system/yield.h>
 

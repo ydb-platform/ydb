@@ -10,7 +10,8 @@ SELECT
         Struct<x: UInt32>,
         ($row) -> ($row.x IN (1, 2, -1)),
         AsTuple(AsAtom("x"))
-    );
+    )
+;
 
 -- opaque collection
 SELECT
@@ -18,7 +19,8 @@ SELECT
         Struct<x: UInt32>,
         ($row) -> ($row.x IN ListFromRange(-1, 3)),
         AsTuple(AsAtom("x"))
-    );
+    )
+;
 
 -- optional collection
 SELECT
@@ -26,7 +28,8 @@ SELECT
         Struct<x: UInt32>,
         ($row) -> (($row.x IN Just(AsSet(-1, 1, 2))) ?? FALSE),
         AsTuple(AsAtom("x"))
-    );
+    )
+;
 
 -- optional items
 SELECT
@@ -34,7 +37,8 @@ SELECT
         Struct<x: UInt32>,
         ($row) -> (($row.x IN (-1, 10u, 20, 1 / 0)) ?? FALSE),
         AsTuple(AsAtom("x"))
-    );
+    )
+;
 
 -- tuple
 SELECT
@@ -42,7 +46,8 @@ SELECT
         Struct<x: UInt32, y: Uint32, z: Uint32>,
         ($row) -> (($row.y, $row.x, $row.z) IN [(1, 2, 3), (100, 200, 300)]),
         AsTuple(AsAtom("x"), AsAtom("y"), AsAtom("z"))
-    );
+    )
+;
 
 -- tuple partial
 SELECT
@@ -50,7 +55,8 @@ SELECT
         Struct<x: UInt32, y: Uint32, z: Uint32>,
         ($row) -> (($row.y, $row.x, $row.z) IN [Just(Just((1, 2, 3))), (100, 200, 300), NULL]),
         AsTuple(AsAtom("x"), AsAtom("y"))
-    );
+    )
+;
 
 -- tuple with implicit nulls
 SELECT
@@ -58,4 +64,5 @@ SELECT
         Struct<x: UInt32, y: Uint32, z: Uint32>,
         ($row) -> (($row.y, $row.x) IN ((1, 2, 3), (100, 200, 300))),
         AsTuple(AsAtom("x"), AsAtom("y"))
-    );
+    )
+;

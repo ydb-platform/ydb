@@ -10,4 +10,5 @@ SELECT
     min_of(AsTuple(1, 1 / 0)) AS min_tuple4,
     max_of(AsTuple(1, 1 / 0)) AS max_tuple4,
     min_of(AsList(1, 2, 3), AsList(1, 1)) AS min_list,
-    max_of(AsList(1, 2, 3), AsList(1, 1)) AS max_list,;
+    max_of(AsList(1, 2, 3), AsList(1, 1)) AS max_list,
+;

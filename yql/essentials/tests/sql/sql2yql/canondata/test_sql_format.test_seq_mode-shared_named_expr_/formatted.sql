@@ -1,9 +1,12 @@
 PRAGMA SeqMode;
 PRAGMA CompactNamedExprs;
+
 $a = 1;
 
 SELECT
-    $a;
+    $a
+;
 
 SELECT
-    $a;
+    $a
+;

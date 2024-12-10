@@ -24,7 +24,9 @@ INSERT INTO plato.Output WITH TRUNCATE
 PROCESS plato.Input0, (
     SELECT
         *
-    FROM plato.Input0
-    WHERE key > "100"
+    FROM
+        plato.Input0
+    WHERE
+        key > "100"
 )
 USING $udf(TableRows());

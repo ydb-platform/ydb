@@ -8,7 +8,9 @@ SELECT
     key,
     subkey,
     value
-FROM plato.Input;
+FROM
+    plato.Input
+;
 
 INSERT INTO plato.Output (
     key,
@@ -19,4 +21,6 @@ SELECT
     key,
     subkey,
     value
-FROM plato.Input2;
+FROM
+    plato.Input2
+;

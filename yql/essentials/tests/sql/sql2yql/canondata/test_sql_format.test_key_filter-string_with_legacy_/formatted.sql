@@ -4,28 +4,40 @@ PRAGMA yt.UseNewPredicateExtraction = "false";
 
 SELECT
     key
-FROM plato.Input
-WHERE StartsWith(key, String("150"))
+FROM
+    plato.Input
+WHERE
+    StartsWith(key, String("150"))
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     key
-FROM plato.Input
-WHERE StartsWith(key, Utf8("15")) OR StartsWith(key, Utf8("150"))
+FROM
+    plato.Input
+WHERE
+    StartsWith(key, Utf8("15")) OR StartsWith(key, Utf8("150"))
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     key
-FROM plato.Input
-WHERE StartsWith(key, Utf8("тест")) OR StartsWith(key, String("тест\xff"))
+FROM
+    plato.Input
+WHERE
+    StartsWith(key, Utf8("тест")) OR StartsWith(key, String("тест\xff"))
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     key
-FROM plato.Input
-WHERE StartsWith(key, String("\xff"))
+FROM
+    plato.Input
+WHERE
+    StartsWith(key, String("\xff"))
 ORDER BY
-    key;
+    key
+;

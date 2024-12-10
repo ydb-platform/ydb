@@ -10,6 +10,8 @@ SELECT
     (key / 0 >= 0) ?? TRUE,
     (key / 0 >= 0) ?? b1,
     (key / 2 >= 0) ?? FALSE,
-FROM Input
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;

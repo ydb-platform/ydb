@@ -80,14 +80,7 @@
   - libavcodec/pcm_tables.h
   - libavcodec/qdm2_tables.h
   - libavcodec/sinewin_tables.h
-  - libio/iolibio.h
-  - libio/libioP.h
   - libs/regex/test/config_info/regex_config_info.cpp
-  - locale/coll-lookup.h
-  - locale/elem-hash.h
-  - locale/localeinfo.h
-  - locale/weight.h
-  - locale/weightwc.h
   - lqr.h
   - m68881.h
   - mach/cthreads.h
@@ -148,11 +141,6 @@
   - value.h
   - sljit/sljitLir.c
   - pcre_printint.c
-  #if defined(_LIBC) && CONTRIB && TRASH
-  - not-cancel.h
-  - local-setxid.h
-  - vasprintf.h
-  #endif
 
 - includes:
   - cpu-features.h
@@ -225,21 +213,6 @@
   - varargs.h
   - vm/vm_param.h
   #endif
-  #if defined(_MSC_VER)
-  - comdef.h
-  - comutil.h
-  - concrt.h
-  - crtdefs.h
-  - crtversion.h
-  - eh.h
-  - excpt.h
-  - ppl.h
-  - ppltasks.h
-  - rtcapi.h
-  - vadefs.h
-  - varargs.h
-  - crtassem.h
-  #endif
   #if defined(_unix_) && TODO
   - bits/types/mbstate_t.h
   - sys/atomic.h
@@ -284,7 +257,7 @@
   #if defined(HAVE_DMALLOC)
   - dmalloc.h
   #endif
-  #if defined(_TRASH_) && TODO
+	#if defined(_TRASH_) && TODO
   - gcrypt.h
   - gdwmfapi.h
   - winmmap.h
@@ -427,14 +400,6 @@
   - yandex/threads/boost_threaded.hpp
   - yasm-plugin.h
   #endif
-  #if CONTRIB && TRASH
-  - macconfig.h
-  - json_batchallocator.h
-  - json_internalarray.inl
-  - json_internalmap.inl
-  - mysql/mysql_version.h
-  - libiberty.h
-  #endif
 
 - includes:
   #if defined(__FreeBSD__)
@@ -470,9 +435,6 @@
   - sys/timers.h
   - sys/tree.h
   - tcpd.h
-  #endif
-  #if defined(_TRASH_) && TODO
-  - google/profiler.h
   #endif
   - net/errno.h
   - sys/mode.h

@@ -9,14 +9,17 @@ SELECT
     count(1) AS total_count,
     value,
     grouping(key, subkey, value) AS group_mask
-FROM Input
+FROM
+    Input
 GROUP BY
     GROUPING SETS (
         value,
-        ROLLUP (key, subkey))
+        ROLLUP (key, subkey)
+    )
 ORDER BY
     group_mask,
     value,
     key,
     subkey,
-    total_count;
+    total_count
+;

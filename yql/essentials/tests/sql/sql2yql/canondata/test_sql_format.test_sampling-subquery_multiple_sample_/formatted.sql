@@ -6,7 +6,8 @@ SELECT
 FROM (
     SELECT
         *
-    FROM plato.Input
+    FROM
+        plato.Input
         TABLESAMPLE BERNOULLI (50)
 )
-    TABLESAMPLE BERNOULLI (30);
+TABLESAMPLE BERNOULLI (30);

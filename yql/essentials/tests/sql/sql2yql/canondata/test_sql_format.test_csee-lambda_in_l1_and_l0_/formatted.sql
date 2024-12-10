@@ -18,4 +18,5 @@ SELECT
                 RETURN $x + 1
             }
         )
-    );
+    )
+;

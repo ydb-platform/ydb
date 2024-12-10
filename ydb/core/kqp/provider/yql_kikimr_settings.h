@@ -168,6 +168,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnablePerStatementQueryExecution = false;
     bool EnableCreateTableAs = false;
     ui64 IdxLookupJoinsPrefixPointLimit = 1;
+    bool AllowOlapDataQuery = false;
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
     bool EnableHtapTx = false;

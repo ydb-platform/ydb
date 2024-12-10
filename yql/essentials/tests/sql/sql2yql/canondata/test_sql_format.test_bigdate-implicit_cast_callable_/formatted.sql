@@ -1,8 +1,10 @@
 /* postgres can not */
 USE plato;
+
 $identity = ($x) -> {
     RETURN $x
 };
+
 $idDate32 = CALLABLE (Callable<(date32) -> date32>, $identity);
 $idDatetime64 = CALLABLE (Callable<(datetime64) -> datetime64>, $identity);
 $idTimestamp64 = CALLABLE (Callable<(timestamp64) -> timestamp64>, $identity);
@@ -34,7 +36,8 @@ SELECT
     $idTimestamp64($valTimestamp64),
     4,
     $idInterval64($valInterval),
-    $idInterval64($valInterval64);
+    $idInterval64($valInterval64)
+;
 
 SELECT
     row,
@@ -49,9 +52,11 @@ SELECT
     $idTimestamp64(ts64),
     4,
     $idInterval64(i64)
-FROM BigDates
+FROM
+    BigDates
 ORDER BY
-    row;
+    row
+;
 
 SELECT
     row,
@@ -64,13 +69,17 @@ SELECT
     $idDatetime64(dt),
     3,
     $idTimestamp64(ts)
-FROM NarrowDates
+FROM
+    NarrowDates
 ORDER BY
-    row;
+    row
+;
 
 SELECT
     row,
     $idInterval64(i)
-FROM NarrowInterval
+FROM
+    NarrowInterval
 ORDER BY
-    row;
+    row
+;

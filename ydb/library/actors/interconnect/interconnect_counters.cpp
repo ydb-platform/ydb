@@ -261,8 +261,10 @@ namespace {
             UpdateUtilization(PrevStarvation, Starvation, starvation);
         }
 
-        void SetPeerInfo(const TString& name, const TString& dataCenterId) override {
-            if (name != std::exchange(HumanFriendlyPeerHostName, name)) {
+        void SetPeerInfo(ui32 nodeId, const TString& name, const TString& dataCenterId) override {
+            if (nodeId != PeerNodeId || name != HumanFriendlyPeerHostName) {
+                PeerNodeId = nodeId;
+                HumanFriendlyPeerHostName = name;
                 PerSessionCounters.Reset();
             }
             VALGRIND_MAKE_READABLE(&DataCenterId, sizeof(DataCenterId));
@@ -278,7 +280,9 @@ namespace {
             const bool updatePerSession = !PerSessionCounters || updatePerDataCenter;
             if (HasSessionCounters && updatePerSession) {
                 auto base = MergePerDataCenterCounters ? PerDataCenterCounters : Counters;
-                PerSessionCounters = base->GetSubgroup("peer", *HumanFriendlyPeerHostName);
+                PerSessionCounters = base
+                    ->GetSubgroup("peer_node_id", ToString(*PeerNodeId))
+                    ->GetSubgroup("peer_name", *HumanFriendlyPeerHostName);
             }
 
             const bool updateGlobal = !Initialized;
@@ -601,8 +605,10 @@ namespace {
             UpdateUtilization(PrevStarvation_, Starvation_, starvation);
         }
 
-        void SetPeerInfo(const TString& name, const TString& dataCenterId) override {
-            if (name != std::exchange(HumanFriendlyPeerHostName, name)) {
+        void SetPeerInfo(ui32 nodeId, const TString& name, const TString& dataCenterId) override {
+            if (nodeId != PeerNodeId || name != HumanFriendlyPeerHostName) {
+                PeerNodeId = nodeId;
+                HumanFriendlyPeerHostName = name;
                 PerSessionMetrics_.reset();
             }
             VALGRIND_MAKE_READABLE(&DataCenterId, sizeof(DataCenterId));
@@ -620,7 +626,10 @@ namespace {
             if (updatePerSession) {
                 auto base = MergePerDataCenterMetrics_ ? PerDataCenterMetrics_ : Metrics_;
                 PerSessionMetrics_ = std::make_shared<NMonitoring::TMetricSubRegistry>(
-                        NMonitoring::TLabels{{"peer", *HumanFriendlyPeerHostName}}, base);
+                    NMonitoring::TLabels{
+                        {"peer_node_id", ToString(*PeerNodeId)},
+                        {"peer_name", *HumanFriendlyPeerHostName},
+                    }, base);
             }
 
             const bool updateGlobal = !Initialized_;

@@ -13,13 +13,15 @@ $join1 = (
         c.c_comment AS c_comment,
         c.c_nationkey AS c_nationkey,
         o.o_orderkey AS o_orderkey
-    FROM plato.customer
-        AS c
-    JOIN plato.orders
-        AS o
-    ON c.c_custkey == o.o_custkey
-    WHERE CAST(o.o_orderdate AS timestamp) >= $border
-    AND CAST(o.o_orderdate AS timestamp) < ($border + Interval("P90D"))
+    FROM
+        plato.customer AS c
+    JOIN
+        plato.orders AS o
+    ON
+        c.c_custkey == o.o_custkey
+    WHERE
+        CAST(o.o_orderdate AS timestamp) >= $border
+        AND CAST(o.o_orderdate AS timestamp) < ($border + Interval("P90D"))
 );
 
 $join2 = (
@@ -33,12 +35,14 @@ $join2 = (
         j.c_nationkey AS c_nationkey,
         l.l_extendedprice AS l_extendedprice,
         l.l_discount AS l_discount
-    FROM $join1
-        AS j
-    JOIN plato.lineitem
-        AS l
-    ON l.l_orderkey == j.o_orderkey
-    WHERE l.l_returnflag == 'R'
+    FROM
+        $join1 AS j
+    JOIN
+        plato.lineitem AS l
+    ON
+        l.l_orderkey == j.o_orderkey
+    WHERE
+        l.l_returnflag == 'R'
 );
 
 $join3 = (
@@ -53,11 +57,12 @@ $join3 = (
         j.l_extendedprice AS l_extendedprice,
         j.l_discount AS l_discount,
         n.n_name AS n_name
-    FROM $join2
-        AS j
-    JOIN plato.nation
-        AS n
-    ON n.n_nationkey == j.c_nationkey
+    FROM
+        $join2 AS j
+    JOIN
+        plato.nation AS n
+    ON
+        n.n_nationkey == j.c_nationkey
 );
 
 SELECT
@@ -69,7 +74,8 @@ SELECT
     c_address,
     c_phone,
     c_comment
-FROM $join3
+FROM
+    $join3
 GROUP BY
     c_custkey,
     c_name,

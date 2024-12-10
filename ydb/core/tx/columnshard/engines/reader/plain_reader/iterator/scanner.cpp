@@ -70,7 +70,6 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
 }
 
 TConclusionStatus TScanHead::Start() {
-    const bool guaranteeExclusivePK = Context->GetCommonContext()->GetReadMetadata()->HasGuaranteeExclusivePK();
     TScanContext context;
     for (auto itPoint = BorderPoints.begin(); itPoint != BorderPoints.end(); ++itPoint) {
         auto& point = itPoint->second;
@@ -82,8 +81,7 @@ TConclusionStatus TScanHead::Start() {
         }
         const bool isExclusive = context.GetCurrentSources().size() == 1;
         for (auto&& i : context.GetCurrentSources()) {
-            i.second->SetExclusiveIntervalOnly(
-                (isExclusive && i.second->GetExclusiveIntervalOnly() && !context.GetIsSpecialPoint()) || guaranteeExclusivePK);
+            i.second->SetExclusiveIntervalOnly((isExclusive && i.second->GetExclusiveIntervalOnly() && !context.GetIsSpecialPoint()));
         }
 
         for (auto&& i : point.GetFinishSources()) {

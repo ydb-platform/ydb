@@ -1,76 +1,92 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 $x = CAST(Unicode::ToLower("foo"u) AS String);
 
 SELECT
-    AsStruct("1" AS foo, 2 AS bar).$x;
+    AsStruct("1" AS foo, 2 AS bar).$x
+;
+
 $x = CAST(Unicode::ToLower("value"u) AS String);
 
 SELECT
     key,
     t.$x
-FROM Input
-    AS t
+FROM
+    Input AS t
 ORDER BY
-    key;
+    key
+;
+
 $x = CAST(Unicode::ToLower("value"u) AS String);
 
 SELECT
     key,
     TableRow().$x
-FROM Input
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;
+
 $x = CAST(Unicode::ToLower("value"u) AS String);
 
 SELECT
     *
-FROM Input
-    AS t
+FROM
+    Input AS t
 ORDER BY
-    t.$x;
+    t.$x
+;
+
 $x = CAST(Unicode::ToLower("value"u) AS String);
 $y = CAST(Unicode::ToLower("key"u) AS String);
 
 SELECT
     x,
     count(*)
-FROM Input
-    AS t
+FROM
+    Input AS t
 GROUP BY
     t.$x AS x
-HAVING min(t.$y) != ""
+HAVING
+    min(t.$y) != ""
 ORDER BY
-    x;
+    x
+;
 
 SELECT
     a.$x AS x,
     b.$y AS y
-FROM Input
-    AS a
-JOIN Input
-    AS b
-ON (a.$x == b.$x)
+FROM
+    Input AS a
+JOIN
+    Input AS b
+ON
+    (a.$x == b.$x)
 ORDER BY
-    x;
+    x
+;
 
 SELECT
     a.$x AS x,
     b.$y AS y
-FROM Input
-    AS a
-JOIN Input
-    AS b
+FROM
+    Input AS a
+JOIN
+    Input AS b
 USING ($x)
 ORDER BY
-    x;
+    x
+;
 
 SELECT
     p,
     value,
     lag(value) OVER w AS lag
-FROM Input
+FROM
+    Input
 WINDOW
     w AS (
         PARTITION BY
@@ -80,4 +96,5 @@ WINDOW
     )
 ORDER BY
     p,
-    value;
+    value
+;

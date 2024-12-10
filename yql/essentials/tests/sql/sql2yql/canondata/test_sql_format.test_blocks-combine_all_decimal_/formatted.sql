@@ -11,4 +11,6 @@ SELECT
     min(CAST(cs_ext_list_price AS float)),
     max(CAST(cs_ext_tax AS float)),
     avg(CAST(cs_sales_price AS float))
-FROM Input;
+FROM
+    Input
+;

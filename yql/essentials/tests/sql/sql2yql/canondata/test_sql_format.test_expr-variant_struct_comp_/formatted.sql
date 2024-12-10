@@ -7,6 +7,7 @@ $id = ($x) -> {
     );
     RETURN $f();
 };
+
 $vt1 = ParseType("Variant<a:Int32,b:Uint32?>");
 $vt2 = ParseType("Variant<b:Int64,c:Uint32>");
 
@@ -18,7 +19,8 @@ SELECT
         VARIANT (1, "b", $vt1) == VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) == VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) == VARIANT ($id(1u), "b", $vt2)
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -28,7 +30,8 @@ SELECT
         VARIANT (1, "b", $vt1) != VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) != VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) != VARIANT ($id(1u), "b", $vt2)
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -38,7 +41,8 @@ SELECT
         VARIANT (1, "b", $vt1) < VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) < VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) < VARIANT ($id(1u), "b", $vt2)
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -48,7 +52,8 @@ SELECT
         VARIANT (1, "b", $vt1) <= VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) <= VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) <= VARIANT ($id(1u), "b", $vt2)
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -58,7 +63,8 @@ SELECT
         VARIANT (1, "b", $vt1) > VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) > VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) > VARIANT ($id(1u), "b", $vt2)
-    );
+    )
+;
 
 SELECT
     AsTuple(
@@ -68,4 +74,5 @@ SELECT
         VARIANT (1, "b", $vt1) >= VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) >= VARIANT ($id(1u), "c", $vt2),
         VARIANT (1u / 0u, "b", $vt1) >= VARIANT ($id(1u), "b", $vt2)
-    );
+    )
+;

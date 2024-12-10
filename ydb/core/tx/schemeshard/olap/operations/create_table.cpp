@@ -224,7 +224,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateColumnTable TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -343,7 +343,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateColumnTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -430,7 +430,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateColumnTable TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -785,8 +785,8 @@ public:
             olapStorePath.Base()->LastTxId = opTxId;
             context.SS->PersistLastTxId(db, olapStorePath.Base());
         } else {
-            NKikimrSchemeOp::TColumnStorageConfig storageConfig; // default
-            storageConfig.SetDataChannelCount(1);
+            tableInfo->StandaloneSharding = NKikimrSchemeOp::TColumnStoreSharding();
+            const NKikimrSchemeOp::TColumnStorageConfig& storageConfig = tableInfo->Description.GetStorageConfig();
 
             TChannelsBindings channelsBindings;
             if (!context.SS->GetOlapChannelsBindings(dstPath.GetPathIdForDomain(), storageConfig, channelsBindings, errStr)) {
@@ -800,7 +800,6 @@ public:
             TShardInfo columnShardInfo = TShardInfo::ColumnShardInfo(opTxId, pathId);
             columnShardInfo.BindedChannels = channelsBindings;
 
-            tableInfo->StandaloneSharding = NKikimrSchemeOp::TColumnStoreSharding();
             Y_ABORT_UNLESS(tableInfo->GetOwnedColumnShardsVerified().empty());
 
             for (ui64 i = 0; i < shardsCount; ++i) {

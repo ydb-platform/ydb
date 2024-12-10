@@ -10,6 +10,7 @@ SELECT
             subkey
     ) AS rn,
     TableName() AS tn
-FROM Input
-    AS a
-    TABLESAMPLE BERNOULLI (10.0) REPEATABLE (1);
+FROM
+    Input AS a
+    TABLESAMPLE BERNOULLI (10.0) REPEATABLE (1)
+;

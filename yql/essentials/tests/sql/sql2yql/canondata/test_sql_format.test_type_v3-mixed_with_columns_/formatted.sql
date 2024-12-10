@@ -6,5 +6,6 @@ SELECT
     lst_yson,
     dt,
     lst
-FROM Input
-    WITH COLUMNS Struct<lst_yson: List<int32>?, dt_yson: Date?>;
+FROM
+    Input WITH COLUMNS Struct<lst_yson: List<int32>?, dt_yson: Date?>
+;

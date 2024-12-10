@@ -7,6 +7,8 @@ FROM (
     SELECT
         AsStruct(key AS key, subkey AS subkey),
         AsStruct("value: " || value AS value)
-    FROM Input
+    FROM
+        Input
 )
-    FLATTEN COLUMNS;
+    FLATTEN COLUMNS
+;

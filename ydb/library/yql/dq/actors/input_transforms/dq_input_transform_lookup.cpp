@@ -22,9 +22,10 @@ using TOutputRowColumnOrder = std::vector<std::pair<EOutputRowItemSource, ui64>>
 
 //Design note: Base implementation is optimized for wide channels
 class TInputTransformStreamLookupBase
-        : public NActors::TActorBootstrapped<TInputTransformStreamLookupBase>
+        : public NActors::TActor<TInputTransformStreamLookupBase>
         , public NYql::NDq::IDqComputeActorAsyncInput
 {
+    using TActor = NActors::TActor<TInputTransformStreamLookupBase>;
 public:
     TInputTransformStreamLookupBase(
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
@@ -47,7 +48,8 @@ public:
         size_t cacheLimit,
         std::chrono::seconds cacheTtl
     )
-        : Alloc(alloc)
+        : TActor(&TInputTransformStreamLookupBase::StateFunc)
+        , Alloc(alloc)
         , HolderFactory(holderFactory)
         , TypeEnv(typeEnv)
         , InputIndex(inputIndex)
@@ -86,26 +88,6 @@ public:
         Free();
     }
 
-    void Bootstrap() {
-        Become(&TInputTransformStreamLookupBase::StateFunc);
-        NDq::IDqAsyncIoFactory::TLookupSourceArguments lookupSourceArgs {
-            .Alloc = Alloc,
-            .KeyTypeHelper = KeyTypeHelper,
-            .ParentId = SelfId(),
-            .TaskCounters = TaskCounters,
-            .LookupSource = Settings.GetRightSource().GetLookupSource(),
-            .KeyType = LookupKeyType,
-            .PayloadType = LookupPayloadType,
-            .TypeEnv = TypeEnv,
-            .HolderFactory = HolderFactory,
-            .MaxKeysInRequest = 1000 // TODO configure me
-        };
-        auto guard = Guard(*Alloc);
-        auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
-        MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
-        LookupSourceId = RegisterWithSameMailbox(lookupSourceActor);
-        KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
-    }
 protected:
     virtual NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) = 0;
     virtual void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) = 0;
@@ -199,6 +181,7 @@ private: //IDqComputeActorAsyncInput
     }
 
     void PassAway() final {
+        InputFlowFetchStatus = NUdf::EFetchStatus::Finish;
         Send(LookupSourceId, new NActors::TEvents::TEvPoison{});
         Free();
     }
@@ -225,6 +208,30 @@ private: //IDqComputeActorAsyncInput
         }
     }
 
+    std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> GetKeysForLookup() { // must be called with mkql allocator
+        if (!KeysForLookup) {
+            Y_ENSURE(SelfId());
+            Y_ENSURE(!LookupSourceId);
+            NDq::IDqAsyncIoFactory::TLookupSourceArguments lookupSourceArgs {
+                .Alloc = Alloc,
+                .KeyTypeHelper = KeyTypeHelper,
+                .ParentId = SelfId(),
+                .TaskCounters = TaskCounters,
+                .LookupSource = Settings.GetRightSource().GetLookupSource(),
+                .KeyType = LookupKeyType,
+                .PayloadType = LookupPayloadType,
+                .TypeEnv = TypeEnv,
+                .HolderFactory = HolderFactory,
+                .MaxKeysInRequest = 1000 // TODO configure me
+            };
+            auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
+            MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
+            LookupSourceId = RegisterWithSameMailbox(lookupSourceActor);
+            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
+        }
+        return KeysForLookup;
+    }
+
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         Y_UNUSED(freeSpace);
         auto startCycleCount = GetCycleCountFast();
@@ -232,7 +239,7 @@ private: //IDqComputeActorAsyncInput
 
         DrainReadyQueue(batch);
 
-        if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && KeysForLookup->empty()) {
+        if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && GetKeysForLookup()->empty()) {
             Y_DEBUG_ABORT_UNLESS(AwaitingQueue.empty());
             NUdf::TUnboxedValue* inputRowItems;
             NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);

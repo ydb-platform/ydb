@@ -3,4 +3,6 @@ SELECT
     key,
     subkey,
     SimpleUdf::Concat(value, "test") AS value
-FROM plato.Input;
+FROM
+    plato.Input
+;

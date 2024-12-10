@@ -8,12 +8,16 @@ SELECT
     key,
     value,
     Grouping(key, value) AS grouping
-FROM Input3
+FROM
+    Input3
 GROUP BY
     GROUPING SETS (
         (key),
-        (value))
-HAVING count(*) > 2
+        (value)
+    )
+HAVING
+    count(*) > 2
 ORDER BY
     key,
-    value;
+    value
+;

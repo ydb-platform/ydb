@@ -7,6 +7,8 @@ USE plato;
 INSERT INTO Output
 SELECT
     *
-FROM concat(`Input[#3]`, `Input[#0]`, `Input[#2]`)
+FROM
+    concat(`Input[#3]`, `Input[#0]`, `Input[#2]`)
 ASSUME ORDER BY
-    key DESC;
+    key DESC
+;

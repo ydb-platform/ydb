@@ -7,8 +7,10 @@ SELECT
     count(value) AS cnt,
     min(value) AS min,
     max(value) AS max
-FROM Input
+FROM
+    Input
 GROUP COMPACT BY
     key
 ORDER BY
-    key;
+    key
+;

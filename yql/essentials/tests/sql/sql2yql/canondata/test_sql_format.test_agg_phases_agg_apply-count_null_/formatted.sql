@@ -5,75 +5,97 @@ PRAGMA EmitAggApply;
 $t =
     SELECT
         *
-    FROM AS_TABLE([<|key: 1, value: NULL|>, <|key: 1, value: NULL|>]);
+    FROM
+        AS_TABLE([<|key: 1, value: NULL|>, <|key: 1, value: NULL|>])
+;
 
 $p =
     SELECT
         key,
         count(value) AS a
-    FROM $t
+    FROM
+        $t
     GROUP BY
         key
-        WITH combine;
+        WITH combine
+;
 
 $p =
-    PROCESS $p;
+    PROCESS $p
+;
 
 --select FormatType(TypeOf($p));
 SELECT
     *
-FROM $p;
+FROM
+    $p
+;
 
 $p =
     SELECT
         key,
         count(a) AS a
-    FROM $p
+    FROM
+        $p
     GROUP BY
         key
-        WITH combinestate;
+        WITH combinestate
+;
 
 $p =
-    PROCESS $p;
+    PROCESS $p
+;
 
 --select FormatType(TypeOf($p));
 SELECT
     *
-FROM $p;
+FROM
+    $p
+;
 
 $p =
     SELECT
         key,
         count(a) AS a
-    FROM $p
+    FROM
+        $p
     GROUP BY
         key
-        WITH mergestate;
+        WITH mergestate
+;
 
 $p =
-    PROCESS $p;
+    PROCESS $p
+;
 
 --select FormatType(TypeOf($p));
 SELECT
     *
-FROM $p;
+FROM
+    $p
+;
 
 $p1 =
     SELECT
         key,
         count(a) AS a
-    FROM $p
+    FROM
+        $p
     GROUP BY
         key
-        WITH mergefinalize;
+        WITH mergefinalize
+;
 
 $p1 =
-    PROCESS $p1;
+    PROCESS $p1
+;
 
 --select FormatType(TypeOf($p1));
 SELECT
     *
-FROM $p1;
+FROM
+    $p1
+;
 
 $p2 =
     SELECT
@@ -83,33 +105,43 @@ $p2 =
         SELECT
             key,
             just(a) AS a
-        FROM $p
+        FROM
+            $p
     )
     GROUP BY
         key
-        WITH mergemanyfinalize;
+        WITH mergemanyfinalize
+;
 
 $p2 =
-    PROCESS $p2;
+    PROCESS $p2
+;
 
 --select FormatType(TypeOf($p2));
 SELECT
     *
-FROM $p2;
+FROM
+    $p2
+;
 
 $p3 =
     SELECT
         key,
         count(value) AS a
-    FROM $t
+    FROM
+        $t
     GROUP BY
         key
-        WITH finalize;
+        WITH finalize
+;
 
 $p3 =
-    PROCESS $p3;
+    PROCESS $p3
+;
 
 --select FormatType(TypeOf($p));
 SELECT
     *
-FROM $p3;
+FROM
+    $p3
+;

@@ -32,4 +32,5 @@ FROM (
         2 AS y
 )
 GROUP BY
-    y;
+    y
+;

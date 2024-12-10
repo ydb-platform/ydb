@@ -24,4 +24,5 @@ SELECT
     ENUM ("foo", Enum<"foo", "bar">) IN {
         AsEnum("bar"),
         AsEnum("baz")
-    };
+    }
+;

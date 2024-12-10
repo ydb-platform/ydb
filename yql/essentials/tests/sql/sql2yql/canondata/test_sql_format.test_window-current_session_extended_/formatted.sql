@@ -2,6 +2,7 @@
 /* postgres can not */
 $init = ($row) -> (AsStruct($row.ts ?? 0 AS value, 1 AS count));
 $calculate = ($_row, $state) -> ($state.value);
+
 -- split partition into two-element grooups, make session key to be cumulative sum of ts from partition start
 $update = ($row, $state) -> {
     $state = AsStruct($state.count + 1 AS count, $state.value AS value);
@@ -17,7 +18,8 @@ SELECT
     COUNT(1) OVER w AS session_len,
     SessionStart() OVER w AS session_start,
     SessionState() OVER w AS session_state,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w AS (
         PARTITION BY
@@ -28,4 +30,5 @@ WINDOW
     )
 ORDER BY
     user,
-    payload;
+    payload
+;

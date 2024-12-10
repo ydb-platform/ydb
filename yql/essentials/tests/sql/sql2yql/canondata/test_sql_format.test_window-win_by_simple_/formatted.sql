@@ -13,4 +13,5 @@ WINDOW
             key
         ORDER BY
             value
-    );
+    )
+;

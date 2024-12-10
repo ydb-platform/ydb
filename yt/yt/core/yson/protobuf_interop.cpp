@@ -1151,6 +1151,8 @@ private:
             switch (field->GetType()) {
                 case FieldDescriptor::TYPE_STRING:
                     ValidateString(value, field->GetFullName());
+                    [[fallthrough]];
+
                 case FieldDescriptor::TYPE_BYTES:
                     BodyCodedStream_.WriteVarint64(value.length());
                     BodyCodedStream_.WriteRaw(value.begin(), static_cast<int>(value.length()));

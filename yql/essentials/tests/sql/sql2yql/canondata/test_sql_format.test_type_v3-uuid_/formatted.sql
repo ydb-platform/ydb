@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 PRAGMA yt.UseNativeYtTypes = "1";
 PRAGMA yt.NativeYtTypeCompatibility = "uuid";
 
@@ -23,8 +24,11 @@ FROM (
     SELECT
         Uuid("3200ec12-4ded-4f6c-a981-4b0ff18bbdd5")
 );
+
 COMMIT;
 
 SELECT
     *
-FROM Output;
+FROM
+    Output
+;

@@ -4,6 +4,7 @@ import sqlite3
 
 import pytest
 from hamcrest import assert_that, raises
+from ydb.retries import RetrySettings
 
 from test_base import BaseSuiteRunner, get_token, get_test_suites, safe_execute, get_statement_and_side_effects
 
@@ -25,6 +26,10 @@ class TestSQLLogic(BaseSuiteRunner):
     def test_sql_suite(self, kind, suite):
         return self.run_sql_suite(kind, "sqllogictest", suite)
 
+    @pytest.mark.parametrize(['kind', 'suite'], get_test_suites("sqllogiccoltest"))
+    def test_column_sql_suite(self, kind, suite):
+        return self.run_sql_suite(kind, "sqllogiccoltest", suite)
+
     def setup_method(self, method=None):
         self.sqlitedbname = "%s.db" % get_token()
         self.sqlite_connection = sqlite3.connect(self.sqlitedbname, detect_types=sqlite3.PARSE_COLNAMES)
@@ -34,8 +39,19 @@ class TestSQLLogic(BaseSuiteRunner):
         os.remove(self.sqlitedbname)
 
     def assert_statement_ok(self, statement):
+        def exec_statement(session, query):
+            session.execute_scheme(query)
+
+        def exec_query(session, query):
+            with session.transaction() as tx:
+                tx.execute(query)
+
         super(TestSQLLogic, self).assert_statement_ok(statement)
-        safe_execute(lambda: self.__execute_sqlitedb(statement.text), statement)
+
+        if self.is_probably_scheme(statement.text):
+            safe_execute(lambda: self.legacy_pool.retry_operation_sync(exec_statement, None, statement.text), statement)
+        else:
+            safe_execute(lambda: self.pool.retry_operation_sync(exec_query, RetrySettings(max_retries=20), statement.text), statement)
 
     def assert_statement_error(self, statement):
         statement_text, side_effects = get_statement_and_side_effects(statement.text)
@@ -43,7 +59,7 @@ class TestSQLLogic(BaseSuiteRunner):
         super(TestSQLLogic, self).assert_statement_error(statement)
 
     def get_query_and_output(self, statement_text):
-        return statement_text, self.__execute_sqlitedb(statement_text, query=True)
+        return statement_text, self.execute_query(statement_text)[0].rows
 
     def __execute_sqlitedb(self, statement_text, query=False):
         cursor = self.sqlite_connection.cursor()

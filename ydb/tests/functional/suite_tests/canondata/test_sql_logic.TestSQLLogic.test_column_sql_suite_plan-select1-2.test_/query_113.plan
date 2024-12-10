@@ -1,0 +1,322 @@
+{
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet_1",
+                "PlanNodeId": 13,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 11
+                                    }
+                                ],
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 12,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 11,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort-CrossJoin",
+                                        "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.col1"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 9
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 7
+                                                    }
+                                                ],
+                                                "Name": "CrossJoin"
+                                            }
+                                        ],
+                                        "PlanNodeId": 10,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 9,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Filter-TableFullScan",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "InternalOperatorId": 1
+                                                                    }
+                                                                ],
+                                                                "Name": "Filter",
+                                                                "Predicate": "item.e > item.c OR item.e < item.d OR item.e + item.d >= item.a + item.b - 10 AND item.e + item.d <= item.c + 130"
+                                                            },
+                                                            {
+                                                                "Inputs": [],
+                                                                "Name": "TableFullScan",
+                                                                "ReadColumns": [
+                                                                    "a",
+                                                                    "b",
+                                                                    "c",
+                                                                    "d",
+                                                                    "e"
+                                                                ],
+                                                                "ReadRanges": [
+                                                                    "a (-\u221e, +\u221e)",
+                                                                    "b (-\u221e, +\u221e)",
+                                                                    "c (-\u221e, +\u221e)",
+                                                                    "d (-\u221e, +\u221e)",
+                                                                    "e (-\u221e, +\u221e)"
+                                                                ],
+                                                                "Scan": "Parallel",
+                                                                "SsaProgram": {
+                                                                    "Command": [
+                                                                        {
+                                                                            "Projection": {
+                                                                                "Columns": [
+                                                                                    {
+                                                                                        "Id": 1
+                                                                                    },
+                                                                                    {
+                                                                                        "Id": 2
+                                                                                    },
+                                                                                    {
+                                                                                        "Id": 3
+                                                                                    },
+                                                                                    {
+                                                                                        "Id": 4
+                                                                                    },
+                                                                                    {
+                                                                                        "Id": 5
+                                                                                    }
+                                                                                ]
+                                                                            }
+                                                                        }
+                                                                    ],
+                                                                    "Version": 5
+                                                                },
+                                                                "Table": "sqllogiccoltest_select1-2.test_plan/t1"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 8,
+                                                        "Tables": [
+                                                            "sqllogiccoltest_select1-2.test_plan/t1"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 7,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "CTE Name": "precompute_0_0",
+                                                        "Node Type": "ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [],
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_0_0"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 6
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "col1 (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Precompute_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 4,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Aggregate-Limit",
+                        "Operators": [
+                            {
+                                "Inputs": [
+                                    {
+                                        "InternalOperatorId": 1
+                                    }
+                                ],
+                                "Name": "Aggregate"
+                            },
+                            {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 2
+                                    }
+                                ],
+                                "Limit": "1",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Aggregate-TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Name": "Aggregate"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "a",
+                                                    "b",
+                                                    "c",
+                                                    "d",
+                                                    "e"
+                                                ],
+                                                "ReadRanges": [
+                                                    "a (-\u221e, +\u221e)",
+                                                    "b (-\u221e, +\u221e)",
+                                                    "c (-\u221e, +\u221e)",
+                                                    "d (-\u221e, +\u221e)",
+                                                    "e (-\u221e, +\u221e)"
+                                                ],
+                                                "Scan": "Parallel",
+                                                "SsaProgram": {
+                                                    "Command": [
+                                                        {
+                                                            "Projection": {
+                                                                "Columns": [
+                                                                    {
+                                                                        "Id": 1
+                                                                    },
+                                                                    {
+                                                                        "Id": 2
+                                                                    },
+                                                                    {
+                                                                        "Id": 3
+                                                                    },
+                                                                    {
+                                                                        "Id": 4
+                                                                    },
+                                                                    {
+                                                                        "Id": 5
+                                                                    }
+                                                                ]
+                                                            }
+                                                        }
+                                                    ],
+                                                    "Version": 5
+                                                },
+                                                "Table": "sqllogiccoltest_select1-2.test_plan/t1"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "sqllogiccoltest_select1-2.test_plan/t1"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE precompute_0_0"
+            }
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
+    },
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": [
+        {
+            "name": "/Root/sqllogiccoltest_select1-2.test_plan/t1",
+            "reads": [
+                {
+                    "columns": [
+                        "a",
+                        "b",
+                        "c",
+                        "d",
+                        "e"
+                    ],
+                    "scan_by": [
+                        "a (-\u221e, +\u221e)",
+                        "b (-\u221e, +\u221e)",
+                        "c (-\u221e, +\u221e)",
+                        "d (-\u221e, +\u221e)",
+                        "e (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+                },
+                {
+                    "columns": [
+                        "a",
+                        "b",
+                        "c",
+                        "d",
+                        "e"
+                    ],
+                    "scan_by": [
+                        "a (-\u221e, +\u221e)",
+                        "b (-\u221e, +\u221e)",
+                        "c (-\u221e, +\u221e)",
+                        "d (-\u221e, +\u221e)",
+                        "e (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+                }
+            ]
+        }
+    ]
+}

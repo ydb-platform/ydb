@@ -158,6 +158,7 @@ class KikimrConfigGenerator(object):
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             kafka_api_port=None,
             metadata_section=None,
+            column_shard_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -351,6 +352,9 @@ class KikimrConfigGenerator(object):
 
         if datashard_config:
             self.yaml_config["data_shard_config"] = datashard_config
+
+        if column_shard_config:
+            self.yaml_config["column_shard_config"] = column_shard_config
 
         self.__build()
 

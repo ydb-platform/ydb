@@ -19,6 +19,7 @@ IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
     DATA (
         arcadia/ydb/tests/functional/suite_tests/postgres
         arcadia/ydb/tests/functional/suite_tests/sqllogictest
+        arcadia/ydb/tests/functional/suite_tests/sqllogiccoltest
     )
 
     PEERDIR(

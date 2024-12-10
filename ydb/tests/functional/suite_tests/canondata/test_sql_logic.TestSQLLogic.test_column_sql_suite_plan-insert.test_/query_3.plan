@@ -1,0 +1,122 @@
+{
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 4,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 2
+                                    }
+                                ],
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "a",
+                                                    "b",
+                                                    "c"
+                                                ],
+                                                "ReadLimit": "1001",
+                                                "ReadRanges": [
+                                                    "a (-\u221e, +\u221e)",
+                                                    "b (-\u221e, +\u221e)",
+                                                    "c (-\u221e, +\u221e)"
+                                                ],
+                                                "Scan": "Sequential",
+                                                "SsaProgram": {
+                                                    "Command": [
+                                                        {
+                                                            "Projection": {
+                                                                "Columns": [
+                                                                    {
+                                                                        "Id": 1
+                                                                    },
+                                                                    {
+                                                                        "Id": 2
+                                                                    },
+                                                                    {
+                                                                        "Id": 3
+                                                                    }
+                                                                ]
+                                                            }
+                                                        }
+                                                    ],
+                                                    "Version": 5
+                                                },
+                                                "Table": "sqllogiccoltest_insert.test_plan/a2"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "sqllogiccoltest_insert.test_plan/a2"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
+    },
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": [
+        {
+            "name": "/Root/sqllogiccoltest_insert.test_plan/a2",
+            "reads": [
+                {
+                    "columns": [
+                        "a",
+                        "b",
+                        "c"
+                    ],
+                    "limit": "1001",
+                    "scan_by": [
+                        "a (-\u221e, +\u221e)",
+                        "b (-\u221e, +\u221e)",
+                        "c (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+                }
+            ]
+        }
+    ]
+}

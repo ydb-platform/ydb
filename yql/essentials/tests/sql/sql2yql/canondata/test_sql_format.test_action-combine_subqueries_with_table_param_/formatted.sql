@@ -8,7 +8,7 @@ $combineQueries = ($query, $list) -> {
             ($world) -> {
                 $queries = ListMap(
                     $list, ($arg) -> {
-                        RETURN FuncCode("Apply", QuoteCode($query), $world, ReprCode($arg))
+                        RETURN FuncCode("Apply", QuoteCode($query), $world, ReprCode($arg));
                     }
                 );
                 RETURN FuncCode("UnionAll", $queries);

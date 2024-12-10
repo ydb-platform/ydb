@@ -43,6 +43,39 @@ TTokenIterator SkipWSOrComment(TTokenIterator curr, TTokenIterator end) {
     return curr;
 }
 
+TTokenIterator SkipWSOrCommentBackward(TTokenIterator curr, TTokenIterator begin) {
+    while (curr != begin && (curr->Name == "WS" || curr->Name == "COMMENT")) {
+        --curr;
+    }
+    return curr;
+}
+
+void SkipForValidate(
+    TTokenIterator& in,
+    TTokenIterator& out,
+    const TParsedTokenList& query,
+    const TParsedTokenList& formattedQuery
+) {
+    in = SkipWS(in, query.end());
+    out = SkipWS(out, formattedQuery.end());
+
+    while (
+        in != query.end() && in->Name == "SEMICOLON" &&
+        (out == formattedQuery.end() || out->Name != "SEMICOLON") &&
+        in != query.begin() && IsIn({"SEMICOLON", "LBRACE_CURLY", "AS"}, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
+    ) {
+        in = SkipWS(++in, query.end());
+    }
+
+    auto inSkippedComments = SkipWSOrComment(in, query.end());
+    if (
+        out != formattedQuery.end() && out->Name == "SEMICOLON" &&
+        inSkippedComments != query.end() && IsIn({"RBRACE_CURLY", "END"}, inSkippedComments->Name)
+    ) {
+        out = SkipWS(++out, formattedQuery.end());
+    }
+}
+
 TParsedToken TransformTokenForValidate(TParsedToken token) {
     if (token.Name == "EQUALS2") {
         token.Name = "EQUALS";
@@ -61,8 +94,7 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
     auto outEnd = formattedQuery.end();
 
     while (in != inEnd && out != outEnd) {
-        in = SkipWS(in, inEnd);
-        out = SkipWS(out, outEnd);
+        SkipForValidate(in, out, query, formattedQuery);
         if (in != inEnd && out != outEnd) {
             auto inToken = TransformTokenForValidate(*in);
             auto outToken = TransformTokenForValidate(*out);
@@ -82,8 +114,7 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
             ++out;
         }
     }
-    in = SkipWS(in, inEnd);
-    out = SkipWS(out, outEnd);
+    SkipForValidate(in, out, query, formattedQuery);
     return in == inEnd && out == outEnd;
 }
 
@@ -777,20 +808,34 @@ private:
         }
     }
 
+    template <typename T>
+    void SkipSemicolons(const ::google::protobuf::RepeatedPtrField<T>& field, bool printOne = false) {
+        for (const auto& m : field) {
+            if (printOne) {
+                Visit(m);
+                printOne = false;
+            } else {
+                ++TokenIndex;
+            }
+        }
+        if (printOne) {
+            Out(';');
+        }
+    }
+
     void VisitDefineActionOrSubqueryBody(const TRule_define_action_or_subquery_body& msg) {
-        VisitRepeated(msg.GetBlock1());
+        SkipSemicolons(msg.GetBlock1());
         if (msg.HasBlock2()) {
             const auto& b = msg.GetBlock2();
             Visit(b.GetRule_sql_stmt_core1());
             for (auto block : b.GetBlock2()) {
-                VisitRepeated(block.GetBlock1());
+                SkipSemicolons(block.GetBlock1(), /* printOne = */ true);
                 if (!IsSimpleStatement(block.GetRule_sql_stmt_core2()).GetOrElse(false)) {
                     Out('\n');
                 }
                 Visit(block.GetRule_sql_stmt_core2());
             }
-
-            VisitRepeated(b.GetBlock3());
+            SkipSemicolons(b.GetBlock3(), /* printOne = */ true);
         }
     }
 
@@ -2344,9 +2389,10 @@ private:
     void VisitLambdaBody(const TRule_lambda_body& msg) {
         PushCurrentIndent();
         NewLine();
-        VisitRepeated(msg.GetBlock1());
+        SkipSemicolons(msg.GetBlock1());
         for (const auto& block : msg.GetBlock2()) {
-            Visit(block);
+            Visit(block.GetRule_lambda_stmt1());
+            SkipSemicolons(block.GetBlock2(), /* printOne = */ true);
             NewLine();
         }
 
@@ -2354,8 +2400,8 @@ private:
         ExprLineIndent = CurrentIndent;
 
         Visit(msg.GetRule_expr4());
-        VisitRepeated(msg.GetBlock5());
 
+        SkipSemicolons(msg.GetBlock5(), /* printOne = */ true);
         ExprLineIndent = 0;
 
         PopCurrentIndent();
@@ -3068,7 +3114,7 @@ public:
                 return false;
             }
 
-            if (!Validate(stmtFormattedTokens, stmtTokens)) {
+            if (!Validate(stmtTokens, stmtFormattedTokens)) {
                 issues.AddIssue(NYql::TIssue({}, TStringBuilder() << "Validation failed: " << currentQuery.Quote() << " != " << currentFormattedQuery.Quote()));
                 return false;
             }

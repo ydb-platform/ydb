@@ -3,11 +3,11 @@
 USE plato;
 
 $to_int = ($x) -> {
-    RETURN CAST($x AS Int32)
+    RETURN CAST($x AS Int32);
 };
 
 $to_in_list = ($col) -> {
-    RETURN ListMap(String::SplitToList($col, ","), $to_int)
+    RETURN ListMap(String::SplitToList($col, ","), $to_int);
 };
 
 $input = (

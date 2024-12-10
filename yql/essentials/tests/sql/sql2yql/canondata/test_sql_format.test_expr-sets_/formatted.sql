@@ -1,14 +1,14 @@
 /* postgres can not */
 $ns = ($set) -> {
-    RETURN ListSort(DictKeys($set))
+    RETURN ListSort(DictKeys($set));
 };
 
 $nd = ($dict) -> {
     RETURN ListSort(
         DictItems($dict), ($z) -> {
-            RETURN $z.0
+            RETURN $z.0;
         }
-    )
+    );
 };
 
 SELECT
@@ -41,7 +41,7 @@ SELECT
             AsDict(AsTuple(1, "foo"), AsTuple(3, "bar")),
             AsDict(AsTuple(1, "baz"), AsTuple(2, "qwe")),
             ($_k, $a, $b) -> {
-                RETURN AsTuple($a, $b)
+                RETURN AsTuple($a, $b);
             }
         )
     )
@@ -81,7 +81,7 @@ SELECT
             AsDict(AsTuple(1, "foo"), AsTuple(3, "bar")),
             AsDict(AsTuple(1, "baz"), AsTuple(2, "qwe")),
             ($_k, $a, $b) -> {
-                RETURN AsTuple($a, $b)
+                RETURN AsTuple($a, $b);
             }
         )
     )
@@ -97,7 +97,7 @@ SELECT
             AsDict(AsTuple(1, "foo"), AsTuple(3, "bar")),
             AsDict(AsTuple(1, "baz"), AsTuple(2, "qwe")),
             ($_k, $a, $b) -> {
-                RETURN AsTuple($a, $b)
+                RETURN AsTuple($a, $b);
             }
         )
     )

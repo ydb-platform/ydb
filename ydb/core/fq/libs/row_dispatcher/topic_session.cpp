@@ -148,7 +148,7 @@ private:
         }
 
         ~TClientsInfo() {
-            Counters->RemoveSubgroup("queryId", Settings.GetQueryId());
+            Counters->RemoveSubgroup("query_id", Settings.GetQueryId());
         }
 
         NFq::NRowDispatcherProto::TEvStartSession Settings;

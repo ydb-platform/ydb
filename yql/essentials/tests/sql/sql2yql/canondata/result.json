@@ -16253,6 +16253,13 @@
             "uri": "https://{canondata_backend}/1936273/4a1b39013e1bae40e722cff8ccef8829784964e2/resource.tar.gz#test_sql2yql.test_produce-reduce_with_python_row_repack_/sql.yql"
         }
     ],
+    "test_sql2yql.test[produce-reduce_with_trivial_remaps]": [
+        {
+            "checksum": "b094793320668f635c5e837a71e84b50",
+            "size": 2276,
+            "uri": "https://{canondata_backend}/1942100/fc877ab79aa3673db82f29099d27c26f000fde66/resource.tar.gz#test_sql2yql.test_produce-reduce_with_trivial_remaps_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[produce-yql-10297]": [
         {
             "checksum": "0efb35a2c6333d72f2edddd180c70a00",
@@ -29300,6 +29307,11 @@
     "test_sql_format.test[produce-reduce_with_python_row_repack]": [
         {
             "uri": "file://test_sql_format.test_produce-reduce_with_python_row_repack_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[produce-reduce_with_trivial_remaps]": [
+        {
+            "uri": "file://test_sql_format.test_produce-reduce_with_trivial_remaps_/formatted.sql"
         }
     ],
     "test_sql_format.test[produce-yql-10297]": [

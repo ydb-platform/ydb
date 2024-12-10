@@ -68,7 +68,6 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
             return;
         }
     }
-
     auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(settings);
     AFL_VERIFY(extStorageConfig);
     auto extStorageOperator = extStorageConfig->ConstructStorageOperator(false);

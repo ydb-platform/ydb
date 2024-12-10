@@ -7,25 +7,49 @@
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 
+#include <library/cpp/retry/retry_policy.h>
 #include <util/string/vector.h>
 
 namespace NKikimr::NColumnShard {
 
 class TTiersManager::TActor: public TActorBootstrapped<TTiersManager::TActor> {
 private:
+    using IRetryPolicy = IRetryPolicy<>;
+
     std::shared_ptr<TTiersManager> Owner;
+    IRetryPolicy::TPtr RetryPolicy;
+    THashMap<TString, IRetryPolicy::IRetryState::TPtr> RetryStateByObject;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr SecretsFetcher;
-    TActorId TieredStorageFetcher;
+    TActorId TiersFetcher;
 
 private:
     TActorId GetExternalDataActorId() const {
         return NMetadata::NProvider::MakeServiceId(SelfId().NodeId());
     }
 
-    void ScheduleRetryWatchObjects(std::unique_ptr<NTiers::TEvWatchSchemeObject> ev) const {
+    void OnInvalidTierConfig(const TString& path) {
+        if (!Owner->TierRefCount.contains(path)) {
+            ResetRetryState(path);
+            return;
+        }
         AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiers_manager")("event", "retry_watch_objects");
-        constexpr static const TDuration RetryInterval = TDuration::Seconds(1);
-        ActorContext().Schedule(RetryInterval, std::make_unique<IEventHandle>(SelfId(), TieredStorageFetcher, ev.release()));
+        auto findRetryState = RetryStateByObject.find(path);
+        if (!findRetryState) {
+            findRetryState = RetryStateByObject.emplace(path, RetryPolicy->CreateRetryState()).first;
+        }
+        auto retryDelay = findRetryState->second->GetNextRetryDelay();
+        AFL_VERIFY(retryDelay)("object", path);
+        ActorContext().Schedule(*retryDelay, std::make_unique<IEventHandle>(SelfId(), TiersFetcher, new NTiers::TEvWatchSchemeObject(std::vector<TString>({ path }))));
+    }
+
+    void ResetRetryState(const TString& path) {
+        RetryStateByObject.erase(path);
+    }
+
+    void OnFetchingFailure(const TString& path) {
+        if (Owner->TierRefCount.contains(path)) {
+            OnInvalidTierConfig(path);
+        }
     }
 
     STATEFN(StateMain) {
@@ -47,7 +71,7 @@ private:
             AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "TEvRefreshSubscriberData")("snapshot", "secrets");
             Owner->UpdateSecretsSnapshot(secrets);
         } else {
-            Y_ABORT_UNLESS(false, "unexpected snapshot");
+            AFL_VERIFY(false);
         }
     }
 
@@ -57,50 +81,54 @@ private:
     }
 
     void Handle(NTiers::TEvNotifySchemeObjectUpdated::TPtr& ev) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_updated")("path", ev->Get()->GetObjectId());
-        const TString& objectId = ev->Get()->GetObjectId();
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_updated")("path", ev->Get()->GetObjectPath());
+        const TString& objectPath = ev->Get()->GetObjectPath();
         const auto& description = ev->Get()->GetDescription();
+        ResetRetryState(objectPath);
         if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeExternalDataSource) {
             NTiers::TTierConfig tier;
             if (const auto status = tier.DeserializeFromProto(description.GetExternalDataSourceDescription()); status.IsFail()) {
-                AFL_VERIFY(false)("error", status.GetErrorMessage());
+                AFL_WARN(NKikimrServices::TX_TIERING)("event", "fetched_invalid_tier_settings")("error", status.GetErrorMessage());
+                OnInvalidTierConfig(objectPath);
+                return;
             }
-            Owner->UpdateTierConfig(tier, objectId);
+            Owner->UpdateTierConfig(tier, objectPath);
         } else {
-            AFL_WARN(NKikimrServices::TX_TIERING)("error", "invalid_object_type")("type", static_cast<ui64>(description.GetSelf().GetPathType()))("path", objectId);
+            AFL_WARN(false)("error", "invalid_object_type")("type", static_cast<ui64>(description.GetSelf().GetPathType()))("path", objectPath);
+            OnInvalidTierConfig(objectPath);
         }
     }
 
     void Handle(NTiers::TEvNotifySchemeObjectDeleted::TPtr& ev) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_deleted")("name", ev->Get()->GetObjectId());
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_deleted")("name", ev->Get()->GetObjectPath());
+        OnInvalidTierConfig(ev->Get()->GetObjectPath());
     }
 
     void Handle(NTiers::TEvSchemeObjectResolutionFailed::TPtr& ev) {
-        const TString objectId = ev->Get()->GetObjectId();
-        switch (ev->Get()->GetReason()) {
-            case NTiers::TEvSchemeObjectResolutionFailed::NOT_FOUND:
-                AFL_WARN(NKikimrServices::TX_TIERING)("event", "object_not_found")("name", objectId);
-                break;
-            case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
-                ScheduleRetryWatchObjects(std::make_unique<NTiers::TEvWatchSchemeObject>(std::vector<TString>({ objectId })));
-                break;
-        }
+        const TString objectPath = ev->Get()->GetObjectPath();
+        AFL_WARN(NKikimrServices::TX_TIERING)("event", "object_resolution_failed")("path", objectPath)(
+            "reason", static_cast<ui64>(ev->Get()->GetReason()));
+        OnInvalidTierConfig(objectPath);
     }
 
     void Handle(NTiers::TEvWatchSchemeObject::TPtr& ev) {
-        Send(TieredStorageFetcher, ev->Release());
+        Send(TiersFetcher, ev->Release());
     }
 
 public:
     TActor(std::shared_ptr<TTiersManager> owner)
         : Owner(owner)
-        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
-    {
+        , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
+              []() {
+                  return ERetryErrorClass::ShortRetry;
+              },
+              TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 10))
+        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()) {
     }
 
     void Bootstrap() {
         AFL_INFO(NKikimrServices::TX_TIERING)("event", "start_subscribing_metadata");
-        TieredStorageFetcher = Register(new TSchemeObjectWatcher(SelfId()));
+        TiersFetcher = Register(new TSchemeObjectWatcher(SelfId()));
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
         Become(&TThis::StateMain);
     }

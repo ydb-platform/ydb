@@ -236,7 +236,7 @@ public:
                                 context.SS->ExternalSourceFactory));
         if (!context.SS->ColumnTables.GetTablesWithTier(dstPath.PathString()).empty()) {
             if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(externalDataSourceDescription); status.IsFail()) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot make this change while external data source is used as an OLAP tiered storage: " + status.GetErrorMessage());
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot make this change while the external data source is used as a tiered storage: " + status.GetErrorMessage());
                 return result;
             }
         }

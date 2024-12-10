@@ -312,7 +312,9 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
     AFL_VERIFY(it != Tables.end());
     auto& table = it->second;
 
+    bool isTtlModified = false;
     if (versionInfo.HasTtlSettings()) {
+        isTtlModified = true;
         const auto& ttlSettings = versionInfo.GetTtlSettings();
         if (ttlSettings.HasEnabled()) {
             NOlap::TTiering deserializedTtl;
@@ -336,7 +338,7 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
         AddSchemaVersion(fakePreset.GetId(), version, *schema, db);
     }
 
-    if (versionInfo.HasTtlSettings()) {
+    if (isTtlModified) {
         if (PrimaryIndex) {
             if (auto findTtl = Ttl.FindPtr(pathId)) {
                 PrimaryIndex->OnTieringModified(*findTtl, pathId);

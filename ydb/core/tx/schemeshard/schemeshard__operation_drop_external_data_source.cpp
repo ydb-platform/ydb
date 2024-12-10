@@ -153,7 +153,7 @@ public:
             return result;
         }
         if (auto tables = context.SS->ColumnTables.GetTablesWithTier(path.PathString()); !tables.empty()) {
-            result->SetError(NKikimrScheme::StatusSchemeError, "Column tables depend on this data source: " + TPath::Init(*tables.begin(), context.SS).PathString());
+            result->SetError(NKikimrScheme::StatusSchemeError, "Can't remove external data source while it is used by a table: " + TPath::Init(*tables.begin(), context.SS).PathString());
             return result;
         }
 

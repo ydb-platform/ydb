@@ -15,33 +15,33 @@ namespace NTiers {
 
 class TEvWatchSchemeObject: public TEventLocal<TEvWatchSchemeObject, NTiers::EvWatchSchemeObject> {
 private:
-    YDB_READONLY_DEF(std::vector<TString>, ObjectIds);
+    YDB_READONLY_DEF(std::vector<TString>, ObjectPaths);
 
 public:
-    TEvWatchSchemeObject(std::vector<TString> names)
-        : ObjectIds(std::move(names)) {
+    TEvWatchSchemeObject(std::vector<TString> paths)
+        : ObjectPaths(std::move(paths)) {
     }
 };
 
 class TEvNotifySchemeObjectUpdated: public TEventLocal<TEvNotifySchemeObjectUpdated, NTiers::EvNotifySchemeObjectUpdated> {
 private:
-    YDB_READONLY_DEF(TString, ObjectId);
+    YDB_READONLY_DEF(TString, ObjectPath);
     YDB_READONLY_DEF(NKikimrSchemeOp::TPathDescription, Description);
 
 public:
     TEvNotifySchemeObjectUpdated(const TString& path, NKikimrSchemeOp::TPathDescription description)
-        : ObjectId(path)
+        : ObjectPath(path)
         , Description(std::move(description)) {
     }
 };
 
 class TEvNotifySchemeObjectDeleted: public TEventLocal<TEvNotifySchemeObjectDeleted, NTiers::EvNotifySchemeObjectDeleted> {
 private:
-    YDB_READONLY_DEF(TString, ObjectId);
+    YDB_READONLY_DEF(TString, ObjectPath);
 
 public:
-    TEvNotifySchemeObjectDeleted(TString name)
-        : ObjectId(std::move(name)) {
+    TEvNotifySchemeObjectDeleted(TString path)
+        : ObjectPath(std::move(path)) {
     }
 };
 
@@ -53,12 +53,12 @@ public:
     };
 
 private:
-    YDB_READONLY_DEF(TString, ObjectId);
+    YDB_READONLY_DEF(TString, ObjectPath);
     YDB_READONLY_DEF(EReason, Reason);
 
 public:
-    TEvSchemeObjectResolutionFailed(TString name, const EReason reason)
-        : ObjectId(std::move(name))
+    TEvSchemeObjectResolutionFailed(TString path, const EReason reason)
+        : ObjectPath(std::move(path))
         , Reason(reason) {
     }
 };
@@ -71,10 +71,6 @@ private:
     THashSet<TPathId> WatchedPathIds;
 
 private:
-    void WatchObjects(const std::vector<TString>& objectIds) {
-        RequestPaths(objectIds);
-    }
-
     THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(
         const TVector<TVector<TString>>& paths, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
@@ -94,70 +90,23 @@ private:
         return request;
     }
 
-    void RequestPaths(const std::vector<TString>& paths) {
+    void WatchObjects(const std::vector<TString>& paths) {
         TVector<TVector<TString>> splitPaths;
         for (const TString& path : paths) {
             splitPaths.emplace_back(SplitPath(path));
         }
 
-        auto event =
-            BuildSchemeCacheNavigateRequest(std::move(splitPaths), MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}));
+        auto event = BuildSchemeCacheNavigateRequest(
+            std::move(splitPaths), MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
     }
 
-    void OnPathFetched(const TVector<TString> pathComponents, const TPathId& pathId) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "path_fetched")("path", JoinPath(pathComponents));
+    void WatchPathId(const TPathId& pathId) {
         if (WatchedPathIds.emplace(pathId).second) {
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(pathId), IEventHandle::FlagTrackDelivery);
         } else {
-            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "skip_watch_path_id")("reason", "already_subscribed")("path", JoinPath(pathComponents));
+            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "skip_watch_path_id")("reason", "already_subscribed")("path", pathId.ToString());
         }
-    }
-
-    void OnPathNotFound(const TVector<TString>& path) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "path_not_found")("path", JoinPath(path));
-        OnObjectResolutionFailure(path, NTiers::TEvSchemeObjectResolutionFailed::EReason::NOT_FOUND);
-    }
-
-    void OnLookupError(const TVector<TString>& path) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "lookup_error")("path", JoinPath(path));
-        OnObjectResolutionFailure(path, NTiers::TEvSchemeObjectResolutionFailed::EReason::LOOKUP_ERROR);
-    }
-
-    void OnObjectResolutionFailure(const TVector<TString>& pathComponents, const NTiers::TEvSchemeObjectResolutionFailed::EReason reason) {
-        Send(Owner, new NTiers::TEvSchemeObjectResolutionFailed(JoinPath(pathComponents), reason));
-    }
-
-    void OnObjectFetched(const NKikimrSchemeOp::TPathDescription& description, const TString& path) {
-        Send(Owner, new NTiers::TEvNotifySchemeObjectUpdated(path, description));
-    }
-
-    void OnObjectDeleted(const TString& path, const TPathId& pathId) {
-        AFL_VERIFY(WatchedPathIds.erase(pathId));
-        Send(Owner, new NTiers::TEvNotifySchemeObjectDeleted(path));
-    }
-
-public:
-    TSchemeObjectWatcher(TActorId owner)
-        : Owner(owner) {
-    }
-
-    STATEFN(StateMain) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-            hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
-            hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
-            hFunc(NTiers::TEvWatchSchemeObject, Handle);
-            hFunc(NActors::TEvents::TEvPoison, Handle);
-            hFunc(NActors::TEvents::TEvUndelivered, Handle);
-            default:
-                break;
-        }
-    }
-
-    void Bootstrap() {
-        Become(&TSchemeObjectWatcher::StateMain);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -165,17 +114,22 @@ public:
         for (auto entry : result->ResultSet) {
             switch (entry.Status) {
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-                    OnPathFetched(entry.Path, entry.TableId.PathId);
+                    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "path_fetched")("path", JoinPath(entry.Path));
+                    WatchPathId(entry.TableId.PathId);
                     break;
 
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
-                    OnPathNotFound(entry.Path);
+                    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "path_not_found")("path", JoinPath(entry.Path));
+                    Send(Owner, new NTiers::TEvSchemeObjectResolutionFailed(
+                                    JoinPath(entry.Path), NTiers::TEvSchemeObjectResolutionFailed::EReason::NOT_FOUND));
                     break;
 
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
-                    OnLookupError(entry.Path);
+                    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "lookup_error")("path", JoinPath(entry.Path));
+                    Send(Owner, new NTiers::TEvSchemeObjectResolutionFailed(
+                                    JoinPath(entry.Path), NTiers::TEvSchemeObjectResolutionFailed::EReason::LOOKUP_ERROR));
                     break;
 
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
@@ -191,7 +145,7 @@ public:
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev) {
         AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "object_fetched")("path", ev->Get()->Path);
         const auto& describeResult = *ev->Get()->Result;
-        OnObjectFetched(describeResult.GetPathDescription(), describeResult.GetPath());
+        Send(Owner, new NTiers::TEvNotifySchemeObjectUpdated(describeResult.GetPath(), describeResult.GetPathDescription()));
     }
 
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev) {
@@ -199,18 +153,14 @@ public:
         const TString name = TString(ExtractBase(record->Path));
         const TString storageDir = TString(ExtractParent(record->Path));
         AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "object_deleted")("path", record->Path);
-        OnObjectDeleted(record->Path, record->PathId);
-    }
-
-    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable::TPtr& ev) {
-        const auto& record = ev->Get();
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "object_unavailable")("path", record->Path);
+        AFL_VERIFY(WatchedPathIds.erase(record->PathId));
+        Send(Owner, new NTiers::TEvNotifySchemeObjectDeleted(record->Path));
     }
 
     void Handle(NTiers::TEvWatchSchemeObject::TPtr& ev) {
         AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "watch_scheme_objects")(
-            "names", JoinStrings(ev->Get()->GetObjectIds().begin(), ev->Get()->GetObjectIds().end(), ","));
-        WatchObjects(ev->Get()->GetObjectIds());
+            "names", JoinStrings(ev->Get()->GetObjectPaths().begin(), ev->Get()->GetObjectPaths().end(), ","));
+        WatchObjects(ev->Get()->GetObjectPaths());
     }
 
     void Handle(NActors::TEvents::TEvPoison::TPtr& /*ev*/) {
@@ -220,6 +170,29 @@ public:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         AFL_WARN(NKikimrServices::TX_TIERING)("error", "event_undelivered_to_scheme_cache")("reason", ev->Get()->Reason);
+    }
+
+public:
+    TSchemeObjectWatcher(TActorId owner)
+        : Owner(owner) {
+    }
+
+    STATEFN(StateMain) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
+            IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);
+            hFunc(NTiers::TEvWatchSchemeObject, Handle);
+            hFunc(NActors::TEvents::TEvPoison, Handle);
+            hFunc(NActors::TEvents::TEvUndelivered, Handle);
+            default:
+                break;
+        }
+    }
+
+    void Bootstrap() {
+        Become(&TSchemeObjectWatcher::StateMain);
     }
 };
 

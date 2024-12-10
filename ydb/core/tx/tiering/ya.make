@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     common.cpp
     manager.cpp
+    fetcher.cpp
 )
 
 IF (OS_WINDOWS)

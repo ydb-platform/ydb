@@ -1,7 +1,5 @@
 #include "read.h"
 
-#include <ydb/core/tx/columnshard/blob_cache.h>
-
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 void TReadingAction::DoStartReading(THashSet<TBlobRange>&& ranges) {

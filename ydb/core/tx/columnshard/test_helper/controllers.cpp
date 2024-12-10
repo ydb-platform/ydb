@@ -1,7 +1,8 @@
 #include "columnshard_ut_common.h"
 #include "controllers.h"
-#include <ydb/core/tx/columnshard/engines/changes/ttl.h>
+
 #include <ydb/core/tx/columnshard/engines/changes/indexation.h>
+#include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 
 namespace NKikimr::NOlap {
 
@@ -19,4 +20,4 @@ void TWaitCompactionController::OverrideTierConfigs(
         runtime.SimulateSleep(TDuration::Seconds(1));
     }
 }
-}
+}   // namespace NKikimr::NOlap

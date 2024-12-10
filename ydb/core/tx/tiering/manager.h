@@ -6,7 +6,6 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
-#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>

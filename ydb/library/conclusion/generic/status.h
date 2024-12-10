@@ -10,36 +10,32 @@
 
 namespace NKikimr {
 
-template <class TStatus, TStatus StatusOk, TStatus DefaultError, class TError, class TDerived>
+template <class TDerived, class TError, class TStatus, TStatus StatusOk, TStatus DefaultError>
 class TConclusionStatusGenericImpl {
 protected:
-    std::optional<TError> ErrorMessage;
+    std::optional<TError> ErrorDescription;
     TStatus Status = StatusOk;
 
     TConclusionStatusGenericImpl() = default;
 
     TConclusionStatusGenericImpl(const TError& error, TStatus status = DefaultError)
-        : ErrorMessage(error)
+        : ErrorDescription(error)
         , Status(status) {
-        Y_ABORT_UNLESS(!!ErrorMessage);
+        Y_ABORT_UNLESS(!!ErrorDescription);
     }
 
     TConclusionStatusGenericImpl(TError&& error, TStatus status = DefaultError)
-        : ErrorMessage(std::move(error))
+        : ErrorDescription(std::move(error))
         , Status(status) {
-        Y_ABORT_UNLESS(!!ErrorMessage);
+        Y_ABORT_UNLESS(!!ErrorDescription);
     }
 
 public:
     virtual ~TConclusionStatusGenericImpl() = default;
 
 public:
-    [[nodiscard]] const TError& GetErrorMessage() const {
-        return ErrorMessage ? *ErrorMessage : Default<TError>();
-    }
-
-    [[nodiscard]] virtual TString GetErrorString() const {
-        return ErrorMessage ? ToString(*ErrorMessage) : Default<TString>();
+    [[nodiscard]] const TError& GetErrorDescription() const {
+        return ErrorDescription ? *ErrorDescription : Default<TError>();
     }
 
     [[nodiscard]] TStatus GetStatus() const {
@@ -66,11 +62,11 @@ public:
     }
 
     [[nodiscard]] bool Ok() const {
-        return !ErrorMessage;
+        return !ErrorDescription;
     }
 
     [[nodiscard]] bool operator!() const {
-        return !!ErrorMessage;
+        return !!ErrorDescription;
     }
 
     [[nodiscard]] static TDerived Success() {
@@ -79,13 +75,13 @@ public:
 };
 
 template <class TStatus, TStatus StatusOk, TStatus DefaultError>
-class TConclusionStatusImpl : public TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, TString, TConclusionStatusImpl<TStatus, StatusOk, DefaultError>> {
+class TConclusionStatusImpl : public TConclusionStatusGenericImpl<TConclusionStatusImpl<TStatus, StatusOk, DefaultError>, TString, TStatus, StatusOk, DefaultError> {
 protected:
     using TSelf = TConclusionStatusImpl<TStatus, StatusOk, DefaultError>;
-    using TBase = TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, TString, TSelf>;
+    using TBase = TConclusionStatusGenericImpl<TSelf, TString, TStatus, StatusOk, DefaultError>;
     using TBase::TBase;
 
-    friend class TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, TString, TSelf>;
+    friend class TConclusionStatusGenericImpl<TSelf, TString, TStatus, StatusOk, DefaultError>;
 
     TConclusionStatusImpl() = default;
 
@@ -100,21 +96,25 @@ protected:
 public:
     void Validate(const TString& processInfo = Default<TString>()) const {
         if (processInfo) {
-            Y_ABORT_UNLESS(TBase::Ok(), "error=%s, processInfo=%s", TBase::GetErrorMessage().c_str(), processInfo.c_str());
+            Y_ABORT_UNLESS(TBase::Ok(), "error=%s, processInfo=%s", GetErrorMessage().c_str(), processInfo.c_str());
         } else {
-            Y_ABORT_UNLESS(TBase::Ok(), "error=%s", TBase::GetErrorMessage().c_str());
+            Y_ABORT_UNLESS(TBase::Ok(), "error=%s", GetErrorMessage().c_str());
         }
+    }
+
+    [[nodiscard]] TString GetErrorMessage() const {
+        return TBase::GetErrorDescription();
     }
 };
 
 template <class TStatus, TStatus StatusOk, TStatus DefaultError>
-class TYQLConclusionStatusImpl : public TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TYQLConclusionStatusImpl<TStatus, StatusOk, DefaultError>> {
+class TYQLConclusionStatusImpl : public TConclusionStatusGenericImpl<TYQLConclusionStatusImpl<TStatus, StatusOk, DefaultError>, NYql::TIssues, TStatus, StatusOk, DefaultError> {
 protected:
     using TSelf = TYQLConclusionStatusImpl<TStatus, StatusOk, DefaultError>;
-    using TBase = TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TSelf>;
+    using TBase = TConclusionStatusGenericImpl<TSelf, NYql::TIssues, TStatus, StatusOk, DefaultError>;
     using TBase::TBase;
 
-    friend class TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TSelf>;
+    friend class TConclusionStatusGenericImpl<TSelf, NYql::TIssues, TStatus, StatusOk, DefaultError>;
 
     TYQLConclusionStatusImpl() = default;
 
@@ -148,8 +148,8 @@ public:
         return *this;
     }
 
-    [[nodiscard]] virtual TString GetErrorString() const override {
-        return TBase::GetErrorMessage().ToOneLineString();
+    [[nodiscard]] TString GetErrorMessage() const {
+        return TBase::GetErrorDescription().ToOneLineString();
     }
 };
 

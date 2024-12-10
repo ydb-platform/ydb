@@ -56,19 +56,19 @@ public:
 
     const TResult& GetResult() const {
         auto result = std::get_if<TResult>(&Result);
-        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorString().data());
+        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorMessage().data());
         return *result;
     }
 
     TResult& MutableResult() {
         auto result = std::get_if<TResult>(&Result);
-        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorString().data());
+        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorMessage().data());
         return *result;
     }
 
     TResult&& DetachResult() {
         auto result = std::get_if<TResult>(&Result);
-        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorString().data());
+        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorMessage().data());
         return std::move(*result);
     }
 
@@ -92,18 +92,10 @@ public:
         return GetError();
     }
 
-    TString GetErrorString() const {
+    TString GetErrorMessage() const {
         auto* status = std::get_if<TStatus>(&Result);
-        return status ? status->GetErrorString() : Default<TString>();
-    }
-
-    const auto& GetErrorMessage() const {
-        auto* status = std::get_if<TStatus>(&Result);
-        if (!status) {
-            return TStatus::Success().GetErrorMessage();
-        } else {
-            return status->GetErrorMessage();
-        }
+        Y_ABORT_UNLESS(status, "incorrect object for extracting error message");
+        return status->GetErrorMessage();
     }
 
     auto GetStatus() const {

@@ -16,7 +16,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropColumnTable TDropParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -94,7 +94,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropColumnTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -183,7 +183,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropColumnTable TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -258,7 +258,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropColumnTable TProposedDeleteParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
     bool Finish(TOperationContext& context) {

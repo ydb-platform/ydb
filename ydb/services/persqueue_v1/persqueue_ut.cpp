@@ -984,12 +984,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(resp.server_message_case() == Topic::StreamReadMessage::FromServer::kCommitOffsetResponse);
         }
 
-        void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, ui32 messageLimit) {
+        void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, const ui32 messageCountMin, const ui32 messageCountMax = 0) {
             // Get DirectReadResponse messages, send DirectReadAck messages.
 
             auto endTime = TInstant::Now() + TDuration::Seconds(10);
-            while (currTotalMessages < messageLimit && endTime > TInstant::Now()) {
-                Cerr << "Wait for direct read id: " << nextReadId << ", currently have " << currTotalMessages << " messages" << Endl;
+            while (currTotalMessages < messageCountMin && endTime > TInstant::Now()) {
+                Cerr << "Wait for direct read id: " << nextReadId << ", currently have " << currTotalMessages << " messages, expected count is " << messageCountMin << Endl;
 
                 Ydb::Topic::StreamDirectReadMessage::FromServer resp;
                 UNIT_ASSERT(DirectStream->Read(&resp));
@@ -1015,7 +1015,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 }
                 nextReadId++;
             }
-            UNIT_ASSERT_VALUES_EQUAL(currTotalMessages, messageLimit);
+            if (messageCountMax) {
+                UNIT_ASSERT(currTotalMessages >= messageCountMin);
+                UNIT_ASSERT(currTotalMessages <= messageCountMax);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(currTotalMessages, messageCountMin);
+            }
         }
 
         void InitDirectSession(
@@ -1161,30 +1166,24 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         ui32 totalMsg = 0;
         ui64 nextReadId = 1;
         Sleep(TDuration::Seconds(3));
-        Cerr << ">>>>> 1" << Endl << Flush;
         setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 50);
 
         Cerr << "First read\n";
-        setup.DoRead(assignId, nextReadId, totalMsg, 40);
-        setup.DoRead(assignId, nextReadId, totalMsg, 42);
+        setup.DoRead(assignId, nextReadId, totalMsg, 40, 48);
 
-        Cerr << ">>>>> 3" << Endl << Flush;
         Topic::StreamReadMessage::FromClient req;
-        req.mutable_read_request()->set_bytes_size(40_MB);
+        req.mutable_read_request()->set_bytes_size(50_MB);
         if (!setup.ControlStream->Write(req)) {
             ythrow yexception() << "write fail";
         }
         Cerr << "Second read\n";
         setup.DoRead(assignId, nextReadId, totalMsg, 50);
 
-        Cerr << ">>>>> 5" << Endl << Flush;
         Sleep(TDuration::Seconds(1));
-        Cerr << ">>>>> 6" << Endl << Flush;
         auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.StagedReads.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.Reads.size(), 0);
-        Cerr << ">>>>> 7" << Endl << Flush;
     }
 
     Y_UNIT_TEST(DirectReadBadCases) {
@@ -2822,7 +2821,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
 
         Cerr << ">>>>> 1" << Endl << Flush;
-        auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 23);
+        auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 16);
         Cerr << ">>>>> 2" << Endl << Flush;
         auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
@@ -2834,9 +2833,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value);
 
         Cerr << ">>>>> 3" << Endl << Flush;
-        info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 23);
+        info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 16);
         Cerr << ">>>>> 4" << Endl << Flush;
-        info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 22);
+        info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
         ui32 fromDisk = info0.BlobsFromDisk + info16.BlobsFromDisk;
         ui32 fromCache = info0.BlobsFromCache + info16.BlobsFromCache;
@@ -2896,16 +2895,13 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             server.AnnoyingClient->WriteToPQ({secondTopic, 0, "source1", i}, mb);
         }
 
-        Cerr << ">>>>> 1" << Endl << Flush;
-        auto info1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 1, "user1"}, 7);
-        Cerr << ">>>>> 2" << Endl << Flush;
-        auto info2 = server.AnnoyingClient->ReadFromPQ({secondTopic, 0, 0, 1, "user1"}, 7);
-        Cerr << ">>>>> 3" << Endl << Flush;
+        auto info1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 1, "user1"}, 1);
+        auto info2 = server.AnnoyingClient->ReadFromPQ({secondTopic, 0, 0, 1, "user1"}, 1);
 
         UNIT_ASSERT_VALUES_EQUAL(info1.BlobsFromCache, 1);
         UNIT_ASSERT_VALUES_EQUAL(info2.BlobsFromCache, 1);
-        UNIT_ASSERT_VALUES_EQUAL(info1.Values.size(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(info2.Values.size(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(info1.Values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(info2.Values.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(info1.Values[0].size(), valueSize);
         UNIT_ASSERT_VALUES_EQUAL(info2.Values[0].size(), valueSize);
         UNIT_ASSERT(info1.Values[0] == value1);
@@ -5006,7 +5002,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_C(serverMessage.server_message_case() == StreamingWriteServerMessage::kBatchWriteResponse, serverMessage);
         UNIT_ASSERT_VALUES_EQUAL_C(defaultCodecs.size(), serverMessage.batch_write_response().offsets_size(), serverMessage);
     }
-
     Y_UNIT_TEST(Codecs_WriteMessageWithNonDefaultCodecThatHasToBeConfiguredAdditionally_SessionClosedWithBadRequestError) {
         APITestSetup setup{TEST_CASE_NAME};
         auto log = setup.GetLog();
@@ -6006,7 +6001,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             grpc::ClientContext rcontext;
             auto status = pqStub->CreateTopic(&rcontext, request, &response);
-
             UNIT_ASSERT(status.ok());
             CreateTopicResult res;
             response.operation().result().UnpackTo(&res);

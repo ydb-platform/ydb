@@ -11,7 +11,9 @@ SELECT
             AsTagged(Nothing(Int32?), "D"),
             AsTagged(Nothing(pgint4?), "E")
         )
-    ) AS x;
+    ) AS x
+;
+
 COMMIT;
 
 SELECT
@@ -20,4 +22,6 @@ SELECT
     x.2,
     x.3,
     x.4
-FROM @tmp;
+FROM
+    @tmp
+;

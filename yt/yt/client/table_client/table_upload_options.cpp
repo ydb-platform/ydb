@@ -97,14 +97,7 @@ void TTableUploadOptions::Persist(const NPhoenix::TPersistenceContext& context)
 
     Persist(context, UpdateMode);
     Persist(context, LockMode);
-    // COMPAT(h0pless): NControllerAgent::ESnapshotVersion::AddChunkSchemas
-    if (context.GetVersion() >= 301300) {
-        Persist(context, TableSchema);
-    } else {
-        TTableSchemaPtr schema;
-        Persist<TNonNullableIntrusivePtrSerializer<>>(context, schema);
-        TableSchema.Set(schema);
-    }
+    Persist(context, TableSchema);
     Persist(context, SchemaId);
     Persist(context, SchemaModification);
     // COMPAT(dave11ar): NControllerAgent::ESnapshotVersion::VersionedMapReduceWrite
@@ -113,10 +106,7 @@ void TTableUploadOptions::Persist(const NPhoenix::TPersistenceContext& context)
     }
     Persist(context, SchemaMode);
     Persist(context, OptimizeFor);
-    // COMPAT(babenko): NControllerAgent::ESnapshotVersion::ChunkFormat
-    if (context.GetVersion() >= 301103) {
-        Persist(context, ChunkFormat);
-    }
+    Persist(context, ChunkFormat);
     Persist(context, CompressionCodec);
     Persist(context, ErasureCodec);
     Persist(context, EnableStripedErasure);

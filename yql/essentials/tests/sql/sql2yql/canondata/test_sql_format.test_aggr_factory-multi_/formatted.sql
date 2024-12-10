@@ -9,7 +9,8 @@ $input = (
             Just(subkey) AS subkey,
             Just(value) AS value
         ) AS nums
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
@@ -24,4 +25,6 @@ SELECT
     MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("aggregate_list_distinct")) AS agg_list_distinct,
     MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("mode")) AS mode,
     MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY("top", 3)) AS top,
-FROM $input;
+FROM
+    $input
+;

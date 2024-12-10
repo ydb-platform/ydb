@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* kikimr can not */
 USE plato;
+
 $udfScript = @@
 def f(input):
    s = []
@@ -16,6 +17,7 @@ def f(input):
         'value': b''.join(s),
       }
 @@;
+
 $udf_stream = Python3::f(
     Callable<
         (Stream<Struct<key: String, subkey: String, value: String>>) -> Stream<Struct<key: String, subkey1: String, value: String>>
@@ -28,11 +30,14 @@ $res =
         value
     ON
         key
-    USING ALL $udf_stream(TableRows());
+    USING ALL $udf_stream(TableRows())
+;
 
 SELECT
     *
-FROM $res
+FROM
+    $res
 ORDER BY
     key,
-    value;
+    value
+;

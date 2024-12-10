@@ -4,10 +4,13 @@ SELECT
 FROM (
     SELECT
         TableRow() AS x
-    FROM plato.Input
+    FROM
+        plato.Input
     UNION ALL
     SELECT
         1 AS y
-    FROM plato.Input
+    FROM
+        plato.Input
 )
-    FLATTEN COLUMNS;
+    FLATTEN COLUMNS
+;

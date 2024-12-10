@@ -1,6 +1,7 @@
 /* custom error:PrintBacktraceToStderr*/
 /* dqfile can not */
 USE plato;
+
 $f = Python3::f(
     @@
 def f(x):
@@ -16,4 +17,5 @@ def f(x):
 );
 
 SELECT
-    $f(0);
+    $f(0)
+;

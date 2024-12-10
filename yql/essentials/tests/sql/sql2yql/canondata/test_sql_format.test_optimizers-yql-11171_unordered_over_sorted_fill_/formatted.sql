@@ -8,13 +8,15 @@ FROM (
     SELECT
         key,
         TableName() AS value
-    FROM Input
-        WITH inline
+    FROM
+        Input WITH inline
     UNION ALL
     SELECT
         key,
         value
-    FROM Input
+    FROM
+        Input
 )
 GROUP COMPACT BY
-    key;
+    key
+;

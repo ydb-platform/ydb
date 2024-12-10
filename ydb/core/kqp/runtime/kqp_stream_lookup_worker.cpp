@@ -62,70 +62,7 @@ NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType* type) {
     return NScheme::TypeInfoFromMiniKQLType(type);
 }
 
-struct THashableKey {
-    TConstArrayRef<TCell> Cells;
 
-    template <typename H>
-    friend H AbslHashValue(H h, const THashableKey& key) {
-        h = H::combine(std::move(h), key.Cells.size());
-        for (const TCell& cell : key.Cells) {
-            h = H::combine(std::move(h), cell.IsNull());
-            if (!cell.IsNull()) {
-                h = H::combine(std::move(h), cell.Size());
-                h = H::combine_contiguous(std::move(h), cell.Data(), cell.Size());
-            }
-        }
-        return h;
-    }
-};
-
-struct TKeyHash {
-    using is_transparent = void;
-
-    size_t operator()(TConstArrayRef<TCell> key) const {
-        return absl::Hash<THashableKey>()(THashableKey{ key });
-    }
-};
-
-struct TKeyEq {
-    using is_transparent = void;
-
-    bool operator()(TConstArrayRef<TCell> a, TConstArrayRef<TCell> b) const {
-        if (a.size() != b.size()) {
-            return false;
-        }
-
-        const TCell* pa = a.data();
-        const TCell* pb = b.data();
-        if (pa == pb) {
-            return true;
-        }
-
-        size_t left = a.size();
-        while (left > 0) {
-            if (pa->IsNull()) {
-                if (!pb->IsNull()) {
-                    return false;
-                }
-            } else {
-                if (pb->IsNull()) {
-                    return false;
-                }
-                if (pa->Size() != pb->Size()) {
-                    return false;
-                }
-                if (pa->Size() > 0 && ::memcmp(pa->Data(), pb->Data(), pa->Size()) != 0) {
-                    return false;
-                }
-            }
-            ++pa;
-            ++pb;
-            --left;
-        }
-
-        return true;
-    }
-};
 }  // !namespace
 
 TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
@@ -599,18 +536,23 @@ public:
                 break;
             }
 
-            auto hasNulls = [](const TOwnedCellVec& cellVec) {
+            auto isKeyAllowed = [&](const TOwnedCellVec& cellVec) {
+                if (Settings.HasAllowNullKeys() && Settings.GetAllowNullKeys()) {
+                    return true;
+                }
+
+                // otherwise we can't use nulls as lookup keys
                 for (const auto& cell : cellVec) {
                     if (cell.IsNull()) {
-                        return true;
+                        return false;
                     }
                 }
 
-                return false;
+                return true;
             };
 
             UnprocessedRows.pop_front();
-            if (!hasNulls(joinKey)) {  // don't use nulls as lookup keys, because null != null
+            if (isKeyAllowed(joinKey)) {
                 std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
                 if (joinKey.size() < KeyColumns.size()) {
                     // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
@@ -996,7 +938,7 @@ private:
     std::deque<std::pair<TOwnedCellVec, NUdf::TUnboxedValue>> UnprocessedRows;
     std::deque<TOwnedTableRange> UnprocessedKeys;
     std::unordered_map<ui64, std::vector<TOwnedTableRange>> PendingKeysByReadId;
-    absl::flat_hash_map<TOwnedCellVec, TLeftRowInfo, TKeyHash, TKeyEq> PendingLeftRowsByKey;
+    absl::flat_hash_map<TOwnedCellVec, TLeftRowInfo, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PendingLeftRowsByKey;
     std::unordered_map<ui64, TResultBatch> ResultRowsBySeqNo;
     ui64 InputRowSeqNo = 0;
     ui64 CurrentResultSeqNo = 0;

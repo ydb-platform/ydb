@@ -4,7 +4,8 @@ $data = (
     SELECT
         mod,
         aggregate_list(value) AS lv
-    FROM plato.Input
+    FROM
+        plato.Input
     GROUP BY
         CAST(key AS uint32) % 10 AS mod
 );
@@ -13,13 +14,14 @@ SELECT
     d.mod,
     d.lv,
     j.key
-FROM $data
-    AS d
-    FLATTEN BY
-        lv
-JOIN plato.Input
-    AS j
-ON d.mod == CAST(j.key AS uint32) / 10 % 10
+FROM
+    $data AS d
+    FLATTEN BY lv
+JOIN
+    plato.Input AS j
+ON
+    d.mod == CAST(j.key AS uint32) / 10 % 10
 ORDER BY
     d.mod,
-    d.lv;
+    d.lv
+;

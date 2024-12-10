@@ -5,4 +5,6 @@ SELECT
     key.kk,
     subkey,
     value
-FROM Input;
+FROM
+    Input
+;

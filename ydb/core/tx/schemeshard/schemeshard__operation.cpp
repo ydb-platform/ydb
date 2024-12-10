@@ -1191,6 +1191,16 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropReplicationCascade:
         return CreateDropReplication(NextPartId(), txState, true);
 
+    // Transfer
+    case TTxState::ETxType::TxCreateTransfer:
+        return CreateNewTransfer(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterTransfer:
+        return CreateAlterTransfer(NextPartId(), txState);
+    case TTxState::ETxType::TxDropTransfer:
+        return CreateDropTransfer(NextPartId(), txState, false);
+    case TTxState::ETxType::TxDropTransferCascade:
+        return CreateDropTransfer(NextPartId(), txState, true);
+
     // BlobDepot
     case TTxState::ETxType::TxCreateBlobDepot:
         return CreateNewBlobDepot(NextPartId(), txState);
@@ -1450,6 +1460,16 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
         return {CreateDropReplication(NextPartId(), tx, true)};
 
+    // Transfer
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
+        return {CreateNewTransfer(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer:
+        return {CreateAlterTransfer(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer:
+        return {CreateDropTransfer(NextPartId(), tx, false)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade:
+        return {CreateDropTransfer(NextPartId(), tx, true)};
+
     // BlobDepot
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:
         return {CreateNewBlobDepot(NextPartId(), tx)};
@@ -1668,13 +1688,18 @@ void TOperation::RegisterRelationByTabletId(TSubTxId partId, TTabletId tablet, c
     if (RelationsByTabletId.contains(tablet)) {
         if (RelationsByTabletId.at(tablet) != partId) {
             // it is Ok if Hive otherwise it is error
+            TSubTxId prevPartId = RelationsByTabletId.at(tablet);
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "TOperation RegisterRelationByTabletId"
                             << " collision in routes has found"
-                            << ", TxId: " << TxId
-                            << ", partId: " << partId
-                            << ", prev tablet: " << RelationsByTabletId.at(tablet)
-                            << ", new tablet: " << tablet);
+                            << ", TxId# " << TxId
+                            << ", partId# " << partId
+                            << ", prevPartId# " << prevPartId
+                            << ", tablet# " << tablet
+                            << ", guessDefaultRootHive# " << (tablet == TTabletId(72057594037968897) ? "yes" : "no")
+                            << ", prevTx# " << (prevPartId < Parts.size() ? Parts[prevPartId]->GetTransaction().ShortDebugString() : TString("unknown"))
+                            << ", newTx# " << (partId < Parts.size() ? Parts[partId]->GetTransaction().ShortDebugString() : TString("unknown"))
+                            );
 
             RelationsByTabletId.erase(tablet);
         }

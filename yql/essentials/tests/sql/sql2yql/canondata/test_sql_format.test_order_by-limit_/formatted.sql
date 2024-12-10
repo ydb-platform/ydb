@@ -1,6 +1,7 @@
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
     a DESC
 LIMIT 3;

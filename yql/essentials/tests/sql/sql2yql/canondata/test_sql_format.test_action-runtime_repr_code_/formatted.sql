@@ -11,4 +11,5 @@ $fact = EvaluateCode(
 );
 
 SELECT
-    $fact;
+    $fact
+;

@@ -11,11 +11,13 @@ SELECT
         Struct<a: PgFloat8, b: PgText>,
         ($row) -> ($row.a IS NOT NULL),
         AsTuple(AsAtom("a"))
-    );
+    )
+;
 
 SELECT
     YQL::RangeComputeFor(
         Struct<a: PgInt4, b: PgText>,
         ($row) -> ($row.b IS NULL),
         AsTuple(AsAtom("b"))
-    );
+    )
+;

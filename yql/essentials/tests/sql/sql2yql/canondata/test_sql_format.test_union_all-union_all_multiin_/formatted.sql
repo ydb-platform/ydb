@@ -6,13 +6,16 @@ FROM (
     SELECT
         key,
         value
-    FROM Input
+    FROM
+        Input
     UNION ALL
     SELECT
         subkey AS key,
         value
-    FROM Input2
+    FROM
+        Input2
 )
 ORDER BY
     key,
-    value;
+    value
+;

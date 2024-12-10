@@ -4,6 +4,8 @@ $_is_wtf = Pire::Match(".*wtf");
 
 SELECT
     *
-FROM plato.Input
-WHERE $is_abc(value)
+FROM
+    plato.Input
+WHERE
+    $is_abc(value)
 LIMIT 10;

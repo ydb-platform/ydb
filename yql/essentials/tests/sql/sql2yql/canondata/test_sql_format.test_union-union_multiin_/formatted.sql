@@ -1,11 +1,14 @@
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 UNION
 SELECT
     *
-FROM plato.Input2
+FROM
+    plato.Input2
 ORDER BY
     key,
     subkey,
-    value;
+    value
+;

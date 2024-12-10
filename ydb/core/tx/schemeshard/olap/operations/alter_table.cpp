@@ -16,7 +16,7 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder() << "TAlterColumnTable TConfigureParts operationId#" << OperationId;
+        return TStringBuilder() << "TAlterColumnTable TConfigureParts operationId# " << OperationId;
     }
 
 public:
@@ -85,7 +85,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterColumnTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -166,7 +166,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterColumnTable TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

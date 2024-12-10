@@ -5,20 +5,23 @@ USE plato;
 $queries_0 = (
     SELECT DISTINCT
         key
-    FROM Input
+    FROM
+        Input
 );
 
 $queries = (
     SELECT
         TableRecordIndex() AS j,
         key
-    FROM $queries_0
+    FROM
+        $queries_0
 );
 
 $count = (
     SELECT
         count(*)
-    FROM $queries
+    FROM
+        $queries
 );
 
 $users_0 = (
@@ -26,26 +29,27 @@ $users_0 = (
         ListFromRange(0, 3) AS lst,
         TableRecordIndex() AS idx,
         subkey
-    FROM Input
-        AS t
+    FROM
+        Input AS t
 );
 
 $users = (
     SELECT
         CAST(Random(idx + x) AS Uint64) % $count AS j,
         subkey
-    FROM $users_0
-        FLATTEN BY
-            lst AS x
+    FROM
+        $users_0
+        FLATTEN BY lst AS x
 );
 
 SELECT
     *
-FROM $queries
-    AS queries
-JOIN $users
-    AS users
+FROM
+    $queries AS queries
+JOIN
+    $users AS users
 USING (j)
 ORDER BY
     key,
-    subkey;
+    subkey
+;

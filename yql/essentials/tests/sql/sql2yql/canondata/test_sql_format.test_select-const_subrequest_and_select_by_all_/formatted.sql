@@ -2,7 +2,8 @@
 USE plato;
 
 $input = (
-    FROM Input
+    FROM
+        Input
     SELECT
         key
     ORDER BY
@@ -13,9 +14,14 @@ $input = (
 --insert into Output
 SELECT
     *
-FROM $input;
+FROM
+    $input
+;
 
 SELECT
     *
-FROM Input
-WHERE key == $input;
+FROM
+    Input
+WHERE
+    key == $input
+;

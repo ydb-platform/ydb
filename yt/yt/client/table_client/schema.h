@@ -166,6 +166,7 @@ public:
     EValueType GetWireType() const;
 
     i64 GetMemoryUsage() const;
+    i64 GetMemoryUsage(i64 limit) const;
 
     // Check if column has plain old v1 type.
     bool IsOfV1Type() const;
@@ -398,6 +399,8 @@ public:
 
     i64 GetMemoryUsage() const;
 
+    i64 GetMemoryUsage(i64 limit) const;
+
 private:
     struct TColumnInfo
     {
@@ -459,6 +462,25 @@ void FromProto(
     const NProto::TKeyColumnsExt& keyColumnsExt);
 
 void PrintTo(const TTableSchema& tableSchema, std::ostream* os);
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TTableSchemaTruncatedFormatter
+{
+public:
+    // NB: #schema is allowed to be |nullptr|.
+    TTableSchemaTruncatedFormatter(const TTableSchemaPtr& schema, i64 memoryLimit);
+
+    void operator()(TStringBuilderBase* builder) const;
+
+private:
+    const TTableSchema* const Schema_ = nullptr;
+    const i64 Limit_ = 0;
+};
+
+TFormatterWrapper<TTableSchemaTruncatedFormatter> MakeTableSchemaTruncatedFormatter(
+    const TTableSchemaPtr& schema,
+    i64 memoryLimit);
 
 ////////////////////////////////////////////////////////////////////////////////
 

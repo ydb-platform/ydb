@@ -3,4 +3,6 @@ USE plato;
 SELECT
     key + 1u,
     subkey
-FROM Input;
+FROM
+    Input
+;

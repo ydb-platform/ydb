@@ -9,7 +9,8 @@ SELECT
         Struct<x: UInt32>,
         ($row) -> ($row.x >= 10 AND $row.x < 11),
         AsTuple(AsAtom("x"))
-    );
+    )
+;
 
 -- (10, 11] -> [11, 11]
 SELECT
@@ -17,7 +18,8 @@ SELECT
         Struct<x: UInt32>,
         ($row) -> ($row.x > 10 AND $row.x <= 11),
         AsTuple(AsAtom("x"))
-    );
+    )
+;
 
 -- dates
 SELECT
@@ -40,7 +42,8 @@ SELECT
         Struct<x: Date32??>,
         ($row) -> (($row.x > Date32("-1-12-31") AND $row.x <= Date32("1-01-01")) ?? FALSE),
         AsTuple(AsAtom("x"))
-    );
+    )
+;
 
 -- datetimes
 SELECT
@@ -63,7 +66,8 @@ SELECT
         Struct<x: Datetime64?>,
         ($row) -> (($row.x > Datetime64("-1-12-31T23:59:59Z") AND $row.x <= Datetime64("1-01-01T00:00:00Z")) ?? FALSE),
         AsTuple(AsAtom("x"))
-    );
+    )
+;
 
 -- timestamps
 SELECT
@@ -86,4 +90,5 @@ SELECT
         Struct<x: Timestamp64??>,
         ($row) -> (($row.x > Timestamp64("-1-12-31T23:59:59.999999Z") AND $row.x <= Timestamp64("1-01-01T00:00:00.000000Z")) ?? FALSE),
         AsTuple(AsAtom("x"))
-    );
+    )
+;

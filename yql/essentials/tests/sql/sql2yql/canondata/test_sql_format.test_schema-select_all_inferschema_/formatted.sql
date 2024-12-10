@@ -1,4 +1,5 @@
 SELECT
     *
-FROM plato.Input
-    WITH inferscheme;
+FROM
+    plato.Input WITH inferscheme
+;

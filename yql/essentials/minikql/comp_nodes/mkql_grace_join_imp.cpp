@@ -489,7 +489,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         // slotSize, slotIdx and strPos is only for hashtable (table2)
         ui64 bloomHits = 0;
         ui64 bloomLookups = 0;
-        
+
         for (ui64 keysValSize = headerSize1; it1 != bucket1->KeyIntVals.end(); it1 += keysValSize, ++tuple1Idx ) {
 
             if ( table1HasKeyStringColumns || table1HasKeyIColumns ) {
@@ -630,7 +630,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
     HasMoreRightTuples_ = hasMoreRightTuples;
 
     TuplesFound_ += tuplesFound;
-    
+
 }
 
 inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
@@ -772,7 +772,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf:
             continue;
 
         if (NumberOfKeyIColumns > 0) {
-            if (!CompareIColumns( 
+            if (!CompareIColumns(
                         (char *) (slotStringsStart),
                         (char *) (keys + HeaderSize ),
                         iColumns,
@@ -903,22 +903,10 @@ ui64 TTable::GetSizeOfBucket(ui64 bucket) const {
     + TableBuckets[bucket].InterfaceOffsets.size() * sizeof(ui32);
 }
 
-bool TTable::TryToReduceMemoryAndWait() {
-    i32 largestBucketIndex = 0;
-    ui64 largestBucketSize = 0;
-    for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
-        if (TableBucketsSpillers[bucket].IsProcessingSpilling()) return true;
-
-        ui64 bucketSize = GetSizeOfBucket(bucket);
-        if (bucketSize > largestBucketSize) {
-            largestBucketSize = bucketSize;
-            largestBucketIndex = bucket;
-        }
-    }
-
-    if (largestBucketSize < SpillingSizeLimit/NumberOfBuckets) return false;
-    if (const auto &tbs = TableBucketsStats[largestBucketIndex]; tbs.HashtableMatches) {
-        auto &tb = TableBuckets[largestBucketIndex];
+bool TTable::TryToReduceMemoryAndWait(ui64 bucket) {
+    if (GetSizeOfBucket(bucket) < SpillingSizeLimit/NumberOfBuckets) return false;
+    if (const auto &tbs = TableBucketsStats[bucket]; tbs.HashtableMatches) {
+        auto &tb = TableBuckets[bucket];
 
         if (tb.JoinSlots.size()) {
             const auto slotSize = tbs.SlotSize;
@@ -946,10 +934,10 @@ bool TTable::TryToReduceMemoryAndWait() {
             tb.JoinSlots.shrink_to_fit();
         }
     }
-    TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
-    TableBuckets[largestBucketIndex] = TTableBucket{};
+    TableBucketsSpillers[bucket].SpillBucket(std::move(TableBuckets[bucket]));
+    TableBuckets[bucket] = TTableBucket{};
 
-    return TableBucketsSpillers[largestBucketIndex].IsProcessingSpilling();
+    return TableBucketsSpillers[bucket].IsProcessingSpilling();
 }
 
 void TTable::UpdateSpilling() {
@@ -987,7 +975,7 @@ void TTable::FinalizeSpilling() {
             TableBucketsSpillers[bucket].Finalize();
             TableBucketsSpillers[bucket].SpillBucket(std::move(TableBuckets[bucket]));
             TableBuckets[bucket] = TTableBucket{};
-            
+
         }
     }
 }
@@ -1288,7 +1276,7 @@ void TTableBucketSpiller::ProcessBucketRestoration() {
             case ENextVectorToProcess::InterfaceOffsets:
                 if (StateUi32Adapter.IsDataReady()) {
                     AppendVector(CurrentBucket.InterfaceOffsets, StateUi32Adapter.ExtractVector());
-                    
+
                     SpilledBucketsCount--;
                     if (SpilledBucketsCount == 0) {
                         NextVectorToProcess = ENextVectorToProcess::None;
@@ -1296,7 +1284,7 @@ void TTableBucketSpiller::ProcessBucketRestoration() {
                     } else {
                         NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
                     }
-                    
+
                     break;
                 }
 

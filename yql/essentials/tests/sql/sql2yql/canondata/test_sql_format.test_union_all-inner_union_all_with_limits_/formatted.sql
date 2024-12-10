@@ -7,18 +7,22 @@ FROM (
     (
         SELECT
             *
-        FROM Input
+        FROM
+            Input
         LIMIT 3
     )
     UNION ALL
     (
         SELECT
             *
-        FROM Input
+        FROM
+            Input
         LIMIT 2
     )
 )
-WHERE key < "100";
+WHERE
+    key < "100"
+;
 
 SELECT
     key,
@@ -27,12 +31,16 @@ FROM (
     (
         SELECT
             *
-        FROM Input
+        FROM
+            Input
         LIMIT 3
     )
     UNION ALL
     SELECT
         *
-    FROM Input
+    FROM
+        Input
 )
-WHERE key < "200";
+WHERE
+    key < "200"
+;

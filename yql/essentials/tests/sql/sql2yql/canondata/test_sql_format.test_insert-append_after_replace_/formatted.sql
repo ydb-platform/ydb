@@ -10,7 +10,10 @@ SELECT
     key,
     subkey,
     value
-FROM plato.Input;
+FROM
+    plato.Input
+;
+
 COMMIT;
 
 INSERT INTO plato.Output (
@@ -22,4 +25,6 @@ SELECT
     key,
     subkey,
     value
-FROM plato.Output;
+FROM
+    plato.Output
+;

@@ -23,9 +23,11 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
-#include <yt/yt/core/tracing/config.h>
 #include <yt/yt/core/tracing/trace_context.h>
 
+#include <yt/yt_proto/yt/core/tracing/proto/tracing_ext.pb.h>
+
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/helpers.h>
 
 #include <library/cpp/yt/threading/count_down_latch.h>
@@ -33,8 +35,6 @@
 #include <util/system/compiler.h>
 #include <util/system/thread.h>
 #include <util/system/type_name.h>
-
-#include <exception>
 
 namespace NYT::NConcurrency {
 namespace {
@@ -1159,17 +1159,9 @@ TEST_W(TSchedulerTest, TraceDisableSendBaggage)
     parentContext->PackBaggage(parentBaggage);
     auto parentBaggageString = ConvertToYsonString(parentBaggage);
 
-    auto originalConfig = GetTracingTransportConfig();
-    auto guard = Finally([&] {
-        SetTracingTransportConfig(originalConfig);
-    });
-
     {
-        auto config = New<TTracingTransportConfig>();
-        config->SendBaggage = true;
-        SetTracingTransportConfig(std::move(config));
         NTracing::NProto::TTracingExt tracingExt;
-        ToProto(&tracingExt, parentContext);
+        ToProto(&tracingExt, parentContext, /*sendBaggage*/ true);
         auto traceContext = TTraceContext::NewChildFromRpc(tracingExt, "Span");
         auto baggage = traceContext->UnpackBaggage();
         ASSERT_NE(baggage, nullptr);
@@ -1177,11 +1169,8 @@ TEST_W(TSchedulerTest, TraceDisableSendBaggage)
     }
 
     {
-        auto config = New<TTracingTransportConfig>();
-        config->SendBaggage = false;
-        SetTracingTransportConfig(std::move(config));
         NTracing::NProto::TTracingExt tracingExt;
-        ToProto(&tracingExt, parentContext);
+        ToProto(&tracingExt, parentContext, /*sendBaggage*/ false);
         auto traceContext = TTraceContext::NewChildFromRpc(tracingExt, "Span");
         EXPECT_EQ(traceContext->UnpackBaggage(), nullptr);
     }

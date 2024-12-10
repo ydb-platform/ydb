@@ -166,6 +166,14 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrement
     constexpr inline static bool NeedRewrite = true;
 };
 
+template <>
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection>
+    : public TSchemeTxTraitsFallback
+{
+    constexpr inline static bool CreateAdditionalDirs = true;
+};
+
+
 namespace NOperation {
 
 template <class TTraits>

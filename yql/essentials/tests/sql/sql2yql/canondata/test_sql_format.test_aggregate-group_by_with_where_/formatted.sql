@@ -3,9 +3,12 @@
 SELECT
     ki,
     count(1)
-FROM plato.Input
-WHERE ki IN ('075', '150')
+FROM
+    plato.Input
+WHERE
+    ki IN ('075', '150')
 GROUP BY
     key AS ki
 ORDER BY
-    ki;
+    ki
+;

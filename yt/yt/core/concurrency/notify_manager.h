@@ -37,7 +37,7 @@ public:
 
     NThreading::TEventCount* GetEventCount();
 
-    void Reconfigure(TDuration pollingPeriod);
+    void SetPollingPeriod(TDuration pollingPeriod);
 
 private:
     static constexpr TCpuInstant SentinelMinEnqueuedAt = std::numeric_limits<TCpuInstant>::max();

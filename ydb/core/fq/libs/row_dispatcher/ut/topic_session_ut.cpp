@@ -98,6 +98,7 @@ public:
         const auto compileServiceActorId = Runtime.Register(new TPurecalcCompileServiceMock(CompileNotifier));
 
         TopicSession = Runtime.Register(NewTopicSession(
+            "read_group",
             topicPath,
             GetDefaultPqEndpoint(),
             GetDefaultPqDatabase(),
@@ -229,6 +230,16 @@ public:
             if (check()) {
                 return;
             }
+=======
+    void ExpectStatisticToReadActor(TSet<NActors::TActorId> readActorIds, ui64 expectedNextMessageOffset) {
+        size_t count = readActorIds.size();
+        for (size_t i = 0; i < count; ++i) {
+            auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvStatistics>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
+            UNIT_ASSERT(eventHolder.Get() != nullptr);
+            UNIT_ASSERT(readActorIds.contains(eventHolder->Get()->ReadActorId));
+            readActorIds.erase(eventHolder->Get()->ReadActorId);
+            UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->Record.GetNextMessageOffset(), expectedNextMessageOffset);
+>>>>>>> upstream/main
         }
         UNIT_ASSERT_C(false, "ExpectStatistics timeout");
     }

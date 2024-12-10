@@ -15,7 +15,6 @@
 
 #include <yt/yt/core/misc/guid.h>
 #include <yt/yt/core/misc/serialize.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/core/ypath/token.h>
 

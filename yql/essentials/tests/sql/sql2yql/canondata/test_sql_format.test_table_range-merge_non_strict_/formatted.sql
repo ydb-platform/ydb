@@ -4,15 +4,19 @@ USE plato;
 SELECT
     key,
     subkey
-FROM CONCAT(Input1, Input1)
+FROM
+    CONCAT(Input1, Input1)
 ORDER BY
     key,
-    subkey;
+    subkey
+;
 
 SELECT
     key,
     subkey
-FROM CONCAT(Input1, Input2)
+FROM
+    CONCAT(Input1, Input2)
 ORDER BY
     key,
-    subkey;
+    subkey
+;

@@ -7,10 +7,12 @@ SELECT
     SessionStart() ?? 100500 AS session_start2,
     ListSort(AGGREGATE_LIST(ts ?? 100500)) AS session,
     COUNT(1) AS session_len
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     SessionWindow(ts, 10) AS session_start,
     user
 ORDER BY
     user,
-    session_start;
+    session_start
+;

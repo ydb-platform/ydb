@@ -5,8 +5,10 @@ $i = (
     SELECT
         CAST(key AS Double) AS key,
         value
-    FROM Input
-    WHERE key < "100"
+    FROM
+        Input
+    WHERE
+        key < "100"
     ORDER BY
         key DESC
     LIMIT 1000
@@ -14,7 +16,10 @@ $i = (
 
 SELECT DISTINCT
     key
-FROM $i
-WHERE value != ""
+FROM
+    $i
+WHERE
+    value != ""
 ORDER BY
-    key;
+    key
+;

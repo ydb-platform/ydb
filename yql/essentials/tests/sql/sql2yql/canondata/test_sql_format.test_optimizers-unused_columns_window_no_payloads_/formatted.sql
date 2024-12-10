@@ -6,7 +6,8 @@ FROM (
     SELECT
         b,
         lag(a) OVER w AS prev_a
-    FROM Input
+    FROM
+        Input
     WINDOW
         w AS (
             PARTITION BY

@@ -437,9 +437,9 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("skip", "not_ready_tiers");
     }
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> result;
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("rw_tasks_count", context.GetTasks().size());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("rw_tasks_count", context.GetTasks().size());
     for (auto&& i : context.GetTasks()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("rw", i.first.DebugString())("count", i.second.size());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("rw", i.first.DebugString())("count", i.second.size());
         for (auto&& t : i.second) {
             SignalCounters.OnActualizationTask(t.GetTask()->GetPortionsToEvictCount(), t.GetTask()->GetPortionsToRemoveSize());
             result.emplace_back(t.GetTask());

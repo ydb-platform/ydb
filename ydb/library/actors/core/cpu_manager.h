@@ -2,10 +2,10 @@
 
 #include "config.h"
 #include "executor_pool_jail.h"
-#include "harmonizer.h"
 #include "executor_pool.h"
 #include "executor_pool_shared.h"
 #include "mon_stats.h"
+#include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <memory>
 
 namespace NActors {
@@ -16,7 +16,7 @@ namespace NActors {
         const ui32 ExecutorPoolCount;
         TArrayHolder<TAutoPtr<IExecutorPool>> Executors;
         std::unique_ptr<IHarmonizer> Harmonizer;
-        std::unique_ptr<TSharedExecutorPool> Shared;
+        std::unique_ptr<ISharedExecutorPool> Shared;
         std::unique_ptr<TExecutorPoolJail> Jail;
         TCpuManagerConfig Config;
 

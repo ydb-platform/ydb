@@ -21,7 +21,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TDropIndexAtMainTable TConfigureParts"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -129,7 +129,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TDropIndexAtMainTable TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:

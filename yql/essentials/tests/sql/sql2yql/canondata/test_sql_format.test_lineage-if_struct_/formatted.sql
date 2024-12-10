@@ -9,7 +9,8 @@ FROM (
             TableRow() AS data,
             key,
             value
-        FROM plato.Input
+        FROM
+            plato.Input
     )
     WINDOW
         w AS (
@@ -17,4 +18,5 @@ FROM (
                 key
         )
 )
-    FLATTEN COLUMNS;
+    FLATTEN COLUMNS
+;

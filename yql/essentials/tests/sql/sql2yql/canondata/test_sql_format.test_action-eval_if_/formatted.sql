@@ -4,7 +4,8 @@ USE plato;
 
 DEFINE ACTION $action1($x) AS
     SELECT
-        $x;
+        $x
+    ;
 END DEFINE;
 
 EVALUATE IF CAST(Unicode::ToUpper("i"u) AS String) == "I" DO

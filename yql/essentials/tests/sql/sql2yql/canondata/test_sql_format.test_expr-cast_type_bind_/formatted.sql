@@ -3,4 +3,5 @@
 $t = List<Uint32>;
 
 SELECT
-    CAST([1] AS $t);
+    CAST([1] AS $t)
+;

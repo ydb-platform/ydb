@@ -4,8 +4,11 @@ SELECT
     Input1.key,
     Input1.subkey,
     Input3.value
-FROM plato.Input1
-LEFT JOIN plato.Input3
+FROM
+    plato.Input1
+LEFT JOIN
+    plato.Input3
 USING (key)
 ORDER BY
-    Input1.key;
+    Input1.key
+;

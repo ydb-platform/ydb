@@ -30,6 +30,7 @@ def serialize(state):
 def deserialize(serialized):
     return json.loads(serialized)
 @@;
+
 $create = Python3::create(Callable<(Int64) -> Resource<Python3>>, $script);
 $add = Python3::add(Callable<(Resource<Python3>, Int64) -> Resource<Python3>>, $script);
 $merge = Python3::merge(Callable<(Resource<Python3>, Resource<Python3>) -> Resource<Python3>>, $script);
@@ -50,5 +51,6 @@ SELECT
 FROM (
     SELECT
         CAST(LENGTH(value) AS Int64) AS item
-    FROM plato.Input
+    FROM
+        plato.Input
 );

@@ -5,4 +5,6 @@ SELECT
     coalesce(d, "") AS b,
     f AS f,
     CAST(coalesce(e, TRUE) AS varchar) AS e
-FROM plato.Input;
+FROM
+    plato.Input
+;

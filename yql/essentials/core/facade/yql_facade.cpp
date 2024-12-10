@@ -874,7 +874,7 @@ TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputS
         .AddPreTypeAnnotation()
         .AddExpressionEvaluation(*FunctionRegistry_)
         .AddIOAnnotation()
-        .AddTypeAnnotation()
+        .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
         .AddCheckExecution(false)
@@ -937,7 +937,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
             .AddPreTypeAnnotation()
             .AddExpressionEvaluation(*FunctionRegistry_)
             .AddIOAnnotation()
-            .AddTypeAnnotation()
+            .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
             .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
             .Build();
 
@@ -1012,7 +1012,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
         .AddPreTypeAnnotation()
         .AddExpressionEvaluation(*FunctionRegistry_)
         .AddIOAnnotation()
-        .AddTypeAnnotation()
+        .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
         .AddOptimization()
@@ -1080,7 +1080,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1139,7 +1139,7 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1220,7 +1220,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput");
     pipeline.AddOptimization();
@@ -1297,7 +1297,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1711,6 +1711,7 @@ TIssues TProgram::Issues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetIssues());
     }
     result.AddIssues(FinalIssues_);
+    CheckFatalIssues(result);
     return result;
 }
 
@@ -1720,6 +1721,7 @@ TIssues TProgram::CompletedIssues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetCompletedIssues());
     }
     result.AddIssues(FinalIssues_);
+    CheckFatalIssues(result);
     return result;
 }
 

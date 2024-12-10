@@ -278,6 +278,15 @@ void TTiersManager::UpdateTierConfig(const NTiers::TTierConfig& config, const TS
     OnConfigsUpdated(notifyShard);
 }
 
+bool TTiersManager::AreConfigsComplete() const {
+    for (const auto& [tier, cnt] : TierRefCount) {
+        if (!TierConfigs.contains(tier)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 TActorId TTiersManager::GetActorId() const {
     if (Actor) {
         return Actor->SelfId();

@@ -56,6 +56,11 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
             d = tieringInfo.GetNextTierWaitingVerified().GetValue();
             targetTierName = tieringInfo.GetNextTierNameVerified();
         }
+        if (!StoragesManager->GetOperatorGuarantee(targetTierName)->IsReady()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_eviction")("reason", "storage_not_ready")("tier", targetTierName)(
+                "portion", portion.GetPortionId());
+            return std::nullopt;
+        }
         if (d) {
             //            if (currentTierName == "deploy_logs_s3" && targetTierName == IStoragesManager::DefaultStorageId) {
             //                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);

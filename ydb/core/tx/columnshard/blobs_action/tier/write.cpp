@@ -6,13 +6,6 @@
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 void TWriteAction::DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) {
-    if (!ExternalStorageOperator) {
-        auto response = std::make_unique<TEvBlobStorage::TEvPutResult>(NKikimrProto::EReplyStatus::ERROR, blobId.GetLogoBlobId(), 0, TGroupId::FromValue(Max<ui32>()), 0, GetStorageId());
-        response->ErrorReason = "storage operator is uninitialized for tier: " + GetStorageId();
-        TActorContext::AsActorContext().Send(TActorContext::AsActorContext().SelfID, response.release());
-        return;
-    }
-
     auto awsRequest = Aws::S3::Model::PutObjectRequest().WithKey(blobId.GetLogoBlobId().ToString());
 
     TString moveData = data;

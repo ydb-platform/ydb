@@ -105,6 +105,7 @@ public:
 
     void UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
     void UpdateTierConfig(const NTiers::TTierConfig& config, const TString& tierName, const bool notifyShard = true);
+    bool AreConfigsComplete() const;
 
     TString DebugString();
 

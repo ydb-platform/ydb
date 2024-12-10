@@ -16,6 +16,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
+#include <ydb/core/tx/tiering/manager.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -103,9 +104,9 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
 void TTxInit::Complete(const TActorContext& ctx) {
     Self->Counters.GetCSCounters().Initialization.OnTxInitFinished(TMonotonic::Now() - StartInstant);
-    Self->ProgressTxController->OnTabletInit();
-    Self->SwitchToWork(ctx);
-    NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*Self);
+    AFL_VERIFY(!Self->IsTxInitFinished);
+    Self->IsTxInitFinished = true;
+    Self->TrySwitchToWork(ctx);
 }
 
 class TTxUpdateSchema: public TTransactionBase<TColumnShard> {

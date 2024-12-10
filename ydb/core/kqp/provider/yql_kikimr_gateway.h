@@ -874,6 +874,47 @@ struct TDropReplicationSettings {
     bool Cascade = false;
 };
 
+struct TTransferSettings {
+
+    TMaybe<TString> ConnectionString;
+    TMaybe<TString> Endpoint;
+    TMaybe<TString> Database;
+    TMaybe<TReplicationSettings::TOAuthToken> OAuthToken;
+    TMaybe<TReplicationSettings::TStaticCredentials> StaticCredentials;
+
+    TReplicationSettings::TOAuthToken& EnsureOAuthToken() {
+        if (!OAuthToken) {
+            OAuthToken = TReplicationSettings::TOAuthToken();
+        }
+
+        return *OAuthToken;
+    }
+
+    TReplicationSettings::TStaticCredentials& EnsureStaticCredentials() {
+        if (!StaticCredentials) {
+            StaticCredentials = TReplicationSettings::TStaticCredentials();
+        }
+
+        return *StaticCredentials;
+    }
+};
+
+struct TCreateTransferSettings {
+    TString Name;
+    TVector<std::pair<TString, TString>> Targets;
+    TTransferSettings Settings;
+};
+
+struct TAlterTransferSettings {
+    TString Name;
+    TTransferSettings Settings;
+};
+
+struct TDropTransferSettings {
+    TString Name;
+    bool Cascade = false;
+};
+
 struct TAnalyzeSettings {
     TString TablePath;
     TVector<TString> Columns;

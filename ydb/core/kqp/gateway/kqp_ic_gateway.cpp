@@ -1094,6 +1094,18 @@ public:
         return NotImplemented<TGenericResult>();
     }
 
+    TFuture<TGenericResult> CreateTransfer(const TString&, const NYql::TCreateTransferSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> AlterTransfer(const TString&, const NYql::TAlterTransferSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> DropTransfer(const TString&, const NYql::TDropTransferSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
     TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) override {
         Y_UNUSED(cluster);
         Y_UNUSED(req);

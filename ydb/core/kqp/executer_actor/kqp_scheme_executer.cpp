@@ -307,6 +307,24 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kCreateTransfer: {
+                const auto& modifyScheme = schemeOp.GetCreateTransfer();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterTransfer: {
+                const auto& modifyScheme = schemeOp.GetAlterTransfer();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropTransfer: {
+                const auto& modifyScheme = schemeOp.GetDropTransfer();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             case NKqpProto::TKqpSchemeOperation::kAlterSequence: {
                 const auto& modifyScheme = schemeOp.GetAlterSequence();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);

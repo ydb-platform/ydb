@@ -176,6 +176,7 @@ void TParallelFileInputState::RunNext() {
             CreateInputStream(Settings_->Requests[inputIdx]).SubscribeUnique(BIND([state = InnerState_, inputIdx](NYT::TErrorOr<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& stream) {
                 if (!stream.IsOK()) {
                     state->Error = stream;
+                    state->WaitPromise.TrySet();
                     return;
                 }
                 state->RawInputs[inputIdx] = std::move(stream.Value());

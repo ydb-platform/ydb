@@ -1031,7 +1031,8 @@ void TFixture::Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
     UNIT_ASSERT_VALUES_EQUAL(count, limit);
 }
 
-bool TFixture::GetEnableOltpSink() const {
+bool TFixture::GetEnableOltpSink() const
+{
     return false;
 }
 
@@ -2288,7 +2289,8 @@ protected:
                           NTable::TTransaction* tx);
 };
 
-bool TFixtureOltpSink::GetEnableOltpSink() const {
+bool TFixtureOltpSink::GetEnableOltpSink() const
+{
     return true;
 }
 

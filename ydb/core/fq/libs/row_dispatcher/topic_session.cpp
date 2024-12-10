@@ -308,7 +308,7 @@ private:
         ExceptionFunc(std::exception, HandleException)
     )
 
-    STRICT_STFUNC(ErrorState, {
+    STRICT_STFUNC_EXC(ErrorState,
         cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
         IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
@@ -319,8 +319,9 @@ private:
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
         IgnoreFunc(NFq::TEvPrivate::TEvSendStatisticToRowDispatcher);
-        IgnoreFunc(TEvRowDispatcher::TEvPurecalcCompileResponse);
-    })
+        IgnoreFunc(TEvRowDispatcher::TEvPurecalcCompileResponse);,
+        ExceptionFunc(std::exception, HandleException)
+    )
 };
 
 TTopicSession::TTopicSession(
@@ -814,12 +815,6 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
         }
     }
 
-    if (Parser) {
-        // Parse remains data before changing parsing schema
-        DoParsing(true);
-    }
-    UpdateParser();
-
     if (!ReadSession) {
         Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
     }
@@ -848,6 +843,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             std::forward_as_tuple(ev->Sender), 
             std::forward_as_tuple(ev, readGroup)).first->second;
         UpdateFieldsIds(clientInfo);
+        UpdateParser();
 
         const auto& source = clientInfo.Settings.GetSource();
         TString predicate = source.GetPredicate();

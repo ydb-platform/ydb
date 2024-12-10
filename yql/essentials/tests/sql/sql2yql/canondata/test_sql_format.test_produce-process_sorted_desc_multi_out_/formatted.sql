@@ -24,7 +24,7 @@ $splitter = ($row) -> {
         WHEN 1 THEN VARIANT ($row, "1", $varType)
         WHEN 2 THEN VARIANT ($row, "2", $varType)
         ELSE VARIANT ($row, "3", $varType)
-    END
+    END;
 };
 
 $a, $b, $c, $d = (

@@ -930,6 +930,10 @@ public:
         return "DQ cannot execute the query. Cause: " + message;
     }
 
+    virtual void NotifyDqTimeout() override {
+        State_->IsDqTimeout = true;
+    }
+
 private:
     TYtState* State_;
 };

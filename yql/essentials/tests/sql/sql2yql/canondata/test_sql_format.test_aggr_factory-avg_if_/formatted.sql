@@ -9,7 +9,7 @@ SELECT
             AsTuple(
                 AsAtom("res"), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN AsTuple($z.a, $z.a < 2)
+                        RETURN AsTuple($z.a, $z.a < 2);
                     }
                 )
             )

@@ -1,11 +1,18 @@
+import hashlib
+import json
 import os
 import shutil
 
+from .constants import PNPM_PRE_LOCKFILE_FILENAME
 from .lockfile import PnpmLockfile
 from .utils import build_lockfile_path, build_pre_lockfile_path, build_ws_config_path
 from .workspace import PnpmWorkspace
 from ..base import BasePackageManager, PackageManagerError
-from ..base.constants import NODE_MODULES_WORKSPACE_BUNDLE_FILENAME, PACKAGE_JSON_FILENAME, PNPM_LOCKFILE_FILENAME
+from ..base.constants import (
+    NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
+    PACKAGE_JSON_FILENAME,
+    PNPM_LOCKFILE_FILENAME,
+)
 from ..base.node_modules_bundler import bundle_node_modules
 from ..base.package_json import PackageJson
 from ..base.timeit import timeit
@@ -52,6 +59,17 @@ class PnpmPackageManager(BasePackageManager):
         return os.path.join(home_dir(), ".cache", "pnpm-store")
 
     @timeit
+    def _get_file_hash(self, path: str):
+        sha256 = hashlib.sha256()
+
+        with open(path, "rb") as f:
+            # Read the file in chunks
+            for chunk in iter(lambda: f.read(4096), b""):
+                sha256.update(chunk)
+
+        return sha256.hexdigest()
+
+    @timeit
     def _create_local_node_modules(self, nm_store_path: str, store_dir: str, virtual_store_dir: str):
         """
         Creates ~/.nots/nm_store/$MODDIR/node_modules folder (with installed packages and .pnpm/virtual-store)
@@ -84,6 +102,11 @@ class PnpmPackageManager(BasePackageManager):
                 shutil.copy(src, dst)
 
         self._run_pnpm_install(store_dir, virtual_store_dir, nm_store_path)
+
+        # Write node_modules.json to prevent extra `pnpm install` running 1
+        with open(os.path.join(nm_store_path, "node_modules.json"), "w") as f:
+            pre_pnpm_lockfile_hash = self._get_file_hash(build_pre_lockfile_path(self.build_path))
+            json.dump({PNPM_PRE_LOCKFILE_FILENAME: {"hash": pre_pnpm_lockfile_hash}}, f)
 
     @timeit
     def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, bundle=True):

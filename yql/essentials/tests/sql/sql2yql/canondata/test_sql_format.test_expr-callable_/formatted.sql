@@ -1,7 +1,7 @@
 /* postgres can not */
 /* syntax version 1 */
 $lambda = ($x) -> {
-    RETURN CAST($x AS String)
+    RETURN CAST($x AS String);
 };
 
 $callables = AsTuple(

@@ -3,7 +3,7 @@
 USE plato;
 
 $udf_stream = ($input) -> {
-    RETURN $input
+    RETURN $input;
 };
 
 $res =

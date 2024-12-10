@@ -33,27 +33,27 @@ $my_table =
 ;
 
 $cnt_create = ($_item, $_parent) -> {
-    RETURN 1ul
+    RETURN 1ul;
 };
 
 $cnt_add = ($state, $_item, $_parent) -> {
-    RETURN 1ul + $state
+    RETURN 1ul + $state;
 };
 
 $cnt_merge = ($state1, $state2) -> {
-    RETURN $state1 + $state2
+    RETURN $state1 + $state2;
 };
 
 $cnt_get_result = ($state) -> {
-    RETURN $state
+    RETURN $state;
 };
 
 $cnt_serialize = ($state) -> {
-    RETURN $state
+    RETURN $state;
 };
 
 $cnt_deserialize = ($state) -> {
-    RETURN $state
+    RETURN $state;
 };
 
 -- non-trivial default value 

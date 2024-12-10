@@ -6,7 +6,6 @@
 #include "yql_functions_servlet.h"
 
 #include <yql/essentials/core/facade/yql_facade.h>
-#include <yql/essentials/core/yql_csv.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 

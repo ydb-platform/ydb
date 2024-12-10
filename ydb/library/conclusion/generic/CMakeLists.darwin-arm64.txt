@@ -18,5 +18,6 @@ add_library(library-conclusion-generic INTERFACE)
 target_link_libraries(library-conclusion-generic INTERFACE
   contrib-libs-cxxsupp
   yutil
+  essentials-public-issue
 )
 

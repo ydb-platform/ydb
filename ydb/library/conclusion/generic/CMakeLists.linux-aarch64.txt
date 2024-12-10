@@ -19,5 +19,6 @@ target_link_libraries(library-conclusion-generic INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  essentials-public-issue
 )
 

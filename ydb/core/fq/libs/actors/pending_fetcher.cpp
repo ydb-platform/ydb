@@ -358,13 +358,16 @@ private:
         const TString folderId = NYdb::NFq::TScope(task.scope()).ParseFolder();
         const TString cloudId = task.sensor_labels().at("cloud_id");
         const TString queryId = task.query_id().value();
-
+        const bool isStreaming = task.query_type() == FederatedQuery::QueryContent::STREAMING;
         TString queryIdLabel = queryId;
         if (task.automatic()) {
-            queryIdLabel = (task.query_type() == FederatedQuery::QueryContent::STREAMING) ? "streaming" : "automatic";
+            queryIdLabel = isStreaming ? "streaming" : "automatic";
         } else {
-            if (task.query_type() == FederatedQuery::QueryContent::ANALYTICS) {
+            if (!isStreaming) {
                 queryIdLabel = "analytics";
+            } else if (task.query_name()) {
+                // todo: sanitize query name
+                queryIdLabel = task.query_name();
             }
         }
 

@@ -81,10 +81,11 @@ public:
 template <class TStatus, TStatus StatusOk, TStatus DefaultError>
 class TConclusionStatusImpl : public TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, TString, TConclusionStatusImpl<TStatus, StatusOk, DefaultError>> {
 protected:
-    friend class TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, TString, TConclusionStatusImpl<TStatus, StatusOk, DefaultError>>;
-
-    using TBase = TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, TString, TConclusionStatusImpl<TStatus, StatusOk, DefaultError>>;
+    using TSelf = TConclusionStatusImpl<TStatus, StatusOk, DefaultError>;
+    using TBase = TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, TString, TSelf>;
     using TBase::TBase;
+
+    friend class TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, TString, TSelf>;
 
     TConclusionStatusImpl() = default;
 
@@ -109,10 +110,11 @@ public:
 template <class TStatus, TStatus StatusOk, TStatus DefaultError>
 class TYQLConclusionStatusImpl : public TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TYQLConclusionStatusImpl<TStatus, StatusOk, DefaultError>> {
 protected:
-    friend class TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TYQLConclusionStatusImpl<TStatus, StatusOk, DefaultError>>;
-
-    using TBase = TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TYQLConclusionStatusImpl<TStatus, StatusOk, DefaultError>>;
+    using TSelf = TYQLConclusionStatusImpl<TStatus, StatusOk, DefaultError>;
+    using TBase = TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TSelf>;
     using TBase::TBase;
+
+    friend class TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TSelf>;
 
     TYQLConclusionStatusImpl() = default;
 

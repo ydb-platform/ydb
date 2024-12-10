@@ -55,5 +55,19 @@ void AuditLog(ui32 status, const TAuditLogParts& parts)
     );
 }
 
+void AuditLogConnectDbAccessDenied(const IRequestProxyCtx* ctx, const TString& database, const TString& userSID, const TString& sanitizedToken)
+{
+    if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {
+        AuditLog(Ydb::StatusIds::UNAUTHORIZED, {
+            {"remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName())},
+            {"subject", userSID},
+            {"sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue)},
+            {"database", database},
+            {"operation", ctx->GetRequestName()},
+            {"reason", "No permission to connect to the database"},
+        });
+    }
+}
+
 }
 }

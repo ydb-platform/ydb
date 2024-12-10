@@ -100,19 +100,18 @@ public:
     std::pair<ETraceState, ui8> HandleTracing(bool isExternal, TRequestDiscriminator discriminator) {
         auto& control = RandomChoice(Controls);
 
-        NWilson::TTraceId traceId;
+        TMaybe<TString> traceparent;
         if (isExternal) {
-            traceId = NWilson::TTraceId::NewTraceId(TComponentTracingLevels::ProductionVerbose, Max<ui32>());
+            traceparent = GenerateTraceparentHeader();
         }
-        auto before = traceId.Clone();
+        NWilson::TTraceId traceId = control->HandleTracing(discriminator, traceparent);
 
-        control->HandleTracing(traceId, discriminator);
         if (!traceId) {
             return {OFF, 0};
         }
 
         ETraceState state;
-        if (traceId == before) {
+        if (traceparent && *traceparent == traceId.ToTraceresponseHeader()) {
             state = ETraceState::EXTERNAL;
         } else {
             state = ETraceState::SAMPLED;
@@ -123,6 +122,43 @@ public:
 
 private:
     TVector<TIntrusivePtr<TSamplingThrottlingControl>> Controls;
+
+    TString GenerateTraceparentHeader() {
+        std::array<char, NWilson::TTraceId::GetTraceIdSize()> traceId;
+        for (;;) {
+            ui32 *p = reinterpret_cast<ui32*>(traceId.data());
+
+            TReallyFastRng32 rng(RandomNumber<ui64>());
+            p[0] = rng();
+            p[1] = rng();
+            p[2] = rng();
+            p[3] = rng();
+
+            if (traceId[0] || traceId[1]) {
+                break;
+            }
+        }
+
+        ui64 spanId;
+        for (;;) {
+            if (spanId = RandomNumber<ui64>(); spanId) {
+                break;
+            }
+        }
+
+        TString result;
+        result += "00-";
+        result += HexEncode(traceId.data(), NWilson::TTraceId::GetTraceIdSize());
+        result += "-";
+        result += HexEncode(reinterpret_cast<char*>(&spanId), sizeof(spanId));
+        result += "-00";
+
+        for (char& c : result) {
+            c = ToLower(c);
+        }
+
+        return result;
+    }
 };
 
 std::pair<TTracingControls, TIntrusivePtr<TSamplingThrottlingConfigurator>>
@@ -222,7 +258,8 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::MilliSeconds(250)); // 4 requests per second
             }
-            UNIT_ASSERT_C(traced >= 250 + 125 - 50 && traced <= 250 + 125 + 50, traced); // 1 of each 4 requests external traced + 1 of each 3 other requests sampled (but not greater than 0.5 of them according to throttling)
+            UNIT_ASSERT_EQUAL(traced, 250);
+            UNIT_ASSERT(sampled >= 110 && sampled <= 135);
         }
         timeProvider->Advance(TDuration::Minutes(1));
 

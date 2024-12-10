@@ -1,5 +1,6 @@
 PRAGMA warning("disable", "4510");
 PRAGMA CostBasedOptimizer = "Native";
+
 USE plato;
 
 $foo =
@@ -7,14 +8,18 @@ $foo =
         subkey,
         key,
         value AS v
-    FROM Input
+    FROM
+        Input
     ORDER BY
         subkey ASC,
         key DESC
-    LIMIT 10;
+    LIMIT 10
+;
 
 $x =
-    PROCESS $foo;
+    PROCESS $foo
+;
 
 SELECT
-    YQL::CostsOf($x) AS costs;
+    YQL::CostsOf($x) AS costs
+;

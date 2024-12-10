@@ -410,9 +410,7 @@ ELSEIF (ARCH_X86_64)
             fixunsxfti.c
             fixxfdi.c
             fixxfti.c
-            floatdixf.c
             floattixf.c
-            floatundixf.c
             floatuntixf.c
             mulxc3.c
             powixf2.c
@@ -584,7 +582,7 @@ ELSE()
     )
 ENDIF()
 
-IF (OS_LINUX)
+IF (OS_LINUX AND NOT WITH_MAPKIT)
     SRCS(
         crtbegin.c
         crtend.c

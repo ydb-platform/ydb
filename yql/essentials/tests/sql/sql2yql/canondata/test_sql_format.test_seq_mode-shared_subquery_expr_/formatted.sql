@@ -2,12 +2,17 @@ PRAGMA SeqMode;
 
 $a =
     SELECT
-        1;
+        1
+;
 
 SELECT
     *
-FROM $a;
+FROM
+    $a
+;
 
 SELECT
     *
-FROM $a;
+FROM
+    $a
+;

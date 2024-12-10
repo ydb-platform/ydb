@@ -5,5 +5,6 @@ PRAGMA yt.TmpFolder = "custom";
 
 SELECT
     *
-FROM plato.Input
-    WITH inferscheme;
+FROM
+    plato.Input WITH inferscheme
+;

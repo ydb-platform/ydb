@@ -5,7 +5,8 @@ SELECT
 FROM (
     SELECT
         TableRow() AS nums
-    FROM AS_TABLE([<|x: (1, 6)|>, <|x: (3, 4)|>, <|x: (5, 2)|>])
+    FROM
+        AS_TABLE([<|x: (1, 6)|>, <|x: (3, 4)|>, <|x: (5, 2)|>])
 );
 
 SELECT
@@ -13,5 +14,6 @@ SELECT
 FROM (
     SELECT
         TableRow() AS nums
-    FROM AS_TABLE([<|x: (1, 6)|>, <|x: (3, 4)|>, <|x: (5, 2)|>])
+    FROM
+        AS_TABLE([<|x: (1, 6)|>, <|x: (3, 4)|>, <|x: (5, 2)|>])
 );

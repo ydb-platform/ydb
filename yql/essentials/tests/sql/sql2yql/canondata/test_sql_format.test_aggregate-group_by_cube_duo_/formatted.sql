@@ -4,9 +4,11 @@ SELECT
     sum(length(value)),
     key,
     subkey
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     CUBE (key, subkey)
 ORDER BY
     key,
-    subkey;
+    subkey
+;

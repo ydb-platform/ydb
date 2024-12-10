@@ -9,6 +9,8 @@ SELECT
     key,
     subkey,
     value
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key DESC;
+    key DESC
+;

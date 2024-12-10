@@ -1,4 +1,5 @@
 USE plato;
+
 $f = ($x, $optArg?) -> {
     RETURN Ensure($x, $optArg IS NULL OR len($optArg) > 0);
 };

@@ -11,7 +11,8 @@ SELECT
     LAST_VALUE(NULL) OVER w1,
     LAST_VALUE(NULL) IGNORE NULLS OVER w1,
     subkey
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w1 AS (
         ORDER BY
@@ -19,4 +20,5 @@ WINDOW
         ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
     )
 ORDER BY
-    subkey;
+    subkey
+;

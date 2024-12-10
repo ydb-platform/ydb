@@ -4,20 +4,24 @@ PRAGMA OrderedColumns;
 
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     user,
     SessionWindow(ts, 10) AS session_start
 ORDER BY
     user,
-    session_start;
+    session_start
+;
 
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     user,
     SessionWindow(ts, 10)
 ORDER BY
     user,
-    group0;
+    group0
+;

@@ -4,12 +4,13 @@
 #include "percpu.h"
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <library/cpp/yt/assert/assert.h>
 
 #include <yt/yt/library/profiling/impl.h>
 #include <yt/yt/library/profiling/sensor.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT::NProfiling {
 

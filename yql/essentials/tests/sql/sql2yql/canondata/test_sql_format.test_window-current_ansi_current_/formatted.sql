@@ -7,7 +7,8 @@ SELECT
     key,
     subkey,
     SUM(CAST(subkey AS Int32)) OVER w AS subkey_sum,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w AS (
         PARTITION BY
@@ -18,4 +19,5 @@ WINDOW
 ORDER BY
     value,
     key,
-    subkey;
+    subkey
+;

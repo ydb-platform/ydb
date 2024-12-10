@@ -27,6 +27,7 @@
 #include <yt/yt/core/misc/proc.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <library/cpp/yt/threading/atomic_object.h>
 

@@ -13,9 +13,11 @@ TProgramPdeathsigMixin::TProgramPdeathsigMixin(NLastGetopt::TOpts& opts)
     opts.AddLongOption("pdeathsig", "parent death signal")
         .StoreResult(&ParentDeathSignal_)
         .RequiredArgument("PDEATHSIG");
+
+    RegisterMixinCallback([&] { Handle(); });
 }
 
-bool TProgramPdeathsigMixin::HandlePdeathsigOptions()
+void TProgramPdeathsigMixin::Handle()
 {
     if (ParentDeathSignal_ > 0) {
 #ifdef _linux_
@@ -28,7 +30,6 @@ bool TProgramPdeathsigMixin::HandlePdeathsigOptions()
         YT_VERIFY(prctl(PR_SET_PDEATHSIG, ParentDeathSignal_) == 0);
 #endif
     }
-    return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

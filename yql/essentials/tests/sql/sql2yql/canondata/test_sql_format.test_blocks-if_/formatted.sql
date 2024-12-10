@@ -9,7 +9,9 @@ SELECT
     if(key > subkey, key, 'subkey is greater') AS sc3,
     if(subkey >= key, 'subkey is greater or eq', key) AS sc4,
     if(subkey >= key, 'subkey is greater or eq', 'key is greater') AS sc5,
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
     key,
-    subkey;
+    subkey
+;

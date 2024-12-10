@@ -30,6 +30,10 @@ public:
     void DumpTags(NProto::TSensorDump* dump);
 
 private:
+    template <class TTagPerfect>
+    TTagId EncodeSanitized(TTagPerfect&& tag);
+    std::optional<TTagId> TryEncodeSanitized(const TTag& tag) const;
+
     // TODO(prime@): maybe do something about the fact that tags are never freed.
     THashMap<TTag, TTagId> TagByName_;
     std::deque<TTag> TagById_;
@@ -60,3 +64,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NProfiling
+
+#define TAG_REGISTRY_INL_H
+#include "tag_registry-inl.h"
+#undef TAG_REGISTRY_INL_H

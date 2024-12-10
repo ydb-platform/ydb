@@ -3,25 +3,33 @@ $x = 1 + 0;
 $y = 2ul + 0ul;
 
 SELECT
-    $x ?? $y;
+    $x ?? $y
+;
 
 SELECT
-    $y ?? $x;
+    $y ?? $x
+;
 
 SELECT
-    Just($x) ?? $y;
+    Just($x) ?? $y
+;
 
 SELECT
-    $y ?? Just($x);
+    $y ?? Just($x)
+;
 
 SELECT
-    $x ?? Just($y);
+    $x ?? Just($y)
+;
 
 SELECT
-    Just($y) ?? $x;
+    Just($y) ?? $x
+;
 
 SELECT
-    Just($x) ?? Just($y);
+    Just($x) ?? Just($y)
+;
 
 SELECT
-    Just($y) ?? Just($x);
+    Just($y) ?? Just($x)
+;

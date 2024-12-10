@@ -1,4 +1,7 @@
 SELECT
     *
-FROM plato.Input
-WHERE key > "100";
+FROM
+    plato.Input
+WHERE
+    key > "100"
+;

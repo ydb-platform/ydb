@@ -12,5 +12,6 @@ FROM (
         Unwrap(CAST(subkey AS int)) AS sub,
         value AS value,
         CAST(value AS int) AS empty
-    FROM plato.Input
+    FROM
+        plato.Input
 );

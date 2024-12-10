@@ -6,6 +6,8 @@ PRAGMA yt.DefaultMaxJobFails = "1";
 SELECT
     boobee,
     DictLookup(_other, 'boobee')
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    boobee;
+    boobee
+;

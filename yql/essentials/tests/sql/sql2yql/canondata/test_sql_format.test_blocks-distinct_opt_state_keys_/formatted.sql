@@ -1,4 +1,5 @@
 PRAGMA yt.UsePartitionsByKeysForFinalAgg = "false";
+
 USE plato;
 
 SELECT
@@ -9,8 +10,10 @@ SELECT
     avg(subkey),
     count(DISTINCT subkey / 2u),
     avg(DISTINCT subkey / 2u)
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

@@ -11,7 +11,9 @@ SELECT
     MULTI_AGGREGATE_BY(x, AggregationFactory("agg_list")),
     MULTI_AGGREGATE_BY(x, AggregationFactory("avg")),
     MULTI_AGGREGATE_BY(x, AggregationFactory("count")),
-FROM AS_TABLE($data);
+FROM
+    AS_TABLE($data)
+;
 
 SELECT
     MULTI_AGGREGATE_BY(x, AggregationFactory("agg_list")),
@@ -20,6 +22,7 @@ SELECT
 FROM (
     SELECT
         *
-    FROM AS_TABLE($data)
+    FROM
+        AS_TABLE($data)
     LIMIT 0
 );

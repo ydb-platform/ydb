@@ -16,7 +16,8 @@ SELECT
     JSON_QUERY ($json, "strict $.array" WITHOUT ARRAY WRAPPER),
     JSON_QUERY ($json, "strict $.object"), -- defaults to WITHOUT ARRAY WRAPPER
     JSON_QUERY ($json, "strict $.object" WITHOUT WRAPPER),
-    JSON_QUERY ($json, "strict $.object" WITHOUT ARRAY WRAPPER);
+    JSON_QUERY ($json, "strict $.object" WITHOUT ARRAY WRAPPER)
+;
 
 -- Check UNCONDITIONAL wrapper
 SELECT
@@ -39,7 +40,8 @@ SELECT
     JSON_QUERY ($json, "strict $.multi_object[*]" WITH WRAPPER), -- default to WITH UNCONDITIONAL WRAPPER
     JSON_QUERY ($json, "strict $.multi_object[*]" WITH ARRAY WRAPPER),
     JSON_QUERY ($json, "strict $.multi_object[*]" WITH UNCONDITIONAL WRAPPER),
-    JSON_QUERY ($json, "strict $.multi_object[*]" WITH UNCONDITIONAL ARRAY WRAPPER);
+    JSON_QUERY ($json, "strict $.multi_object[*]" WITH UNCONDITIONAL ARRAY WRAPPER)
+;
 
 -- Check CONDITIONAL wrapper
 SELECT
@@ -52,4 +54,5 @@ SELECT
     JSON_QUERY ($json, "strict $.multi_array[*]" WITH CONDITIONAL WRAPPER),
     JSON_QUERY ($json, "strict $.multi_array[*]" WITH CONDITIONAL ARRAY WRAPPER),
     JSON_QUERY ($json, "strict $.multi_object[*]" WITH CONDITIONAL WRAPPER),
-    JSON_QUERY ($json, "strict $.multi_object[*]" WITH CONDITIONAL ARRAY WRAPPER);
+    JSON_QUERY ($json, "strict $.multi_object[*]" WITH CONDITIONAL ARRAY WRAPPER)
+;

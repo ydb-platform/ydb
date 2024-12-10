@@ -23,4 +23,5 @@ SELECT
     pginterval('1 day') - pginterval('1 hour'),
     pgtimestamp('2001-09-29 03:00') - pgtimestamp('2001-07-27 12:00'),
     pginterval('1 second') * 900.0,
-    pginterval('1 hour') / 1.5;
+    pginterval('1 hour') / 1.5
+;

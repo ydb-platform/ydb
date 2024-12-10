@@ -4,11 +4,16 @@ USE plato;
 $i =
     SELECT
         *
-    FROM Input;
+    FROM
+        Input
+;
 
 $i =
-    PROCESS $i;
+    PROCESS $i
+;
+
 $members = StructTypeComponents(ListItemType(TypeHandle(TypeOf($i))));
+
 $filteredMembers = ListFilter(
     ListMap(
         $members, ($x) -> {
@@ -21,5 +26,6 @@ $filteredMembers = ListFilter(
 
 SELECT
     ChooseMembers(TableRow(), $filteredMembers)
-FROM Input
-    VIEW raw;
+FROM
+    Input VIEW raw
+;

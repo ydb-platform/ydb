@@ -11,4 +11,6 @@ SELECT
     subkey,
     value AS new_value,
     "x"
-FROM plato.Input;
+FROM
+    plato.Input
+;

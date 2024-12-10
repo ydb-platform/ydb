@@ -3,12 +3,16 @@ USE plato;
 SELECT DISTINCT
     value,
     value_utf
-FROM Input
+FROM
+    Input
 ORDER BY
-    value;
+    value
+;
 
 SELECT DISTINCT
     value,
-FROM Input
+FROM
+    Input
 ORDER BY
-    value;
+    value
+;

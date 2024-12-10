@@ -5,10 +5,14 @@ USE plato;
 $list =
     SELECT
         ListSort(aggregate_list(key))
-    FROM Input;
+    FROM
+        Input
+;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
-    ListIndexOf($list ?? [], key);
+    ListIndexOf($list ?? [], key)
+;

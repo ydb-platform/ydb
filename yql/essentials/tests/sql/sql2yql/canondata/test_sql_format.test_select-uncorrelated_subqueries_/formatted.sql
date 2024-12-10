@@ -6,18 +6,25 @@ $_data = (
         key AS kk,
         subkey AS sk,
         value AS val
-    FROM plato.Input1
-    WHERE key == '075'
+    FROM
+        plato.Input1
+    WHERE
+        key == '075'
 );
 
 $data_one_key = (
     SELECT
         subkey
-    FROM plato.Input1
-    WHERE key == '075'
+    FROM
+        plato.Input1
+    WHERE
+        key == '075'
 );
 
 SELECT
     *
-FROM Input2
-WHERE key == $data_one_key;
+FROM
+    Input2
+WHERE
+    key == $data_one_key
+;

@@ -12,4 +12,5 @@ SELECT
     $capture($value) AS capture,
     $capture($value)._1 AS capture_member,
     $replace($value, "b\\1z") AS replace,
-    $count($value) AS count;
+    $count($value) AS count
+;

@@ -5,7 +5,8 @@ USE plato;
 DEFINE SUBQUERY $get_tables_list($dir) AS
     SELECT
         Unwrap($dir || "/" || CAST(TableName(Path, "yt") AS String)) AS Path,
-    FROM FOLDER($dir)
+    FROM
+        FOLDER($dir)
 END DEFINE;
 
 DEFINE SUBQUERY $get_all_tables_list($dirs) AS
@@ -13,7 +14,9 @@ DEFINE SUBQUERY $get_all_tables_list($dirs) AS
 
     SELECT
         *
-    FROM $get_src_tables();
+    FROM
+        $get_src_tables()
+    ;
 END DEFINE;
 
 PROCESS $get_all_tables_list([""]);

@@ -2,5 +2,6 @@
 /* syntax version 1 */
 SELECT
     *
-FROM plato.`Input`
-    VIEW `key`;
+FROM
+    plato.`Input` VIEW `key`
+;

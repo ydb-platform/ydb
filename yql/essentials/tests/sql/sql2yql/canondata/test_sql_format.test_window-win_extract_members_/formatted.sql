@@ -7,7 +7,8 @@ $foo = (
         subkey,
         value,
         sum(CAST(subkey AS uint32)) OVER w AS sks
-    FROM Input
+    FROM
+        Input
     WINDOW
         w AS (
             PARTITION BY
@@ -23,7 +24,8 @@ $bar = (
         subkey,
         sum(CAST(subkey AS uint32)) OVER w AS sks,
         avg(CAST(subkey AS uint32)) OVER w AS ska
-    FROM Input4
+    FROM
+        Input4
     WINDOW
         w AS (
             PARTITION BY
@@ -37,15 +39,19 @@ SELECT
     key,
     subkey,
     value
-FROM $foo
+FROM
+    $foo
 ORDER BY
     key,
-    subkey;
+    subkey
+;
 
 SELECT
     key,
     ska
-FROM $bar
+FROM
+    $bar
 ORDER BY
     key,
-    ska;
+    ska
+;

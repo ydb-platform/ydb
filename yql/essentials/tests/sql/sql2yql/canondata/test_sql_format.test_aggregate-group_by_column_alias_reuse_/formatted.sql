@@ -6,9 +6,10 @@ SELECT
 
     --    key as kkk,
     aggregate_list(subkey)
-FROM plato.Input4
-    AS a
+FROM
+    plato.Input4 AS a
 GROUP BY
     a.key AS kk
 ORDER BY
-    kk;
+    kk
+;

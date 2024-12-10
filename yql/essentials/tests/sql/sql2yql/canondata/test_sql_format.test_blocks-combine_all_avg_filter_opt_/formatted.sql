@@ -2,5 +2,8 @@ USE plato;
 
 SELECT
     avg(key)
-FROM Input
-WHERE subkey != 5;
+FROM
+    Input
+WHERE
+    subkey != 5
+;

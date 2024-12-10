@@ -6,7 +6,9 @@ FROM (
         AsTuple(Just(key), Just(key)) AS key,
         subkey,
         value
-    FROM plato.Input
+    FROM
+        plato.Input
 )
 ORDER BY
-    key;
+    key
+;

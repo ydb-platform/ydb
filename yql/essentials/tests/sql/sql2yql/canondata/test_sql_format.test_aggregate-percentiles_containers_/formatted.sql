@@ -8,12 +8,14 @@ FROM (
     SELECT
         key,
         CAST(value AS int) AS val
-    FROM plato.Input
+    FROM
+        plato.Input
 )
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     median(val) AS med,
@@ -24,5 +26,6 @@ FROM (
     SELECT
         key,
         CAST(value AS int) AS val
-    FROM plato.Input
+    FROM
+        plato.Input
 );

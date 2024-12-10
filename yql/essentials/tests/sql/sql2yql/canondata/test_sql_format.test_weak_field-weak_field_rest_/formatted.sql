@@ -10,6 +10,8 @@ SELECT
     WeakField(wild, "Bool"),
     WeakField(pet, "Bool", FALSE),
     WeakField(miss, "Bool", TRUE)
-FROM Input
+FROM
+    Input
 ORDER BY
-    weightMin;
+    weightMin
+;

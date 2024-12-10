@@ -8,7 +8,8 @@ SELECT
     ROW_NUMBER() OVER w1 AS rn1,
     ROW_NUMBER() OVER w2 AS rn2,
     ROW_NUMBER() OVER w3 AS rn3,
-FROM Input
+FROM
+    Input
 WINDOW
     w1 AS (),
     w2 AS (
@@ -20,4 +21,5 @@ WINDOW
         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW
     )
 ORDER BY
-    subkey;
+    subkey
+;

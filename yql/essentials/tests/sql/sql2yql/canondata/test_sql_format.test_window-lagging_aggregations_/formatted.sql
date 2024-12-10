@@ -10,8 +10,10 @@ SELECT
 FROM (
     SELECT
         *
-    FROM plato.Input
-    WHERE key == '1'
+    FROM
+        plato.Input
+    WHERE
+        key == '1'
 )
 WINDOW
     w1 AS (
@@ -29,4 +31,5 @@ WINDOW
         ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
     )
 ORDER BY
-    value;
+    value
+;

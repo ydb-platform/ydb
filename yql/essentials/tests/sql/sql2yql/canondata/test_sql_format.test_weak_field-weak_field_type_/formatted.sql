@@ -5,4 +5,6 @@ SELECT
     WeakField(key, DataType("String")),
     WeakField(subkey, OptionalType(DataType("String"))),
     WeakField(value, "String")
-FROM Input;
+FROM
+    Input
+;

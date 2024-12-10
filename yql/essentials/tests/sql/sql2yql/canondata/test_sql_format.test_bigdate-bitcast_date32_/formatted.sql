@@ -15,4 +15,5 @@ SELECT
     9,
     BITCAST(Yql::Date32(AsAtom("1")) AS Uint64),
     10,
-    BITCAST(Yql::Date32(AsAtom("1")) AS Int64);
+    BITCAST(Yql::Date32(AsAtom("1")) AS Int64)
+;

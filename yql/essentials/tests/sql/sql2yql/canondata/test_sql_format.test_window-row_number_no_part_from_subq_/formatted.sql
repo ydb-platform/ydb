@@ -7,8 +7,11 @@ SELECT
 FROM (
     SELECT
         *
-    FROM Input
-    WHERE key != "020"
+    FROM
+        Input
+    WHERE
+        key != "020"
 )
 WINDOW
-    w AS ();
+    w AS ()
+;

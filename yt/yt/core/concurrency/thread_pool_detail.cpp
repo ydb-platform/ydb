@@ -21,9 +21,9 @@ TThreadPoolBase::TThreadPoolBase(TString threadNamePrefix)
         /*priority*/ 100))
 { }
 
-void TThreadPoolBase::Configure(int threadCount)
+void TThreadPoolBase::SetThreadCount(int threadCount)
 {
-    DoConfigure(std::clamp(threadCount, 1, MaxThreadCount));
+    DoSetThreadCount(std::clamp(threadCount, 1, MaxThreadCount));
 }
 
 void TThreadPoolBase::Shutdown()
@@ -79,7 +79,7 @@ int TThreadPoolBase::GetThreadCount()
     return std::ssize(Threads_);
 }
 
-void TThreadPoolBase::DoConfigure(int threadCount)
+void TThreadPoolBase::DoSetThreadCount(int threadCount)
 {
     ThreadCount_.store(threadCount);
     if (StartFlag_.load()) {

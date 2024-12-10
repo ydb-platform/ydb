@@ -12,24 +12,23 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(libs-row_dispatcher-purecalc_compilation)
+add_library(row_dispatcher-format_handler-common)
 
 
-target_compile_options(libs-row_dispatcher-purecalc_compilation PRIVATE
+target_compile_options(row_dispatcher-format_handler-common PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_link_libraries(libs-row_dispatcher-purecalc_compilation PUBLIC
+target_link_libraries(row_dispatcher-format_handler-common PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  libs-actors-logging
-  libs-row_dispatcher-events
-  row_dispatcher-format_handler-common
-  libs-row_dispatcher-purecalc_no_pg_wrapper
-  library-actors-core
+  ydb-library-conclusion
+  dq-actors-protos
+  essentials-public-issue
 )
 
-target_sources(libs-row_dispatcher-purecalc_compilation PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.cpp
+target_sources(row_dispatcher-format_handler-common PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/format_handler/common/common.cpp
 )
 

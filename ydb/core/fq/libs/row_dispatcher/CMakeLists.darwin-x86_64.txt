@@ -14,36 +14,35 @@
 
 add_subdirectory(protos)
 add_subdirectory(events)
-add_subdirectory(purecalc_compilation)
+add_subdirectory(format_handler)
 add_subdirectory(purecalc_no_pg_wrapper)
+add_subdirectory(purecalc_compilation)
 
 add_library(fq-libs-row_dispatcher)
 
 
 target_compile_options(fq-libs-row_dispatcher PRIVATE
-  -Wno-assume
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
 target_link_libraries(fq-libs-row_dispatcher PUBLIC
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-fmt
-  contrib-libs-simdjson
   libs-actors-logging
   libs-config-protos
   libs-row_dispatcher-events
+  libs-row_dispatcher-format_handler
   libs-row_dispatcher-purecalc_compilation
   fq-libs-shared_resources
   fq-libs-ydb
   ydb-core-mon
   library-actors-core
   ydb-library-security
+  yql-dq-actors
   dq-actors-common
   dq-actors-compute
   yql-dq-proto
   providers-pq-provider
-  libs-row_dispatcher-purecalc_no_pg_wrapper
   cpp-client-ydb_scheme
   cpp-client-ydb_table
 )
@@ -52,8 +51,6 @@ target_sources(fq-libs-row_dispatcher PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/actors_factory.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/coordinator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/json_filter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/json_parser.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/leader_election.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/row_dispatcher.cpp

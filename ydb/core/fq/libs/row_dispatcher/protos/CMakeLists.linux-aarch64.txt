@@ -36,6 +36,7 @@ target_link_libraries(libs-row_dispatcher-protos PUBLIC
   library-actors-protos
   dq-actors-protos
   providers-pq-proto
+  api-protos
   contrib-libs-protobuf
 )
 

@@ -23,6 +23,7 @@ target_link_libraries(libs-row_dispatcher-events PUBLIC
   libs-row_dispatcher-protos
   library-actors-core
   providers-pq-provider
+  essentials-public-issue
 )
 
 target_sources(libs-row_dispatcher-events PRIVATE

@@ -23,7 +23,9 @@ target_link_libraries(libs-row_dispatcher-purecalc_compilation PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  libs-actors-logging
   libs-row_dispatcher-events
+  row_dispatcher-format_handler-common
   libs-row_dispatcher-purecalc_no_pg_wrapper
   library-actors-core
 )

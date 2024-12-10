@@ -12,24 +12,33 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(libs-row_dispatcher-purecalc_compilation)
+add_library(row_dispatcher-format_handler-parsers)
 
 
-target_compile_options(libs-row_dispatcher-purecalc_compilation PRIVATE
+target_compile_options(row_dispatcher-format_handler-parsers PRIVATE
+  -Wno-assume
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_link_libraries(libs-row_dispatcher-purecalc_compilation PUBLIC
+target_link_libraries(row_dispatcher-format_handler-parsers PUBLIC
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-simdjson
+  cpp-containers-absl_flat_hash
   libs-actors-logging
   libs-row_dispatcher-events
   row_dispatcher-format_handler-common
-  libs-row_dispatcher-purecalc_no_pg_wrapper
-  library-actors-core
+  client-ydb_topic-include
+  yql-essentials-minikql
+  essentials-minikql-dom
+  essentials-minikql-invoke_builtins
+  providers-common-schema
 )
 
-target_sources(libs-row_dispatcher-purecalc_compilation PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.cpp
+target_sources(row_dispatcher-format_handler-parsers PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/format_handler/parsers/parser_abstract.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/format_handler/parsers/parser_base.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/format_handler/parsers/json_parser.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/format_handler/parsers/raw_parser.cpp
 )
 

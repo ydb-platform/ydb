@@ -408,17 +408,19 @@ struct TEvPQProxy {
 
 
     struct TEvCommitDone : public NActors::TEventLocal<TEvCommitDone, EvCommitDone> {
-        explicit TEvCommitDone(const ui64 assignId, const ui64 startCookie, const ui64 lastCookie, const ui64 offset)
+        explicit TEvCommitDone(const ui64 assignId, const ui64 startCookie, const ui64 lastCookie, const ui64 offset, const ui64 endOffset)
             : AssignId(assignId)
             , StartCookie(startCookie)
             , LastCookie(lastCookie)
             , Offset(offset)
+            , EndOffset(endOffset)
         { }
 
         ui64 AssignId;
         ui64 StartCookie;
         ui64 LastCookie;
         ui64 Offset;
+        ui64 EndOffset;
     };
 
     struct TEvParentCommitedToFinish : public NActors::TEventLocal<TEvParentCommitedToFinish, EvParentCommitedToFinish> {

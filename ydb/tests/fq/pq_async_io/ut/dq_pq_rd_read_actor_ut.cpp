@@ -1,12 +1,16 @@
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <library/cpp/testing/unittest/gtest.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <thread>
 
@@ -16,7 +20,6 @@ const ui64 PartitionId1 = 666;
 const ui64 PartitionId2 = 667;
 
 struct TFixture : public TPqIoTestFixture {
-
     TFixture() {
         LocalRowDispatcherId = CaSetup->Runtime->AllocateEdgeActor();
         Coordinator1Id = CaSetup->Runtime->AllocateEdgeActor();
@@ -45,6 +48,7 @@ struct TFixture : public TPqIoTestFixture {
 
             NYql::NPq::NProto::TDqPqTopicSource copySettings = settings;
             auto [dqSource, dqSourceAsActor] = CreateDqPqRdReadActor(
+                actor.TypeEnv,
                 std::move(copySettings),
                 0,
                 NYql::NDq::TCollectStatsLevel::None,
@@ -141,14 +145,32 @@ struct TFixture : public TPqIoTestFixture {
         });
     }
 
-    void MockMessageBatch(ui64 offset, const std::vector<TString>& jsons, NActors::TActorId rowDispatcherId, ui64 generation = 1,
-        ui64 partitionId = PartitionId1) {
+    TRope SerializeItem(TFakeActor& actor, ui64 intValue, const TString& strValue) {
+        NKikimr::NMiniKQL::TType* typeMkql = actor.ProgramBuilder.NewMultiType({
+            NYql::NCommon::ParseTypeFromYson(TStringBuf("[DataType; Uint64]"), actor.ProgramBuilder, Cerr),
+            NYql::NCommon::ParseTypeFromYson(TStringBuf("[DataType; String]"), actor.ProgramBuilder, Cerr)
+        });
+        UNIT_ASSERT_C(typeMkql, "Failed to create multi type");
+
+        NKikimr::NMiniKQL::TValuePackerTransport<true> packer(typeMkql);
+
+        TVector<NUdf::TUnboxedValue> values = {
+            NUdf::TUnboxedValuePod(intValue),
+            NKikimr::NMiniKQL::MakeString(strValue)
+        };
+        packer.AddWideItem(values.data(), 2);
+
+        return NYql::MakeReadOnlyRope(packer.Finish());
+    }
+
+    // Supported schema (Uint64, String)
+    void MockMessageBatch(ui64 offset, const std::vector<std::pair<ui64, TString>>& messages, NActors::TActorId rowDispatcherId, ui64 generation = 1, ui64 partitionId = PartitionId1) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvMessageBatch();
-            for (const auto& json :jsons) {
+            for (const auto& item : messages) {
                 NFq::NRowDispatcherProto::TEvMessage message;
-                message.SetJson(json);
-                message.SetOffset(offset++);
+                message.SetPayloadId(event->AddPayload(SerializeItem(actor, item.first, item.second)));
+                message.AddOffsets(offset++);
                 *event->Record.AddMessages() = message;
             }
             event->Record.SetPartitionId(partitionId);
@@ -160,11 +182,11 @@ struct TFixture : public TPqIoTestFixture {
     void MockSessionError() {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvSessionError();
-            event->Record.SetMessage("A problem has been detected and session has been shut down to prevent damage your life");
+            event->Record.SetStatusCode(::NYql::NDqProto::StatusIds::BAD_REQUEST);
+            IssueToMessage(TIssue("A problem has been detected and session has been shut down to prevent damage your life"), event->Record.AddIssues());
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RowDispatcher1, event, 0, 1));
         });
     }
-
     void MockStatistics(NActors::TActorId rowDispatcherId, ui64 nextOffset, ui64 generation, ui64 partitionId) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvStatistics();
@@ -196,7 +218,7 @@ struct TFixture : public TPqIoTestFixture {
                     watermarksBeforeIter == watermarkBeforePositions.end() ||
                     *watermarksBeforeIter > expectedPos,
                     "Watermark before item on position " << expectedPos << " was expected");
-                UNIT_ASSERT_EQUAL(std::get<T>(item), expected.at(expectedPos));
+                UNIT_ASSERT_VALUES_EQUAL(std::get<T>(item), expected.at(expectedPos));
                 expectedPos++;
             }
         }
@@ -225,7 +247,7 @@ struct TFixture : public TPqIoTestFixture {
 
     void StartSession(NYql::NPq::NProto::TDqPqTopicSource& settings, i64 freeSpace = 1_MB, ui64 partitionCount = 1) {
         InitRdSource(settings, freeSpace, partitionCount);
-        SourceRead<TString>(UVParser);
+        SourceRead<std::pair<ui64, TString>>(UVPairParser);
         ExpectCoordinatorChangesSubscribe();
     
         MockCoordinatorChanged(Coordinator1Id);
@@ -236,23 +258,23 @@ struct TFixture : public TPqIoTestFixture {
         MockAck(RowDispatcher1);
     }
 
-    void ProcessSomeJsons(ui64 offset, const std::vector<TString>& jsons, NActors::TActorId rowDispatcherId,
-        std::function<std::vector<TString>(const NUdf::TUnboxedValue&)> uvParser = UVParser, ui64 generation = 1,
+    void ProcessSomeMessages(ui64 offset, const std::vector<std::pair<ui64, TString>>& messages, NActors::TActorId rowDispatcherId,
+        std::function<std::vector<std::pair<ui64, TString>>(const NUdf::TUnboxedValue&)> uvParser = UVPairParser, ui64 generation = 1,
         ui64 partitionId = PartitionId1, bool readedByCA = true) {
-        MockNewDataArrived(rowDispatcherId, generation, partitionId);
-        ExpectGetNextBatch(rowDispatcherId, partitionId);
+        MockNewDataArrived(rowDispatcherId, generation);
+        ExpectGetNextBatch(rowDispatcherId);
 
-        MockMessageBatch(offset, jsons, rowDispatcherId, generation, partitionId);
+        MockMessageBatch(offset, messages, rowDispatcherId, generation, partitionId);
         if (readedByCA) {
-            auto result = SourceReadDataUntil<TString>(uvParser, jsons.size());
-            AssertDataWithWatermarks(result, jsons, {});
+            auto result = SourceReadDataUntil<std::pair<ui64, TString>>(uvParser, messages.size());
+            AssertDataWithWatermarks(result, messages, {});
         }
     } 
 
-    const TString Json1 = "{\"dt\":100,\"value\":\"value1\"}";
-    const TString Json2 = "{\"dt\":200,\"value\":\"value2\"}";
-    const TString Json3 = "{\"dt\":300,\"value\":\"value3\"}";
-    const TString Json4 = "{\"dt\":400,\"value\":\"value4\"}";
+    const std::pair<ui64, TString> Message1 = {100, "value1"};
+    const std::pair<ui64, TString> Message2 = {200, "value2"};
+    const std::pair<ui64, TString> Message3 = {300, "value3"};
+    const std::pair<ui64, TString> Message4 = {400, "value4"};
 
     NYql::NPq::NProto::TDqPqTopicSource Source1 = BuildPqTopicSourceSettings("topicName");
 
@@ -266,7 +288,7 @@ struct TFixture : public TPqIoTestFixture {
 Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
     Y_UNIT_TEST_F(TestReadFromTopic2, TFixture) {
         StartSession(Source1);
-        ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
+        ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1);
     }
 
     Y_UNIT_TEST_F(SessionError, TFixture) {
@@ -278,7 +300,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
 
         bool failured = false;
         while (Now() < deadline) {
-            SourceRead<TString>(UVParser);
+            SourceRead<std::pair<ui64, TString>>(UVPairParser);
             if (future.HasValue()) {
                 UNIT_ASSERT_STRING_CONTAINS(future.GetValue().ToOneLineString(), "damage your life");
                 failured = true;
@@ -294,17 +316,18 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockNewDataArrived(RowDispatcher1);
         ExpectGetNextBatch(RowDispatcher1);
 
-        const std::vector<TString> data1 = {Json1, Json2};
+        const std::vector<std::pair<ui64, TString>> data1 = {Message1, Message2};
         MockMessageBatch(0, data1, RowDispatcher1);
 
-        const std::vector<TString> data2 = {Json3, Json4};
+        const std::vector<std::pair<ui64, TString>> data2 = {Message3, Message4};
         MockMessageBatch(2, data2, RowDispatcher1);
 
-        auto result = SourceReadDataUntil<TString>(UVParser, 1, 1);
-        std::vector<TString> expected{data1};
+        auto result = SourceReadDataUntil<std::pair<ui64, TString>>(UVPairParser, 1, 1);
+        std::vector<std::pair<ui64, TString>> expected{data1};
         AssertDataWithWatermarks(result, expected, {});
 
-        UNIT_ASSERT_EQUAL(SourceRead<TString>(UVParser, 0).size(), 0);
+        auto readSize = SourceRead<std::pair<ui64, TString>>(UVPairParser, 0).size();
+        UNIT_ASSERT_VALUES_EQUAL(readSize, 0);
     }
 
     Y_UNIT_TEST(TestSaveLoadPqRdRead) {
@@ -313,7 +336,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         {
             TFixture f;
             f.StartSession(f.Source1);
-            f.ProcessSomeJsons(0, {f.Json1, f.Json2}, f.RowDispatcher1);  // offsets: 0, 1
+            f.ProcessSomeMessages(0, {f.Message1, f.Message2}, f.RowDispatcher1);  // offsets: 0, 1
 
             f.SaveSourceState(CreateCheckpoint(), state);
             Cerr << "State saved" << Endl;
@@ -322,7 +345,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
             TFixture f;
             f.InitRdSource(f.Source1);
             f.LoadSource(state);
-            f.SourceRead<TString>(UVParser);
+            f.SourceRead<std::pair<ui64, TString>>(UVPairParser);
             f.ExpectCoordinatorChangesSubscribe();
     
             f.MockCoordinatorChanged(f.Coordinator1Id);
@@ -332,7 +355,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
             f.ExpectStartSession({{PartitionId1, 2}}, f.RowDispatcher1);
             f.MockAck(f.RowDispatcher1);
 
-            f.ProcessSomeJsons(2, {f.Json3}, f.RowDispatcher1);  // offsets: 2
+            f.ProcessSomeMessages(2, {f.Message3}, f.RowDispatcher1);  // offsets: 2
             state.Data.clear();
             f.SaveSourceState(CreateCheckpoint(), state);
             Cerr << "State saved" << Endl;
@@ -341,7 +364,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
             TFixture f;
             f.InitRdSource(f.Source1);
             f.LoadSource(state);
-            f.SourceRead<TString>(UVParser);
+            f.SourceRead<std::pair<ui64, TString>>(UVPairParser);
             f.ExpectCoordinatorChangesSubscribe();
     
             f.MockCoordinatorChanged(f.Coordinator1Id);
@@ -351,14 +374,14 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
             f.ExpectStartSession({{PartitionId1, 3}}, f.RowDispatcher1);
             f.MockAck(f.RowDispatcher1);
 
-            f.ProcessSomeJsons(3, {f.Json4}, f.RowDispatcher1);  // offsets: 3
+            f.ProcessSomeMessages(3, {f.Message4}, f.RowDispatcher1);  // offsets: 3
         }
     }
 
     Y_UNIT_TEST_F(CoordinatorChanged, TFixture) {
         StartSession(Source1);
-        ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
-        MockMessageBatch(2, {Json3}, RowDispatcher1);
+        ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1);
+        MockMessageBatch(2, {Message3}, RowDispatcher1);
 
         // change active Coordinator 
         MockCoordinatorChanged(Coordinator2Id);
@@ -376,7 +399,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         ExpectStartSession({{PartitionId1, 4}}, RowDispatcher2, 2);
         MockAck(RowDispatcher2, 2);
 
-        ProcessSomeJsons(4, {Json1}, RowDispatcher2, UVParser, 2);
+        ProcessSomeMessages(4, {Message4}, RowDispatcher2, UVPairParser, 2);
 
         MockHeartbeat(RowDispatcher1, 1);       // old generation
         ExpectStopSession(RowDispatcher1);
@@ -386,36 +409,36 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         req = ExpectCoordinatorRequest(Coordinator1Id);
         MockCoordinatorResult({{RowDispatcher2, PartitionId1}}, req->Cookie);       // distribution is not changed
 
-        ProcessSomeJsons(5, {Json2}, RowDispatcher2, UVParser, 2);
+        ProcessSomeMessages(5, {Json2}, RowDispatcher2, UVParser, 2);
     }
 
     Y_UNIT_TEST_F(Backpressure, TFixture) {
         StartSession(Source1, 2_KB);
 
-        TString json(900, 'c');
-        ProcessSomeJsons(0, {json}, RowDispatcher1);
+        std::pair<ui64, TString> message = {100500, TString(900, 'c')};
+        ProcessSomeMessages(0, {message}, RowDispatcher1);
 
         MockNewDataArrived(RowDispatcher1);
         ExpectGetNextBatch(RowDispatcher1);
-        MockMessageBatch(1, {json, json, json}, RowDispatcher1);
+        MockMessageBatch(1, {message, message, message}, RowDispatcher1);
 
         MockNewDataArrived(RowDispatcher1);
         ASSERT_THROW(
             CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(RowDispatcher1, TDuration::Seconds(0)),
             NActors::TEmptyEventQueueException);
 
-        auto result = SourceReadDataUntil<TString>(UVParser, 3);
-        AssertDataWithWatermarks(result, {json, json, json}, {});
+        auto result = SourceReadDataUntil<std::pair<ui64, TString>>(UVPairParser, 3);
+        AssertDataWithWatermarks(result, {message, message, message}, {});
         ExpectGetNextBatch(RowDispatcher1);
 
-        MockMessageBatch(4, {Json1}, RowDispatcher1);
-        result = SourceReadDataUntil<TString>(UVParser, 1);
-        AssertDataWithWatermarks(result, {Json1}, {});
+        MockMessageBatch(4, {Message1}, RowDispatcher1);
+        result = SourceReadDataUntil<std::pair<ui64, TString>>(UVPairParser, 1);
+        AssertDataWithWatermarks(result, {Message1}, {});
     }
 
     Y_UNIT_TEST_F(RowDispatcherIsRestarted2, TFixture) {
         StartSession(Source1);
-        ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
+        ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1);
         MockDisconnected();
         MockConnected();
         MockUndelivered(RowDispatcher1);
@@ -425,7 +448,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         ExpectStartSession({{PartitionId1, 2}}, RowDispatcher1, 2);
         MockAck(RowDispatcher1, 2);
 
-        ProcessSomeJsons(2, {Json3}, RowDispatcher1, UVParser, 2);
+        ProcessSomeMessages(2, {Message3}, RowDispatcher1, UVPairParser, 2);
     }
 
     Y_UNIT_TEST_F(TwoPartitionsRowDispatcherIsRestarted, TFixture) {
@@ -473,15 +496,22 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
     }
 
     Y_UNIT_TEST_F(MetadataFields, TFixture) {
+        auto metadataUVParser = [](const NUdf::TUnboxedValue& item) -> std::vector<std::pair<ui64, TString>> {
+            UNIT_ASSERT_VALUES_EQUAL(item.GetListLength(), 3);
+            auto stringElement = item.GetElement(2);
+            return { {item.GetElement(1).Get<ui64>(), TString(stringElement.AsStringRef())} };
+        };
+
         auto source = BuildPqTopicSourceSettings("topicName");
         source.AddMetadataFields("_yql_sys_create_time");
+        source.SetRowType("[StructType; [[_yql_sys_create_time; [DataType; Uint32]]; [dt; [DataType; Uint64]]; [value; [DataType; String]]]]");
         StartSession(source);
-        ProcessSomeJsons(0, {Json1}, RowDispatcher1, UVParserWithMetadatafields);  
+        ProcessSomeMessages(0, {Message1}, RowDispatcher1, metadataUVParser);  
     }
 
     Y_UNIT_TEST_F(IgnoreCoordinatorResultIfWrongState, TFixture) {
         StartSession(Source1);
-        ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
+        ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1);
 
         MockCoordinatorChanged(Coordinator2Id);
         auto req = ExpectCoordinatorRequest(Coordinator2Id);

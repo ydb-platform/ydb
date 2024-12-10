@@ -101,7 +101,7 @@ struct TAggQueryStat {
     NYql::TCounters::TEntry ReadLagMessages;
     bool IsWaiting = false;
 
-    void Add(const TopicSessionClientStatistic& stat) {
+    void Add(const TTopicSessionClientStatistic& stat) {
         FilteredReadBytes.Add(NYql::TCounters::TEntry(stat.FilteredReadBytes));
         UnreadBytes.Add(NYql::TCounters::TEntry(stat.UnreadBytes));
         UnreadRows.Add(NYql::TCounters::TEntry(stat.UnreadRows));
@@ -278,7 +278,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         bool PendingGetNextBatch = false;
         bool PendingNewDataArrived = false;
         TActorId TopicSessionId;
-        TopicSessionClientStatistic Stat;
+        TTopicSessionClientStatistic Stat;
         bool StatisticsUpdated = false;
     };
 
@@ -308,13 +308,13 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         THashMap<ui32, TConsumerPartition> Partitions;
         const TString QueryId;
         ConsumerCounters Counters;
-        TopicSessionClientStatistic Stat;
+        TTopicSessionClientStatistic Stat;
         ui64 Generation;
     };
 
     struct SessionInfo {
         TMap<TActorId, TAtomicSharedPtr<ConsumerInfo>> Consumers;   // key - ReadActor actor id
-        TopicSessionCommonStatistic Stat;                           // Increments
+        TTopicSessionCommonStatistic Stat;                           // Increments
         NYql::TCounters::TEntry AggrReadBytes;
     };
 
@@ -653,10 +653,15 @@ TString TRowDispatcher::GetInternalState() {
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
             str << " / " << LeftPad(actorId, 32)
                 << " data rate " << toHumanDR(sessionInfo.AggrReadBytes.Sum) << " unread bytes " << toHuman(sessionInfo.Stat.UnreadBytes)
-                << " offset " << LeftPad(sessionInfo.Stat.LastReadedOffset, 12) << " restarts by offsets " << sessionInfo.Stat.RestartSessionByOffsets
-                << " parse and filter lantecy " << sessionInfo.Stat.ParseAndFilterLatency << "\n";
+                << " offset " << LeftPad(sessionInfo.Stat.LastReadedOffset, 12) << " restarts by offsets " << sessionInfo.Stat.RestartSessionByOffsets << "\n";
             ui64 maxInitialOffset = 0;
             ui64 minInitialOffset = std::numeric_limits<ui64>::max();
+
+            for (const auto& [formatName, formatStats] : sessionInfo.Stat.FormatHandlers) {
+                str << "    " << formatName 
+                    << " parse and filter lantecy  " << formatStats.ParseAndFilterLatency
+                    << " (parse " << formatStats.ParserStats.ParserLatency << ", filter " << formatStats.FilterStats.FilterLatency << ")\n";
+            }
 
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
                 const auto& partition = consumer->Partitions[key.PartitionId];

@@ -986,7 +986,14 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         ui32 logBuffSize = 250;
         ui32 chunkBuffSize = 128_KB;
 
-        for (ui32 testCase = 0; testCase < 2; testCase++) {
+        for (ui32 testCase = 0; testCase < 8; testCase++) {
+            Cerr << "restart# " << bool(testCase & 4) << " start with noop scheduler# " << bool(testCase & 1)
+                << " end with noop scheduler# " << bool(testCase & 2) << Endl;
+            testCtx.SafeRunOnPDisk([=] (NPDisk::TPDisk* pdisk) {
+                pdisk->UseNoopSchedulerHDD = testCase & 1;
+                pdisk->UseNoopSchedulerSSD = testCase & 1;
+            });
+
             vdisk.InitFull();
             for (ui32 i = 0; i < 100; ++i) {
                 testCtx.Send(new NPDisk::TEvLog(
@@ -1000,10 +1007,16 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     chunk, 0, chunkBuffSize, 0, nullptr));
             }
 
-            if (testCase & 1) {
+            if (testCase & 4) {
                 Cerr << "restart" << Endl;
                 testCtx.RestartPDiskSync();
             }
+
+            testCtx.SafeRunOnPDisk([=] (NPDisk::TPDisk* pdisk) {
+                pdisk->UseNoopSchedulerHDD = testCase & 2;
+                pdisk->UseNoopSchedulerSSD = testCase & 2;
+            });
+
 
             for (ui32 i = 0; i < 100; ++i) {
                 auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();

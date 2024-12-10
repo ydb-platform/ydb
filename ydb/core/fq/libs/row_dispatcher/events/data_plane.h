@@ -7,10 +7,11 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/purecalc/common/fwd.h>
+
 #include <util/generic/set.h>
 #include <util/generic/map.h>
-
-#include <yql/essentials/public/purecalc/common/fwd.h>
 
 namespace NFq {
 
@@ -154,9 +155,9 @@ struct TEvRowDispatcher {
     };
 
     struct TEvSessionStatistic : public NActors::TEventLocal<TEvSessionStatistic, EEv::EvSessionStatistic> {
-        TEvSessionStatistic(const TopicSessionStatistic& stat)
+        TEvSessionStatistic(const TTopicSessionStatistic& stat)
         : Stat(stat) {}
-        TopicSessionStatistic Stat;
+        TTopicSessionStatistic Stat;
     };
 
     struct TEvHeartbeat : public NActors::TEventPB<TEvHeartbeat, NFq::NRowDispatcherProto::TEvHeartbeat, EEv::EvHeartbeat> {
@@ -185,16 +186,19 @@ struct TEvRowDispatcher {
     };
 
     struct TEvPurecalcCompileResponse : public NActors::TEventLocal<TEvPurecalcCompileResponse, EEv::EvPurecalcCompileResponse> {
-        explicit TEvPurecalcCompileResponse(const TString& error)
-            : Error(error)
+        TEvPurecalcCompileResponse(NYql::NDqProto::StatusIds::StatusCode status, NYql::TIssues issues)
+            : Status(status)
+            , Issues(std::move(issues))
         {}
 
         explicit TEvPurecalcCompileResponse(IProgramHolder::TPtr programHolder)
             : ProgramHolder(std::move(programHolder))
+            , Status(NYql::NDqProto::StatusIds::SUCCESS)
         {}
 
         IProgramHolder::TPtr ProgramHolder;  // Same holder that passed into TEvPurecalcCompileRequest
-        TString Error;
+        NYql::NDqProto::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
     };
 };
 

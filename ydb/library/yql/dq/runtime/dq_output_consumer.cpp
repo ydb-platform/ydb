@@ -516,7 +516,7 @@ private:
             if (blockType->GetShape() == NMiniKQL::TBlockType::EShape::Many) {
                 auto itemType = blockType->GetItemType();
                 YQL_ENSURE(!itemType->IsPg(), "pg types are not supported yet");
-                Builders_.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), maxBlockLen, nullptr, {.MinFillPercentage=100}));
+                Builders_.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), maxBlockLen, nullptr));
             } else {
                 Builders_.emplace_back();
             }

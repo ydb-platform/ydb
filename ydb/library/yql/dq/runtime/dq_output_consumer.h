@@ -6,8 +6,8 @@
 #include <yql/essentials/minikql/mkql_alloc.h>
 
 namespace NKikimr::NMiniKQL {
-class TTypeEnvironment;
-class THolderFactory;
+    class TTypeEnvironment;
+    class THolderFactory;
 } // namespace NKikimr::NMiniKQL
 
 namespace NYql::NDq {
@@ -50,6 +50,5 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth);
-
 
 } // namespace NYql::NDq

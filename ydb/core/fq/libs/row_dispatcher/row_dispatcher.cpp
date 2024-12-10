@@ -759,7 +759,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 
         if (topicSessionInfo.Sessions.empty()) {
             LOG_ROW_DISPATCHER_DEBUG("Create new session: read group " << source.GetReadGroup() << " topic " << source.GetTopicPath() 
-                << " part id " << ev->Get()->Record.GetPartitionId() << " offset " << readOffset);
+                << " part id " << partitionId);
             sessionActorId = ActorFactory->RegisterTopicSession(
                 source.GetReadGroup(),
                 source.GetTopicPath(),

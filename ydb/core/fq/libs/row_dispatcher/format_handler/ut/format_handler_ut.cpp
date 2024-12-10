@@ -102,7 +102,7 @@ public:
             HasData = true;
         }
 
-        void UpdateClinetOffset(ui64 offset) override {
+        void UpdateClientOffset(ui64 offset) override {
             UNIT_ASSERT_C(Started, "Unexpected offset for not started session");
             UNIT_ASSERT_C(!ExpectedError, "Error is not handled: " << ExpectedError->second << ", client id: " << ClientId);
             UNIT_ASSERT_C(!Offsets.empty(), "Unexpected message batch, offset: " << offset << ", client id: " << ClientId);

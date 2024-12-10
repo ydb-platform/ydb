@@ -25,7 +25,7 @@ public:
 
     virtual void StartClientSession() = 0;
     virtual void AddDataToClient(ui64 offset, ui64 rowSize) = 0;
-    virtual void UpdateClinetOffset(ui64 offset) = 0;
+    virtual void UpdateClientOffset(ui64 offset) = 0;
 };
 
 class ITopicFormatHandler : public TNonCopyable {

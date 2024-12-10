@@ -94,8 +94,8 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
             }
 
             for (const auto clientId : columnIt->second.Clients) {
-                const auto clientIt = Self.Clinets.find(clientId);
-                if (clientIt != Self.Clinets.end()) {
+                const auto clientIt = Self.Clients.find(clientId);
+                if (clientIt != Self.Clients.end()) {
                     clientIt->second->OnClientError(status);
                 }
             }
@@ -298,7 +298,7 @@ public:
         Counters.ActiveClients->Set(0);
 
         with_lock(Alloc) {
-            Clinets.clear();
+            Clients.clear();
         }
     }
 
@@ -327,7 +327,7 @@ public:
 
     void Handle(NActors::TEvents::TEvPoison::TPtr&) {
         with_lock(Alloc) {
-            Clinets.clear();
+            Clients.clear();
         }
         PassAway();
     }
@@ -344,14 +344,14 @@ public:
         if (Parser) {
             Parser->ParseMessages(messages);
             ScheduleRefresh();
-        } else if (!Clinets.empty()) {
+        } else if (!Clients.empty()) {
             FatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, "Failed to parse messages, expected empty clients set without parser"));
         }
     }
 
     TQueue<std::pair<TRope, TVector<ui64>>> ExtractClientData(NActors::TActorId clientId) override {
-        const auto it = Clinets.find(clientId);
-        if (it == Clinets.end()) {
+        const auto it = Clients.find(clientId);
+        if (it == Clients.end()) {
             return {};
         }
         return it->second->ExtractClientData();
@@ -361,7 +361,7 @@ public:
         LOG_ROW_DISPATCHER_DEBUG("Add client with id " << client->GetClientId());
 
         auto clientHandler = MakeIntrusive<TClientHandler>(*this, client);
-        if (!Clinets.emplace(client->GetClientId(), clientHandler).second) {
+        if (!Clients.emplace(client->GetClientId(), clientHandler).second) {
             return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to create new client, client with id " << client->GetClientId() << " already exists");
         }
         Counters.ActiveClients->Inc();
@@ -392,14 +392,14 @@ public:
             Filters->RemoveFilter(clientId);
         }
 
-        const auto it = Clinets.find(clientId);
-        if (it == Clinets.end()) {
+        const auto it = Clients.find(clientId);
+        if (it == Clients.end()) {
             return;
         }
 
         const auto client = it->second->GetClient();
         Counters.ActiveClients->Dec();
-        Clinets.erase(it);
+        Clients.erase(it);
 
         for (const auto& column : client->GetColumns()) {
             const auto columnIt = ColumnsDesc.find(column.Name);
@@ -420,7 +420,7 @@ public:
     }
 
     bool HasClients() const override {
-        return !Clinets.empty();
+        return !Clients.empty();
     }
 
     TFormatHandlerStatistic GetStatistics() override {
@@ -514,17 +514,17 @@ private:
             Filters->FilterData(ParserSchemaIndex, *Offsets, ParsedData, numberRows);
         }
 
-        for (const auto& [_, client] : Clinets) {
+        for (const auto& [_, client] : Clients) {
             if (client->IsClientStarted()) {
                 LOG_ROW_DISPATCHER_TRACE("Commit client " << client->GetClient()->GetClientId() << " offset " << lastOffset);
-                client->GetClient()->UpdateClinetOffset(lastOffset);
+                client->GetClient()->UpdateClientOffset(lastOffset);
             }
         }
     }
 
     void FatalError(TStatus status) const {
         LOG_ROW_DISPATCHER_ERROR("Got fatal error: " << status.GetErrorMessage());
-        for (const auto& [_, client] : Clinets) {
+        for (const auto& [_, client] : Clients) {
             client->OnClientError(status);
         }
     }
@@ -539,7 +539,7 @@ private:
     TVector<ui64> FreeColumnIds;
     TVector<ui64> ParserSchemaIndex;  // Column id to index in parser schema
     std::map<TString, TColumnDesc> ColumnsDesc;
-    std::unordered_map<NActors::TActorId, TClientHandler::TPtr> Clinets;
+    std::unordered_map<NActors::TActorId, TClientHandler::TPtr> Clients;
 
     // Perser and filters
     ITopicParser::TPtr Parser;

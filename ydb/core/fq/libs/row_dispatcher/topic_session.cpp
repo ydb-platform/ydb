@@ -158,8 +158,8 @@ private:
             Self.SendDataArrived(*this);
         }
 
-        void UpdateClinetOffset(ui64 offset) override {
-            LOG_ROW_DISPATCHER_TRACE("UpdateClinetOffset for " << ReadActorId << ", new offset: " << offset);
+        void UpdateClientOffset(ui64 offset) override {
+            LOG_ROW_DISPATCHER_TRACE("UpdateClientOffset for " << ReadActorId << ", new offset: " << offset);
             if (!NextMessageOffset || *NextMessageOffset < offset + 1) {
                 NextMessageOffset = offset + 1;
             }

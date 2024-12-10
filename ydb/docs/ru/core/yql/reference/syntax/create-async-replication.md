@@ -95,7 +95,7 @@ FOR original_table AS replica_table
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret',
-    CONSISTENCY_MODE = 'GLOBAL'
+    CONSISTENCY_LEVEL = 'GLOBAL'
 );
 ```
 
@@ -107,7 +107,7 @@ FOR original_table AS replica_table
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret',
-    CONSISTENCY_MODE = 'GLOBAL',
+    CONSISTENCY_LEVEL = 'GLOBAL',
     COMMIT_INTERVAL = Interval('PT1M')
 );
 ```

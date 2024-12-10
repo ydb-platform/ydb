@@ -82,8 +82,6 @@ protected:
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTabletControls::descriptor(), ctx);
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TBlobStorageControllerControls")
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TBlobStorageControllerControls::descriptor(), ctx);
-            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TDSProxyControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TDSProxyControls::descriptor(), ctx);
         }
 
         ctx.Send(RequestEvent->Sender,

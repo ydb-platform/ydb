@@ -272,6 +272,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
     const bool ReadBody;
     const bool DiscoverBlockedGeneration;
     const TInstant Deadline;
+    const TInstant StartTime;
 
     TGroupResponseTracker GroupResponseTracker;
     std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> PendingResult;
@@ -294,7 +295,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
     template<typename TPtr>
     void SendResult(TPtr& result) {
         Y_ABORT_UNLESS(result);
-        const TDuration duration = TActivationContext::Monotonic() - RequestStartTime;
+        const TDuration duration = TActivationContext::Now() - StartTime;
         Mon->CountDiscoverResponseTime(duration);
         const bool success = result->Status == NKikimrProto::OK;
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
@@ -876,17 +877,25 @@ public:
         return ERequestType::Discover;
     }
 
-    TBlobStorageGroupDiscoverRequest(TBlobStorageGroupDiscoverParameters& params)
-        : TBlobStorageGroupRequestActor(params, NWilson::TSpan(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.Discover"))
-        , TabletId(params.Common.Event->TabletId)
-        , MinGeneration(params.Common.Event->MinGeneration)
-        , ReadBody(params.Common.Event->ReadBody)
-        , DiscoverBlockedGeneration(params.Common.Event->DiscoverBlockedGeneration)
-        , Deadline(params.Common.Event->Deadline)
+    TBlobStorageGroupDiscoverRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
+            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
+            const TIntrusivePtr<TBlobStorageGroupProxyMon> mon, TEvBlobStorage::TEvDiscover *ev,
+            ui64 cookie, NWilson::TTraceId traceId, TInstant now,
+            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
+                NKikimrServices::BS_PROXY_DISCOVER, true, {}, now, storagePoolCounters, ev->RestartCounter,
+                NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Discover"),
+                std::move(ev->ExecutionRelay))
+        , TabletId(ev->TabletId)
+        , MinGeneration(ev->MinGeneration)
+        , ReadBody(ev->ReadBody)
+        , DiscoverBlockedGeneration(ev->DiscoverBlockedGeneration)
+        , Deadline(ev->Deadline)
+        , StartTime(now)
         , GroupResponseTracker(Info)
         , IsGetBlockDone(!DiscoverBlockedGeneration)
-        , ForceBlockedGeneration(params.Common.Event->ForceBlockedGeneration)
-        , FromLeader(params.Common.Event->FromLeader)
+        , ForceBlockedGeneration(ev->ForceBlockedGeneration)
+        , FromLeader(ev->FromLeader)
     {}
 
     void Bootstrap() {
@@ -965,8 +974,13 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupDiscoverRequest(TBlobStorageGroupDiscoverParameters params) {
-    return new TBlobStorageGroupDiscoverRequest(params);
+IActor* CreateBlobStorageGroupDiscoverRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
+        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
+        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvDiscover *ev,
+        ui64 cookie, NWilson::TTraceId traceId, TInstant now,
+        TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
+    return new TBlobStorageGroupDiscoverRequest(info, state, source, mon, ev, cookie, std::move(traceId), now,
+            storagePoolCounters);
 }
 
 }//NKikimr

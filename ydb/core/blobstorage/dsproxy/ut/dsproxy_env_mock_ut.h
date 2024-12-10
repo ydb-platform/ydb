@@ -82,10 +82,7 @@ struct TDSProxyEnv {
         TControlWrapper enablePutBatching(DefaultEnablePutBatching, false, true);
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), true, nodeMon,
-            std::move(storagePoolCounters), TBlobStorageProxyParameters{
-                    .EnablePutBatching = enablePutBatching,
-                    .EnableVPatch = enableVPatch,
-                });
+            std::move(storagePoolCounters), enablePutBatching, enableVPatch);
         TActorId actorId = runtime.Register(dsproxy, nodeIndex);
         runtime.RegisterService(RealProxyActorId, actorId, nodeIndex);
 
@@ -106,96 +103,36 @@ struct TDSProxyEnv {
 
     std::unique_ptr<IActor> CreatePutRequestActor(TEvBlobStorage::TEvPut::TPtr &ev) {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(ev->Get()->HandleClass);
-        return std::unique_ptr<IActor>(CreateBlobStorageGroupPutRequest(
-                TBlobStorageGroupPutParameters{
-                    .Common = {
-                        .GroupInfo = Info,
-                        .GroupQueues = GroupQueues,
-                        .Mon = Mon,
-                        .Source = ev->Sender,
-                        .Cookie = ev->Cookie,
-                        .Now = TMonotonic::Now(),
-                        .StoragePoolCounters = StoragePoolCounters,
-                        .RestartCounter = ev->Get()->RestartCounter,
-                        .TraceId = std::move(ev->TraceId),
-                        .Event = ev->Get(),
-                        .ExecutionRelay = ev->Get()->ExecutionRelay,
-                        .LatencyQueueKind = kind,
-                    },
-                    .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
-                    .Stats = PerDiskStatsPtr,
-                    .EnableRequestMod3x3ForMinLatency = false,
-                }));
+        return std::unique_ptr<IActor>(CreateBlobStorageGroupPutRequest(Info, GroupQueues, ev->Sender, Mon, ev->Get(),
+                ev->Cookie, std::move(ev->TraceId), Mon->TimeStats.IsEnabled(), PerDiskStatsPtr, kind,
+                TInstant::Now(), StoragePoolCounters, false));
     }
 
     std::unique_ptr<IActor> CreatePutRequestActor(TBatchedVec<TEvBlobStorage::TEvPut::TPtr> &batched,
             TEvBlobStorage::TEvPut::ETactic tactic, NKikimrBlobStorage::EPutHandleClass handleClass)
     {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(handleClass);
-        return std::unique_ptr<IActor>(CreateBlobStorageGroupPutRequest(
-                TBlobStorageGroupMultiPutParameters{
-                    .Common = {
-                        .GroupInfo = Info,
-                        .GroupQueues = GroupQueues,
-                        .Mon = Mon,
-                        .Now = TMonotonic::Now(),
-                        .StoragePoolCounters = StoragePoolCounters,
-                        .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
-                        .LatencyQueueKind = kind,
-                    },
-                    .Events = batched,
-                    .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
-                    .Stats = PerDiskStatsPtr,
-                    .HandleClass = handleClass,
-                    .Tactic = tactic,
-                    .EnableRequestMod3x3ForMinLatency = false,
-                }));
+        return std::unique_ptr<IActor>(CreateBlobStorageGroupPutRequest(Info, GroupQueues,
+                Mon, batched, Mon->TimeStats.IsEnabled(), PerDiskStatsPtr, kind,TInstant::Now(),
+                StoragePoolCounters, handleClass, tactic, false));
     }
 
     std::unique_ptr<IActor> CreateGetRequestActor(TEvBlobStorage::TEvGet::TPtr &ev,
             NKikimrBlobStorage::EPutHandleClass handleClass)
     {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(handleClass);
-        return std::unique_ptr<IActor>(CreateBlobStorageGroupGetRequest(
-                TBlobStorageGroupGetParameters{
-                    .Common = {
-                        .GroupInfo = Info,
-                        .GroupQueues = GroupQueues,
-                        .Mon = Mon,
-                        .Source = ev->Sender,
-                        .Cookie = ev->Cookie,
-                        .Now = TMonotonic::Now(),
-                        .StoragePoolCounters = StoragePoolCounters,
-                        .RestartCounter = ev->Get()->RestartCounter,
-                        .TraceId = std::move(ev->TraceId),
-                        .Event = ev->Get(),
-                        .ExecutionRelay = ev->Get()->ExecutionRelay,
-                        .LatencyQueueKind = kind,
-                    },
-                    .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo)
-                }));
+        return std::unique_ptr<IActor>(CreateBlobStorageGroupGetRequest(Info, GroupQueues, ev->Sender, Mon,
+                ev->Get(), ev->Cookie, std::move(ev->TraceId), TNodeLayoutInfoPtr(NodeLayoutInfo),
+                kind, TInstant::Now(), StoragePoolCounters));
     }
 
     std::unique_ptr<IActor> CreatePatchRequestActor(TEvBlobStorage::TEvPatch::TPtr &ev, bool useVPatch = false) {
-        return std::unique_ptr<IActor>(CreateBlobStorageGroupPatchRequest(
-            TBlobStorageGroupPatchParameters{
-                .Common = {
-                    .GroupInfo = Info,
-                    .GroupQueues = GroupQueues,
-                    .Mon = Mon,
-                    .Source = ev->Sender,
-                    .Cookie = ev->Cookie,
-                    .Now = TMonotonic::Now(),
-                    .StoragePoolCounters = StoragePoolCounters,
-                    .RestartCounter = ev->Get()->RestartCounter,
-                    .TraceId = std::move(ev->TraceId),
-                    .Event = ev->Get(),
-                    .ExecutionRelay = ev->Get()->ExecutionRelay
-                },
-                .UseVPatch = useVPatch
-            }));
+        return std::unique_ptr<IActor>(CreateBlobStorageGroupPatchRequest(Info, GroupQueues, ev->Sender, Mon,
+                ev->Get(), ev->Cookie, std::move(ev->TraceId), TInstant::Now(), StoragePoolCounters,
+                useVPatch));
     }
 };
+
 
 inline bool ScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event,
         TDuration delay, TInstant& deadline) {

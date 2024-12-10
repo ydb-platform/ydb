@@ -3403,24 +3403,9 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
                 batched[1] = GetPut(blobIds[1], Data2);
 
                 TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(HandleClass);
-                IActor *reqActor = CreateBlobStorageGroupPutRequest(
-                        TBlobStorageGroupMultiPutParameters{
-                            .Common = {
-                                .GroupInfo = BsInfo,
-                                .GroupQueues = GroupQueues,
-                                .Mon = Mon,
-                                .Now = TMonotonic::Now(),
-                                .StoragePoolCounters = StoragePoolCounters,
-                                .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
-                                .LatencyQueueKind = kind,
-                            },
-                            .Events = batched,
-                            .TimeStatsEnabled = false,
-                            .Stats = PerDiskStatsPtr,
-                            .HandleClass = HandleClass,
-                            .Tactic = Tactic,
-                            .EnableRequestMod3x3ForMinLatency = false,
-                        });
+                IActor *reqActor = CreateBlobStorageGroupPutRequest(BsInfo, GroupQueues,
+                        Mon, batched, false, PerDiskStatsPtr, kind,TInstant::Now(),
+                        StoragePoolCounters, HandleClass, Tactic, false);
 
                 ctx.Register(reqActor);
                 break;
@@ -4203,15 +4188,8 @@ public:
         TIntrusivePtr<TDsProxyNodeMon> dsProxyNodeMon(new TDsProxyNodeMon(counters, true));
         TDsProxyPerPoolCounters perPoolCounters(counters);
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
-        TControlWrapper enablePutBatching(args.EnablePutBatching, false, true);
-        TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), false,
-            dsProxyNodeMon, TIntrusivePtr(storagePoolCounters), TBlobStorageProxyParameters{
-                    .EnablePutBatching = enablePutBatching,
-                    .EnableVPatch = enableVPatch,
-                }
-            )
-        };
+            dsProxyNodeMon, TIntrusivePtr(storagePoolCounters), args.EnablePutBatching, DefaultEnableVPatch)};
         TActorSetupCmd bsproxySetup(proxyActor.release(), TMailboxType::Revolving, 3);
         setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyId, std::move(bsproxySetup)));
 

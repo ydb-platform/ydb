@@ -295,14 +295,9 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
 
     for (auto& vget : gets) {
         if (vget) {
-            ui32 orderNumber = Info->GetTopology().GetOrderNumber(VDiskIDFromVDiskID(vget->Record.GetVDiskID()));
-            R_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# " << orderNumber << " vget# " << vget->ToString());
-            if (vget->Record.ExtremeQueriesSize() > 0) {
-                TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(vget->Record.GetExtremeQueries(0).GetId());
-                History.AddVGetToWaitingList(blobId.PartId(), vget->Record.ExtremeQueriesSize(), orderNumber);
-            } else {
-                History.AddVGetToWaitingList(THistory::InvalidPartId, 0, orderNumber);
-            }
+            R_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# "
+                << Info->GetTopology().GetOrderNumber(VDiskIDFromVDiskID(vget->Record.GetVDiskID()))
+                << " vget# " << vget->ToString());
             outVGets.push_back(std::move(vget));
             ++RequestIndex;
         }
@@ -319,7 +314,6 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
         auto vput = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vdiskId, true, nullptr, Deadline,
             Blackboard.PutHandleClass);
         R_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
-        History.AddVPutToWaitingList(put.Id.PartId(), 1, put.OrderNumber);
         outVPuts.push_back(std::move(vput));
         ++VPutRequests;
     }
@@ -396,7 +390,6 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
         Y_ABORT("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
     }
     Step(logCtx, outVGets, outVPuts, outGetResult);
-    History.AddVPutResult(orderNumber, status, record.GetErrorReason());
 }
 
 }//NKikimr

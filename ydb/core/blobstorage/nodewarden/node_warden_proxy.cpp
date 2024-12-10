@@ -36,10 +36,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                     // create proxy that will be used by blob depot agent to fetch underlying data
                     proxyActorId = as->Register(CreateBlobStorageGroupProxyConfigured(
                         TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon,
-                        getCounters(info), TBlobStorageProxyParameters{
-                            .EnablePutBatching = EnablePutBatching,
-                            .EnableVPatch = EnableVPatch,
-                        }), TMailboxType::ReadAsFilled,
+                        getCounters(info), EnablePutBatching, EnableVPatch), TMailboxType::ReadAsFilled,
                         AppData()->SystemPoolId);
                     [[fallthrough]];
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
@@ -54,17 +51,11 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
         } else {
             // create proxy with configuration
             proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon, getCounters(info),
-            TBlobStorageProxyParameters{
-                .EnablePutBatching = EnablePutBatching,
-                .EnableVPatch = EnableVPatch,
-            }));
+                EnablePutBatching, EnableVPatch));
         }
     } else {
         // create proxy without configuration
-        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, TBlobStorageProxyParameters{
-            .EnablePutBatching = EnablePutBatching,
-            .EnableVPatch = EnableVPatch,
-        }));
+        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, EnablePutBatching, EnableVPatch));
     }
 
     group.ProxyId = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);

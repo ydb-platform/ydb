@@ -407,13 +407,8 @@ private:
         auto proxy = Counters->GetSubgroup("subsystem", "proxy");
         TIntrusivePtr<TDsProxyNodeMon> mon = MakeIntrusive<TDsProxyNodeMon>(proxy, true);
         StoragePoolCounters = MakeIntrusive<TStoragePoolCounters>(proxy, TString(), NPDisk::DEVICE_TYPE_SSD);
-        TControlWrapper enablePutBatching(DefaultEnablePutBatching, false, true);
-        TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), false, mon,
-            TIntrusivePtr(StoragePoolCounters), TBlobStorageProxyParameters{
-                .EnablePutBatching = enablePutBatching,
-                .EnableVPatch = enableVPatch,
-            })};
+            TIntrusivePtr(StoragePoolCounters), DefaultEnablePutBatching, DefaultEnableVPatch)};
         const TActorId& actorId = runtime.Register(proxyActor.release(), TActorId(), 0, std::nullopt, 1);
         runtime.RegisterService(MakeBlobStorageProxyID(GroupId), actorId);
     }

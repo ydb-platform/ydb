@@ -24,6 +24,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
     TVector<TBlobStatusTracker> BlobStatus;
     ui32 VGetsInFlight;
 
+    TInstant StartTime;
     NKikimrBlobStorage::EGetHandleClass GetHandleClass;
 
     ui64 TabletId;
@@ -50,7 +51,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
             PendingResult->ErrorReason = ErrorReason;
         }
         Y_ABORT_UNLESS(PendingResult);
-        Mon->CountIndexRestoreGetResponseTime(TActivationContext::Monotonic() - RequestStartTime);
+        Mon->CountIndexRestoreGetResponseTime(TActivationContext::Now() - StartTime);
         SendResponseAndDie(std::move(PendingResult));
     }
 
@@ -265,16 +266,23 @@ public:
         return ERequestType::Get;
     }
 
-    TBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters& params, NWilson::TSpan&& span)
-        : TBlobStorageGroupRequestActor(params, std::move(span))
-        , QuerySize(params.Common.Event->QuerySize)
-        , Queries(params.Common.Event->Queries.Release())
-        , Deadline(params.Common.Event->Deadline)
-        , IsInternal(params.Common.Event->IsInternal)
-        , Decommission(params.Common.Event->Decommission)
-        , ForceBlockTabletData(params.Common.Event->ForceBlockTabletData)
+    TBlobStorageGroupIndexRestoreGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
+            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
+            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, ui64 cookie,
+            NWilson::TSpan&& span, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
+            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
+                NKikimrServices::BS_PROXY_INDEXRESTOREGET, false, latencyQueueKind, now, storagePoolCounters,
+                ev->RestartCounter, std::move(span), std::move(ev->ExecutionRelay))
+        , QuerySize(ev->QuerySize)
+        , Queries(ev->Queries.Release())
+        , Deadline(ev->Deadline)
+        , IsInternal(ev->IsInternal)
+        , Decommission(ev->Decommission)
+        , ForceBlockTabletData(ev->ForceBlockTabletData)
         , VGetsInFlight(0)
-        , GetHandleClass(params.Common.Event->GetHandleClass)
+        , StartTime(now)
+        , GetHandleClass(ev->GetHandleClass)
         , RestoreQueriesStarted(0)
         , RestoreQueriesFinished(0)
     {
@@ -290,7 +298,7 @@ public:
         }
 
         // phantom checks are for non-index queries only
-        Y_ABORT_UNLESS(!params.Common.Event->PhantomCheck);
+        Y_ABORT_UNLESS(!ev->PhantomCheck);
     }
 
     void Bootstrap() {
@@ -386,12 +394,18 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters params) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.IndexRestoreGet");
+IActor* CreateBlobStorageGroupIndexRestoreGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
+        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
+        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev,
+        ui64 cookie, NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
+        TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
+    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.IndexRestoreGet");
     if (span) {
-        span.Attribute("event", params.Common.Event->ToString());
+        span.Attribute("event", ev->ToString());
     }
-    return new TBlobStorageGroupIndexRestoreGetRequest(params, std::move(span));
+
+    return new TBlobStorageGroupIndexRestoreGetRequest(info, state, source, mon, ev, cookie, std::move(span),
+        latencyQueueKind, now, storagePoolCounters);
 }
 
 }//NKikimr

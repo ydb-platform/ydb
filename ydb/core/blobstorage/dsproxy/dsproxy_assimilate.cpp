@@ -264,12 +264,17 @@ public:
         return mon->ActiveAssimilate;
     }
 
-    TBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParameters& params)
-        : TBlobStorageGroupRequestActor(params, NWilson::TSpan(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.Assimilate"))
-        , SkipBlocksUpTo(params.Common.Event->SkipBlocksUpTo)
-        , SkipBarriersUpTo(params.Common.Event->SkipBarriersUpTo)
-        , SkipBlobsUpTo(params.Common.Event->SkipBlobsUpTo)
-        , PerVDiskInfo(Info->GetTotalVDisksNum())
+    TBlobStorageGroupAssimilateRequest(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+            const TIntrusivePtr<TGroupQueues>& state, const TActorId& source,
+            const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon, TEvBlobStorage::TEvAssimilate *ev, ui64 cookie,
+            NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters>& storagePoolCounters)
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
+            NKikimrServices::BS_PROXY_ASSIMILATE, false, {}, now, storagePoolCounters, ev->RestartCounter,
+            NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Assimilate"), std::move(ev->ExecutionRelay))
+        , SkipBlocksUpTo(ev->SkipBlocksUpTo)
+        , SkipBarriersUpTo(ev->SkipBarriersUpTo)
+        , SkipBlobsUpTo(ev->SkipBlobsUpTo)
+        , PerVDiskInfo(info->GetTotalVDisksNum())
         , Result(new TEvBlobStorage::TEvAssimilateResult(NKikimrProto::OK, {}))
     {
         Heap.reserve(PerVDiskInfo.size());
@@ -459,8 +464,11 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParameters params) {
-    return new TBlobStorageGroupAssimilateRequest(params);
+IActor* CreateBlobStorageGroupAssimilateRequest(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+        const TIntrusivePtr<TGroupQueues>& state, const TActorId& source,
+        const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon, TEvBlobStorage::TEvAssimilate *ev,
+        ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters>& storagePoolCounters) {
+    return new TBlobStorageGroupAssimilateRequest(info, state, source, mon, ev, cookie, std::move(traceId), now, storagePoolCounters);
 }
 
 } // NKikimr

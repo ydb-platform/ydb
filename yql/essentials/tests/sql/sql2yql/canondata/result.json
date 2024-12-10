@@ -16008,6 +16008,13 @@
             "uri": "https://{canondata_backend}/1936273/4a1b39013e1bae40e722cff8ccef8829784964e2/resource.tar.gz#test_sql2yql.test_produce-reduce_all_opt_/sql.yql"
         }
     ],
+    "test_sql2yql.test[produce-reduce_all_with_python_input_stream]": [
+        {
+            "checksum": "fb045c612f56afe15a88b4bf225baa8a",
+            "size": 1657,
+            "uri": "https://{canondata_backend}/1916746/66aad41ebc8da3aed847a3e1507b00750a224c70/resource.tar.gz#test_sql2yql.test_produce-reduce_all_with_python_input_stream_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[produce-reduce_by_struct]": [
         {
             "checksum": "b3aafefb5ebb7de3fac6828adbf06c3e",
@@ -16209,6 +16216,13 @@
             "checksum": "d3c7645543d761821cef7bd83a10357c",
             "size": 1593,
             "uri": "https://{canondata_backend}/1936273/4a1b39013e1bae40e722cff8ccef8829784964e2/resource.tar.gz#test_sql2yql.test_produce-reduce_with_python_having_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[produce-reduce_with_python_input_stream]": [
+        {
+            "checksum": "fcc67637b06db0c48b684606ce2c110d",
+            "size": 2117,
+            "uri": "https://{canondata_backend}/1916746/66aad41ebc8da3aed847a3e1507b00750a224c70/resource.tar.gz#test_sql2yql.test_produce-reduce_with_python_input_stream_/sql.yql"
         }
     ],
     "test_sql2yql.test[produce-reduce_with_python_presort]": [
@@ -29113,6 +29127,11 @@
             "uri": "file://test_sql_format.test_produce-reduce_all_opt_/formatted.sql"
         }
     ],
+    "test_sql_format.test[produce-reduce_all_with_python_input_stream]": [
+        {
+            "uri": "file://test_sql_format.test_produce-reduce_all_with_python_input_stream_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[produce-reduce_by_struct]": [
         {
             "uri": "file://test_sql_format.test_produce-reduce_by_struct_/formatted.sql"
@@ -29256,6 +29275,11 @@
     "test_sql_format.test[produce-reduce_with_python_having]": [
         {
             "uri": "file://test_sql_format.test_produce-reduce_with_python_having_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[produce-reduce_with_python_input_stream]": [
+        {
+            "uri": "file://test_sql_format.test_produce-reduce_with_python_input_stream_/formatted.sql"
         }
     ],
     "test_sql_format.test[produce-reduce_with_python_presort]": [

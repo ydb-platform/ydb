@@ -242,9 +242,14 @@ struct TTxState {
         ETxState Operation;         // (first) TxState, that affects on shard
 
         TString RangeEnd;            // For datashard split
+        ui64 LoopStep = 0;
 
         TShardOperation(TShardIdx idx, TTabletTypes::EType type, ETxState op)
             : Idx(idx), TabletType(type), Operation(op)
+        {}
+
+        TShardOperation(TShardIdx idx, TTabletTypes::EType type, ETxState op, ui64 loopStep)
+            : Idx(idx), TabletType(type), Operation(op), LoopStep(loopStep)
         {}
     };
 
@@ -330,7 +335,7 @@ struct TTxState {
 
     void UpdateShardsInProgress(ETxState operation = Invalid) {
         for (auto shard : Shards) {
-            if (!operation || operation == shard.Operation) {
+            if ((!operation || operation == shard.Operation) && shard.LoopStep == LoopStep) {
                 ShardsInProgress.insert(shard.Idx);
             }
         }

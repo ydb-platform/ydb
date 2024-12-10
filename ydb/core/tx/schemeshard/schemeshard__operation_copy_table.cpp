@@ -726,7 +726,7 @@ public:
                 << " pathId# " << newTable->PathId
                 << " withNewCdc# " << (Transaction.HasCreateCdcStream() ? "true" : "false")
                 << " schemeshard# " << ssId
-                << " tx# " << Transaction.DebugString()
+                << " tx# " << Transaction.ShortDebugString()
                 );
 
         SetState(NextState());

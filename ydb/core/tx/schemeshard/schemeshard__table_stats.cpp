@@ -545,7 +545,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
                                                      << " from shard " << datashardId
                                                      << " followerId " << followerId
                                                      << " pathId " << pathId
-                                                     << " raw table stats:\n" << tableStats.ShortDebugString());
+                                                     << " raw table stats: " << tableStats.ShortDebugString());
 
     TStatsId statsId(pathId, datashardId, followerId);
 

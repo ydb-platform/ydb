@@ -1,3 +1,4 @@
+{#- empty string #}
 plugins {
 {%- if mainClass %}
     `application`
@@ -42,4 +43,4 @@ java {
         languageVersion = JavaLanguageVersion.of("{{ required_jdk }}")
     }
 }
-{%  endif -%}
+{%- endif -%}

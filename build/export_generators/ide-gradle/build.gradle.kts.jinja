@@ -1,124 +1,21 @@
-{%- set has_errorprone = target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length -%}
-{%- if has_errorprone -%}
-import net.ltgt.gradle.errorprone.CheckSeverity
-import net.ltgt.gradle.errorprone.errorprone
-
-{% endif -%}
-
-{%- include "[generator]/builddir.jinja" %}
-
-{%- macro OutDirs(runs, prefix, suffix) -%}
-{%-    if run.args|length and run.out_dir|length -%}
-{%-        for out_dir in run.out_dir -%}
-{#-            search all run arguments ended by /<out_dir> -#}
-{%-            set out_dirs = select_by_ends(run.args, "/" + out_dir) -%}
-{%-            if out_dirs|length %}
-{{ prefix }}{{ out_dirs|first }}{{ suffix }}
-{%-            endif -%}
-{%-        endfor -%}
-{%-    endif -%}
-{%- endmacro %}
-
-{%- set mainClass = target.app_main_class -%}
-{%- set publish = target.publish -%}
-{%- set with_kotlin = target.with_kotlin -%}
-{%- set kotlin_version = target.kotlin_version -%}
-{%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
-
-{%- if not target.required_jdk -%}
-{%-     set has_required_jdk = false -%}
-{#-     If no required JDK, set default JDK for Kotlin parts -#}
-{%-     set required_jdk = '17' -%}
-{%- else -%}
-{%-     set has_required_jdk = true -%}
-{%-     set required_jdk = target.required_jdk -%}
-{%- endif %}
-
-{%  include "[generator]/plugins.jinja" -%}
+{%- include "[generator]/vars.jinja" -%}
+{%- include "[generator]/import.jinja" -%}
+{%- include "[generator]/repositories.jinja" -%}
+{%- include "[generator]/builddir.jinja" -%}
+{%- include "[generator]/plugins.jinja" -%}
 {%- include "[generator]/kotlin_plugins.jinja" -%}
 {%- include "[generator]/publish.jinja" -%}
 {%- include "[generator]/preview.jinja" -%}
-
-{#- javac flags -#}
-{%- if target.javac.flags|length -%}
-{#-     skip errorprone options -#}
-{%-     set javac_flags = target.javac.flags|reject('startsWith', '-Xep:')|reject('startsWith', '-XepOpt:') -%}
-{%-     if javac_flags|length and javac_flags != ['-parameters'] %}
-
-tasks.withType<JavaCompile> {
-{%-         for javac_flag in javac_flags %}
-    options.compilerArgs.add("{{ javac_flag }}")
-{%-         endfor %}
-}
-{%      endif -%}
-{%- endif -%}
-
-{%- include "[generator]/errorprone.jinja" %}
-{% include "[generator]/bucket.jinja" %}
-val project_root = "{{ arcadia_root }}"
-
-{%  if mainClass -%}
-application {
-    mainClass.set("{{ mainClass }}")
-}
-
-{%  endif -%}
-java {
-    withSourcesJar()
-    withJavadocJar()
-}
-
-configurations.api {
-    isTransitive = false
-}
-
-configurations.implementation {
-    isTransitive = false
-}
-
-configurations.testImplementation {
-    isTransitive = false
-}
-
-{%- if has_test %}
-
-val testsJar by tasks.registering(Jar::class) {
-    dependsOn(JavaPlugin.COMPILE_TEST_JAVA_TASK_NAME)
-    archiveClassifier.set("tests")
-    from(sourceSets["test"].output)
-}
-
-artifacts.add(configurations.create("testArtifacts").name, testsJar)
-
-tasks.test {
-    testLogging {
-        showStandardStreams = true
-        events("passed", "skipped", "failed")
-    }
-}
-{%  endif -%}
-
-{%- include "[generator]/source_sets.jinja"  %}
-
-{%  include "[generator]/dependencies.jinja" -%}
-
-{%- if hasJunit5Test %}
-
-tasks.named<Test>("test") {
-    useJUnitPlatform()
-}
-{%  endif -%}
-
+{%- include "[generator]/configuration.jinja" -%}
+{%- include "[generator]/javac_flags.jinja" -%}
+{%- include "[generator]/errorprone.jinja" -%}
+{%- include "[generator]/source_sets.jinja" -%}
+{%- include "[generator]/test.jinja" -%}
+{%- include "[generator]/javadoc.jinja" -%}
 {%- include "[generator]/run_java_program.jinja" -%}
-
-{% include "extra-tests.gradle.kts" ignore missing %}
-{% if publish -%}
-{% include 'publish.gradle.kts' ignore missing -%}
-{% endif -%}
-{#- To disable redundant javadoc (it may fail the build) #}
-
-tasks.withType<Javadoc>().configureEach {
-    isEnabled = false
-}
-
+{%- include "[generator]/dependencies.jinja" -%}
+{%- include "extra-tests.gradle.kts" ignore missing -%}
+{%- if publish -%}
+{%-     include 'publish.gradle.kts' ignore missing -%}
+{%- endif -%}
 {%- include "[generator]/debug.jinja" ignore missing -%}

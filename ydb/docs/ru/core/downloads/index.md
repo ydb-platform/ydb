@@ -52,7 +52,7 @@
 
 ## {{ ydb-short-name }} Ops {#ydbops}
 
-{{ ydb-short-name }} Ops - утилита командной строки для [управления кластером {{ ydb-short-name }} ](../reference/ydbops/index.md).
+{{ ydb-short-name }} Ops — утилита командной строки для [управления кластером {{ ydb-short-name }}](../reference/ydbops/index.md).
 
 {% list tabs group=os %}
 

@@ -52,7 +52,7 @@ To use the utility, install the [ydb-dstool](https://pypi.org/project/ydb-dstool
 
 ## {{ ydb-short-name }} Ops {#ydbops}
 
-{{ ydb-short-name }} Ops is a command line utility for [operating with {{ ydb-short-name }} cluster](../reference/ydbops/index.md).
+{{ ydb-short-name }} Ops is a command line utility for [operating {{ ydb-short-name }} clusters](../reference/ydbops/index.md).
 
 {% list tabs group=os %}
 

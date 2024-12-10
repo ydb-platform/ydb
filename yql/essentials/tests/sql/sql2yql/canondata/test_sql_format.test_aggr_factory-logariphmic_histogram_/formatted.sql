@@ -14,7 +14,9 @@ SELECT
                 )
             )
         )
-    );
+    )
+;
+
 $f = AGGREGATION_FACTORY("logarithmichistogram", 10, 0.01, 1000.0);
 
 SELECT
@@ -28,15 +30,22 @@ SELECT
                 )
             )
         )
-    );
+    )
+;
+
 USE plato;
 
 INSERT INTO @a
 SELECT
     a AS aa
-FROM as_table($t);
+FROM
+    as_table($t)
+;
+
 COMMIT;
 
 SELECT
     AGGREGATE_BY(aa, $f)
-FROM @a;
+FROM
+    @a
+;

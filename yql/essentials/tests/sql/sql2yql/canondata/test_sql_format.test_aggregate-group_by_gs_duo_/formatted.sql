@@ -4,11 +4,14 @@ SELECT
     sum(length(value)),
     key,
     subkey
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     GROUPING SETS (
         (key),
-        (subkey))
+        (subkey)
+    )
 ORDER BY
     key,
-    subkey;
+    subkey
+;

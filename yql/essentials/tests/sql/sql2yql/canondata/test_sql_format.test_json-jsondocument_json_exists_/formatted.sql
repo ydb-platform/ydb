@@ -6,4 +6,5 @@ SELECT
     JSON_EXISTS ($json, "$.a"),
     JSON_EXISTS ($json, "$.b"),
     JSON_EXISTS ($json, "$.c"),
-    JSON_EXISTS (CAST(NULL AS JsonDocument), "$.a");
+    JSON_EXISTS (CAST(NULL AS JsonDocument), "$.a")
+;

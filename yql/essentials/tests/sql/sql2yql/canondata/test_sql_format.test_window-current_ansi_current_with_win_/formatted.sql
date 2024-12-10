@@ -8,7 +8,8 @@ SELECT
     subkey,
     SUM(CAST(subkey AS Int32)) OVER w AS subkey_sum_ansi,
     LEAD(CAST(subkey AS Int32)) OVER w AS subkey_next,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w AS (
         PARTITION BY
@@ -19,4 +20,5 @@ WINDOW
 ORDER BY
     value,
     key,
-    subkey;
+    subkey
+;

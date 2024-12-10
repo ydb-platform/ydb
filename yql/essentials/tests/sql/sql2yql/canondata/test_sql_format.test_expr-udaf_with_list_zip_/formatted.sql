@@ -3,6 +3,7 @@
 $lists_2sum = ($l1, $l2) -> (
     ListMap(ListZip($l1, $l2), ($x) -> ($x.0 + $x.1))
 );
+
 $perelement_sum = AGGREGATION_FACTORY(
     "UDAF",
     ($item, $_parent) -> ($item),
@@ -12,11 +13,13 @@ $perelement_sum = AGGREGATION_FACTORY(
 
 SELECT
     AGGREGATE_BY(list_col, $perelement_sum) AS cnt1,
-FROM AS_TABLE([
-    <|"list_col": [4, 5, 6]|>,
-    <|"list_col": [4, 5, 6]|>,
-    <|"list_col": [4, 5, 6]|>,
-    <|"list_col": [4, 5, 6]|>,
-    <|"list_col": [4, 5, 6]|>,
-    <|"list_col": [4, 5, 6]|>
-]);
+FROM
+    AS_TABLE([
+        <|"list_col": [4, 5, 6]|>,
+        <|"list_col": [4, 5, 6]|>,
+        <|"list_col": [4, 5, 6]|>,
+        <|"list_col": [4, 5, 6]|>,
+        <|"list_col": [4, 5, 6]|>,
+        <|"list_col": [4, 5, 6]|>
+    ])
+;

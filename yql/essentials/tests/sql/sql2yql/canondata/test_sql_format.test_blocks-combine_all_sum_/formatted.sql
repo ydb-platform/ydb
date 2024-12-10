@@ -9,4 +9,6 @@ SELECT
     sum(2),
     sum(if(key == 10u, key)),
     sum(if(key == 100u, key))
-FROM Input;
+FROM
+    Input
+;

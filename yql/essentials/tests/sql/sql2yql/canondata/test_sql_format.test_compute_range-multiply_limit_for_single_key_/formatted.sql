@@ -12,4 +12,5 @@ SELECT
         Struct<x: String, y: String>,
         ($row) -> ($row.x IN CAST(ListFromRange(0, 10001) AS List<String>)),
         AsTuple(AsAtom("x"))
-    );
+    )
+;

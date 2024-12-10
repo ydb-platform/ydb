@@ -5,12 +5,14 @@ USE plato;
 $list = (
     SELECT
         aggregate_list(key)
-    FROM Input
+    FROM
+        Input
 );
 
 DEFINE ACTION $echo($x) AS
     SELECT
-        $x;
+        $x
+    ;
 END DEFINE;
 
 EVALUATE FOR $a IN $list DO

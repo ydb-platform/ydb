@@ -5,4 +5,5 @@ $json = Unwrap(CAST(@@{"x": 1}@@ AS Json));
 SELECT
     JSON_EXISTS ($json, "strict $.x"),
     JSON_VALUE ($json, "strict $.x"),
-    JSON_QUERY ($json, "strict $");
+    JSON_QUERY ($json, "strict $")
+;

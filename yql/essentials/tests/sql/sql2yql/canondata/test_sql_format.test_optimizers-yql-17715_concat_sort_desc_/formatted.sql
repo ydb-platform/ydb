@@ -1,4 +1,5 @@
 USE plato;
+
 $min_ts_for_stat_calculation = DateTime::ToSeconds(CurrentUtcDate() - Interval("P1D"));
 
 INSERT INTO @a
@@ -13,7 +14,8 @@ FROM (
 )
 ASSUME ORDER BY
     puid,
-    timestamp DESC;
+    timestamp DESC
+;
 
 INSERT INTO @b
 SELECT
@@ -27,7 +29,8 @@ FROM (
 )
 ASSUME ORDER BY
     puid,
-    timestamp DESC;
+    timestamp DESC
+;
 
 INSERT INTO @c
 SELECT
@@ -41,15 +44,19 @@ FROM (
 )
 ASSUME ORDER BY
     puid,
-    timestamp DESC;
+    timestamp DESC
+;
+
 COMMIT;
 
 $target_events = (
     SELECT
         puid,
         segments
-    FROM CONCAT(@a, @b, @c)
-    WHERE DateTime::ToSeconds(`timestamp`) > $min_ts_for_stat_calculation
+    FROM
+        CONCAT(@a, @b, @c)
+    WHERE
+        DateTime::ToSeconds(`timestamp`) > $min_ts_for_stat_calculation
 );
 
 $target_events = (
@@ -58,16 +65,18 @@ $target_events = (
     FROM (
         SELECT
             *
-        FROM $target_events
-            FLATTEN LIST BY
-                segments
+        FROM
+            $target_events
+            FLATTEN LIST BY segments
     )
         FLATTEN COLUMNS
 );
 
 SELECT
     *
-FROM $target_events
+FROM
+    $target_events
 ORDER BY
     puid,
-    segments;
+    segments
+;

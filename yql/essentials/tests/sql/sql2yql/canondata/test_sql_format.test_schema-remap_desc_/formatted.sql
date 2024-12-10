@@ -4,5 +4,6 @@ USE plato;
 SELECT
     TableName() AS tn,
     t.*
-FROM concat(Input, Input)
-    AS t;
+FROM
+    concat(Input, Input) AS t
+;

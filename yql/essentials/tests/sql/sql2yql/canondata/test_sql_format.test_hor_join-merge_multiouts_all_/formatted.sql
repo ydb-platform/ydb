@@ -1,4 +1,5 @@
 USE plato;
+
 /* syntax version 1 */
 /* postgres can not */
 $udfScript = @@
@@ -9,9 +10,12 @@ def MyFunc(list):
 $record = (
     SELECT
         TableRow()
-    FROM Input
+    FROM
+        Input
 );
+
 $recordType = TypeOf(Unwrap($record));
+
 $udf = Python::MyFunc(
     CallableType(
         0,
@@ -33,22 +37,27 @@ SELECT
 FROM (
     SELECT
         *
-    FROM $i0
+    FROM
+        $i0
     UNION ALL
     SELECT
         *
-    FROM $i1
+    FROM
+        $i1
     UNION ALL
     SELECT
         *
-    FROM $i2
+    FROM
+        $i2
     UNION ALL
     SELECT
         *
-    FROM $i3
+    FROM
+        $i3
 )
 ORDER BY
-    key;
+    key
+;
 
 INSERT INTO Output
 SELECT
@@ -56,17 +65,21 @@ SELECT
 FROM (
     SELECT
         *
-    FROM $i0
+    FROM
+        $i0
     UNION ALL
     SELECT
         *
-    FROM $i1
+    FROM
+        $i1
     UNION ALL
     SELECT
         *
-    FROM $i2
+    FROM
+        $i2
     UNION ALL
     SELECT
         *
-    FROM $i3
+    FROM
+        $i3
 );

@@ -9,4 +9,6 @@ SELECT
     key,
     subkey,
     "1" AS value
-FROM plato.Input;
+FROM
+    plato.Input
+;

@@ -5,36 +5,50 @@ USE plato;
 INSERT INTO @a
 SELECT
     *
-FROM Input0
+FROM
+    Input0
 ORDER BY
     key,
-    subkey;
+    subkey
+;
+
 COMMIT;
 
 INSERT INTO @c
 SELECT
     *
-FROM @a
-WHERE key < "100"
+FROM
+    @a
+WHERE
+    key < "100"
 ORDER BY
     key,
-    subkey;
+    subkey
+;
 
 INSERT INTO @d
 SELECT
     key AS key,
     "" AS subkey,
     "value:" || value AS value
-FROM @a
-WHERE key < "100"
+FROM
+    @a
+WHERE
+    key < "100"
 ORDER BY
-    key;
+    key
+;
+
 COMMIT;
 
 SELECT
     *
-FROM @c;
+FROM
+    @c
+;
 
 SELECT
     *
-FROM @d;
+FROM
+    @d
+;

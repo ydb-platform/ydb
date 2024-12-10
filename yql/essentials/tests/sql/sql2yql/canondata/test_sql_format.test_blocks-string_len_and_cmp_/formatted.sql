@@ -32,6 +32,8 @@ SELECT
     len(''u),
     len('проверка'),
     len('тест'u),
-FROM Input
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;

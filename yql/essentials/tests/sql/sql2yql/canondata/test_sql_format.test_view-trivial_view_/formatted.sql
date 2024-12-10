@@ -6,5 +6,6 @@ SELECT
     k,
     s,
     v
-FROM Input
-    VIEW ksv;
+FROM
+    Input VIEW ksv
+;

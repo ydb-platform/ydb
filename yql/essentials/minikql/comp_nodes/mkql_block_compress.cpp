@@ -84,6 +84,9 @@ public:
 
         const auto bitmapValue = getres.second[BitmapIndex_](ctx, block);
         const auto bitmap = CallInst::Create(getBitmap, { WrapArgumentForWindows(bitmapValue, ctx, block) }, "bitmap", block);
+
+        ValueCleanup(EValueRepresentation::Any, bitmapValue, ctx, block);
+
         const auto one = ConstantInt::get(bitmapType, 1);
         const auto band = BinaryOperator::CreateAnd(bitmap, one, "band", block);
         const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, band, one, "good", block);
@@ -189,6 +192,9 @@ public:
 
         const auto bitmapValue = getres.second[BitmapIndex_](ctx, block);
         const auto pops = CallInst::Create(getPopCount, { WrapArgumentForWindows(bitmapValue, ctx, block) }, "pops", block);
+
+        ValueCleanup(EValueRepresentation::Any, bitmapValue, ctx, block);
+
         const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, pops, ConstantInt::get(sizeType, 0), "good", block);
 
         BranchInst::Create(fill, loop, good, block);
@@ -270,7 +276,7 @@ public:
                         s.IsFinished_ = true;
                         break;
                     case EFetchResult::One:
-                        switch (s.Check(bitmap.Release())) {
+                        switch (s.Check(bitmap)) {
                             case TState::EStep::Copy:
                                 for (ui32 i = 0; i < s.Values.size(); ++i) {
                                     if (const auto out = output[i]) {
@@ -415,6 +421,8 @@ public:
         const auto checkPtr = CastInst::Create(Instruction::IntToPtr, checkFunc, PointerType::getUnqual(checkType), "check_func", block);
         const auto check = CallInst::Create(checkType, checkPtr, {stateArg, bitmapArg}, "check", block);
 
+        ValueCleanup(EValueRepresentation::Any, bitmap, ctx, block);
+
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
 
         const auto step = SwitchInst::Create(check, save, 2U, block);
@@ -552,9 +560,8 @@ private:
         EStep Check(const NUdf::TUnboxedValuePod bitmapValue) {
             Y_ABORT_UNLESS(!IsFinished_);
             Y_ABORT_UNLESS(!InputSize_);
-            const NUdf::TUnboxedValue b(std::move(bitmapValue));
             auto& bitmap = Arrays_.back();
-            bitmap = TArrowBlock::From(b).GetDatum().array();
+            bitmap = TArrowBlock::From(bitmapValue).GetDatum().array();
 
             if (!bitmap->length)
                 return EStep::Skip;

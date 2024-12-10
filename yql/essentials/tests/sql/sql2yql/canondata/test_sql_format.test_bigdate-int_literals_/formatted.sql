@@ -24,4 +24,5 @@ SELECT
     13,
     Yql::Interval64(AsAtom("-9223339708799999999")),
     14,
-    Yql::Interval64(AsAtom("9223339708799999999"));
+    Yql::Interval64(AsAtom("9223339708799999999"))
+;

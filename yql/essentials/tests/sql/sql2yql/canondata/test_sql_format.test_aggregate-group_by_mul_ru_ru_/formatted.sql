@@ -7,7 +7,8 @@ SELECT
     vf,
     vl,
     grouping(kf, kl, vf, vl)
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     ROLLUP (CAST(key AS uint32) / 100u AS kf, CAST(key AS uint32) % 10u AS kl),
     ROLLUP (Substring(value, 0, 1) AS vf, Substring(value, 2, 1) AS vl)
@@ -15,4 +16,5 @@ ORDER BY
     kf,
     kl,
     vf,
-    vl;
+    vl
+;

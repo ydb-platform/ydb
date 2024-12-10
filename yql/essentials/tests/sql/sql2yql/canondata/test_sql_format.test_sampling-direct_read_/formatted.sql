@@ -4,5 +4,7 @@ PRAGMA direct_read;
 
 SELECT
     *
-FROM plato.Input
-    TABLESAMPLE BERNOULLI (30) REPEATABLE (1);
+FROM
+    plato.Input
+    TABLESAMPLE BERNOULLI (30) REPEATABLE (1)
+;

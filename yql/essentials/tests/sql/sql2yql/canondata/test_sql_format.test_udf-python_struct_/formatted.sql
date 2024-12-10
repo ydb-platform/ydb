@@ -1,5 +1,6 @@
 /* postgres can not */
 USE plato;
+
 $udf = YQL::@@(block '(
     (let $udfScript (String '@@@@
 class Person:
@@ -21,9 +22,12 @@ def NewPerson(name, age):
 $persons = (
     SELECT
         $udf(value, 100) AS val
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
     val
-FROM $persons;
+FROM
+    $persons
+;

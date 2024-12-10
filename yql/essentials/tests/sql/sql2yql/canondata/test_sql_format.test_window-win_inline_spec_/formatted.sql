@@ -11,7 +11,8 @@ SELECT
         ROWS UNBOUNDED PRECEDING
     ) AS next_key,
     aggregate_list(key) OVER w AS keys,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w AS (
         ORDER BY
@@ -19,4 +20,5 @@ WINDOW
         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
     )
 ORDER BY
-    key;
+    key
+;

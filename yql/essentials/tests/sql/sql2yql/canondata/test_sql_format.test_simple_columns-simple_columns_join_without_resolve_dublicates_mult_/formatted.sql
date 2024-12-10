@@ -1,5 +1,6 @@
 /* postgres can not */
 PRAGMA SimpleColumns;
+
 USE plato;
 
 $data = (
@@ -8,8 +9,10 @@ $data = (
         key AS kk,
         CAST(subkey AS uint32) * 10 AS subkey,
         "data: " || value AS value
-    FROM Input
-    WHERE CAST(key AS uint32) / 100 < 5
+    FROM
+        Input
+    WHERE
+        CAST(key AS uint32) / 100 < 5
 );
 
 --INSERT INTO Output
@@ -22,10 +25,13 @@ WITHOUT
     Input.value,
     d.subkey,
     d.key
-FROM Input
-JOIN $data
-    AS d
-ON Input.subkey == d.key
+FROM
+    Input
+JOIN
+    $data AS d
+ON
+    Input.subkey == d.key
 ORDER BY
     key,
-    value;
+    value
+;

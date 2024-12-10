@@ -5,6 +5,8 @@ USE plato;
 SELECT
     WeakField(subkey, 'string'),
     WeakField(strE1, 'string')
-FROM Input
+FROM
+    Input
 ORDER BY
-    subkey;
+    subkey
+;

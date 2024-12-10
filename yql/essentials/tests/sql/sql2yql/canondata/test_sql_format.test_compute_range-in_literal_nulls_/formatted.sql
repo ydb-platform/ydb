@@ -11,4 +11,5 @@ SELECT
         Struct<x: Int32?>,
         ($row) -> (($row.x IN (1, 2, 5, NULL)) ?? FALSE),
         AsTuple(AsAtom("x"))
-    );
+    )
+;

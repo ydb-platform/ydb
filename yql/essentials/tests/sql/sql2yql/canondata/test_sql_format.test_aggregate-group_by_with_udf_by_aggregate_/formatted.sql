@@ -15,6 +15,8 @@ SELECT
     count(*),
     val,
     $majority_vote(aggregate_list(subkey))
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
-    CAST(key AS uint32) % 2 AS val;
+    CAST(key AS uint32) % 2 AS val
+;

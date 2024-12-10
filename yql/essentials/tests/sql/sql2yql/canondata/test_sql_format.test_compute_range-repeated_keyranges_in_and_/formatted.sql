@@ -14,4 +14,5 @@ SELECT
             )
         ),
         AsTuple(AsAtom("x"), AsAtom("y"), AsAtom("z"))
-    );
+    )
+;

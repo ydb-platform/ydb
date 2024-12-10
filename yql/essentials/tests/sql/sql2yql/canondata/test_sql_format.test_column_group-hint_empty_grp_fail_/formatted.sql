@@ -5,4 +5,6 @@ USE plato;
 INSERT INTO Output WITH column_groups = "{g1=[];def=#}"
 SELECT
     *
-FROM Input;
+FROM
+    Input
+;

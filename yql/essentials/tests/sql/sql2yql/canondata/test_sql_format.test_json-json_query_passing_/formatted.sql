@@ -63,7 +63,8 @@ SELECT
     JSON_QUERY (
         $json,
         "strict $var" PASSING NULL AS var WITH UNCONDITIONAL ARRAY WRAPPER
-    );
+    )
+;
 
 -- Check various ways to pass variable name
 SELECT
@@ -80,4 +81,5 @@ SELECT
     ),
     JSON_QUERY (
         $json, "strict $VaR1" PASSING 123 AS "VaR1" WITH UNCONDITIONAL ARRAY WRAPPER
-    );
+    )
+;

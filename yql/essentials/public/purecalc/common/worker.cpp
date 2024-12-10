@@ -57,10 +57,10 @@ TWorkerGraph::TWorkerGraph(
     , NativeYtTypeFlags_(nativeYtTypeFlags)
 {
     // Build the root MKQL node
-
+    NCommon::TMemoizedTypesMap typeMemoization;
     NKikimr::NMiniKQL::TRuntimeNode rootNode;
     if (exprRoot) {
-        rootNode = CompileMkql(exprRoot, exprCtx, FuncRegistry_, Env_, userData);
+        rootNode = CompileMkql(exprRoot, exprCtx, FuncRegistry_, Env_, userData, &typeMemoization);
     } else {
         rootNode = NKikimr::NMiniKQL::DeserializeRuntimeNode(serializedProgram, Env_);
     }
@@ -79,12 +79,12 @@ TWorkerGraph::TWorkerGraph(
 
     NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env_, FuncRegistry_);
     for (ui32 i = 0; i < inputsCount; ++i) {
-        const auto* type = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *inputTypes[i], pgmBuilder));
+        const auto* type = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *inputTypes[i], pgmBuilder, typeMemoization));
         const auto* originalType = type;
-        const auto* rawType = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *rawInputTypes[i], pgmBuilder));
+        const auto* rawType = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *rawInputTypes[i], pgmBuilder, typeMemoization));
         if (inputTypes[i] != originalInputTypes[i]) {
             YQL_ENSURE(inputTypes[i]->GetSize() >= originalInputTypes[i]->GetSize());
-            originalType = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *originalInputTypes[i], pgmBuilder));
+            originalType = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *originalInputTypes[i], pgmBuilder, typeMemoization));
         }
 
         InputTypes_.push_back(type);
@@ -93,10 +93,10 @@ TWorkerGraph::TWorkerGraph(
     }
 
     if (outputType) {
-        OutputType_ = NCommon::BuildType(TPositionHandle(), *outputType, pgmBuilder);
+        OutputType_ = NCommon::BuildType(TPositionHandle(), *outputType, pgmBuilder, typeMemoization);
     }
     if (rawOutputType) {
-        RawOutputType_ = NCommon::BuildType(TPositionHandle(), *rawOutputType, pgmBuilder);
+        RawOutputType_ = NCommon::BuildType(TPositionHandle(), *rawOutputType, pgmBuilder, typeMemoization);
     }
 
     if (!exprRoot) {

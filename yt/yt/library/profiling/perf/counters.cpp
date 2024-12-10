@@ -2,13 +2,14 @@
 
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/library/profiling/sensor.h>
 
 #include <library/cpp/yt/assert/assert.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <linux/perf_event.h>
 

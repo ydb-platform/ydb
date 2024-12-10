@@ -5,8 +5,10 @@ SELECT
 FROM (
     SELECT
         *
-    FROM Input
+    FROM
+        Input
 )
-    SAMPLE (0.5)
+SAMPLE (0.5)
 ORDER BY
-    key;
+    key
+;

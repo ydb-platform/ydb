@@ -8,11 +8,11 @@ DEFINE SUBQUERY $sub() AS
             (1),
             (2),
             (3)
-    )
-        AS a (
-            x
-        );
+    ) AS a (
+        x
+    );
 END DEFINE;
+
 $sub2 = SubqueryAssumeOrderBy($sub, [("x", TRUE)]);
 
 PROCESS $sub2();

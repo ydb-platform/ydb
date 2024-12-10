@@ -6,8 +6,8 @@ FROM (
     SELECT
         d.*,
         Just(key) AS ok
-    FROM plato.Input
-        AS d
+    FROM
+        plato.Input AS d
 )
-    FLATTEN BY
-        ok;
+    FLATTEN BY ok
+;

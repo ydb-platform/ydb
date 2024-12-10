@@ -4,49 +4,63 @@ USE plato;
 $r4_20 = (
     SELECT
         optkey
-    FROM Input
-    WHERE optkey BETWEEN 4 AND 20
+    FROM
+        Input
+    WHERE
+        optkey BETWEEN 4 AND 20
 );
 
 $r6_20 = (
     SELECT
         key
-    FROM Input
-    WHERE optkey BETWEEN 6 AND 20
+    FROM
+        Input
+    WHERE
+        optkey BETWEEN 6 AND 20
 );
 
 $r8_20 = (
     SELECT
         key
-    FROM Input
-    WHERE optkey BETWEEN 8 AND 20
+    FROM
+        Input
+    WHERE
+        optkey BETWEEN 8 AND 20
 );
 
 $r10_20 = (
     SELECT
         optkey
-    FROM Input
-    WHERE optkey BETWEEN 10 AND 20
+    FROM
+        Input
+    WHERE
+        optkey BETWEEN 10 AND 20
 );
 
 $r1_16 = (
     SELECT
         optkey
-    FROM Input
-    WHERE optkey BETWEEN 1 AND 16
+    FROM
+        Input
+    WHERE
+        optkey BETWEEN 1 AND 16
 );
 
 $r1_12 = (
     SELECT
         key
-    FROM Input
-    WHERE optkey BETWEEN 1 AND 12
+    FROM
+        Input
+    WHERE
+        optkey BETWEEN 1 AND 12
 );
 
 SELECT
     key
-FROM Input
-WHERE (key + 1) IN $r4_20
+FROM
+    Input
+WHERE
+    (key + 1) IN $r4_20
     AND -- key = [3, 19]       -- 2 joinable
     optkey IN $r6_20
     AND -- key = [6, 19]

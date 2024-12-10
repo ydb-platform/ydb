@@ -4,4 +4,6 @@ PRAGMA direct_read;
 
 SELECT
     *
-FROM plato.`Input["150"]`;
+FROM
+    plato.`Input["150"]`
+;

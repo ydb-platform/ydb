@@ -3,4 +3,6 @@ USE plato;
 SELECT
     min(subkey),
     max(subkey),
-FROM Input;
+FROM
+    Input
+;

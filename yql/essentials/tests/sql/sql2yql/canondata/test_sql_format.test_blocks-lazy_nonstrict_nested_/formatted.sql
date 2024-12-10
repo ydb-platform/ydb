@@ -5,4 +5,6 @@ SELECT
     if(value > "aaa" AND String::AsciiToLower(AssumeNonStrict(subkey)) > "3", "foo", "bar"),
     value,
     subkey
-FROM Input;
+FROM
+    Input
+;

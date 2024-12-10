@@ -1,3 +1,5 @@
 SELECT
     count(*)
-FROM plato.Input;
+FROM
+    plato.Input
+;

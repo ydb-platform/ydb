@@ -5,5 +5,7 @@ $x = 1.0 / 3;
 
 SELECT
     *
-FROM plato.Input
-    SAMPLE $x;
+FROM
+    plato.Input
+    SAMPLE $x
+;

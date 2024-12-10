@@ -4,13 +4,18 @@ USE plato;
 $max =
     SELECT
         max(key)
-    FROM Input;
+    FROM
+        Input
+;
 
 $list =
     SELECT
         key
-    FROM Input
-    WHERE subkey > "1";
+    FROM
+        Input
+    WHERE
+        subkey > "1"
+;
 
 SELECT
     *
@@ -18,6 +23,9 @@ FROM (
     SELECT
         if(key == $max, "max", key) AS key,
         value
-    FROM Input
+    FROM
+        Input
 )
-WHERE key IN COMPACT $list;
+WHERE
+    key IN COMPACT $list
+;

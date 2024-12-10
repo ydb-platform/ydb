@@ -629,7 +629,7 @@ void FillResultFromOperationError(NCommon::TOperationResult& result, const NYT::
             } else {
                 TString errorDescription = failedJob.Error.ShortDescription();
                 if (uniqueErrors.insert(errorDescription).second) {
-                    rootIssue.AddSubIssue(MakeIntrusive<TIssue>(YqlIssue(pos, TIssuesIds::UNEXPECTED, errorDescription)));
+                    rootIssue.AddSubIssue(MakeIntrusive<TIssue>(YqlIssue(pos, TIssuesIds::DEFAULT_ERROR, errorDescription)));
                 }
             }
         }
@@ -658,7 +658,7 @@ void FillResultFromCurrentException(NCommon::TOperationResult& result, TPosition
     } catch (const std::exception& e) {
         result.SetException(e, pos);
     } catch (const NKikimr::TMemoryLimitExceededException&) {
-        result.SetStatus(TIssuesIds::UNEXPECTED);
+        result.SetStatus(TIssuesIds::DEFAULT_ERROR);
         result.AddIssue(TIssue(pos, "Memory limit exceeded in MKQL runtime"));
     } catch (...) {
         result.SetStatus(TIssuesIds::UNEXPECTED);

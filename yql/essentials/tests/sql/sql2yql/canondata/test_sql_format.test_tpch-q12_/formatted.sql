@@ -8,12 +8,14 @@ $join = (
         l.l_commitdate AS l_commitdate,
         l.l_shipdate AS l_shipdate,
         l.l_receiptdate AS l_receiptdate
-    FROM plato.orders
-        AS o
-    JOIN plato.lineitem
-        AS l
-    ON o.o_orderkey == l.l_orderkey
+    FROM
+        plato.orders AS o
+    JOIN
+        plato.lineitem AS l
+    ON
+        o.o_orderkey == l.l_orderkey
 );
+
 $border = Date("1994-01-01");
 
 SELECT
@@ -21,21 +23,21 @@ SELECT
     sum(
         CASE
             WHEN o_orderpriority == '1-URGENT'
-            OR o_orderpriority == '2-HIGH'
-                THEN 1
+            OR o_orderpriority == '2-HIGH' THEN 1
             ELSE 0
         END
     ) AS high_line_count,
     sum(
         CASE
             WHEN o_orderpriority != '1-URGENT'
-            AND o_orderpriority != '2-HIGH'
-                THEN 1
+            AND o_orderpriority != '2-HIGH' THEN 1
             ELSE 0
         END
     ) AS low_line_count
-FROM $join
-WHERE (l_shipmode == 'MAIL' OR l_shipmode == 'TRUCK')
+FROM
+    $join
+WHERE
+    (l_shipmode == 'MAIL' OR l_shipmode == 'TRUCK')
     AND l_commitdate < l_receiptdate
     AND l_shipdate < l_commitdate
     AND CAST(l_receiptdate AS timestamp) >= $border
@@ -43,4 +45,5 @@ WHERE (l_shipmode == 'MAIL' OR l_shipmode == 'TRUCK')
 GROUP BY
     l_shipmode
 ORDER BY
-    l_shipmode;
+    l_shipmode
+;

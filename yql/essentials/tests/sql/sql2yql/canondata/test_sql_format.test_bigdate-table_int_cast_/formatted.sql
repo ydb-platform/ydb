@@ -23,9 +23,11 @@ SELECT
     CAST(i64 AS datetime64),
     CAST(i64 AS timestamp64),
     CAST(i64 AS interval64)
-FROM Signed
+FROM
+    Signed
 ORDER BY
-    row;
+    row
+;
 
 SELECT
     row,
@@ -49,9 +51,11 @@ SELECT
     CAST(i64 AS int16),
     CAST(i64 AS int32),
     CAST(i64 AS int64)
-FROM BigDates
+FROM
+    BigDates
 ORDER BY
-    row;
+    row
+;
 
 SELECT
     row,
@@ -75,9 +79,11 @@ SELECT
     CAST(i64 AS uint16),
     CAST(i64 AS uint32),
     CAST(i64 AS uint64)
-FROM BigDates
+FROM
+    BigDates
 ORDER BY
-    row;
+    row
+;
 
 SELECT
     row,
@@ -101,6 +107,8 @@ SELECT
     CAST(ui64 AS datetime64),
     CAST(ui64 AS timestamp64),
     CAST(ui64 AS interval64)
-FROM Unsigned
+FROM
+    Unsigned
 ORDER BY
-    row;
+    row
+;

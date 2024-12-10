@@ -7,4 +7,6 @@ INSERT INTO plato.Output WITH (
 )
 SELECT
     *
-FROM plato.Input;
+FROM
+    plato.Input
+;

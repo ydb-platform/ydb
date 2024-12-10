@@ -3,7 +3,6 @@ IF (NOT OPENSOURCE)
 UNITTEST_FOR(yql/essentials/core)
 
 SRCS(
-    yql_csv_ut.cpp
     yql_column_order_ut.cpp
     yql_execution_ut.cpp
     yql_expr_constraint_ut.cpp

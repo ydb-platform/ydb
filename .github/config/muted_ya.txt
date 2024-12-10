@@ -1,6 +1,5 @@
 ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWithChangingSlowDisk
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
-ydb/core/blobstorage/pdisk/ut TPDiskTest.AllRequestsAreAnsweredOnPDiskRestart
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
@@ -66,6 +65,8 @@ ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBack
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
+ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlter-PQConfigTransactionsAtSchemeShard-true
+ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlterDropPqGroupWithReboots-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-false
@@ -86,7 +87,6 @@ ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test
 ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[primitive_types-dqrun]
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_asterisk-dqrun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-dqrun]
-ydb/library/yql/tests/sql/hybrid_file/part1 test.py.test[in-in_noansi_join--Debug]
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*] chunk chunk
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*]+chunk+chunk
 ydb/services/datastreams/ut DataStreams.TestPutRecordsCornerCases

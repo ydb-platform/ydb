@@ -46,6 +46,7 @@ message TIssuesIds {
 // core errors
         CORE_GC_NODES_LIMIT_EXCEEDED = 1500;
         CORE_GC_STRINGS_LIMIT_EXCEEDED = 1501;
+        CORE_RUNTIME_ERROR = 1502;
 
 // kikimr
         KIKIMR_LOCKS_INVALIDATED = 2001;

@@ -9,7 +9,6 @@ FROM (
         (Interval("P1D")),
         (Interval("P2D")),
         (Interval("P3D"))
-)
-    AS a (
-        key
-    );
+) AS a (
+    key
+);

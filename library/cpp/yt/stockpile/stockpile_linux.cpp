@@ -116,14 +116,14 @@ private:
         i64 adjustedBufferSize,
         TDuration adjustedPeriod)
     {
-        int returnCode = -::madvise(nullptr, adjustedBufferSize, MADV_STOCKPILE);
-        YT_LOG_DEBUG_IF(returnCode != 0, "System call \"madvise\" failed: %v", strerror(returnCode));
+        int result = ::madvise(nullptr, adjustedBufferSize, MADV_STOCKPILE);
+        if (result == 0) {
+            Sleep(Options_.Period);
+            return {Options_.BufferSize, Options_.Period};
+        }
 
-        switch(returnCode) {
-            case 0:
-                Sleep(Options_.Period);
-                return {Options_.BufferSize, Options_.Period};
-
+        YT_LOG_DEBUG("System call \"madvise\" failed: %v", strerror(errno));
+        switch (errno) {
             case ENOMEM:
                 if (adjustedBufferSize / 2 >= PageSize_) {
                     // Immediately make an attempt to reclaim half as much.

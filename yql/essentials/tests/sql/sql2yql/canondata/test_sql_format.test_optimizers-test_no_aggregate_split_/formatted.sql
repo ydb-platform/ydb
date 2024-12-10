@@ -4,7 +4,8 @@ $aggregated = (
         Group,
         Name,
         SUM(Amount) AS TotalAmount
-    FROM plato.Input1
+    FROM
+        plato.Input1
     GROUP BY
         Group,
         Name
@@ -13,17 +14,21 @@ $aggregated = (
 SELECT
     t.Comment,
     a.TotalAmount
-FROM plato.Input1
-    AS t
-INNER JOIN $aggregated
-    AS a
-ON t.Group == a.Group AND t.Name == a.Name
+FROM
+    plato.Input1 AS t
+INNER JOIN
+    $aggregated AS a
+ON
+    t.Group == a.Group AND t.Name == a.Name
 ORDER BY
     t.Comment,
-    a.TotalAmount;
+    a.TotalAmount
+;
 
 SELECT
     TotalAmount
-FROM $aggregated
+FROM
+    $aggregated
 ORDER BY
-    TotalAmount;
+    TotalAmount
+;

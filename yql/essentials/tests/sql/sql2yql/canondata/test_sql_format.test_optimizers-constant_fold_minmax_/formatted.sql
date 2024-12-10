@@ -15,4 +15,5 @@ SELECT
     MIN_OF(50ut, 30, 40) AS MinMixed2,
     MAX_OF(50ut, 30, 40) AS MaxMixed2,
     MIN_OF(1) AS MinSingle,
-    MAX_OF(-1) AS MaxSingle;
+    MAX_OF(-1) AS MaxSingle
+;

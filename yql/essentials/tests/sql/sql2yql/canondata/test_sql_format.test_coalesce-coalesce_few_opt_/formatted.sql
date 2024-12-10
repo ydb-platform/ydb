@@ -21,4 +21,6 @@ SELECT
     coalesce(coalesce(coalesce(third_null, 222), 442), 100500),
     coalesce(coalesce(coalesce(third_num, 233), 443), 100501),
     'end'
-FROM plato.Input;
+FROM
+    plato.Input
+;

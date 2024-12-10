@@ -7,9 +7,11 @@ FROM (
     FROM (
         SELECT
             <|a: key, b: value|> AS x
-        FROM plato.Input
+        FROM
+            plato.Input
     )
     GROUP BY
         x
 )
-    FLATTEN COLUMNS;
+    FLATTEN COLUMNS
+;

@@ -1,4 +1,5 @@
 USE plato;
+
 $r = ($s) -> (Yql::FlatMap($s, ($x) -> ($x.1)));
 
 INSERT INTO Output

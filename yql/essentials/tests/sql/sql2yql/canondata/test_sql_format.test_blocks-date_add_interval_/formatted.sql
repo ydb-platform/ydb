@@ -25,7 +25,8 @@ SELECT
     a.wt + b.wi,
     a.wtz + b.ni,
     a.wtz + b.wi,
-FROM Dates
-    AS a
-CROSS JOIN Dates
-    AS b;
+FROM
+    Dates AS a
+CROSS JOIN
+    Dates AS b
+;

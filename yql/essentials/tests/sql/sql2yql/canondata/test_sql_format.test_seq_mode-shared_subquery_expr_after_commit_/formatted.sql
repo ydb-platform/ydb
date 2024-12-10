@@ -1,20 +1,29 @@
 USE plato;
+
 PRAGMA SeqMode;
 
 INSERT INTO @foo
 SELECT
-    1;
+    1
+;
+
 COMMIT;
 
 $a =
     SELECT
         *
-    FROM @foo;
+    FROM
+        @foo
+;
 
 SELECT
     *
-FROM $a;
+FROM
+    $a
+;
 
 SELECT
     *
-FROM $a;
+FROM
+    $a
+;

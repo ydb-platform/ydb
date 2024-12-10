@@ -9,7 +9,10 @@ SELECT
     Just((Just(subkey), key)) AS d,
     Nothing(Tuple<Int32, Int32>?) AS e,
     Nothing(Tuple<Int32?, Int32>?) AS f,
-FROM Input;
+FROM
+    Input
+;
+
 COMMIT;
 
 SELECT
@@ -25,4 +28,6 @@ SELECT
     e.1,
     f.0,
     f.1
-FROM @tmp;
+FROM
+    @tmp
+;

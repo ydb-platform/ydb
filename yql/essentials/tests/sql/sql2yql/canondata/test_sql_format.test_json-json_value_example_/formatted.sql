@@ -6,7 +6,9 @@ USE plato;
 SELECT
     T.K,
     JSON_VALUE (T.J, 'lax $.who') AS Who
-FROM T;
+FROM
+    T
+;
 
 SELECT
     T.K,
@@ -14,7 +16,9 @@ SELECT
     JSON_VALUE (
         T.J, 'lax $.where' NULL ON EMPTY
     ) AS Nali
-FROM T;
+FROM
+    T
+;
 
 SELECT
     T.K,
@@ -22,7 +26,9 @@ SELECT
     JSON_VALUE (
         T.J, 'strict $.where' DEFAULT 'no where there' ON ERROR
     ) AS Nali
-FROM T;
+FROM
+    T
+;
 
 SELECT
     T.K,
@@ -31,7 +37,9 @@ SELECT
     JSON_VALUE (
         T.J, 'lax $.friends.name' NULL ON EMPTY DEFAULT '*** error ***' ON ERROR
     ) AS Friend
-FROM T;
+FROM
+    T
+;
 
 SELECT
     T.K,
@@ -51,7 +59,9 @@ SELECT
     JSON_VALUE (
         T.J, 'strict $.friends[*].name' NULL ON EMPTY DEFAULT '*** error ***' ON ERROR
     ) AS Friend
-FROM T;
+FROM
+    T
+;
 
 SELECT
     T.K,
@@ -59,4 +69,6 @@ SELECT
 
     -- NOTE: In the original example INTEGER type was used. YQL does not have INTEGER type, Int64 was used instead
     JSON_VALUE (T.J, 'lax $.friends[0].rank' RETURNING Int64 NULL ON EMPTY) AS Rank
-FROM T;
+FROM
+    T
+;

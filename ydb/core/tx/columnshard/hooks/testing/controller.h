@@ -192,6 +192,9 @@ protected:
     virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 def) const override {
         return OverrideRejectMemoryIntervalLimit.value_or(def);
     }
+    virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 def) const override {
+        return 0;
+    }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
         return CompactionControl;
     }

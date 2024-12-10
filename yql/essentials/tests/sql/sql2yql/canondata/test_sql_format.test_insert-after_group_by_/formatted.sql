@@ -8,9 +8,11 @@ SELECT
     key,
     subkey,
     max(value)
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     key,
     subkey
 ORDER BY
-    key;
+    key
+;

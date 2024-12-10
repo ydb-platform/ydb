@@ -51,4 +51,5 @@ SELECT
     ToMultiDict(Just([])),
     ToSet(Just([])),
     SetIsDisjoint({1, 2, 3}, Just([])),
-    SetIncludes({1, 2, 3}, Just([])),;
+    SetIncludes({1, 2, 3}, Just([])),
+;

@@ -1,4 +1,5 @@
 PRAGMA yt.UsePartitionsByKeysForFinalAgg = "false";
+
 USE plato;
 
 SELECT
@@ -7,8 +8,10 @@ SELECT
     sum(DISTINCT subkey),
     count(DISTINCT Unwrap(subkey / 2u)),
     sum(DISTINCT Unwrap(subkey / 2u))
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

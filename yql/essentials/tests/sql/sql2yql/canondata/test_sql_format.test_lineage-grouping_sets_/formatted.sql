@@ -5,17 +5,20 @@ $data =
         key,
         subkey,
         value
-    FROM Input
+    FROM
+        Input
     GROUP BY
         GROUPING SETS (
             (key, subkey),
-            (subkey, value));
+            (subkey, value)
+        )
+;
 
 INSERT INTO @tmp WITH TRUNCATE
 SELECT
     b.value
-FROM $data
-    AS a
-LEFT JOIN Input
-    AS b
+FROM
+    $data AS a
+LEFT JOIN
+    Input AS b
 USING (key);

@@ -5,4 +5,6 @@ SELECT
     1ul + key + key + key,
     subkey + 2ul,
     key
-FROM Input;
+FROM
+    Input
+;

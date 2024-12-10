@@ -4,9 +4,13 @@
 $a =
     SELECT
         *
-    FROM plato.Input;
+    FROM
+        plato.Input
+;
 
 SELECT
     *
-FROM $a
-    TABLESAMPLE BERNOULLI (0.1);
+FROM
+    $a
+    TABLESAMPLE BERNOULLI (0.1)
+;

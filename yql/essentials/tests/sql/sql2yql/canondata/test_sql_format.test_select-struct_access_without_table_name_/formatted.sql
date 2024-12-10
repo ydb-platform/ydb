@@ -6,7 +6,8 @@ $data = (
         CAST(key AS uint32) % 10 AS mod,
         (key AS kk, subkey AS sk) AS struct_field,
         value
-    FROM Input
+    FROM
+        Input
 );
 
 --INSERT INTO Output
@@ -15,8 +16,9 @@ SELECT
     struct_field.kk AS mod_key,
     struct_field.sk,
     d.value
-FROM $data
-    AS d
+FROM
+    $data AS d
 ORDER BY
     mod_key,
-    value;
+    value
+;

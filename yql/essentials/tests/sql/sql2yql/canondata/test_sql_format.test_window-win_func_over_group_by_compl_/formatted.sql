@@ -7,7 +7,8 @@ $data = (
         CAST(key AS uint32) AS age,
         CAST(subkey AS uint32) AS region,
         value AS name
-    FROM Input
+    FROM
+        Input
 );
 
 --insert into Output
@@ -23,7 +24,8 @@ SELECT
     lag(region) OVER w1 AS prev_region,
     lag(aggr_list(region)) OVER w1 AS prev_region_list,
     'test'
-FROM $data
+FROM
+    $data
 GROUP BY
     region,
     SUBSTRING(name, 0, 1) AS prefix
@@ -40,4 +42,5 @@ WINDOW
 --window w1 as (order by avg(age) desc)
 ORDER BY
     region,
-    avg_age DESC;
+    avg_age DESC
+;

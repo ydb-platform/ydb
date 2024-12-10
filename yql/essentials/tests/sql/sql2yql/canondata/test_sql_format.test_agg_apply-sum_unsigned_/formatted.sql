@@ -9,7 +9,6 @@ FROM (
         (1u),
         (NULL),
         (3u)
-)
-    AS a (
-        key
-    );
+) AS a (
+    key
+);

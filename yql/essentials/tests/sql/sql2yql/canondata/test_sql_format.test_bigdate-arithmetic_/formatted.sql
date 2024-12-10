@@ -49,7 +49,8 @@ SELECT
     $date32_min + $interval_minus1,
     $date32_max + $interval_minus1,
     $date32_min + $interval_plus1,
-    $date32_max + $interval_plus1;
+    $date32_max + $interval_plus1
+;
 
 SELECT
     1,
@@ -80,7 +81,8 @@ SELECT
     $datetime64_min + $interval_minus1,
     $datetime64_max + $interval_minus1,
     $datetime64_min + $interval_plus1,
-    $datetime64_max + $interval_plus1;
+    $datetime64_max + $interval_plus1
+;
 
 SELECT
     1,
@@ -111,7 +113,8 @@ SELECT
     $timestamp64_min + $interval_minus1,
     $timestamp64_max + $interval_minus1,
     $timestamp64_min + $interval_plus1,
-    $timestamp64_max + $interval_plus1;
+    $timestamp64_max + $interval_plus1
+;
 
 SELECT
     1,
@@ -146,7 +149,8 @@ SELECT
     $timestamp_max - $interval64_minus1,
     $timestamp_max + $interval64_minus1,
     $timestamp_max - $interval64_plus1,
-    $timestamp_max + $interval64_plus1;
+    $timestamp_max + $interval64_plus1
+;
 
 SELECT
     1,
@@ -164,7 +168,8 @@ SELECT
     $interval64_max + $interval64_min,
     $interval64_max + $interval64_max,
     $interval64_min - $interval64_min,
-    $interval64_max - $interval64_max;
+    $interval64_max - $interval64_max
+;
 
 SELECT
     0,
@@ -220,4 +225,5 @@ SELECT
     abs($interval64_zero),
     11,
     CAST(4294967296l AS interval64) * 4294967296l,
-    4294967296ul * CAST(4294967296l AS interval64);
+    4294967296ul * CAST(4294967296l AS interval64)
+;

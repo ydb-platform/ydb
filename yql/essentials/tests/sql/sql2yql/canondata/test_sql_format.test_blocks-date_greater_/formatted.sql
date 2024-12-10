@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.DisableOptimizers = "OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin,FuseMultiOutsWithOuterMaps";
 
 SELECT
@@ -78,10 +79,11 @@ SELECT
     a.ni > b.wi,
     a.wi > b.ni,
     a.wi > b.wi
-FROM Dates
-    AS a
-CROSS JOIN Dates
-    AS b;
+FROM
+    Dates AS a
+CROSS JOIN
+    Dates AS b
+;
 
 SELECT
     a.wa > b.na,
@@ -156,7 +158,8 @@ SELECT
     a.wtz > b.waz,
     a.wtz > b.wdz,
     a.wtz > b.wtz
-FROM Dates
-    AS a
-CROSS JOIN Dates
-    AS b;
+FROM
+    Dates AS a
+CROSS JOIN
+    Dates AS b
+;

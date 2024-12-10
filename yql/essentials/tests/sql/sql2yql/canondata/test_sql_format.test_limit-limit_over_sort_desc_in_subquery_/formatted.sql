@@ -6,8 +6,10 @@ USE plato;
 $in = (
     SELECT
         *
-    FROM Input
-    WHERE subkey > '1'
+    FROM
+        Input
+    WHERE
+        subkey > '1'
     ORDER BY
         key DESC
     LIMIT 15000
@@ -15,5 +17,8 @@ $in = (
 
 SELECT
     *
-FROM $in
-WHERE value LIKE "a%";
+FROM
+    $in
+WHERE
+    value LIKE "a%"
+;

@@ -8,57 +8,6 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TStockpileConfig::Register(TRegistrar registrar)
-{
-    registrar.BaseClassParameter("buffer_size", &TThis::BufferSize)
-        .Default(DefaultBufferSize)
-        .GreaterThan(0);
-    registrar.BaseClassParameter("thread_count", &TThis::ThreadCount)
-        .Default(DefaultThreadCount);
-    registrar.BaseClassParameter("strategy", &TThis::Strategy)
-        .Default(DefaultStrategy);
-    registrar.BaseClassParameter("period", &TThis::Period)
-        .Default(DefaultPeriod);
-}
-
-TStockpileConfigPtr TStockpileConfig::ApplyDynamic(const TStockpileDynamicConfigPtr& dynamicConfig) const
-{
-    auto mergedConfig = CloneYsonStruct(MakeStrong(this));
-
-    if (dynamicConfig->BufferSize) {
-        mergedConfig->BufferSize = *dynamicConfig->BufferSize;
-    }
-    if (dynamicConfig->ThreadCount) {
-        mergedConfig->ThreadCount = *dynamicConfig->ThreadCount;
-    }
-    if (dynamicConfig->Strategy) {
-        mergedConfig->Strategy = *dynamicConfig->Strategy;
-    }
-    if (dynamicConfig->Period) {
-        mergedConfig->Period = *dynamicConfig->Period;
-    }
-
-    return mergedConfig;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TStockpileDynamicConfig::Register(TRegistrar registrar)
-{
-    registrar.BaseClassParameter("buffer_size", &TThis::BufferSize)
-        .Optional()
-        .GreaterThan(0);
-    registrar.BaseClassParameter("thread_count", &TThis::ThreadCount)
-        .Optional()
-        .GreaterThanOrEqual(0);
-    registrar.BaseClassParameter("strategy", &TThis::Strategy)
-        .Optional();
-    registrar.BaseClassParameter("period", &TThis::Period)
-        .Optional();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 void THeapProfilerConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("sampling_rate", &TThis::SamplingRate)
@@ -71,10 +20,8 @@ void THeapProfilerConfig::Register(TRegistrar registrar)
 
 void TSingletonsConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("spin_wait_slow_path_logging_threshold", &TThis::SpinWaitSlowPathLoggingThreshold)
-        .Default(TDuration::MicroSeconds(100));
-    registrar.Parameter("fiber_stack_pool_sizes", &TThis::FiberStackPoolSizes)
-        .Default({});
+    registrar.Parameter("fiber_manager", &TThis::FiberManager)
+        .DefaultNew();
     registrar.Parameter("address_resolver", &TThis::AddressResolver)
         .DefaultNew();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)
@@ -92,38 +39,26 @@ void TSingletonsConfig::Register(TRegistrar registrar)
         .ResetOnLoad();
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
-    registrar.Parameter("tracing_transport", &TThis::TracingTransport)
-        .DefaultNew();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
         .DefaultNew();
     registrar.Parameter("stockpile", &TThis::Stockpile)
         .DefaultNew();
     registrar.Parameter("enable_ref_counted_tracker_profiling", &TThis::EnableRefCountedTrackerProfiling)
         .Default(true);
-    registrar.Parameter("enable_resource_tracker", &TThis::EnableResourceTracker)
-        .Default(true);
-    registrar.Parameter("resource_tracker_vcpu_factor", &TThis::ResourceTrackerVCpuFactor)
-        .Optional();
+    registrar.Parameter("resource_tracker", &TThis::ResourceTracker)
+        .DefaultNew();
     registrar.Parameter("heap_profiler", &TThis::HeapProfiler)
         .DefaultNew();
     registrar.Parameter("protobuf_interop", &TThis::ProtobufInterop)
         .DefaultNew();
-
-    registrar.Postprocessor([] (TThis* config) {
-        if (config->ResourceTrackerVCpuFactor && !config->EnableResourceTracker) {
-            THROW_ERROR_EXCEPTION("Option \"resource_tracker_vcpu_factor\" can be specified only if resource tracker is enabled");
-        }
-    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void TSingletonsDynamicConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("spin_lock_slow_path_logging_threshold", &TThis::SpinWaitSlowPathLoggingThreshold)
-        .Optional();
-    registrar.Parameter("max_idle_fibers", &TThis::MaxIdleFibers)
-        .Default(NConcurrency::DefaultMaxIdleFibers);
+    registrar.Parameter("fiber_manager", &TThis::FiberManager)
+        .DefaultNew();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)
         .DefaultNew();
     registrar.Parameter("io_dispatcher", &TThis::IODispatcher)
@@ -134,12 +69,10 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
-    registrar.Parameter("tracing_transport", &TThis::TracingTransport)
-        .Optional();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
         .Optional();
     registrar.Parameter("stockpile", &TThis::Stockpile)
-        .Optional();
+        .DefaultNew();
     registrar.Parameter("protobuf_interop", &TThis::ProtobufInterop)
         .DefaultNew();
 }

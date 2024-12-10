@@ -1,6 +1,7 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 $udfScript = @@
 def f(key, input):
    for i in input:
@@ -10,6 +11,7 @@ def f(key, input):
         'pass': 10
       }
 @@;
+
 $udf_stream = Python3::f(
     Callable<
         (String, Stream<Struct<key: String, value: String>>) -> Stream<Struct<key: String, value: String, pass: Int32>>

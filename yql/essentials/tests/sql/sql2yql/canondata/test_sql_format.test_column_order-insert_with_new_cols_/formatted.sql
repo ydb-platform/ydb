@@ -1,6 +1,7 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 PRAGMA OrderedColumns;
 
 INSERT INTO Output WITH truncate
@@ -10,5 +11,6 @@ SELECT
         PARTITION BY
             subkey
     ) AS cnt
-FROM Input
-    AS a;
+FROM
+    Input AS a
+;

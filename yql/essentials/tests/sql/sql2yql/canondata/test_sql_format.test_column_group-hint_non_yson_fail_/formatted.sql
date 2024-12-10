@@ -5,4 +5,6 @@ USE plato;
 INSERT INTO Output WITH column_groups = "!"
 SELECT
     *
-FROM Input;
+FROM
+    Input
+;

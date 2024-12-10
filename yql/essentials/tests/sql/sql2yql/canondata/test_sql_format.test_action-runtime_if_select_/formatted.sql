@@ -5,38 +5,49 @@ USE plato;
 INSERT INTO @foo
 SELECT
     count(*) AS count
-FROM Input;
+FROM
+    Input
+;
+
 COMMIT;
 
 $n = (
     SELECT
         count
-    FROM @foo
+    FROM
+        @foo
 );
+
 $predicate = $n > 1;
 
 IF $predicate DO BEGIN
     SELECT
-        1;
+        1
+    ;
 END DO;
 
 IF NOT $predicate DO BEGIN
     SELECT
-        2;
+        2
+    ;
 END DO;
 
 IF $predicate DO BEGIN
     SELECT
-        3;
+        3
+    ;
 END DO ELSE DO BEGIN
     SELECT
-        4;
+        4
+    ;
 END DO;
 
 IF NOT $predicate DO BEGIN
     SELECT
-        5;
+        5
+    ;
 END DO ELSE DO BEGIN
     SELECT
-        6;
+        6
+    ;
 END DO;

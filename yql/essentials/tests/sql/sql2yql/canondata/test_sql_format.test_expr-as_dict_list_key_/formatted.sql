@@ -7,12 +7,15 @@ $d = AsDict(
 SELECT
     ListSort(DictItems($d)),
     ListSort(DictKeys($d)),
-    ListSort(DictPayloads($d));
+    ListSort(DictPayloads($d))
+;
 
 SELECT
     DictLookup($d, AsList(1, 2)),
-    DictLookup($d, AsList(1, 3));
+    DictLookup($d, AsList(1, 3))
+;
 
 SELECT
     DictContains($d, AsList(1, 2)),
-    DictContains($d, AsList(1, 3));
+    DictContains($d, AsList(1, 3))
+;

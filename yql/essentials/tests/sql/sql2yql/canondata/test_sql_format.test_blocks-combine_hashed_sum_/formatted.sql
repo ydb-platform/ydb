@@ -6,8 +6,10 @@ SELECT
     sum(subkey),
     sum(1u),
     sum(1u / 0u)
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

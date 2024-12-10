@@ -2305,14 +2305,52 @@ IGraphTransformer::TStatus PeepHoleBlockStage(const TExprNode::TPtr& input, TExp
     }, ctx, settings);
 }
 
+class TStrongTypeErrorProxy : public IGraphTransformer {
+public:
+    TStrongTypeErrorProxy(IGraphTransformer& inner)
+        : Inner_(inner)
+    {}
+
+    TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+        auto status = Inner_.Transform(input, output, ctx);
+        CheckFatalTypeError(status);
+        return status;
+    }
+
+    NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) final {
+        return Inner_.GetAsyncFuture(input);
+    }
+
+    TStatus ApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+        auto status = Inner_.ApplyAsyncChanges(input, output, ctx);
+        CheckFatalTypeError(status);
+        return status;
+    }
+
+    void Rewind() final {
+        return Inner_.Rewind();
+    }
+
+    TStatistics GetStatistics() const final {
+        return Inner_.GetStatistics();
+    }
+
+private:
+    IGraphTransformer& Inner_;
+};
+
+TAutoPtr<IGraphTransformer> MakeStrongTypeErrorProxy(IGraphTransformer& inner) {
+    return new TStrongTypeErrorProxy(inner);
+}
+
 template<bool FinalStage>
 void AddStandardTransformers(TTransformationPipeline& pipelene, IGraphTransformer* typeAnnotator) {
     auto issueCode = TIssuesIds::CORE_EXEC;
     pipelene.AddServiceTransformers(issueCode);
     if (typeAnnotator) {
-        pipelene.Add(*typeAnnotator, "TypeAnnotation", issueCode);
+        pipelene.Add(MakeStrongTypeErrorProxy(*typeAnnotator), "TypeAnnotation", issueCode);
     } else {
-        pipelene.AddTypeAnnotationTransformer(issueCode);
+        pipelene.AddTypeAnnotationTransformerWithMode(issueCode, ETypeCheckMode::Repeat);
     }
 
     pipelene.AddPostTypeAnnotation(true, FinalStage, issueCode);

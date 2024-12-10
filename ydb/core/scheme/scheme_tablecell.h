@@ -179,9 +179,21 @@ inline size_t EstimateSize(TCellsRef cells) {
             size += AlignUp(cellSize);
         }
     }
-    
+
     return size;
 }
+
+struct TCellVectorsHash {
+    using is_transparent = void;
+
+    size_t operator()(TConstArrayRef<TCell> key) const;
+};
+
+struct TCellVectorsEquals {
+    using is_transparent = void;
+
+    bool operator()(TConstArrayRef<TCell> a, TConstArrayRef<TCell> b) const;
+};
 
 inline int CompareCellsAsByteString(const TCell& a, const TCell& b, bool isDescending) {
     const char* pa = (const char*)a.Data();
@@ -558,7 +570,7 @@ public:
     explicit operator bool() const
     {
         return !Cells.empty();
-    }    
+    }
 
     // read headers, assuming the buf is correct and append additional cells at the end
     static bool UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec);

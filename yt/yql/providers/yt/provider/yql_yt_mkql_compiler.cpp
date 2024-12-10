@@ -153,7 +153,7 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
                     }
 
                     secType = ctx.ProgramBuilder.NewStructType(secType, key,
-                        NCommon::BuildType(section.Ref(), *keyType, ctx.ProgramBuilder));
+                        ctx.BuildType(section.Ref(), *keyType));
                     rebuildType = true;
                 }
 
@@ -455,7 +455,7 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             TYtTableContent tableContent(&node);
             if (node.GetConstraint<TEmptyConstraintNode>()) {
-                const auto itemType = NCommon::BuildType(node, GetSeqItemType(*node.GetTypeAnn()), ctx.ProgramBuilder);
+                const auto itemType = ctx.BuildType(node, GetSeqItemType(*node.GetTypeAnn()));
                 return ctx.ProgramBuilder.NewEmptyList(itemType);
             }
             TMaybe<ui64> itemsCount;
@@ -469,12 +469,12 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             if (auto maybeRead = tableContent.Input().Maybe<TYtReadTable>()) {
                 auto read = maybeRead.Cast();
                 return BuildTableContentCall(name,
-                    NCommon::BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder),
+                    ctx.BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType()),
                     read.DataSource().Cluster().Value(), read.Input().Ref(), itemsCount, ctx, true);
             } else {
                 auto output = tableContent.Input().Cast<TYtOutput>();
                 return BuildTableContentCall(name,
-                    NCommon::BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder),
+                    ctx.BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType()),
                     GetOutputOp(output).DataSink().Cluster().Value(), output.Ref(), itemsCount, ctx, true);
             }
         });
@@ -498,12 +498,12 @@ void RegisterDqYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
             if (const auto& wrapper = TDqReadBlockWideWrap(&node); wrapper.Input().Maybe<TYtReadTable>().IsValid()) {
                 const auto ytRead = wrapper.Input().Cast<TYtReadTable>();
                 const auto readType = ytRead.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back();
-                const auto inputItemType = NCommon::BuildType(wrapper.Input().Ref(), GetSeqItemType(*readType), ctx.ProgramBuilder);
+                const auto inputItemType = ctx.BuildType(wrapper.Input().Ref(), GetSeqItemType(*readType));
                 const auto cluster = ytRead.DataSource().Cluster().StringValue();
                 const bool useRPCReaderDefault = DEFAULT_USE_RPC_READER_IN_DQ || state->Types->BlockEngineMode != EBlockEngineMode::Disable;
                 size_t inflight = state->Configuration->UseRPCReaderInDQ.Get(cluster).GetOrElse(useRPCReaderDefault) ? state->Configuration->DQRPCReaderInflight.Get(cluster).GetOrElse(DEFAULT_RPC_READER_INFLIGHT) : 0;
                 size_t timeout = state->Configuration->DQRPCReaderTimeout.Get(cluster).GetOrElse(DEFAULT_RPC_READER_TIMEOUT).MilliSeconds();
-                const auto outputType = NCommon::BuildType(wrapper.Ref(), *wrapper.Ref().GetTypeAnn(), ctx.ProgramBuilder);
+                const auto outputType = ctx.BuildType(wrapper.Ref(), *wrapper.Ref().GetTypeAnn());
                 TString tokenName;
                 if (auto secureParams = wrapper.Token()) {
                     tokenName = secureParams.Cast().Name().StringValue();
@@ -529,11 +529,11 @@ void RegisterDqYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
             if (const auto& wrapper = TDqReadWideWrap(&node); wrapper.Input().Maybe<TYtReadTable>().IsValid()) {
                 const auto ytRead = wrapper.Input().Cast<TYtReadTable>();
                 const auto readType = ytRead.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back();
-                const auto inputItemType = NCommon::BuildType(wrapper.Input().Ref(), GetSeqItemType(*readType), ctx.ProgramBuilder);
+                const auto inputItemType = ctx.BuildType(wrapper.Input().Ref(), GetSeqItemType(*readType));
                 const auto cluster = ytRead.DataSource().Cluster().StringValue();
                 size_t isRPC = state->Configuration->UseRPCReaderInDQ.Get(cluster).GetOrElse(DEFAULT_USE_RPC_READER_IN_DQ) ? state->Configuration->DQRPCReaderInflight.Get(cluster).GetOrElse(DEFAULT_RPC_READER_INFLIGHT) : 0;
                 size_t timeout = state->Configuration->DQRPCReaderTimeout.Get(cluster).GetOrElse(DEFAULT_RPC_READER_TIMEOUT).MilliSeconds();
-                const auto outputType = NCommon::BuildType(wrapper.Ref(), *wrapper.Ref().GetTypeAnn(), ctx.ProgramBuilder);
+                const auto outputType = ctx.BuildType(wrapper.Ref(), *wrapper.Ref().GetTypeAnn());
                 TString tokenName;
                 if (auto secureParams = wrapper.Token()) {
                     tokenName = secureParams.Cast().Name().StringValue();
@@ -556,7 +556,7 @@ void RegisterDqYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
     compiler.AddCallable(TYtDqWideWrite::CallableName(),
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             const auto write = TYtDqWideWrite(&node);
-            const auto outType = NCommon::BuildType(write.Ref(), *write.Ref().GetTypeAnn(), ctx.ProgramBuilder);
+            const auto outType = ctx.BuildType(write.Ref(), *write.Ref().GetTypeAnn());
             const auto arg = MkqlBuildExpr(write.Input().Ref(), ctx);
 
             TString server{GetSetting(write.Settings().Ref(), "server")->Child(1)->Content()};

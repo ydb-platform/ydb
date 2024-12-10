@@ -11,4 +11,5 @@ $json = CAST(
 SELECT
     JSON_QUERY (
         $json, "strict $var" PASSING AsTuple(1, 2) AS var WITH UNCONDITIONAL ARRAY WRAPPER
-    );
+    )
+;

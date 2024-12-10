@@ -2,8 +2,10 @@
 /* postgres can not */
 SELECT
     MIN(DISTINCT ts) ?? 100500 AS session_start,
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     SessionWindow(ts, 10)
 ORDER BY
-    session_start;
+    session_start
+;

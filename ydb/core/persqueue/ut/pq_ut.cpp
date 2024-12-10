@@ -1606,14 +1606,14 @@ Y_UNIT_TEST(TestPQRead) {
         CmdRead(0, 9, 1, 100_MB, 1, false, tc);
         CmdRead(0, 23, 3, 100_MB, 3, false, tc);
 
-        CmdRead(0, 3, 1000, 511_KB, 4, false, tc);
-        CmdRead(0, 3, 1000, 511_KB, 4, false, tc);
-        CmdRead(0, 3, 1000, 1_KB, 4, false, tc); //at least one message will be readed always
+        CmdRead(0, 3, 1000, 511_KB, 12, false, tc);
+        CmdRead(0, 3, 1000, 511_KB, 12, false, tc);
+        CmdRead(0, 3, 1000, 1_KB, 12, false, tc); //at least one message will be readed always
         CmdRead(0, 25, 1000, 1_KB, 1, false, tc); //at least one message will be readed always, from head
 
         activeZone = true;
-        CmdRead(0, 9, 1000, 3_MB, 6, false, tc);
-        CmdRead(0, 9, 1000, 3_MB - 10_KB, 6, false, tc);
+        CmdRead(0, 9, 1000, 3_MB, 14, false, tc);
+        CmdRead(0, 9, 1000, 3_MB - 10_KB, 14, false, tc);
         CmdRead(0, 25, 1000, 512_KB, 1, false, tc); //from head
         CmdRead(0, 24, 1000, 512_KB, 1, false, tc); //from head
 
@@ -1710,9 +1710,9 @@ Y_UNIT_TEST(TestPQReadAhead) {
         CmdRead(0, 4, 10, 100_MB, 10, false, tc);
 
         CmdRead(0, 0, Max<i32>(), 100_KB, 12, false, tc);
-        CmdRead(0, 1, Max<i32>(), 100_KB, 11, false, tc);
-        CmdRead(0, 2, Max<i32>(), 100_KB, 10, false, tc);
-        CmdRead(0, 3, Max<i32>(), 100_KB, 9, false, tc);
+        CmdRead(0, 1, Max<i32>(), 100_KB, 19, false, tc);
+        CmdRead(0, 2, Max<i32>(), 100_KB, 18, false, tc);
+        CmdRead(0, 3, Max<i32>(), 100_KB, 17, false, tc);
     });
 }
 

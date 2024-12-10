@@ -16,7 +16,8 @@ FROM (
             b,
             CAST(c AS int32) AS c,
             d
-        FROM Input
+        FROM
+            Input
     )
     GROUP BY
         a

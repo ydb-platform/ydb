@@ -36,4 +36,5 @@ SELECT
         Just(1), ($x) -> {
             RETURN $x < 3
         }
-    );
+    )
+;

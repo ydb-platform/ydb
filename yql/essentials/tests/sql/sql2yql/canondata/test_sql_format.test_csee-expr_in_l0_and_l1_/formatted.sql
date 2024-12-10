@@ -6,4 +6,5 @@ SELECT
                 RETURN $x + (1 + 2)
             }
         ),
-    );
+    )
+;

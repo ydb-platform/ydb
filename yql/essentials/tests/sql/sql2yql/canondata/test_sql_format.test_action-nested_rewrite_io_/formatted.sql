@@ -3,19 +3,25 @@ USE plato;
 $input =
     SELECT
         *
-    FROM AS_TABLE([<|a: "foo", b: "123"|>]);
+    FROM
+        AS_TABLE([<|a: "foo", b: "123"|>])
+;
 
 $mapping =
     SELECT
         {"a": "String", "b": "Int32"}
-    FROM Input
-    LIMIT 1;
+    FROM
+        Input
+    LIMIT 1
+;
+
 $transformer = ($type) -> {
     $t = EvaluateType(ParseTypeHandle($type));
     RETURN ($value) -> {
         RETURN CAST($value AS $t);
     };
 };
+
 $converter = ($row) -> {
     RETURN EvaluateCode(
         LambdaCode(
@@ -40,6 +46,8 @@ SELECT
 FROM (
     SELECT
         $converter(TableRow())
-    FROM $input
+    FROM
+        $input
 )
-    FLATTEN COLUMNS;
+    FLATTEN COLUMNS
+;

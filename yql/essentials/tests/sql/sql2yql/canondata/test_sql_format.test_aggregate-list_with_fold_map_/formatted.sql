@@ -11,12 +11,15 @@ $data = (
             }
         ) AS profile,
         id
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
     AGGREGATE_LIST(profile) AS profiles,
     id
-FROM $data
+FROM
+    $data
 GROUP BY
-    id;
+    id
+;

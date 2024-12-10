@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.DisableOptimizers = "OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin,FuseMultiOutsWithOuterMaps";
 
 SELECT
@@ -26,7 +27,9 @@ SELECT
     TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") + wi,
     TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") + ni,
     TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") + wi
-FROM Dates;
+FROM
+    Dates
+;
 
 SELECT
     na + Interval("P1D"),
@@ -53,4 +56,6 @@ SELECT
     wdz + Interval64("P1D"),
     wtz + Interval("P1D"),
     wtz + Interval64("P1D")
-FROM Dates;
+FROM
+    Dates
+;

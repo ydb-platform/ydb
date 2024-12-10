@@ -1592,6 +1592,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindReplication;
                 FillInfo(Kind, ReplicationInfo, std::move(*pathDesc.MutableReplicationDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeTransfer:
+                Kind = TNavigate::KindTransfer;
+                FillInfo(Kind, ReplicationInfo, std::move(*pathDesc.MutableReplicationDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeBlobDepot:
                 Kind = TNavigate::KindBlobDepot;
                 FillInfo(Kind, BlobDepotInfo, std::move(*pathDesc.MutableBlobDepotDescription()));
@@ -1675,6 +1679,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeReplication:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindReplication);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeTransfer:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindTransfer);
                         break;
                     case NKikimrSchemeOp::EPathTypeBlobDepot:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindBlobDepot);

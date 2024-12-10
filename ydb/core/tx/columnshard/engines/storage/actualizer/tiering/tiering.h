@@ -126,23 +126,14 @@ private:
 
     std::optional<TFullActualizationInfo> BuildActualizationInfo(const TPortionInfo& portion, const TInstant now) const;
 
-    void AddPortionImpl(const TPortionInfo& portion, const TInstant now) {
-        auto info = BuildActualizationInfo(portion, now);
-        if (!info) {
-            return;
-        }
-        AFL_VERIFY(PortionIdByWaitDuration[info->GetAddress()].AddPortion(*info, portion.GetPortionId(), now));
-        auto address = info->GetAddress();
-        TFindActualizationInfo findId(std::move(address), info->GetWaitInstant(now));
-        AFL_VERIFY(PortionsInfo.emplace(portion.GetPortionId(), std::move(findId)).second);
-    }
+    void AddPortionImpl(const TPortionInfo& portion, const TInstant now);
 
     virtual void DoAddPortion(const TPortionInfo& portion, const TAddExternalContext& addContext) override;
     virtual void DoRemovePortion(const ui64 portionId) override;
     virtual void DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
 public:
     void ActualizePortionInfo(const TPortionDataAccessor& accessor, const TActualizationContext& context);
-    std::optional<TCSMetadataRequest> BuildMetadataRequest(
+    std::vector<TCSMetadataRequest> BuildMetadataRequests(
         const ui64 pathId, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index);
 
     void Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext);

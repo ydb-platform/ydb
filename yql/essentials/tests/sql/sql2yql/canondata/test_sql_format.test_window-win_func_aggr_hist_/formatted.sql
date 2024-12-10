@@ -5,7 +5,8 @@ SELECT
     count(key) OVER w1 AS c,
     min(key) OVER w1 AS mink,
     max(key) OVER w1 AS maxk
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w1 AS (
         PARTITION BY
@@ -15,4 +16,5 @@ WINDOW
     )
 ORDER BY
     subkey,
-    c;
+    c
+;

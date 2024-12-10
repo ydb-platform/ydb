@@ -4,4 +4,6 @@ SELECT
     `A'`,
     `A\"\"`,
     `A `
-FROM plato.`C-D`;
+FROM
+    plato.`C-D`
+;

@@ -10,7 +10,8 @@ SELECT
                 }
             )
         }
-    );
+    )
+;
 
 SELECT
     ListFlatMap(
@@ -21,4 +22,5 @@ SELECT
                 }
             )
         }
-    );
+    )
+;

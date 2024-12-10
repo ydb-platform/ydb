@@ -4,6 +4,8 @@ SELECT
     key,
     COUNT(*) AS cnt,
     COUNT(DISTINCT value) AS uniq
-FROM Input
+FROM
+    Input
 GROUP BY
-    key;
+    key
+;

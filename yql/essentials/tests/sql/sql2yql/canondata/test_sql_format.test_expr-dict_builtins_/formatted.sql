@@ -11,4 +11,5 @@ SELECT
     DictContains($dict, "foo"),
     DictContains($dict, "baz"),
     DictCreate(String, Tuple<String, Double?>),
-    DictCreate(Tuple<Int32?, String>, OptionalType(DataType("String")));
+    DictCreate(Tuple<Int32?, String>, OptionalType(DataType("String")))
+;

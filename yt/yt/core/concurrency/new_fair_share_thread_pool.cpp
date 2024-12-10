@@ -622,7 +622,7 @@ public:
 
     void Configure(TDuration pollingPeriod)
     {
-        TNotifyManager::Reconfigure(pollingPeriod);
+        TNotifyManager::SetPollingPeriod(pollingPeriod);
     }
 
     // (arkady-e1ppa): Explanation of memory orders and fences around Stopped_:
@@ -1317,7 +1317,7 @@ public:
             ThreadNamePrefix_,
             options))
     {
-        Configure(threadCount);
+        SetThreadCount(threadCount);
     }
 
     ~TTwoLevelFairShareThreadPool()
@@ -1325,12 +1325,12 @@ public:
         Shutdown();
     }
 
-    void Configure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        TThreadPoolBase::Configure(threadCount);
+        TThreadPoolBase::SetThreadCount(threadCount);
     }
 
-    void Configure(TDuration pollingPeriod) override
+    void SetPollingPeriod(TDuration pollingPeriod) override
     {
         Queue_->Configure(pollingPeriod);
     }
@@ -1369,10 +1369,10 @@ private:
         Queue_->Drain();
     }
 
-    void DoConfigure(int threadCount) override
+    void DoSetThreadCount(int threadCount) override
     {
         Queue_->Configure(threadCount);
-        TThreadPoolBase::DoConfigure(threadCount);
+        TThreadPoolBase::DoSetThreadCount(threadCount);
     }
 
     TSchedulerThreadPtr SpawnThread(int index) override

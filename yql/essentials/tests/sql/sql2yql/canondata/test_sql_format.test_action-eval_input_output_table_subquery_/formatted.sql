@@ -11,6 +11,7 @@ $b = (
     SELECT
         CAST(Unicode::ToUpper("i"u) AS String) || "npu"
 );
+
 $a = $a || CAST(Unicode::ToLower("T"u) AS String);
 $b = $b || CAST(Unicode::ToLower("T"u) AS String);
 
@@ -19,7 +20,10 @@ SELECT
     key AS key,
     "" AS subkey,
     "value:" || value AS value
-FROM $b
-WHERE key < "100"
+FROM
+    $b
+WHERE
+    key < "100"
 ORDER BY
-    key;
+    key
+;

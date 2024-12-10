@@ -14,17 +14,6 @@ namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! An opaque reflected counterpart of ::google::protobuf::Descriptor.
-/*!
- *  Reflecting a descriptor takes the following options into account:
- *  NYT.NProto.NYson.field_name:      overrides the default name of field
- *  NYT.NProto.NYson.enum_value_name: overrides the default name of enum value
- */
-class TProtobufMessageType;
-
-//! An opaque reflected counterpart of ::google::protobuf::EnumDescriptor.
-class TProtobufEnumType;
-
 //! Reflects ::google::protobuf::Descriptor.
 /*!
  *  The call caches its result in a static variable and is thus efficient.

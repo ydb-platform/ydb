@@ -373,7 +373,7 @@ TRuntimeNode ToList(TRuntimeNode list, NCommon::TMkqlBuildContext& ctx) {
 TType* BuildInputType(TYtSectionList input, NCommon::TMkqlBuildContext& ctx) {
     TVector<TType*> items;
     for (auto section: input) {
-        items.push_back(NCommon::BuildType(input.Ref(), *section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder));
+        items.push_back(ctx.BuildType(input.Ref(), *section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()));
     }
     return items.size() == 1
         ? items.front()
@@ -383,7 +383,7 @@ TType* BuildInputType(TYtSectionList input, NCommon::TMkqlBuildContext& ctx) {
 TType* BuildOutputType(TYtOutSection output, NCommon::TMkqlBuildContext& ctx) {
     TVector<TType*> items;
     for (auto table: output) {
-        items.push_back(NCommon::BuildType(output.Ref(), *table.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder));
+        items.push_back(ctx.BuildType(output.Ref(), *table.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()));
     }
     return items.size() == 1
         ? items.front()

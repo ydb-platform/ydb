@@ -7,11 +7,13 @@ SELECT
     lead(Just(subkey)) OVER w AS opt_lead,
     lag(subkey, 0) OVER w AS lag0,
     lead(subkey, 0) OVER w AS lead0
-FROM Input
+FROM
+    Input
 WINDOW
     w AS ()
 ORDER BY
-    subkey;
+    subkey
+;
 
 SELECT
     key,
@@ -19,11 +21,13 @@ SELECT
     lead(Just(optkey)) OVER w AS opt_lead,
     lag(Just(optkey), 0) OVER w AS lag0,
     lead(optkey, 0) OVER w AS lead0
-FROM InputOpt
+FROM
+    InputOpt
 WINDOW
     w AS ()
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     lead(NULL) OVER w
@@ -32,4 +36,5 @@ FROM (
         1 AS key
 )
 WINDOW
-    w AS ();
+    w AS ()
+;

@@ -10,6 +10,7 @@ $src = [
     <|a: 2, b: 20, zz: 200|>,
     <|a: 1, b: 10, zz: 100|>,
 ];
+
 $src1 = [
     <|e: 5, f: 50|>,
     <|e: 4, f: 40|>,
@@ -21,21 +22,27 @@ $src1 = [
 $src =
     SELECT
         *
-    FROM as_table($src);
+    FROM
+        as_table($src)
+;
 
 $src1 =
     SELECT
         *
-    FROM as_table($src1);
+    FROM
+        as_table($src1)
+;
 
 SELECT
     x.zz,
     x.b + y.f AS col1
-FROM $src
-    AS x
-CROSS JOIN $src1
-    AS y
-WHERE x.a == y.e
+FROM
+    $src AS x
+CROSS JOIN
+    $src1 AS y
+WHERE
+    x.a == y.e
 ORDER BY
     zz,
-    col1;
+    col1
+;

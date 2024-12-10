@@ -145,6 +145,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
         case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
+        case NKikimrSchemeOp::ESchemeOpDropTransfer:
+        case NKikimrSchemeOp::ESchemeOpDropTransferCascade:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
@@ -325,6 +327,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpCreateReplication:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
+        case NKikimrSchemeOp::ESchemeOpCreateTransfer:
+        case NKikimrSchemeOp::ESchemeOpAlterTransfer:
             return *modifyScheme.MutableReplication()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
@@ -653,6 +657,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterColumnTable:
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
+        case NKikimrSchemeOp::ESchemeOpAlterTransfer:
         case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
         case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
         case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
@@ -688,6 +693,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
         case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
+        case NKikimrSchemeOp::ESchemeOpDropTransfer:
+        case NKikimrSchemeOp::ESchemeOpDropTransferCascade:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
@@ -751,6 +758,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSolomonVolume:
         case NKikimrSchemeOp::ESchemeOpCreateSequence:
         case NKikimrSchemeOp::ESchemeOpCreateReplication:
+        case NKikimrSchemeOp::ESchemeOpCreateTransfer:
         case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
         case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:

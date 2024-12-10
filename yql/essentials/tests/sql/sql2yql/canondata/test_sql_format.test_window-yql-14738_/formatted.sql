@@ -13,12 +13,13 @@ SELECT
             key || "2"
     ) AS c2,
     COUNT(*) OVER w AS c3,
-FROM Input
-    AS t
+FROM
+    Input AS t
 WINDOW
     w AS (
         PARTITION BY
             key || "3"
     )
 ORDER BY
-    subkey;
+    subkey
+;

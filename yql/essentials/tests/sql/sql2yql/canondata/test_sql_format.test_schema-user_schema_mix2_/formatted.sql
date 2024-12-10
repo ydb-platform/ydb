@@ -3,9 +3,12 @@ USE plato;
 
 SELECT
     *
-FROM Input
-    WITH SCHEMA Struct<key: String, value: String>;
+FROM
+    Input WITH SCHEMA Struct<key: String, value: String>
+;
 
 SELECT
     *
-FROM Input;
+FROM
+    Input
+;

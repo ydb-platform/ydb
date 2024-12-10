@@ -516,9 +516,9 @@ message TMetadataManagerConstructorContainer {
 
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
-    optional bool ExternalGuaranteeExclusivePK = 2 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
+    optional string ScanReaderPolicyName = 5;
 }
 
 message TColumnTableSchema {
@@ -560,9 +560,9 @@ message TColumnTableSchemaDiff {
 
 message TColumnTableRequestedOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
-    optional bool ExternalGuaranteeExclusivePK = 2;
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
+    optional string ScanReaderPolicyName = 5;
 }
 
 message TAlterColumnTableSchema {
@@ -1763,6 +1763,7 @@ enum EPathType {
     EPathTypeView = 20;
     EPathTypeResourcePool = 21;
     EPathTypeBackupCollection = 22;
+    EPathTypeTransfer = 23;
 }
 
 enum EPathSubType {

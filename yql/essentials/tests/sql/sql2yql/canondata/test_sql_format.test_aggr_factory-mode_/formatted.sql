@@ -9,7 +9,7 @@ SELECT
             AsTuple(
                 AsAtom("res"), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN $z.a
+                        RETURN $z.a;
                     }
                 )
             )
@@ -25,7 +25,7 @@ SELECT
             AsTuple(
                 AsAtom("res"), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN $z.a
+                        RETURN $z.a;
                     }
                 )
             )
@@ -53,7 +53,7 @@ FROM
 SELECT
     ListSort(
         AGGREGATE_BY(DISTINCT a, $f), ($x) -> {
-            RETURN $x.Value
+            RETURN $x.Value;
         }
     )
 FROM

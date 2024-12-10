@@ -1,10 +1,10 @@
 /* postgres can not */
 $first = ($x) -> {
-    RETURN $x.0
+    RETURN $x.0;
 };
 
 $second = ($x) -> {
-    RETURN $x.1
+    RETURN $x.1;
 };
 
 $i = AsDict(AsTuple(1, "A"), AsTuple(2, "B"));
@@ -24,7 +24,7 @@ SELECT
         ListFlatten(
             ListMap(
                 DictItems($d), ($x) -> {
-                    RETURN DictItems($x.0)
+                    RETURN DictItems($x.0);
                 }
             )
         )
@@ -33,7 +33,7 @@ SELECT
         ListFlatten(
             ListMap(
                 DictKeys($d), ($x) -> {
-                    RETURN DictItems($x)
+                    RETURN DictItems($x);
                 }
             )
         )
@@ -58,7 +58,7 @@ SELECT
         ListFlatten(
             ListMap(
                 DictItems($d), ($x) -> {
-                    RETURN DictItems($x.0)
+                    RETURN DictItems($x.0);
                 }
             )
         )
@@ -67,7 +67,7 @@ SELECT
         ListFlatten(
             ListMap(
                 DictKeys($d), ($x) -> {
-                    RETURN DictItems($x)
+                    RETURN DictItems($x);
                 }
             )
         )

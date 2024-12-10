@@ -8,7 +8,7 @@ SELECT
     ListSort(
         ListMap(
             aggregate_list(DISTINCT value), ($x) -> {
-                RETURN DictItems($x)
+                RETURN DictItems($x);
             }
         )
     ) AS lst

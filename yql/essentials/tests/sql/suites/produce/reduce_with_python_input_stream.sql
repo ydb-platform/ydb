@@ -1,4 +1,4 @@
-/* postgres can not */
+/* custom error: Cannot execute ScriptUdf over stream/flow inside DQ stage */
 USE plato;
 
 $udfScript = @@

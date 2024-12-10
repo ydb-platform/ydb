@@ -10,19 +10,19 @@ SELECT
                                 RETURN MAX_OF(
                                     $x, Yql::Fold(
                                         AsList(11, 12), 2, ($e, $f) -> {
-                                            RETURN MAX_OF($e, $f, $y)
+                                            RETURN MAX_OF($e, $f, $y);
                                         }
                                     )
-                                )
+                                );
                             }
                         ), 0, ($a, $b) -> {
                             RETURN MAX_OF(
                                 $a, $b, Yql::Fold(
                                     AsList(13, 14), 3, ($i, $j) -> {
-                                        RETURN MAX_OF($i, $j, $a)
+                                        RETURN MAX_OF($i, $j, $a);
                                     }
                                 )
-                            )
+                            );
                         }
                     ),
                     Yql::Fold(
@@ -34,25 +34,25 @@ SELECT
                                             RETURN MAX_OF(
                                                 $x, Yql::Fold(
                                                     AsList(11, 12), 2, ($e, $f) -> {
-                                                        RETURN MAX_OF($f, $y, $e)
+                                                        RETURN MAX_OF($f, $y, $e);
                                                     }
                                                 )
-                                            )
+                                            );
                                         }
                                     ), 0, ($a, $b) -> {
                                         RETURN MAX_OF(
                                             Yql::Fold(
                                                 AsList(13, 14), 3, ($i, $j) -> {
-                                                    RETURN MAX_OF($j, $a, $i)
+                                                    RETURN MAX_OF($j, $a, $i);
                                                 }
                                             ), $a, $b
-                                        )
+                                        );
                                     }
                                 )
-                            )
+                            );
                         }
                     )
-                )
+                );
             }
         )
     )

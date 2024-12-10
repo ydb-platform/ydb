@@ -1,10 +1,10 @@
 /* postgres can not */
 $modVal = () -> {
-    RETURN 2
+    RETURN 2;
 };
 
 $filter = ($item) -> {
-    RETURN NOT ($item % $modVal() == 0)
+    RETURN NOT ($item % $modVal() == 0);
 };
 
 SELECT

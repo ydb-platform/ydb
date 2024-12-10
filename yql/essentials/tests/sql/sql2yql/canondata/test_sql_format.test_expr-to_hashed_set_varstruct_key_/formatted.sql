@@ -1,10 +1,10 @@
 /* postgres can not */
 $first = ($x) -> {
-    RETURN $x.0
+    RETURN $x.0;
 };
 
 $second = ($x) -> {
-    RETURN $x.1
+    RETURN $x.1;
 };
 
 $vt = ParseType("Variant<a:Int32,b:Uint32>");

@@ -2,7 +2,7 @@
 $id = ($x) -> {
     $f = Yql::Callable(
         CallableType(0, TypeOf($x)), () -> {
-            RETURN $x
+            RETURN $x;
         }
     );
     RETURN $f();

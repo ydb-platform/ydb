@@ -7,10 +7,10 @@ $shiftSteps = 1;
 $linear = ($x, $z) -> {
     $v = 10 * $z + $x;
     $shift = ($item) -> {
-        RETURN $item << $shiftSteps
+        RETURN $item << $shiftSteps;
     };
     $res = Math::Floor(Math::Pi() * $shift($v));
-    RETURN $res
+    RETURN $res;
 };
 
 --INSERT INTO Output

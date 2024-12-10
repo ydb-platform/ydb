@@ -17,10 +17,10 @@ $members = StructTypeComponents(ListItemType(TypeHandle(TypeOf($i))));
 $filteredMembers = ListFilter(
     ListMap(
         $members, ($x) -> {
-            RETURN $x.Name
+            RETURN $x.Name;
         }
     ), ($x) -> {
-        RETURN $x > "k"
+        RETURN $x > "k";
     }
 );
 

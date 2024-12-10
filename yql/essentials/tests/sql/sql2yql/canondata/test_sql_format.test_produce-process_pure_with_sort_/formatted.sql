@@ -23,7 +23,7 @@ $sorted = ($world, $input, $orderByColumns, $asc) -> {
                     $x,
                     ListCode(ListReplicate(ReprCode($asc), $n)),
                     $keySelector
-                )
+                );
             }
         )
     );

@@ -99,7 +99,7 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
       Data persistence is currently supported only on x86_64 processors.
 
-      To disable data persistence and make all data volatile, stored only in RAM, add the `-e YDB_USE_IN_MEMORY_PDISKS=true` parameter to the command that runs the Docker container. Learn more about [configuring Docker container](./reference/docker/environment.md)
+      To disable data persistence and make all data volatile, stored only in RAM, add the `-e YDB_USE_IN_MEMORY_PDISKS=true` parameter to the command that runs the Docker container. Learn more about [configuring Docker container](./reference/docker/configuration.md)
 
       If you are using a Mac with an Apple Silicon processor, emulate the x86_64 CPU instruction set with [Rosetta](https://support.apple.com/en-us/102527):
 

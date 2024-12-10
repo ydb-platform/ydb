@@ -1,8 +1,14 @@
-## For a docker image [`ydbplatform/local-ydb`](https://hub.docker.com/r/ydbplatform/local-ydb), the following naming rules apply for tags
+## {{ ydb-short-name }} Docker container naming
 
-* **latest** - corresponds to the *stable* version of YDB that was tested on well-known YDB production clusters. The **latest** tag is rebuilt when an entry about a new YDB release appears in [ydb](https://github.com/ydb-platform/ydb/releases) project.
-* **edge** - a candidate for the next *stable*, i.e. the version that is currently being tested. You can try out new YDB features in edge, but you should also not expect this build to be stable.
-* **trunk,** **main**, **nightly** - the latest version of YDB from the code in the main YDB development branch. Contains the most recent changes. The image is reassembled every night.
-* **XX.Y** - corresponds to the latest version of YDB in a major release **XX-Y** (with all patches included).
-* **XX.Y.ZZ** - corresponds to the YDB release version **XX-Y-ZZ**.
-* **XX.Y-slim** and **XX.Y.ZZ-slim** - corresponds to YDB versions with specially compressed binaries `ydbd` \+ `ydb` (*cli*) inside the image. The \***-slim** versions take a little longer to start, although they have a much smaller image size. For compression, the [upx](https://github.com/upx/upx) utility is used, which can cause problems in certain startup environments.
+For the [`ydbplatform/local-ydb`](https://hub.docker.com/r/ydbplatform/local-ydb) Docker image, the following naming rules apply for tags:
+
+| Tag Name                 | Description                                                                                                             |
+|--------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| `latest`               | Corresponds to the most recent *stable* version of {{ ydb-short-name }} tested on production clusters. Rebuilt for each new {{ ydb-short-name }} release. |
+| `edge`                 | A candidate for the next *stable* version, currently undergoing testing. Includes new features but may not be stable and thus unsuitable for production environments.  |
+| `trunk`, `main`, `nightly` | The latest version of {{ ydb-short-name }} from the main development branch. Includes all recent changes and is rebuilt nightly. Similarly to `edge`, it is not suitable for production environments.      |
+| `XX.Y`                 | Corresponds to the latest minor version of {{ ydb-short-name }} in a major release `XX.Y`, including all patches.                           |
+| `XX.Y.ZZ`              | Corresponds to the {{ ydb-short-name }} release version `XX.Y.ZZ`.                                                                    |
+| `XX.Y-slim`, `XX.Y.ZZ-slim` | Compressed binaries of {{ ydb-short-name }} (`ydbd` and `ydb` CLI) with smaller image size but a slower startup. Uses [UPX](https://github.com/upx/upx). |
+
+Once you decide which tag to use, proceed to [prerequisites](prerequisites.md) and [starting the container](start.md).

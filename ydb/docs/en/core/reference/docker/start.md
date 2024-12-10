@@ -23,18 +23,18 @@ docker run \
     -p 2135:2135 \ # publish a container grpcs port to the host 
     -p 2136:2136 \ # publish a container grpc port to the host 
     -p 8765:8765 \ # publish a container http port to the host 
-    -p 5432:5432 \ # publish a container port to the host, providing PostgreSQL compatibility
-    -v $(pwd)/ydb_certs:/ydb_certs \ # directory with TLS certificates
-    -v $(pwd)/ydb_data:/ydb_data \ # working directory
-    -e GRPC_TLS_PORT=2135 \ # grpcs port
-    -e GRPC_PORT=2136 \ # grpc port
-    -e MON_PORT=8765 \ # http port
-    -e YDB_USE_IN_MEMORY_PDISKS=1 \ # makes all data volatile and stored only in RAM
+    -p 5432:5432 \ # publish a container port to the host that provides PostgreSQL compatibility
+    -v $(pwd)/ydb_certs:/ydb_certs \ # mount directory with TLS certificates
+    -v $(pwd)/ydb_data:/ydb_data \ # mount working directory
+    -e GRPC_TLS_PORT=2135 \ # grpcs port, needs to match what's published above
+    -e GRPC_PORT=2136 \ # grpc port, needs to match what's published above
+    -e MON_PORT=8765 \ # http port, needs to match what's published above
+    -e YDB_USE_IN_MEMORY_PDISKS=0 \ # change to 1 to make all data volatile and stored only in RAM
     ydbplatform/local-ydb:latest # docker image name and tag
 ```
 
-For more information about environment variables used when running a Docker container with {{ ydb-short-name }}, see [{#T}](environment.md)
+For more information about environment variables available when running a Docker container with {{ ydb-short-name }}, see [{#T}](environment.md).
 
-With the parameters specified in the example above and running Docker locally, [Embedded UI](../embedded-ui/index.md) {{ ydb-short-name }} will be available at [http://localhost:8765](http://localhost:8765).
+With the parameters specified in the example above and running Docker locally, [Embedded UI](../embedded-ui/index.md) will be available at [http://localhost:8765](http://localhost:8765).
 
-For more information about stopping and deleting a Docker container with {{ ydb-short-name }}, see [{#T}](cleanup.md)
+For more information about stopping and deleting a Docker container with {{ ydb-short-name }}, see [{#T}](cleanup.md).

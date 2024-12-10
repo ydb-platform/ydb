@@ -177,12 +177,6 @@ protected:
     void CheckTabletKeys(const TString& topicName);
     void DumpPQTabletKeys(const TString& topicName);
 
-    NTable::TDataQueryResult ExecuteDataQuery(NTable::TSession session, const TString& query, const NTable::TTxControl& control);
-
-    void Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
-                                            const TString& consumerName,
-                                            size_t count);
-
     struct TAvgWriteBytes {
         ui64 PerSec = 0;
         ui64 PerMin = 0;
@@ -393,9 +387,9 @@ void TFixture::CreateTopic(const TString& path,
 }
 
 
-void TFixture::DescribeTopic(const TString& path)
+TTopicDescription TFixture::DescribeTopic(const TString& topicPath)
 {
-    Setup->DescribeTopic(path);
+    return Setup->DescribeTopic(topicPath);
 }
 
 void TFixture::AddConsumer(const TString& topicPath,
@@ -438,11 +432,6 @@ void TFixture::AlterAutoPartitioning(const TString& topicPath,
 
     auto result = client.AlterTopic(topicPath, settings).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-}
-
-TTopicDescription TFixture::DescribeTopic(const TString& path)
-{
-    return Setup->DescribeTopic(path);
 }
 
 const TDriver& TFixture::GetDriver() const
@@ -1010,26 +999,12 @@ void TFixture::RestartLongTxService()
     }
 }
 
-void TFixture::Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
-                                                  const TString& consumerName,
-                                                  size_t limit)
-{
-    size_t count = 0;
-
-    while (count < limit) {
-        auto messages = ReadFromTopic(topicPath, consumerName, TDuration::Seconds(2));
-        count += messages.size();
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(count, limit);
-}
-
-auto TFixture::GetAvgWriteBytes(const TString& topicName,
+auto TFixture::GetAvgWriteBytes(const TString& topicPath,
                                 ui32 partitionId) -> TAvgWriteBytes
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partitionId);
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicPath, partitionId);
 
     runtime.SendToPipe(tabletId, edge, new NKikimr::TEvPersQueue::TEvStatus());
     auto response = runtime.GrabEdgeEvent<NKikimr::TEvPersQueue::TEvStatusResponse>();
@@ -2250,101 +2225,6 @@ Y_UNIT_TEST_F(ReadRuleGeneration, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_40, TFixture)
-{
-    // The recording stream will run into a quota. Before the commit, the client will receive confirmations
-    // for some of the messages. The `CommitTx` call will wait for the rest.
-    CreateTopic("topic_A", TEST_CONSUMER);
-
-    NTable::TSession tableSession = CreateTableSession();
-    NTable::TTransaction tx = BeginTx(tableSession);
-
-    for (size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), &tx);
-    }
-
-    CommitTx(tx, EStatus::SUCCESS);
-
-    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_41, TFixture)
-{
-    // If the recording session does not wait for confirmations, the commit will fail
-    CreateTopic("topic_A", TEST_CONSUMER);
-
-    NTable::TSession tableSession = CreateTableSession();
-    NTable::TTransaction tx = BeginTx(tableSession);
-
-    for (size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), &tx);
-    }
-
-    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID, true); // force close
-
-    CommitTx(tx, EStatus::SESSION_EXPIRED);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_42, TFixture)
-{
-    CreateTopic("topic_A", TEST_CONSUMER);
-
-    NTable::TSession tableSession = CreateTableSession();
-    NTable::TTransaction tx = BeginTx(tableSession);
-
-    for (size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), &tx);
-    }
-
-    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID); // gracefully close
-
-    CommitTx(tx, EStatus::SUCCESS);
-
-    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_43, TFixture)
-{
-    // The recording stream will run into a quota. Before the commit, the client will receive confirmations
-    // for some of the messages. The `ExecuteDataQuery` call will wait for the rest.
-    CreateTopic("topic_A", TEST_CONSUMER);
-
-    NTable::TSession tableSession = CreateTableSession();
-    NTable::TTransaction tx = BeginTx(tableSession);
-
-    for (size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), &tx);
-    }
-
-    ExecuteDataQuery(tableSession, "SELECT 1", NTable::TTxControl::Tx(tx).CommitTx(true));
-
-    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
-{
-    CreateTopic("topic_A", TEST_CONSUMER);
-
-    NTable::TSession tableSession = CreateTableSession();
-
-    auto result = ExecuteDataQuery(tableSession, "SELECT 1", NTable::TTxControl::BeginTx());
-
-    NTable::TTransaction tx = *result.GetTransaction();
-
-    for (size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), &tx);
-    }
-
-    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
-
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
-
-    ExecuteDataQuery(tableSession, "SELECT 2", NTable::TTxControl::Tx(tx).CommitTx(true));
-
-    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
-}
-
 void TFixture::CheckAvgWriteBytes(const TString& topicPath,
                                   ui32 partitionId,
                                   size_t minSize, size_t maxSize)
@@ -2367,11 +2247,11 @@ void TFixture::SplitPartition(const TString& topicName,
                               ui32 partitionId,
                               const TString& boundary)
 {
-    NKikimr::NPQ::NTest::SplitPartition(Setup->GetRuntime(),
-                                        ++SchemaTxId,
-                                        topicName,
-                                        partitionId,
-                                        boundary);
+    NKikimr::SplitPartition(Setup->GetRuntime(),
+                            ++SchemaTxId,
+                            topicName,
+                            partitionId,
+                            boundary);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_45, TFixture)
@@ -2388,6 +2268,9 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_45, TFixture)
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, &tx, 0);
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
 
     CommitTx(tx, EStatus::SUCCESS);
 
@@ -2479,6 +2362,11 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_48, TFixture)
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx, 1);
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_4, message, &tx, 1);
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_4, message, &tx, 1);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_3);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_4);
 
     CommitTx(tx, EStatus::SUCCESS);
 

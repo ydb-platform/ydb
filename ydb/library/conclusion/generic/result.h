@@ -1,5 +1,6 @@
 #pragma once
 #include <util/generic/singleton.h>
+#include <util/generic/string.h>
 #include <util/system/yassert.h>
 
 #include <optional>
@@ -55,19 +56,19 @@ public:
 
     const TResult& GetResult() const {
         auto result = std::get_if<TResult>(&Result);
-        Y_ABORT_UNLESS(result, "incorrect object for result request");
+        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorString().data());
         return *result;
     }
 
     TResult& MutableResult() {
         auto result = std::get_if<TResult>(&Result);
-        Y_ABORT_UNLESS(result, "incorrect object for result request");
+        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorString().data());
         return *result;
     }
 
     TResult&& DetachResult() {
         auto result = std::get_if<TResult>(&Result);
-        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorMessage().data());
+        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorString().data());
         return std::move(*result);
     }
 
@@ -91,10 +92,15 @@ public:
         return GetError();
     }
 
-    const TString& GetErrorMessage() const {
+    TString GetErrorString() const {
+        auto* status = std::get_if<TStatus>(&Result);
+        return status ? status->GetErrorString() : Default<TString>();
+    }
+
+    const auto& GetErrorMessage() const {
         auto* status = std::get_if<TStatus>(&Result);
         if (!status) {
-            return Default<TString>();
+            return TStatus::Success().GetErrorMessage();
         } else {
             return status->GetErrorMessage();
         }

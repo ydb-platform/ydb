@@ -116,10 +116,6 @@ public:
         return ResultIndexSchema;
     }
 
-    bool HasGuaranteeExclusivePK() const {
-        return GetIndexInfo().GetExternalGuaranteeExclusivePK();
-    }
-
     ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
 
     const std::shared_ptr<NArrow::TSchemaLite>& GetBlobSchema(const ui64 version) const {

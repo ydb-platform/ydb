@@ -13,15 +13,3 @@
 {%-     set has_required_jdk = true -%}
 {%-     set required_jdk = target.required_jdk -%}
 {%- endif -%}
-
-{%- macro OutDirs(runs, prefix, suffix) -%}
-{%-    if run.args|length and run.out_dir|length -%}
-{%-        for out_dir in run.out_dir -%}
-{#-            search all run arguments ended by /<out_dir> -#}
-{%-            set out_dirs = select_by_ends(run.args, "/" + out_dir) -%}
-{%-            if out_dirs|length %}
-{{ prefix }}{{ out_dirs|first }}{{ suffix }}
-{%-            endif -%}
-{%-        endfor -%}
-{%-    endif -%}
-{%- endmacro -%}

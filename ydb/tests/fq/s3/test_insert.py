@@ -16,6 +16,7 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_all
 from moto import __version__ as moto_version
 from packaging.version import Version
 
+
 class TestS3(object):
     def create_bucket_and_upload_file(self, filename, s3, kikimr):
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data")

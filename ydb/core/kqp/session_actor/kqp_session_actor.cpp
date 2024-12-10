@@ -2277,7 +2277,7 @@ public:
     }
 
     void HandleFinalCleanup(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        ReplyProcessError(ev, Ydb::StatusIds::BAD_SESSION, "Session is under shutdown");
+        ReplyProcessError(ev->Sender, ev->Cookie, Ydb::StatusIds::BAD_SESSION, "Session is under shutdown");
     }
 
     STFUNC(ReadyState) {

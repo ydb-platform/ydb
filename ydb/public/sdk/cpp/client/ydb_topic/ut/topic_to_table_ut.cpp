@@ -490,11 +490,6 @@ Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)
     WriteToTopicWithInvalidTxId(false);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)
-{
-    WriteToTopicWithInvalidTxId(false);
-}
-
 //Y_UNIT_TEST_F(WriteToTopic_Invalid_Tx, TFixture)
 //{
 //    WriteToTopicWithInvalidTxId(true);

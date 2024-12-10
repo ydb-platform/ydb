@@ -627,6 +627,13 @@ ISubOperation::TPtr CreateAlterReplication(TOperationId id, TTxState::ETxState s
 ISubOperation::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx, bool cascade);
 ISubOperation::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state, bool cascade);
 
+ISubOperation::TPtr CreateNewTransfer(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewTransfer(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateAlterTransfer(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterTransfer(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateDropTransfer(TOperationId id, const TTxTransaction& tx, bool cascade);
+ISubOperation::TPtr CreateDropTransfer(TOperationId id, TTxState::ETxState state, bool cascade);
+
 ISubOperation::TPtr CreateNewBlobDepot(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewBlobDepot(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateAlterBlobDepot(TOperationId id, const TTxTransaction& tx);

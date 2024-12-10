@@ -125,6 +125,7 @@ public:
     bool IsColumnTable() const;
     bool IsSequence() const;
     bool IsReplication() const;
+    bool IsTransfer() const;
     bool IsBlobDepot() const;
     bool IsContainer() const;
     bool IsLikeDirectory() const;

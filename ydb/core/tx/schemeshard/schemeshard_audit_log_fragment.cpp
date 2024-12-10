@@ -204,6 +204,15 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP REPLICATION";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
         return "DROP REPLICATION CASCADE";
+    // replication
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
+        return "CREATE TRANSFER";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer:
+        return "ALTER TRANSFER";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer:
+        return "DROP TRANSFER";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade:
+        return "DROP TRANSFER CASCADE";
     // blob depot
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:
         return "CREATE BLOB DEPOT";
@@ -502,12 +511,16 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetReplication().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer:
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:

@@ -869,6 +869,14 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropReplicationCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropReplicationCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade)
 
+    // transfer
+    GENERIC_HELPERS(CreateTransfer, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer, &NKikimrSchemeOp::TModifyScheme::MutableReplication)
+    GENERIC_HELPERS(AlterTransfer, NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer, &NKikimrSchemeOp::TModifyScheme::MutableAlterReplication)
+    GENERIC_HELPERS(DropTransfer, NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropTransfer, NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer)
+    GENERIC_HELPERS(DropTransferCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropTransferCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade)
+
     // pq
     GENERIC_HELPERS(CreatePQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableCreatePersQueueGroup)
     GENERIC_HELPERS(AlterPQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableAlterPersQueueGroup)

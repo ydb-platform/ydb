@@ -440,6 +440,9 @@ bool TKikimrKey::Extract(const TExprNode& key) {
     } else if(tagName == "permission") {
         KeyType = Type::Permission;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
+    } else if (tagName == "sequence") {
+        KeyType = Type::Sequence;
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
     } else if (tagName == "pgObject") {
         KeyType = Type::PGObject;
         Target = key.Child(0)->Child(1)->Child(0)->Content();

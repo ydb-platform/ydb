@@ -400,7 +400,7 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
 
     for (ui32 i = 0; i < columns.size(); ++i) {
         *schema->MutableColumns()->Add() = columns[i].CreateColumn(i + 1);
-        if (!specials.NeedTestStatistics()) {
+        if (!specials.NeedTestStatistics(pk)) {
             continue;
         }
         if (NOlap::NIndexes::NMax::TIndexMeta::IsAvailableType(columns[i].GetType())) {

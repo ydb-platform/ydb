@@ -140,7 +140,7 @@ public:
                 sketchesByColumns.emplace(id, TCountMinSketch::Create());
             }
 
-            for (const auto& portionInfo : result.GetPortions()) {
+            for (const auto& [id, portionInfo] : result.GetPortions()) {
                 std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo.GetPortionInfo().GetSchema(*VersionedIndex);
                 for (const ui32 columnId : ColumnTagsRequested) {
                     auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaCountMinSketch({ columnId });

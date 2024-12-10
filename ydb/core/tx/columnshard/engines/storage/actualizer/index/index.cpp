@@ -56,11 +56,7 @@ std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataReque
     if (!TieringActualizer) {
         return {};
     }
-    auto req = TieringActualizer->BuildMetadataRequest(PathId, portions, TieringActualizer);
-    if (!req) {
-        return {};
-    }
-    return { *req };
+    return TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
 }
 
 }

@@ -10,21 +10,21 @@
 
 namespace NKikimr {
 
-template <class TDerived, class TError, class TStatus, TStatus StatusOk, TStatus DefaultError>
+template <class TDerived, class TErrorDescription, class TStatus, TStatus StatusOk, TStatus DefaultError>
 class TConclusionStatusGenericImpl {
 protected:
-    std::optional<TError> ErrorDescription;
+    std::optional<TErrorDescription> ErrorDescription;
     TStatus Status = StatusOk;
 
     TConclusionStatusGenericImpl() = default;
 
-    TConclusionStatusGenericImpl(const TError& error, TStatus status = DefaultError)
+    TConclusionStatusGenericImpl(const TErrorDescription& error, TStatus status = DefaultError)
         : ErrorDescription(error)
         , Status(status) {
         Y_ABORT_UNLESS(!!ErrorDescription);
     }
 
-    TConclusionStatusGenericImpl(TError&& error, TStatus status = DefaultError)
+    TConclusionStatusGenericImpl(TErrorDescription&& error, TStatus status = DefaultError)
         : ErrorDescription(std::move(error))
         , Status(status) {
         Y_ABORT_UNLESS(!!ErrorDescription);
@@ -34,8 +34,8 @@ public:
     virtual ~TConclusionStatusGenericImpl() = default;
 
 public:
-    [[nodiscard]] const TError& GetErrorDescription() const {
-        return ErrorDescription ? *ErrorDescription : Default<TError>();
+    [[nodiscard]] const TErrorDescription& GetErrorDescription() const {
+        return ErrorDescription ? *ErrorDescription : Default<TErrorDescription>();
     }
 
     [[nodiscard]] TStatus GetStatus() const {

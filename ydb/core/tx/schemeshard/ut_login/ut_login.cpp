@@ -160,6 +160,51 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             {NLs::HasRight("+U:user2"), NLs::HasEffectiveRight("+U:user2")});
     }
 
+    Y_UNIT_TEST(RemoveLogin_Owner) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1/DirSub1");
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+        AsyncModifyACL(runtime, ++txId, "/MyRoot/Dir1", "DirSub1", diffACL.SerializeAsString(), "user1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+            {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1"), NLs::HasOwner("user1")});
+
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
+
+        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1",
+            TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed}});
+        
+        // check user still exists and has their rights:
+        {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+                {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1"), NLs::HasOwner("user1")});
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "");
+        }
+
+        AsyncModifyACL(runtime, ++txId, "/MyRoot/Dir1", "DirSub1", NACLib::TDiffACL().SerializeAsString(), "user2");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
+
+        // check user has been removed:
+        {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+                {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"), NLs::HasOwner("user2")});
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Invalid user");
+        }
+    }
+
     Y_UNIT_TEST(RemoveLogin_Many) {
         const size_t pathsToCreate = 1000;
         const size_t usersToAdd = 10;

@@ -95,7 +95,7 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
       If the container starts successfully, you'll see the container ID. The container might take a few seconds to initialize. The database will not be available until container initialization is complete.
 
-      {% note warning %}
+      {% note info %}
 
       Data persistence is currently supported only on x86_64 processors.
 

@@ -1608,6 +1608,26 @@ public:
 
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
+            transaction.SetOp(NKikimrPQ::TDataTransaction::Commit);
+
+            const auto prepareSettings = TxManager->GetPrepareTransactionInfo();
+            if (!prepareSettings.ArbiterColumnShard) {
+                for (const ui64 sendingShardId : prepareSettings.SendingShards) {
+                    transaction.AddSendingShards(sendingShardId);
+                }
+                for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
+                    transaction.AddReceivingShards(receivingShardId);
+                }
+            } else {
+                transaction.AddSendingShards(*prepareSettings.ArbiterColumnShard);
+                transaction.AddReceivingShards(*prepareSettings.ArbiterColumnShard);
+                if (prepareSettings.SendingShards.contains(tabletId)) {
+                    transaction.AddSendingShards(tabletId);
+                }
+                if (prepareSettings.ReceivingShards.contains(tabletId)) {
+                    transaction.AddReceivingShards(tabletId);
+                }
+            }
 
             auto ev = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
 

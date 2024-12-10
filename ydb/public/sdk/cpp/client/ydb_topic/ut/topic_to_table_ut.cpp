@@ -2282,10 +2282,23 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
 class TFixtureOltpSink : public TFixture {
 protected:
     bool GetEnableOltpSink() const override;
+
+    void TryReadFromTable(const TString& tablePath,
+                          NTable::TSession* session,
+                          NTable::TTransaction* tx);
 };
 
 bool TFixtureOltpSink::GetEnableOltpSink() const {
     return true;
+}
+
+void TFixtureOltpSink::TryReadFromTable(const TString& tablePath,
+                                        NTable::TSession* session,
+                                        NTable::TTransaction* tx)
+{
+    TString query = Sprintf(R"(SELECT COUNT(*) FROM `%s`)", tablePath.data());
+    auto result = session->ExecuteDataQuery(query, NTable::TTxControl::Tx(*tx)).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
 Y_UNIT_TEST_F(OltpSink_WriteToTopic_1, TFixtureOltpSink)
@@ -2616,9 +2629,7 @@ Y_UNIT_TEST_F(OltpSink_WriteToTopicAndTable_4, TFixtureOltpSink)
     auto records = MakeTableRecords();
 
     NTable::TTransaction tx1 = BeginTx(tableSession);
-    TString query = Sprintf(R"(SELECT * FROM `%s`)", "table_A");
-    auto result = tableSession.ExecuteDataQuery(query, NTable::TTxControl::Tx(tx1)).GetValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    TryReadFromTable("table_A", &tableSession, &tx1);
 
     NTable::TTransaction tx2 = BeginTx(tableSession);
     WriteToTable("table_A", records, &tx2);

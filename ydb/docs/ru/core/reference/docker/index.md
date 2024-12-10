@@ -6,4 +6,4 @@
 
 * [{#T}](install.md)
 * [{#T}](start.md)
-* [{#T}](environment.md)
+* [{#T}](configuration.md)

@@ -3,8 +3,8 @@ items:
     href: install.md
   - name: Работа с Docker
     href: start.md
-  - name: Переменные окружения
-    href: environment.md
+  - name: Настройка
+    href: configuration.md
   - name: Остановка и очистка
     href: cleanup.md 
   - name: Именование тегов

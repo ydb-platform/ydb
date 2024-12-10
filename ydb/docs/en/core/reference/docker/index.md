@@ -7,5 +7,5 @@ The {{ ydb-short-name }} Docker container reference documentation includes the f
 * [{#T}](naming.md)
 * [{#T}](install.md)
 * [{#T}](start.md)
-* [{#T}](environment.md)
+* [{#T}](configuration.md)
 * [{#T}](cleanup.md)

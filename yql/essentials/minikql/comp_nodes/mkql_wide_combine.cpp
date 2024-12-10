@@ -289,7 +289,7 @@ public:
         try {
             States.CheckGrow();
         } catch (TMemoryLimitExceededException) {
-            YQL_LOG(INFO) << "State failed to grow";
+            YQL_LOG(ERROR) << "State failed to grow";
             if (IsOutOfMemory || !AllowOutOfMemory) {
                 throw;
             } else {
@@ -726,7 +726,7 @@ private:
         }
         logmsg << (used/1_MB) << "MB/" << (limit/1_MB) << "MB";
 
-        YQL_LOG(INFO) << logmsg;
+        YQL_LOG(ERROR) << logmsg;
     }
 
     void SpillMoreStateFromBucket(TSpilledBucket& bucket) {
@@ -849,12 +849,12 @@ private:
     void SwitchMode(EOperatingMode mode) {
         switch(mode) {
             case EOperatingMode::InMemory: {
-                YQL_LOG(INFO) << "switching Memory mode to InMemory";
+                YQL_LOG(ERROR) << "switching Memory mode to InMemory";
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
             case EOperatingMode::SplittingState: {
-                YQL_LOG(INFO) << "switching Memory mode to SplittingState";
+                YQL_LOG(ERROR) << "switching Memory mode to SplittingState";
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
                 auto spiller = Ctx.SpillerFactory->CreateSpiller();
@@ -866,14 +866,14 @@ private:
                 break;
             }
             case EOperatingMode::Spilling: {
-                YQL_LOG(INFO) << "switching Memory mode to Spilling";
+                YQL_LOG(ERROR) << "switching Memory mode to Spilling";
                 MKQL_ENSURE(EOperatingMode::SplittingState == Mode || EOperatingMode::InMemory == Mode, "Internal logic error");
 
                 Tongue = ViewForKeyAndState.data();
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
-                YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
+                YQL_LOG(ERROR) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
 
@@ -1984,7 +1984,7 @@ IComputationNode* WrapWideCombiner(TCallable& callable, const TComputationNodeFa
 }
 
 IComputationNode* WrapWideLastCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    YQL_LOG(INFO) << "Found non-serializable type, spilling is disabled";
+    YQL_LOG(ERROR) << "Found non-serializable type, spilling is disabled";
     return WrapWideCombinerT<true>(callable, ctx, false);
 }
 

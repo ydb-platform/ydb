@@ -9,7 +9,10 @@ $e = "";
 
 SELECT
     count(*)
-FROM plato.range($a, $b, $c, $d, $e);
+FROM
+    plato.range($a, $b, $c, $d, $e)
+;
+
 $a = "";
 $b = "Inp";
 $c = "Input1";
@@ -18,7 +21,10 @@ $e = "raw";
 
 SELECT
     count(*)
-FROM plato.range($a, $b, $c, $d, $e);
+FROM
+    plato.range($a, $b, $c, $d, $e)
+;
+
 $a = "";
 $b = "Inp";
 $c = "Input2";
@@ -27,8 +33,12 @@ $e = "";
 
 SELECT
     count(*)
-FROM plato.range($a, $b, $c, $d, $e);
+FROM
+    plato.range($a, $b, $c, $d, $e)
+;
+
 USE plato;
+
 $a = "";
 $b = "Input";
 $c = "Input";
@@ -37,7 +47,10 @@ $e = "";
 
 SELECT
     count(*)
-FROM range($a, $b, $c, $d, $e);
+FROM
+    range($a, $b, $c, $d, $e)
+;
+
 $a = "";
 $b = "Inp";
 $c = "Input1";
@@ -46,7 +59,10 @@ $e = "raw";
 
 SELECT
     count(*)
-FROM range($a, $b, $c, $d, $e);
+FROM
+    range($a, $b, $c, $d, $e)
+;
+
 $a = "";
 $b = "Inp";
 $c = "Input2";
@@ -55,4 +71,6 @@ $e = "";
 
 SELECT
     count(*)
-FROM range($a, $b, $c, $d, $e);
+FROM
+    range($a, $b, $c, $d, $e)
+;

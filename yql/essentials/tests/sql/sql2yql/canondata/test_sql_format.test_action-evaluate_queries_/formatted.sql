@@ -5,11 +5,13 @@ USE plato;
 $s = (
     SELECT
         count(*)
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
-    EvaluateExpr($s);
+    EvaluateExpr($s)
+;
 /*
 $s = (select key from Input);
 select EvaluateExpr($s);

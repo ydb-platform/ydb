@@ -4,7 +4,8 @@ USE plato;
 $x = (
     SELECT
         *
-    FROM Input
+    FROM
+        Input
     ORDER BY
         value
     LIMIT 10
@@ -12,6 +13,8 @@ $x = (
 
 SELECT
     *
-FROM $x
-WHERE key > "000"
+FROM
+    $x
+WHERE
+    key > "000"
 LIMIT coalesce(CAST(0.1 * 0 AS Uint64), 0);

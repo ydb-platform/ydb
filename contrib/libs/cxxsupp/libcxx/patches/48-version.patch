@@ -1,8 +1,8 @@
 diff --git a/include/version b/include/version
-index 4fdfec4..cbdd87a 100644
+index 7aa002e..9da4974 100644
 --- a/include/version
 +++ b/include/version
-@@ -263,7 +263,11 @@ __cpp_lib_within_lifetime                               202306L <type_traits>
+@@ -283,7 +283,11 @@ __cpp_lib_within_lifetime                               202306L <type_traits>
  # define __cpp_lib_allocator_traits_is_always_equal     201411L
  # define __cpp_lib_any                                  201606L
  # define __cpp_lib_apply                                201603L
@@ -15,7 +15,7 @@ index 4fdfec4..cbdd87a 100644
  # define __cpp_lib_as_const                             201510L
  # define __cpp_lib_atomic_is_always_lock_free           201603L
  # define __cpp_lib_bool_constant                        201505L
-@@ -308,7 +312,11 @@ __cpp_lib_within_lifetime                               202306L <type_traits>
+@@ -328,7 +332,11 @@ __cpp_lib_within_lifetime                               202306L <type_traits>
  # endif
  # define __cpp_lib_shared_ptr_arrays                    201611L
  # define __cpp_lib_shared_ptr_weak_type                 201606L

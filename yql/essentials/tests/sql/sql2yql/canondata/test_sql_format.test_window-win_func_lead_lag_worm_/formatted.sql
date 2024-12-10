@@ -6,7 +6,8 @@ $input = (
         CAST(key AS int32) AS key,
         CAST(subkey AS int32) AS subkey,
         value
-    FROM Input
+    FROM
+        Input
 );
 
 --insert into Output
@@ -21,7 +22,8 @@ SELECT
     lag(key, 4) OVER w AS key_4,
     lag(key, 5) OVER w AS key_5,
     value
-FROM $input
+FROM
+    $input
 WINDOW
     w AS (
         ORDER BY
@@ -30,4 +32,5 @@ WINDOW
     )
 ORDER BY
     keyO,
-    value;
+    value
+;

@@ -2,8 +2,7 @@
 
 #include "oidc_session_create.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 class THandlerSessionCreateNebius : public THandlerSessionCreate {
 private:
@@ -15,7 +14,7 @@ public:
                                 const NActors::TActorId& httpProxyId,
                                 const TOpenIdConnectSettings& settings);
 
-    void RequestSessionToken(const TString& code, const NActors::TActorContext& ctx) override;
+    void RequestSessionToken(const TString& code) override;
     void ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) override;
 
 private:
@@ -26,5 +25,4 @@ private:
     }
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

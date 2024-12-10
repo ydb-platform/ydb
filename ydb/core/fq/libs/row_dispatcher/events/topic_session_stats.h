@@ -35,12 +35,14 @@ struct TopicSessionCommonStatistic {
     ui64 ReadBytes = 0;     // Increment
     ui64 ReadEvents = 0;    // Increment
     ui64 LastReadedOffset = 0;
+    TDuration ParseAndFilterLatency;
     void Add(const TopicSessionCommonStatistic& stat) {
         UnreadBytes = stat.UnreadBytes;
         RestartSessionByOffsets = stat.RestartSessionByOffsets;
         ReadBytes += stat.ReadBytes;
         ReadEvents += stat.ReadEvents;
         LastReadedOffset = stat.LastReadedOffset;
+        ParseAndFilterLatency = stat.ParseAndFilterLatency != TDuration::Zero() ? stat.ParseAndFilterLatency : ParseAndFilterLatency;
     }
     void Clear() {
         ReadBytes = 0;
@@ -49,6 +51,7 @@ struct TopicSessionCommonStatistic {
 };
 
 struct TopicSessionParams {
+    TString ReadGroup;
     TString Endpoint;
     TString Database;
     TString TopicPath;

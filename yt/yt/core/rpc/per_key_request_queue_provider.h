@@ -79,7 +79,6 @@ private:
     static TKeyFromRequestHeaderCallback CreateKeyFromRequestHeaderCallback();
 };
 
-DECLARE_REFCOUNTED_CLASS(TPerUserRequestQueueProvider);
 DEFINE_REFCOUNTED_TYPE(TPerUserRequestQueueProvider);
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -5,6 +5,7 @@
 /* yt can not */
 PRAGMA warning("disable", "4510");
 PRAGMA warning("disable", "1108");
+
 $Input = [(4, 100), (5, 100)];
 
 SELECT
@@ -30,7 +31,9 @@ SELECT
             AsAtom("c"),
             AsAtom("d"),
         )
-    );
+    )
+;
+
 $Input2 = [(30, 20, 88), (31, 21, 99)];
 
 SELECT
@@ -60,7 +63,9 @@ SELECT
             AsAtom("d"),
             AsAtom("e"),
         )
-    );
+    )
+;
+
 $Input3 = [(20, 10, 30, 99), (21, 10, 31, 88)];
 
 SELECT
@@ -91,4 +96,5 @@ SELECT
             AsAtom("d"),
             AsAtom("e"),
         )
-    );
+    )
+;

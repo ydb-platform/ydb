@@ -1,5 +1,6 @@
 PRAGMA AnsiLike;
 PRAGMA warning("disable", "4510");
+
 USE plato;
 
 SELECT
@@ -14,6 +15,8 @@ SELECT
     EndsWith('тестпроверка'u, value_utf),
     value LIKE 'ba%ar',
     value_utf LIKE 'про%ерка',
-FROM Input
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;

@@ -22,6 +22,9 @@ SRCS(
     skiff_yson_converter.cpp
     unversioned_value_yson_writer.cpp
     web_json_writer.cpp
+    yaml_helpers.cpp
+    yaml_parser.cpp
+    yaml_writer.cpp
     yamred_dsv_parser.cpp
     yamred_dsv_writer.cpp
     yamr_parser_base.cpp
@@ -40,6 +43,7 @@ PEERDIR(
     yt/yt/library/column_converters
 
     contrib/libs/apache/arrow
+    contrib/libs/yaml
 )
 
 END()

@@ -57,4 +57,5 @@ FROM (
 GROUP BY
     x
 ORDER BY
-    c;
+    c
+;

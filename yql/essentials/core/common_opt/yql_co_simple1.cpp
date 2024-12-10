@@ -6786,6 +6786,39 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
+    map["FailMe"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << "Expand FailMe";
+        auto failureKind = node->Child(0)->Content();
+        if (failureKind == "expr") {
+            return ctx.Builder(node->Pos())
+                .Callable("String")
+                    .Atom(0, "foo")
+                    .Atom(1, "bar")
+                .Seal()
+                .Build();
+        }
+
+        if (failureKind == "type") {
+            return ctx.Builder(node->Pos())
+                .Callable("Int32")
+                    .Atom(0, "1")
+                .Seal()
+                .Build();
+        }
+
+        if (failureKind == "constraint") {
+            return ctx.Builder(node->Pos())
+                .Callable("AsList")
+                    .Callable(0, "String")
+                        .Atom(0, "foo")
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        throw yexception() << "Unknown failure kind: " << failureKind;
+    };
+
     // will be applied to any callable after all above
     map[""] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         YQL_ENSURE(node->IsCallable());

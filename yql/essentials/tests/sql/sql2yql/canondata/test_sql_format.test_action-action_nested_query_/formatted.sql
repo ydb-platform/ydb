@@ -6,13 +6,19 @@ DEFINE ACTION $action() AS
     $sub = (
         SELECT
             *
-        FROM Input
+        FROM
+            Input
     );
 
     SELECT
         *
-    FROM $sub
+    FROM
+        $sub
     ORDER BY
-        key;
+        key
+    ;
 END DEFINE;
-DO $action();
+
+DO
+    $action()
+;

@@ -281,7 +281,7 @@ struct TPendingPartSwitch {
 enum class EPageCollectionRequest : ui64 {
     Undefined = 0,
     Cache = 1,
-    CacheSync,
+    InMemPages,
     PendingInit,
     BootLogic,
 };
@@ -465,6 +465,8 @@ class TExecutor
     size_t ReadyPartSwitches = 0;
 
     ui64 UsedTabletMemory = 0;
+    ui64 StickyPagesMemory = 0;
+    ui64 TransactionPagesMemory = 0;
 
     TActorContext OwnerCtx() const;
 
@@ -513,8 +515,9 @@ class TExecutor
     void DropSingleCache(const TLogoBlobID&) noexcept;
 
     void TranslateCacheTouchesToSharedCache();
-    void RequestInMemPagesForDatabase();
+    void RequestInMemPagesForDatabase(bool pendingOnly = false);
     void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView, const THashSet<NTable::TTag> &stickyColumns);
+    void StickInMemPages(NSharedCache::TEvResult *msg);
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     void RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
         NBlockIO::EPriority way, EPageCollectionRequest requestCategory);

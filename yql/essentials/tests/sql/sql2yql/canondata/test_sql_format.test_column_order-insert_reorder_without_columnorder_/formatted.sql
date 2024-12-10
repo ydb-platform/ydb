@@ -1,7 +1,9 @@
 /* postgres can not */
 USE plato;
+
 PRAGMA DisableOrderedColumns;
 PRAGMA warning("disable", "4517");
+
 $Group = 1u;
 
 INSERT INTO Output (
@@ -11,6 +13,8 @@ INSERT INTO Output (
 SELECT
     $Group,
     value
-FROM Input
-WHERE key == "150"
+FROM
+    Input
+WHERE
+    key == "150"
 LIMIT 1;

@@ -17,7 +17,6 @@ using NOlap::IBlobInUseTracker;
 class TSnapshotLiveInfo {
 private:
     const NOlap::TSnapshot Snapshot;
-    std::optional<TInstant> LastPingInstant;
     std::optional<TInstant> LastRequestFinishedInstant;
     THashSet<ui32> Requests;
     YDB_READONLY(bool, IsLock, false);
@@ -48,22 +47,32 @@ public:
 
     static TSnapshotLiveInfo BuildFromDatabase(const NOlap::TSnapshot& reqSnapshot) {
         TSnapshotLiveInfo result(reqSnapshot);
-        result.LastPingInstant = TInstant::Now();
-        result.LastRequestFinishedInstant = result.LastPingInstant;
+        result.LastRequestFinishedInstant = TInstant::Now();
         result.IsLock = true;
         return result;
     }
 
-    bool Ping(const TDuration critDuration, const TInstant now) {
-        LastPingInstant = now;
-        if (Requests.empty()) {
-            AFL_VERIFY(LastRequestFinishedInstant);
-            if (critDuration < *LastPingInstant - *LastRequestFinishedInstant && IsLock) {
-                IsLock = false;
+    bool IsExpired(const TDuration critDuration, const TInstant now) const {
+        if (Requests.size()) {
+            return false;
+        }
+        AFL_VERIFY(LastRequestFinishedInstant);
+        return critDuration < now - *LastRequestFinishedInstant;
+    }
+
+    bool CheckToLock(const TDuration snapshotLivetime, const TDuration usedSnapshotGuaranteeLivetime, const TInstant now) {
+        if (IsLock) {
+            return false;
+        }
+
+        if (Requests.size()) {
+            if (now + usedSnapshotGuaranteeLivetime > Snapshot.GetPlanInstant() + snapshotLivetime) {
+                IsLock = true;
                 return true;
             }
         } else {
-            if (critDuration < *LastPingInstant - Snapshot.GetPlanInstant() && !IsLock) {
+            AFL_VERIFY(LastRequestFinishedInstant);
+            if (*LastRequestFinishedInstant + usedSnapshotGuaranteeLivetime > Snapshot.GetPlanInstant() + snapshotLivetime) {
                 IsLock = true;
                 return true;
             }
@@ -88,7 +97,8 @@ public:
 
     bool LoadFromDatabase(NTable::TDatabase& db);
 
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> Ping(TColumnShard* self, const TDuration critDuration, const TInstant now);
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> Ping(
+        TColumnShard* self, const TDuration stalenessInMem, const TDuration usedSnapshotLivetime, const TInstant now);
 
     // Returns a unique cookie associated with this request
     [[nodiscard]] ui64 AddInFlightRequest(

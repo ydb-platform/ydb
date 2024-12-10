@@ -10,6 +10,7 @@ $t = AsList(
     AsStruct(1 AS a),
     AsStruct(9 AS a)
 );
+
 $f = AGGREGATION_FACTORY("bottom", 3);
 
 SELECT
@@ -24,19 +25,28 @@ SELECT
                 )
             )
         )
-    );
+    )
+;
+
 USE plato;
 
 INSERT INTO @a
 SELECT
     *
-FROM as_table($t);
+FROM
+    as_table($t)
+;
+
 COMMIT;
 
 SELECT
     AGGREGATE_BY(a, $f)
-FROM @a;
+FROM
+    @a
+;
 
 SELECT
     AGGREGATE_BY(DISTINCT a, $f)
-FROM @a;
+FROM
+    @a
+;

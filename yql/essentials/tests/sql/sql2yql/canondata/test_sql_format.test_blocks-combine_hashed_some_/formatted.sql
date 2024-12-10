@@ -6,8 +6,10 @@ SELECT
     some(subkey),
     some(1u),
     some(1u / 0u)
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

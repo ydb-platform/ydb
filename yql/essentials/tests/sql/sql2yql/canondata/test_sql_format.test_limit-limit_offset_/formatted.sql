@@ -5,9 +5,9 @@ SELECT
 FROM (
     SELECT
         *
-    FROM plato.Input
-)
-    AS x
+    FROM
+        plato.Input
+) AS x
 ORDER BY
     key,
     subkey

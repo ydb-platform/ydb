@@ -1,12 +1,9 @@
 /* yt can not */
 $round_period = ($day, $period) -> {
     RETURN CASE
-        WHEN $period == 'd'
-            THEN $day
-        WHEN $period == 'w'
-            THEN DateTime::MakeDate(DateTime::StartOfWeek($day))
-        WHEN $period == 'm'
-            THEN DateTime::MakeDate(DateTime::StartOfMonth($day))
+        WHEN $period == 'd' THEN $day
+        WHEN $period == 'w' THEN DateTime::MakeDate(DateTime::StartOfWeek($day))
+        WHEN $period == 'm' THEN DateTime::MakeDate(DateTime::StartOfMonth($day))
         ELSE $day
     END
 };
@@ -37,7 +34,8 @@ $data =
             'ACTIVE' AS status,
             1111 AS user_id,
             0 AS is_proven_owner,
-    );
+    )
+;
 
 SELECT
     day,
@@ -47,20 +45,17 @@ SELECT
     month,
     GROUPING(month) AS grouping_month,
     CASE
-        WHEN GROUPING(week) == 1 AND GROUPING(month) == 1
-            THEN 'd'
-        WHEN GROUPING(day) == 1 AND GROUPING(month) == 1
-            THEN 'w'
-        WHEN GROUPING(day) == 1 AND GROUPING(week) == 1
-            THEN 'm'
+        WHEN GROUPING(week) == 1 AND GROUPING(month) == 1 THEN 'd'
+        WHEN GROUPING(day) == 1 AND GROUPING(month) == 1 THEN 'w'
+        WHEN GROUPING(day) == 1 AND GROUPING(week) == 1 THEN 'm'
         ELSE NULL
     END AS period_type,
     user_cards_segm,
     if(GROUPING(user_cards_segm) == 1, -300, user_cards_segm) AS __user_cards_segm__,
     GROUPING(user_cards_segm) AS grouping_user_cards_segm,
     COUNT(DISTINCT user_id) AS all_user_qty,
-FROM $data
-    AS t
+FROM
+    $data AS t
 GROUP BY
     GROUPING SETS (
         -- day grouping
@@ -73,4 +68,6 @@ GROUP BY
 
         -- -- month grouping
         (month),
-        (month, user_cards_segm));
+        (month, user_cards_segm)
+    )
+;

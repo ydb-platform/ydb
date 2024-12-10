@@ -12,4 +12,5 @@ FROM (
             <|remain: RemoveMembers($s, $list)|>
         )
 )
-    FLATTEN COLUMNS;
+    FLATTEN COLUMNS
+;

@@ -32,7 +32,7 @@ PEERDIR(
 )
 
 DEPENDS(
-    contrib/ydb/library/yql/tools/yqlrun
+    yql/tools/yqlrun
     yql/essentials/udfs/common/re2
 )
 

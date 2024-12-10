@@ -16,14 +16,16 @@ SELECT
     l.ts64 - r.d,
     l.ts64 - r.dt,
     l.ts64 - r.ts
-FROM BigDates
-    AS l
-CROSS JOIN NarrowDates
-    AS r
-WHERE abs(l.row) <= 7 AND abs(r.row) <= 7
+FROM
+    BigDates AS l
+CROSS JOIN
+    NarrowDates AS r
+WHERE
+    abs(l.row) <= 7 AND abs(r.row) <= 7
 ORDER BY
     l.row,
-    r.row;
+    r.row
+;
 
 SELECT
     l.row,
@@ -46,14 +48,16 @@ SELECT
     l.ts - r.ts64,
     l.ts - r.i64,
     l.ts + r.i64
-FROM NarrowDates
-    AS l
-CROSS JOIN BigDates
-    AS r
-WHERE abs(l.row) <= 7 AND abs(r.row) <= 7
+FROM
+    NarrowDates AS l
+CROSS JOIN
+    BigDates AS r
+WHERE
+    abs(l.row) <= 7 AND abs(r.row) <= 7
 ORDER BY
     l.row,
-    r.row;
+    r.row
+;
 
 SELECT
     l.row,
@@ -68,11 +72,13 @@ SELECT
     l.dt64 + r.i,
     l.ts64 + r.i,
     l.i64 + r.i
-FROM BigDates
-    AS l
-CROSS JOIN NarrowInterval
-    AS r
-WHERE abs(l.row) <= 7 AND abs(r.row) <= 7
+FROM
+    BigDates AS l
+CROSS JOIN
+    NarrowInterval AS r
+WHERE
+    abs(l.row) <= 7 AND abs(r.row) <= 7
 ORDER BY
     l.row,
-    r.row;
+    r.row
+;

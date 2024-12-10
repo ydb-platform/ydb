@@ -6,8 +6,6 @@ SRCS(
 
 SIZE(MEDIUM)
 
-TIMEOUT(600)
-
 PEERDIR(
     ydb/apps/version
     ydb/library/actors/interconnect/mock

@@ -5,6 +5,8 @@ SELECT
     key + subkey,
     value,
     value_utf
-FROM Input
+FROM
+    Input
 ORDER BY
-    key;
+    key
+;

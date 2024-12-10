@@ -6,8 +6,10 @@ SELECT
             key
     ) AS rn,
     key
-FROM Input
+FROM
+    Input
 GROUP BY
     ROLLUP (key, subkey)
 ORDER BY
-    rn;
+    rn
+;

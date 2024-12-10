@@ -463,7 +463,7 @@ public:
     {
     }
 
-    TString Process(const NProtoBuf::Message& msg, bool& addLine) {
+    TString Process(const NProtoBuf::Message& msg, bool& addLineBefore, bool& addLineAfter, TMaybe<ui32>& stmtCoreAltCase) {
         Scopes.push_back(EScope::Default);
         MarkedTokens.reserve(ParsedTokens.size());
         MarkTokens(msg);
@@ -480,7 +480,10 @@ public:
             AddComment(text);
         }
 
-        addLine = AddLine.GetOrElse(true);
+        ui32 lines = OutLine - (OutColumn == 0 ? 1 : 0);
+        addLineBefore = AddLine.GetOrElse(true) || lines > 1;
+        addLineAfter = AddLine.GetOrElse(true) || lines - CommentLines > 1;
+        stmtCoreAltCase = StmtCoreAltCase;
 
         return SB;
     }
@@ -543,6 +546,10 @@ private:
             Out(' ');
         }
 
+        if (OutColumn == 0) {
+            ++CommentLines;
+        }
+
         Out(text);
 
         if (!text.StartsWith("--") &&
@@ -571,7 +578,9 @@ private:
             MarkToken(token);
         } else if (descr == TRule_sql_stmt_core::GetDescriptor()) {
             if (AddLine.Empty()) {
-                AddLine = !IsSimpleStatement(dynamic_cast<const TRule_sql_stmt_core&>(msg)).GetOrElse(false);
+                const auto& rule = dynamic_cast<const TRule_sql_stmt_core&>(msg);
+                AddLine = !IsSimpleStatement(rule).GetOrElse(false);
+                StmtCoreAltCase = rule.Alt_case();
             }
         } else if (descr == TRule_lambda_body::GetDescriptor()) {
             Y_ENSURE(TokenIndex >= 1);
@@ -865,6 +874,7 @@ private:
                 PushCurrentIndent();
                 Visit(alt);
                 PopCurrentIndent();
+                NewLine();
                 break;
             }
 
@@ -983,6 +993,7 @@ private:
             switch (choice.Alt_case()) {
             case TRule_set_clause_choice::kAltSetClauseChoice1: {
                 const auto& clauses = choice.GetAlt_set_clause_choice1().GetRule_set_clause_list1();
+                NewLine();
                 PushCurrentIndent();
                 Visit(clauses.GetRule_set_clause1());
                 for (auto& block : clauses.GetBlock2()) {
@@ -992,6 +1003,7 @@ private:
                 }
 
                 PopCurrentIndent();
+                NewLine();
                 break;
             }
             case TRule_set_clause_choice::kAltSetClauseChoice2: {
@@ -1017,6 +1029,7 @@ private:
                 switch (simpleValues.Alt_case()) {
                 case TRule_simple_values_source::kAltSimpleValuesSource1: {
                     const auto& exprs = simpleValues.GetAlt_simple_values_source1().GetRule_expr_list1();
+                    NewLine();
                     PushCurrentIndent();
                     Visit(exprs.GetRule_expr1());
                     for (const auto& block : exprs.GetBlock2()) {
@@ -1026,12 +1039,15 @@ private:
                     }
 
                     PopCurrentIndent();
+                    NewLine();
                     break;
                 }
                 case TRule_simple_values_source::kAltSimpleValuesSource2: {
+                    NewLine();
                     PushCurrentIndent();
                     Visit(simpleValues.GetAlt_simple_values_source2());
                     PopCurrentIndent();
+                    NewLine();
                     break;
                 }
                 default:
@@ -1123,6 +1139,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitAlterTable(const TRule_alter_table_stmt& msg) {
@@ -1140,6 +1157,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitAlterTableStore(const TRule_alter_table_store_stmt& msg) {
@@ -1163,13 +1181,15 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDo(const TRule_do_stmt& msg) {
-        NewLine();
         VisitKeyword(msg.GetToken1());
         switch (msg.GetBlock2().Alt_case()) {
         case TRule_do_stmt_TBlock2::kAlt1: { // CALL
+            PushCurrentIndent();
+            NewLine();
             const auto& alt = msg.GetBlock2().GetAlt1().GetRule_call_action1();
             Visit(alt.GetBlock1());
             AfterInvokeExpr = true;
@@ -1177,8 +1197,9 @@ private:
             if (alt.HasBlock3()) {
                 Visit(alt.GetBlock3());
             }
-
             Visit(alt.GetToken4());
+            PopCurrentIndent();
+            NewLine();
             break;
         }
         case TRule_do_stmt_TBlock2::kAlt2: { // INLINE
@@ -1222,52 +1243,12 @@ private:
 
     void VisitIf(const TRule_if_stmt& msg) {
         NewLine();
-        if (msg.HasBlock1()) {
-            Visit(msg.GetBlock1());
-        }
-
-        Visit(msg.GetToken2());
-        Visit(msg.GetRule_expr3());
-        NewLine();
-        PushCurrentIndent();
-        Visit(msg.GetRule_do_stmt4());
-        PopCurrentIndent();
-        if (msg.HasBlock5()) {
-            NewLine();
-            Visit(msg.GetBlock5().GetToken1());
-            NewLine();
-            PushCurrentIndent();
-            Visit(msg.GetBlock5().GetRule_do_stmt2());
-            PopCurrentIndent();
-        }
+        VisitAllFields(TRule_if_stmt::GetDescriptor(), msg);
     }
 
     void VisitFor(const TRule_for_stmt& msg) {
         NewLine();
-        if (msg.HasBlock1()) {
-            Visit(msg.GetBlock1());
-        }
-
-        if (msg.HasBlock2()) {
-            Visit(msg.GetBlock2());
-        }
-
-        Visit(msg.GetToken3());
-        Visit(msg.GetRule_bind_parameter4());
-        Visit(msg.GetToken5());
-        Visit(msg.GetRule_expr6());
-        NewLine();
-        PushCurrentIndent();
-        Visit(msg.GetRule_do_stmt7());
-        PopCurrentIndent();
-        if (msg.HasBlock8()) {
-            NewLine();
-            Visit(msg.GetBlock8().GetToken1());
-            NewLine();
-            PushCurrentIndent();
-            Visit(msg.GetBlock8().GetRule_do_stmt2());
-            PopCurrentIndent();
-        }
+        VisitAllFields(TRule_for_stmt::GetDescriptor(), msg);
     }
 
     void VisitValues(const TRule_values_stmt& msg) {
@@ -1284,6 +1265,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitGrantPermissions(const TRule_grant_permissions_stmt& msg) {
@@ -1348,10 +1330,10 @@ private:
         Visit(msg.GetBlock3());
         Visit(msg.GetRule_topic_ref4());
         if (msg.HasBlock5()) {
-            PushCurrentIndent();
             auto& b = msg.GetBlock5().GetRule_create_topic_entries1();
             Visit(b.GetToken1());
             NewLine();
+            PushCurrentIndent();
             Visit(b.GetRule_create_topic_entry2());
             for (auto& subEntry : b.GetBlock3()) {
                 Visit(subEntry.GetToken1());
@@ -1391,6 +1373,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropTopic(const TRule_drop_topic_stmt& msg) {
@@ -1421,6 +1404,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropExternalDataSource(const TRule_drop_external_data_source_stmt& msg) {
@@ -1475,6 +1459,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropResourcePool(const TRule_drop_resource_pool_stmt& msg) {
@@ -1518,6 +1503,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropBackupCollection(const TRule_drop_backup_collection_stmt& msg) {
@@ -1548,6 +1534,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitDropResourcePoolClassifier(const TRule_drop_resource_pool_classifier_stmt& msg) {
@@ -1764,12 +1751,24 @@ private:
 
             if (block5.HasBlock5()) {
                 NewLine();
-                Visit(block5.GetBlock5());
+                const auto& whereBlock = block5.GetBlock5();
+                Visit(whereBlock.GetToken1());
+                NewLine();
+                PushCurrentIndent();
+                Visit(whereBlock.GetRule_expr2());
+                PopCurrentIndent();
+                NewLine();
             }
 
             if (block5.HasBlock6()) {
                 NewLine();
-                Visit(block5.GetBlock6());
+                const auto& havingBlock = block5.GetBlock6();
+                Visit(havingBlock.GetToken1());
+                NewLine();
+                PushCurrentIndent();
+                Visit(havingBlock.GetRule_expr2());
+                PopCurrentIndent();
+                NewLine();
             }
 
             if (block5.HasBlock7()) {
@@ -1819,12 +1818,24 @@ private:
 
         if (msg.HasBlock11()) {
             NewLine();
-            Visit(msg.GetBlock11());
+            const auto& whereBlock = msg.GetBlock11();
+            Visit(whereBlock.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(whereBlock.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
         }
 
         if (msg.HasBlock12()) {
             NewLine();
-            Visit(msg.GetBlock12());
+            const auto& havingBlock = msg.GetBlock12();
+            Visit(havingBlock.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(havingBlock.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
         }
 
         if (msg.HasBlock13()) {
@@ -1844,6 +1855,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitSelectCore(const TRule_select_core& msg) {
@@ -1872,6 +1884,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
 
         if (msg.HasBlock8()) {
             NewLine();
@@ -1885,7 +1898,13 @@ private:
 
         if (msg.HasBlock10()) {
             NewLine();
-            Visit(msg.GetBlock10());
+            const auto& whereBlock = msg.GetBlock10();
+            Visit(whereBlock.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(whereBlock.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
         }
 
         if (msg.HasBlock11()) {
@@ -1895,7 +1914,13 @@ private:
 
         if (msg.HasBlock12()) {
             NewLine();
-            Visit(msg.GetBlock12());
+            const auto& havingBlock = msg.GetBlock12();
+            Visit(havingBlock.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(havingBlock.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
         }
 
         if (msg.HasBlock13()) {
@@ -1930,6 +1955,20 @@ private:
         }
     }
 
+    void VisitJoinConstraint(const TRule_join_constraint& msg) {
+        if (msg.Alt_case() == TRule_join_constraint::kAltJoinConstraint1) {
+            const auto& alt = msg.GetAlt_join_constraint1();
+            Visit(alt.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            Visit(alt.GetRule_expr2());
+            PopCurrentIndent();
+            NewLine();
+        } else {
+            VisitAllFields(TRule_join_constraint::GetDescriptor(), msg);
+        }
+    }
+
     void VisitSingleSource(const TRule_single_source& msg) {
         switch (msg.Alt_case()) {
         case TRule_single_source::kAltSingleSource1: {
@@ -1940,6 +1979,7 @@ private:
         case TRule_single_source::kAltSingleSource2: {
             const auto& alt = msg.GetAlt_single_source2();
             Visit(alt.GetToken1());
+            NewLine();
             PushCurrentIndent();
             Visit(alt.GetRule_select_stmt2());
             PopCurrentIndent();
@@ -1950,6 +1990,7 @@ private:
         case TRule_single_source::kAltSingleSource3: {
             const auto& alt = msg.GetAlt_single_source3();
             Visit(alt.GetToken1());
+            NewLine();
             PushCurrentIndent();
             Visit(alt.GetRule_values_stmt2());
             PopCurrentIndent();
@@ -1963,12 +2004,25 @@ private:
     }
 
     void VisitFlattenSource(const TRule_flatten_source& msg) {
-        Visit(msg.GetRule_named_single_source1());
-        if (msg.HasBlock2()) {
-            PushCurrentIndent();
+        const auto& namedSingleSource = msg.GetRule_named_single_source1();
+        bool indentBeforeSource = namedSingleSource.GetRule_single_source1().Alt_case() == TRule_single_source::kAltSingleSource1;
+
+        if (indentBeforeSource) {
             NewLine();
+            PushCurrentIndent();
+        }
+        Visit(namedSingleSource);
+        if (indentBeforeSource) {
+            PopCurrentIndent();
+            NewLine();
+        }
+
+        if (msg.HasBlock2()) {
+            NewLine();
+            PushCurrentIndent();
             Visit(msg.GetBlock2());
             PopCurrentIndent();
+            NewLine();
         }
     }
 
@@ -1981,8 +2035,6 @@ private:
             Visit(matchRecognize);
         }
         if (msg.HasBlock3()) {
-            NewLine();
-            PushCurrentIndent();
             const auto& block3 = msg.GetBlock3();
             Visit(block3.GetBlock1());
             if (block3.HasBlock2()) {
@@ -2001,15 +2053,11 @@ private:
                 PopCurrentIndent();
                 Visit(columns.GetToken4());
             }
-
-            PopCurrentIndent();
         }
 
         if (msg.HasBlock4()) {
             NewLine();
-            PushCurrentIndent();
             Visit(msg.GetBlock4());
-            PopCurrentIndent();
         }
     }
 
@@ -2085,10 +2133,7 @@ private:
         switch (msg.Alt_case()) {
         case TRule_flatten_by_arg::kAltFlattenByArg1: {
             const auto& alt = msg.GetAlt_flatten_by_arg1();
-            NewLine();
-            PushCurrentIndent();
             Visit(alt);
-            PopCurrentIndent();
             break;
         }
         case TRule_flatten_by_arg::kAltFlattenByArg2: {
@@ -2133,6 +2178,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitTableRef(const TRule_table_ref& msg) {
@@ -2150,12 +2196,7 @@ private:
             const auto& alt = block3.GetAlt1();
             const auto& key = alt.GetRule_table_key1();
             Visit(key.GetRule_id_table_or_type1());
-            if (key.HasBlock2()) {
-                NewLine();
-                PushCurrentIndent();
-                Visit(key.GetBlock2());
-                PopCurrentIndent();
-            }
+            Visit(key.GetBlock2());
 
             break;
         }
@@ -2180,10 +2221,7 @@ private:
             }
 
             if (alt.HasBlock3()) {
-                NewLine();
-                PushCurrentIndent();
                 Visit(alt.GetBlock3());
-                PopCurrentIndent();
             }
 
             break;
@@ -2193,10 +2231,7 @@ private:
         }
 
         if (msg.HasBlock4()) {
-            NewLine();
-            PushCurrentIndent();
             Visit(msg.GetBlock4());
-            PopCurrentIndent();
         }
     }
 
@@ -2211,6 +2246,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitGroupByClause(const TRule_group_by_clause& msg) {
@@ -2227,6 +2263,7 @@ private:
             PushCurrentIndent();
             Visit(msg.GetBlock6());
             PopCurrentIndent();
+            NewLine();
         }
     }
 
@@ -2242,6 +2279,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitWindowSpecification(const TRule_window_specification& msg) {
@@ -2300,6 +2338,7 @@ private:
         }
 
         PopCurrentIndent();
+        NewLine();
     }
 
     void VisitLambdaBody(const TRule_lambda_body& msg) {
@@ -2423,17 +2462,6 @@ private:
         PopCurrentIndent();
         NewLine();
         Visit(msg.GetToken5());
-    }
-
-    void VisitWhenExpr(const TRule_when_expr& msg) {
-        VisitKeyword(msg.GetToken1());
-        Visit(msg.GetRule_expr2());
-
-        NewLine();
-        PushCurrentIndent();
-        VisitKeyword(msg.GetToken3());
-        Visit(msg.GetRule_expr4());
-        PopCurrentIndent();
     }
 
     void VisitWithTableSettingsExpr(const TRule_with_table_settings& msg) {
@@ -2725,9 +2753,11 @@ private:
     ui32 LastLine = 0;
     ui32 LastColumn = 0;
     ui32 LastComment = 0;
+    ui32 CommentLines = 0;
     i32 CurrentIndent = 0;
     TVector<EScope> Scopes;
     TMaybe<bool> AddLine;
+    TMaybe<ui32> StmtCoreAltCase;
     ui64 InsideType = 0;
     bool AfterNamespace = false;
     bool AfterBracket = false;
@@ -2797,6 +2827,7 @@ TStaticData::TStaticData()
         {TRule_sort_specification_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSortSpecificationList)},
         {TRule_select_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectCore)},
         {TRule_join_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinSource)},
+        {TRule_join_constraint::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinConstraint)},
         {TRule_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSingleSource)},
         {TRule_flatten_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFlattenSource)},
         {TRule_named_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedSingleSource)},
@@ -2822,7 +2853,6 @@ TStaticData::TStaticData()
         {TRule_define_action_or_subquery_body::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDefineActionOrSubqueryBody)},
         {TRule_exists_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExistsExpr)},
         {TRule_case_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCaseExpr)},
-        {TRule_when_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWhenExpr)},
         {TRule_with_table_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithTableSettingsExpr)},
         {TRule_table_setting_value::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableSettingValue)},
         {TRule_ttl_tier_action::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTtlTierAction)},
@@ -2972,6 +3002,8 @@ public:
         TVector<TTokenIterator> statements;
         SplitByStatements(allTokens.begin(), allTokens.end(), statements);
         TStringBuilder finalFormattedQuery;
+        bool prevAddLine = false;
+        TMaybe<ui32> prevStmtCoreAltCase;
         for (size_t i = 1; i < statements.size(); ++i) {
             TStringBuilder currentQueryBuilder;
             for (auto it = statements[i - 1]; it != statements[i]; ++it) {
@@ -3022,8 +3054,11 @@ public:
             }
 
             TPrettyVisitor visitor(parsedTokens, comments);
-            bool addLine;
-            auto currentFormattedQuery = visitor.Process(*message, addLine);
+            bool addLineBefore = false;
+            bool addLineAfter = false;
+            TMaybe<ui32> stmtCoreAltCase;
+            auto currentFormattedQuery = visitor.Process(*message, addLineBefore, addLineAfter, stmtCoreAltCase);
+
             TParsedTokenList stmtFormattedTokens;
             auto onNextFormattedToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtFormattedTokens.push_back(token);
@@ -3038,9 +3073,12 @@ public:
                 return false;
             }
 
-            if (addLine && !finalFormattedQuery.empty()) {
+            const bool differentStmtAltCase = prevStmtCoreAltCase.Defined() && stmtCoreAltCase != prevStmtCoreAltCase;
+            if ((addLineBefore || prevAddLine || differentStmtAltCase) && !finalFormattedQuery.empty()) {
                 finalFormattedQuery << "\n";
             }
+            prevAddLine = addLineAfter;
+            prevStmtCoreAltCase = stmtCoreAltCase;
 
             finalFormattedQuery << currentFormattedQuery;
             if (parsedTokens.back().Name != "SEMICOLON") {

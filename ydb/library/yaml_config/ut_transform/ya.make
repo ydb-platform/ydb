@@ -26,8 +26,6 @@ PEERDIR(
     ydb/tests/oss/canonical
 )
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 END()

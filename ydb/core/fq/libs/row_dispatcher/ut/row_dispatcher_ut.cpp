@@ -27,15 +27,16 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
     }
 
     NActors::TActorId RegisterTopicSession(
+        const TString& /*readGroup*/,
         const TString& /*topicPath*/,
         const TString& /*endpoint*/,
         const TString& /*database*/,
         const NConfig::TRowDispatcherConfig& /*config*/,
         NActors::TActorId /*rowDispatcherActorId*/,
+        NActors::TActorId /*compileServiceActorId*/,
         ui32 /*partitionId*/,
         NYdb::TDriver /*driver*/,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/,
-        IPureCalcProgramFactory::TPtr /*pureCalcProgramFactory*/,
         const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
         const NYql::IPqGateway::TPtr& /*pqGateway*/,
         ui64 /*maxBufferSize*/) const override {
@@ -109,7 +110,8 @@ public:
     NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
         TString endpoint,
         TString database,
-        TString topic)
+        TString topic,
+        TString readGroup)
     {
         NYql::NPq::NProto::TDqPqTopicSource settings;
         settings.SetTopicPath(topic);
@@ -117,6 +119,7 @@ public:
         settings.SetEndpoint(endpoint);
         settings.MutableToken()->SetName("token");
         settings.SetDatabase(database);
+        settings.SetReadGroup(readGroup);
         return settings;
     }
 
@@ -236,8 +239,9 @@ public:
     NActors::TActorId ReadActorId2;
     TIntrusivePtr<TTestActorFactory> TestActorFactory;
 
-    NYql::NPq::NProto::TDqPqTopicSource Source1 = BuildPqTopicSourceSettings("Endpoint1", "Database1", "topic");
-    NYql::NPq::NProto::TDqPqTopicSource Source2 = BuildPqTopicSourceSettings("Endpoint2", "Database1", "topic");
+    NYql::NPq::NProto::TDqPqTopicSource Source1 = BuildPqTopicSourceSettings("Endpoint1", "Database1", "topic", "connection_id1");
+    NYql::NPq::NProto::TDqPqTopicSource Source2 = BuildPqTopicSourceSettings("Endpoint2", "Database1", "topic", "connection_id1");
+    NYql::NPq::NProto::TDqPqTopicSource Source1Connection2 = BuildPqTopicSourceSettings("Endpoint1", "Database1", "topic", "connection_id2");
 
     ui64 PartitionId0 = 0;
     ui64 PartitionId1 = 1;
@@ -393,6 +397,27 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
 
         MockUndelivered(ReadActorId1, 1);
         ExpectStopSession(topicSession1, PartitionId0);
+    }
+
+    Y_UNIT_TEST_F(TwoClientTwoConnection, TFixture) {
+        MockAddSession(Source1, PartitionId0, ReadActorId1);
+        auto session1 = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(session1);
+
+        MockAddSession(Source1Connection2, PartitionId0, ReadActorId2);
+        auto session2 = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId2);
+        ExpectStartSession(session2);
+
+        ProcessData(ReadActorId1, PartitionId0, session1);
+        ProcessData(ReadActorId2, PartitionId0, session2);
+
+        MockStopSession(Source1, PartitionId0, ReadActorId1);
+        ExpectStopSession(session1, PartitionId0);
+
+        MockStopSession(Source1Connection2, PartitionId0, ReadActorId2);
+        ExpectStopSession(session2, PartitionId0);
     }
 }
 

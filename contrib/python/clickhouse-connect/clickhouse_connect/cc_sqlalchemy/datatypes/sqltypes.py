@@ -206,6 +206,26 @@ class Point(ChSqlaType, UserDefinedType):
     python_type = None
 
 
+class Ring(ChSqlaType, UserDefinedType):
+    python_type = None
+
+
+class Polygon(ChSqlaType, UserDefinedType):
+    python_type = None
+
+
+class MultiPolygon(ChSqlaType, UserDefinedType):
+    python_type = None
+
+
+class LineString(ChSqlaType, UserDefinedType):
+    python_type = None
+
+
+class MultiLineString(ChSqlaType, UserDefinedType):
+    python_type = None
+
+
 class Date(ChSqlaType, SqlaDate):
     pass
 

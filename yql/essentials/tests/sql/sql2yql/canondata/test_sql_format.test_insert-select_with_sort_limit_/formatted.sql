@@ -2,7 +2,8 @@
 INSERT INTO plato.Output
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
     key
 LIMIT 2;

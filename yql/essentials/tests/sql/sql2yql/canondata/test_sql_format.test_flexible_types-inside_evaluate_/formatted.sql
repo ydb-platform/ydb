@@ -9,7 +9,9 @@ $do_safe_cast = ($x, $type) -> {
     );
     RETURN $cast_code($x);
 };
+
 $do_safe_cast_2 = ($x, $type) -> ($do_safe_cast($x, FormatType($type)));
 
 SELECT
-    $do_safe_cast_2(123, String);
+    $do_safe_cast_2(123, String)
+;

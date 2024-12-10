@@ -1,9 +1,8 @@
-#include <util/generic/string.h>
-#include <library/cpp/string_utils/base64/base64.h>
 #include "oidc_settings.h"
+#include <library/cpp/string_utils/base64/base64.h>
+#include <util/generic/string.h>
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 TString TOpenIdConnectSettings::GetAuthorizationString() const {
     return "Basic " + Base64Encode(ClientId + ":" + ClientSecret);
@@ -21,5 +20,8 @@ TString TOpenIdConnectSettings::GetExchangeEndpointURL() const {
     return AuthorizationServerAddress + ExchangeUrlPath;
 }
 
-} // NOIDC
-} // NMVP
+TString TOpenIdConnectSettings::GetImpersonateEndpointURL() const {
+    return AuthorizationServerAddress + ImpersonateUrlPath;
+}
+
+} // NMVP::NOIDC

@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 PRAGMA warning("disable", "4510");
+
 USE plato;
 
 $foo =
@@ -8,14 +9,18 @@ $foo =
         subkey,
         key,
         value AS v
-    FROM Input
+    FROM
+        Input
     ORDER BY
         subkey ASC,
         key DESC
-    LIMIT 0;
+    LIMIT 0
+;
 
 $x =
-    PROCESS $foo;
+    PROCESS $foo
+;
 
 SELECT
-    YQL::ConstraintsOf($x) AS constraints;
+    YQL::ConstraintsOf($x) AS constraints
+;

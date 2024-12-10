@@ -19,7 +19,8 @@ FROM (
     )
 )
 ORDER BY
-    key;
+    key
+;
 
 SELECT
     key
@@ -41,4 +42,5 @@ FROM (
     )
 )
 ORDER BY
-    key;
+    key
+;

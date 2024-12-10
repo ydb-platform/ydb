@@ -6,4 +6,6 @@ SELECT
     waz,
     wdz,
     wtz
-FROM Input;
+FROM
+    Input
+;

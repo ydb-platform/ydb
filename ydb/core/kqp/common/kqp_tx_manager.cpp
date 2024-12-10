@@ -92,6 +92,7 @@ public:
         auto& shardInfo = ShardsInfo.at(shardId);
         if (auto lockPtr = shardInfo.Locks.FindPtr(lock.GetKey()); lockPtr) {
             if (lock.Proto.GetHasWrites()) {
+                AFL_ENSURE(!ReadOnly);
                 lockPtr->Lock.Proto.SetHasWrites(true);
             }
 
@@ -221,7 +222,13 @@ public:
     }
 
     bool IsVolatile() const override {
-        return !HasOlapTable() && !HasTopics();
+        return !HasOlapTable()
+            && !IsReadOnly()
+            && !IsSingleShard()
+            && !HasTopics();
+
+        // TODO: && !HasPersistentChannels;
+        // Note: currently persistent channels are never used
     }
 
     bool HasSnapshot() const override {
@@ -248,10 +255,15 @@ public:
         return ShardsIds.size();
     }
 
+    bool NeedCommit() const override {
+        const bool dontNeedCommit = IsReadOnly() && (IsSingleShard() || HasSnapshot());
+        return !dontNeedCommit;
+    }
+
     void StartPrepare() override {
         AFL_ENSURE(!CollectOnly);
         AFL_ENSURE(State == ETransactionState::COLLECTING);
-        AFL_ENSURE(!IsReadOnly());
+        AFL_ENSURE(NeedCommit());
 
         THashSet<ui64> sendingColumnShardsSet;
         THashSet<ui64> receivingColumnShardsSet;
@@ -279,8 +291,6 @@ public:
             AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
             shardInfo.State = EShardState::PREPARING;
         }
-
-        Y_ABORT_UNLESS(!ReceivingShards.empty());
 
         constexpr size_t minArbiterMeshSize = 5;
         if ((IsVolatile() &&
@@ -324,7 +334,7 @@ public:
 
     TPrepareInfo GetPrepareTransactionInfo() override {
         AFL_ENSURE(State == ETransactionState::PREPARING);
-        AFL_ENSURE(!ReceivingShards.empty());
+        AFL_ENSURE(!ReceivingShards.empty() || !SendingShards.empty());
 
         TPrepareInfo result {
             .SendingShards = SendingShards,
@@ -361,7 +371,7 @@ public:
         AFL_ENSURE(State == ETransactionState::PREPARING
                 || (State == ETransactionState::COLLECTING
                     && IsSingleShard()));
-        AFL_ENSURE(!IsReadOnly());
+        AFL_ENSURE(NeedCommit());
         State = ETransactionState::EXECUTING;
 
         for (auto& [_, shardInfo] : ShardsInfo) {
@@ -398,9 +408,24 @@ public:
         AFL_ENSURE(shardInfo.State == EShardState::EXECUTING);
         shardInfo.State = EShardState::FINISHED;
 
-        // Either all shards committed or all shards failed,
-        // so we need to wait only for one answer from ReceivingShards.
-        return ReceivingShards.contains(shardId) || IsSingleShard();
+        if (IsSingleShard() || ReceivingShards.contains(shardId)) {
+            // Either all shards committed write or all shards failed,
+            // so we need to wait only for one answer from ReceivingShards.
+            return true;
+        } else if (IsReadOnly() && !HasSnapshot()) {
+            AFL_ENSURE(ReceivingShards.empty());
+            // NOTE: In this case we have a possible RW transaction, that didn't write anything.
+            // For example, statement 'update dst set ... where ...' or 'insert into dst select from src where ...'.
+            // So, it's ok to use distributed commit in this case,
+            // because in general case (possible RW tx is RW tx) tx will be executed faster
+            // due to absence of taking snapshot (up to 10ms).
+
+            // In case of read only multishard tx without snapshot,
+            // we need to wait for all shards answers (to check locks).
+            AFL_ENSURE(SendingShards.erase(shardId) == 1);
+            return SendingShards.empty();
+        }
+        return false;
     }
 
 private:

@@ -439,15 +439,15 @@ public:
     >;
 
 public:
-    explicit TTtlTierSettings(TDuration evictionDelay, const TAction& action);
+    explicit TTtlTierSettings(TDuration applyAfter, const TAction& action);
     explicit TTtlTierSettings(const Ydb::Table::TtlTier& tier);
     void SerializeTo(Ydb::Table::TtlTier& proto) const;
 
-    TDuration GetEvictAfter() const;
+    TDuration GetApplyAfter() const;
     const TAction& GetAction() const;
 
 private:
-    TDuration EvictAfter_;
+    TDuration ApplyAfter_;
     TAction Action_;
 };
 
@@ -516,16 +516,16 @@ public:
     explicit TTtlSettings(const TString& columnName, const TVector<TTtlTierSettings>& tiers);
     explicit TTtlSettings(const TString& columnName, const TDuration& expireAfter);
     const TDateTypeColumnModeSettings& GetDateTypeColumn() const;
-    // Deprecated. Use DeserializeFromProto()
+    // Deprecated. Use FromProto()
     explicit TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds);
 
     explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TVector<TTtlTierSettings>& tiers);
     explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter);
     const TValueSinceUnixEpochModeSettings& GetValueSinceUnixEpoch() const;
-    // Deprecated. Use DeserializeFromProto()
+    // Deprecated. Use FromProto()
     explicit TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds);
 
-    static std::optional<TTtlSettings> DeserializeFromProto(const Ydb::Table::TtlSettings& proto);
+    static std::optional<TTtlSettings> FromProto(const Ydb::Table::TtlSettings& proto);
     void SerializeTo(Ydb::Table::TtlSettings& proto) const;
     EMode GetMode() const;
 
@@ -536,7 +536,7 @@ public:
     std::optional<TDuration> GetExpireAfter() const;
 
 private:
-    explicit TTtlSettings(TMode mode, ui32 runIntervalSeconds);
+    explicit TTtlSettings(TMode mode, const TVector<TTtlTierSettings>& tiers, ui32 runIntervalSeconds);
     static std::optional<TDuration> GetExpireAfterFrom(const TVector<TTtlTierSettings>& tiers);
 
 private:
@@ -660,6 +660,7 @@ public:
     TVector<TIndexDescription> GetIndexDescriptions() const;
     TVector<TChangefeedDescription> GetChangefeedDescriptions() const;
     TMaybe<TTtlSettings> GetTtlSettings() const;
+    // Deprecated. Use GetTtlSettings() instead
     TMaybe<TString> GetTiering() const;
     EStoreType GetStoreType() const;
 
@@ -806,6 +807,7 @@ public:
 
     TColumnFamilyBuilder& SetData(const TString& media);
     TColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression);
+    TColumnFamilyBuilder& SetKeepInMemory(bool enabled);
 
     TColumnFamilyDescription Build() const;
 
@@ -865,6 +867,11 @@ public:
 
     TTableColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TTableColumnFamilyBuilder& SetKeepInMemory(bool enabled) {
+        Builder_.SetKeepInMemory(enabled);
         return *this;
     }
 
@@ -1483,6 +1490,11 @@ public:
 
     TAlterColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TAlterColumnFamilyBuilder& SetKeepInMemory(bool enabled) {
+        Builder_.SetKeepInMemory(enabled);
         return *this;
     }
 

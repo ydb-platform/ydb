@@ -262,7 +262,6 @@ namespace Tests {
             AppConfig->MutableHiveConfig()->SetObjectImbalanceToBalance(100);
             AppConfig->MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
-            FeatureFlags.SetEnableImmediateWritingOnBulkUpsert(true);
             FeatureFlags.SetEnableWritePortionsOnInsert(true);
             FeatureFlags.SetEnableFollowerStats(true);
         }

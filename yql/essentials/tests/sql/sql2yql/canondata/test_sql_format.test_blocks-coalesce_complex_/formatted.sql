@@ -1,10 +1,12 @@
 USE plato;
+
 $strings = [
     <|key: Just(Just("foo")), subkey: Just("bar"), value: 1|>,
     <|key: Just(Nothing(String?)), subkey: Just("two"), value: 2|>,
     <|key: Nothing(String??), subkey: Just("three"), value: 3|>,
     <|key: Nothing(String??), subkey: Nothing(String?), value: 4|>,
 ];
+
 $tuples = [
     <|key: Just(Just(AsTuple(1, 2))), subkey: Just(AsTuple(3, 4)), value: 1|>,
     <|key: Just(Nothing(Tuple<Int, Int>?)), subkey: Just(AsTuple(4, 5)), value: 2|>,
@@ -15,26 +17,35 @@ $tuples = [
 INSERT INTO @strings
 SELECT
     *
-FROM as_table($strings);
+FROM
+    as_table($strings)
+;
 
 INSERT INTO @tuples
 SELECT
     *
-FROM as_table($tuples);
+FROM
+    as_table($tuples)
+;
+
 COMMIT;
 
 SELECT
     value,
     key ?? subkey,
     subkey ?? "xxx",
-FROM @strings
+FROM
+    @strings
 ORDER BY
-    value;
+    value
+;
 
 SELECT
     value,
     key ?? subkey,
     subkey ?? AsTuple(100, 500),
-FROM @tuples
+FROM
+    @tuples
 ORDER BY
-    value;
+    value
+;

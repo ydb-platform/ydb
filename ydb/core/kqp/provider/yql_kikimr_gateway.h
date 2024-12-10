@@ -44,6 +44,7 @@ namespace NKikimr {
 namespace NKikimrReplication {
     class TOAuthToken;
     class TStaticCredentials;
+    class TReplicationConfig_TStrongConsistency;
 }
 
 namespace NYql {
@@ -221,9 +222,14 @@ struct TTtlSettings {
         Nanoseconds = 4,
     };
 
+    struct TTier {
+        TDuration ApplyAfter;
+        std::optional<TString> StorageName;
+    };
+
     TString ColumnName;
-    TDuration ExpireAfter;
     TMaybe<EUnit> ColumnUnit;
+    std::vector<TTier> Tiers;
 
     static bool TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error);
 };
@@ -241,7 +247,6 @@ struct TTableSettings {
     TMaybe<TString> KeyBloomFilter;
     TMaybe<TString> ReadReplicasSettings;
     TResetableSetting<TTtlSettings, void> TtlSettings;
-    TResetableSetting<TString, void> Tiering;
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
 
@@ -792,11 +797,21 @@ struct TReplicationSettings {
         void Serialize(NKikimrReplication::TStaticCredentials& proto) const;
     };
 
+    struct TWeakConsistency {};
+
+    struct TStrongConsistency {
+        TDuration CommitInterval;
+
+        void Serialize(NKikimrReplication::TReplicationConfig_TStrongConsistency& proto) const;
+    };
+
     TMaybe<TString> ConnectionString;
     TMaybe<TString> Endpoint;
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
+    TMaybe<TWeakConsistency> WeakConsistency;
+    TMaybe<TStrongConsistency> StrongConsistency;
     TMaybe<TStateDone> StateDone;
 
     TOAuthToken& EnsureOAuthToken() {
@@ -813,6 +828,22 @@ struct TReplicationSettings {
         }
 
         return *StaticCredentials;
+    }
+
+    TWeakConsistency& EnsureWeakConsistency() {
+        if (!WeakConsistency) {
+            WeakConsistency = TWeakConsistency();
+        }
+
+        return *WeakConsistency;
+    }
+
+    TStrongConsistency& EnsureStrongConsistency() {
+        if (!StrongConsistency) {
+            StrongConsistency = TStrongConsistency();
+        }
+
+        return *StrongConsistency;
     }
 
     using EFailoverMode = TStateDone::EFailoverMode;
@@ -1074,6 +1105,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> Backup(const TString& cluster, const TBackupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> BackupIncremental(const TString& cluster, const TBackupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> Restore(const TString& cluster, const TBackupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;
 

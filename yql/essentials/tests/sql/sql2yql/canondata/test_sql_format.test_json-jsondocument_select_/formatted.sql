@@ -2,4 +2,6 @@
 SELECT
     Id,
     Profile
-FROM plato.Input;
+FROM
+    plato.Input
+;

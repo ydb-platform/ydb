@@ -6,7 +6,8 @@ SELECT
     payload,
     AGGREGATE_LIST(ts) OVER w AS ts_session,
     COUNT(1) OVER w AS session_len,
-FROM plato.Input
+FROM
+    plato.Input
 WINDOW
     w AS (
         PARTITION COMPACT BY
@@ -18,4 +19,5 @@ WINDOW
     )
 ORDER BY
     user,
-    payload;
+    payload
+;

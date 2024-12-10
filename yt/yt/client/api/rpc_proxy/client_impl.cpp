@@ -2689,6 +2689,12 @@ TFuture<TShuffleHandlePtr> TClient::StartShuffle(
     req->set_account(account);
     req->set_partition_count(partitionCount);
     ToProto(req->mutable_parent_transaction_id(), parentTransactionId);
+    if (options.MediumName) {
+        req->set_medium_name(*options.MediumName);
+    }
+    if (options.ReplicationFactor) {
+        req->set_replication_factor(*options.ReplicationFactor);
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
         return ConvertTo<TShuffleHandlePtr>(TYsonString(rsp->shuffle_handle()));

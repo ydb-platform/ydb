@@ -3,11 +3,11 @@
 
 #include <yt/yt/core/concurrency/thread_affinity.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <queue>
 

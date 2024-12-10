@@ -6,8 +6,10 @@ SELECT
     min(subkey),
     min(1u),
     min(1u / 0u)
-FROM Input
+FROM
+    Input
 GROUP BY
     key
 ORDER BY
-    key;
+    key
+;

@@ -3,23 +3,32 @@ USE plato;
 $i =
     SELECT
         *
-    FROM Input
-    WHERE a > "a";
+    FROM
+        Input
+    WHERE
+        a > "a"
+;
 
 SELECT
     a,
     b,
     c,
     d
-FROM $i;
+FROM
+    $i
+;
 
 SELECT
     c,
     d,
     e,
     f
-FROM $i;
+FROM
+    $i
+;
 
 SELECT
     count(*)
-FROM $i;
+FROM
+    $i
+;

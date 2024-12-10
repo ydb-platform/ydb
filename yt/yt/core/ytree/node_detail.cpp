@@ -3,13 +3,13 @@
 #include "exception_helpers.h"
 #include "attribute_filter.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/ypath/token.h>
 #include <yt/yt/core/ypath/tokenizer.h>
 
 #include <yt/yt/core/yson/tokenizer.h>
 #include <yt/yt/core/yson/async_writer.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT::NYTree {
 
@@ -313,13 +313,16 @@ void TMapNodeMixin::ListSelf(
         ? FromProto<TAttributeFilter>(request->attributes())
         : TAttributeFilter();
 
-    auto limit = request->has_limit()
-        ? std::make_optional(request->limit())
-        : std::nullopt;
+    auto limit = YT_PROTO_OPTIONAL(*request, limit);
 
     context->SetRequestInfo("Limit: %v, AttributeFilter: %v",
         limit,
         attributeFilter);
+
+    if (limit && limit < 0) {
+        THROW_ERROR_EXCEPTION("Limit is negative")
+            << TErrorAttribute("limit", limit);
+    }
 
     TAsyncYsonWriter writer;
 

@@ -7,8 +7,10 @@ FROM (
     SELECT
         key,
         AsTuple(key, subkey) AS tpl
-    FROM Input
+    FROM
+        Input
 )
 ORDER BY
     key,
-    tpl;
+    tpl
+;

@@ -1,8 +1,10 @@
 PRAGMA DisableSimpleColumns;
+
 /* postgres can not */
 /* kikimr can not */
 /* ignore runonopt plan diff */
 USE plato;
+
 PRAGMA yt.MapJoinLimit = "1m";
 
 -- YQL-5582
@@ -14,15 +16,19 @@ $join = (
     FROM (
         SELECT
             *
-        FROM Input
-        WHERE value > "bbb"
-    )
-        AS a
-    LEFT JOIN Input
-        AS b
-    ON a.key == b.key
+        FROM
+            Input
+        WHERE
+            value > "bbb"
+    ) AS a
+    LEFT JOIN
+        Input AS b
+    ON
+        a.key == b.key
 );
 
 SELECT
     count(*)
-FROM $join;
+FROM
+    $join
+;

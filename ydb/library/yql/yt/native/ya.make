@@ -46,24 +46,25 @@ PEERDIR(
     ydb/library/yql/dq/opt
     ydb/library/yql/providers/dq/actors/yt
     ydb/library/yql/providers/dq/global_worker_manager
+    ydb/library/yql/providers/dq/helper
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/provider/exec
     ydb/library/yql/providers/dq/service
     ydb/library/yql/providers/dq/stats_collector
     ydb/library/yql/providers/dq/worker_manager/interface
-    ydb/library/yql/providers/yt/gateway/native
-    ydb/library/yql/providers/yt/codec
-    ydb/library/yql/providers/yt/codec/codegen
-    ydb/library/yql/providers/yt/lib/log
-    ydb/library/yql/providers/yt/lib/res_pull
-    ydb/library/yql/providers/yt/lib/row_spec
-    ydb/library/yql/providers/yt/lib/schema
-    ydb/library/yql/providers/yt/lib/skiff
-    ydb/library/yql/providers/yt/lib/yt_download
-    ydb/library/yql/providers/yt/provider
-    ydb/library/yql/providers/yt/codec/codegen
-    ydb/library/yql/providers/yt/comp_nodes/dq
-    ydb/library/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/gateway/native
+    yt/yql/providers/yt/codec
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/lib/log
+    yt/yql/providers/yt/lib/res_pull
+    yt/yql/providers/yt/lib/row_spec
+    yt/yql/providers/yt/lib/schema
+    yt/yql/providers/yt/lib/skiff
+    yt/yql/providers/yt/lib/yt_download
+    yt/yql/providers/yt/provider
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/dq
+    yt/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/providers/yt/dq_task_preprocessor
 
     ydb/library/yql/yt

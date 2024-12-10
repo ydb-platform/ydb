@@ -43,9 +43,9 @@ components as indicated by the Maturity table below.
 | metrics/\*<br>collector/metrics/* | Stable | [Stable](docs/specification.md#json-protobuf-encoding) |
 | trace/\*<br>collector/trace/* | Stable | [Stable](docs/specification.md#json-protobuf-encoding) |
 | logs/\*<br>collector/logs/* | Stable | [Stable](docs/specification.md#json-protobuf-encoding) |
-| profiles/\*<br>collector/profiles/* | Experimental | [Experimental](docs/specification.md#json-protobuf-encoding) |
+| profiles/\*<br>collector/profiles/* | Development | [Development](docs/specification.md#json-protobuf-encoding) |
 
-(See [maturity-matrix.yaml](https://github.com/open-telemetry/community/blob/47813530864b9fe5a5146f466a58bd2bb94edc72/maturity-matrix.yaml#L57)
+(See [Versioning and Stability](https://github.com/open-telemetry/opentelemetry-specification/blob/a08d1f92f62acd4aafe4dfaa04ae7bf28600d49e/specification/versioning-and-stability.md)
 for definition of maturity levels).
 
 ## Stability Definition
@@ -89,8 +89,8 @@ is generated from the .proto files by any particular code generator.
 ## Experiments
 
 In some cases we are trying to experiment with different features. In this case,
-we recommend using an "experimental" sub-directory instead of adding them to any
+we recommend using a "development" sub-directory instead of adding them to any
 protocol version. These protocols should not be used, except for
 development/testing purposes.
 
-Another review must be conducted for experimental protocols to join the main project.
+Another review must be conducted for in-development protocols to join the main project.

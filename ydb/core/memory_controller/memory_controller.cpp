@@ -35,7 +35,7 @@ ui64 SafeDiff(ui64 a, ui64 b) {
 }
 
 TString HumanReadableBytes(std::optional<ui64> bytes) {
-    return bytes.has_value() ? TString(TStringBuilder() << HumanReadableBytes(bytes.value())) : "none"; 
+    return bytes.has_value() ? TString(TStringBuilder() << HumanReadableBytes(bytes.value())) : "none";
 }
 
 }
@@ -125,6 +125,14 @@ public:
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
                     NKikimrConsole::TConfigItem::MemoryControllerConfigItem}));
+
+        // When profiling memory it's convenient to set initial tcmalloc soft limit
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        tcmalloc::MallocExtension::MemoryLimit limit;
+        limit.hard = false;
+        limit.limit = GetSoftLimitBytes(Config, hardLimitBytes);
+        tcmalloc::MallocExtension::SetMemoryLimit(limit);
+#endif
 
         HandleWakeup(ctx);
 

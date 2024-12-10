@@ -1701,6 +1701,7 @@ message TReqMoveNode
     optional bool preserve_expiration_time = 6 [default = false];
     optional bool preserve_expiration_timeout = 12 [default = false];
     optional bool preserve_owner = 11 [default = false];
+    optional bool preserve_acl = 14 [default = false];
     optional bool pessimistic_quota_check = 7 [default = true];
     optional bool enable_cross_cell_copying = 13 [default = true];
 
@@ -3471,6 +3472,8 @@ message TReqStartShuffle
     required string account = 1;
     required int32 partition_count = 2;
     required NYT.NProto.TGuid parent_transaction_id = 3;
+    optional string medium_name = 4;
+    optional int32 replication_factor = 5;
 }
 
 message TRspStartShuffle

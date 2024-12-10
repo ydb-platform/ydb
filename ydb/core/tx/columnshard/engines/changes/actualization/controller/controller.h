@@ -11,10 +11,14 @@ private:
 
 public:
     void StartActualization(const NActualizer::TRWAddress& address) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "actualization_start")("count", ActualizationsInProgress[address])(
+            "limit", GetLimitForAddress(address))("rw", address.DebugString());
         AFL_VERIFY(++ActualizationsInProgress[address] <= (i32)GetLimitForAddress(address));
     }
 
     void FinishActualization(const NActualizer::TRWAddress& address) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "actualization_finished")("count", ActualizationsInProgress[address])(
+            "limit", GetLimitForAddress(address))("rw", address.DebugString());
         AFL_VERIFY(--ActualizationsInProgress[address] >= 0);
     }
 

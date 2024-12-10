@@ -3,16 +3,19 @@
 /* syntax version 1 */
 USE plato;
 
-EVALUATE FOR $_i IN ListFromRange(0, 10)
-    DO BEGIN
-        INSERT INTO Output
-        SELECT
-            *
-        FROM Input;
-        COMMIT;
-    END DO;
+EVALUATE FOR $_i IN ListFromRange(0, 10) DO BEGIN
+    INSERT INTO Output
+    SELECT
+        *
+    FROM
+        Input
+    ;
+    COMMIT;
+END DO;
 
 SELECT
     *
-FROM Output
-    TABLESAMPLE SYSTEM (10);
+FROM
+    Output
+    TABLESAMPLE SYSTEM (10)
+;

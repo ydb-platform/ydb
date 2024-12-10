@@ -4,10 +4,16 @@ $a = "Input";
 
 SELECT
     count(*)
-FROM plato.concat_strict($a, $a);
+FROM
+    plato.concat_strict($a, $a)
+;
+
 USE plato;
+
 $a = "Input";
 
 SELECT
     count(*)
-FROM concat_strict($a, $a);
+FROM
+    concat_strict($a, $a)
+;

@@ -27,7 +27,6 @@ message TLoadControlConfig {
     bool Strict = 7;                       // default false, whether to deny execution in load level unavailable
     uint32 CpuNumber = 8;
     string MonitoringEndpoint = 9;         // if defined, will be used as REST API instead of default GRPC
-    TYdbStorageConfig DatabaseConnection = 10;
 }
 
 message TWorkloadManagerConfig {

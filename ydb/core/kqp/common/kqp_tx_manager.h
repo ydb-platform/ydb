@@ -76,6 +76,8 @@ public:
     virtual const THashSet<ui64>& GetShards() const = 0;
     virtual ui64 GetShardsCount() const = 0;
 
+    virtual bool NeedCommit() const = 0;
+
     virtual void StartPrepare() = 0;
 
     struct TPrepareInfo {

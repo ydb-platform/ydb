@@ -58,7 +58,7 @@ void RunUnderProfiler(const TString& name, std::function<void()> work, bool chec
     });
 
     TFileOutput output(GetOutputPath() / name);
-    WriteProfile(&output, profile);
+    WriteCompressedProfile(&output, profile);
     output.Finish();
 }
 

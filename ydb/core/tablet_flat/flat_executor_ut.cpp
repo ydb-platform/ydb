@@ -585,7 +585,7 @@ THolder<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
  * 4. Resume scan.
  * 5. Check number of scanned rows.
  */
-Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompactionScan) {
     Y_UNIT_TEST(TestCompactionScan) {
         TMyEnvBase env;
         TRowsModel data;
@@ -633,7 +633,7 @@ Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
 }
 
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorTxLimit) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_ExecutorTxLimit) {
 
     struct TTxSchema : public ITransaction {
         TTxSchema(TActorId owner) : Owner(owner) { }
@@ -685,7 +685,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorTxLimit) {
 }
 
 
-Y_UNIT_TEST_SUITE(TFlatTableReschedule) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reschedule) {
 
     class TTxRollbackOnReschedule : public ITransaction {
     public:
@@ -745,7 +745,7 @@ Y_UNIT_TEST_SUITE(TFlatTableReschedule) {
 } // namespace Y_UNIT_TEST_SUITE(TFlatTableExecuteReschedule)
 
 
-Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_BackgroundCompactions) {
 
     using namespace NKikimrResourceBroker;
     using namespace NResourceBroker;
@@ -984,7 +984,7 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
 }
 
 
-Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
 
     using namespace NKikimrResourceBroker;
     using namespace NResourceBroker;
@@ -1074,7 +1074,7 @@ Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_ResourceProfile) {
 
     struct TTaskSequence {
         struct TEvent {
@@ -1807,7 +1807,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorSliceOverlapScan) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_SliceOverlapScan) {
 
     Y_UNIT_TEST(TestSliceOverlapScan) {
         TMyEnvBase env;
@@ -1843,7 +1843,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorSliceOverlapScan) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorColumnGroups) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_ColumnGroups) {
 
     struct TTxSelectRows : public ITransaction {
 
@@ -1949,7 +1949,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorColumnGroups) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorCachePressure) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_CachePressure) {
 
     struct TTxSmallCacheSize : public ITransaction {
         bool Execute(TTransactionContext &txc, const TActorContext &) override
@@ -2026,7 +2026,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorCachePressure) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorCompressedSelectRows) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompressedSelectRows) {
 
     struct TTxUpdateSchema : public ITransaction {
         bool Execute(TTransactionContext &txc, const TActorContext &) override
@@ -2102,7 +2102,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorCompressedSelectRows) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedRows) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedRows) {
 
     using NTable::EReady;
 
@@ -2442,7 +2442,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedRows) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedLargeBlobs) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedLargeBlobs) {
 
     using NTable::EReady;
 
@@ -2588,7 +2588,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedLargeBlobs) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorKeepEraseMarkers) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_KeepEraseMarkers) {
 
     enum class ESchemaVariant {
         KeepEraseMarkers,
@@ -2787,7 +2787,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorKeepEraseMarkers) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveTableData) {
 
     struct TTxInitSchema : public ITransaction {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -3208,7 +3208,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
 
     struct TTxCheckStep : public ITransaction {
         ui32& Step;
@@ -3533,7 +3533,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorRejectProbability) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
 
     struct TTxMultiSchema : public ITransaction {
         TIntrusiveConstPtr<TCompactionPolicy> Policy;
@@ -3693,7 +3693,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorRejectProbability) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableCold) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
 
     struct TTxDummy : public ITransaction {
         bool Execute(TTransactionContext&, const TActorContext&) override {
@@ -3941,7 +3941,7 @@ Y_UNIT_TEST_SUITE(TFlatTableCold) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
 
     enum : ui32  {
         TableId = 101,
@@ -4708,9 +4708,9 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
         }
     }
 
-} // Y_UNIT_TEST_SUITE(TFlatTableLongTx)
+}
 
-Y_UNIT_TEST_SUITE(TFlatTableLongTxAndBlobs) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTxAndBlobs) {
 
     enum : ui32  {
         TableId = 101,
@@ -4879,9 +4879,9 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxAndBlobs) {
         DoValueSize(32);
     }
 
-} // Y_UNIT_TEST_SUITE(TFlatTableLongTxAndBlobs)
+}
 
-Y_UNIT_TEST_SUITE(TFlatTableSnapshotWithCommits) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_SnapshotWithCommits) {
 
     struct TTxMakeSnapshotAndWrite : public ITransaction {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -5009,9 +5009,9 @@ Y_UNIT_TEST_SUITE(TFlatTableSnapshotWithCommits) {
         }
     }
 
-} // Y_UNIT_TEST_SUITE(TFlatTableSnapshotWithCommits)
+}
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
 
     struct TTxCalculateReadSize : public ITransaction {
         ui32 Attempt = 0;
@@ -5194,7 +5194,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
         env.WaitFor<NFake::TEvCompacted>();
 
-        env.SendSync(new NFake::TEvExecute(new NTestSuiteTFlatTableExecutorResourceProfile::TTxSetResourceProfile("zero")));
+        env.SendSync(new NFake::TEvExecute(new NTestSuiteTFlatTableExecutor_ResourceProfile::TTxSetResourceProfile("zero")));
         env.SendSync(new NFake::TEvExecute{ new TTxPrechargeAndSeek() });
 
         // restart tablet
@@ -5241,7 +5241,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
         env.WaitFor<NFake::TEvCompacted>();
 
-        env.SendSync(new NFake::TEvExecute(new NTestSuiteTFlatTableExecutorResourceProfile::TTxSetResourceProfile("zero")));
+        env.SendSync(new NFake::TEvExecute(new NTestSuiteTFlatTableExecutor_ResourceProfile::TTxSetResourceProfile("zero")));
         env.SendSync(new NFake::TEvExecute{ new TTxPrechargeAndSeek() });
 
         // restart tablet
@@ -5713,7 +5713,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
     using EReady = NTable::EReady;
     using ENext = NTable::ENext;
 
@@ -5816,17 +5816,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky until restart
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 22); // 20 data pages and 2 index pages
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky again
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky
     }
 
     Y_UNIT_TEST(TestNonSticky_BTreeIndex) {
@@ -5922,17 +5922,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky until restart
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 15); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky again
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky
     }
 
     Y_UNIT_TEST(TestNonStickyGroup_BTreeIndex) {
@@ -6030,17 +6030,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky until restart
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 5); // 1 groups[0], 1 historic[0], 3 index pages
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky again
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky
     }
 
     Y_UNIT_TEST(TestStickyAlt_BTreeIndex) {
@@ -6140,7 +6140,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_GE(failedAttempts, 20); // old parts aren't sticky before restart
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // parts become sticky soon after it's enabled
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
@@ -6174,7 +6174,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
-        UNIT_ASSERT_GE(failedAttempts, 20); // old parts aren't sticky before restart
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // parts become sticky soon after it's enabled
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
@@ -6185,7 +6185,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
     using EReady = NTable::EReady;
     using ENext = NTable::ENext;
 
@@ -6336,10 +6336,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        // after restart we have no pages in private cache
+        // after restart we have no pages in private cache except flat index
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 286);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_EnableLocalDBFlatIndex_False) { // uses b-tree index
@@ -6414,10 +6414,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        // after restart we have no pages in private cache
+        // after restart we have no pages in private cache except flat index
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 286);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_TurnOff) { // uses b-tree index at first
@@ -6454,11 +6454,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        // after restart we have no pages in private cache
+        // after restart we have no pages in private cache except flat index
         // but use only flat index
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 286);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_Generations) { // uses b-tree index
@@ -6510,7 +6510,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorReboot) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reboot) {
     Y_UNIT_TEST(TestSchemeGcAfterReassign) {
         TMyEnvBase env;
         TRowsModel data;
@@ -6572,5 +6572,5 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorReboot) {
     }
 }
 
-} // namespace NTabletFlatExecutor
-} // namespace NKikimr
+}
+}

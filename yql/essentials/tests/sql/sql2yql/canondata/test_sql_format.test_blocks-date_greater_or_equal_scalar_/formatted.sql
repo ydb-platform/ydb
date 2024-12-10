@@ -1,4 +1,5 @@
 USE plato;
+
 PRAGMA yt.DisableOptimizers = "OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin,FuseMultiOutsWithOuterMaps";
 
 SELECT
@@ -74,7 +75,9 @@ SELECT
     TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") >= waz,
     TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") >= wdz,
     TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") >= wtz
-FROM Dates;
+FROM
+    Dates
+;
 
 SELECT
     Date32("1900-01-01") >= na,
@@ -153,7 +156,9 @@ SELECT
     Interval("P1D") >= wi,
     Interval64("P1D") >= ni,
     Interval64("P1D") >= wi,
-FROM Dates;
+FROM
+    Dates
+;
 
 SELECT
     na >= Date("2000-01-01"),
@@ -228,7 +233,9 @@ SELECT
     waz >= TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow"),
     wdz >= TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow"),
     wtz >= TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow")
-FROM Dates;
+FROM
+    Dates
+;
 
 SELECT
     na >= Date32("1900-01-01"),
@@ -307,4 +314,6 @@ SELECT
     wi >= Interval("P1D"),
     ni >= Interval64("P1D"),
     wi >= Interval64("P1D"),
-FROM Dates;
+FROM
+    Dates
+;

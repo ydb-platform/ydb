@@ -4,7 +4,6 @@
 
 #include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/proc.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
@@ -14,6 +13,8 @@
 #include <library/cpp/yt/misc/tls.h>
 
 #include <library/cpp/yt/system/exit.h>
+
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 #include <util/generic/algorithm.h>
 

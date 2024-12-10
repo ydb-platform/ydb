@@ -1538,6 +1538,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateSequence:
     case TTxState::TxCopySequence:
     case TTxState::TxCreateReplication:
+    case TTxState::TxCreateTransfer:
     case TTxState::TxCreateBlobDepot:
     case TTxState::TxCreateExternalTable:
     case TTxState::TxCreateExternalDataSource:
@@ -1573,6 +1574,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropCdcStreamAtTableDropSnapshot:
     case TTxState::TxAlterSequence:
     case TTxState::TxAlterReplication:
+    case TTxState::TxAlterTransfer:
     case TTxState::TxAlterBlobDepot:
     case TTxState::TxUpdateMainTableOnIndexMove:
     case TTxState::TxAlterExternalTable:
@@ -1599,6 +1601,8 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropSequence:
     case TTxState::TxDropReplication:
     case TTxState::TxDropReplicationCascade:
+    case TTxState::TxDropTransfer:
+    case TTxState::TxDropTransferCascade:
     case TTxState::TxDropBlobDepot:
     case TTxState::TxDropExternalTable:
     case TTxState::TxDropExternalDataSource:
@@ -4290,7 +4294,8 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetSequenceVersion();
                 break;
             }
-            case NKikimrSchemeOp::EPathType::EPathTypeReplication: {
+            case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+            case NKikimrSchemeOp::EPathType::EPathTypeTransfer: {
                 auto it = Replications.find(pathId);
                 Y_ABORT_UNLESS(it != Replications.end());
                 result.SetReplicationVersion(it->second->AlterVersion);
@@ -5143,6 +5148,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         break;
     case TPathElement::EPathType::EPathTypeReplication:
         TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Sub(1);
+        break;
+    case TPathElement::EPathType::EPathTypeTransfer:
+        TabletCounters->Simple()[COUNTER_TRANSFER_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeBlobDepot:
         TabletCounters->Simple()[COUNTER_BLOB_DEPOT_COUNT].Sub(1);

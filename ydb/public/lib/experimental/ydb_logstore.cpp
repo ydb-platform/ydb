@@ -16,7 +16,7 @@ namespace NYdb {
 namespace NLogStore {
 
 TMaybe<TTtlSettings> TtlSettingsFromProto(const Ydb::Table::TtlSettings& proto) {
-    if (auto settings = TTtlSettings::DeserializeFromProto(proto)) {
+    if (auto settings = TTtlSettings::FromProto(proto)) {
         return *settings;
     }
     return Nothing();
@@ -186,8 +186,6 @@ void TLogTableDescription::SerializeTo(Ydb::LogStore::CreateLogTableRequest& req
 
     if (TtlSettings) {
         TtlSettings->SerializeTo(*request.mutable_ttl_settings());
-    } else if (TieringSettings) {
-        TieringSettings->SerializeTo(*request.mutable_tiering_settings());
     }
 }
 

@@ -1,7 +1,9 @@
 /* syntax version 1 */
 /* postgres can not */
 SELECT
-    EvaluateCode(FuncCode("Int32", AtomCode("1")));
+    EvaluateCode(FuncCode("Int32", AtomCode("1")))
+;
+
 $inc = EvaluateCode(
     LambdaCode(
         ($x) -> {
@@ -11,7 +13,9 @@ $inc = EvaluateCode(
 );
 
 SELECT
-    $inc(1);
+    $inc(1)
+;
+
 $addPrefixForMembers = ($strValue) -> {
     $code = EvaluateCode(
         LambdaCode(
@@ -30,4 +34,5 @@ $addPrefixForMembers = ($strValue) -> {
 };
 
 SELECT
-    $addPrefixForMembers(AsStruct(1 AS foo, "2" AS bar));
+    $addPrefixForMembers(AsStruct(1 AS foo, "2" AS bar))
+;

@@ -8,4 +8,6 @@ SELECT
     LENGTH(key) |<< 15 AS rotl_res,
     LENGTH(key) >>| 15 AS rotr_res,
     ~LENGTH(key) AS not_res
-FROM plato.Input;
+FROM
+    plato.Input
+;

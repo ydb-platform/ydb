@@ -1,0 +1,59 @@
+{#- empty string #}
+sourceSets {
+{%- if target.runs|length %}
+    main {
+        {#-
+            Default by Gradle:
+
+            java.srcDir("src/main/java")
+            resources.srcDir("src/main/resources")
+
+        #}
+{%-     for run in target.runs -%}
+{{         OutDirs(run, '        java.srcDir("', '")') }}
+{%-     endfor %}
+    }
+{%- endif %}
+    test {
+        {#-
+            Default by Gradle:
+
+            java.srcDir("src/test/java")
+            resources.srcDir("src/test/resources")
+
+        #}
+        java.srcDir("ut/java")
+        resources.srcDir("ut/resources")
+        java.srcDir("src/test-integration/java")
+        resources.srcDir("src/test-integration/resources")
+        java.srcDir("src/testFixtures/java")
+        resources.srcDir("src/testFixtures/resources")
+        java.srcDir("src/intTest/java")
+        resources.srcDir("src/intTest/resources")
+{%- for extra_target in extra_targets -%}
+{%-     if extra_target|length -%}
+{%-         for run in extra_target.runs -%}
+{{              OutDirs(run, '        java.srcDir("', '")') }}
+{%-         endfor -%}
+{%-     endif -%}
+{%- endfor %}
+    }
+}
+
+{%- if target.jar_source_set|length -%}
+{%-     for source_set in target.jar_source_set -%}
+{%-         set srcdir_glob = split(source_set, ':') %}
+
+sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
+{%-     endfor -%}
+{%- endif -%}
+
+{%  for extra_target in extra_targets -%}
+{%-     if extra_target.jar_source_set|length -%}
+{%-         for source_set in extra_target.jar_source_set -%}
+{%-             set srcdir_glob = split(source_set, ':') %}
+
+sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
+{%-         endfor -%}
+{%-     endif -%}
+{%- endfor -%}

@@ -9,7 +9,8 @@ $es = Nothing(Struct<a: PgInt>?);
 SELECT
     TryMember($s, "a", NULL),
     TryMember($js, "a", NULL),
-    TryMember($es, "a", NULL),;
+    TryMember($es, "a", NULL),
+;
 
 -- TypeOf TryMember is type of third argument
 -- field type should either match third type exactly, or (if the third type is optional) 
@@ -20,4 +21,5 @@ SELECT
     TryMember($js, "a", 999p),
     TryMember($js, "a", Just(999p)),
     TryMember($es, "a", 999p),
-    TryMember($es, "a", Just(999p)),;
+    TryMember($es, "a", Just(999p)),
+;

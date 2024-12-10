@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
@@ -11,7 +12,6 @@
 namespace NYql {
     class IOptimizationContext;
     struct TTypeAnnotationContext;
-    struct TDqSettings;
     struct IProviderContext;
     struct TRelOptimizerNode;
     struct TOptimizerStatistics;
@@ -38,7 +38,7 @@ NNodes::TExprBase DqSqlInDropCompact(NNodes::TExprBase node, TExprContext& ctx);
 
 NNodes::TExprBase DqReplicateFieldSubset(NNodes::TExprBase node, TExprContext& ctx, const TParentsMap& parents);
 
-IGraphTransformer::TStatus DqWrapIO(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TDqSettings& config);
+IGraphTransformer::TStatus DqWrapIO(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const IDqIntegration::TWrapReadSettings& wrSettings);
 
 NNodes::TExprBase DqExpandMatchRecognize(NNodes::TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typeAnnCtx);
 

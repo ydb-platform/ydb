@@ -4,7 +4,8 @@ USE plato;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
     key
 LIMIT length(CAST(Unicode::ToUpper("a"u) AS String)) OFFSET length(CAST(Unicode::ToUpper("bc"u) AS String));

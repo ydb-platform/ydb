@@ -5,7 +5,6 @@ ELSE()
 UNITTEST_FOR(ydb/tools/stress_tool/lib)
 
 SIZE(LARGE)
-TIMEOUT(3600)
 TAG(ya:fat)
 
 SRC(

@@ -5,5 +5,6 @@ USE plato;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 LIMIT 5 OFFSET 10;

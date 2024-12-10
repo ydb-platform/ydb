@@ -14,4 +14,5 @@ SELECT
     TryMember($js, "b", Just(Just(999u))),
     TryMember($js, "c", Just(Just(Just(999)))),
     TryMember($es, "b", Just(Just(999u))),
-    TryMember($es, "c", Just(Just(Just(999)))),;
+    TryMember($es, "c", Just(Just(Just(999)))),
+;

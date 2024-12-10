@@ -2,4 +2,6 @@ USE plato;
 
 SELECT
     *
-FROM concat(Input1, Input2);
+FROM
+    concat(Input1, Input2)
+;

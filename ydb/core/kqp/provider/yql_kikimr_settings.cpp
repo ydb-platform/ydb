@@ -87,13 +87,14 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NYql::TOptimizerHints::Parse(v); });
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
+    REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
     REGISTER_SETTING(*this, EnableSpillingNodes)
         .Parser([](const TString& v) { return ParseEnableSpillingNodes(v); });
 
-    REGISTER_SETTING(*this, MaxDPccpDPTableSize);
+    REGISTER_SETTING(*this, MaxDPHypDPTableSize);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
     REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
@@ -119,6 +120,10 @@ bool TKikimrSettings::SystemColumnsEnabled() const {
 
 bool TKikimrSettings::SpillingEnabled() const {
     return GetFlagValue(_KqpEnableSpilling.Get());
+}
+
+bool TKikimrSettings::OrderPreservingLookupJoinEnabled() const {
+    return GetFlagValue(EnableOrderPreservingLookupJoin.Get());
 }
 
 bool TKikimrSettings::DisableLlvmForUdfStages() const {

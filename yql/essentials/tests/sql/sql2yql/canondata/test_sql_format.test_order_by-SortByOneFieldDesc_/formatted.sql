@@ -1,5 +1,7 @@
 SELECT
     b
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    b DESC;
+    b DESC
+;

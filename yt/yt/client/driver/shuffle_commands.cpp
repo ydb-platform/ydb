@@ -25,6 +25,18 @@ void TStartShuffleCommand::Register(TRegistrar registrar)
     registrar.Parameter("account", &TThis::Account);
     registrar.Parameter("partition_count", &TThis::PartitionCount);
     registrar.Parameter("parent_transaction_id", &TThis::ParentTransactionId);
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "medium_name",
+        [] (TThis* command) -> auto& {
+            return command->Options.MediumName;
+        })
+        .Default();
+    registrar.ParameterWithUniversalAccessor<std::optional<int>>(
+        "replication_factor",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicationFactor;
+        })
+        .Default();
 }
 
 void TStartShuffleCommand::DoExecute(ICommandContextPtr context)

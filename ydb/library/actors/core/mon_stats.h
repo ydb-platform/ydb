@@ -41,14 +41,14 @@ namespace NActors {
     };
 
     struct TExecutorPoolState {
-        float UsedCpu = 0;
+        float ElapsedCpu = 0;
         float CurrentLimit = 0;
         float PossibleMaxLimit = 0;
         float MaxLimit = 0;
         float MinLimit = 0;
 
         void Aggregate(const TExecutorPoolState& other) {
-            UsedCpu += other.UsedCpu;
+            ElapsedCpu += other.ElapsedCpu;
             CurrentLimit += other.CurrentLimit;
             PossibleMaxLimit += other.PossibleMaxLimit;
             MaxLimit += other.MaxLimit;
@@ -63,10 +63,6 @@ namespace NActors {
         ui64 DecreasingThreadsByStarvedState = 0;
         ui64 DecreasingThreadsByHoggishState = 0;
         ui64 DecreasingThreadsByExchange = 0;
-        i64 MaxCpuUs = 0;
-        i64 MinCpuUs = 0;
-        i64 MaxElapsedUs = 0;
-        i64 MinElapsedUs = 0;
         double SpinningTimeUs = 0;
         double SpinThresholdUs = 0;
         i16 WrongWakenedThreadCount = 0;

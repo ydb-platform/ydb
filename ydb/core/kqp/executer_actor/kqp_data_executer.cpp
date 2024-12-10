@@ -142,7 +142,9 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
+        , AllowOlapDataQuery(tableServiceConfig.GetAllowOlapDataQuery())
         , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
+        , WaitCAStatsTimeout(TDuration::MilliSeconds(tableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
     {
         Target = creator;
 
@@ -1931,7 +1933,7 @@ private:
     }
 
     bool HasDmlOperationOnOlap(NKqpProto::TKqpPhyTx_EType queryType, const NKqpProto::TKqpPhyStage& stage) {
-        if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA) {
+        if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA && !AllowOlapDataQuery) {
             return true;
         }
 
@@ -2847,8 +2849,7 @@ private:
                 this->Become(&TThis::WaitShutdownState);
                 LOG_I("Waiting for shutdown of " << Planner->GetPendingComputeTasks().size() << " tasks and "
                     << Planner->GetPendingComputeActors().size() << " compute actors");
-                // TODO(ilezhankin): the CA awaiting timeout should be configurable.
-                TActivationContext::Schedule(TDuration::Seconds(10), new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPoison));
+                TActivationContext::Schedule(WaitCAStatsTimeout, new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPoison));
             }
         } else {
             PassAway();
@@ -2924,6 +2925,8 @@ private:
     void HandleShutdown(TEvDq::TEvAbortExecution::TPtr& ev) {
         auto statusCode = NYql::NDq::DqStatusToYdbStatus(ev->Get()->Record.GetStatusCode());
 
+        // TODO(ISSUE-12128): if wait stats timeout is less than 1% of the original query timeout, then still wait for stats.
+
         // In case of external timeout the response is already sent to the client - no need to wait for stats.
         if (statusCode == Ydb::StatusIds::TIMEOUT) {
             LOG_I("External timeout while waiting for Compute Actors to finish - forcing shutdown. Sender: " << ev->Sender);
@@ -2982,6 +2985,7 @@ private:
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;
+    const bool AllowOlapDataQuery = false;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
@@ -3017,7 +3021,8 @@ private:
     TLockHandle LockHandle;
     ui64 LastShard = 0;
 
-    NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
+    const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
+    const TDuration WaitCAStatsTimeout;
 };
 
 } // namespace

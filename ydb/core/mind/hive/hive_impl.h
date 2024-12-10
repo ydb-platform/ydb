@@ -306,6 +306,7 @@ protected:
     ITransaction* CreateUpdateDcFollowers(const TDataCenterId& dc);
     ITransaction* CreateGenerateTestData(uint64_t seed);
     ITransaction* CreateDeleteNode(TNodeId nodeId);
+    ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
 
 public:
     TDomainsView DomainsView;

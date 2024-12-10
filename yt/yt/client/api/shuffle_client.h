@@ -12,7 +12,9 @@ struct TShuffleHandle
     NObjectClient::TTransactionId TransactionId;
     std::string CoordinatorAddress;
     std::string Account;
+    std::string MediumName;
     int PartitionCount;
+    int ReplicationFactor;
 
     REGISTER_YSON_STRUCT(TShuffleHandle);
 
@@ -25,7 +27,10 @@ DEFINE_REFCOUNTED_TYPE(TShuffleHandle)
 
 struct TStartShuffleOptions
     : public TTimeoutOptions
-{ };
+{
+    std::optional<std::string> MediumName;
+    std::optional<int> ReplicationFactor;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

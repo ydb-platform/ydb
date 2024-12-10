@@ -140,7 +140,6 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     if (!InitDone) {
         return;
     }
-
     auto now = ctx.Now();
 
     auto forgetSubscription = [&](const TString clientId) {
@@ -400,8 +399,7 @@ TReadAnswer TReadInfo::FormAnswer(
     readResult->SetReadFromTimestampMs(ReadTimestampMs);
 
     Y_ABORT_UNLESS(endOffset <= (ui64)Max<i64>(), "Max offset is too big: %" PRIu64, endOffset);
-
-    PQ_LOG_D("FormAnswer " << Blobs.size());
+    PQ_LOG_D("FormAnswer for " << Blobs.size() << " blobs");
 
     if (!isActive && response->GetBlobs().empty()) {
         readResult->SetReadingFinished(true);
@@ -427,9 +425,10 @@ TReadAnswer TReadInfo::FormAnswer(
                 size -= lastBlobSize;
             }
             lastBlobSize = 0;
-            return (size >= Size || cnt >= Count);
+            return cnt >= Count;
         }
-        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (size >= Size || cnt >= Count);
+        // For backward compatibility, we keep the behavior for older clients for non-FirstClassCitizen
+        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && cnt >= Count;
     };
 
     Y_ABORT_UNLESS(blobs.size() == Blobs.size());
@@ -491,15 +490,14 @@ TReadAnswer TReadInfo::FormAnswer(
                 continue;
 
 
-            PQ_LOG_D("FormAnswer processing batch offset "
-                << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount() << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
+            PQ_LOG_D("FormAnswer processing batch offset " << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount() 
+                    << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
 
-            ui32 i = 0;
-            for (i = pos; i < batch.Blobs.size(); ++i) {
+            for (size_t i = pos; i < batch.Blobs.size(); ++i) {
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 
-                Y_ABORT_UNLESS(PartNo == res.GetPartNo(), "pos %" PRIu32 " i %" PRIu32 " Offset %" PRIu64 " PartNo %" PRIu16 " offset %" PRIu64 " partNo %" PRIu16,
+                Y_ABORT_UNLESS(PartNo == res.GetPartNo(), "pos %" PRIu32 " i %" PRIu64 " Offset %" PRIu64 " PartNo %" PRIu16 " offset %" PRIu64 " partNo %" PRIu16,
                          pos, i, Offset, PartNo, offset, res.GetPartNo());
 
                 if (userInfo) {
@@ -516,13 +514,11 @@ TReadAnswer TReadInfo::FormAnswer(
                 } else {
                     ++PartNo;
                 }
+
                 if (updateUsage(res)) {
+                    needStop = true;
                     break;
                 }
-            }
-
-            if (i != batch.Blobs.size()) {//not fully processed batch - next definetely will not be processed
-                needStop = true;
             }
         }
     }
@@ -544,6 +540,7 @@ TReadAnswer TReadInfo::FormAnswer(
                     Destination != 0, ctx.Now()
                 );
             }
+
             AddResultBlob(readResult, writeBlob, Offset);
             if (writeBlob.IsLastPart()) {
                 ++Offset;
@@ -620,7 +617,7 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
         }
         while (it != DataKeysBody.end()
                && (size < maxSize && count < maxCount || count == 0) //count== 0 grants that blob with offset from ReadFromTimestamp will be readed
-               && (lastOffset == 0 || it->Key.GetOffset() < lastOffset)
+               && (lastOffset == 0 || it->Key.GetOffset() <= lastOffset)
         ) {
             size += sz;
             count += cnt;
@@ -666,14 +663,15 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
             Y_ABORT_UNLESS(pno == blobs[i].GetPartNo());
             bool skip = offset < startOffset || offset == startOffset &&
                 blobs[i].GetPartNo() < partNo;
+            if (lastOffset != 0 && lastOffset < offset) {
+                break;
+            }
             if (blobs[i].IsLastPart()) {
                 ++offset;
                 pno = 0;
             } else {
                 ++pno;
             }
-            if (lastOffset > 0 && offset >= lastOffset)
-                break;
 
             if (skip) continue;
 
@@ -687,10 +685,12 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
                 }
                 lastBlobSize = 0;
 
-                if (count > maxCount) // blob is counted already
+                if (count > maxCount) {// blob is counted already
                     break;
-                if (size > maxSize)
+                }
+                if (size > maxSize) {
                     break;
+                }
             }
             size += blobs[i].GetBlobSize();
             lastBlobSize += blobs[i].GetBlobSize();
@@ -996,8 +996,9 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     );
     info.Blobs = blobs;
     ui64 lastOffset = info.Offset + Min(count, info.Count);
+
     PQ_LOG_D("read cookie " << cookie << " added " << info.Blobs.size()
-                << " blobs, size " << size << " count " << count << " last offset " << lastOffset);
+                << " blobs, size " << size << " count " << count << " last offset " << lastOffset << ", current partition end offset: " << EndOffset);
 
     if (blobs.empty() || blobs.back().Key == DataKeysBody.back().Key) { // read from head only when all blobs from body processed
         ui64 insideHeadOffset{0};
@@ -1031,6 +1032,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
 
         ctx.Send(info.Destination != 0 ? Tablet : ctx.SelfID, answer.Event.Release());
+
         OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
         return;
     }

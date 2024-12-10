@@ -10,4 +10,6 @@ SELECT
     CAST(subkey AS Uint32) IN (1, 2) AS optional_key_ui32,
     CAST(subkey AS Uint64) IN (1, 2) AS optional_key_ui64,
     CAST(subkey AS Uint8) IN (1, 2) AS optional_key_to_larger_type
-FROM plato.Input;
+FROM
+    plato.Input
+;

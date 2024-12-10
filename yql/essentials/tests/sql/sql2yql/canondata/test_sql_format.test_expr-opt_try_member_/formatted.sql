@@ -17,4 +17,5 @@ SELECT
     TryMember(Nothing(Struct<x: Int32>?), "x", 0),
     TryMember(Nothing(Struct<x: Int32>?), "x", NULL),
     TryMember(Nothing(Struct<x: Int32?>?), "x", Just(0)),
-    TryMember(Nothing(Struct<x: Int32?>?), "x", NULL);
+    TryMember(Nothing(Struct<x: Int32?>?), "x", NULL)
+;

@@ -33,7 +33,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/formats
     ydb/core/grpc_services/local_rpc
-    ydb/core/io_formats/arrow
+    ydb/core/io_formats/arrow/scheme
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view/common

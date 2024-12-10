@@ -9,15 +9,17 @@ $dict = (
             AsTuple("sk", CAST(subkey AS uint32) ?? 1),
             AsTuple("str", CAST(ByteAt(value, 0) AS uint32) ?? 256)
         ) AS dd
-    FROM Input
+    FROM
+        Input
 );
 
 --INSERT INTO Output
 SELECT
     dd['key'] AS key,
     dd['str'] AS zz
-FROM $dict
-    AS d
+FROM
+    $dict AS d
 ORDER BY
     key,
-    zz;
+    zz
+;

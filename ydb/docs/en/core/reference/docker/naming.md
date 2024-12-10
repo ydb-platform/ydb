@@ -10,5 +10,3 @@ For the [`ydbplatform/local-ydb`](https://hub.docker.com/r/ydbplatform/local-ydb
 | `XX.Y`                 | Corresponds to the latest minor version of {{ ydb-short-name }} in a major release `XX.Y`, including all patches.                           |
 | `XX.Y.ZZ`              | Corresponds to the {{ ydb-short-name }} release version `XX.Y.ZZ`.                                                                    |
 | `XX.Y-slim`, `XX.Y.ZZ-slim` | Compressed binaries of {{ ydb-short-name }} (`ydbd` and `ydb` CLI) with smaller image size but a slower startup. Uses [UPX](https://github.com/upx/upx). |
-
-Once you decide which tag to use, proceed to [prerequisites](prerequisites.md) and [starting the container](start.md).

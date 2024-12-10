@@ -1,4 +1,6 @@
 items:
+  - name: Именование тегов
+    href: naming.md
   - name: Установка Docker
     href: install.md
   - name: Работа с Docker
@@ -7,5 +9,3 @@ items:
     href: configuration.md
   - name: Остановка и очистка
     href: cleanup.md 
-  - name: Именование тегов
-    href: naming.md

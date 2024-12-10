@@ -33,6 +33,8 @@ docker run \
     {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }} # docker image name and tag
 ```
 
+{% include [index.md](_includes/rosetta.md) %}
+
 For more information about environment variables available when running a Docker container with {{ ydb-short-name }}, see [{#T}](configuration.md).
 
 With the parameters specified in the example above and running Docker locally, [Embedded UI](../embedded-ui/index.md) will be available at [http://localhost:8765](http://localhost:8765).

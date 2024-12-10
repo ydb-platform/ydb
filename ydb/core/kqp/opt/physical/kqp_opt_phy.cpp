@@ -362,7 +362,7 @@ protected:
     TMaybeNode<TExprBase> BuildTopStageRemoveSort(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildTopStageRemoveSort(node, ctx, optCtx, TypesCtx, *getParents(), IsGlobal);
+        TExprBase output = KqpBuildTopStageRemoveSort(node, ctx, optCtx, TypesCtx, *getParents(), IsGlobal);
         DumpAppliedRule("BuildTopStageRemoveSort", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

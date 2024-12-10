@@ -144,9 +144,9 @@ public:
         }
     }
 
-    void AddFilter(const NArrow::TColumnFilter& filter) {
+    void AddFilter(const NArrow::TColumnFilter& filter, const bool useSlices = false) {
         if (UseFilter && Table) {
-            AFL_VERIFY(filter.Apply(Table));
+            AFL_VERIFY(filter.Apply(Table, NArrow::TColumnFilter::TApplyContext().SetUseSlices(useSlices)));
         }
         if (!Filter) {
             Filter = std::make_shared<NArrow::TColumnFilter>(filter);
@@ -176,7 +176,7 @@ public:
         DataAdded = true;
         auto tableLocal = table;
         if (Filter && UseFilter) {
-            AFL_VERIFY(Filter->Apply(tableLocal));
+            AFL_VERIFY(Filter->Apply(tableLocal, NArrow::TColumnFilter::TApplyContext().SetUseSlices(Filter->GetFilter().size() < 10)));
         }
         if (!Table) {
             Table = std::make_shared<NArrow::TGeneralContainer>(tableLocal);

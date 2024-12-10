@@ -22,7 +22,7 @@ private:
     bool DefaultFilterValue = true;
     bool LastValue = true;
     ui32 Count = 0;
-    std::vector<ui32> Filter;
+    YDB_READONLY_DEF(std::vector<ui32>, Filter);
     mutable std::optional<std::vector<bool>> FilterPlain;
     mutable std::optional<ui32> FilteredCount;
     TColumnFilter(const bool defaultFilterValue)
@@ -31,6 +31,14 @@ private:
 
     }
 
+    static ui32 CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const ui32 f2);
+    class TMergerImpl;
+    void Reset(const ui32 count);
+    void ResetCaches() const {
+        FilterPlain.reset();
+        FilteredCount.reset();
+    }
+public:
     bool GetStartValue(const bool reverse = false) const {
         if (Filter.empty()) {
             return DefaultFilterValue;
@@ -46,14 +54,6 @@ private:
         }
     }
 
-    static ui32 CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const ui32 f2);
-    class TMergerImpl;
-    void Reset(const ui32 count);
-    void ResetCaches() const {
-        FilterPlain.reset();
-        FilteredCount.reset();
-    }
-public:
     void Append(const TColumnFilter& filter);
     void Add(const bool value, const ui32 count = 1);
     std::optional<ui32> GetFilteredCount() const;
@@ -199,9 +199,31 @@ public:
     // It makes a filter using composite predicate
     static TColumnFilter MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border, ECompareType compareType);
 
-    bool Apply(std::shared_ptr<TGeneralContainer>& batch, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {}) const;
-    bool Apply(std::shared_ptr<arrow::Table>& batch, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {}) const;
-    bool Apply(std::shared_ptr<arrow::RecordBatch>& batch, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {}) const;
+    class TApplyContext {
+    private:
+        YDB_READONLY_DEF(std::optional<ui32>, StartPos);
+        YDB_READONLY_DEF(std::optional<ui32>, Count);
+        YDB_ACCESSOR(bool, UseSlices, false);
+
+    public:
+        TApplyContext() = default;
+        bool HasSlice() const {
+            return !!StartPos && !!Count;
+        }
+
+        TApplyContext(const ui32 start, const ui32 count)
+            : StartPos(start)
+            , Count(count)
+        {
+
+        }
+
+        TApplyContext& Slice(const ui32 start, const ui32 count);
+    };
+
+    bool Apply(std::shared_ptr<TGeneralContainer>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
+    bool Apply(std::shared_ptr<arrow::Table>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
+    bool Apply(std::shared_ptr<arrow::RecordBatch>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
     void Apply(const ui32 expectedRecordsCount, std::vector<arrow::Datum*>& datums) const;
 
     // Combines filters by 'and' operator (extFilter count is true positions count in self, thought extFitler patch exactly that positions)

@@ -1979,6 +1979,95 @@ private:
         }
     }
 
+    void VisitRowPatternRecognitionClause(const TRule_row_pattern_recognition_clause& msg) {
+        VisitToken(msg.GetToken1());
+        VisitToken(msg.GetToken2());
+
+        NewLine();
+        PushCurrentIndent();
+
+        if (msg.HasBlock3()) {
+            Visit(msg.GetBlock3());
+            NewLine();
+        }
+
+        if (msg.HasBlock4()) {
+            Visit(msg.GetBlock4());
+            NewLine();
+        }
+
+        if (msg.HasBlock5()) {
+            const auto& block = msg.GetBlock5().GetRule_row_pattern_measures1();
+            VisitToken(block.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            const auto& measureList = block.GetRule_row_pattern_measure_list2();
+            Visit(measureList.GetRule_row_pattern_measure_definition1());
+            for (const auto& measureDefinitionBlock : measureList.GetBlock2()) {
+                VisitToken(measureDefinitionBlock.GetToken1());
+                NewLine();
+                Visit(measureDefinitionBlock.GetRule_row_pattern_measure_definition2());
+            }
+            PopCurrentIndent();
+            NewLine();
+        }
+
+        if (msg.HasBlock6()) {
+            Visit(msg.GetBlock6());
+            NewLine();
+        }
+
+        const auto& common = msg.GetRule_row_pattern_common_syntax7();
+        if (common.HasBlock1()) {
+            Visit(common.GetBlock1());
+            NewLine();
+        }
+
+        if (common.HasBlock2()) {
+            Visit(common.GetBlock2());
+        }
+
+        VisitToken(common.GetToken3());
+        VisitToken(common.GetToken4());
+        Visit(common.GetRule_row_pattern5());
+        VisitToken(common.GetToken6());
+        NewLine();
+
+        if (common.HasBlock7()) {
+            const auto& block = common.GetBlock7().GetRule_row_pattern_subset_clause1();
+            VisitToken(block.GetToken1());
+            NewLine();
+            PushCurrentIndent();
+            const auto& subsetList = block.GetRule_row_pattern_subset_list2();
+            Visit(subsetList.GetRule_row_pattern_subset_item1());
+            for (const auto& subsetItemBlock : subsetList.GetBlock2()) {
+                VisitToken(subsetItemBlock.GetToken1());
+                NewLine();
+                Visit(subsetItemBlock.GetRule_row_pattern_subset_item2());
+            }
+            PopCurrentIndent();
+            NewLine();
+        }
+
+        VisitToken(common.GetToken8());
+        NewLine();
+        PushCurrentIndent();
+        const auto& definitionList = common.GetRule_row_pattern_definition_list9();
+        Visit(definitionList.GetRule_row_pattern_definition1());
+        for (const auto& definitionBlock : definitionList.GetBlock2()) {
+            VisitToken(definitionBlock.GetToken1());
+            NewLine();
+            Visit(definitionBlock.GetRule_row_pattern_definition2());
+        }
+        PopCurrentIndent();
+        NewLine();
+
+        PopCurrentIndent();
+        NewLine();
+
+        VisitToken(msg.GetToken8());
+    }
+
     void VisitJoinSource(const TRule_join_source& msg) {
         if (msg.HasBlock1()) {
             Visit(msg.GetBlock1());
@@ -2074,10 +2163,7 @@ private:
     void VisitNamedSingleSource(const TRule_named_single_source& msg) {
         Visit(msg.GetRule_single_source1());
         if (msg.HasBlock2()) {
-            const auto& matchRecognize = msg.GetBlock2();
-            //TODO handle MATCH_RECOGNIZE block
-            //https://st.yandex-team.ru/YQL-16186
-            Visit(matchRecognize);
+            Visit(msg.GetBlock2());
         }
         if (msg.HasBlock3()) {
             const auto& block3 = msg.GetBlock3();
@@ -2872,6 +2958,7 @@ TStaticData::TStaticData()
         {TRule_reduce_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitReduceCore)},
         {TRule_sort_specification_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSortSpecificationList)},
         {TRule_select_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectCore)},
+        {TRule_row_pattern_recognition_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRowPatternRecognitionClause)},
         {TRule_join_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinSource)},
         {TRule_join_constraint::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinConstraint)},
         {TRule_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSingleSource)},

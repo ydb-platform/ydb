@@ -1378,8 +1378,13 @@ USE plato;
 SELECT
     *
 FROM Input MATCH_RECOGNIZE(
-    PATTERN ( A )
-    DEFINE A as A
+    PARTITION BY a, b, c
+    ORDER BY ts
+    MEASURES LAST(B1.ts) AS b1, LAST(B3.ts) AS b3
+    ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW INITIAL
+    PATTERN ( A B2 + B3 )
+    SUBSET U = (C, D), W = (Q, P)
+    DEFINE A as A, B as B
 );
 )",
 R"(PRAGMA FeatureR010 = "prototype";
@@ -1389,7 +1394,26 @@ USE plato;
 SELECT
     *
 FROM
-    Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A)
+    Input MATCH_RECOGNIZE (
+        PARTITION BY
+            a,
+            b,
+            c
+        ORDER BY
+            ts
+        MEASURES
+            LAST(B1.ts) AS b1,
+            LAST(B3.ts) AS b3
+        ONE ROW PER MATCH
+        AFTER MATCH SKIP TO NEXT ROW
+        INITIAL PATTERN (A B2 + B3)
+        SUBSET
+            U = (C, D),
+            W = (Q, P)
+        DEFINE
+            A AS A,
+            B AS B
+    )
 ;
 )"
     }};

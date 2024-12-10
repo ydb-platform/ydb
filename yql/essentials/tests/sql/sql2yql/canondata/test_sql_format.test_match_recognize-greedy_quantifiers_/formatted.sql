@@ -18,7 +18,17 @@ $input =
 SELECT
     *
 FROM
-    $input MATCH_RECOGNIZE (ORDER BY
-        CAST(time AS Timestamp)
-    MEASURES FIRST(A.id) AS a_id, LAST(B_OR_C.id) AS bc_id, LAST(C.id) AS c_id PATTERN (A B_OR_C * C) DEFINE A AS A.name == 'A', B_OR_C AS (B_OR_C.name == 'B' OR B_OR_C.name == 'C'), C AS C.name == 'C')
+    $input MATCH_RECOGNIZE (
+        ORDER BY
+            CAST(time AS Timestamp)
+        MEASURES
+            FIRST(A.id) AS a_id,
+            LAST(B_OR_C.id) AS bc_id,
+            LAST(C.id) AS c_id
+        PATTERN (A B_OR_C * C)
+        DEFINE
+            A AS A.name == 'A',
+            B_OR_C AS (B_OR_C.name == 'B' OR B_OR_C.name == 'C'),
+            C AS C.name == 'C'
+    )
 ;

@@ -4,14 +4,14 @@
 val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
     group = "build"
     description = "Code generation by run java program"
-{%-        if run.classpath|length %}
-{%             for classpath in run.classpath -%}
+{%-        set classpaths = run.classpath|reject('eq', '@.cplst') -%}
+{%-        if classpaths|length -%}
+{%             for classpath in classpaths -%}
 {%-                set rel_file_classpath = classpath|replace('@', '')|replace(export_root, '')|replace(arcadia_root, '') %}
+
     val classpaths = "$project_root/" + File("$project_root{{ rel_file_classpath }}").readText().trim().replace(":", ":$project_root/")
     classpath = files(classpaths.split(":"))
 {%-            endfor -%}
-{%         else %}
-    classpath = sourceSets.main.get().runtimeClasspath
 {%-        endif %}
 
     mainClass.set("{{ run.args[0] }}")

@@ -857,15 +857,17 @@ void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActor
         TUserInfo& userInfo(pr.second);
         NKikimrPQ::TClientInfo& clientInfo = *result.AddClientInfo();
         clientInfo.SetClientId(pr.first);
+
         auto& write = *clientInfo.MutableWritePosition();
         write.SetOffset(userInfo.Offset);
         write.SetWriteTimestamp((userInfo.GetWriteTimestamp(EndOffset) ? userInfo.GetWriteTimestamp(EndOffset) : GetWriteTimeEstimate(userInfo.Offset)).MilliSeconds());
         write.SetCreateTimestamp(userInfo.GetCreateTimestamp(EndOffset).MilliSeconds());
+        write.SetSize(GetSizeLag(userInfo.Offset));
+
         auto& read = *clientInfo.MutableReadPosition();
         read.SetOffset(userInfo.GetReadOffset());
         read.SetWriteTimestamp((userInfo.GetReadWriteTimestamp(EndOffset) ? userInfo.GetReadWriteTimestamp(EndOffset) : GetWriteTimeEstimate(userInfo.GetReadOffset())).MilliSeconds());
         read.SetCreateTimestamp(userInfo.GetReadCreateTimestamp(EndOffset).MilliSeconds());
-        write.SetSize(GetSizeLag(userInfo.Offset));
         read.SetSize(GetSizeLag(userInfo.GetReadOffset()));
     }
     ctx.Send(ev->Get()->Sender, response.Release(), 0, ev->Cookie);
@@ -1456,7 +1458,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_TIME].Set(totalLag);
         }
 
-        ts = readTimestamp.MilliSeconds();
+        ts = ((IsActive() || off < (i64)EndOffset) ? readTimestamp : now).MilliSeconds();
         if (userInfo.LabeledCounters->GetCounters()[METRIC_LAST_READ_TIME].Get() != ts) {
             haveChanges = true;
             userInfo.LabeledCounters->GetCounters()[METRIC_LAST_READ_TIME].Set(ts);

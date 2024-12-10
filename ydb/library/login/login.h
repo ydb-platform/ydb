@@ -48,8 +48,16 @@ public:
     };
 
     struct TLoginUserResponse : TBasicResponse {
+        enum class EStatus {
+            SUCCESS,
+            INVALID_USER,
+            INVALID_PASSWORD,
+            UNAVAILABLE_KEY
+        };
+
         TString Token;
         TString SanitizedToken; // Token for audit logs
+        EStatus Status = EStatus::SUCCESS;
     };
 
     struct TValidateTokenRequest : TBasicRequest {

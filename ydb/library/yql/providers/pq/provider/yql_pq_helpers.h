@@ -21,4 +21,6 @@ void FillSettingsWithResolvedYdsIds(
     const TPqState::TPtr& state,
     const TDatabaseResolverResponse::TDatabaseDescriptionMap& fullResolvedIds);
 
+NNodes::TMaybeNode<NNodes::TExprBase> FindSetting(TExprNode::TPtr settings, TStringBuf name);
+
 } // namespace NYql

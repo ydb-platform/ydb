@@ -216,6 +216,7 @@ public:
                 .RowSpec(DropUnusedRowItems(pqTopic.RowSpec().Pos(), inputRowType, usedColumnNames, ctx))
                 .Build()
             .Columns(DropUnusedColumns(dqPqTopicSource.Columns(), usedColumnNames, ctx))
+            .RowType(DropUnusedRowItems(dqPqTopicSource.RowType().Pos(), oldRowType, usedColumnNames, ctx))
             .Done()
             .Ptr();
 

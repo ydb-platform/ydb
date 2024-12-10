@@ -107,21 +107,21 @@ public:
 };
 
 template <class TStatus, TStatus StatusOk, TStatus DefaultError>
-class TConclusionStatusIssueImpl : public TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TConclusionStatusIssueImpl<TStatus, StatusOk, DefaultError>> {
+class TYQLConclusionStatusImpl : public TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TYQLConclusionStatusImpl<TStatus, StatusOk, DefaultError>> {
 protected:
-    friend class TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TConclusionStatusIssueImpl<TStatus, StatusOk, DefaultError>>;
+    friend class TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TYQLConclusionStatusImpl<TStatus, StatusOk, DefaultError>>;
 
-    using TBase = TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TConclusionStatusIssueImpl<TStatus, StatusOk, DefaultError>>;
+    using TBase = TConclusionStatusGenericImpl<TStatus, StatusOk, DefaultError, NYql::TIssues, TYQLConclusionStatusImpl<TStatus, StatusOk, DefaultError>>;
     using TBase::TBase;
 
-    TConclusionStatusIssueImpl() = default;
+    TYQLConclusionStatusImpl() = default;
 
-    TConclusionStatusIssueImpl(const TString& errorMessage, TStatus status = DefaultError)
+    TYQLConclusionStatusImpl(const TString& errorMessage, TStatus status = DefaultError)
         : TBase({NYql::TIssue(errorMessage)}, status) {
     }
 
 public:
-    TConclusionStatusIssueImpl& AddParentIssue(NYql::TIssue issue) {
+    TYQLConclusionStatusImpl& AddParentIssue(NYql::TIssue issue) {
         Y_ABORT_UNLESS(!!TBase::ErrorMessage);
         for (const auto& childIssue : *TBase::ErrorMessage) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(childIssue));
@@ -130,18 +130,18 @@ public:
         return *this;
     }
 
-    TConclusionStatusIssueImpl& AddParentIssue(const TString& message) {
+    TYQLConclusionStatusImpl& AddParentIssue(const TString& message) {
         AddParentIssue(NYql::TIssue(message));
         return *this;
     }
 
-    TConclusionStatusIssueImpl& AddIssue(NYql::TIssue issue) {
+    TYQLConclusionStatusImpl& AddIssue(NYql::TIssue issue) {
         Y_ABORT_UNLESS(!!TBase::ErrorMessage);
         TBase::ErrorMessage->AddIssue(std::move(issue));
         return *this;
     }
 
-    TConclusionStatusIssueImpl& AddIssue(const TString& message) {
+    TYQLConclusionStatusImpl& AddIssue(const TString& message) {
         AddIssue(NYql::TIssue(message));
         return *this;
     }

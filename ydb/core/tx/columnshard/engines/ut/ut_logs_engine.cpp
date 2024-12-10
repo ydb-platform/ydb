@@ -443,7 +443,8 @@ private:
     TColumnEngineForLogs& Engine;
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
-        Processor->ApplyResult(std::move(result), Engine);
+        Processor->ApplyResult(
+            NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>::BuildForTest(std::move(result)), Engine);
     }
 
 public:

@@ -17,7 +17,7 @@ SELECT
                 AsAtom("res"),
                 $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN AsTuple($z.value, $z.key)
+                        RETURN AsTuple($z.value, $z.key);
                     }
                 )
             )

@@ -4,7 +4,7 @@ SELECT
         AsList(3, 2, 1),
         AsTuple(),
         ($_x) -> {
-            RETURN AsTuple()
+            RETURN AsTuple();
         }
     )
 ;
@@ -14,7 +14,7 @@ SELECT
         AsList(3, 2, 1),
         AsTuple(TRUE),
         ($x) -> {
-            RETURN $x
+            RETURN $x;
         }
     )
 ;
@@ -24,7 +24,7 @@ SELECT
         AsList(3, 2, 1),
         TRUE,
         ($x) -> {
-            RETURN $x
+            RETURN $x;
         }
     )
 ;
@@ -34,7 +34,7 @@ SELECT
         AsList(3, 2, 1),
         AsTuple(TRUE),
         ($x) -> {
-            RETURN AsTuple($x)
+            RETURN AsTuple($x);
         }
     )
 ;
@@ -44,7 +44,7 @@ SELECT
         AsList(3, 2, 1),
         AsTuple(TRUE, TRUE),
         ($x) -> {
-            RETURN AsTuple($x, $x)
+            RETURN AsTuple($x, $x);
         }
     )
 ;

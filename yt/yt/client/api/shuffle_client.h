@@ -23,6 +23,8 @@ struct TShuffleHandle
 
 DEFINE_REFCOUNTED_TYPE(TShuffleHandle)
 
+void FormatValue(TStringBuilderBase* builder, const TShuffleHandlePtr& shuffleHandle, TStringBuf spec);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TStartShuffleOptions

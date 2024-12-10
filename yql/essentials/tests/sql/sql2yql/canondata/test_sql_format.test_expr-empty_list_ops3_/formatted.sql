@@ -1,7 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 $pred = ($x) -> {
-    RETURN $x > 0
+    RETURN $x > 0;
 };
 
 SELECT
@@ -18,26 +18,26 @@ SELECT
     SetIncludes({1, 2, 3}, []),
     Yql::Fold(
         [], 0, ($x, $y) -> {
-            RETURN $x + $y
+            RETURN $x + $y;
         }
     ),
     Yql::Fold1(
         [], ($x) -> {
-            RETURN $x
+            RETURN $x;
         }, ($x, $y) -> {
-            RETURN $x + $y
+            RETURN $x + $y;
         }
     ),
     Yql::FoldMap(
         [], 0, ($x, $y) -> {
-            RETURN ($x + $y, $y)
+            RETURN ($x + $y, $y);
         }
     ),
     Yql::Fold1Map(
         [], ($x) -> {
-            RETURN ($x, $x)
+            RETURN ($x, $x);
         }, ($x, $y) -> {
-            RETURN ($x + $y, $y)
+            RETURN ($x + $y, $y);
         }
     ),
     Yql::LazyList([]),

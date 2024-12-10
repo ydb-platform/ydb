@@ -8,9 +8,9 @@ $shiftSteps = 1;
 $linear = ($x, $z) -> {
     $v = 10 * $z + $x;
     $shift = ($item) -> {
-        RETURN $item << $shiftSteps
+        RETURN $item << $shiftSteps;
     };
-    RETURN $shift($v)
+    RETURN $shift($v);
 };
 
 --INSERT INTO Output

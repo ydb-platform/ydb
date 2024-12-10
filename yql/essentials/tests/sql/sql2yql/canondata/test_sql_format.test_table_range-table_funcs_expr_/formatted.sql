@@ -30,7 +30,7 @@ SELECT
     count(*)
 FROM
     filter("", ($x) -> {
-        RETURN $x == "Input"
+        RETURN $x == "Input";
     })
 ;
 
@@ -38,7 +38,7 @@ SELECT
     count(*)
 FROM
     filter_strict("", ($x) -> {
-        RETURN $x == "Input"
+        RETURN $x == "Input";
     })
 ;
 

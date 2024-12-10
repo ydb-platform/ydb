@@ -42,6 +42,7 @@
   - cusparse.h
   - cusparseLt.h
   - device_atomic_functions.h
+  - device_launch_parameters.h
   - device_types.h
   - driver_types.h
   - host_defines.h
@@ -49,6 +50,7 @@
   - math_constants.h
   - mma.h
   - npp.h
+  - nppdefs.h
   - nppi.h
   - nv/target
   - nvToolsExt.h

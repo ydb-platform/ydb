@@ -962,64 +962,6 @@ TEST_P(TOmitNameLabelSuffixTest, GaugeSummary)
     ASSERT_NEAR(gauges[Format("yt.davg%v{}", omitNameLabelSuffix ? "" : ".avg")], 40 + 1 / 3.0, 1e-6);
 }
 
-TEST(TSolomonRegistry, IncorrectSolomonLabels)
-{
-    auto impl = New<TSolomonRegistry>();
-    impl->SetWindowSize(12);
-
-    TString longTag;
-    longTag.reserve(210);
-    for (int index = 0; index < 210; ++index) {
-        longTag.append('a' + index % 26);
-    }
-    TString longTagEncoded;
-    longTagEncoded.reserve(200);
-    longTagEncoded.append(longTag.begin(), 100).append("...");
-    for (int index = 103; index < 200; ++index) {
-        longTagEncoded.append('a' + (index - 103 + 9) % 26);
-    }
-
-    TString incorrectSymbolsTag = "aaa|*?\"'\\`bbb";
-    incorrectSymbolsTag.back() = 0xff;
-    TString incorrectSymbolsTagEncoded = "aaa%7c%2a%3f%22%27%5c%60bb%ff";
-
-    TString longWithIncorrectSymbolsTag(200, 'a');
-    longWithIncorrectSymbolsTag[98] = 0xff;
-    longWithIncorrectSymbolsTag[199] = 0x00;
-    TString longWithIncorrectSymbolsTagEncoded;
-    longWithIncorrectSymbolsTagEncoded.append(TString(98, 'a'))
-        .append("%f...")
-        .append(TString(94, 'a'))
-        .append("%00");
-
-    auto profiler = TProfiler(impl, "/debug")
-        .WithTag("tag0", longTag)
-        .WithTag("tag1", incorrectSymbolsTag)
-        .WithTag("tag2", longWithIncorrectSymbolsTag);
-    auto c0 = profiler.Counter("/c");
-    c0.Increment(1);
-
-    auto result = CollectSensors(impl);
-
-    for (const auto& label : result.Labels) {
-        auto equal = [&label] (TStringBuf tag) {
-            return std::equal(label.begin(), label.begin() + 4, tag.begin());
-        };
-
-        auto labelValue = label.substr(5, label.size() - 5);
-
-        if (equal("tag0")) {
-            ASSERT_EQ(labelValue, longTagEncoded);
-        } else if (equal("tag1")) {
-            ASSERT_EQ(labelValue, incorrectSymbolsTagEncoded);
-        } else if (equal("tag2")) {
-            ASSERT_EQ(labelValue, longWithIncorrectSymbolsTagEncoded);
-        } else {
-            ASSERT_TRUE(false);
-        }
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

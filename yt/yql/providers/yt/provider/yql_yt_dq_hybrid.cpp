@@ -83,6 +83,16 @@ private:
             return false;
         }
 
+        if (State_->IsDqTimeout) {
+            PushSkipStat("DqTimeout", nodeName);
+            return false;
+        }
+
+        if (State_->OnlyNativeExecution) {
+            PushSkipStat("OnlyNativeExecution", nodeName);
+            return false;
+        }
+
         if (operation.Output().Size() != 1U) {
             PushSkipStat("MultipleOutputs", nodeName);
             return false;

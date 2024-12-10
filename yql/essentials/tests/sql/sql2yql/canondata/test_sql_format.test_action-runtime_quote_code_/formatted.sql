@@ -8,7 +8,7 @@ SELECT
     FormatCode(
         QuoteCode(
             ($x, $y) -> {
-                RETURN $x + $y
+                RETURN $x + $y;
             }
         )
     ),
@@ -17,10 +17,10 @@ SELECT
             RETURN FormatCode(
                 QuoteCode(
                     ($y) -> {
-                        RETURN $x + $y
+                        RETURN $x + $y;
                     }
                 )
-            )
+            );
         }
     )
 ;

@@ -22,6 +22,7 @@ DEFINE SUBQUERY $sub2($sub, $extra) AS
         $foo AS another
     FROM
         $sub() AS a
+    ;
 END DEFINE;
 
 SELECT

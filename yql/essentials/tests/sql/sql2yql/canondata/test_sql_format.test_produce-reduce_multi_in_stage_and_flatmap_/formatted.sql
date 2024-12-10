@@ -20,7 +20,7 @@ $udf = YQL::@@
 $r = (
     REDUCE Input, AS_TABLE(ListMap(
         ListFromRange(0, 10), ($val) -> {
-            RETURN AsStruct(CAST($val AS String) AS key, CAST($val AS String) AS subkey, CAST($val AS String) AS value)
+            RETURN AsStruct(CAST($val AS String) AS key, CAST($val AS String) AS subkey, CAST($val AS String) AS value);
         }
     ))
     ON

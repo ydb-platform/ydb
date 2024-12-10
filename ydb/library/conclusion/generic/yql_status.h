@@ -23,11 +23,11 @@ protected:
 
 public:
     TYQLConclusionStatusImpl& AddParentIssue(NYql::TIssue issue) {
-        Y_ABORT_UNLESS(!!TBase::ErrorMessage);
-        for (const auto& childIssue : *TBase::ErrorMessage) {
+        Y_ABORT_UNLESS(!!TBase::ErrorDescription);
+        for (const auto& childIssue : *TBase::ErrorDescription) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(childIssue));
         }
-        TBase::ErrorMessage = {std::move(issue)};
+        TBase::ErrorDescription = {std::move(issue)};
         return *this;
     }
 
@@ -37,8 +37,8 @@ public:
     }
 
     TYQLConclusionStatusImpl& AddIssue(NYql::TIssue issue) {
-        Y_ABORT_UNLESS(!!TBase::ErrorMessage);
-        TBase::ErrorMessage->AddIssue(std::move(issue));
+        Y_ABORT_UNLESS(!!TBase::ErrorDescription);
+        TBase::ErrorDescription->AddIssue(std::move(issue));
         return *this;
     }
 

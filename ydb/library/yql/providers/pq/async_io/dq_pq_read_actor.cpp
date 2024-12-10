@@ -698,6 +698,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         }
 
         return CreateDqPqRdReadActor(
+            args.TypeEnv,
             std::move(settings),
             args.InputIndex,
             args.StatsLevel,

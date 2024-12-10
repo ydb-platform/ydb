@@ -1809,6 +1809,33 @@ public:
                 NYql::NDqProto::StatusIds::ABORTED,
                 {});
             return;
+        case NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST:
+            CA_LOG_E("Got BAD REQUEST ProposeTransactionResult for PQ."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
+            ReplyErrorAndDie(
+                TStringBuilder() << "Bad request proposal status for PQ. ",
+                NYql::NDqProto::StatusIds::BAD_REQUEST,
+                {});
+            return;
+        case NKikimrPQ::TEvProposeTransactionResult::OVERLOADED:
+            CA_LOG_E("Got OVERLOADED ProposeTransactionResult for PQ."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
+            ReplyErrorAndDie(
+                TStringBuilder() << "Overloaded proposal status for PQ. ",
+                NYql::NDqProto::StatusIds::OVERLOADED,
+                {});
+            return;
+        case NKikimrPQ::TEvProposeTransactionResult::CANCELLED:
+            CA_LOG_E("Got CANCELLED ProposeTransactionResult for PQ."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
+            ReplyErrorAndDie(
+                TStringBuilder() << "Cancelled proposal status for PQ. ",
+                NYql::NDqProto::StatusIds::CANCELLED,
+                {});
+            return;
         default:
             CA_LOG_E("Got undefined ProposeTransactionResult for PQ."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","

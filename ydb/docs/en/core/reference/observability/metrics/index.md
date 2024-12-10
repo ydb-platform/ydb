@@ -41,7 +41,7 @@ Labels
 `grpc.topic.stream_read.commits`
 `RATE`, pieces
 |
-The number of the `Ydb::TopicService::StreamRead` method commits.
+The number of commits (reading confirmations) after processing messages that were read by the `Ydb::TopicService::StreamRead` method.
 
 Labels:
 
@@ -153,7 +153,7 @@ Labels:
 `grpc.topic.stream_read.partition_session.count`
 `RATE`, pieces
 |
-The number of partition sessions.
+The number of active partition sessions.
 
 Labels:
 
@@ -965,4 +965,3 @@ The size of the execution queue for the requests that await processing.
 The number of requests in the execution queue. This metric works only for the pools with the enabled `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` option.
 ||
 |#
-

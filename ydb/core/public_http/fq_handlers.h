@@ -281,14 +281,7 @@ public:
             .SetMapAsObject(true);
     }
 
-    static void SegmentationFaultHandler(int) {
-        Cerr << "segmentation fault call stack:" << Endl;
-        FormatBackTrace(&Cerr);
-        abort();
-    }
-
     void Bootstrap(const TActorContext& ctx) {
-        signal(SIGSEGV, &SegmentationFaultHandler);
         Bootstrap_wrapper(ctx);
     }
 

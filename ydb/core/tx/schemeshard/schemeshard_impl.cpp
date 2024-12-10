@@ -13,7 +13,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/statistics/events.h>
-#include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/statistics/service/service.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
@@ -7311,6 +7311,10 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContex
 }
 
 void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext&) {
+    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+        "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+        << ", at schemeshard: " << TabletID());
+
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
     std::unique_ptr<TNavigate> request(ev->Get()->Request.Release());
     if (request->ResultSet.size() != 1) {
@@ -7323,20 +7327,27 @@ void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 
     if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
         StatisticsAggregatorId = TTabletId(entry.DomainInfo->Params.GetStatisticsAggregator());
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, StatisticsAggregatorId=" << StatisticsAggregatorId
+            << ", at schemeshard: " << TabletID());
         ConnectToSA();
     }
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr&, const TActorContext& ctx) {
-    SendBaseStatsToSA();
-    auto seconds = SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds;
-    ctx.Schedule(TDuration::Seconds(SendStatsIntervalMinSeconds + RandomNumber<ui64>(seconds)),
-        new TEvPrivate::TEvSendBaseStatsToSA());
+    TDuration delta = SendBaseStatsToSA();
+    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+        "Schedule next SendBaseStatsToSA in " << delta
+        << ", at schemeshard: " << TabletID());
+    ctx.Schedule(delta, new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
 void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
     ResolveSA();
-    ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvSendBaseStatsToSA());
+    // since columnshard statistics is now sent once in a minute,
+    // we expect that in most cases we will gather full stats
+    // before sending them to StatisticsAggregator
+    ctx.Schedule(TDuration::Seconds(120), new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
 void TSchemeShard::ResolveSA() {
@@ -7355,12 +7366,21 @@ void TSchemeShard::ResolveSA() {
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
     } else {
         StatisticsAggregatorId = subDomainInfo->GetTenantStatisticsAggregatorID();
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "ResolveSA(), StatisticsAggregatorId=" << StatisticsAggregatorId
+            << ", at schemeshard: " << TabletID());         
         ConnectToSA();
     }
 }
 
 void TSchemeShard::ConnectToSA() {
-    if (!EnableStatistics || !StatisticsAggregatorId) {
+    if (!EnableStatistics)
+        return;
+    
+    if (!StatisticsAggregatorId) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "ConnectToSA(), no StatisticsAggregatorId"
+            << ", at schemeshard: " << TabletID());        
         return;
     }
     auto policy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -7375,49 +7395,95 @@ void TSchemeShard::ConnectToSA() {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
         "ConnectToSA()"
         << ", pipe client id: " << SAPipeClientId
-        << ", at schemeshard: " << TabletID());
+        << ", at schemeshard: " << TabletID()
+        << ", StatisticsAggregatorId: " << StatisticsAggregatorId
+        << ", at schemeshard: " << TabletID()
+    );
 }
 
-void TSchemeShard::SendBaseStatsToSA() {
+TDuration TSchemeShard::SendBaseStatsToSA() {
     if (!EnableStatistics) {
-        return;
+        return TDuration::Seconds(30);
     }
 
     if (!SAPipeClientId) {
         ResolveSA();
         if (!StatisticsAggregatorId) {
-            return;
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "SendBaseStatsToSA(), no StatisticsAggregatorId"
+                << ", at schemeshard: " << TabletID());
+            return TDuration::Seconds(30);
+        } else {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "SendBaseStatsToSA(), StatisticsAggregatorId=" << StatisticsAggregatorId
+                << ", at schemeshard: " << TabletID());
         }
     }
 
     int count = 0;
+    bool areAllStatsFull = true;
 
     NKikimrStat::TSchemeShardStats record;
     for (const auto& [pathId, tableInfo] : Tables) {
-        const auto& aggregated = tableInfo->GetStats().Aggregated;
+        const auto& stats = tableInfo->GetStats();
+        const auto& aggregated = stats.Aggregated;
+        bool areStatsFull = stats.AreStatsFull();
+
         auto* entry = record.AddEntries();
         auto* entryPathId = entry->MutablePathId();
         entryPathId->SetOwnerId(pathId.OwnerId);
         entryPathId->SetLocalId(pathId.LocalPathId);
-        entry->SetRowCount(aggregated.RowCount);
-        entry->SetBytesSize(aggregated.DataSize);
-        ++count;
-    }
-    auto columnTablesPathIds = ColumnTables.GetAllPathIds();
-    for (const auto& pathId : columnTablesPathIds) {
-        const auto& tableInfo = ColumnTables.GetVerified(pathId);
-        const auto& aggregated = tableInfo->Stats.Aggregated;
-        auto* entry = record.AddEntries();
-        auto* entryPathId = entry->MutablePathId();
-        entryPathId->SetOwnerId(pathId.OwnerId);
-        entryPathId->SetLocalId(pathId.LocalPathId);
-        entry->SetRowCount(aggregated.RowCount);
-        entry->SetBytesSize(aggregated.DataSize);
+        entry->SetRowCount(areStatsFull ? aggregated.RowCount : 0);
+        entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
+        entry->SetIsColumnTable(false);
+        entry->SetAreStatsFull(areStatsFull);
+        areAllStatsFull = areAllStatsFull && areStatsFull;
+
         ++count;
     }
 
+    auto columnTablesPathIds = ColumnTables.GetAllPathIds();
+    for (const auto& pathId : columnTablesPathIds) {
+        const auto& tableInfo = ColumnTables.GetVerified(pathId);
+        const auto& stats = tableInfo->GetStats();
+        const TTableAggregatedStats* aggregatedStats = nullptr;
+
+        // stats are stored differently for standalone and non-standalone column tables
+        if (tableInfo->IsStandalone()) {
+            aggregatedStats = &stats;
+        } else {
+            auto it = stats.TableStats.find(pathId);
+            if (it == stats.TableStats.end()) {
+                continue;
+            }
+            aggregatedStats = &it->second;
+        }
+        const auto& aggregated = aggregatedStats->Aggregated;
+        bool areStatsFull = aggregatedStats->AreStatsFull();
+
+        auto* entry = record.AddEntries();
+        auto* entryPathId = entry->MutablePathId();
+        entryPathId->SetOwnerId(pathId.OwnerId);
+        entryPathId->SetLocalId(pathId.LocalPathId);
+        entry->SetRowCount(areStatsFull ? aggregated.RowCount : 0);
+        entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
+        entry->SetIsColumnTable(true);
+        entry->SetAreStatsFull(areStatsFull);
+        areAllStatsFull = areAllStatsFull && areStatsFull;
+
+        ++count;
+    }
+
+    if (!count) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "SendBaseStatsToSA() No tables to send"
+            << ", at schemeshard: " << TabletID());
+        return TDuration::Seconds(30);
+    }
+
+    record.SetAreAllStatsFull(areAllStatsFull);
+
     TString stats;
-    stats.clear();
     Y_PROTOBUF_SUPPRESS_NODISCARD record.SerializeToString(&stats);
 
     auto event = std::make_unique<NStat::TEvStatistics::TEvSchemeShardStats>();
@@ -7430,6 +7496,9 @@ void TSchemeShard::SendBaseStatsToSA() {
         "SendBaseStatsToSA()"
         << ", path count: " << count
         << ", at schemeshard: " << TabletID());
+
+    return TDuration::Seconds(SendStatsIntervalMinSeconds 
+        + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds));   
 }
 
 } // namespace NSchemeShard

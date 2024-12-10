@@ -8,6 +8,7 @@ ydb/core/external_sources *
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
+ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
@@ -17,6 +18,7 @@ ydb/core/kqp/ut/tx KqpSnapshotRead.ReadOnlyTxWithIndexCommitsOnConcurrentWrite+w
 ydb/core/kqp/ut/tx KqpSinkTx.InvalidateOnError
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
+ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpReplace+HasSecondaryIndex
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
@@ -26,9 +28,9 @@ ydb/core/kqp/ut/scheme [15/50]*
 ydb/core/kqp/ut/scheme [44/50]*
 ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
 ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
+ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpUpdate
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
-ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpUpdate
 ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpReplace+HasSecondaryIndex
 ydb/core/persqueue/ut [37/40] chunk chunk
 ydb/core/persqueue/ut [38/40] chunk chunk

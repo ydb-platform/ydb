@@ -74,7 +74,7 @@ TIntrusivePtr<IKqpGateway> GetIcGateway(Tests::TServer& server) {
     counters->TxProxyMon = new NTxProxy::TTxProxyMon(server.GetRuntime()->GetAppData(0).Counters);
 
     std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TestCluster, server.GetRuntime()->GetAnyNodeActorSystem(),TIntrusivePtr<NYql::TKikimrConfiguration>(nullptr), false);
-    return CreateKikimrIcGateway(TestCluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
+    return CreateKikimrIcGateway(TestCluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, "/Root", "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
         server.GetRuntime()->GetNodeId(0), counters, server.GetSettings().AppConfig->GetQueryServiceConfig());
 }
 
@@ -232,7 +232,7 @@ void TestCreateResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGat
         {"concurrent_query_limit", "10"},
         {"queue_size", "100"}
     });
-    const auto& resourcePool = TestCreateObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.resource_pools/" << poolId);
+    const auto& resourcePool = TestCreateObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.metadata/workload_manager/pools/" << poolId);
 
     UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
     UNIT_ASSERT(resourcePool.ResourcePoolInfo);
@@ -249,7 +249,7 @@ void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGate
     }, {
         "queue_size"
     });
-    const auto& resourcePool = TestAlterObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.resource_pools/" << poolId);
+    const auto& resourcePool = TestAlterObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.metadata/workload_manager/pools/" << poolId);
 
     UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
     UNIT_ASSERT(resourcePool.ResourcePoolInfo);
@@ -262,7 +262,7 @@ void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGate
 
 void TestDropResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
     TDropObjectSettings settings("RESOURCE_POOL", poolId, {});
-    TestDropObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.resource_pools/" << poolId);
+    TestDropObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.metadata/workload_manager/pools/" << poolId);
 }
 
 TKikimrRunner GetKikimrRunnerWithResourcePools() {

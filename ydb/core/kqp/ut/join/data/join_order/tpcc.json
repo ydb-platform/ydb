@@ -1,0 +1,27 @@
+{
+  "op_name":"InnerJoin (MapJoin)",
+  "args":
+    [
+      {
+        "op_name":"TablePointLookup",
+        "args":
+          [
+            {
+              "op_name":"Filter",
+              "args":
+                [
+                  {
+                    "op_name":"TableRangeScan",
+                    "table":"test\/tpcc\/order_line"
+                  }
+                ]
+            }
+          ]
+      },
+      {
+        "op_name":"TableRangeScan",
+        "table":"test\/tpcc\/order_line"
+      }
+    ]
+}
+

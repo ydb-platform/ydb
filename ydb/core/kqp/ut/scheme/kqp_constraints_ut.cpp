@@ -676,6 +676,118 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     }
 
+    Y_UNIT_TEST(IndexAutoChooseAndNonReadyIndex) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
+        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+        auto querySession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/IndexChooseAndNonReadyIndex` (
+                    Key Uint32 NOT NULL,
+                    Value String  NOT NULL,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = kikimr.RunCall([&]{ return session.ExecuteSchemeQuery(query).GetValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+        auto fQuery = [&](TString query) -> TString {
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.KeepInQueryCache(true);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result = kikimr.RunCall([&] {
+                return querySession
+                    .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
+                                      execSettings)
+                    .ExtractValueSync(); } );
+
+            if (result.GetStatus() == EStatus::SUCCESS) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                           result.GetIssues().ToString());
+                if (result.GetResultSets().size() > 0)
+                    return NYdb::FormatResultSetYson(result.GetResultSet(0));
+                return "";
+            } else {
+                return TStringBuilder() << result.GetStatus() << ": " << result.GetIssues().ToString();
+            }
+        };
+
+        fQuery(R"(
+            UPSERT INTO `/Root/IndexChooseAndNonReadyIndex` (Key, Value) VALUES (1, "Old");
+        )");
+
+        auto fCompareTable = [&](TString expected) {
+            TString query = R"(
+                SELECT * FROM `/Root/IndexChooseAndNonReadyIndex` WHERE Value = "Old";
+            )";
+            CompareYson(expected, fQuery(query));
+        };
+
+        fCompareTable(R"(
+            [
+                [1u;"Old"]
+            ]
+        )");
+
+        auto alterQuery = R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/IndexChooseAndNonReadyIndex` ADD INDEX Index GLOBAL ON (Value);
+        )";
+
+        bool enabledCapture = true;
+        TVector<TAutoPtr<IEventHandle>> delayedUpsertRows;
+        auto grab = [&delayedUpsertRows, &enabledCapture](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (enabledCapture && ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvUploadRowsRequest::EventType) {
+                delayedUpsertRows.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&delayedUpsertRows](IEventHandle&) {
+            return delayedUpsertRows.size() > 0;
+        });
+
+        runtime.SetObserverFunc(grab);
+
+        auto alterFuture = kikimr.RunInThreadPool([&] { return session.ExecuteSchemeQuery(alterQuery).GetValueSync(); });
+
+        runtime.DispatchEvents(opts);
+        Y_VERIFY_S(delayedUpsertRows.size() > 0, "no upload rows requests");
+
+        fCompareTable(R"(
+            [
+                [1u;"Old"]
+            ]
+        )");
+
+        enabledCapture = false;
+        for (const auto& ev: delayedUpsertRows) {
+            runtime.Send(ev);
+        }
+
+        auto result = runtime.WaitFuture(alterFuture);
+        fCompareTable(R"(
+            [
+                [1u;"Old"]
+            ]
+        )");
+
+    }
+
     Y_UNIT_TEST(AddNonColumnDoesnotReturnInternalError) {
 
         NKikimrConfig::TAppConfig appConfig;

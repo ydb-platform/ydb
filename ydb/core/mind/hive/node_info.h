@@ -231,7 +231,7 @@ public:
         }
     }
 
-    bool CanBeDeleted() const;
+    bool CanBeDeleted(TInstant now) const;
     void RegisterInDomains();
     void DeregisterInDomains();
     void Ping();

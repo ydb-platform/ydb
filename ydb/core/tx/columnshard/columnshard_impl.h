@@ -89,6 +89,8 @@ class TGeneralCompactColumnEngineChanges;
 
 namespace NKikimr::NColumnShard {
 
+class TEvWriteCommitPrimaryTransactionOperator;
+class TEvWriteCommitSecondaryTransactionOperator;
 class TTxFinishAsyncTransaction;
 class TTxInsertTableCleanup;
 class TTxRemoveSharedBlobs;
@@ -138,6 +140,8 @@ class TColumnShard
     : public TActor<TColumnShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
+    friend class TEvWriteCommitSecondaryTransactionOperator;
+    friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInsertTableCleanup;
     friend class TTxInit;
     friend class TTxInitSchema;
@@ -230,6 +234,7 @@ class TColumnShard
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
+    void Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const TActorContext& ctx);
     void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&);
@@ -383,6 +388,7 @@ protected:
             HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
             HFunc(TEvPrivate::TEvTieringModified, Handle);
 
+            HFunc(NStat::TEvStatistics::TEvAnalyzeTable, Handle);
             HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
 
             HFunc(NActors::TEvents::TEvUndelivered, Handle);
@@ -537,6 +543,10 @@ private:
 
 public:
     ui64 TabletTxCounter = 0;
+
+    const TTablesManager& GetTablesManager() const {
+        return TablesManager;
+    }
 
     bool HasLongTxWrites(const TInsertWriteId insertWriteId) const {
         return LongTxWrites.contains(insertWriteId);

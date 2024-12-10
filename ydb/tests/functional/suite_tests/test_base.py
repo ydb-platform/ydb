@@ -344,6 +344,16 @@ class BaseSuiteRunner(object):
     def pretty_json(j):
         return json.dumps(j, indent=4, sort_keys=True)
 
+    def remove_optimizer_estimates(self, query_plan):
+        if 'Plans' in query_plan:
+            for p in query_plan['Plans']:
+                self.remove_optimizer_estimates(p)
+        if 'Operators' in query_plan:
+            for op in query_plan['Operators']:
+                for key in ['A-Cpu', 'A-Rows', 'E-Cost', 'E-Rows', 'E-Size']:
+                    if key in op:
+                        del op[key]
+
     def assert_statement_query(self, statement):
         def get_actual_and_expected():
             query, expected = self.get_query_and_output(statement.text)
@@ -356,6 +366,8 @@ class BaseSuiteRunner(object):
             query_plan = json.loads(self.explain(statement.text))
             if 'SimplifiedPlan' in query_plan:
                 del query_plan['SimplifiedPlan']
+            if 'Plan' in query_plan:
+                self.remove_optimizer_estimates(query_plan['Plan'])
             self.files[query_name + '.plan'] = write_canonical_response(
                 query_plan,
                 query_name + '.plan',

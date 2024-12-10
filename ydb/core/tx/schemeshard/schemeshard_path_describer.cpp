@@ -41,6 +41,7 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetRangeReadRows(tableStats.RangeReadRows);
 
     stats->SetPartCount(tableStats.PartCount);
+    stats->SetHasSchemaChanges(tableStats.HasSchemaChanges);
 
     auto* storagePoolsStats = stats->MutableStoragePools()->MutablePoolsUsage();
     for (const auto& [poolKind, stats] : tableStats.StoragePoolsStats) {

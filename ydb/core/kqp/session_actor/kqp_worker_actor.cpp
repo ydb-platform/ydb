@@ -182,7 +182,7 @@ public:
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
             Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr);
-        Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, std::move(loader),
+        Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, QueryState->RequestEv->GetDatabaseId(), std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
@@ -333,11 +333,7 @@ public:
         if (CleanupState->Final) {
             ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, "Session is being closed");
         } else {
-            auto busyStatus = Settings.TableService.GetUseSessionBusyStatus()
-                ? Ydb::StatusIds::SESSION_BUSY
-                : Ydb::StatusIds::PRECONDITION_FAILED;
-
-            ReplyProcessError(ev->Sender, proxyRequestId, busyStatus, "Pending previous query completion");
+            ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::SESSION_BUSY, "Pending previous query completion");
         }
     }
 
@@ -894,11 +890,7 @@ private:
             return;
         }
 
-        auto busyStatus = Settings.TableService.GetUseSessionBusyStatus()
-            ? Ydb::StatusIds::SESSION_BUSY
-            : Ydb::StatusIds::PRECONDITION_FAILED;
-
-        ReplyProcessError(ev->Sender, proxyRequestId, busyStatus,
+        ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::SESSION_BUSY,
             "Pending previous query completion");
     }
 

@@ -288,7 +288,7 @@ namespace NBalancing {
             CreateQueuesForVDisks(*QueueActorMapPtr, SelfId(), GInfo, Ctx->VCtx,
                     GInfo->GetVDisks(), Ctx->MonGroup.GetGroup(),
                     queueClientId, NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead,
-                    "DisksBalancing", interconnectChannel);
+                    "DisksBalancing", interconnectChannel, false);
         }
 
         void Handle(NActors::TEvents::TEvUndelivered::TPtr ev) {

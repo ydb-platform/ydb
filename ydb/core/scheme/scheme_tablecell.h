@@ -555,9 +555,10 @@ public:
         return Cells;
     }
 
-    explicit operator bool() const {
+    explicit operator bool() const
+    {
         return !Cells.empty();
-    }
+    }    
 
     // read headers, assuming the buf is correct and append additional cells at the end
     static bool UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec);

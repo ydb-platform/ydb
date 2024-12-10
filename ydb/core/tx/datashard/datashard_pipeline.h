@@ -85,6 +85,7 @@ public:
     TPipeline(TDataShard * self);
     ~TPipeline();
 
+    void Reset();
     bool Load(NIceDb::TNiceDb& db);
     void UpdateConfig(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TPipelineConfig& cfg);
 
@@ -485,6 +486,11 @@ private:
                     << " while TxCounter has active references, possible Add/Remove mismatch");
                 ItemsSet.erase(it);
             }
+        }
+
+        void Reset() {
+            TxIdMap.clear();
+            ItemsSet.clear();
         }
 
         inline bool HasOpsBelow(TRowVersion upperBound) const {

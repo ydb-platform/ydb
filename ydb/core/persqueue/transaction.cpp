@@ -337,6 +337,22 @@ bool TDistributedTransaction::HaveAllRecipientsReceive() const
 void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
                                           EState state)
 {
+    auto tx = Serialize(state);
+    PQ_LOG_D("save tx " << tx.ShortDebugString());
+
+    TString value;
+    Y_ABORT_UNLESS(tx.SerializeToString(&value));
+
+    auto command = request.AddCmdWrite();
+    command->SetKey(GetKey());
+    command->SetValue(value);
+}
+
+NKikimrPQ::TTransaction TDistributedTransaction::Serialize() {
+    return Serialize(State);
+}
+
+NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
     NKikimrPQ::TTransaction tx;
 
     tx.SetKind(Kind);
@@ -374,15 +390,9 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
     Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
 
-    PQ_LOG_D("save tx " << tx.ShortDebugString());
-
-    TString value;
-    Y_ABORT_UNLESS(tx.SerializeToString(&value));
-
-    auto command = request.AddCmdWrite();
-    command->SetKey(GetKey());
-    command->SetValue(value);
+    return tx;
 }
+
 
 void TDistributedTransaction::AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx)
 {

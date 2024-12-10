@@ -2685,6 +2685,16 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         return;
     }
 
+    if (State == TShardState::PreOffline ||
+        State == TShardState::Offline)
+    {
+        replyWithError(
+            Ydb::StatusIds::NOT_FOUND,
+            TStringBuilder() << "Shard " << TabletID() << " finished splitting/merging"
+                << " (node# " << SelfId().NodeId() << " state# " << DatashardStateName(State) << ")");
+        return;
+    }
+
     if (!IsStateNewReadAllowed()) {
         replyWithError(
             Ydb::StatusIds::OVERLOADED,

@@ -542,65 +542,75 @@ private:
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        NodesInfoResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (NodesInfoResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvNodeStateResponse::TPtr& ev) {
-        NodeStateResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (NodeStateResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
-        ListTenantsResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (ListTenantsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
-        PDisksResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (PDisksResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetStorageStatsResponse::TPtr& ev) {
-        StorageStatsResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (StorageStatsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
-        HiveNodeStatsResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (HiveNodeStatsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        SystemStateResponse[nodeId].Set(std::move(ev));
-        WhiteboardRequestDone();
+        if (SystemStateResponse[nodeId].Set(std::move(ev))) {
+            WhiteboardRequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        TabletStateResponse[nodeId].Set(std::move(ev));
-        WhiteboardRequestDone();
+        if (TabletStateResponse[nodeId].Set(std::move(ev))) {
+            WhiteboardRequestDone();
+        }
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         switch (ev->Get()->Record.Response_case()) {
             case NKikimrViewer::TEvViewerResponse::ResponseCase::kSystemResponse:
-                SystemViewerResponse[nodeId].Set(std::move(ev));
-                NodeBatches.erase(nodeId);
-                WhiteboardRequestDone();
+                if (SystemViewerResponse[nodeId].Set(std::move(ev))) {
+                    NodeBatches.erase(nodeId);
+                    WhiteboardRequestDone();
+                }
                 return;
             case NKikimrViewer::TEvViewerResponse::ResponseCase::kTabletResponse:
-                TabletViewerResponse[nodeId].Set(std::move(ev));
-                NodeBatches.erase(nodeId);
-                WhiteboardRequestDone();
+                if (TabletViewerResponse[nodeId].Set(std::move(ev))) {
+                    NodeBatches.erase(nodeId);
+                    WhiteboardRequestDone();
+                }
                 return;
             default:
                 break;

@@ -139,9 +139,9 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , MaxTxLagMilliseconds(5*60*1000, 0, 30*24*3600*1000ll)
     , CanCancelROWithReadSets(0, 0, 1)
     , PerShardReadSizeLimit(5368709120, 0, 107374182400)
-    , CpuUsageReportThreshlodPercent(60, -1, 146)
+    , CpuUsageReportThresholdPercent(60, -1, 146)
     , CpuUsageReportIntervalSeconds(60, 0, 365*86400)
-    , HighDataSizeReportThreshlodBytes(10ull<<30, -1, Max<i64>())
+    , HighDataSizeReportThresholdBytes(10ull<<30, -1, Max<i64>())
     , HighDataSizeReportIntervalSeconds(60, 0, 365*86400)
     , DataTxProfileLogThresholdMs(0, 0, 86400000)
     , DataTxProfileBufferThresholdMs(0, 0, 86400000)
@@ -305,9 +305,9 @@ void TDataShard::IcbRegister() {
 
         appData->Icb->RegisterSharedControl(CanCancelROWithReadSets, "DataShardControls.CanCancelROWithReadSets");
         appData->Icb->RegisterSharedControl(PerShardReadSizeLimit, "TxLimitControls.PerShardReadSizeLimit");
-        appData->Icb->RegisterSharedControl(CpuUsageReportThreshlodPercent, "DataShardControls.CpuUsageReportThreshlodPercent");
+        appData->Icb->RegisterSharedControl(CpuUsageReportThresholdPercent, "DataShardControls.CpuUsageReportThreshlodPercent");
         appData->Icb->RegisterSharedControl(CpuUsageReportIntervalSeconds, "DataShardControls.CpuUsageReportIntervalSeconds");
-        appData->Icb->RegisterSharedControl(HighDataSizeReportThreshlodBytes, "DataShardControls.HighDataSizeReportThreshlodBytes");
+        appData->Icb->RegisterSharedControl(HighDataSizeReportThresholdBytes, "DataShardControls.HighDataSizeReportThreshlodBytes");
         appData->Icb->RegisterSharedControl(HighDataSizeReportIntervalSeconds, "DataShardControls.HighDataSizeReportIntervalSeconds");
 
         appData->Icb->RegisterSharedControl(BackupReadAheadLo, "DataShardControls.BackupReadAheadLo");

@@ -36,7 +36,8 @@ public:
         , BufferActorId(bufferActorId)
         , ActualSchema(actualSchema)
         , ActualSnapshot(actualSnapshot)
-        , WritingCounters(writingCounters) {
+        , WritingCounters(writingCounters)
+    {
     }
 };
-}   // namespace NKikimr::NOlap
+}  // namespace NKikimr::NOlap

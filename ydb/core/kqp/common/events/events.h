@@ -111,6 +111,18 @@ struct TEvKqp {
     struct TEvScriptRequest : public TEventLocal<TEvScriptRequest, TKqpEvents::EvScriptRequest> {
         TEvScriptRequest() = default;
 
+        const TString& GetDatabase() const {
+            return Record.GetRequest().GetDatabase();
+        }
+
+        const TString& GetDatabaseId() const {
+            return Record.GetRequest().GetDatabaseId();
+        }
+
+        void SetDatabaseId(const TString& databaseId) {
+            Record.MutableRequest()->SetDatabaseId(databaseId);
+        }
+
         mutable NKikimrKqp::TEvQueryRequest Record;
         TDuration ForgetAfter;
         TDuration ResultsTtl;
@@ -163,6 +175,40 @@ struct TEvKqp {
             issues.AddIssue(message);
             return issues;
         }
+    };
+
+    struct TEvUpdateDatabaseInfo : public TEventLocal<TEvUpdateDatabaseInfo, TKqpEvents::EvUpdateDatabaseInfo> {
+        TEvUpdateDatabaseInfo(const TString& database, Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+            : Status(status)
+            , Database(database)
+            , Issues(std::move(issues))
+        {}
+
+        TEvUpdateDatabaseInfo(const TString& database, const TString& databaseId, bool serverless)
+            : Status(Ydb::StatusIds::SUCCESS)
+            , Database(database)
+            , DatabaseId(databaseId)
+            , Serverless(serverless)
+            , Issues({})
+        {}
+
+        Ydb::StatusIds::StatusCode Status;
+        TString Database;
+        TString DatabaseId;
+        bool Serverless = false;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvDelayedRequestError : public TEventLocal<TEvDelayedRequestError, TKqpEvents::EvDelayedRequestError> {
+        TEvDelayedRequestError(THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+            : RequestEvent(std::move(requestEvent))
+            , Status(status)
+            , Issues(std::move(issues))
+        {}
+
+        THolder<IEventHandle> RequestEvent;
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
     };
 };
 

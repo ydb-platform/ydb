@@ -163,6 +163,7 @@ public:
     EBalancerPolicy BalancerPolicy;
     TNodeId FailedNodeId = 0; // last time we tried to start the tablet, we failed on this node
     bool InWaitQueue = false;
+    TInstant BootTime;
 
     TTabletInfo(ETabletRole role, THive& hive);
     TTabletInfo(const TTabletInfo&) = delete;

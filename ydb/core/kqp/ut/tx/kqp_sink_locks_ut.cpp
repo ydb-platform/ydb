@@ -43,12 +43,10 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             )"), TTxControl::Tx(tx1->GetId()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
-            if (!GetIsOlap()) {
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                    [] (const NYql::TIssue& issue) {
-                        return issue.GetMessage().Contains("/Root/Test");
-                    }), result.GetIssues().ToString());
-            }
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
+                [] (const NYql::TIssue& issue) {
+                    return issue.GetMessage().Contains("/Root/Test");
+                }), result.GetIssues().ToString());
 
             result = session2.ExecuteQuery(Q_(R"(
                 SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
@@ -197,12 +195,10 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             )"), TTxControl::Tx(tx1->GetId()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
-            if (!GetIsOlap()) {
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                    [] (const NYql::TIssue& issue) {
-                        return issue.GetMessage().Contains("/Root/Test");
-                    }), result.GetIssues().ToString());
-            }
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
+                [] (const NYql::TIssue& issue) {
+                    return issue.GetMessage().Contains("/Root/Test");
+                }), result.GetIssues().ToString());
 
             result = session1.ExecuteQuery(Q1_(R"(
                 SELECT * FROM Test WHERE Group = 11;
@@ -258,12 +254,10 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             )"), TTxControl::Tx(tx1->GetId()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
-            if (!GetIsOlap()) {
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                    [] (const NYql::TIssue& issue) {
-                        return issue.GetMessage().Contains("/Root/Test");
-                    }), result.GetIssues().ToString());
-            }
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
+                [] (const NYql::TIssue& issue) {
+                    return issue.GetMessage().Contains("/Root/Test");
+                }), result.GetIssues().ToString());
 
             result = session1.ExecuteQuery(Q1_(R"(
                 SELECT * FROM Test WHERE Group = 11;

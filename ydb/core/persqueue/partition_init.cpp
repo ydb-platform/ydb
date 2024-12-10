@@ -28,6 +28,7 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitInfoRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
+    Steps.push_back(MakeHolder<TInitEndWriteTimestampStep>(this));
 
     CurrentStep = Steps.begin();
 }
@@ -311,14 +312,14 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         bool res = meta.ParseFromString(response.GetValue());
         Y_ABORT_UNLESS(res);
 
-        /* Bring back later, when switch to 21-2 will be unable
-           StartOffset = meta.GetStartOffset();
-           EndOffset = meta.GetEndOffset();
-           if (StartOffset == EndOffset) {
-           NewHead.Offset = Head.Offset = EndOffset;
-           }
-           */
+        Partition()->StartOffset = meta.GetStartOffset();
+        Partition()->EndOffset = meta.GetEndOffset();
+        if (Partition()->StartOffset == Partition()->EndOffset) {
+           Partition()->NewHead.Offset = Partition()->Head.Offset = Partition()->EndOffset;
+        }
         Partition()->SubDomainOutOfSpace = meta.GetSubDomainOutOfSpace();
+        Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetEndWriteTimestamp());
+        Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
         if (Partition()->IsSupportive()) {
             const auto& counterData = meta.GetCounterData();
             Partition()->BytesWrittenGrpc.SetSavedValue(counterData.GetBytesWrittenGrpc());
@@ -503,7 +504,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
             if (k.GetPartNo() > 0) ++startOffset;
             head.PartNo = 0;
         } else {
-            Y_ABORT_UNLESS(endOffset <= k.GetOffset(), "%s", pair.GetKey().c_str());
+            Y_ABORT_UNLESS(endOffset <= k.GetOffset(), "%" PRIu64 " <= %" PRIu64 " %s", endOffset, k.GetOffset(), pair.GetKey().c_str());
             if (endOffset < k.GetOffset()) {
                 gapOffsets.push_back(std::make_pair(endOffset, k.GetOffset()));
                 gapSize += k.GetOffset() - endOffset;
@@ -631,7 +632,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
                 Y_ABORT_UNLESS(offset + 1 >= Partition()->StartOffset);
                 Y_ABORT_UNLESS(offset < Partition()->EndOffset);
-                Y_ABORT_UNLESS(size == read.GetValue().size());
+                Y_ABORT_UNLESS(size == read.GetValue().size(), "size=%" PRIu32 " == read.GetValue().size() =%" PRIu64, size, read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
                     head.AddBatch(it.GetBatch());
@@ -666,6 +667,43 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     Done(ctx);
 }
 
+
+//
+// TInitEndWriteTimestampStep
+//
+
+TInitEndWriteTimestampStep::TInitEndWriteTimestampStep(TInitializer* initializer)
+    : TInitializerStep(initializer, "TInitEndWriteTimestampStep", true) {
+}
+
+void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
+    if (Partition()->EndWriteTimestamp != TInstant::Zero() || (Partition()->HeadKeys.empty() && Partition()->DataKeysBody.empty())) {
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
+            "Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
+            << "' partition " << Partition()->Partition
+            << " skiped because already initialized.");
+        return Done(ctx);
+    }
+
+    TDataKey* lastKey = nullptr;
+    if (!Partition()->HeadKeys.empty()) {
+        lastKey = &Partition()->HeadKeys.back();
+    } else if (!Partition()->DataKeysBody.empty()) {
+        lastKey = &Partition()->DataKeysBody.back();
+    }
+
+    if (lastKey) {
+        Partition()->EndWriteTimestamp = lastKey->Timestamp;
+        Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
+    }
+
+     LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
+        "Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
+        << "' partition " << Partition()->Partition
+        << " from keys completed. Value " << Partition()->EndWriteTimestamp);
+
+    return Done(ctx);
+}
 
 //
 // TPartition

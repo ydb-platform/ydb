@@ -123,7 +123,7 @@
 
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/statistics/service/service.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 
 #include <ydb/core/tablet/bootstrapper.h>
@@ -742,15 +742,30 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     actorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint("ic", Sprintf(":%d", port)));
                 };
                 icCommon->UpdateWhiteboard = [whiteboardId](const TWhiteboardSessionStatus& data) {
-                    data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvNodeStateUpdate(
-                        data.Peer, data.Connected,
-                        data.Green ? NKikimrWhiteboard::EFlag::Green :
-                        data.Yellow ? NKikimrWhiteboard::EFlag::Yellow :
-                        data.Orange ? NKikimrWhiteboard::EFlag::Orange :
-                        data.Red ? NKikimrWhiteboard::EFlag::Red : NKikimrWhiteboard::EFlag()));
+                    auto update = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvNodeStateUpdate>();
+                    auto& record = update->Record;
+                    record.SetPeerNodeId(data.PeerNodeId);
+                    record.SetPeerName(data.PeerName);
+                    record.SetConnected(data.Connected);
+                    record.SetConnectTime(data.ConnectTime);
+                    record.SetConnectStatus(static_cast<NKikimrWhiteboard::EFlag>(static_cast<int>(data.ConnectStatus) + 1/*GREY = 0, GREEN = 1 ....*/));
+                    record.SetClockSkewUs(data.ClockSkewUs);
+                    record.SetPingTimeUs(data.PingTimeUs);
+                    record.SetUtilization(data.Utilization);
+                    record.MutableScopeId()->SetX1(data.ScopeId.first);
+                    record.MutableScopeId()->SetX2(data.ScopeId.second);
+                    record.SetBytesWritten(data.BytesWrittenToSocket);
+                    if (data.SessionClosed) {
+                        record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::CLOSED);
+                    } else if (data.SessionPendingConnection) {
+                        record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::PENDING_CONNECTION);
+                    } else if (data.SessionConnected) {
+                        record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::CONNECTED);
+                    }
+                    data.ActorSystem->Send(whiteboardId, update.release());
                     if (data.ReportClockSkew) {
                         data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
-                            data.PeerId, data.ClockSkew));
+                            data.PeerNodeId, data.ClockSkewUs));
                     }
                 };
             }
@@ -1188,6 +1203,8 @@ void TSharedCacheInitializer::InitializeServices(
 
     config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
     config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
+    config->ReplacementPolicy = cfg.GetReplacementPolicy();
+    config->LimitBytes = cfg.GetMemoryLimit();
 
     if (cfg.HasActivePagesReservationPercent()) {
         config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
@@ -1199,10 +1216,6 @@ void TSharedCacheInitializer::InitializeServices(
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");
 
-    config->CacheConfig = new TCacheCacheConfig(cfg.GetMemoryLimit(),
-            sausageGroup->GetCounter("fresh"),
-            sausageGroup->GetCounter("staging"),
-            sausageGroup->GetCounter("warm"));
     config->Counters = new TSharedPageCacheCounters(sausageGroup);
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0),

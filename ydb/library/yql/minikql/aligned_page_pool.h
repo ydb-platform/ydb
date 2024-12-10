@@ -218,8 +218,17 @@ public:
         IsMaximumLimitValueReached = isReached;
     }
 
+    bool GetMaximumLimitValueReached() const noexcept {
+        return IsMaximumLimitValueReached;
+    }
+
     bool IsMemoryYellowZoneEnabled() const noexcept {
         return IsMemoryYellowZoneReached;
+    }
+
+    void ForcefullySetMemoryYellowZone(bool isEnabled) noexcept {
+        IsMemoryYellowZoneReached = isEnabled;
+        IsMemoryYellowZoneForcefullyChanged = true;
     }
 
 protected:
@@ -268,6 +277,10 @@ protected:
 
     // Indicates when memory limit is almost reached.
     bool IsMemoryYellowZoneReached = false;
+    // Indicates that memory yellow zone was enabled or disabled forcefully.
+    // If the value of this variable is true, then the limits specified below will not be applied and
+    // changing the value can only be done manually.
+    bool IsMemoryYellowZoneForcefullyChanged = false;
     // This theshold is used to determine is memory limit is almost reached.
     // If TIncreaseMemoryLimitCallback is set this thresholds should be ignored.
     // The yellow zone turns on when memory consumption reaches 80% and turns off when consumption drops below 50%.

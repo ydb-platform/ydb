@@ -1102,6 +1102,8 @@ inline TTypeBase::TTypeBase(EKind kind, TTypeType* type, bool supportsPresort)
 
 
 inline TType* TRuntimeNode::GetStaticType() const {
+    MKQL_ENSURE(GetNode() != nullptr, "Node is a nullptr value");
+
     if (IsImmediate()) {
         return GetNode()->GetGenericType();
     } else {

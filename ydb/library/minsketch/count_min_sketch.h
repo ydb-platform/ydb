@@ -3,8 +3,6 @@
 #include <util/system/types.h>
 #include <util/generic/strbuf.h>
 
-#include <vector>
-
 namespace NKikimr {
 
 class TCountMinSketch {

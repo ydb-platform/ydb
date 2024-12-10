@@ -38,7 +38,7 @@ public:
 
     void StartPoolFetchRequest() const {
         LOG_D("Start pool fetching");
-        Register(CreatePoolFetcherActor(SelfId(), Event->Get()->Database, Event->Get()->PoolId, Event->Get()->UserToken));
+        Register(CreatePoolFetcherActor(SelfId(), Event->Get()->DatabaseId, Event->Get()->PoolId, Event->Get()->UserToken));
     }
 
     void Handle(TEvPrivate::TEvFetchPoolResponse::TPtr& ev) {
@@ -74,13 +74,13 @@ public:
         diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);
 
         auto token = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
-        Register(CreatePoolCreatorActor(SelfId(), Event->Get()->Database, Event->Get()->PoolId, NResourcePool::TPoolSettings(), token, diffAcl));
+        Register(CreatePoolCreatorActor(SelfId(), Event->Get()->DatabaseId, Event->Get()->PoolId, NResourcePool::TPoolSettings(), token, diffAcl));
     }
 
     void Handle(TEvPrivate::TEvCreatePoolResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             LOG_E("Failed to create default pool " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
-            Reply(ev->Get()->Status, GroupIssues(ev->Get()->Issues, "Failed to create default pool"));
+            Reply(ev->Get()->Status, GroupIssues(ev->Get()->Issues, TStringBuilder() << "Failed to create default pool in database " << Event->Get()->DatabaseId));
             return;
         }
 
@@ -96,7 +96,7 @@ public:
 
 private:
     TString LogPrefix() const {
-        return TStringBuilder() << "[TPoolResolverActor] ActorId: " << SelfId() << ", Database: " << Event->Get()->Database << ", PoolId: " << Event->Get()->PoolId << ", SessionId: " << Event->Get()->SessionId << ", ";
+        return TStringBuilder() << "[TPoolResolverActor] ActorId: " << SelfId() << ", DatabaseId: " << Event->Get()->DatabaseId << ", PoolId: " << Event->Get()->PoolId << ", SessionId: " << Event->Get()->SessionId << ", ";
     }
 
     void Reply(NResourcePool::TPoolSettings poolConfig, TPathId pathId) {
@@ -122,9 +122,9 @@ private:
 
 class TPoolFetcherActor : public TSchemeActorBase<TPoolFetcherActor> {
 public:
-    TPoolFetcherActor(const TActorId& replyActorId, const TString& database, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+    TPoolFetcherActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
         : ReplyActorId(replyActorId)
-        , Database(database)
+        , DatabaseId(databaseId)
         , PoolId(poolId)
         , UserToken(userToken)
     {}
@@ -179,8 +179,8 @@ protected:
     void StartRequest() override {
         LOG_D("Start pool fetching");
         auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
-            {{".resource_pools", PoolId}},
-            Database,
+            {{".metadata/workload_manager/pools", PoolId}},
+            DatabaseIdToDatabase(DatabaseId),
             UserToken
         );
         event->ResultSet[0].Access |= NACLib::SelectRow;
@@ -193,7 +193,7 @@ protected:
     }
 
     TString LogPrefix() const override {
-        return TStringBuilder() << "[TPoolFetcherActor] ActorId: " << SelfId() << ", Database: " << Database << ", PoolId: " << PoolId << ", ";
+        return TStringBuilder() << "[TPoolFetcherActor] ActorId: " << SelfId() << ", DatabaseId: " << DatabaseId << ", PoolId: " << PoolId << ", ";
     }
 
 private:
@@ -221,13 +221,13 @@ private:
         }
 
         Issues.AddIssues(std::move(issues));
-        Send(ReplyActorId, new TEvPrivate::TEvFetchPoolResponse(status, PoolConfig, PathIdFromPathId(PathId), std::move(Issues)));
+        Send(ReplyActorId, new TEvPrivate::TEvFetchPoolResponse(status, DatabaseId, PoolId, PoolConfig, PathIdFromPathId(PathId), std::move(Issues)));
         PassAway();
     }
 
 private:
     const TActorId ReplyActorId;
-    const TString Database;
+    const TString DatabaseId;
     const TString PoolId;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 
@@ -240,9 +240,9 @@ class TPoolCreatorActor : public TSchemeActorBase<TPoolCreatorActor> {
     using TBase = TSchemeActorBase<TPoolCreatorActor>;
 
 public:
-    TPoolCreatorActor(const TActorId& replyActorId, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl)
+    TPoolCreatorActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl)
         : ReplyActorId(replyActorId)
-        , Database(database)
+        , DatabaseId(databaseId)
         , PoolId(poolId)
         , UserToken(userToken)
         , DiffAcl(diffAcl)
@@ -326,7 +326,7 @@ protected:
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
         auto& schemeTx = *event->Record.MutableTransaction()->MutableModifyScheme();
-        schemeTx.SetWorkingDir(JoinPath({Database, ".resource_pools"}));
+        schemeTx.SetWorkingDir(JoinPath({DatabaseIdToDatabase(DatabaseId), ".metadata/workload_manager/pools"}));
         schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
         schemeTx.SetInternal(true);
 
@@ -345,7 +345,7 @@ protected:
     }
 
     TString LogPrefix() const override {
-        return TStringBuilder() << "[TPoolCreatorActor] ActorId: " << SelfId() << ", Database: " << Database << ", PoolId: " << PoolId << ", ";
+        return TStringBuilder() << "[TPoolCreatorActor] ActorId: " << SelfId() << ", DatabaseId: " << DatabaseId << ", PoolId: " << PoolId << ", ";
     }
 
 private:
@@ -390,10 +390,10 @@ private:
 
     void BuildCreatePoolRequest(NKikimrSchemeOp::TResourcePoolDescription& poolDescription) {
         poolDescription.SetName(PoolId);
-        for (auto& [property, value] : NResourcePool::GetPropertiesMap(PoolConfig)) {
+        for (auto& [property, value] : PoolConfig.GetPropertiesMap()) {
             poolDescription.MutableProperties()->MutableProperties()->insert({
                 property,
-                std::visit(NResourcePool::TSettingsExtractor{}, value)
+                std::visit(NResourcePool::TPoolSettings::TExtractor{}, value)
             });
         }
     }
@@ -432,7 +432,7 @@ private:
 
 private:
     const TActorId ReplyActorId;
-    const TString Database;
+    const TString DatabaseId;
     const TString PoolId;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const NACLibProto::TDiffACL DiffAcl;
@@ -445,9 +445,11 @@ private:
 
 class TDatabaseFetcherActor : public TSchemeActorBase<TDatabaseFetcherActor> {
 public:
-    TDatabaseFetcherActor(const TActorId& replyActorId, const TString& database)
+    TDatabaseFetcherActor(const TActorId& replyActorId, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLib::EAccessRights checkAccess)
         : ReplyActorId(replyActorId)
         , Database(database)
+        , UserToken(userToken)
+        , CheckAccess(checkAccess)
     {}
 
     void DoBootstrap() {
@@ -467,10 +469,12 @@ public:
             case EStatus::PathNotTable:
             case EStatus::PathNotPath:
             case EStatus::RedirectLookupError:
-            case EStatus::AccessDenied:
             case EStatus::RootUnknown:
             case EStatus::PathErrorUnknown:
                 Reply(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Database " << Database << " not found or you don't have access permissions");
+                return;
+            case EStatus::AccessDenied:
+                Reply(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for database " << Database);
                 return;
             case EStatus::LookupError:
             case EStatus::TableCreationNotComplete:
@@ -479,7 +483,14 @@ public:
                 }
                 return;
             case EStatus::Ok:
-                Serverless = result.DomainInfo && result.DomainInfo->IsServerless();
+                if (!IsSubDomainPath(result)) {
+                    Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Invalid database path " << Database << ", please check the correctness of the path");
+                    return;
+                }
+                if (result.DomainInfo) {
+                    Serverless = result.DomainInfo->IsServerless();
+                    PathId = result.DomainInfo->DomainKey;
+                }
                 Reply(Ydb::StatusIds::SUCCESS);
                 return;
         }
@@ -496,8 +507,13 @@ public:
 protected:
     void StartRequest() override {
         LOG_D("Start database fetching");
-        auto event = NTableCreator::BuildSchemeCacheNavigateRequest({{}}, Database, nullptr);
+        auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
+            {{}},
+            Database ? Database : AppData()->TenantName,
+            UserToken
+        );
         event->ResultSet[0].Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        event->ResultSet[0].Access |= CheckAccess;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
     }
 
@@ -516,21 +532,36 @@ private:
 
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
         if (status == Ydb::StatusIds::SUCCESS) {
-            LOG_D("Database info successfully fetched");
+            LOG_D("Database info successfully fetched, serverless: " << Serverless);
         } else {
             LOG_W("Failed to fetch database info, " << status << ", issues: " << issues.ToOneLineString());
         }
 
         Issues.AddIssues(std::move(issues));
-        Send(ReplyActorId, new TEvPrivate::TEvFetchDatabaseResponse(status, Database, Serverless, std::move(Issues)));
+        Send(ReplyActorId, new TEvFetchDatabaseResponse(status, Database, CreateDatabaseId(Database, Serverless, PathId), Serverless, PathId, std::move(Issues)));
         PassAway();
+    }
+
+    static bool IsSubDomainPath(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        switch (entry.Kind) {
+            case NSchemeCache::TSchemeCacheNavigate::EKind::KindSubdomain:
+            case NSchemeCache::TSchemeCacheNavigate::EKind::KindExtSubdomain:
+                return true;
+            case NSchemeCache::TSchemeCacheNavigate::EKind::KindPath:
+                return entry.Self->Info.GetPathId() == NSchemeShard::RootPathId;
+            default:
+                return false;
+        }
     }
 
 private:
     const TActorId ReplyActorId;
     const TString Database;
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    const NACLib::EAccessRights CheckAccess;
 
     bool Serverless = false;
+    TPathId PathId;
 };
 
 }  // anonymous namespace
@@ -539,16 +570,16 @@ IActor* CreatePoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bool defaul
     return new TPoolResolverActor(std::move(event), defaultPoolExists);
 }
 
-IActor* CreatePoolFetcherActor(const TActorId& replyActorId, const TString& database, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
-    return new TPoolFetcherActor(replyActorId, database, poolId, userToken);
+IActor* CreatePoolFetcherActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
+    return new TPoolFetcherActor(replyActorId, databaseId, poolId, userToken);
 }
 
-IActor* CreatePoolCreatorActor(const TActorId& replyActorId, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl) {
-    return new TPoolCreatorActor(replyActorId, database, poolId, poolConfig, userToken, diffAcl);
+IActor* CreatePoolCreatorActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl) {
+    return new TPoolCreatorActor(replyActorId, databaseId, poolId, poolConfig, userToken, diffAcl);
 }
 
-IActor* CreateDatabaseFetcherActor(const TActorId& replyActorId, const TString& database) {
-    return new TDatabaseFetcherActor(replyActorId, database);
+IActor* CreateDatabaseFetcherActor(const TActorId& replyActorId, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLib::EAccessRights checkAccess) {
+    return new TDatabaseFetcherActor(replyActorId, database, userToken, checkAccess);
 }
 
 }  // NKikimr::NKqp::NWorkload

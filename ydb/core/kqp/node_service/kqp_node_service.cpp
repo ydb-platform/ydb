@@ -14,6 +14,8 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
+#include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
+#include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
@@ -80,6 +82,16 @@ public:
         if (config.HasIteratorReadQuotaSettings()) {
             SetIteratorReadsQuotaSettings(config.GetIteratorReadQuotaSettings());
         }
+        if (config.HasWriteActorSettings()) {
+            SetWriteActorSettings(config.GetWriteActorSettings());
+        }
+
+        SchedulerOptions = {
+            .AdvanceTimeInterval = TDuration::MicroSeconds(config.GetComputeSchedulerSettings().GetAdvanceTimeIntervalUsec()),
+            .ForgetOverflowTimeout = TDuration::MicroSeconds(config.GetComputeSchedulerSettings().GetForgetOverflowTimeoutUsec()),
+            .ActivePoolPollingTimeout = TDuration::Seconds(config.GetComputeSchedulerSettings().GetActivePoolPollingSec()),
+            .Counters = counters,
+        };
     }
 
     void Bootstrap() {
@@ -100,6 +112,10 @@ public:
 
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
         Become(&TKqpNodeService::WorkState);
+
+        Scheduler = std::make_shared<TComputeScheduler>();
+        SchedulerOptions.Scheduler = Scheduler;
+        SchedulerActorId = RegisterWithSameMailbox(CreateSchedulerActor(SchedulerOptions));
     }
 
 private:
@@ -181,6 +197,8 @@ private:
         const TString& serializedGUCSettings = ev->Get()->Record.HasSerializedGUCSettings() ?
             ev->Get()->Record.GetSerializedGUCSettings() : "";
 
+        auto schedulerNow = TlsActivationContext->Monotonic();
+
         // start compute actors
         TMaybe<NYql::NDqProto::TRlPath> rlPath = Nothing();
         if (msgRtSettings.HasRlPath()) {
@@ -188,10 +206,38 @@ private:
         }
 
         TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
-            txId, TInstant::Now(), ResourceManager_->GetCounters());
+            txId, TInstant::Now(), ResourceManager_->GetCounters(),
+            msg.GetSchedulerGroup(), msg.GetMemoryPoolPercent(),
+            msg.GetDatabase());
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
+            TString group = msg.GetSchedulerGroup();
+
+            TComputeActorSchedulingOptions schedulingTaskOptions {
+                .Now = schedulerNow,
+                .SchedulerActorId = SchedulerActorId,
+                .Scheduler = Scheduler.get(),
+                .Group = group,
+                .Weight = 1,
+                .NoThrottle = false,
+                .Counters = Counters
+            };
+
+            if (SchedulerOptions.Scheduler->Disabled(group)) {
+                auto share = msg.GetMaxCpuShare();
+                if (share > 0) {
+                    Scheduler->UpdateMaxShare(group, share, schedulerNow);
+                    Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabaseId(), group, share));
+                } else {
+                    schedulingTaskOptions.NoThrottle = true;
+                }
+            } 
+
+            if (!schedulingTaskOptions.NoThrottle) {
+                schedulingTaskOptions.Handle = SchedulerOptions.Scheduler->Enroll(schedulingTaskOptions.Group, schedulingTaskOptions.Weight, schedulingTaskOptions.Now);
+            }
+
             auto result = CaFactory_->CreateKqpComputeActor({
                 .ExecuterId = request.Executer,
                 .TxId = txId,
@@ -212,7 +258,8 @@ private:
                 .ShareMailbox = false,
                 .RlPath = rlPath,
                 .ComputesByStages = &computesByStage,
-                .State = State_
+                .State = State_,
+                .SchedulingOptions = std::move(schedulingTaskOptions),
             });
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
@@ -332,7 +379,6 @@ private:
             FORCE_VALUE(MkqlHeavyProgramMemoryLimit)
             FORCE_VALUE(QueryMemoryLimit)
             FORCE_VALUE(PublishStatisticsIntervalSec);
-            FORCE_VALUE(EnableInstantMkqlMemoryAlloc);
             FORCE_VALUE(MaxTotalChannelBuffersSize);
             FORCE_VALUE(MinChannelBufferSize);
             FORCE_VALUE(MinMemAllocSize);
@@ -354,7 +400,6 @@ private:
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
-
     }
 
     void SetIteratorReadsQuotaSettings(const NKikimrConfig::TTableServiceConfig::TIteratorReadQuotaSettings& settings) {
@@ -376,6 +421,24 @@ private:
         }
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxDelayMs());
         SetReadIteratorBackoffSettings(ptr);
+    }
+
+    void SetWriteActorSettings(const NKikimrConfig::TTableServiceConfig::TWriteActorSettings& settings) {
+        auto ptr = MakeIntrusive<NKikimr::NKqp::TWriteActorSettings>();
+
+        ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
+        ptr->MemoryLimitPerMessageBytes = settings.GetMemoryLimitPerMessageBytes();
+        ptr->MaxBatchesPerMessage = settings.GetMaxBatchesPerMessage();
+
+        ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
+        ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());
+        ptr->UnsertaintyRatio = settings.GetUnsertaintyRatio();
+        ptr->Multiplier = settings.GetMultiplier();
+
+        ptr->MaxWriteAttempts = settings.GetMaxWriteAttempts();
+        ptr->MaxResolveAttempts = settings.GetMaxResolveAttempts();
+
+        NKikimr::NKqp::SetWriteActorSettings(ptr);
     }
 
     void HandleWork(TEvents::TEvUndelivered::TPtr& ev) {
@@ -447,6 +510,11 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
+    std::shared_ptr<TComputeScheduler> Scheduler;
+    TSchedulerActorOptions SchedulerOptions;
+    TActorId SchedulerActorId;
+
+    //state sharded by TxId
     std::shared_ptr<TNodeServiceState> State_;
 };
 

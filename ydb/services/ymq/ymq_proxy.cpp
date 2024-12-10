@@ -290,7 +290,7 @@ namespace NKikimr::NYmq::V1 {
             COPY_FIELD_IF_PRESENT(message_deduplication_id, MessageDeduplicationId);
             COPY_FIELD_IF_PRESENT(message_group_id, MessageGroupId);
 
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url())->second);
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url()).second);
 
             result->SetMessageBody(GetProtoRequest()->Getmessage_body());
 
@@ -376,7 +376,7 @@ namespace NKikimr::NYmq::V1 {
         NKikimr::NSQS::TReceiveMessageRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableReceiveMessage();
 
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
 
             COPY_FIELD_IF_PRESENT(max_number_of_messages, MaxNumberOfMessages);
             COPY_FIELD_IF_PRESENT(receive_request_attempt_id, ReceiveRequestAttemptId);
@@ -496,7 +496,7 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TGetQueueAttributesRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableGetQueueAttributes();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             for (const auto& attributeName : GetProtoRequest()->Getattribute_names()) {
                 result->MutableNames()->Add()->assign(attributeName);
             }
@@ -574,7 +574,7 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TDeleteMessageRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableDeleteMessage();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             result->SetReceiptHandle(GetProtoRequest()->receipt_handle());
             return result;
         }
@@ -607,7 +607,7 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TPurgeQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutablePurgeQueue();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             return result;
         }
     };
@@ -639,7 +639,7 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TDeleteQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableDeleteQueue();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             return result;
         }
     };
@@ -671,7 +671,7 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TChangeMessageVisibilityRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableChangeMessageVisibility();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             result->SetReceiptHandle(GetProtoRequest()->Getreceipt_handle());
             result->SetVisibilityTimeout(GetProtoRequest()->Getvisibility_timeout());
             return result;
@@ -713,7 +713,7 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TSetQueueAttributesRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableSetQueueAttributes();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             for (auto& [name, value]: GetProtoRequest()->Getattributes()) {
                 AddAttribute(requestHolder, name, value);
             }
@@ -751,7 +751,7 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TListDeadLetterSourceQueuesRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableListDeadLetterSourceQueues();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             return result;
         }
     };
@@ -803,7 +803,7 @@ namespace NKikimr::NYmq::V1 {
         NKikimr::NSQS::TSendMessageBatchRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableSendMessageBatch();
 
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url())->second);
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url()).second);
 
             for (auto& requestEntry : GetProtoRequest()->Getentries()) {
                 auto entry = requestHolder.MutableSendMessageBatch()->MutableEntries()->Add();
@@ -870,7 +870,7 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TDeleteMessageBatchRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableDeleteMessageBatch();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url())->second);
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url()).second);
             for (auto& requestEntry : GetProtoRequest()->Getentries()) {
                 auto entry = requestHolder.MutableDeleteMessageBatch()->AddEntries();
                 entry->SetId(requestEntry.Getid());
@@ -921,7 +921,7 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TChangeMessageVisibilityBatchRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableChangeMessageVisibilityBatch();
-            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url())->second);
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url()).second);
             for (auto& requestEntry : GetProtoRequest()->Getentries()) {
                 auto entry = requestHolder.MutableChangeMessageVisibilityBatch()->MutableEntries()->Add();
                 entry->SetId(requestEntry.Getid());

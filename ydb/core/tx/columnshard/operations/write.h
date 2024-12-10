@@ -62,7 +62,7 @@ public:
         const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType);
 
     void Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source,
-        const std::shared_ptr<NOlap::ISnapshotSchema>& schema, const TActorContext& ctx);
+        const std::shared_ptr<NOlap::ISnapshotSchema>& schema, const TActorContext& ctx, const NOlap::TSnapshot& applyToSnapshot);
     void OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds, const bool ephemeralFlag);
     void CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;
     void CommitOnComplete(TColumnShard& owner, const NOlap::TSnapshot& snapshot) const;

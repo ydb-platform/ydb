@@ -280,6 +280,18 @@ namespace {
         };
     }
 
+    TAnalyzeSettings ParseAnalyzeSettings(const TKiAnalyzeTable& analyze) {
+        TVector<TString> columns;
+        for (const auto& column: analyze.Columns()) {
+            columns.push_back(TString(column.Ptr()->Content()));
+        }
+
+        return TAnalyzeSettings{
+            .TablePath = TString(analyze.Table()),
+            .Columns = std::move(columns)
+        };
+    }
+
     TAlterColumnTableSettings ParseAlterColumnTableSettings(TKiAlterTable alter) {
         return TAlterColumnTableSettings{
             .Table = TString(alter.Table())
@@ -803,10 +815,11 @@ private:
 
         TVector<TExprBase> fakeReads;
         auto paramsType = NDq::CollectParameters(programLambda, ctx);
+        NDq::TSpillingSettings spillingSettings{SessionCtx->Config().GetEnabledSpillingNodes()};
         lambda = NDq::BuildProgram(
             programLambda, *paramsType, compiler, SessionCtx->Query().QueryData->GetAllocState()->TypeEnv,
                 *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry(),
-                ctx, fakeReads);
+                ctx, fakeReads, spillingSettings);
 
         NKikimr::NMiniKQL::TProgramBuilder programBuilder(SessionCtx->Query().QueryData->GetAllocState()->TypeEnv,
             *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry());
@@ -2306,6 +2319,26 @@ public:
             }
         }
 
+        if (auto maybeAnalyze = TMaybeNode<TKiAnalyzeTable>(input)) {
+            if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
+                ctx.AddError(TIssue("ANALYZE command is not supported because `EnableColumnStatistics` feature flag is off"));
+                return SyncError();            
+            }
+
+            auto cluster = TString(maybeAnalyze.Cast().DataSink().Cluster());
+
+            TAnalyzeSettings analyzeSettings = ParseAnalyzeSettings(maybeAnalyze.Cast());
+
+            auto future = Gateway->Analyze(cluster, analyzeSettings);
+            
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ANALYZE");
+        }
+
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
             << "(Kikimr DataSink) Failed to execute node: " << input->Content()));
         return SyncError();
@@ -2458,7 +2491,7 @@ private:
         }
 
         if (!SessionCtx->HasTx()) {
-            TKikimrTransactionContextBase emptyCtx(SessionCtx->Config().EnableKqpImmediateEffects);
+            TKikimrTransactionContextBase emptyCtx;
             emptyCtx.SetTempTables(SessionCtx->GetTempTablesState());
             return emptyCtx.ApplyTableOperations(tableOps, tableInfo, queryType);
         }

@@ -111,6 +111,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat/protos
+    ydb/core/util
     ydb/library/binary_json
     ydb/library/dynumber
     ydb/library/mkql_proto/protos

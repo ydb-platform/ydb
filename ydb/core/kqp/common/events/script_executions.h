@@ -22,13 +22,34 @@ enum EFinalizationStatus : i32 {
     FS_ROLLBACK,
 };
 
-struct TEvForgetScriptExecutionOperation : public NActors::TEventLocal<TEvForgetScriptExecutionOperation, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperation> {
-    TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+template <typename TEv, ui32 TEventType>
+struct TEventWithDatabaseId : public NActors::TEventLocal<TEv, TEventType> {
+    TEventWithDatabaseId(const TString& database)
         : Database(database)
+    {}
+
+    const TString& GetDatabase() const {
+        return Database;
+    }
+
+    const TString& GetDatabaseId() const {
+        return DatabaseId;
+    }
+
+    void SetDatabaseId(const TString& databaseId) {
+        DatabaseId = databaseId;
+    }
+
+    const TString Database;
+    TString DatabaseId;
+};
+
+struct TEvForgetScriptExecutionOperation : public TEventWithDatabaseId<TEvForgetScriptExecutionOperation, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperation> {
+    TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+        : TEventWithDatabaseId(database)
         , OperationId(id)
     {}
 
-    const TString Database;
     const NOperationId::TOperationId OperationId;
 };
 
@@ -43,14 +64,12 @@ struct TEvForgetScriptExecutionOperationResponse : public NActors::TEventLocal<T
     NYql::TIssues Issues;
 };
 
-struct TEvGetScriptExecutionOperation : public NActors::TEventLocal<TEvGetScriptExecutionOperation, TKqpScriptExecutionEvents::EvGetScriptExecutionOperation> {
-    explicit TEvGetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
-        : Database(database)
+struct TEvGetScriptExecutionOperation : public TEventWithDatabaseId<TEvGetScriptExecutionOperation, TKqpScriptExecutionEvents::EvGetScriptExecutionOperation> {
+    TEvGetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+        : TEventWithDatabaseId(database)
         , OperationId(id)
-    {
-    }
+    {}
 
-    TString Database;
     NOperationId::TOperationId OperationId;
 };
 
@@ -97,14 +116,13 @@ struct TEvGetScriptExecutionOperationResponse : public NActors::TEventLocal<TEvG
     TMaybe<google::protobuf::Any> Metadata;
 };
 
-struct TEvListScriptExecutionOperations : public NActors::TEventLocal<TEvListScriptExecutionOperations, TKqpScriptExecutionEvents::EvListScriptExecutionOperations> {
+struct TEvListScriptExecutionOperations : public TEventWithDatabaseId<TEvListScriptExecutionOperations, TKqpScriptExecutionEvents::EvListScriptExecutionOperations> {
     TEvListScriptExecutionOperations(const TString& database, const ui64 pageSize, const TString& pageToken)
-        : Database(database)
+        : TEventWithDatabaseId(database)
         , PageSize(pageSize)
         , PageToken(pageToken)
     {}
 
-    TString Database;
     ui64 PageSize;
     TString PageToken;
 };
@@ -151,14 +169,12 @@ struct TEvCheckAliveRequest : public NActors::TEventPB<TEvCheckAliveRequest, NKi
 struct TEvCheckAliveResponse : public NActors::TEventPB<TEvCheckAliveResponse, NKikimrKqp::TEvCheckAliveResponse, TKqpScriptExecutionEvents::EvCheckAliveResponse> {
 };
 
-struct TEvCancelScriptExecutionOperation : public NActors::TEventLocal<TEvCancelScriptExecutionOperation, TKqpScriptExecutionEvents::EvCancelScriptExecutionOperation> {
-    explicit TEvCancelScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
-        : Database(database)
+struct TEvCancelScriptExecutionOperation : public TEventWithDatabaseId<TEvCancelScriptExecutionOperation, TKqpScriptExecutionEvents::EvCancelScriptExecutionOperation> {
+    TEvCancelScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+        : TEventWithDatabaseId(database)
         , OperationId(id)
-    {
-    }
+    {}
 
-    TString Database;
     NOperationId::TOperationId OperationId;
 };
 

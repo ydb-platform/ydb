@@ -264,17 +264,12 @@ public:
         return mon->ActiveAssimilate;
     }
 
-    TBlobStorageGroupAssimilateRequest(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-            const TIntrusivePtr<TGroupQueues>& state, const TActorId& source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon, TEvBlobStorage::TEvAssimilate *ev, ui64 cookie,
-            NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters>& storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
-            NKikimrServices::BS_PROXY_ASSIMILATE, false, {}, now, storagePoolCounters, ev->RestartCounter,
-            NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Assimilate"), std::move(ev->ExecutionRelay))
-        , SkipBlocksUpTo(ev->SkipBlocksUpTo)
-        , SkipBarriersUpTo(ev->SkipBarriersUpTo)
-        , SkipBlobsUpTo(ev->SkipBlobsUpTo)
-        , PerVDiskInfo(info->GetTotalVDisksNum())
+    TBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , SkipBlocksUpTo(params.Common.Event->SkipBlocksUpTo)
+        , SkipBarriersUpTo(params.Common.Event->SkipBarriersUpTo)
+        , SkipBlobsUpTo(params.Common.Event->SkipBlobsUpTo)
+        , PerVDiskInfo(Info->GetTotalVDisksNum())
         , Result(new TEvBlobStorage::TEvAssimilateResult(NKikimrProto::OK, {}))
     {
         Heap.reserve(PerVDiskInfo.size());
@@ -464,11 +459,9 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupAssimilateRequest(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-        const TIntrusivePtr<TGroupQueues>& state, const TActorId& source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon, TEvBlobStorage::TEvAssimilate *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters>& storagePoolCounters) {
-    return new TBlobStorageGroupAssimilateRequest(info, state, source, mon, ev, cookie, std::move(traceId), now, storagePoolCounters);
+IActor* CreateBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParameters params, NWilson::TTraceId traceId) {
+    params.Common.Span = NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Assimilate");
+    return new TBlobStorageGroupAssimilateRequest(params);
 }
 
 } // NKikimr

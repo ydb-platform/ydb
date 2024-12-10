@@ -581,6 +581,7 @@ namespace NFlatExecutorSetup {
 
         // edge and ts of last full compaction
         virtual TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 tableId) const = 0;
+        virtual bool HasSchemaChanges(ui32 table) const = 0;
 
         // Forces full compaction of the specified table in the near future
         // Returns 0 if can't compact, otherwise compaction ID

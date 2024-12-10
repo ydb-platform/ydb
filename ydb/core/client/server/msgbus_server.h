@@ -87,6 +87,7 @@ public:
     void SendReplyMove(NBus::TBusMessageAutoPtr response);
     void Swap(TBusMessageContext& msg);
     TVector<TStringBuf> FindClientCert() const;
+    TString GetPeerName() const;
 
 private:
     friend class TMessageBusSessionIdentHolder;

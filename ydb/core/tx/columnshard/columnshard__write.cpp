@@ -19,8 +19,8 @@ namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
-void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
-    std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx) {
+void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize,
+    const ui64 cookie, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx) {
     Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
     switch (overloadReason) {
         case EOverloadStatus::Disk:
@@ -262,8 +262,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
                                     << (writeMeta.GetWriteId() ? (" writeId " + ToString(writeMeta.GetWriteId())).c_str() : " ")
                                     << Counters.GetWritesMonitor()->DebugString() << " at tablet " << TabletID());
         writeData.MutableWriteMeta().SetWriteMiddle1StartInstant(TMonotonic::Now());
-        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(
-            TabletID(), SelfId(), BufferizationWriteActorId, std::move(writeData), snapshotSchema, GetLastTxSnapshot(), Counters.GetCSCounters().WritingCounters);
+        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(TabletID(), SelfId(), BufferizationWriteActorId,
+            std::move(writeData), snapshotSchema, GetLastTxSnapshot(), Counters.GetCSCounters().WritingCounters);
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
     }
 }
@@ -281,11 +281,12 @@ public:
 
     bool IsPrimary() const {
         AFL_VERIFY(NeedSyncLocks());
-        return TabletId == *ReceivingShards.begin();
+        return TabletId == ArbiterColumnShard;
     }
 
     TCommitOperation(const ui64 tabletId)
-        : TabletId(tabletId) {
+        : TabletId(tabletId)
+    {
     }
 
     TConclusionStatus Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
@@ -293,13 +294,23 @@ public:
         auto& locks = evWrite.Record.GetLocks();
         auto& lock = evWrite.Record.GetLocks().GetLocks()[0];
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());
-        if ((ui32)locks.GetSendingShards().size() != SendingShards.size()) {
-            return TConclusionStatus::Fail("duplications in SendingShards proto field");
-        }
         ReceivingShards = std::set<ui64>(locks.GetReceivingShards().begin(), locks.GetReceivingShards().end());
-        if ((ui32)locks.GetReceivingShards().size() != ReceivingShards.size()) {
-            return TConclusionStatus::Fail("duplications in ReceivingShards proto field");
+        if (!ReceivingShards.size() || !SendingShards.size()) {
+            ReceivingShards.clear();
+            SendingShards.clear();
+        } else if (!locks.HasArbiterColumnShard()) {
+            ArbiterColumnShard = *ReceivingShards.begin();
+            if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
+                return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
+            }
+        } else {
+            ArbiterColumnShard = locks.GetArbiterColumnShard();
+            AFL_VERIFY(ArbiterColumnShard);
+            if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
+                return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
+            }
         }
+
         TxId = evWrite.Record.GetTxId();
         LockId = lock.GetLockId();
         Generation = lock.GetGeneration();
@@ -313,14 +324,6 @@ public:
         if (evWrite.Record.GetLocks().GetOp() != NKikimrDataEvents::TKqpLocks::Commit) {
             return TConclusionStatus::Fail("incorrect message type");
         }
-        if (!ReceivingShards.size() || !SendingShards.size()) {
-            ReceivingShards.clear();
-            SendingShards.clear();
-        } else {
-            if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
-                return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
-            }
-        }
         return TConclusionStatus::Success();
     }
 
@@ -331,8 +334,8 @@ public:
             return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
                 TFullTxInfo::BuildFake(kind), LockId, ReceivingShards, SendingShards);
         } else {
-            return std::make_unique<NColumnShard::TEvWriteCommitSecondaryTransactionOperator>(
-                TFullTxInfo::BuildFake(kind), LockId, *ReceivingShards.begin(), ReceivingShards.contains(TabletId));
+            return std::make_unique<NColumnShard::TEvWriteCommitSecondaryTransactionOperator>(TFullTxInfo::BuildFake(kind), LockId,
+                ArbiterColumnShard, ReceivingShards.contains(TabletId));
         }
     }
 
@@ -343,6 +346,7 @@ private:
     YDB_READONLY(ui64, TxId, 0);
     YDB_READONLY_DEF(std::set<ui64>, SendingShards);
     YDB_READONLY_DEF(std::set<ui64>, ReceivingShards);
+    ui64 ArbiterColumnShard = 0;
 };
 
 class TProposeWriteTransaction: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
@@ -354,7 +358,8 @@ public:
         : TBase(self)
         , WriteCommit(op)
         , Source(source)
-        , Cookie(cookie) {
+        , Cookie(cookie)
+    {
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -399,7 +404,8 @@ public:
         : TBase(self)
         , TxId(txId)
         , Source(source)
-        , Cookie(cookie) {
+        , Cookie(cookie)
+    {
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -430,7 +436,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
     const auto behaviourConclusion = TOperationsManager::GetBehaviour(*ev->Get());
-    //    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
+//    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
     if (behaviourConclusion.IsFail()) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
@@ -463,9 +469,8 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                         NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
                 } else {
                     if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
-                        sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
-                                      " != " + ::ToString(commitOperation->GetGeneration()),
-                            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+                        sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) + " != " +
+                                      ::ToString(commitOperation->GetGeneration()), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
                     } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
                         sendError(
                             "tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) +
@@ -564,7 +569,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie, granuleShardingVersionId, *mType);
     Y_ABORT_UNLESS(writeOperation);
     writeOperation->SetBehaviour(behaviour);
-    writeOperation->Start(*this, tableId, arrowData, source, schema, ctx);
+    writeOperation->Start(*this, tableId, arrowData, source, schema, ctx, NOlap::TSnapshot::Max());
 }
 
-}   // namespace NKikimr::NColumnShard
+}  // namespace NKikimr::NColumnShard

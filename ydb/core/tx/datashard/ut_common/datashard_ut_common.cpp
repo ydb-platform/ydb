@@ -1583,6 +1583,47 @@ ui64 AsyncAlterDropColumn(
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }
 
+ui64 AsyncSetEnableFilterByKey(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        bool value)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpAlterTable, workingDir);
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableAlterTable();
+    desc.SetName(name);
+    desc.MutablePartitionConfig()->SetEnableFilterByKey(value);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request));
+}
+
+ui64 AsyncSetColumnFamily(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        const TString& colName,
+        TShardedTableOptions::TFamily family)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpAlterTable, workingDir);
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableAlterTable();
+    desc.SetName(name);
+    
+    auto col = desc.AddColumns();
+    col->SetName(colName);
+    col->SetFamilyName(family.Name);
+
+    auto fam = desc.MutablePartitionConfig()->AddColumnFamilies();
+    if (family.Name) fam->SetName(family.Name);
+    if (family.LogPoolKind) fam->MutableStorageConfig()->MutableLog()->SetPreferredPoolKind(family.LogPoolKind);
+    if (family.SysLogPoolKind) fam->MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind(family.SysLogPoolKind);
+    if (family.DataPoolKind) fam->MutableStorageConfig()->MutableData()->SetPreferredPoolKind(family.DataPoolKind);
+    if (family.ExternalPoolKind) fam->MutableStorageConfig()->MutableExternal()->SetPreferredPoolKind(family.ExternalPoolKind);
+    if (family.DataThreshold) fam->MutableStorageConfig()->SetDataThreshold(family.DataThreshold);
+    if (family.ExternalThreshold) fam->MutableStorageConfig()->SetExternalThreshold(family.ExternalThreshold);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request));
+}
+
 ui64 AsyncAlterAndDisableShadow(
         Tests::TServer::TPtr server,
         const TString& workingDir,
@@ -1791,6 +1832,47 @@ void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId) {
     WaitTxNotification(server, sender, txId);
 }
 
+void WaitTableStatsImpl(TTestActorRuntime& runtime, 
+    std::function<void(typename TEvDataShard::TEvPeriodicTableStats::TPtr&)> observerFunc,
+    bool& captured) {
+
+    auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>(observerFunc);
+
+    for (int i = 0; i < 5 && !captured; ++i) {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() { return captured; };
+        runtime.DispatchEvents(options, TDuration::Seconds(5));
+    }
+
+    observer.Remove();
+
+    UNIT_ASSERT(captured);
+}
+
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 datashardId,
+    std::function<bool(const NKikimrTableStats::TTableStats& stats)> condition) 
+{
+    NKikimrTxDataShard::TEvPeriodicTableStats stats;
+    bool captured = false;
+
+    auto observerFunc = [&](auto& ev) {
+        const NKikimrTxDataShard::TEvPeriodicTableStats& record = ev->Get()->Record;
+        Cerr << "Captured TEvDataShard::TEvPeriodicTableStats " << record.ShortDebugString() << Endl;
+
+        if (record.GetDatashardId() != datashardId)
+            return;
+        
+        if (!condition(record.GetTableStats()))
+            return;
+
+        stats = record;
+        captured = true;
+    };
+
+    WaitTableStatsImpl(runtime, observerFunc, captured);
+    return stats;
+}
+
 NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minPartCount, ui64 minRows) {
     NKikimrTxDataShard::TEvPeriodicTableStats stats;
     bool captured = false;
@@ -1818,6 +1900,7 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
 
     return stats;
 }
+
 
 void SimulateSleep(Tests::TServer::TPtr server, TDuration duration) {
     auto &runtime = *server->GetRuntime();

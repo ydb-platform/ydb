@@ -165,7 +165,7 @@ namespace NTable {
         /**
          * Returns row schema of the specified table
          */
-        virtual TIntrusiveConstPtr<TRowScheme> RowScheme(ui32 table) = 0;
+        virtual TIntrusiveConstPtr<TRowScheme> RowScheme(ui32 table) const = 0;
 
         /**
          * Returns schema of the specified table

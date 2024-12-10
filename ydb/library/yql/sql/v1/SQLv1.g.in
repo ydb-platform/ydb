@@ -66,6 +66,10 @@ sql_stmt_core:
   | create_resource_pool_stmt
   | alter_resource_pool_stmt
   | drop_resource_pool_stmt
+  | analyze_stmt
+  | create_resource_pool_classifier_stmt
+  | alter_resource_pool_classifier_stmt
+  | drop_resource_pool_classifier_stmt
 ;
 
 expr:
@@ -592,12 +596,12 @@ alter_external_data_source_action:
 
 drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? object_ref;
 
-create_view_stmt: CREATE VIEW object_ref
+create_view_stmt: CREATE VIEW (IF NOT EXISTS)? object_ref
     create_object_features?
     AS select_stmt
 ;
 
-drop_view_stmt: DROP VIEW object_ref;
+drop_view_stmt: DROP VIEW (IF EXISTS)? object_ref;
 
 upsert_object_stmt: UPSERT OBJECT object_ref
     LPAREN TYPE object_type_ref RPAREN
@@ -809,12 +813,25 @@ alter_resource_pool_stmt: ALTER RESOURCE POOL object_ref
   alter_resource_pool_action (COMMA alter_resource_pool_action)*
 ;
 alter_resource_pool_action:
-    alter_table_set_table_setting_uncompat
-  | alter_table_set_table_setting_compat
+    alter_table_set_table_setting_compat
   | alter_table_reset_table_setting
 ;
 
 drop_resource_pool_stmt: DROP RESOURCE POOL object_ref;
+
+create_resource_pool_classifier_stmt: CREATE RESOURCE POOL CLASSIFIER object_ref
+  with_table_settings
+;
+
+alter_resource_pool_classifier_stmt: ALTER RESOURCE POOL CLASSIFIER object_ref
+  alter_resource_pool_classifier_action (COMMA alter_resource_pool_classifier_action)*
+;
+alter_resource_pool_classifier_action:
+    alter_table_set_table_setting_compat
+  | alter_table_reset_table_setting
+;
+
+drop_resource_pool_classifier_stmt: DROP RESOURCE POOL CLASSIFIER object_ref;
 
 create_replication_stmt: CREATE ASYNC REPLICATION object_ref
     FOR replication_target (COMMA replication_target)*
@@ -980,6 +997,10 @@ named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt);
 commit_stmt: COMMIT;
 
 rollback_stmt: ROLLBACK;
+
+analyze_table: simple_table_ref (LPAREN column_list RPAREN)?;
+analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
+analyze_stmt: ANALYZE analyze_table_list;
 
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;
@@ -1200,6 +1221,7 @@ keyword_as_compat:
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CLASSIFIER
   // | COLLATE
   | COMMIT
   | CONDITIONAL
@@ -1412,6 +1434,7 @@ keyword_compat: (
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CLASSIFIER
   | COLLATE
   | COMMIT
   | CONDITIONAL
@@ -1728,6 +1751,7 @@ CASE: C A S E;
 CAST: C A S T;
 CHANGEFEED: C H A N G E F E E D;
 CHECK: C H E C K;
+CLASSIFIER: C L A S S I F I E R;
 COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
 COLUMNS: C O L U M N S;

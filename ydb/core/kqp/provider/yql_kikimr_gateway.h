@@ -531,6 +531,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         PathId.ToMessage(message->MutablePathId());
         message->SetSchemaVersion(SchemaVersion);
         message->SetKind(static_cast<ui32>(Kind));
+        message->SetStatsLoaded(StatsLoaded);
         message->SetRecordsCount(RecordsCount);
         message->SetDataSize(DataSize);
         message->SetStatsLoaded(StatsLoaded);
@@ -787,6 +788,11 @@ struct TDropReplicationSettings {
     bool Cascade = false;
 };
 
+struct TAnalyzeSettings {
+    TString TablePath;
+    TVector<TString> Columns;
+};
+
 struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
         Name = name;
@@ -932,6 +938,7 @@ public:
     virtual TMaybe<TString> GetSetting(const TString& cluster, const TString& name) = 0;
 
     virtual void SetToken(const TString& cluster, const TIntrusiveConstPtr<NACLib::TUserToken>& token) = 0;
+    virtual void SetClientAddress(const TString& clientAddress) = 0;
 
     virtual NThreading::TFuture<TListPathResult> ListPath(const TString& cluster, const TString& path) = 0;
 
@@ -1014,6 +1021,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterExternalTable(const TString& cluster, const TAlterExternalTableSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings, bool missingOk) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> Analyze(const TString& cluster, const TAnalyzeSettings& settings) = 0;
 
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 

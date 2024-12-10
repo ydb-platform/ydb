@@ -500,7 +500,7 @@ namespace NActors {
             return 128 * 1024;
         }
 
-        void SendUpdateToWhiteboard(bool connected = true);
+        void SendUpdateToWhiteboard(bool connected = true, bool reschedule = true);
         ui32 CalculateQueueUtilization();
 
         void Handle(TEvPollerReady::TPtr& ev);

@@ -29,6 +29,7 @@ class BaseSystemViews(object):
                 }
             )
         )
+        cls.cluster.config.yaml_config['feature_flags']['enable_column_statistics'] = False
         cls.cluster.start()
 
     @classmethod

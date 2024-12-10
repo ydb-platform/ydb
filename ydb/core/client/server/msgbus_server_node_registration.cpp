@@ -40,6 +40,7 @@ public:
         } else {
             TBase::SetSecurityToken(BUILTIN_ACL_ROOT); // NBS compatibility
         }
+        TBase::SetPeerName(msg.GetPeerName());
     }
 
     void Bootstrap(const TActorContext &ctx)

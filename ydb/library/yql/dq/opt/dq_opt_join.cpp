@@ -116,11 +116,56 @@ TExprBase BuildDqJoinInput(TExprContext& ctx, TPositionHandle pos, const TExprBa
     return partition;
 }
 
-TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
-    const THashMap<TStringBuf, TJoinInputDesc>& inputs, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx)
+TMaybe<TJoinInputDesc> BuildDqJoin(
+    const TCoEquiJoinTuple& joinTuple,
+    const THashMap<TStringBuf, TJoinInputDesc>& inputs, 
+    EHashJoinMode mode, 
+    TExprContext& ctx,
+    const TTypeAnnotationContext& typeCtx,
+    TVector<TString>& subtreeLabels,
+    const NYql::TOptimizerHints& hints
+)
 {
+    TMaybe<TJoinInputDesc> left;
+    TVector<TString> lhsLabels;
+    if (joinTuple.LeftScope().Maybe<TCoAtom>()) {
+        lhsLabels.push_back(joinTuple.LeftScope().Cast<TCoAtom>().StringValue());
+        left = inputs.at(joinTuple.LeftScope().Cast<TCoAtom>().Value());
+        YQL_ENSURE(left, "unknown scope " << joinTuple.LeftScope().Cast<TCoAtom>().Value());
+    } else {
+        left = BuildDqJoin(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), inputs, mode, ctx, typeCtx, lhsLabels, hints);
+        if (!left) {
+            return {};
+        }
+    }
+
+    TMaybe<TJoinInputDesc> right;
+    TVector<TString> rhsLabels;
+    if (joinTuple.RightScope().Maybe<TCoAtom>()) {
+        rhsLabels.push_back(joinTuple.RightScope().Cast<TCoAtom>().StringValue());
+        right = inputs.at(joinTuple.RightScope().Cast<TCoAtom>().Value());
+        YQL_ENSURE(right, "unknown scope " << joinTuple.RightScope().Cast<TCoAtom>().Value());
+    } else {
+        right = BuildDqJoin(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), inputs, mode, ctx, typeCtx, rhsLabels, hints);
+        if (!right) {
+            return {};
+        }
+    }
+
+    subtreeLabels.insert(subtreeLabels.end(), std::make_move_iterator(lhsLabels.begin()), std::make_move_iterator(lhsLabels.end()));
+    subtreeLabels.insert(subtreeLabels.end(), std::make_move_iterator(rhsLabels.begin()), std::make_move_iterator(rhsLabels.end()));
+
     auto options = joinTuple.Options();
     auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
+    for (auto& hint: hints.JoinAlgoHints->Hints) {
+        if (
+            std::unordered_set<std::string>(hint.JoinLabels.begin(), hint.JoinLabels.end()) ==
+            std::unordered_set<std::string>(subtreeLabels.begin(), subtreeLabels.end())
+        ) {
+            linkSettings.JoinAlgo = hint.Algo;
+            hint.Applied = true;   
+        }
+    }
     YQL_ENSURE(linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin || typeCtx.StreamLookupJoin, "Unsupported join strategy: streamlookup");
 
     if (linkSettings.JoinAlgo == EJoinAlgoType::MapJoin) {
@@ -131,28 +176,6 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
 
     bool leftAny = linkSettings.LeftHints.contains("any");
     bool rightAny = linkSettings.RightHints.contains("any");
-
-    TMaybe<TJoinInputDesc> left;
-    if (joinTuple.LeftScope().Maybe<TCoAtom>()) {
-        left = inputs.at(joinTuple.LeftScope().Cast<TCoAtom>().Value());
-        YQL_ENSURE(left, "unknown scope " << joinTuple.LeftScope().Cast<TCoAtom>().Value());
-    } else {
-        left = BuildDqJoin(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), inputs, mode, useCBO, ctx, typeCtx);
-        if (!left) {
-            return {};
-        }
-    }
-
-    TMaybe<TJoinInputDesc> right;
-    if (joinTuple.RightScope().Maybe<TCoAtom>()) {
-        right = inputs.at(joinTuple.RightScope().Cast<TCoAtom>().Value());
-        YQL_ENSURE(right, "unknown scope " << joinTuple.RightScope().Cast<TCoAtom>().Value());
-    } else {
-        right = BuildDqJoin(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), inputs, mode, useCBO, ctx, typeCtx);
-        if (!right) {
-            return {};
-        }
-    }
 
     TStringBuf joinType = joinTuple.Type().Value();
     TSet<std::pair<TStringBuf, TStringBuf>> resultKeys;
@@ -202,6 +225,9 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
                 : FullColumnName(rightScopeAtom.Value(), rightColumnAtom.Value()))
             .Done();
 
+        auto leftColumnName = Build<TCoAtom>(ctx, left->Input.Pos()).Value(FullColumnName(leftScopeAtom.Value(), leftColumnAtom.Value())).Done();
+        auto rightColumnName = Build<TCoAtom>(ctx, right->Input.Pos()).Value(FullColumnName(rightScopeAtom.Value(), rightColumnAtom.Value())).Done();
+
         joinKeysBuilder.Add<TDqJoinKeyTuple>()
             .LeftLabel(leftScopeAtom)
             .LeftColumn(leftColumnAtom)
@@ -212,8 +238,8 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
         leftJoinKeys.emplace_back(leftKey);
         rightJoinKeys.emplace_back(rightKey);
 
-        leftJoinKeyNames.emplace_back(leftColumnAtom);
-        rightJoinKeyNames.emplace_back(rightColumnAtom);
+        leftJoinKeyNames.emplace_back(leftColumnName);
+        rightJoinKeyNames.emplace_back(rightColumnName);
     }
 
     if (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode || !(leftAny || rightAny)) {
@@ -323,8 +349,8 @@ std::pair<TVector<TCoAtom>, TVector<TCoAtom>> GetJoinKeys(const TDqJoin& join, T
 }
 
 
-TDqPhyMapJoin DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, const TExprBase& rightInput,
-    TExprContext& ctx)
+TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, const TExprBase& rightInput,
+    TExprContext& ctx, bool useGraceCore)
 {
     static const std::set<std::string_view> supportedTypes = {"Inner"sv, "Left"sv, "LeftOnly"sv, "LeftSemi"sv};
     auto joinType = join.JoinType().Value();
@@ -349,16 +375,34 @@ TDqPhyMapJoin DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, 
     auto leftFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), leftInput, leftFilterKeys);
     auto rightFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), rightInput, rightFilterKeys);
 
-    return Build<TDqPhyMapJoin>(ctx, join.Pos())
-        .LeftInput(leftFilteredInput)
-        .LeftLabel(join.LeftLabel())
-        .RightInput(rightFilteredInput)
-        .RightLabel(join.RightLabel())
-        .JoinType(join.JoinType())
-        .JoinKeys(join.JoinKeys())
-        .LeftJoinKeyNames(join.LeftJoinKeyNames())
-        .RightJoinKeyNames(join.RightJoinKeyNames())
-        .Done();
+    if (useGraceCore) {
+        auto flags = Build<TCoAtomList>(ctx, join.Pos())
+            .Add<TCoAtom>().Value("Broadcast").Build()
+            .Done();
+
+        return Build<TDqPhyGraceJoin>(ctx, join.Pos())
+            .LeftInput(leftFilteredInput)
+            .LeftLabel(join.LeftLabel())
+            .RightInput(rightFilteredInput)
+            .RightLabel(join.RightLabel())
+            .JoinType(join.JoinType())
+            .JoinKeys(join.JoinKeys())
+            .LeftJoinKeyNames(join.LeftJoinKeyNames())
+            .RightJoinKeyNames(join.RightJoinKeyNames())
+            .Flags(flags)
+            .Done();
+    } else {
+        return Build<TDqPhyMapJoin>(ctx, join.Pos())
+            .LeftInput(leftFilteredInput)
+            .LeftLabel(join.LeftLabel())
+            .RightInput(rightFilteredInput)
+            .RightLabel(join.RightLabel())
+            .JoinType(join.JoinType())
+            .JoinKeys(join.JoinKeys())
+            .LeftJoinKeyNames(join.LeftJoinKeyNames())
+            .RightJoinKeyNames(join.RightJoinKeyNames())
+            .Done();
+    }
 }
 
 } // namespace
@@ -376,9 +420,16 @@ bool CheckJoinColumns(const TExprBase& node) {
     }
 }
 
-TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
-    int dummyJoinCounter;
-    return DqRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, dummyJoinCounter);
+TExprBase DqRewriteEquiJoin(
+    const TExprBase& node, 
+    EHashJoinMode mode, 
+    bool useCBO, 
+    TExprContext& ctx, 
+    const TTypeAnnotationContext& typeCtx,
+    const TOptimizerHints& hints
+) {
+    int dummyJoinCounter = 0;
+    return DqRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, dummyJoinCounter, hints);
 }
 
 /**
@@ -386,7 +437,15 @@ TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useC
  * physical stages with join operators.
  * Potentially this optimizer can also perform joins reorder given cardinality information.
  */
-TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, int& joinCounter) {
+TExprBase DqRewriteEquiJoin(
+    const TExprBase& node, 
+    EHashJoinMode mode, 
+    bool /* useCBO */, 
+    TExprContext& ctx, 
+    const TTypeAnnotationContext& typeCtx, 
+    int& joinCounter, 
+    const TOptimizerHints& hints
+) {
     if (!node.Maybe<TCoEquiJoin>()) {
         return node;
     }
@@ -403,7 +462,8 @@ TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useC
     }
 
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
-    auto result = BuildDqJoin(joinTuple, inputs, mode, useCBO, ctx, typeCtx);
+    TVector<TString> dummy;
+    auto result = BuildDqJoin(joinTuple, inputs, mode, ctx, typeCtx, dummy, hints);
     if (!result) {
         return node;
     }
@@ -609,7 +669,7 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
         .Done();
 }
 
-TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx) {
+TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap) {
     static const std::set<std::string_view> supportedTypes = {
         "Inner"sv,
         "Left"sv,
@@ -623,6 +683,19 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
     if (!supportedTypes.contains(joinType)) {
         return join;
     }
+
+    TExprNode::TListType flags;
+    if (const auto maybeFlags = join.Flags()) {
+        flags = maybeFlags.Cast().Ref().ChildrenList();
+    }
+
+    for (auto& flag : flags) {
+        if (flag->IsAtom("LeftAny") || flag->IsAtom("RightAny")) {
+            ctx.AddError(TIssue(ctx.GetPosition(join.Ptr()->Pos()), "ANY join kind is not currently supported"));
+            return join;
+        }
+    }
+
 
     YQL_ENSURE(join.LeftInput().Maybe<TDqCnUnionAll>());
     TDqCnUnionAll leftCn = join.LeftInput().Cast<TDqCnUnionAll>();
@@ -747,7 +820,7 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
 
     TMaybeNode<TExprBase> phyJoin;
     if (join.JoinType().Value() != "Cross"sv) {
-        phyJoin = DqMakePhyMapJoin(join, leftInputArg, joinRightInput, ctx);
+        phyJoin = DqMakePhyMapJoin(join, leftInputArg, joinRightInput, ctx, useGraceCoreForMap);
     } else {
         YQL_ENSURE(join.JoinKeys().Empty());
 

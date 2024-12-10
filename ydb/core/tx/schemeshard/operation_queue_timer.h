@@ -113,8 +113,8 @@ struct TShardCompactionInfo {
     ui64 LastFullCompactionTs = 0;
     ui64 RowCount = 0;
     ui64 RowDeletes = 0;
-
     ui64 PartCount = 0;
+    bool HasSchemaChanges = false;
 
     explicit TShardCompactionInfo(const TShardIdx& id)
         : ShardIdx(id)
@@ -127,6 +127,7 @@ struct TShardCompactionInfo {
         , RowCount(stats.RowCount)
         , RowDeletes(stats.RowDeletes)
         , PartCount(stats.PartCount)
+        , HasSchemaChanges(stats.HasSchemaChanges)
     {}
 
     TShardCompactionInfo(const TShardCompactionInfo&) = default;
@@ -263,7 +264,8 @@ public:
 
         // ignore single parted shard if needed
         bool isSingleParted = info.PartCount == 1;
-        if (!Config.CompactSinglePartedShards && isSingleParted)
+        bool hasSchemaChanges = info.HasSchemaChanges;
+        if (!Config.CompactSinglePartedShards && isSingleParted && !hasSchemaChanges)
             return false;
 
         if (info.RowCount < Config.RowCountThreshold)

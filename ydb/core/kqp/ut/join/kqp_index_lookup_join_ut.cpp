@@ -224,7 +224,8 @@ Y_UNIT_TEST_TWIN(JoinWithSubquery, StreamLookup) {
                 ON l.Fk = r.Key
         );
         SELECT j.lValue AS Value FROM $join AS j INNER JOIN `/Root/Kv` AS kv
-            ON j.lKey = kv.Key;
+            ON j.lKey = kv.Key
+        ORDER BY Value;
     )";
 
     NKikimrConfig::TAppConfig appConfig;
@@ -1008,7 +1009,21 @@ Y_UNIT_TEST_TWIN(JoinByComplexKeyWithNullComponents, StreamLookupJoin) {
 Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    auto settings = TKikimrSettings().SetAppConfig(appConfig);
+
+   TString stats = R"(
+        {"/Root/Left":{"n_rows":3}, "/Root/Right":{"n_rows":3}}
+    )";
+
+    TVector<NKikimrKqp::TKqpSetting> settings;
+
+    NKikimrKqp::TKqpSetting setting;
+    setting.SetName("OptOverrideStatistics");
+    setting.SetValue(stats);
+    settings.push_back(setting);
+
+    TKikimrSettings serverSettings = TKikimrSettings().SetAppConfig(appConfig);;
+    serverSettings.SetKqpSettings(settings);
+
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1068,7 +1083,7 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
             [[1];[1];[1];[1]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        const ui32 index = (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
+        const ui32 index = (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         for (const auto& tableStats : stats.query_phases(index).table_access()) {
             if (tableStats.name() == "/Root/Right") {
@@ -1098,7 +1113,7 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
             [[2];[2];[20];#]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        const ui32 index = (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
+        const ui32 index = (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         for (const auto& tableStats : stats.query_phases(index).table_access()) {
             if (tableStats.name() == "/Root/Right") {
@@ -1127,7 +1142,7 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
             [[2];[2];[2];["two"];["two"];["two"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        const ui32 index = (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
+        const ui32 index = (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         for (const auto& tableStats : stats.query_phases(index).table_access()) {
             if (tableStats.name() == "/Root/Right") {
@@ -1158,7 +1173,7 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
             [[2];[2];[2];["two"];["two"];["two"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        const ui32 index = (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
+        const ui32 index = (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         for (const auto& tableStats : stats.query_phases(index).table_access()) {
             if (tableStats.name() == "/Root/Right") {

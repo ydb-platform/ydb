@@ -24,12 +24,12 @@
                         "PlanNodeId": 9,
                         "Plans": [
                             {
-                                "Node Type": "UnionAll",
+                                "Node Type": "Merge",
                                 "PlanNodeId": 8,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -38,10 +38,11 @@
                                                     }
                                                 ],
                                                 "Limit": "1001",
-                                                "Name": "Limit"
+                                                "Name": "TopSort",
+                                                "TopSortBy": "argument.xx.pkxx"
                                             },
                                             {
-                                                "Condition": "pkxx = _equijoin_column_0",
+                                                "Condition": "xx.pkxx = Q._equijoin_column_0",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6
@@ -127,6 +128,9 @@
                                             }
                                         ]
                                     }
+                                ],
+                                "SortColumns": [
+                                    "xx.pkxx (Asc)"
                                 ]
                             }
                         ]

@@ -228,6 +228,14 @@ public:
         return Token_;
     }
 
+    TString GetClientAddress() const {
+        if (RequestCtx) {
+            return RequestCtx->GetPeerName();
+        }
+
+        return Record.GetRequest().GetClientAddress();
+    }
+
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
         if (YdbParameters) {
             return *YdbParameters;
@@ -353,6 +361,14 @@ public:
         return PoolConfig;
     }
 
+    const TString& GetDatabaseId() const {
+        return DatabaseId ? DatabaseId : Record.GetRequest().GetDatabaseId();
+    }
+
+    void SetDatabaseId(const TString& databaseId) {
+        DatabaseId = databaseId;
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -365,6 +381,7 @@ private:
     mutable TIntrusiveConstPtr<NACLib::TUserToken> Token_;
     TActorId RequestActorId;
     TString Database;
+    TString DatabaseId;
     TString SessionId;
     TString YqlText;
     TString QueryId;

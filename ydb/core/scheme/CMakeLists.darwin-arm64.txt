@@ -35,6 +35,7 @@ target_link_libraries(ydb-core-scheme PUBLIC
   public-lib-scheme_types
   library-pretty_types_print-protobuf
   cpp-lwtrace-mon
+  cpp-containers-absl_flat_hash
 )
 
 target_sources(ydb-core-scheme PRIVATE

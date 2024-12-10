@@ -3,7 +3,6 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/string.h>
-#include <util/string/cast.h>
 #include <util/system/yassert.h>
 
 #include <optional>

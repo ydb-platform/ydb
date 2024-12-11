@@ -323,7 +323,7 @@ private:
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
-        IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
+        IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);,
         ExceptionFunc(std::exception, HandleException)
     )
 

@@ -401,7 +401,7 @@ FROM my_table;
 
 ## ListHas {#listhas}
 
-Show whether the list contains the specified element. In this case, NULLs are considered equal to each other, and with a NULL input list, the result is always false.
+Show whether the list contains the specified element. In this case, `NULL` values are considered equal to each other, and with a `NULL` input list, the result is always `false`.
 
 {% if feature_column_container_type %}
 

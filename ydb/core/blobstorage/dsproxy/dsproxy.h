@@ -143,6 +143,7 @@ NActors::NLog::EPriority PriorityForStatusInbound(NKikimrProto::EReplyStatus sta
     XX(TEvBlobStorage::TEvPut) \
     XX(TEvBlobStorage::TEvGet) \
     XX(TEvBlobStorage::TEvBlock) \
+    XX(TEvBlobStorage::TEvGetBlock) \
     XX(TEvBlobStorage::TEvDiscover) \
     XX(TEvBlobStorage::TEvRange) \
     XX(TEvBlobStorage::TEvCollectGarbage) \
@@ -485,6 +486,16 @@ struct TBlobStorageGroupBlockParameters {
     };
 };
 IActor* CreateBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters params);
+
+struct TBlobStorageGroupGetBlockParameters {
+    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvGetBlock> Common;
+    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+        .LogComponent = NKikimrServices::BS_PROXY_GETBLOCK,
+        .Name = "DSProxy.GetBlock",
+        .Activity = NKikimrServices::TActivity::BS_GROUP_GETBLOCK,
+    };
+};
+IActor* CreateBlobStorageGroupGetBlockRequest(TBlobStorageGroupGetBlockParameters params);
 
 struct TBlobStorageGroupStatusParameters {
     TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvStatus> Common;

@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
                 }
               }
               ConsistencySettings {
-                GlobalConsistency {
+                Global {
                   CommitIntervalMilliSeconds: 10000
                 }
               }

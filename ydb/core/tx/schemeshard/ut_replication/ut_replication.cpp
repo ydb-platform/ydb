@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
                 }
               }
               ConsistencySettings {
-                GlobalConsistency {
+                Global {
                   CommitIntervalMilliSeconds: 10000
                 }
               }

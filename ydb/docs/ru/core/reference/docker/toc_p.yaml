@@ -1,6 +1,6 @@
 items:
   - name: Именование тегов
-    href: naming.md
+    href: tags.md
   - name: Установка Docker
     href: prerequisites.md
   - name: Работа с Docker

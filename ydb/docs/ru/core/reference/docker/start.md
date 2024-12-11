@@ -26,17 +26,16 @@ docker run \
     -p 5432:5432 \ # открытие внешнего доступа к порту, обеспечивающему PostgreSQL-совместимость
     -v $(pwd)/ydb_certs:/ydb_certs \ # директория для TLS сертификатов
     -v $(pwd)/ydb_data:/ydb_data \ # рабочая директория
-    -e GRPC_TLS_PORT=2135 \ # grpcs порт
-    -e GRPC_PORT=2136 \ # grpc порт
-    -e MON_PORT=8765 \ # http порт
-    -e YDB_USE_IN_MEMORY_PDISKS=1 \ # хранение данных только в оперативной памяти
+    -e GRPC_TLS_PORT=2135 \ # grpcs порт должен соответствовать тому, что опубликовано выше
+    -e GRPC_PORT=2136 \ # grpc порт должен соответствовать тому, что опубликовано выше
+    -e MON_PORT=8765 \ # http  порт должен соответствовать тому, что опубликовано выше
     {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }} # имя и тег образа
 ```
 
 {% include [index.md](_includes/rosetta.md) %}
 
-Подробнее про переменные окружения, используемые при запуске Docker контейнера с {{ ydb-short-name }} можно узнать в разделе [{#T}](configuration.md)
+Подробнее про переменные окружения, используемые при запуске Docker контейнера с {{ ydb-short-name }} можно узнать в разделе [{#T}](configuration.md).
 
 При указанных в примере выше параметрах и запуске Docker локально, [Embedded UI](../embedded-ui/index.md) {{ ydb-short-name }} будет доступен по адресу [http://localhost:8765⁠](http://localhost:8765⁠).
 
-Подробнее про остановку и удаление Docker контейнера с {{ ydb-short-name }} можно узнать в разделе [{#T}](cleanup.md)
+Подробнее про остановку и удаление Docker контейнера с {{ ydb-short-name }} можно узнать в разделе [{#T}](cleanup.md).

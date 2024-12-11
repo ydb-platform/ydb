@@ -4,7 +4,7 @@
 
 Документация по Docker контейнеру содержит следующие разделы:
 
-* [{#T}](naming.md)
+* [{#T}](tags.md)
 * [{#T}](prerequisites.md)
 * [{#T}](start.md)
 * [{#T}](configuration.md)

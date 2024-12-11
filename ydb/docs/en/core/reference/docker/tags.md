@@ -1,6 +1,6 @@
-## {{ ydb-short-name }} Docker container naming
+# Docker image `{{ ydb_local_docker_image}}` tags naming
 
-For the [`ydbplatform/local-ydb`](https://hub.docker.com/r/ydbplatform/local-ydb) Docker image, the following naming rules apply for tags:
+For the [{{ ydb_local_docker_image}}](https://hub.docker.com/r/ydbplatform/local-ydb) Docker image, the following naming rules apply for tags:
 
 | Tag Name                 | Description                                                                                                             |
 |--------------------------|-------------------------------------------------------------------------------------------------------------------------|
@@ -9,4 +9,4 @@ For the [`ydbplatform/local-ydb`](https://hub.docker.com/r/ydbplatform/local-ydb
 | `trunk`, `main`, `nightly` | The latest version of {{ ydb-short-name }} from the main development branch. Includes all recent changes and is rebuilt nightly. Similarly to `edge`, it is not suitable for production environments.      |
 | `XX.Y`                 | Corresponds to the latest minor version of {{ ydb-short-name }} in a major release `XX.Y`, including all patches.                           |
 | `XX.Y.ZZ`              | Corresponds to the {{ ydb-short-name }} release version `XX.Y.ZZ`.                                                                    |
-| `XX.Y-slim`, `XX.Y.ZZ-slim` | Compressed binaries of {{ ydb-short-name }} (`ydbd` and `ydb` CLI) with smaller image size but a slower startup. Uses [UPX](https://github.com/upx/upx). |
+| `XX.Y-slim`, `XX.Y.ZZ-slim` | Compressed binaries of {{ ydb-short-name }} (`ydbd` and `ydb`) with smaller image size but a slower startup. Uses [UPX](https://github.com/upx/upx). |

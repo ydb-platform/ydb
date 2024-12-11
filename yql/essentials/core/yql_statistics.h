@@ -56,9 +56,10 @@ struct TOptimizerStatistics {
     struct TSortColumns : public TSimpleRefCount<TSortColumns> {
         TVector<TString> Columns;
         TVector<TString> Aliases;
-        TSortColumns(const TVector<TString>& cols, const TVector<TString>& aliases) : 
-            Columns(cols)
-            ,Aliases(aliases)  {}
+        TSortColumns(const TVector<TString>& cols, const TVector<TString>& aliases)
+            : Columns(cols)
+            , Aliases(aliases)
+        {}
     };
 
     struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
@@ -79,7 +80,6 @@ struct TOptimizerStatistics {
     TIntrusivePtr<TSortColumns> SortColumns;
     std::shared_ptr<IProviderStatistics> Specific;
     std::shared_ptr<TVector<TString>> Labels = {};
-
 
     TOptimizerStatistics(TOptimizerStatistics&&) = default;
     TOptimizerStatistics& operator=(TOptimizerStatistics&&) = default;

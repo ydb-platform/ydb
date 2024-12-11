@@ -23,7 +23,7 @@ TString GetYdbDatabase()
 
 TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode)
 {
-    SetEnv("YDB_TOKEN", "root@builin");
+    SetEnv("YDB_TOKEN", "root@builtin");
 
     TShellCommand command(BinaryPath(GetEnv("YDB_CLI_BINARY")));
 

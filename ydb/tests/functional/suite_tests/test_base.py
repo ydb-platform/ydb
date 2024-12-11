@@ -262,6 +262,28 @@ class BaseSuiteRunner(object):
         cls.legacy_pool = ydb.SessionPool(cls.driver)  # for explain
         cls.pool = ydb.QuerySessionPool(cls.driver)
         cls.driver.wait()
+
+        cls.column_cluster = KiKiMR(
+            KikimrConfigGenerator(
+                udfs_path=yatest.common.build_path("yql/udfs"),
+                use_in_memory_pdisks=True,
+                disable_iterator_reads=True,
+                disable_iterator_lookups=True,
+                extra_feature_flags=["enable_resource_pools"],
+                column_shard_config={
+                    'allow_nullable_columns_in_pk': True,
+                },
+                # additional_log_configs={'KQP_YQL': 7}
+            )
+        )
+        cls.column_cluster.start()
+        cls.column_driver = ydb.Driver(ydb.DriverConfig(
+            database="/Root",
+            endpoint="%s:%s" % (cls.column_cluster.nodes[1].host, cls.column_cluster.nodes[1].port)))
+        cls.column_legacy_pool = ydb.SessionPool(cls.column_driver)  # for explain
+        cls.column_pool = ydb.QuerySessionPool(cls.column_driver)
+        cls.column_driver.wait()
+
         cls.query_id = itertools.count(start=1)
         cls.files = {}
         cls.plan = False
@@ -274,7 +296,28 @@ class BaseSuiteRunner(object):
         cls.driver.stop()
         cls.cluster.stop()
 
+        cls.column_legacy_pool.stop()
+        cls.column_pool.stop()
+        cls.column_driver.stop()
+        cls.column_cluster.stop()
+
     def run_sql_suite(self, kind, *path_pieces):
+        self.no_cols = '_'.join(list(path_pieces)) in {
+            'postgres_case.test',
+            'postgres_create_table.test',
+            'postgres_jointest/join1.test',
+            'postgres_jointest/join2.test',
+            'postgres_jointest/join3.test',
+            'postgres_jointest/join4.test',
+            'postgres_select.test',
+            'postgres_select_distinct.test',
+            'sqllogictest_select2-1.test',
+            'sqllogictest_select2-2.test',
+            'sqllogictest_select2-3.test',
+            'sqllogictest_select2-4.test',
+            'sqllogictest_select3-4.test',
+        }
+        logger.info('Path pieces {} no cols {}'.format('_'.join(list(path_pieces)), self.no_cols))
         self.files = {}
         self.plan = (kind == 'plan')
         self.query_id = itertools.count(start=1)
@@ -458,15 +501,48 @@ class BaseSuiteRunner(object):
         return self.legacy_pool.retry_operation_sync(lambda s: s.explain(yql_text)).query_plan
 
     def execute_scheme(self, statement_text):
+        def col_create(statement):
+            brind = statement.find('(')
+            if brind < 0:
+                return statement
+            tokens = statement[brind + 1:].split(',')
+            key = None
+            for token in tokens:
+                if token.strip().startswith('primary key'):
+                    key = token.split('(')[1].split(')')[0].split(',')[0]
+            logger.info('Statement {} brind {} tokens {} key {}'.format(statement, brind, tokens, key))
+            return statement + ' PARTITION BY HASH({}) WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1)'.format(key)
+
+        def col_statements(statements):
+            return ';'.join([col_create(st) for st in statements.split(';')])
+
         yql_text = format_yql_statement(statement_text, self.table_path_prefix)
         self.pool.execute_with_retries(yql_text)
+
+        if not self.no_cols:
+            col_yql_text = format_yql_statement(col_statements(statement_text), self.table_path_prefix)
+            logger.info('Column yql query: {}'.format(col_yql_text))
+            self.column_pool.execute_with_retries(col_yql_text)
         yql_text = format_yql_statement(statement_text, self.table_path_prefix_ne)
         self.pool.execute_with_retries(yql_text)
         return None
 
     def execute_query(self, statement_text):
         yql_text = format_yql_statement(statement_text, self.table_path_prefix)
-        result = self.pool.execute_with_retries(yql_text)
+        def execute():
+            return self.pool.execute_with_retries(yql_text)
+
+        def col_execute():
+            return self.column_pool.execute_with_retries(yql_text)
+
+        tp = futures.ThreadPoolExecutor(2)
+        future = tp.submit(execute)
+        if not self.no_cols:
+            col_future = tp.submit(col_execute)
+        result = safe_execute(lambda: future.result())
+        if not self.no_cols:
+            column_result = safe_execute(lambda: col_future.result())
+        logger.info('Executed yql {}'.format(statement_text))
 
         if len(result) == 1:
             scan_query_result = self.execute_scan_query(yql_text)
@@ -476,5 +552,12 @@ class BaseSuiteRunner(object):
                     scan_query_result,
                     "Results are not same",
                 )
+
+                if not self.no_cols:
+                    self.execute_assert(
+                        column_result[i].rows,
+                        scan_query_result,
+                        "Results are not same",
+                    )
 
         return result

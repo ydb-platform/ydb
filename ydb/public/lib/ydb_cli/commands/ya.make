@@ -38,6 +38,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/threading/local_executor
     ydb/library/backup
+    ydb/library/formats/arrow/csv/table
     ydb/library/workload
     ydb/library/yaml_config/public
     ydb/public/lib/operation_id
@@ -66,7 +67,6 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_table
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/public/sdk/cpp/client/ydb_types/credentials/login
-    ydb/core/io_formats/arrow/table
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb_ping.h)

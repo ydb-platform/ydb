@@ -1174,7 +1174,7 @@ Y_UNIT_TEST(TestWritePQBigMessage) {
         CmdWrite(0, "sourceid0", data, tc, false, {}, true);
         PQGetPartInfo(0, 27, tc);
 
-        CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc);
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 13, false, tc);
         CmdRead(0, 1, Max<i32>(), Max<i32>(), 25, false, tc);
         CmdRead(0, 24, Max<i32>(), Max<i32>(), 2, false, tc);
         CmdRead(0, 26, Max<i32>(), Max<i32>(), 1, false, tc);
@@ -1602,17 +1602,18 @@ Y_UNIT_TEST(TestPQRead) {
         CmdRead(0, 26, Max<i32>(), Max<i32>(), 0, true, tc);
 
         CmdRead(0, 0, Max<i32>(), Max<i32>(), 25, false, tc);
-        CmdRead(0, 0, 10, 100_MB, 10, false, tc);
-        CmdRead(0, 9, 1, 100_MB, 1, false, tc);
+        CmdRead(0, 0, 10, 100_MB, 15, false, tc);
+        CmdRead(0, 9, 1, 100_MB, 6, false, tc);
         CmdRead(0, 23, 3, 100_MB, 3, false, tc);
 
-        CmdRead(0, 3, 1000, 511_KB, 1, false, tc);
-        CmdRead(0, 3, 1000, 1_KB, 1, false, tc); //at least one message will be readed always
+        CmdRead(0, 3, 1000, 511_KB, 4, false, tc);
+        CmdRead(0, 3, 1000, 511_KB, 4, false, tc);
+        CmdRead(0, 3, 1000, 1_KB, 4, false, tc); //at least one message will be readed always
         CmdRead(0, 25, 1000, 1_KB, 1, false, tc); //at least one message will be readed always, from head
 
         activeZone = true;
-        CmdRead(0, 9, 1000, 3_MB, 3, false, tc);
-        CmdRead(0, 9, 1000, 3_MB - 10_KB, 3, false, tc);
+        CmdRead(0, 9, 1000, 3_MB, 6, false, tc);
+        CmdRead(0, 9, 1000, 3_MB - 10_KB, 6, false, tc);
         CmdRead(0, 25, 1000, 512_KB, 1, false, tc); //from head
         CmdRead(0, 24, 1000, 512_KB, 1, false, tc); //from head
 
@@ -1701,11 +1702,12 @@ Y_UNIT_TEST(TestPQReadAhead) {
         CmdWrite(0, "sourceid0", data, tc, false, {}, true); //now 1 blob
         PQGetPartInfo(0, 22, tc);
         activeZone = true;
-        CmdRead(0, 0, 1, 100_MB, 1, false, tc);
-        CmdRead(0, 1, 1, 100_MB, 1, false, tc);
-        CmdRead(0, 2, 1, 100_MB, 1, false, tc);
-        CmdRead(0, 3, 1, 100_MB, 1, false, tc);
-        CmdRead(0, 4, 10, 100_MB, 10, false, tc);
+
+        CmdRead(0, 0, 1, 100_MB, 12, false, tc);
+        CmdRead(0, 1, 1, 100_MB, 11, false, tc);
+        CmdRead(0, 2, 1, 100_MB, 10, false, tc);
+        CmdRead(0, 3, 1, 100_MB, 9, false, tc);
+        CmdRead(0, 4, 10, 100_MB, 16, false, tc);
     });
 }
 
@@ -2021,7 +2023,7 @@ Y_UNIT_TEST(TestPQCacheSizeManagement) {
 
         TAutoPtr<IEventHandle> handle;
         for (ui32 i = 0; i < 10; ++i) {
-            CmdRead(0, 0, 1, 100_MB, 1, false, tc);
+            CmdRead(0, 0, 1, 100_MB, 7, false, tc);
             PQTabletRestart(tc);
         }
     });
@@ -2071,14 +2073,15 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
             tc.Runtime->UpdateCurrentTime(tc.Runtime->GetCurrentTime() + TDuration::Minutes(1));
         }
         const auto ts = tc.Runtime->GetCurrentTime();
-        CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {0});
-        CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {21}, TDuration::Minutes(3).MilliSeconds());
-        CmdRead(0, 22, 1, Max<i32>(), 1, false, tc, {22}, TDuration::Minutes(3).MilliSeconds());
+
+        CmdRead(0, 0, 1, Max<i32>(), 7, false, tc, {0});
+        CmdRead(0, 0, 1, Max<i32>(), 7, false, tc, {21}, TDuration::Minutes(3).MilliSeconds());
+        CmdRead(0, 22, 1, Max<i32>(), 6, false, tc, {22}, TDuration::Minutes(3).MilliSeconds());
         CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {34}, 1000);
 
-        CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {21}, 0,
+        CmdRead(0, 0, 1, Max<i32>(), 7, false, tc, {21}, 0,
                 (ts - TDuration::Minutes(3)).MilliSeconds());
-        CmdRead(0, 22, 1, Max<i32>(), 1, false, tc, {22}, 0,
+        CmdRead(0, 22, 1, Max<i32>(), 6, false, tc, {22}, 0,
                 (ts - TDuration::Minutes(3)).MilliSeconds());
         CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {34}, 0,
                 (ts - TDuration::Seconds(1)).MilliSeconds());
@@ -2086,7 +2089,6 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
         PQTabletPrepare({.readFromTimestampsMs=(ts - TDuration::Seconds(1)).MilliSeconds()},
                         {{"aaa", true}}, tc);
         CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {34});
-
     });
 }
 

@@ -29,46 +29,10 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     }
@@ -78,16 +42,25 @@
                                                 "TopSortBy": "row.name"
                                             },
                                             {
-                                                "Condition": "a = a.code",
+                                                "Condition": "c.a = ss.a.code",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 12
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 12
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.a.code)"
                                             }
                                         ],
                                         "PlanNodeId": 15,
@@ -107,19 +80,28 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "LeftJoin (MapJoin)",
+                                                                        "Node Type": "LeftJoin (MapJoin)-Filter",
                                                                         "Operators": [
                                                                             {
-                                                                                "Condition": "code = a",
+                                                                                "Condition": "a.code = b_grp.a",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 8
                                                                                     },
                                                                                     {
-                                                                                        "ExternalPlanNodeId": 6
+                                                                                        "InternalOperatorId": 1
                                                                                     }
                                                                                 ],
                                                                                 "Name": "LeftJoin (MapJoin)"
+                                                                            },
+                                                                            {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 6
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.a)"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 9,

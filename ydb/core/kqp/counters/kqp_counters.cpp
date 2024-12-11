@@ -8,7 +8,6 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 
 #include <ydb/library/actors/core/log.h>
-
 #include <util/generic/size_literals.h>
 
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
@@ -815,6 +814,18 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     DataShardIteratorMessages = KqpGroup->GetCounter("IteratorReads/DatashardMessages", true);
     IteratorDeliveryProblems = KqpGroup->GetCounter("IteratorReads/DeliveryProblems", true);
 
+    /* sink writes */
+    WriteActorsShardResolve = KqpGroup->GetCounter("SinkWrites/WriteActorShardResolve", true);
+    WriteActorsCount = KqpGroup->GetCounter("SinkWrites/WriteActorsCount", false);
+    WriteActorImmediateWrites = KqpGroup->GetCounter("SinkWrites/WriteActorImmediateWrites", true);
+    WriteActorImmediateWritesRetries = KqpGroup->GetCounter("SinkWrites/WriteActorImmediateWritesRetries", true);
+    WriteActorWritesSizeHistogram =
+        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesSize", NMonitoring::ExponentialHistogram(28, 2, 1));
+    WriteActorWritesOperationsHistogram =
+        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesOperations", NMonitoring::ExponentialHistogram(20, 2, 1));
+    WriteActorWritesLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+
     /* sequencers */
 
     SequencerActorsCount = KqpGroup->GetCounter("Sequencer/ActorCount", false);
@@ -829,6 +840,13 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         "PhyTx/ScanTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     FullScansExecuted = KqpGroup->GetCounter("FullScans", true);
+
+    SchedulerThrottled = KqpGroup->GetCounter("NodeScheduler/ThrottledUs", true);
+    SchedulerCapacity = KqpGroup->GetCounter("NodeScheduler/Capacity");
+    ComputeActorExecutions = KqpGroup->GetHistogram("NodeScheduler/BatchUs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    ComputeActorDelays = KqpGroup->GetHistogram("NodeScheduler/Delays", NMonitoring::ExponentialHistogram(20, 2, 1));
+    ThrottledActorsSpuriousActivations = KqpGroup->GetCounter("NodeScheduler/SpuriousActivations", true);
+    SchedulerDelays = KqpGroup->GetHistogram("NodeScheduler/Delay", NMonitoring::ExponentialHistogram(20, 2, 1));
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

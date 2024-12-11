@@ -313,6 +313,8 @@ namespace NActors {
         LastHandshakeDone = TActivationContext::Now();
 
         GenerateTraffic();
+
+        SendUpdateToWhiteboard(true, false);
     }
 
     void TInterconnectSessionTCP::Handle(TEvUpdateFromInputSession::TPtr& ev) {
@@ -533,6 +535,7 @@ namespace NActors {
             XdcSocket->Shutdown(SHUT_RDWR);
             XdcSocket.Reset();
         }
+        SendUpdateToWhiteboard(true, false);
     }
 
     void TInterconnectSessionTCP::ReestablishConnectionExecute() {
@@ -996,16 +999,11 @@ namespace NActors {
         return sumBusy * 1000000 / sumPeriod;
     }
 
-    void TInterconnectSessionTCP::SendUpdateToWhiteboard(bool connected) {
+    void TInterconnectSessionTCP::SendUpdateToWhiteboard(bool connected, bool reschedule) {
+        using EFlag = TWhiteboardSessionStatus::EFlag;
         const ui32 utilization = Socket ? CalculateQueueUtilization() : 0;
 
         if (const auto& callback = Proxy->Common->UpdateWhiteboard) {
-            enum class EFlag {
-                GREEN,
-                YELLOW,
-                ORANGE,
-                RED,
-            };
             EFlag flagState = EFlag::RED;
 
             if (Socket) {
@@ -1034,19 +1032,25 @@ namespace NActors {
             // they have one scope in this case
             bool reportClockSkew = Proxy->Common->LocalScopeId.first != 0 && Proxy->Common->LocalScopeId == Params.PeerScopeId;
 
-            callback({TlsActivationContext->ExecutorThread.ActorSystem,
-                     Proxy->PeerNodeId,
-                     Proxy->Metrics->GetHumanFriendlyPeerHostName(),
-                     connected,
-                     flagState == EFlag::GREEN,
-                     flagState == EFlag::YELLOW,
-                     flagState == EFlag::ORANGE,
-                     flagState == EFlag::RED,
-                     ReceiveContext->ClockSkew_us.load(),
-                     reportClockSkew});
+            callback({
+                .ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem,
+                .PeerNodeId = Proxy->PeerNodeId,
+                .PeerName = Proxy->Metrics->GetHumanFriendlyPeerHostName(),
+                .Connected = connected,
+                .SessionClosed = !connected,
+                .SessionPendingConnection = connected && !Socket,
+                .SessionConnected = connected && Socket,
+                .ConnectStatus = flagState,
+                .ClockSkewUs = ReceiveContext->ClockSkew_us,
+                .ReportClockSkew = reportClockSkew,
+                .PingTimeUs = ReceiveContext->PingRTT_us,
+                .ScopeId = Params.PeerScopeId,
+                .ConnectTime = LastHandshakeDone.MilliSeconds(),
+                .BytesWrittenToSocket = BytesWrittenToSocket,
+            });
         }
 
-        if (connected) {
+        if (connected && reschedule) {
             Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
         }
     }

@@ -196,8 +196,18 @@ bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                              const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
+std::shared_ptr<arrow::RecordBatch> SortBatch(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::shared_ptr<arrow::Array>>& sortingKey, const bool andUnique) {
+    auto sortPermutation = MakeSortPermutation(sortingKey, andUnique);
+    if (sortPermutation) {
+        return Reorder(batch, sortPermutation, andUnique);
+    } else {
+        return batch;
+    }
+}
+
+std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
+    const bool andUnique) {
     auto sortPermutation = MakeSortPermutation(batch, sortingKey, andUnique);
     if (sortPermutation) {
         return Reorder(batch, sortPermutation, andUnique);

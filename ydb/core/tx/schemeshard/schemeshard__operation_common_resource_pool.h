@@ -24,6 +24,8 @@ bool IsApplyIfChecksPassed(const TTxTransaction& transaction, const THolder<TPro
 
 bool IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSchemeOp::TResourcePoolDescription& description);
 
+bool IsResourcePoolInfoValid(const THolder<TProposeResponse>& result, const TResourcePoolInfo::TPtr& info);
+
 TTxState& CreateTransaction(const TOperationId& operationId, const TOperationContext& context, const TPathId& resourcePoolPathId, TTxState::ETxType txType);
 
 void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath);

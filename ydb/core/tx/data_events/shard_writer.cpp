@@ -7,9 +7,10 @@
 
 namespace NKikimr::NEvWrite {
 
-    TWritersController::TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId)
+    TWritersController::TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId, const bool immediateWrite)
         : WritesCount(writesCount)
         , LongTxActorId(longTxActorId)
+        , ImmediateWrite(immediateWrite)
         , LongTxId(longTxId)
     {
         Y_ABORT_UNLESS(writesCount);
@@ -39,28 +40,62 @@ namespace NKikimr::NEvWrite {
         }
     }
 
-    TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const TString& dedupId, const IShardInfo::TPtr& data,
-        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx, const EModificationType mType)
+    TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
+        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx, const EModificationType mType, const bool immediateWrite)
         : ShardId(shardId)
         , WritePartIdx(writePartIdx)
         , TableId(tableId)
+        , SchemaVersion(schemaVersion)
         , DedupId(dedupId)
         , DataForShard(data)
         , ExternalController(externalController)
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , ActorSpan(parentSpan.BuildChildrenSpan("ShardWriter"))
         , ModificationType(mType)
+        , ImmediateWrite(immediateWrite)
     {
     }
 
+    void TShardWriter::SendWriteRequest() {
+        if (ImmediateWrite) {
+            auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            DataForShard->Serialize(*ev, TableId, SchemaVersion);
+            SendToTablet(std::move(ev));
+        } else {
+            auto ev = MakeHolder<TEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx, ModificationType);
+            DataForShard->Serialize(*ev);
+            SendToTablet(std::move(ev));
+        }
+    }
+
     void TShardWriter::Bootstrap() {
-        auto ev = MakeHolder<TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx, ModificationType);
-        DataForShard->Serialize(*ev);
-        SendToTablet(std::move(ev));
+        SendWriteRequest();
         Become(&TShardWriter::StateMain);
     }
 
-    void TShardWriter::Handle(TEvWriteResult::TPtr& ev) {
+    void TShardWriter::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        const auto* msg = ev->Get();
+        Y_ABORT_UNLESS(msg->Record.GetOrigin() == ShardId);
+
+        const auto ydbStatus = msg->GetStatus();
+        if (ydbStatus == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED) {
+            if (RetryWriteRequest(true)) {
+                return;
+            }
+        }
+
+        auto gPassAway = PassAwayGuard();
+        if (ydbStatus != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+            ExternalController->OnFail(Ydb::StatusIds::GENERIC_ERROR,
+                TStringBuilder() << "Cannot write data into shard " << ShardId << " in longTx " <<
+                ExternalController->GetLongTxId().ToString());
+            return;
+        }
+
+        ExternalController->OnSuccess(ShardId, 0, WritePartIdx);
+    }
+
+    void TShardWriter::Handle(TEvColumnShard::TEvWriteResult::TPtr& ev) {
         const auto* msg = ev->Get();
         Y_ABORT_UNLESS(msg->Record.GetOrigin() == ShardId);
 
@@ -113,9 +148,7 @@ namespace NKikimr::NEvWrite {
             Schedule(OverloadTimeout(), new TEvents::TEvWakeup());
         } else {
             ++NumRetries;
-            auto ev = MakeHolder<TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx, ModificationType);
-            DataForShard->Serialize(*ev);
-            SendToTablet(std::move(ev));
+            SendWriteRequest();
         }
         return true;
     }

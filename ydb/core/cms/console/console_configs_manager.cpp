@@ -979,6 +979,7 @@ void TConfigsManager::HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest
     AuditLogReplaceConfigTransaction(
         /* peer = */ ev->Get()->Record.GetPeerName(),
         /* userSID = */ ev->Get()->Record.GetUserToken(),
+        /* sanitizedToken = */ TString(),
         /* oldConfig = */ YamlConfig,
         /* newConfig = */ ev->Get()->Record.GetRequest().config(),
         /* reason = */ "Unauthorized.",
@@ -989,6 +990,7 @@ void TConfigsManager::HandleUnauthorized(TEvConsole::TEvSetYamlConfigRequest::TP
     AuditLogReplaceConfigTransaction(
         /* peer = */ ev->Get()->Record.GetPeerName(),
         /* userSID = */ ev->Get()->Record.GetUserToken(),
+        /* sanitizedToken = */ TString(),
         /* oldConfig = */ YamlConfig,
         /* newConfig = */ ev->Get()->Record.GetRequest().config(),
         /* reason = */ "Unauthorized.",

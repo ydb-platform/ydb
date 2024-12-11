@@ -1,5 +1,7 @@
 #include "read_balancer__balancing.h"
 
+#include "common_app.h"
+
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #define DEBUG(message)
@@ -7,8 +9,8 @@
 
 namespace NKikimr::NPQ::NBalancing {
 
-void TBalancer::RenderApp(TStringStream& str) const {
-    auto& __stream = str;
+void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
+    IOutputStream& __stream = __navigationBar;
 
     for (auto& [consumerName, consumer] : Consumers) {
         auto consumerAnchor = "c_" + EncodeAnchor(consumerName);
@@ -20,32 +22,32 @@ void TBalancer::RenderApp(TStringStream& str) const {
             return TStringBuilder() << consumerAnchor << "_P" << partitionId;
         };
 
-        DIV_CLASS_ID("tab-pane fade", consumerAnchor) {
+        NAVIGATION_TAB_CONTENT(consumerAnchor) {
             TABLE_CLASS("table") {
-                CAPTION() { str << "Families"; }
+                CAPTION() { __stream << "Families"; }
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() { str << "Id"; }
-                        TABLEH() { str << "Status"; }
-                        TABLEH() { str << "Partitions"; }
-                        TABLEH() { str << "Session"; }
-                        TABLEH() { str << "Statistics"; }
+                        TABLEH() { __stream << "Id"; }
+                        TABLEH() { __stream << "Status"; }
+                        TABLEH() { __stream << "Partitions"; }
+                        TABLEH() { __stream << "Session"; }
+                        TABLEH() { __stream << "Statistics"; }
                     }
                 }
 
                 TABLEBODY() {
                     for (auto& [familyId, family] : consumer->Families) {
                         TABLER() {
-                            TABLED() {  DIV_CLASS_ID("text-info", familyAnchor(familyId)) { str << familyId; } }
-                            TABLED() { str << family->Status; }
+                            TABLED() {  DIV_CLASS_ID("text-info", familyAnchor(familyId)) { __stream << familyId; } }
+                            TABLED() { __stream << family->Status; }
                             TABLED() {
                                 for (auto partitionId : family->Partitions) {
-                                    HREF("#" + partitionAnchor(partitionId)) { str << partitionId; }
-                                    str << ", ";
+                                    HREF("#" + partitionAnchor(partitionId)) { __stream << partitionId; }
+                                    __stream << ", ";
                                 }
                             }
-                            TABLED() { str << (family->Session ? family->Session->SessionName : ""); }
-                            TABLED() { str << "Active " << family->ActivePartitionCount << " / Inactive " << family->InactivePartitionCount << " / Locked " << family->LockedPartitions.size(); }
+                            TABLED() { __stream << (family->Session ? family->Session->SessionName : ""); }
+                            TABLED() { __stream << "Active " << family->ActivePartitionCount << " / Inactive " << family->InactivePartitionCount << " / Locked " << family->LockedPartitions.size(); }
                         }
                     }
                 }
@@ -57,16 +59,16 @@ void TBalancer::RenderApp(TStringStream& str) const {
             size_t ready = 0;
 
             TABLE_CLASS("table") {
-                CAPTION() { str << "Partitions"; }
+                CAPTION() { __stream << "Partitions"; }
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() { str << "Id"; }
-                        TABLEH() { str << "Family"; }
-                        TABLEH() { str << "Status"; };
-                        TABLEH() { str << "Parents"; }
-                        TABLEH() { str << "Description"; }
-                        TABLEH() { str << "P Generation"; }
-                        TABLEH() { str << "P Cookie"; }
+                        TABLEH() { __stream << "Id"; }
+                        TABLEH() { __stream << "Family"; }
+                        TABLEH() { __stream << "Status"; };
+                        TABLEH() { __stream << "Parents"; }
+                        TABLEH() { __stream << "Description"; }
+                        TABLEH() { __stream << "P Generation"; }
+                        TABLEH() { __stream << "P Cookie"; }
                     }
                 }
 
@@ -79,102 +81,102 @@ void TBalancer::RenderApp(TStringStream& str) const {
 
                         TABLER() {
                             TABLED() { DIV_CLASS_ID(style, partitionAnchor(partitionId)) {
-                                str << partitionId << " ";
+                                __stream << partitionId << " ";
                                 if (partitionInfo) {
-                                    HREF(TStringBuilder() << "?TabletID=" << partitionInfo->TabletId) { str << "#"; }
+                                    HREF(TStringBuilder() << "?TabletID=" << partitionInfo->TabletId) { __stream << "#"; }
                                 }
                             } }
                             TABLED() {
                                 if (family) {
-                                    HREF("#" + familyAnchor(family->Id)) { str << family->Id; }
+                                    HREF("#" + familyAnchor(family->Id)) { __stream << family->Id; }
                                 }
                             }
                             TABLED() {
                                 if (family) {
                                     if (partition.IsInactive()) {
-                                        str << "Finished";
+                                        __stream << "Finished";
                                         ++finished;
                                     } else {
-                                        str << "Read";
+                                        __stream << "Read";
                                         ++read;
                                     }
                                 } else if (consumer->IsReadable(partitionId)) {
-                                    str << "Ready";
+                                    __stream << "Ready";
                                     ++ready;
                                 } else {
-                                    str << "Free";
+                                    __stream << "Free";
                                     ++free;
                                 }
                             }
                             TABLED() {
                                 if (node) {
                                     for (auto* parent : node->Parents) {
-                                        HREF("#" + partitionAnchor(parent->Id)) { str << parent->Id; }
-                                        str << ", ";
+                                        HREF("#" + partitionAnchor(parent->Id)) { __stream << parent->Id; }
+                                        __stream << ", ";
                                     }
                                 } else {
-                                    str << "error: not found";
+                                    __stream << "error: not found";
                                 }
                             }
                             TABLED() {
                                 if (partition.Commited) {
-                                    str << "commited";
+                                    __stream << "commited";
                                 } else if (partition.ReadingFinished) {
                                     if (partition.ScaleAwareSDK) {
-                                        str << "reading child";
+                                        __stream << "reading child";
                                     } else if (partition.StartedReadingFromEndOffset) {
-                                        str << "finished";
+                                        __stream << "finished";
                                     } else {
-                                        str << "scheduled. iteration: " << partition.Iteration;
+                                        __stream << "scheduled. iteration: " << partition.Iteration;
                                     }
                                 } else if (partition.Iteration) {
-                                    str << "iteration: " << partition.Iteration;
+                                    __stream << "iteration: " << partition.Iteration;
                                 }
                             }
-                            TABLED() { str << partition.PartitionGeneration; }
-                            TABLED() { str << partition.PartitionCookie; }
+                            TABLED() { __stream << partition.PartitionGeneration; }
+                            TABLED() { __stream << partition.PartitionCookie; }
                         }
                     }
                 }
             }
 
             TABLE_CLASS("table") {
-                CAPTION() { str << "Statistics"; }
+                CAPTION() { __stream << "Statistics"; }
                 TABLEBODY() {
                     TABLER() {
-                        TABLED() { str << "Free"; }
-                        TABLED() { str << free; }
+                        TABLED() { __stream << "Free"; }
+                        TABLED() { __stream << free; }
                     }
                     TABLER() {
-                        TABLED() { str << "Ready"; }
-                        TABLED() { str << ready; }
+                        TABLED() { __stream << "Ready"; }
+                        TABLED() { __stream << ready; }
                     }
                     TABLER() {
-                        TABLED() { str << "Read"; }
-                        TABLED() { str << read; }
+                        TABLED() { __stream << "Read"; }
+                        TABLED() { __stream << read; }
                     }
                     TABLER() {
-                        TABLED() { str << "Finished"; }
-                        TABLED() { str << finished; }
+                        TABLED() { __stream << "Finished"; }
+                        TABLED() { __stream << finished; }
                     }
                     TABLER() {
-                        TABLED() { STRONG() { str << "Total"; }}
-                        TABLED() { str << (finished + read + ready + free); }
+                        TABLED() { STRONG() { __stream << "Total"; }}
+                        TABLED() { __stream << (finished + read + ready + free); }
                     }
                 }
             }
 
             TABLE_CLASS("table") {
-                CAPTION() { str << "Sessions"; }
+                CAPTION() { __stream << "Sessions"; }
                 TABLEHEAD() {
                     TABLER() {
                         TABLEH() { }
-                        TABLEH() { str << "Id"; }
-                        TABLEH() { str << "Partitions"; }
-                        TABLEH() { str << "<span title=\"All families / Active / Releasing\">Families</span>"; }
-                        TABLEH() { str << "<span title=\"All partitions / Active / Inactive / Releasing\">Statistics</span>"; };
-                        TABLEH() { str << "Client node"; }
-                        TABLEH() { str << "Proxy node"; }
+                        TABLEH() { __stream << "Id"; }
+                        TABLEH() { __stream << "Partitions"; }
+                        TABLEH() { __stream << "<span title=\"All families / Active / Releasing\">Families</span>"; }
+                        TABLEH() { __stream << "<span title=\"All partitions / Active / Inactive / Releasing\">Statistics</span>"; };
+                        TABLEH() { __stream << "Client node"; }
+                        TABLEH() { __stream << "Proxy node"; }
                     }
                 }
                 TABLEBODY() {
@@ -199,22 +201,22 @@ void TBalancer::RenderApp(TStringStream& str) const {
                         releasingPartitionCount += session->ReleasingPartitionCount;
 
                         TABLER() {
-                            TABLED() { str << ++i; }
-                            TABLED() { str << session->SessionName; }
-                            TABLED() { str << (session->Partitions.empty() ? "" : JoinRange(", ", session->Partitions.begin(), session->Partitions.end())); }
-                            TABLED() { str << session->Families.size() << " / " << session->ActiveFamilyCount << " / " << session->ReleasingFamilyCount; }
-                            TABLED() { str << (session->ActivePartitionCount + session->InactivePartitionCount + session->ReleasingPartitionCount)
+                            TABLED() { __stream << ++i; }
+                            TABLED() { __stream << session->SessionName; }
+                            TABLED() { __stream << (session->Partitions.empty() ? "" : JoinRange(", ", session->Partitions.begin(), session->Partitions.end())); }
+                            TABLED() { __stream << session->Families.size() << " / " << session->ActiveFamilyCount << " / " << session->ReleasingFamilyCount; }
+                            TABLED() { __stream << (session->ActivePartitionCount + session->InactivePartitionCount + session->ReleasingPartitionCount)
                                            << " / " << session->ActivePartitionCount << " / " << session->InactivePartitionCount << " / " << session->ReleasingPartitionCount; }
-                            TABLED() { str << session->ClientNode; }
-                            TABLED() { str << session->ProxyNodeId; }
+                            TABLED() { __stream << session->ClientNode; }
+                            TABLED() { __stream << session->ProxyNodeId; }
                         }
                     }
                     TABLER() {
                         TABLED() { }
-                        TABLED() { str << "<strong>Total:</strong>"; }
+                        TABLED() { __stream << "<strong>Total:</strong>"; }
                         TABLED() { }
-                        TABLED() { str << familyAllCount << " / " << activeFamilyCount << " / " << releasingFamilyCount; }
-                        TABLED() { str << (activePartitionCount + inactivePartitionCount + releasingPartitionCount) << " / " << activePartitionCount << " / "
+                        TABLED() { __stream << familyAllCount << " / " << activeFamilyCount << " / " << releasingFamilyCount; }
+                        TABLED() { __stream << (activePartitionCount + inactivePartitionCount + releasingPartitionCount) << " / " << activePartitionCount << " / "
                                        << inactivePartitionCount << " / " << releasingPartitionCount; }
                         TABLED() { }
                         TABLED() { }

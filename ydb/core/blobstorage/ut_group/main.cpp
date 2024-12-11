@@ -410,10 +410,12 @@ private:
         TControlWrapper enablePutBatching(DefaultEnablePutBatching, false, true);
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), false, mon,
-            TIntrusivePtr(StoragePoolCounters), TBlobStorageProxyParameters{
-                .EnablePutBatching = enablePutBatching,
-                .EnableVPatch = enableVPatch,
-            })};
+                TIntrusivePtr(StoragePoolCounters), TBlobStorageProxyParameters{
+                    .Controls = TBlobStorageProxyControlWrappers{
+                        .EnablePutBatching = enablePutBatching,
+                        .EnableVPatch = enableVPatch,
+                    }
+                })};
         const TActorId& actorId = runtime.Register(proxyActor.release(), TActorId(), 0, std::nullopt, 1);
         runtime.RegisterService(MakeBlobStorageProxyID(GroupId), actorId);
     }

@@ -82,8 +82,8 @@ class TReadRowsRPC : public TActorBootstrapped<TReadRowsRPC> {
 
     static constexpr TDuration DEFAULT_TIMEOUT = TDuration::Seconds(60);
 public:
-    explicit TReadRowsRPC(std::unique_ptr<IRequestNoOpCtx> request)
-        : Request(std::move(request))
+    explicit TReadRowsRPC(IRequestNoOpCtx* request)
+        : Request(request)
         , PipeCache(MakePipePerNodeCacheID(true))
         , Span(TWilsonGrpc::RequestActor, Request->GetWilsonTraceId(), "ReadRowsRpc")
     {}
@@ -730,8 +730,13 @@ private:
     NWilson::TSpan Span;
 };
 
-void DoReadRowsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TReadRowsRPC(std::move(p)));
+ void DoReadRowsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TReadRowsRPC(p.release()));
+}
+
+template<>
+IActor* TEvReadRowsRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return new TReadRowsRPC(msg);
 }
 
 } // namespace NKikimr::NGRpcService

@@ -37,7 +37,6 @@ SRCS(
     dsproxy_quorum_tracker.h
     dsproxy_range.cpp
     dsproxy_responsiveness.h
-    dsproxy_request_reporting.cpp
     dsproxy_status.cpp
     dsproxy_strategy_accelerate_put.h
     dsproxy_strategy_accelerate_put_m3dc.h
@@ -63,6 +62,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/backpressure
     ydb/core/blobstorage/base
+    ydb/core/blobstorage/common
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/storagepoolmon
     ydb/core/blobstorage/vdisk/ingress

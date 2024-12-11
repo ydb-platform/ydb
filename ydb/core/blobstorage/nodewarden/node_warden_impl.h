@@ -146,8 +146,17 @@ namespace NKikimr::NStorage {
 
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
 
-        TControlWrapper LongRequestThresholdMs;
-        TControlWrapper LongRequestReportingDelayMs;
+        TControlWrapper SlowDiskThreshold;
+        TControlWrapper SlowDiskThresholdHDD;
+        TControlWrapper SlowDiskThresholdSSD;
+
+        TControlWrapper PredictedDelayMultiplier;
+        TControlWrapper PredictedDelayMultiplierHDD;
+        TControlWrapper PredictedDelayMultiplierSSD;
+    
+        TControlWrapper MaxNumOfSlowDisks;
+        TControlWrapper MaxNumOfSlowDisksHDD;
+        TControlWrapper MaxNumOfSlowDisksSSD;
 
     public:
         struct TGroupRecord;
@@ -172,8 +181,15 @@ namespace NKikimr::NStorage {
                 TCostMetricsParameters{50},
                 TCostMetricsParameters{32},
             })
-            , LongRequestThresholdMs(50'000, 1, 1'000'000)
-            , LongRequestReportingDelayMs(60'000, 1, 1'000'000)
+            , SlowDiskThreshold(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000)
+            , SlowDiskThresholdHDD(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000)
+            , SlowDiskThresholdSSD(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000)
+            , PredictedDelayMultiplier(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
+            , PredictedDelayMultiplierHDD(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
+            , PredictedDelayMultiplierSSD(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
+            , MaxNumOfSlowDisks(DefaultMaxNumOfSlowDisks, 1, 2)
+            , MaxNumOfSlowDisksHDD(DefaultMaxNumOfSlowDisksHDD, 1, 2)
+            , MaxNumOfSlowDisksSSD(DefaultMaxNumOfSlowDisks, 1, 2)
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;
@@ -223,7 +239,6 @@ namespace NKikimr::NStorage {
         void StartLocalProxy(ui32 groupId);
         void StartVirtualGroupAgent(ui32 groupId);
         void StartStaticProxies();
-        void StartRequestReportingThrottler();
 
         /**
          * Removes drives with bad serial numbers and reports them to monitoring.

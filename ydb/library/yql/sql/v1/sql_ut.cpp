@@ -2494,7 +2494,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 725:7: local_index\n");
+            "<main>:1:40: Error: local: alternative is not implemented yet: 729:7: local_index\n");
     }
 
     Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {
@@ -2691,7 +2691,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             auto req = Sprintf(reqTpl, key.c_str(), value.c_str());
             auto res = SqlToYql(req);
             UNIT_ASSERT(res.Root);
-            
+
             TVerifyLineFunc verifyLine = [&key, &value](const TString& word, const TString& line) {
                 if (word == "Write") {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
@@ -6592,6 +6592,28 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
+    Y_UNIT_TEST(CreateViewIfNotExists) {
+        constexpr const char* name = "TheView";
+        NYql::TAstParseResult res = SqlToYql(std::format(R"(
+                USE plato;
+                CREATE VIEW IF NOT EXISTS {} WITH (security_invoker = TRUE) AS SELECT 1;
+            )", name
+        ));
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, name);
+                UNIT_ASSERT_STRING_CONTAINS(line, "createObjectIfNotExists");
+            }
+        };
+
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
     Y_UNIT_TEST(CreateViewFromTable) {
         constexpr const char* path = "/PathPrefix/TheView";
         constexpr const char* query = R"(
@@ -6671,6 +6693,28 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
 
+    Y_UNIT_TEST(DropViewIfExists) {
+        constexpr const char* name = "TheView";
+        NYql::TAstParseResult res = SqlToYql(std::format(R"(
+                USE plato;
+                DROP VIEW IF EXISTS {};
+            )", name
+        ));
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, name);
+                UNIT_ASSERT_STRING_CONTAINS(line, "dropObjectIfExists");
+            }
+        };
+
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
     Y_UNIT_TEST(CreateViewWithTablePrefix) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
@@ -6714,7 +6758,7 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
-    
+
     Y_UNIT_TEST(YtAlternativeSchemaSyntax) {
         NYql::TAstParseResult res = SqlToYql(R"(
             SELECT * FROM plato.Input WITH schema(y Int32, x String not null);
@@ -6783,7 +6827,7 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
             pragma CompactNamedExprs;
             pragma ValidateUnusedExprs;
 
-            define subquery $x() as 
+            define subquery $x() as
                 select count(1, 2);
             end define;
             select 1;
@@ -6806,7 +6850,7 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
             pragma CompactNamedExprs;
             pragma DisableValidateUnusedExprs;
 
-            define subquery $x() as 
+            define subquery $x() as
                 select count(1, 2);
             end define;
             select 1;
@@ -6859,8 +6903,7 @@ Y_UNIT_TEST_SUITE(ResourcePool) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 ALTER RESOURCE POOL MyResourcePool
-                    SET (CONCURRENT_QUERY_LIMIT = 30, Weight = 5),
-                    SET QUEUE_TYPE "UNORDERED",
+                    SET (CONCURRENT_QUERY_LIMIT = 30, Weight = 5, QUEUE_TYPE = "UNORDERED"),
                     RESET (Query_Cancel_After_Seconds, Query_Count_Limit);
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
@@ -6922,5 +6965,89 @@ Y_UNIT_TEST_SUITE(OlapPartitionCount) {
         UNIT_ASSERT(!res.IsOk());
         UNIT_ASSERT(res.Issues.Size() == 1);
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "PARTITION_COUNT can be used only with STORE=COLUMN");
+    }
+}
+
+Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
+    Y_UNIT_TEST(CreateResourcePoolClassifier) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                    RANK=20,
+                    RESOURCE_POOL='wgUserQueries',
+                    MEMBER_NAME='yandex_query@abc'
+                );
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"member_name" '"yandex_query@abc") '('"rank" (Int32 '"20")) '('"resource_pool" '"wgUserQueries"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateResourcePoolClassifierWithBadArguments) {
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;
+            )sql" , "<main>:3:72: Error: Unexpected token ';' : syntax error...\n\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                    DUPLICATE_SETTING="first_value",
+                    DUPLICATE_SETTING="second_value"
+                );
+            )sql" , "<main>:5:21: Error: DUPLICATE_SETTING duplicate keys\n");
+    }
+
+    Y_UNIT_TEST(AlterResourcePoolClassifier) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
+                    SET (RANK = 30, Weight = 5, MEMBER_NAME = "test@user"),
+                    RESET (Resource_Pool);
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"member_name" '"test@user") '('"rank" (Int32 '"30")) '('"weight" (Int32 '"5")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"resource_pool")))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropResourcePoolClassifier) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;
+            )sql");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 }

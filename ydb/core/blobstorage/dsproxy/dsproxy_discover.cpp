@@ -272,6 +272,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
     const bool ReadBody;
     const bool DiscoverBlockedGeneration;
     const TInstant Deadline;
+    const TInstant StartTime;
 
     TGroupResponseTracker GroupResponseTracker;
     std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> PendingResult;
@@ -294,7 +295,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
     template<typename TPtr>
     void SendResult(TPtr& result) {
         Y_ABORT_UNLESS(result);
-        const TDuration duration = TActivationContext::Monotonic() - RequestStartTime;
+        const TDuration duration = TActivationContext::Now() - StartTime;
         Mon->CountDiscoverResponseTime(duration);
         const bool success = result->Status == NKikimrProto::OK;
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
@@ -877,12 +878,13 @@ public:
     }
 
     TBlobStorageGroupDiscoverRequest(TBlobStorageGroupDiscoverParameters& params)
-        : TBlobStorageGroupRequestActor(params, NWilson::TSpan(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.Discover"))
+        : TBlobStorageGroupRequestActor(params)
         , TabletId(params.Common.Event->TabletId)
         , MinGeneration(params.Common.Event->MinGeneration)
         , ReadBody(params.Common.Event->ReadBody)
         , DiscoverBlockedGeneration(params.Common.Event->DiscoverBlockedGeneration)
         , Deadline(params.Common.Event->Deadline)
+        , StartTime(params.Common.Now)
         , GroupResponseTracker(Info)
         , IsGetBlockDone(!DiscoverBlockedGeneration)
         , ForceBlockedGeneration(params.Common.Event->ForceBlockedGeneration)
@@ -965,7 +967,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupDiscoverRequest(TBlobStorageGroupDiscoverParameters params) {
+IActor* CreateBlobStorageGroupDiscoverRequest(TBlobStorageGroupDiscoverParameters params, NWilson::TTraceId traceId) {
+    params.Common.Span = NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Discover");
     return new TBlobStorageGroupDiscoverRequest(params);
 }
 

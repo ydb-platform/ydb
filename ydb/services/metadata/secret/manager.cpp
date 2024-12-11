@@ -6,7 +6,7 @@
 namespace NKikimr::NMetadata::NSecret {
 
 void TAccessManager::DoPrepareObjectsBeforeModification(std::vector<TAccess>&& patchedObjects, NModifications::IAlterPreparationController<TAccess>::TPtr controller,
-    const TInternalModificationContext& context) const {
+    const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const {
     if (context.GetActivityType() == IOperationsManager::EActivityType::Alter) {
         controller->OnPreparationProblem("access object cannot be modified");
         return;
@@ -88,7 +88,7 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
 }
 
 void TSecretManager::DoPrepareObjectsBeforeModification(std::vector<TSecret>&& patchedObjects, NModifications::IAlterPreparationController<TSecret>::TPtr controller,
-    const TInternalModificationContext& context) const {
+    const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const {
     if (!!context.GetExternalData().GetUserToken()) {
         for (auto&& i : patchedObjects) {
             if (i.GetOwnerUserId() != context.GetExternalData().GetUserToken()->GetUserSID()) {

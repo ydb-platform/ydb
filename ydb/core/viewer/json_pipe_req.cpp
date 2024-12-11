@@ -254,6 +254,15 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
             case NKikimrViewer::TEvViewerRequest::kSystemRequest:
                 response.Span.Attribute("request_type", "SystemRequest");
                 break;
+            case NKikimrViewer::TEvViewerRequest::kPDiskRequest:
+                response.Span.Attribute("request_type", "PDiskRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kVDiskRequest:
+                response.Span.Attribute("request_type", "VDiskRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kNodeRequest:
+                response.Span.Attribute("request_type", "NodeRequest");
+                break;
             case NKikimrViewer::TEvViewerRequest::kQueryRequest:
                 response.Span.Attribute("request_type", "QueryRequest");
                 break;

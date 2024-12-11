@@ -663,6 +663,26 @@
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_pk_predicate_pk_predicate_point_range_rp.sql-result_sets_/pk_predicate_pk_predicate_point_range_rp.sql.results"
         }
     },
+    "test_sql.TestCanonicalFolder1.test_case[pk_predicate/pk_predicate_random_chars.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_pk_predicate_pk_predicate_random_chars.sql-plan_/pk_predicate_pk_predicate_random_chars.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[pk_predicate/pk_predicate_random_chars.sql-result_sets]": {
+        "result_sets": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_pk_predicate_pk_predicate_random_chars.sql-result_sets_/pk_predicate_pk_predicate_random_chars.sql.results"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[pk_predicate/pk_predicate_random_chars_ranges.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_pk_predicate_pk_predicate_random_chars_ranges.sql-plan_/pk_predicate_pk_predicate_random_chars_ranges.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[pk_predicate/pk_predicate_random_chars_ranges.sql-result_sets]": {
+        "result_sets": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_pk_predicate_pk_predicate_random_chars_ranges.sql-result_sets_/pk_predicate_pk_predicate_random_chars_ranges.sql.results"
+        }
+    },
     "test_sql.TestCanonicalFolder1.test_case[pk_predicate/pk_predicate_range.sql-plan]": {
         "plan": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_pk_predicate_pk_predicate_range.sql-plan_/pk_predicate_pk_predicate_range.sql.plan"

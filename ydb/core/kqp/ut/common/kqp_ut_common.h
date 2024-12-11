@@ -217,6 +217,7 @@ inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSet
 struct TCollectedStreamResult {
     TString ResultSetYson;
     TMaybe<TString> PlanJson;
+    TMaybe<TString> Ast;
     TMaybe<Ydb::TableStats::QueryStats> QueryStats;
     ui64 RowsCount = 0;
     ui64 ConsumedRuFromHeader = 0;
@@ -338,8 +339,19 @@ void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);
 
-/* Temporary solution to canonize tests */
-NJson::TJsonValue CanonizeJoinOrder(const TString& deserializedPlan);
+struct TGetPlanParams {
+    bool IncludeFilters = false;
+    bool IncludeOptimizerEstimation = false;
+    bool IncludeTables = true;
+};
+
+/* Gets join order with details as: join algo, join type and scan type. */
+NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TGetPlanParams& params = {});
+
+/* Gets tables join order without details : only tables. */
+NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan);
+
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder);
 
 } // namespace NKqp
 } // namespace NKikimr

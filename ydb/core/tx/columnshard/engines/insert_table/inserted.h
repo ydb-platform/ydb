@@ -29,7 +29,7 @@ public:
     /// One of them wins and becomes committed. Original DedupId would be lost then.
     /// After commit we use original Initiator:WriteId as DedupId of inserted blob inside {PlanStep, TxId}.
     /// pathId, initiator, {writeId}, {dedupId} -> pathId, planStep, txId, {dedupId}
-    [[nodiscard]] TCommittedData Commit(const ui64 planStep, const ui64 txId);
+    [[nodiscard]] TCommittedData Commit(const ui64 planStep, const ui64 txId) const;
 };
 
 }   // namespace NKikimr::NOlap

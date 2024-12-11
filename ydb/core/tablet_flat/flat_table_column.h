@@ -37,6 +37,14 @@ namespace NTable {
             }
         }
 
+        std::optional<ui32> GetCorrectKeyOrder() const {
+            if (KeyOrder == Max<TPos>()) {
+                return std::nullopt;
+            } else {
+                return KeyOrder;
+            }
+        }
+
         NTable::TTag Id = Max<TTag>();
         NScheme::TTypeInfo PType;
         TString PTypeMod;

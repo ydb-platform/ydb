@@ -38,6 +38,9 @@ NNodes::TExprBase DqBuildPureFlatmapStage(NNodes::TExprBase node, TExprContext& 
 NNodes::TExprBase DqBuildFlatmapStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
+NNodes::TExprBase DqPushFlatmapToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
+
 NNodes::TExprBase DqPushCombineToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
@@ -55,7 +58,6 @@ NNodes::TExprBase DqBuildShuffleStage(NNodes::TExprBase node, TExprContext& ctx,
 
 NNodes::TExprBase DqBuildFinalizeByKeyStage(NNodes::TExprBase node, TExprContext& ctx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
-NNodes::TExprBase DqBuildHashShuffleByKeyStage(NNodes::TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap);
 
 NNodes::TExprBase DqBuildAggregationResultStage(NNodes::TExprBase node, TExprContext& ctx,
     IOptimizationContext& optCtx);

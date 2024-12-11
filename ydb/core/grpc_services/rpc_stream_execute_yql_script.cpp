@@ -8,6 +8,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/grpc_services/grpc_integrity_trails.h>
+#include <ydb/core/grpc_services/base/flow_control.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
@@ -84,7 +85,7 @@ public:
 
     TStreamExecuteYqlScriptRPC(IRequestNoOpCtx* request, ui64 rpcBufferSize)
         : TBase(request)
-        , RpcBufferSize_(rpcBufferSize)
+        , FlowControl_(rpcBufferSize)
         , CancelationFlag(std::make_shared<std::atomic_bool>(false))
     {
         // StreamExecuteYqlScript allows write in to table.
@@ -230,8 +231,7 @@ private:
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
 
-        GRpcResponsesSizeQueue_.push(out.size());
-        GRpcResponsesSize_ += out.size();
+        FlowControl_.PushResponse(out.size());
 
         RequestPtr()->SendSerializedResult(std::move(out), StatusIds::SUCCESS);
     }
@@ -268,28 +268,22 @@ private:
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
 
-        GRpcResponsesSizeQueue_.push(out.size());
-        GRpcResponsesSize_ += out.size();
+        FlowControl_.PushResponse(out.size());
+        const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
+        LastSeqNo_ = ev->Get()->Record.GetSeqNo();
+        AckedFreeSpaceBytes_ = freeSpaceBytes;
 
         RequestPtr()->SendSerializedResult(std::move(out), StatusIds::SUCCESS);
 
-        ui64 freeSpace = GRpcResponsesSize_ < RpcBufferSize_
-            ? RpcBufferSize_ - GRpcResponsesSize_
-            : 0;
-
-        if (freeSpace == 0) {
-            WaitOnSeqNo_ = ev->Get()->Record.GetSeqNo();
-        }
-
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Send stream data ack"
             << ", seqNo: " << ev->Get()->Record.GetSeqNo()
-            << ", freeSpace: " << freeSpace
+            << ", freeSpace: " << freeSpaceBytes
             << ", to: " << ev->Sender
-            << ", queue: " << GRpcResponsesSizeQueue_.size());
+            << ", queue: " << FlowControl_.QueueSize());
 
         auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
         resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
-        resp->Record.SetFreeSpace(freeSpace);
+        resp->Record.SetFreeSpace(freeSpaceBytes);
 
         ctx.Send(ev->Sender, resp.Release());
     }
@@ -297,9 +291,9 @@ private:
     void Handle(TRpcServices::TEvGrpcNextReply::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " NextReply"
             << ", left: " << ev->Get()->LeftInQueue
-            << ", queue: " << GRpcResponsesSizeQueue_.size()
-            << ", used memory: " << GRpcResponsesSize_
-            << ", buffer size: " << RpcBufferSize_);
+            << ", queue: " << FlowControl_.QueueSize()
+            << ", inflight bytes: " << FlowControl_.InflightBytes()
+            << ", limit bytes: " << FlowControl_.InflightLimitBytes());
         LastDataStreamTimestamp_ = TAppData::TimeProvider->Now();
 
         if (DataQueryStreamContext) {
@@ -317,27 +311,24 @@ private:
 
         } else {
             //ScanQuery in progress
-            while (GRpcResponsesSizeQueue_.size() > ev->Get()->LeftInQueue) {
-                GRpcResponsesSize_ -= GRpcResponsesSizeQueue_.front();
-                GRpcResponsesSizeQueue_.pop();
+            while (FlowControl_.QueueSize() > ev->Get()->LeftInQueue) {
+                FlowControl_.PopResponse();
             }
-            Y_DEBUG_ABORT_UNLESS(GRpcResponsesSizeQueue_.empty() == (GRpcResponsesSize_ == 0));
 
-            if (WaitOnSeqNo_ && RpcBufferSize_ > GRpcResponsesSize_) {
-                ui64 freeSpace = RpcBufferSize_ - GRpcResponsesSize_;
-
+            const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
+            if (freeSpaceBytes > 0 && LastSeqNo_ && AckedFreeSpaceBytes_ <= 0) {
                 LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Send stream data ack"
-                    << ", seqNo: " << *WaitOnSeqNo_
-                    << ", freeSpace: " << freeSpace
+                    << ", seqNo: " << *LastSeqNo_
+                    << ", freeSpace: " << freeSpaceBytes
                     << ", to: " << GatewayRequestHandlerActorId_);
 
                 auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-                resp->Record.SetSeqNo(*WaitOnSeqNo_);
-                resp->Record.SetFreeSpace(freeSpace);
+                resp->Record.SetSeqNo(*LastSeqNo_);
+                resp->Record.SetFreeSpace(freeSpaceBytes);
 
                 ctx.Send(GatewayRequestHandlerActorId_, resp.Release());
 
-                WaitOnSeqNo_.Clear();
+                AckedFreeSpaceBytes_ = freeSpaceBytes;
             }
         }
     }
@@ -397,7 +388,7 @@ private:
         TInstant now = TAppData::TimeProvider->Now();
         TDuration timeout;
 
-        if (InactiveClientTimeout_ && GRpcResponsesSizeQueue_.size() > 0) {
+        if (InactiveClientTimeout_ && FlowControl_.QueueSize() > 0) {
             TDuration processTime = now - LastDataStreamTimestamp_;
             if (processTime >= InactiveClientTimeout_) {
                 auto message = TStringBuilder() << this->SelfId() << " Client cannot process data in " << processTime
@@ -476,13 +467,12 @@ private:
     }
 
 private:
-    const ui64 RpcBufferSize_;
+    TRpcFlowControlState FlowControl_;
+    TMaybe<ui64> LastSeqNo_;
+    i64 AckedFreeSpaceBytes_ = 0;
 
     TDuration InactiveClientTimeout_;
-    TQueue<ui64> GRpcResponsesSizeQueue_;
-    ui64 GRpcResponsesSize_ = 0;
     TInstant LastDataStreamTimestamp_;
-    TMaybe<ui64> WaitOnSeqNo_;
 
     TSchedulerCookieHolder ClientTimeoutTimerCookieHolder_;
 

@@ -29,8 +29,8 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "precompute_4_0",
-                                        "Node Type": "Limit-InnerJoin (MapJoin)-ConstantExpr-Filter-TablePointLookup-ConstantExpr",
+                                        "CTE Name": "precompute_3_0",
+                                        "Node Type": "Limit-InnerJoin (MapJoin)-Filter-TablePointLookup-ConstantExpr-Filter-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -42,26 +42,21 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "k = p_1.k",
+                                                "Condition": "x.k = p_1.k",
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "InternalOperatorId": 2
+                                                        "InternalOperatorId": 5
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
                                             },
                                             {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute_3_0"
-                                            },
-                                            {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 4
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "Filter",
@@ -70,7 +65,7 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 5
+                                                        "InternalOperatorId": 4
                                                     }
                                                 ],
                                                 "Name": "TablePointLookup",
@@ -83,6 +78,20 @@
                                                 "Inputs": [],
                                                 "Iterator": "precompute_4_0",
                                                 "Name": "Iterator"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 6
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.p_1.k)"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_3_0"
                                             }
                                         ],
                                         "PlanNodeId": 23,
@@ -133,19 +142,28 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "LeftJoin (MapJoin)",
+                                        "Node Type": "LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
-                                                "Condition": "k = k",
+                                                "Condition": "p_1.k = c.k",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 12
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 12
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.k)"
                                             }
                                         ],
                                         "PlanNodeId": 15,

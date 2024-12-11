@@ -141,6 +141,15 @@ void FillTablesMap(const TKqpTable& table, const TCoAtomList& columns,
     THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
 {
     FillTablesMap(table, tablesMap);
+    for (const auto& column : columns) {
+        tablesMap[table.Path()].emplace(column);
+    }
+}
+
+void FillTablesMap(const TKqpTable& table, const TVector<TStringBuf>& columns,
+    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+{
+    FillTablesMap(table, tablesMap);
 
     for (const auto& column : columns) {
         tablesMap[table.Path()].emplace(column);
@@ -763,7 +772,7 @@ private:
                 YQL_ENSURE(maybeSinkNode);
                 auto sinkNode = maybeSinkNode.Cast();
                 auto* sinkProto = stageProto.AddSinks();
-                FillSink(sinkNode, sinkProto, tablesMap, ctx);
+                FillSink(sinkNode, sinkProto, tablesMap, stage, ctx);
                 sinkProto->SetOutputIndex(FromString(TStringBuf(sinkNode.Index())));
 
                 if (IsTableSink(sinkNode.DataSink().Cast<TCoDataSink>().Category())) {
@@ -779,8 +788,9 @@ private:
         stageProto.SetIsEffectsStage(hasEffects || hasTxTableSink);
 
         auto paramsType = CollectParameters(stage, ctx);
+        NDq::TSpillingSettings spillingSettings{Config->GetEnabledSpillingNodes()};
         auto programBytecode = NDq::BuildProgram(stage.Program(), *paramsType, *KqlCompiler, TypeEnv, FuncRegistry,
-            ctx, {});
+            ctx, {}, spillingSettings);
 
         auto& programProto = *stageProto.MutableProgram();
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
@@ -1028,23 +1038,38 @@ private:
         }
     }
 
-    void FillKqpSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
+    void FillKqpSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, const TDqPhyStage& stage) {
         if (auto settings = sink.Settings().Maybe<TKqpTableSinkSettings>()) {
             NKqpProto::TKqpInternalSink& internalSinkProto = *protoSink->MutableInternalSink();
             internalSinkProto.SetType(TString(NYql::KqpTableSinkName));
             NKikimrKqp::TKqpTableSinkSettings settingsProto;
-            FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
+
+            const auto& tupleType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
+            YQL_ENSURE(tupleType);
+            YQL_ENSURE(tupleType->GetSize() == 1);
+            const auto& listType = tupleType->GetItems()[0]->Cast<TListExprType>();
+            YQL_ENSURE(listType);
+            const auto& structType = listType->GetItemType()->Cast<TStructExprType>();
+            YQL_ENSURE(structType);
+
+            TVector<TStringBuf> columns;
+            columns.reserve(structType->GetSize());
+            for (const auto& item : structType->GetItems()) {
+                columns.emplace_back(item->GetName());
+            }
+
+            FillTablesMap(settings.Table().Cast(), columns, tablesMap);
             FillTableId(settings.Table().Cast(), *settingsProto.MutableTable());
 
             const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
 
             for (const auto& columnName : tableMeta->KeyColumnNames) {
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 
                 auto keyColumnProto = settingsProto.AddKeyColumns();
                 keyColumnProto->SetId(columnMeta->Id);
-                keyColumnProto->SetName(columnName);
+                keyColumnProto->SetName(TString(columnName));
                 keyColumnProto->SetTypeId(columnMeta->TypeInfo.GetTypeId());
 
                 if (columnMeta->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
@@ -1054,14 +1079,13 @@ private:
                 }
             }
 
-            for (const auto& column : settings.Columns().Cast()) {
-                const auto columnName = column.StringValue();
+            for (const auto& columnName : columns) {
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 
                 auto columnProto = settingsProto.AddColumns();
                 columnProto->SetId(columnMeta->Id);
-                columnProto->SetName(columnName);
+                columnProto->SetName(TString(columnName));
                 columnProto->SetTypeId(columnMeta->TypeInfo.GetTypeId());
 
                 if (columnMeta->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
@@ -1101,11 +1125,11 @@ private:
             || dataSinkCategory == NYql::KqpTableSinkName;
     }
 
-    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx) {
+    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
         if (IsTableSink(dataSinkCategory)) {
-            FillKqpSink(sink, protoSink, tablesMap);
+            FillKqpSink(sink, protoSink, tablesMap, stage);
         } else {
             // Delegate sink filling to dq integration of specific provider
             const auto provider = TypesCtx.DataSinkMap.find(dataSinkCategory);
@@ -1253,6 +1277,7 @@ private:
             YQL_ENSURE(streamLookup.LookupStrategy().Maybe<TCoAtom>());
             TString lookupStrategy = streamLookup.LookupStrategy().Maybe<TCoAtom>().Cast().StringValue();
             streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(lookupStrategy));
+            streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingLookupJoinEnabled());
 
             switch (streamLookupProto.GetLookupStrategy()) {
                 case NKqpProto::EStreamLookupStrategy::LOOKUP: {

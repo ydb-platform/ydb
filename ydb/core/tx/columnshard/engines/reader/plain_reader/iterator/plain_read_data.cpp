@@ -22,21 +22,21 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
         sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, i, SpecialReadContext));
     }
     for (auto&& i : committed) {
-        if (i.HasSnapshot()) {
+        if (i.IsCommitted()) {
             continue;
         }
-        if (GetReadMetadata()->IsMyUncommitted(i.GetWriteIdVerified())) {
+        if (GetReadMetadata()->IsMyUncommitted(i.GetInsertWriteId())) {
             continue;
         }
         if (GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetFirst()) ||
             GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetLast())) {
-            GetReadMetadata()->SetConflictedWriteId(i.GetWriteIdVerified());
+            GetReadMetadata()->SetConflictedWriteId(i.GetInsertWriteId());
         }
     }
 
     for (auto&& i : committed) {
-        if (!i.HasSnapshot()) {
-            if (GetReadMetadata()->IsWriteConflictable(i.GetWriteIdVerified())) {
+        if (!i.IsCommitted()) {
+            if (GetReadMetadata()->IsWriteConflictable(i.GetInsertWriteId())) {
                 continue;
             }
         } else if (GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(i.GetFirst(), i.GetLast()) ==

@@ -1,0 +1,20 @@
+{
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": [
+        {
+            "name": "/local/base_pk_predicate_pk_predicate_random_chars_sql_plan/Input5",
+            "reads": [
+                {
+                    "columns": [
+                        "HashPassword",
+                        "Login"
+                    ],
+                    "type": "Lookup"
+                }
+            ]
+        }
+    ]
+}

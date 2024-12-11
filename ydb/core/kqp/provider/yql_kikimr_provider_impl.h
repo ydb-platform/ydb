@@ -74,6 +74,8 @@ private:
     virtual TStatus HandleModifyPermissions(NNodes::TKiModifyPermissions node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleReturningList(NNodes::TKiReturningList node, TExprContext& ctx) = 0;
+
+    virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) = 0;
 };
 
 class TKikimrKey {

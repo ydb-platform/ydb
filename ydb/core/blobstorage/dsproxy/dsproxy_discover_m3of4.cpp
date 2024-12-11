@@ -13,6 +13,7 @@ class TBlobStorageGroupMirror3of4DiscoverRequest
 {
     const ui64 TabletId;
     const ui32 MinGeneration;
+    const TInstant StartTime;
     const TInstant Deadline;
     const bool ReadBody;
     const bool DiscoverBlockedGeneration;
@@ -29,9 +30,10 @@ public:
     }
 
     TBlobStorageGroupMirror3of4DiscoverRequest(TBlobStorageGroupDiscoverParameters& params)
-        : TBlobStorageGroupRequestActor(params, NWilson::TSpan(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.Discover(mirror-3of4)"))
+        : TBlobStorageGroupRequestActor(params)
         , TabletId(params.Common.Event->TabletId)
         , MinGeneration(params.Common.Event->MinGeneration)
+        , StartTime(params.Common.Now)
         , Deadline(params.Common.Event->Deadline)
         , ReadBody(params.Common.Event->ReadBody)
         , DiscoverBlockedGeneration(params.Common.Event->DiscoverBlockedGeneration)
@@ -352,7 +354,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupMirror3of4DiscoverRequest(TBlobStorageGroupDiscoverParameters params) {
+IActor* CreateBlobStorageGroupMirror3of4DiscoverRequest(TBlobStorageGroupDiscoverParameters params, NWilson::TTraceId traceId) {
+    params.Common.Span = NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Discover(mirror-3of4)");
     return new TBlobStorageGroupMirror3of4DiscoverRequest(params);
 }
 

@@ -95,6 +95,9 @@ public:
         if (requestId) {
             meta.Aux.push_back({"x-request-id", requestId});
         }
+        for (const auto& [k, v] : ev->Get()->Headers) {
+            meta.Aux.push_back({k, v});
+        }
 
         NYdbGrpc::TResponseCallback<TResponseType> callback =
             [actorSystem = NActors::TActivationContext::ActorSystem(), prefix = Prefix(requestId), request = ev](NYdbGrpc::TGrpcStatus&& status, TResponseType&& response) -> void {

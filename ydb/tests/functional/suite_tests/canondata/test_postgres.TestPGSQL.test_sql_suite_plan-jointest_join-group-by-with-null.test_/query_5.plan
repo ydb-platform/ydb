@@ -53,7 +53,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Aggregate-LeftJoin (MapJoin)",
+                                                        "Node Type": "Aggregate-LeftJoin (MapJoin)-Filter",
                                                         "Operators": [
                                                             {
                                                                 "Aggregation": "{_yql_agg_0: COUNT(item.t2.q1,state._yql_agg_0)}",
@@ -61,30 +61,30 @@
                                                                 "Inputs": [
                                                                     {
                                                                         "InternalOperatorId": 1
-                                                                    },
-                                                                    {
-                                                                        "InternalOperatorId": 1
-                                                                    },
-                                                                    {
-                                                                        "InternalOperatorId": 1
-                                                                    },
-                                                                    {
-                                                                        "InternalOperatorId": 1
                                                                     }
                                                                 ],
                                                                 "Name": "Aggregate"
                                                             },
                                                             {
-                                                                "Condition": "q2 = q1",
+                                                                "Condition": "t1.q2 = t2.q1",
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 6
                                                                     },
                                                                     {
-                                                                        "ExternalPlanNodeId": 4
+                                                                        "InternalOperatorId": 2
                                                                     }
                                                                 ],
                                                                 "Name": "LeftJoin (MapJoin)"
+                                                            },
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 4
+                                                                    }
+                                                                ],
+                                                                "Name": "Filter",
+                                                                "Predicate": "Exist(item.q1)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 7,

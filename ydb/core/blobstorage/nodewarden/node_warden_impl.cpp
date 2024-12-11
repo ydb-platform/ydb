@@ -1,7 +1,7 @@
 #include "node_warden_impl.h"
 
+#include <ydb/core/blobstorage/common/immediate_control_defaults.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
-#include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/core/base/nameservice.h>
@@ -91,6 +91,10 @@ void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData
 }
 
 TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
+    if (!AppData()->FeatureFlags.GetEnableDriveSerialsDiscovery()) {
+        return {};
+    }
+
     TStringStream details;
     TVector<NPDisk::TDriveData> drives = ListDevicesWithPartlabel(details);
 
@@ -129,11 +133,6 @@ void TNodeWarden::StopInvalidGroupProxy() {
     ui32 groupId = Max<ui32>();
     STLOG(PRI_DEBUG, BS_NODE, NW15, "StopInvalidGroupProxy", (GroupId, groupId));
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, MakeBlobStorageProxyID(groupId), {}, nullptr, 0));
-}
-
-void TNodeWarden::StartRequestReportingThrottler() {
-    STLOG(PRI_DEBUG, BS_NODE, NW27, "StartRequestReportingThrottler");
-    Register(CreateRequestReportingThrottler(LongRequestReportingDelayMs));
 }
 
 void TNodeWarden::PassAway() {
@@ -199,8 +198,18 @@ void TNodeWarden::Bootstrap() {
                 "VDiskControls.DiskTimeAvailableScaleSSD");
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
                 "VDiskControls.DiskTimeAvailableScaleNVME");
-        icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
-        icb->RegisterSharedControl(LongRequestReportingDelayMs, "DSProxyControls.LongRequestReportingDelayMs");
+
+        icb->RegisterSharedControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
+        icb->RegisterSharedControl(SlowDiskThresholdHDD, "DSProxyControls.SlowDiskThresholdHDD");
+        icb->RegisterSharedControl(SlowDiskThresholdSSD, "DSProxyControls.SlowDiskThresholdSSD");
+
+        icb->RegisterSharedControl(PredictedDelayMultiplier, "DSProxyControls.PredictedDelayMultiplier");
+        icb->RegisterSharedControl(PredictedDelayMultiplierHDD, "DSProxyControls.PredictedDelayMultiplierHDD");
+        icb->RegisterSharedControl(PredictedDelayMultiplierSSD, "DSProxyControls.PredictedDelayMultiplierSSD");
+
+        icb->RegisterSharedControl(MaxNumOfSlowDisks, "DSProxyControls.MaxNumOfSlowDisks");
+        icb->RegisterSharedControl(MaxNumOfSlowDisksHDD, "DSProxyControls.MaxNumOfSlowDisksHDD");
+        icb->RegisterSharedControl(MaxNumOfSlowDisksSSD, "DSProxyControls.MaxNumOfSlowDisksSSD");
     }
 
     // start replication broker
@@ -264,8 +273,6 @@ void TNodeWarden::Bootstrap() {
     StartDistributedConfigKeeper();
 
     HandleGroupPendingQueueTick();
-
-    StartRequestReportingThrottler();
 }
 
 void TNodeWarden::HandleReadCache() {

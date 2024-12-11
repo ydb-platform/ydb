@@ -80,22 +80,23 @@ protected:
         TRequestResponse& operator =(const TRequestResponse&) = delete;
         TRequestResponse& operator =(TRequestResponse&&) = default;
 
-        void Set(std::unique_ptr<T>&& response) {
+        bool Set(std::unique_ptr<T>&& response) {
+            if (IsDone()) {
+                return false;
+            }
             constexpr bool hasErrorCheck = requires(const std::unique_ptr<T>& r) {TViewerPipeClient::IsSuccess(r);};
             if constexpr (hasErrorCheck) {
                 if (!TViewerPipeClient::IsSuccess(response)) {
-                    Error(TViewerPipeClient::GetError(response));
-                    return;
+                    return Error(TViewerPipeClient::GetError(response));
                 }
             }
-            if (!IsDone()) {
-                Span.EndOk();
-                Response = std::move(response);
-            }
+            Span.EndOk();
+            Response = std::move(response);
+            return true;
         }
 
-        void Set(TAutoPtr<TEventHandle<T>>&& response) {
-            Set(std::unique_ptr<T>(response->Release().Release()));
+        bool Set(TAutoPtr<TEventHandle<T>>&& response) {
+            return Set(std::unique_ptr<T>(response->Release().Release()));
         }
 
         bool Error(const TString& error) {

@@ -90,13 +90,27 @@ message TNodeClockSkew {
 }
 
 message TNodeStateInfo {
-    optional string PeerName = 1;
-    optional bool Connected = 2;
+    enum ESessionState {
+        CLOSED = 0;
+        PENDING_CONNECTION = 1;
+        CONNECTED = 2;
+    }
+    optional string PeerName = 1 [(DefaultField) = true];
+    optional bool Connected = 2 [(DefaultField) = true];
     optional uint32 NodeId = 3; // filled during merge
-    optional uint64 ChangeTime = 4;
+    optional uint64 ChangeTime = 4 [(DefaultField) = true];
     optional uint32 OutputQueueSize = 5 [(InsignificantChangeAmount) = 1048576]; // 1Mb
-    optional EFlag ConnectStatus = 6;
+    optional EFlag ConnectStatus = 6 [(DefaultField) = true];
+    optional uint64 ConnectTime = 7; // changed every time the connection changes it state
+    optional uint32 PeerNodeId = 8 [(DefaultField) = true]; // node if of the peer
+    optional int64 ClockSkewUs = 9; // a positive value means the peer is ahead in time; a negative value means it's behind
+    optional uint64 PingTimeUs = 10; // RTT for the peer
+    optional float Utilization = 11; // network utilization 0-1
+    optional NActorsInterconnect.TScopeId ScopeId = 12; // scope id of the peer
     optional uint32 Count = 13; // filled during group count
+    optional uint64 BytesWritten = 14; // bytes written to the socket
+    optional uint64 WriteThroughput = 15; // bytes written per second
+    optional ESessionState SessionState = 16;
 }
 
 message TEvNodeStateRequest {

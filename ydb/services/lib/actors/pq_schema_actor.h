@@ -544,6 +544,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             return path;
         }
 
+        const TMaybe<TString>& GetCdcStreamName() const {
+            return CdcStreamName;
+        }
+
         void SendDescribeProposeRequest(bool showPrivate = false) {
             return TBase::SendDescribeProposeRequest(this->ActorContext(), showPrivate);
         }
@@ -599,6 +603,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
                     Y_ABORT_UNLESS(response.ListNodeEntry->Children.size() == 1);
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
+
+                    if (response.Self) {
+                        CdcStreamName = response.Self->Info.GetName();
+                    }
                     SendDescribeProposeRequest(true);
                     return true;
                 }
@@ -616,6 +624,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
         TMaybe<TString> PrivateTopicName;
+        TMaybe<TString> CdcStreamName;
+
     };
 
 }

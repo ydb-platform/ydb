@@ -69,6 +69,7 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
     TStorageStatusFlags StatusFlags = 0;
     float ApproximateFreeSpaceShare = 0;
 
+    TInstant StartTime;
     TInstant StageStart;
     TInstant Deadline;
 
@@ -138,14 +139,15 @@ public:
         return ERequestType::Patch;
     }
 
-    TBlobStorageGroupPatchRequest(TBlobStorageGroupPatchParameters& params, NWilson::TSpan&& span)
-        : TBlobStorageGroupRequestActor(params, std::move(span))
+    TBlobStorageGroupPatchRequest(TBlobStorageGroupPatchParameters& params)
+        : TBlobStorageGroupRequestActor(params)
         , OriginalGroupId(TGroupId::FromValue(params.Common.Event->OriginalGroupId))
         , OriginalId(params.Common.Event->OriginalId)
         , PatchedId(params.Common.Event->PatchedId)
         , MaskForCookieBruteForcing(params.Common.Event->MaskForCookieBruteForcing)
         , DiffCount(params.Common.Event->DiffCount)
         , Diffs(params.Common.Event->Diffs.Release())
+        , StartTime(params.Common.Now)
         , Deadline(params.Common.Event->Deadline)
         , Orbit(std::move(params.Common.Event->Orbit))
         , UseVPatch(params.UseVPatch)
@@ -160,7 +162,7 @@ public:
                 StatusFlags, Info->GroupID, ApproximateFreeSpaceShare);
         result->ErrorReason = ErrorReason;
         result->Orbit = std::move(Orbit);
-        TDuration duration = TActivationContext::Monotonic() - RequestStartTime;
+        TDuration duration = TActivationContext::Now() - StartTime;
         Mon->CountPatchResponseTime(Info->GetDeviceType(), duration);
         SendResponseAndDie(std::move(result));
     }
@@ -1036,12 +1038,13 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupPatchRequest(TBlobStorageGroupPatchParameters params) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.Patch");
+IActor* CreateBlobStorageGroupPatchRequest(TBlobStorageGroupPatchParameters params, NWilson::TTraceId traceId) {
+    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Patch");
     if (span) {
         span.Attribute("event", params.Common.Event->ToString());
     }
-    return new TBlobStorageGroupPatchRequest(params, std::move(span));
+    params.Common.Span = std::move(span);
+    return new TBlobStorageGroupPatchRequest(params);
 }
 
 }//NKikimr

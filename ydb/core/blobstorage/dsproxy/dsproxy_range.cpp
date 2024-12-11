@@ -24,6 +24,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
     const bool IsIndexOnly;
     const ui32 ForceBlockedGeneration;
     const bool Decommission;
+    TInstant StartTime;
 
     TMap<TLogoBlobID, TBlobStatusTracker> BlobStatus;
     TBlobStorageGroupInfo::TGroupVDisks FailedDisks;
@@ -47,7 +48,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         for (const TEvBlobStorage::TEvRangeResult::TResponse& resp : reply->Responses) {
             size += resp.Buffer.size();
         }*/
-        Mon->CountRangeResponseTime(TActivationContext::Monotonic() - RequestStartTime);
+        Mon->CountRangeResponseTime(TActivationContext::Now() - StartTime);
         SendResponseAndDie(std::move(reply));
     }
 
@@ -338,8 +339,8 @@ public:
         return ERequestType::Range;
     }
 
-    TBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters& params, NWilson::TSpan&& span)
-        : TBlobStorageGroupRequestActor(params, std::move(span))
+    TBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters& params)
+        : TBlobStorageGroupRequestActor(params)
         , TabletId(params.Common.Event->TabletId)
         , From(params.Common.Event->From)
         , To(params.Common.Event->To)
@@ -348,6 +349,7 @@ public:
         , IsIndexOnly(params.Common.Event->IsIndexOnly)
         , ForceBlockedGeneration(params.Common.Event->ForceBlockedGeneration)
         , Decommission(params.Common.Event->Decommission)
+        , StartTime(params.Common.Now)
         , FailedDisks(&Info->GetTopology())
     {}
 
@@ -394,9 +396,9 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters params) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.Range");
-    return new TBlobStorageGroupRangeRequest(params, std::move(span));
+IActor* CreateBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters params, NWilson::TTraceId traceId) {
+    params.Common.Span = NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Range");
+    return new TBlobStorageGroupRangeRequest(params);
 }
 
 };//NKikimr

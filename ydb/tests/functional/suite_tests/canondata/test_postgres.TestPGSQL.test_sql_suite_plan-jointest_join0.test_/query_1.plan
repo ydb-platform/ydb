@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -42,16 +42,25 @@
                                                 "TopSortBy": ""
                                             },
                                             {
-                                                "Condition": "q2 = i2_1.q2",
+                                                "Condition": "i1.q2 = i2_1.q2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 4
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 4
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.i2_1.q2)"
                                             }
                                         ],
                                         "PlanNodeId": 7,
@@ -74,13 +83,10 @@
                                                                         "Node Type": "InnerJoin (MapJoin)-Filter-TableFullScan",
                                                                         "Operators": [
                                                                             {
-                                                                                "Condition": "q1 = x",
+                                                                                "Condition": "i2_1.q1 = ss.x",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "InternalOperatorId": 1
-                                                                                    },
-                                                                                    {
-                                                                                        "Other": "ConstantExpression"
                                                                                     }
                                                                                 ],
                                                                                 "Name": "InnerJoin (MapJoin)"

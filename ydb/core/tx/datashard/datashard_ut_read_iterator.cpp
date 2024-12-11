@@ -3630,7 +3630,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             if (Commit)
                  expectedRowCount += writeCount * rowCount;
 
-            ui64 statRowCount = WaitTableStats(*runtime, tabletId, 0, expectedRowCount).GetTableStats().GetRowCount();
+            ui64 statRowCount = WaitTableStats(*runtime, tabletId, [expectedRowCount](const NKikimrTableStats::TTableStats& stats) {
+                return stats.GetRowCount() >= expectedRowCount;
+            }).GetTableStats().GetRowCount();
             UNIT_ASSERT_VALUES_EQUAL(statRowCount, expectedRowCount);
         }
     }
@@ -3970,7 +3972,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     Y_UNIT_TEST(HandleMvccGoneInContinue) {
         // TODO
     }
-};
+}
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorSysTables) {
     Y_UNIT_TEST(ShouldRead) {
@@ -4054,7 +4056,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorSysTables) {
 
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::UNSUPPORTED);
     }
-};
+}
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
     Y_UNIT_TEST(ShouldCalculateQuota) {
@@ -4105,7 +4107,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
         UNIT_ASSERT_VALUES_EQUAL(state.Quota.Bytes, 131729);
         UNIT_ASSERT(state.State == NDataShard::TReadIteratorState::EState::Executing);
     }
-};
+}
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
     Y_UNIT_TEST(CancelPageFaultedReadThenDropTable) {
@@ -4751,6 +4753,72 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
             "{ items { uint32_value: 5 } items { uint32_value: 50 } }, "
             "{ items { uint32_value: 6 } items { uint32_value: 60 } }, "
             "{ items { uint32_value: 7 } items { uint32_value: 70 } }");
+    }
+
+}
+
+Y_UNIT_TEST_SUITE(DataShardReadIteratorLatency) {
+
+    Y_UNIT_TEST(ReadSplitLatency) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+        TServer::TPtr server = new TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        // Insert initial data
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10), (2, 20), (3, 30), (4, 40), (5, 50);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (6, 60), (7, 70), (8, 80), (9, 90), (10, 100);");
+
+        // Copy table (this will ensure original shards stay alive after split)
+        {
+            auto senderCopy = runtime.AllocateEdgeActor();
+            ui64 txId = AsyncCreateCopyTable(server, senderCopy, "/Root", "table-2", "/Root/table-1");
+            WaitTxNotification(server, senderCopy, txId);
+        }
+
+        TBlockEvents<TEvDataShard::TEvRead> blockedReads(runtime);
+
+        Cerr << "... starting read from table-1" << Endl;
+        TString readSessionId;
+        auto readFuture = KqpSimpleBeginSend(runtime, readSessionId, R"(
+            SELECT * FROM `/Root/table-1` ORDER BY key;
+            )");
+
+        runtime.WaitFor("blocked TEvRead", [&]{ return blockedReads.size() >= 1; });
+
+        {
+            Cerr << "... splitting table-1" << Endl;
+            SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+            auto shards1before = GetTableShards(server, sender, "/Root/table-1");
+            ui64 txId = AsyncSplitTable(server, sender, "/Root/table-1", shards1before.at(0), 5);
+            Cerr << "... split txId# " << txId << " started" << Endl;
+            WaitTxNotification(server, sender, txId);
+            Cerr << "... split txId# " << txId << " finished" << Endl;
+        }
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        auto readStartTs = runtime.GetCurrentTime();
+        blockedReads.Unblock();
+        blockedReads.Stop();
+        auto readResponse = runtime.WaitFuture(std::move(readFuture));
+        UNIT_ASSERT_VALUES_EQUAL(readResponse.operation().status(), Ydb::StatusIds::SUCCESS);
+        auto readLatency = runtime.GetCurrentTime() - readStartTs;
+        Cerr << "... read latency was " << readLatency << Endl;
+        UNIT_ASSERT_C(readLatency < TDuration::MilliSeconds(100),
+            "unexpected read latency " << readLatency);
     }
 
 }

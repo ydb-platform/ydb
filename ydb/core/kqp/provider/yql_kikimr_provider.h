@@ -244,6 +244,7 @@ enum class TYdbOperation : ui32 {
     CreateReplication    = 1 << 24,
     AlterReplication     = 1 << 25,
     DropReplication      = 1 << 26,
+    Analyze              = 1 << 27,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);
@@ -259,8 +260,8 @@ bool AddDmlIssue(const TIssue& issue, TExprContext& ctx);
 
 class TKikimrTransactionContextBase : public TThrRefBase {
 public:
-    explicit TKikimrTransactionContextBase(bool enableImmediateEffects) : EnableImmediateEffects(enableImmediateEffects) {
-    }
+    explicit TKikimrTransactionContextBase()
+    {}
 
     bool HasStarted() const {
         return EffectiveIsolationLevel.Defined();
@@ -411,28 +412,10 @@ public:
             const bool currentModify = currentOps & KikimrModifyOps();
             if (currentModify) {
                 if (KikimrReadOps() & newOp) {
-                    if (!EnableImmediateEffects) {
-                        TString message = TStringBuilder() << "Data modifications previously made to table '" << table
-                            << "' in current transaction won't be seen by operation: '"
-                            << newOp << "'";
-                        const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
-                        auto newIssue = AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_READ_MODIFIED_TABLE, message));
-                        issues.AddIssue(newIssue);
-                        return {false, issues};
-                    }
-
                     HasUncommittedChangesRead = true;
                 }
 
                 if ((*info)->GetHasIndexTables()) {
-                    if (!EnableImmediateEffects) {
-                        TString message = TStringBuilder()
-                            << "Multiple modification of table with secondary indexes is not supported yet";
-                        const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
-                        issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                        return {false, issues};
-                    }
-
                     HasUncommittedChangesRead = true;
                 }
             }
@@ -447,7 +430,6 @@ public:
 
 public:
     bool HasUncommittedChangesRead = false;
-    const bool EnableImmediateEffects;
     THashMap<TString, TYdbOperations> TableOperations;
     THashMap<TKikimrPathId, TString> TableByIdMap;
     TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
@@ -511,6 +493,10 @@ public:
         return Database;
     }
 
+    TString GetDatabaseId() const {
+        return DatabaseId;
+    }
+
     const TString& GetSessionId() const {
         return SessionId;
     }
@@ -521,6 +507,10 @@ public:
 
     void SetDatabase(const TString& database) {
         Database = database;
+    }
+
+    void SetDatabaseId(const TString& databaseId) {
+        DatabaseId = databaseId;
     }
 
     void SetSessionId(const TString& sessionId) {
@@ -561,6 +551,7 @@ private:
     TString UserName;
     TString Cluster;
     TString Database;
+    TString DatabaseId;
     TString SessionId;
     TKikimrConfiguration::TPtr Configuration;
     TIntrusivePtr<TKikimrTablesData> TablesData;

@@ -14,13 +14,14 @@
 namespace NKikimr::NKqp::NPrivateEvents {
 
 struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCompileRequest> {
-    TEvCompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
+    TEvCompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& clientAddress, const TMaybe<TString>& uid,
         TMaybe<TKqpQueryId>&& query, bool keepInCache, bool isQueryActionPrepare, bool perStatementResult, TInstant deadline,
         TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings, const TMaybe<TString>& applicationName,
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing(),
         bool split = false, NYql::TExprContext* splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr)
         : UserToken(userToken)
+        , ClientAddress(clientAddress)
         , Uid(uid)
         , Query(std::move(query))
         , KeepInCache(keepInCache)
@@ -44,6 +45,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
     }
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TString ClientAddress;
     TMaybe<TString> Uid;
     TMaybe<TKqpQueryId> Query;
     bool KeepInCache = false;
@@ -72,13 +74,14 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
-    TEvRecompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& uid,
+    TEvRecompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& clientAddress, const TString& uid,
         const TMaybe<TKqpQueryId>& query, bool isQueryActionPrepare, TInstant deadline,
         TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings, const TMaybe<TString>& applicationName,
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, TKqpTempTablesState::TConstPtr tempTablesState = nullptr, TMaybe<TQueryAst> queryAst = Nothing(),
         bool split = false, NYql::TExprContext* splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr)
         : UserToken(userToken)
+        , ClientAddress(clientAddress)
         , Uid(uid)
         , Query(query)
         , IsQueryActionPrepare(isQueryActionPrepare)
@@ -98,6 +101,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
     }
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TString ClientAddress;
     TString Uid;
     TMaybe<TKqpQueryId> Query;
     bool IsQueryActionPrepare = false;

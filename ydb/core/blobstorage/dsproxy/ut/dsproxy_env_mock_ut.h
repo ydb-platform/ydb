@@ -83,9 +83,12 @@ struct TDSProxyEnv {
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), true, nodeMon,
             std::move(storagePoolCounters), TBlobStorageProxyParameters{
-                    .EnablePutBatching = enablePutBatching,
-                    .EnableVPatch = enableVPatch,
-                });
+                    .Controls = TBlobStorageProxyControlWrappers{
+                        .EnablePutBatching = enablePutBatching,
+                        .EnableVPatch = enableVPatch,
+                    }
+                }
+            );
         TActorId actorId = runtime.Register(dsproxy, nodeIndex);
         runtime.RegisterService(RealProxyActorId, actorId, nodeIndex);
 
@@ -114,10 +117,9 @@ struct TDSProxyEnv {
                         .Mon = Mon,
                         .Source = ev->Sender,
                         .Cookie = ev->Cookie,
-                        .Now = TMonotonic::Now(),
+                        .Now =  TInstant::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = ev->Get()->RestartCounter,
-                        .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
                         .ExecutionRelay = ev->Get()->ExecutionRelay,
                         .LatencyQueueKind = kind,
@@ -125,7 +127,7 @@ struct TDSProxyEnv {
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                     .Stats = PerDiskStatsPtr,
                     .EnableRequestMod3x3ForMinLatency = false,
-                }));
+                }, std::move(ev->TraceId)));
     }
 
     std::unique_ptr<IActor> CreatePutRequestActor(TBatchedVec<TEvBlobStorage::TEvPut::TPtr> &batched,
@@ -138,7 +140,7 @@ struct TDSProxyEnv {
                         .GroupInfo = Info,
                         .GroupQueues = GroupQueues,
                         .Mon = Mon,
-                        .Now = TMonotonic::Now(),
+                        .Now = TInstant::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
                         .LatencyQueueKind = kind,
@@ -164,16 +166,15 @@ struct TDSProxyEnv {
                         .Mon = Mon,
                         .Source = ev->Sender,
                         .Cookie = ev->Cookie,
-                        .Now = TMonotonic::Now(),
+                        .Now = TInstant::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = ev->Get()->RestartCounter,
-                        .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
                         .ExecutionRelay = ev->Get()->ExecutionRelay,
                         .LatencyQueueKind = kind,
                     },
                     .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo)
-                }));
+                }, std::move(ev->TraceId)));
     }
 
     std::unique_ptr<IActor> CreatePatchRequestActor(TEvBlobStorage::TEvPatch::TPtr &ev, bool useVPatch = false) {
@@ -185,17 +186,17 @@ struct TDSProxyEnv {
                     .Mon = Mon,
                     .Source = ev->Sender,
                     .Cookie = ev->Cookie,
-                    .Now = TMonotonic::Now(),
+                    .Now = TInstant::Now(),
                     .StoragePoolCounters = StoragePoolCounters,
                     .RestartCounter = ev->Get()->RestartCounter,
-                    .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 },
                 .UseVPatch = useVPatch
-            }));
+            }, std::move(ev->TraceId)));
     }
 };
+
 
 inline bool ScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event,
         TDuration delay, TInstant& deadline) {

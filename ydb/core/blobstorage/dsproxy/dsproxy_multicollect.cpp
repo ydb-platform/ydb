@@ -35,6 +35,8 @@ class TBlobStorageGroupMultiCollectRequest
     ui64 FlagRequestsInFlight;
     ui64 CollectRequestsInFlight;
 
+    TInstant StartTime;
+
     TStackVec<TRequestInfo, TypicalDisksInGroup> RequestInfos;
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
@@ -92,7 +94,7 @@ public:
     }
 
     TBlobStorageGroupMultiCollectRequest(TBlobStorageGroupMultiCollectParameters& params)
-        : TBlobStorageGroupRequestActor(params, NWilson::TSpan(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.MultiCollect"))
+        : TBlobStorageGroupRequestActor(params)
         , Iterations(params.Common.Event->PerGenerationCounterStepSize())
         , TabletId(params.Common.Event->TabletId)
         , RecordGeneration(params.Common.Event->RecordGeneration)
@@ -108,6 +110,7 @@ public:
         , Decommission(params.Common.Event->Decommission)
         , FlagRequestsInFlight(0)
         , CollectRequestsInFlight(0)
+        , StartTime(params.Common.Now)
     {
         Y_ABORT_UNLESS(Iterations > 1);
     }
@@ -206,7 +209,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupMultiCollectRequest(TBlobStorageGroupMultiCollectParameters params) {
+IActor* CreateBlobStorageGroupMultiCollectRequest(TBlobStorageGroupMultiCollectParameters params, NWilson::TTraceId traceId) {
+    params.Common.Span = NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.MultiCollect");
     return new TBlobStorageGroupMultiCollectRequest(params);
 }
 

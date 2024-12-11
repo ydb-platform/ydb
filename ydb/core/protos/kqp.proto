@@ -64,6 +64,7 @@ enum EIsolationLevel {
     ISOLATION_LEVEL_READ_COMMITTED = 2;
     ISOLATION_LEVEL_READ_UNCOMMITTED = 3;
     ISOLATION_LEVEL_READ_STALE = 4;
+    ISOLATION_LEVEL_SNAPSHOT_RO = 5;
 };
 
 enum EQueryReplyFlags {
@@ -123,6 +124,7 @@ message TQueryRequest {
     optional string UserSID = 33;
     optional uint64 OutputChunkMaxSize = 34;
     optional string PoolId = 35;
+    optional string DatabaseId = 36;
 }
 
 message TKqpPathIdProto {
@@ -584,6 +586,11 @@ message TEvStartKqpTasksRequest {
     optional bool StartAllOrFail = 6 [default = true];
     optional uint64 OutputChunkMaxSize = 7 [default = 0]; // 0 - use some default value 
     optional string SerializedGUCSettings = 8;
+    optional string SchedulerGroup = 9;
+    optional double MemoryPoolPercent = 10 [default = 100];
+    optional string Database = 11;
+    optional double MaxCpuShare = 12;
+    optional string DatabaseId = 17;
     optional uint64 LockTxId = 13;
     optional uint32 LockNodeId = 14;
 }
@@ -767,6 +774,7 @@ message TKqpStreamLookupSettings {
     optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
     optional bool AllowInconsistentReads = 9 [default = false];
     optional uint32 LockNodeId = 10;
+    optional bool KeepRowsOrder = 11;
 }
 
 message TKqpSequencerSettings {

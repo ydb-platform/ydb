@@ -89,9 +89,12 @@ public:
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(GroupInfo), false, nodeMon,
             std::move(storagePoolCounters), TBlobStorageProxyParameters{
-                .EnablePutBatching = enablePutBatching,
-                .EnableVPatch = enableVPatch,
-            });
+                .Controls = TBlobStorageProxyControlWrappers{
+                    .EnablePutBatching = enablePutBatching,
+                    .EnableVPatch = enableVPatch,
+                }
+            }
+        );
         setup->LocalServices.emplace_back(MakeBlobStorageProxyID(GroupInfo->GroupID),
                 TActorSetupCmd(dsproxy, TMailboxType::Simple, 0));
 

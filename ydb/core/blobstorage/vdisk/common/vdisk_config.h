@@ -219,6 +219,7 @@ namespace NKikimr {
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
         TControlWrapper DefaultHugeGarbagePerMille;
+        bool UseActorSystemTimeInBSQueue = false;
 
         ///////////// BALANCING SETTINGS ////////////////////
         bool BalancingEnableSend;

@@ -28,6 +28,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
     const bool Decommission;
     TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses;
 
+    const TInstant StartTime;
     const bool MustRestoreFirst;
     const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
     const std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
@@ -76,8 +77,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
             x.LooksLikePhantom = PhantomCheck ? std::make_optional(false) : std::nullopt;
         }
         ev->ErrorReason = ErrorReason;
-        Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(),
-                TActivationContext::Monotonic() - RequestStartTime);
+        Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime);
         Y_ABORT_UNLESS(status != NKikimrProto::OK);
         SendResponseAndDie(std::move(ev));
     }
@@ -95,8 +95,8 @@ public:
         return mon->ActiveMultiGet;
     }
 
-    TBlobStorageGroupMultiGetRequest(TBlobStorageGroupMultiGetParameters& params, NWilson::TSpan&& span)
-        : TBlobStorageGroupRequestActor(params, std::move(span))
+    TBlobStorageGroupMultiGetRequest(TBlobStorageGroupMultiGetParameters& params)
+        : TBlobStorageGroupRequestActor(params)
         , QuerySize(params.Common.Event->QuerySize)
         , Queries(params.Common.Event->Queries.Release())
         , Deadline(params.Common.Event->Deadline)
@@ -104,6 +104,7 @@ public:
         , PhantomCheck(params.Common.Event->PhantomCheck)
         , Decommission(params.Common.Event->Decommission)
         , Responses(new TEvBlobStorage::TEvGetResult::TResponse[QuerySize])
+        , StartTime(params.Common.Now)
         , MustRestoreFirst(params.Common.Event->MustRestoreFirst)
         , GetHandleClass(params.Common.Event->GetHandleClass)
         , ForceBlockTabletData(params.Common.Event->ForceBlockTabletData)
@@ -138,8 +139,7 @@ public:
             auto ev = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, 0, Info->GroupID);
             ev->ResponseSz = QuerySize;
             ev->Responses = std::move(Responses);
-            Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(),
-                    TActivationContext::Monotonic() - RequestStartTime);
+            Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime);
             SendResponseAndDie(std::move(ev));
         }
     }
@@ -202,12 +202,9 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupMultiGetRequest(TBlobStorageGroupMultiGetParameters params) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.MultiGet");
-    if (span) {
-        span.Attribute("event", params.Common.Event->ToString());
-    }
-    return new TBlobStorageGroupMultiGetRequest(params, std::move(span));
+IActor* CreateBlobStorageGroupMultiGetRequest(TBlobStorageGroupMultiGetParameters params, NWilson::TTraceId traceId) {
+    params.Common.Span = NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.MultiGet");
+    return new TBlobStorageGroupMultiGetRequest(params);
 }
 
 }//NKikimr

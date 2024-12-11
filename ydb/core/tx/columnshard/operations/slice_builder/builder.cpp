@@ -43,7 +43,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
         return TConclusionStatus::Fail("no data in batch");
     }
     const auto& indexSchema = ActualSchema->GetIndexInfo().ArrowSchema();
-    auto subsetConclusion = NArrow::TColumnOperator().BuildSequentialSubset(OriginalBatch, indexSchema);
+    auto subsetConclusion = NArrow::TColumnOperator().IgnoreOnDifferentFieldTypes().BuildSequentialSubset(OriginalBatch, indexSchema);
     if (subsetConclusion.IsFail()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())(
             "problem", subsetConclusion.GetErrorMessage());
@@ -57,7 +57,8 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     if (OriginalBatch->num_columns() != indexSchema->num_fields()) {
         AFL_VERIFY(OriginalBatch->num_columns() < indexSchema->num_fields())("original", OriginalBatch->num_columns())(
                                                       "index", indexSchema->num_fields());
-        if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOptionalColumnsInColumnShard()) {
+        if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOptionalColumnsInColumnShard() &&
+            WriteData.GetWriteMeta().GetModificationType() != NEvWrite::EModificationType::Delete) {
             subset = NArrow::TSchemaSubset::AllFieldsAccepted();
             const std::vector<ui32>& columnIdsVector = ActualSchema->GetIndexInfo().GetColumnIds(false);
             const std::set<ui32> columnIdsSet(columnIdsVector.begin(), columnIdsVector.end());

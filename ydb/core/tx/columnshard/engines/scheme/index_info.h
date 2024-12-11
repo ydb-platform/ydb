@@ -29,6 +29,10 @@ namespace NIndexes::NMax {
 class TIndexMeta;
 }
 
+namespace NIndexes::NCountMinSketch {
+class TIndexMeta;
+}
+
 namespace NStorageOptimizer {
 class IOptimizerPlannerConstructor;
 }
@@ -107,17 +111,38 @@ private:
     private:
         YDB_READONLY_DEF(TString, Name);
         YDB_READONLY(ui32, ColumnId, 0);
-
+        YDB_READONLY(ui32, ColumnIdx, 0);
     public:
-        TNameInfo(const TString& name, const ui32 columnId)
+        TNameInfo(const TString& name, const ui32 columnId, const ui32 columnIdx)
             : Name(name)
             , ColumnId(columnId)
+            , ColumnIdx(columnIdx)
         {
 
         }
 
-        bool operator<(const TNameInfo& item) const {
-            return Name < item.Name;
+        static std::vector<TNameInfo> BuildColumnNames(const TColumns& columns) {
+            std::vector<TNameInfo> result;
+            for (auto&& i : columns) {
+                result.emplace_back(TNameInfo(i.second.Name, i.first, 0));
+            }
+            {
+                const auto pred = [](const TNameInfo& l, const TNameInfo& r) {
+                    return l.ColumnId < r.ColumnId;
+                };
+                std::sort(result.begin(), result.end(), pred);
+            }
+            ui32 idx = 0;
+            for (auto&& i : result) {
+                i.ColumnIdx = idx++;
+            }
+            {
+                const auto pred = [](const TNameInfo& l, const TNameInfo& r) {
+                    return l.Name < r.Name;
+                };
+                std::sort(result.begin(), result.end(), pred);
+            }
+            return result;
         }
     };
 
@@ -139,6 +164,11 @@ private:
         const ui32 columnId, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<IStoragesManager>& operators) const;
 
 public:
+    std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
+        AFL_VERIFY(columnIndex < ColumnFeatures.size());
+        return ColumnFeatures[columnIndex]->GetPKColumnIndex();
+    }
+
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
     bool IsNullableVerifiedByIndex(const ui32 colIndex) const {
         AFL_VERIFY(colIndex < ColumnFeatures.size());
@@ -237,10 +267,7 @@ public:
     static TIndexInfo BuildDefault(
         const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<TString>& pkNames) {
         TIndexInfo result = BuildDefault();
-        for (auto&& i : columns) {
-            result.ColumnNames.emplace_back(i.second.Name, i.first);
-        }
-        std::sort(result.ColumnNames.begin(), result.ColumnNames.end());
+        result.ColumnNames = TNameInfo::BuildColumnNames(columns);
         for (auto&& i : pkNames) {
             const ui32 columnId = result.GetColumnIdVerified(i);
             result.PKColumnIds.emplace_back(columnId);
@@ -335,7 +362,8 @@ public:
         return result;
     }
 
-    std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMax(const ui32 columnId) const;
+    std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMetaMax(const ui32 columnId) const;
+    std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
 
     [[nodiscard]] TConclusionStatus AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
         const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, TSecondaryData& result) const;
@@ -350,6 +378,7 @@ public:
         return result;
     }
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
+    std::optional<ui32> GetColumnIndexOptional(const std::string& name) const;
 
     /// Returns a name of the column located by id.
     TString GetColumnName(const ui32 id, bool required = true) const;
@@ -358,6 +387,10 @@ public:
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
     std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
     const std::vector<ui32>& GetColumnIds(const bool withSpecial = true) const;
+    ui32 GetColumnIdByIndexVerified(const ui32 index) const {
+        AFL_VERIFY(index < SchemaColumnIdsWithSpecials.size());
+        return SchemaColumnIdsWithSpecials[index];
+    }
     const std::vector<ui32>& GetPKColumnIds() const {
         AFL_VERIFY(PKColumnIds.size());
         return PKColumnIds;

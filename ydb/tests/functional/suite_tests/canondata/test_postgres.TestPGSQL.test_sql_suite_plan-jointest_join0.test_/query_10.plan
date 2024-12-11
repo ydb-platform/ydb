@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-Filter-LeftJoin (MapJoin)",
+                                        "Node Type": "Limit-Filter-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -59,16 +59,25 @@
                                                 "Predicate": "item.b.thousand == item.a.q1 And item.a.q1 == item.b.hundred"
                                             },
                                             {
-                                                "Condition": "q1 = unique2",
+                                                "Condition": "a.q1 = b.unique2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 4
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 4
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.unique2)"
                                             }
                                         ],
                                         "PlanNodeId": 7,

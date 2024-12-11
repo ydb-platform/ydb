@@ -85,7 +85,7 @@ public:
     }
 
     TBlobStorageGroupStatusRequest(TBlobStorageGroupStatusParameters& params)
-        : TBlobStorageGroupRequestActor(params, NWilson::TSpan(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.Status"))
+        : TBlobStorageGroupRequestActor(params)
         , Deadline(params.Common.Event->Deadline)
         , Requests(0)
         , Responses(0)
@@ -129,7 +129,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupStatusRequest(TBlobStorageGroupStatusParameters params) {
+IActor* CreateBlobStorageGroupStatusRequest(TBlobStorageGroupStatusParameters params, NWilson::TTraceId traceId) {
+    params.Common.Span = NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Status");
     return new TBlobStorageGroupStatusRequest(params);
 }
 

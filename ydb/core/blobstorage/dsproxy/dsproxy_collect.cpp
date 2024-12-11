@@ -27,6 +27,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     const bool Decommission;
 
     TGroupQuorumTracker QuorumTracker;
+    TInstant StartTime;
 
     ui32 RequestsSent = 0;
     ui32 ResponsesReceived = 0;
@@ -141,7 +142,7 @@ public:
     }
 
     TBlobStorageGroupCollectGarbageRequest(TBlobStorageGroupCollectGarbageParameters& params)
-        : TBlobStorageGroupRequestActor(params, NWilson::TSpan(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.CollectGarbage"))
+        : TBlobStorageGroupRequestActor(params)
         , TabletId(params.Common.Event->TabletId)
         , RecordGeneration(params.Common.Event->RecordGeneration)
         , PerGenerationCounter(params.Common.Event->PerGenerationCounter)
@@ -155,6 +156,7 @@ public:
         , Collect(params.Common.Event->Collect)
         , Decommission(params.Common.Event->Decommission)
         , QuorumTracker(Info.Get())
+        , StartTime(params.Common.Now)
     {}
 
     void Bootstrap() {
@@ -198,7 +200,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupCollectGarbageRequest(TBlobStorageGroupCollectGarbageParameters params) {
+IActor* CreateBlobStorageGroupCollectGarbageRequest(TBlobStorageGroupCollectGarbageParameters params, NWilson::TTraceId traceId) {
+    params.Common.Span = NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.CollectGarbage");
     return new TBlobStorageGroupCollectGarbageRequest(params);
 }
 

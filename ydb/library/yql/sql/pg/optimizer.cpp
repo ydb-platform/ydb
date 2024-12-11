@@ -491,11 +491,11 @@ struct TPgOptimizerImpl
         std::vector<std::tuple<int,int,TStringBuf,TStringBuf>>& rightVars,
         const std::shared_ptr<TJoinOptimizerNode>& op)
     {
-        for (auto& [l, r]: op->JoinConditions) {
-            auto& ltable = l.RelName;
-            auto& lcol = l.AttributeName;
-            auto& rtable = r.RelName;
-            auto& rcol = r.AttributeName;
+        for (size_t i=0; i<op->LeftJoinKeys.size(); i++ ) {
+            auto& ltable = op->LeftJoinKeys[i].RelName;
+            auto& lcol = op->LeftJoinKeys[i].AttributeName;
+            auto& rtable = op->RightJoinKeys[i].RelName;
+            auto& rcol = op->RightJoinKeys[i].AttributeName;
 
             const auto& lrelIds = Table2RelIds[ltable];
             YQL_ENSURE(!lrelIds.empty());
@@ -562,7 +562,7 @@ struct TPgOptimizerImpl
 
             MakeEqClasses(EqClasses, leftVars, rightVars);
         } else if (op->JoinType == LeftJoin || op->JoinType == RightJoin) {
-            CHECK(op->JoinConditions.size() == 1, "Only 1 var per join supported");
+            CHECK(op->LeftJoinKeys.size() == 1 && op->RightJoinKeys.size() == 1, "Only 1 var per join supported");
 
             std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> leftVars, rightVars;
             ExtractVars(leftVars, rightVars, op);
@@ -637,24 +637,27 @@ struct TPgOptimizerImpl
 
             YQL_ENSURE(node->LeftVars.size() == node->RightVars.size());
 
-            std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
+            TVector<NDq::TJoinColumn> leftJoinKeys;
+            TVector<NDq::TJoinColumn> rightJoinKeys;
+
             for (size_t i = 0; i < node->LeftVars.size(); i++) {
                 auto [lrelId, lvarId] = node->LeftVars[i];
                 auto [rrelId, rvarId] = node->RightVars[i];
                 auto [ltable, lcolumn] = Var2TableCol[lrelId - 1][lvarId - 1];
                 auto [rtable, rcolumn] = Var2TableCol[rrelId - 1][rvarId - 1];
 
-                joinConditions.insert({
-                    NDq::TJoinColumn{TString(ltable), TString(lcolumn)},
-                    NDq::TJoinColumn{TString(rtable), TString(rcolumn)}
-                });
+                leftJoinKeys.push_back(NDq::TJoinColumn(TString(ltable), TString(lcolumn)));
+                rightJoinKeys.push_back(NDq::TJoinColumn(TString(rtable), TString(rcolumn)));
             }
 
             return std::make_shared<TJoinOptimizerNode>(
                 left, right,
-                joinConditions,
+                leftJoinKeys,
+                rightJoinKeys,
                 joinKind,
-                EJoinAlgoType::MapJoin
+                EJoinAlgoType::MapJoin,
+                false,
+                false
                 );
         } else {
             YQL_ENSURE(false, "Wrong CBO node");
@@ -690,8 +693,11 @@ public:
         , Log(log)
     { }
 
-    std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) override
+    std::shared_ptr<TJoinOptimizerNode> JoinSearch(
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        const TOptimizerHints& hints = {}) override
     {
+        Y_UNUSED(hints);
         return TPgOptimizerImpl(joinTree, Ctx, Log).Do();
     }
 

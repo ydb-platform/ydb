@@ -265,7 +265,7 @@ public:
     }
 
     TBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParameters& params)
-        : TBlobStorageGroupRequestActor(params, NWilson::TSpan(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.Assimilate"))
+        : TBlobStorageGroupRequestActor(params)
         , SkipBlocksUpTo(params.Common.Event->SkipBlocksUpTo)
         , SkipBarriersUpTo(params.Common.Event->SkipBarriersUpTo)
         , SkipBlobsUpTo(params.Common.Event->SkipBlobsUpTo)
@@ -459,7 +459,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParameters params) {
+IActor* CreateBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParameters params, NWilson::TTraceId traceId) {
+    params.Common.Span = NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Assimilate");
     return new TBlobStorageGroupAssimilateRequest(params);
 }
 

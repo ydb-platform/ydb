@@ -24,6 +24,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
     TVector<TBlobStatusTracker> BlobStatus;
     ui32 VGetsInFlight;
 
+    TInstant StartTime;
     NKikimrBlobStorage::EGetHandleClass GetHandleClass;
 
     ui64 TabletId;
@@ -50,7 +51,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
             PendingResult->ErrorReason = ErrorReason;
         }
         Y_ABORT_UNLESS(PendingResult);
-        Mon->CountIndexRestoreGetResponseTime(TActivationContext::Monotonic() - RequestStartTime);
+        Mon->CountIndexRestoreGetResponseTime(TActivationContext::Now() - StartTime);
         SendResponseAndDie(std::move(PendingResult));
     }
 
@@ -265,8 +266,8 @@ public:
         return ERequestType::Get;
     }
 
-    TBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters& params, NWilson::TSpan&& span)
-        : TBlobStorageGroupRequestActor(params, std::move(span))
+    TBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters& params)
+        : TBlobStorageGroupRequestActor(params)
         , QuerySize(params.Common.Event->QuerySize)
         , Queries(params.Common.Event->Queries.Release())
         , Deadline(params.Common.Event->Deadline)
@@ -274,6 +275,7 @@ public:
         , Decommission(params.Common.Event->Decommission)
         , ForceBlockTabletData(params.Common.Event->ForceBlockTabletData)
         , VGetsInFlight(0)
+        , StartTime(params.Common.Now)
         , GetHandleClass(params.Common.Event->GetHandleClass)
         , RestoreQueriesStarted(0)
         , RestoreQueriesFinished(0)
@@ -386,12 +388,13 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters params) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.IndexRestoreGet");
+IActor* CreateBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters params, NWilson::TTraceId traceId) {
+    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.IndexRestoreGet");
     if (span) {
         span.Attribute("event", params.Common.Event->ToString());
     }
-    return new TBlobStorageGroupIndexRestoreGetRequest(params, std::move(span));
+    params.Common.Span = std::move(span);
+    return new TBlobStorageGroupIndexRestoreGetRequest(params);
 }
 
 }//NKikimr

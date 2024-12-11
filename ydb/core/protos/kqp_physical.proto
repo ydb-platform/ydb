@@ -273,6 +273,7 @@ message TKqpPhyCnStreamLookup {
     bytes LookupKeysType = 4;
     bytes ResultType = 5;
     EStreamLookupStrategy LookupStrategy = 6;
+    bool KeepRowsOrder = 7;
 }
 
 message TKqpPhyCnSequencer {
@@ -386,6 +387,11 @@ message TKqpPhyResult {
     optional uint32 QueryResultIndex = 5;
 }
 
+message TKqpAnalyzeOperation {
+    string TablePath = 1;
+    repeated string Columns = 2;
+}
+
 message TKqpPhyMetadataOperation {
     message TColumnValue {
         string Column = 1;
@@ -450,6 +456,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateResourcePool = 38;
         NKikimrSchemeOp.TModifyScheme AlterResourcePool = 39;
         NKikimrSchemeOp.TModifyScheme DropResourcePool = 40;
+        TKqpAnalyzeOperation AnalyzeTable = 41;
         NKikimrSchemeOp.TModifyScheme CreateTopic = 42;
         NKikimrSchemeOp.TModifyScheme AlterTopic = 43;
         NKikimrSchemeOp.TModifyScheme DropTopic = 44;

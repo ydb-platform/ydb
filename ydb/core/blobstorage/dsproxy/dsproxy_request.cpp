@@ -52,14 +52,13 @@ namespace NKikimr {
                         .Mon = Mon,
                         .Source = ev->Sender,
                         .Cookie = ev->Cookie,
-                        .Now = TActivationContext::Monotonic(),
+                        .Now = TActivationContext::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = ev->Get()->RestartCounter,
-                        .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
                         .ExecutionRelay = ev->Get()->ExecutionRelay,
                     }
-                }),
+                }, std::move(ev->TraceId)),
                 ev->Get()->Deadline
             );
         } else {
@@ -101,17 +100,17 @@ namespace NKikimr {
                             .Mon = Mon,
                             .Source = ev->Sender,
                             .Cookie = ev->Cookie,
-                            .Now = TActivationContext::Monotonic(),
+                            .Now = TActivationContext::Now(),
                             .StoragePoolCounters = StoragePoolCounters,
                             .RestartCounter = ev->Get()->RestartCounter,
-                            .TraceId = std::move(ev->TraceId),
                             .Event = ev->Get(),
                             .ExecutionRelay = ev->Get()->ExecutionRelay,
+                            .LogAccEnabled = ev->Get()->IsVerboseNoDataEnabled || ev->Get()->CollectDebugInfo,
                             .LatencyQueueKind = kind,
                         },
                         .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo),
-                        .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
-                    }),
+                        .AccelerationParams = GetAccelerationParams(),
+                    }, std::move(ev->TraceId)),
                     ev->Get()->Deadline
                 );
             } else {
@@ -124,15 +123,14 @@ namespace NKikimr {
                             .Mon = Mon,
                             .Source = ev->Sender,
                             .Cookie = ev->Cookie,
-                            .Now = TActivationContext::Monotonic(),
+                            .Now = TActivationContext::Now(),
                             .StoragePoolCounters = StoragePoolCounters,
                             .RestartCounter = ev->Get()->RestartCounter,
-                            .TraceId = std::move(ev->TraceId),
                             .Event = ev->Get(),
                             .ExecutionRelay = ev->Get()->ExecutionRelay,
                             .LatencyQueueKind = kind,
                         },
-                    }),
+                    }, std::move(ev->TraceId)),
                     ev->Get()->Deadline
                 );
             }
@@ -179,7 +177,10 @@ namespace NKikimr {
         Y_DEBUG_ABORT_UNLESS(MinREALHugeBlobInBytes);
         const ui32 partSize = Info->Type.PartSize(ev->Get()->Id);
 
-        if (EnablePutBatching && partSize < MinREALHugeBlobInBytes && partSize <= MaxBatchedPutSize) {
+        TInstant now = TActivationContext::Now();
+
+        if (Controls.EnablePutBatching.Update(now) && partSize < MinREALHugeBlobInBytes &&
+                partSize <= MaxBatchedPutSize) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
             Y_ABORT_UNLESS((ui64)handleClass <= PutHandleClassCount);
@@ -212,10 +213,9 @@ namespace NKikimr {
                         .Mon = Mon,
                         .Source = ev->Sender,
                         .Cookie = ev->Cookie,
-                        .Now = TActivationContext::Monotonic(),
+                        .Now = TActivationContext::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = ev->Get()->RestartCounter,
-                        .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
                         .ExecutionRelay = ev->Get()->ExecutionRelay,
                         .LatencyQueueKind = kind
@@ -223,8 +223,8 @@ namespace NKikimr {
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                     .Stats = PerDiskStats,
                     .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
-                    .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
-                }),
+                    .AccelerationParams = GetAccelerationParams(),
+                }, std::move(ev->TraceId)),
                 ev->Get()->Deadline
             );
         }
@@ -241,14 +241,13 @@ namespace NKikimr {
                     .Mon = Mon,
                     .Source = ev->Sender,
                     .Cookie = ev->Cookie,
-                    .Now = TActivationContext::Monotonic(),
+                    .Now = TActivationContext::Now(),
                     .StoragePoolCounters = StoragePoolCounters,
                     .RestartCounter = ev->Get()->RestartCounter,
-                    .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 }
-            }),
+            }, std::move(ev->TraceId)),
             ev->Get()->Deadline
         );
     }
@@ -261,6 +260,7 @@ namespace NKikimr {
         }
         EnsureMonitoring(true);
         Mon->EventPatch->Inc();
+        TInstant now = TActivationContext::Now();
         PushRequest(CreateBlobStorageGroupPatchRequest(
             TBlobStorageGroupPatchParameters{
                 .Common = {
@@ -269,15 +269,14 @@ namespace NKikimr {
                     .Mon = Mon,
                     .Source = ev->Sender,
                     .Cookie = ev->Cookie,
-                    .Now = TActivationContext::Monotonic(),
+                    .Now = now,
                     .StoragePoolCounters = StoragePoolCounters,
                     .RestartCounter = ev->Get()->RestartCounter,
-                    .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 },
-                .UseVPatch = static_cast<bool>(EnableVPatch.Update(TActivationContext::Now()))
-            }),
+                .UseVPatch = static_cast<bool>(Controls.EnableVPatch.Update(now))
+            }, std::move(ev->TraceId)),
             ev->Get()->Deadline
         );
     }
@@ -293,9 +292,10 @@ namespace NKikimr {
         EnsureMonitoring(true);
         Mon->EventDiscover->Inc();
         EnableWilsonTracing(ev, Mon->DiscoverSamplePPM);
-        auto&& callback = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+        TErasureType::EErasureSpecies erasure = Info->Type.GetErasure();
+        auto&& callback = erasure == TBlobStorageGroupType::ErasureMirror3dc
             ? CreateBlobStorageGroupMirror3dcDiscoverRequest
-            : Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3of4
+            : erasure == TBlobStorageGroupType::ErasureMirror3of4
             ? CreateBlobStorageGroupMirror3of4DiscoverRequest
             : CreateBlobStorageGroupDiscoverRequest;
         PushRequest(callback(
@@ -306,14 +306,15 @@ namespace NKikimr {
                     .Mon = Mon,
                     .Source = ev->Sender,
                     .Cookie = ev->Cookie,
-                    .Now = TActivationContext::Monotonic(),
+                    .Now = TActivationContext::Now(),
                     .StoragePoolCounters = StoragePoolCounters,
                     .RestartCounter = ev->Get()->RestartCounter,
-                    .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
-                    .ExecutionRelay = ev->Get()->ExecutionRelay
+                    .ExecutionRelay = ev->Get()->ExecutionRelay,
+                    .LogAccEnabled = (erasure != TBlobStorageGroupType::ErasureMirror3dc) &&
+                            (erasure != TBlobStorageGroupType::ErasureMirror3of4)
                 }
-            }),
+            }, std::move(ev->TraceId)),
             ev->Get()->Deadline
         );
     }
@@ -334,14 +335,13 @@ namespace NKikimr {
                     .Mon = Mon,
                     .Source = ev->Sender,
                     .Cookie = ev->Cookie,
-                    .Now = TActivationContext::Monotonic(),
+                    .Now = TActivationContext::Now(),
                     .StoragePoolCounters = StoragePoolCounters,
                     .RestartCounter = ev->Get()->RestartCounter,
-                    .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 }
-            }),
+            }, std::move(ev->TraceId)),
             ev->Get()->Deadline
         );
     }
@@ -359,14 +359,13 @@ namespace NKikimr {
                         .Mon = Mon,
                         .Source = ev->Sender,
                         .Cookie = ev->Cookie,
-                        .Now = TActivationContext::Monotonic(),
+                        .Now = TActivationContext::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = ev->Get()->RestartCounter,
-                        .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
                         .ExecutionRelay = ev->Get()->ExecutionRelay
                     }
-                }),
+                }, std::move(ev->TraceId)),
                 ev->Get()->Deadline
             );
         } else {
@@ -379,14 +378,13 @@ namespace NKikimr {
                         .Mon = Mon,
                         .Source = ev->Sender,
                         .Cookie = ev->Cookie,
-                        .Now = TActivationContext::Monotonic(),
+                        .Now = TActivationContext::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = ev->Get()->RestartCounter,
-                        .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
                         .ExecutionRelay = ev->Get()->ExecutionRelay
                     }
-                }),
+                }, std::move(ev->TraceId)),
                 ev->Get()->Deadline
             );
         }
@@ -408,14 +406,13 @@ namespace NKikimr {
                     .Mon = Mon,
                     .Source = ev->Sender,
                     .Cookie = ev->Cookie,
-                    .Now = TActivationContext::Monotonic(),
+                    .Now = TActivationContext::Now(),
                     .StoragePoolCounters = StoragePoolCounters,
                     .RestartCounter = ev->Get()->RestartCounter,
-                    .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 }
-            }),
+            }, std::move(ev->TraceId)),
             TInstant::Max()
         );
     }
@@ -431,14 +428,13 @@ namespace NKikimr {
                     .Mon = Mon,
                     .Source = ev->Sender,
                     .Cookie = ev->Cookie,
-                    .Now = TActivationContext::Monotonic(),
+                    .Now = TActivationContext::Now(),
                     .StoragePoolCounters = StoragePoolCounters,
                     .RestartCounter = ev->Get()->RestartCounter,
-                    .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 }
-            }),
+            }, std::move(ev->TraceId)),
             TInstant::Max()
         );
     }
@@ -482,10 +478,9 @@ namespace NKikimr {
                                 .Mon = Mon,
                                 .Source = ev->Sender,
                                 .Cookie = ev->Cookie,
-                                .Now = TActivationContext::Monotonic(),
+                                .Now = TActivationContext::Now(),
                                 .StoragePoolCounters = StoragePoolCounters,
                                 .RestartCounter = ev->Get()->RestartCounter,
-                                .TraceId = std::move(ev->TraceId),
                                 .Event = ev->Get(),
                                 .ExecutionRelay = ev->Get()->ExecutionRelay,
                                 .LatencyQueueKind = kind,
@@ -493,8 +488,8 @@ namespace NKikimr {
                             .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                             .Stats = PerDiskStats,
                             .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
-                            .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
-                        }),
+                            .AccelerationParams = GetAccelerationParams(),
+                        }, std::move(ev->TraceId)),
                         ev->Get()->Deadline
                     );
                 } else {
@@ -504,7 +499,7 @@ namespace NKikimr {
                                 .GroupInfo = Info,
                                 .GroupQueues = Sessions->GroupQueues,
                                 .Mon = Mon,
-                                .Now = TActivationContext::Monotonic(),
+                                .Now = TActivationContext::Now(),
                                 .StoragePoolCounters = StoragePoolCounters,
                                 .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batchedPuts.Queue),
                                 .LatencyQueueKind = kind,
@@ -515,7 +510,7 @@ namespace NKikimr {
                             .HandleClass = handleClass,
                             .Tactic = tactic,
                             .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
-                            .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
+                            .AccelerationParams = GetAccelerationParams(),
                         }),
                         TInstant::Max()
                     );
@@ -549,7 +544,7 @@ namespace NKikimr {
         ++*Mon->EventStopPutBatching;
         LWPROBE(DSProxyBatchedPutRequest, BatchedPutRequestCount, GroupId.GetRawId());
         BatchedPutRequestCount = 0;
-        EnablePutBatching.Update(TActivationContext::Now());
+        Controls.EnablePutBatching.Update(TActivationContext::Now());
     }
 
     void TBlobStorageGroupProxy::Handle(TEvStopBatchingGetRequests::TPtr& ev) {
@@ -559,4 +554,18 @@ namespace NKikimr {
         BatchedGetRequestCount = 0;
     }
 
+    void TBlobStorageGroupProxy::Handle(TEvGetQueuesInfo::TPtr ev) {
+        ui32 groupSize = Info->GetTotalVDisksNum();
+        std::unique_ptr<TEvQueuesInfo> res = std::make_unique<TEvQueuesInfo>(groupSize);
+        if (Sessions && Sessions->GroupQueues) {
+            for (ui32 orderNum = 0; orderNum < groupSize; ++orderNum) {
+                TGroupQueues::TVDisk* vdisk = Sessions->GroupQueues->DisksByOrderNumber[orderNum];
+                if (vdisk) {
+                    const TGroupQueues::TVDisk::TQueues::TQueue& queue = vdisk->Queues.GetQueue(ev->Get()->QueueId);
+                    res->AddInfoForQueue(orderNum, queue.ActorId, queue.FlowRecord);
+                }
+            }
+        }
+        TActivationContext::Send(ev->Sender, std::move(res));
+    }
 } // NKikimr

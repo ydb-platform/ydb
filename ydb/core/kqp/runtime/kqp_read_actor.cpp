@@ -1,4 +1,5 @@
 #include "kqp_read_actor.h"
+#include "kqp_compute_scheduler.h"
 
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>

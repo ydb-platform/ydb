@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -42,16 +42,25 @@
                                                 "TopSortBy": "argument.qr.y"
                                             },
                                             {
-                                                "Condition": "_equijoin_column_0 = x",
+                                                "Condition": "qr._equijoin_column_0 = pv.x",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 28
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 26
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 26
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.x)"
                                             }
                                         ],
                                         "PlanNodeId": 29,
@@ -179,19 +188,28 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "LeftJoin (MapJoin)",
+                                        "Node Type": "LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
-                                                "Condition": "x = x",
+                                                "Condition": "a.x = qt.x",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 12
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 12
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.x)"
                                             }
                                         ],
                                         "PlanNodeId": 15,

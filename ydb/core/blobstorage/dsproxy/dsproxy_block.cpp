@@ -16,6 +16,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
     const ui32 Generation;
     const TInstant Deadline;
     const ui64 IssuerGuid;
+    TInstant StartTime;
     bool SeenAlready = false;
 
     TGroupQuorumTracker QuorumTracker;
@@ -99,7 +100,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
         std::unique_ptr<TEvBlobStorage::TEvBlockResult> result(new TEvBlobStorage::TEvBlockResult(status));
         result->ErrorReason = ErrorReason;
         A_LOG_LOG_S(true, PriorityForStatusResult(status), "DSPB04", "Result# " << result->Print(false));
-        Mon->CountBlockResponseTime(TActivationContext::Monotonic() - RequestStartTime);
+        Mon->CountBlockResponseTime(TActivationContext::Now() - StartTime);
         return SendResponseAndDie(std::move(result));
     }
 
@@ -131,12 +132,13 @@ public:
         return mon->ActiveBlock;
     }
 
-    TBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters& params, NWilson::TSpan&& span)
-        : TBlobStorageGroupRequestActor(params, std::move(span))
+    TBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters& params)
+        : TBlobStorageGroupRequestActor(params)
         , TabletId(params.Common.Event->TabletId)
         , Generation(params.Common.Event->Generation)
         , Deadline(params.Common.Event->Deadline)
         , IssuerGuid(params.Common.Event->IssuerGuid)
+        , StartTime(params.Common.Now)
         , QuorumTracker(Info.Get())
     {}
 
@@ -167,12 +169,13 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters params) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.Block");
+IActor* CreateBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters params, NWilson::TTraceId traceId) {
+    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Block");
     if (span) {
         span.Attribute("event", params.Common.Event->ToString());
     }
-    return new TBlobStorageGroupBlockRequest(params, std::move(span));
+    params.Common.Span = std::move(span);
+    return new TBlobStorageGroupBlockRequest(params);
 }
 
 } // NKikimr

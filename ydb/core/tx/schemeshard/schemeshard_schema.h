@@ -373,7 +373,7 @@ struct Schema : NIceDb::Schema {
         struct FullCompactionTs : Column<31, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
         struct MemDataSize : Column<32, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
 
-        // PartCount, PartOwners & ShardState are volatile data
+        // PartCount, PartOwners, ShardState, HasSchemaChanges are volatile data
 
         // Represented by NKikimrTableStats::TStoragePoolsStats.
         struct StoragePoolsStats : Column<33, NScheme::NTypeIds::String> { using Type = TString; };

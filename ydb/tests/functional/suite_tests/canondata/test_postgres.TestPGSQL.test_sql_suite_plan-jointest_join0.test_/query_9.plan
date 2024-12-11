@@ -29,25 +29,10 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     }
@@ -57,16 +42,25 @@
                                                 "TopSortBy": "row.fault"
                                             },
                                             {
-                                                "Condition": "q2 = unique2",
+                                                "Condition": "int8_tbl.q2 = tenk1.unique2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 4
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 4
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.unique2)"
                                             }
                                         ],
                                         "PlanNodeId": 7,

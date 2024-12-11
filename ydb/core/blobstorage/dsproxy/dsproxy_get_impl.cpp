@@ -159,29 +159,26 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 }
 
 
-ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nthWorst) {
+ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId) {
     Y_UNUSED(logCtx);
     // Find the slowest disk
     TDiskDelayPredictions worstDisks;
     if (Blackboard.BlobStates.size() == 1) {
-        Blackboard.BlobStates.begin()->second.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId, nthWorst, &worstDisks);
+        Blackboard.BlobStates.begin()->second.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues,
+                queueId, &worstDisks, AccelerationParams);
     } else {
-        Blackboard.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId, nthWorst, &worstDisks);
+        Blackboard.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, queueId, &worstDisks,
+                AccelerationParams);
     }
-    nthWorst = std::min(nthWorst, (ui32)worstDisks.size() - 1);
-    return worstDisks[nthWorst].PredictedNs;
+    return worstDisks[std::min(AccelerationParams.MaxNumOfSlowDisks, (ui32)worstDisks.size() - 1)].PredictedNs;
 }
 
-ui64 TGetImpl::GetTimeToAccelerateGetNs(TLogContext &logCtx, ui32 acceleratesSent) {
-    Y_DEBUG_ABORT_UNLESS(acceleratesSent < 2);
-    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.GetHandleClass), 2 - acceleratesSent);
+ui64 TGetImpl::GetTimeToAccelerateGetNs(TLogContext &logCtx) {
+    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.GetHandleClass));
 }
 
-ui64 TGetImpl::GetTimeToAcceleratePutNs(TLogContext &logCtx, ui32 acceleratesSent) {
-    Y_DEBUG_ABORT_UNLESS(acceleratesSent < 2);
-    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.PutHandleClass), 2 - acceleratesSent);
+ui64 TGetImpl::GetTimeToAcceleratePutNs(TLogContext &logCtx) {
+    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.PutHandleClass));
 }
 
 TString TGetImpl::DumpFullState() const {
@@ -295,14 +292,9 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
 
     for (auto& vget : gets) {
         if (vget) {
-            ui32 orderNumber = Info->GetTopology().GetOrderNumber(VDiskIDFromVDiskID(vget->Record.GetVDiskID()));
-            R_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# " << orderNumber << " vget# " << vget->ToString());
-            if (vget->Record.ExtremeQueriesSize() > 0) {
-                TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(vget->Record.GetExtremeQueries(0).GetId());
-                History.AddVGetToWaitingList(blobId.PartId(), vget->Record.ExtremeQueriesSize(), orderNumber);
-            } else {
-                History.AddVGetToWaitingList(THistory::InvalidPartId, 0, orderNumber);
-            }
+            R_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# "
+                << Info->GetTopology().GetOrderNumber(VDiskIDFromVDiskID(vget->Record.GetVDiskID()))
+                << " vget# " << vget->ToString());
             outVGets.push_back(std::move(vget));
             ++RequestIndex;
         }
@@ -319,7 +311,6 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
         auto vput = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vdiskId, true, nullptr, Deadline,
             Blackboard.PutHandleClass);
         R_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
-        History.AddVPutToWaitingList(put.Id.PartId(), 1, put.OrderNumber);
         outVPuts.push_back(std::move(vput));
         ++VPutRequests;
     }
@@ -334,13 +325,13 @@ EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
     if (MustRestoreFirst) {
         strategies.push_back(&s2);
     }
-    return Blackboard.RunStrategies(logCtx, strategies);
+    return Blackboard.RunStrategies(logCtx, strategies, AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
     return MustRestoreFirst
-        ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy())
-        : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck));
+        ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), AccelerationParams)
+        : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck), AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
@@ -351,7 +342,7 @@ EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
     if (MustRestoreFirst) {
         strategies.push_back(&s2);
     }
-    return Blackboard.RunStrategies(logCtx, strategies);
+    return Blackboard.RunStrategies(logCtx, strategies, AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
@@ -362,9 +353,9 @@ EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
     } else if (MustRestoreFirst || PhantomCheck) {
         return RunBoldStrategy(logCtx);
     } else if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy());
+        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy(), AccelerationParams);
     } else if (Info->Type.ErasureFamily() == TErasureType::ErasureMirror) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy());
+        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy(), AccelerationParams);
     } else {
         return RunBoldStrategy(logCtx);
     }
@@ -396,7 +387,6 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
         Y_ABORT("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
     }
     Step(logCtx, outVGets, outVPuts, outGetResult);
-    History.AddVPutResult(orderNumber, status, record.GetErrorReason());
 }
 
 }//NKikimr

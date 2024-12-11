@@ -71,7 +71,7 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
             TEvBlobStorage::TEvGet ev(queriesA, queryCount, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::FastRead, false, false);
             ev.IsVerboseNoDataEnabled = isVerboseNoDataEnabled;
-            TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr);
+            TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
             TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
             logCtx.LogAcc.IsLogEnabled = false;
@@ -324,7 +324,7 @@ private:
         TEvBlobStorage::TEvGet ev(queriesA, queryCount, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::FastRead, IsRestore, false);
         ev.IsVerboseNoDataEnabled = IsVerboseNoDataEnabled;
-        TGetImpl getImpl(Group->GetInfo(), GroupQueues, &ev, nullptr);
+        TGetImpl getImpl(Group->GetInfo(), GroupQueues, &ev, nullptr, TAccelerationParams{});
         ClearCounters();
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
@@ -452,7 +452,7 @@ public:
     TAutoPtr<TEvBlobStorage::TEvGetResult> Simulate(TEvBlobStorage::TEvGet *ev) {
         TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
 
-        TGetImpl getImpl(Group.GetInfo(), GroupQueues, ev, nullptr);
+        TGetImpl getImpl(Group.GetInfo(), GroupQueues, ev, nullptr, TAccelerationParams{});
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
@@ -563,7 +563,7 @@ Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
 
     TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
 
-    TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr);
+    TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
     TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
     TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
     TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
@@ -703,7 +703,7 @@ Y_UNIT_TEST(TestBlock42WipedOneDiskAndErrorDurringGet) {
 
     TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
 
-    TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr);
+    TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
     TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
     TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
     TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
@@ -974,7 +974,7 @@ void TestWipedErrorWithTwoBlobs(TErasureType::EErasureSpecies erasureSpecies, bo
 
                         TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
 
-                        TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr);
+                        TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
                         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
                         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
                         TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
@@ -1192,7 +1192,7 @@ class TTestPossibleBlobLost {
         TEvBlobStorage::TEvGet ev(queriesA, MaxQueryCount, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::Discover, true, false);
         ev.IsVerboseNoDataEnabled = false;
-        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr);
+        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         getImpl.GenerateInitialRequests(logCtx, vGets);
         return vGets.size();
@@ -1257,7 +1257,7 @@ public:
         TEvBlobStorage::TEvGet ev(queriesA, MaxQueryCount, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::Discover, true, false);
         ev.IsVerboseNoDataEnabled = false;
-        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr);
+        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         getImpl.GenerateInitialRequests(logCtx, vGets);
@@ -1404,7 +1404,7 @@ protected:
         TEvBlobStorage::TEvGet ev(queriesA, MaxQueryCount, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::Discover, true, false);
         ev.IsVerboseNoDataEnabled = false;
-        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr);
+        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         getImpl.GenerateInitialRequests(logCtx, vGets);
         return vGets.size();
@@ -1469,7 +1469,7 @@ public:
         TEvBlobStorage::TEvGet ev(queriesA, MaxQueryCount, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::Discover, true, false);
         ev.IsVerboseNoDataEnabled = false;
-        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr);
+        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         getImpl.GenerateInitialRequests(logCtx, vGets);

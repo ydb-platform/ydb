@@ -1570,6 +1570,8 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     TPartitionStats newAggregatedStats;
     newAggregatedStats.PartCount = newPartitioning.size();
     ui64 cpuTotal = 0;
+    THashSet<TShardIdx> newUpdatedStats;
+
     for (const auto& np : newPartitioning) {
         auto idx = np.ShardIdx;
         auto& newStats(newPartitionStats[idx]);
@@ -1591,6 +1593,10 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
         newAggregatedStats.WriteThroughput += newStats.WriteThroughput;
         newAggregatedStats.ReadIops += newStats.ReadIops;
         newAggregatedStats.WriteIops += newStats.WriteIops;
+
+        if (Stats.PartitionStats.contains(idx) && Stats.UpdatedStats.contains(idx)) {
+            newUpdatedStats.insert(idx);
+        }
     }
     newAggregatedStats.SetCurrentRawCpuUsage(cpuTotal, AppData()->TimeProvider->Now());
     newAggregatedStats.LastAccessTime = Stats.Aggregated.LastAccessTime;
@@ -1617,6 +1623,7 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
 
     Stats.PartitionStats.swap(newPartitionStats);
     Stats.Aggregated = newAggregatedStats;
+    Stats.UpdatedStats.swap(newUpdatedStats);
     Partitions.swap(newPartitioning);
     PreserializedTablePartitions.clear();
     PreserializedTablePartitionsNoKeys.clear();
@@ -1722,6 +1729,8 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
             Aggregated.TxCompleteLag = Max(Aggregated.TxCompleteLag, ps.second.TxCompleteLag);
         }
     }
+
+    UpdatedStats.insert(datashardIdx);
 }
 
 void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats) {

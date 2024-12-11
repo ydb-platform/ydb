@@ -3409,7 +3409,7 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
                                 .GroupInfo = BsInfo,
                                 .GroupQueues = GroupQueues,
                                 .Mon = Mon,
-                                .Now = TMonotonic::Now(),
+                                .Now = TInstant::Now(),
                                 .StoragePoolCounters = StoragePoolCounters,
                                 .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
                                 .LatencyQueueKind = kind,
@@ -3420,6 +3420,7 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
                             .HandleClass = HandleClass,
                             .Tactic = Tactic,
                             .EnableRequestMod3x3ForMinLatency = false,
+                            .AccelerationParams = TAccelerationParams{},
                         });
 
                 ctx.Register(reqActor);
@@ -4206,9 +4207,12 @@ public:
         TControlWrapper enablePutBatching(args.EnablePutBatching, false, true);
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), false,
-            dsProxyNodeMon, TIntrusivePtr(storagePoolCounters), TBlobStorageProxyParameters{
-                    .EnablePutBatching = enablePutBatching,
-                    .EnableVPatch = enableVPatch,
+                dsProxyNodeMon, TIntrusivePtr(storagePoolCounters),
+                TBlobStorageProxyParameters{
+                    .Controls = TBlobStorageProxyControlWrappers{
+                        .EnablePutBatching = enablePutBatching,
+                        .EnableVPatch = enableVPatch,
+                    }
                 }
             )
         };

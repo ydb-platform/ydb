@@ -53,7 +53,7 @@ runs:
           debug)
             folder+="-debug"
             ;;
-          release-*)
+          release*)
             folder+="-${BUILD_PRESET/release-/}"
             ;;
           *)

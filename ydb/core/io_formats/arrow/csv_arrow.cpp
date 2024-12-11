@@ -250,7 +250,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TStr
     }
 
     if (batch && ResultColumns.size()) {
-        batch = NArrow::TColumnOperator().NullIfAbsent().Extract(batch, ResultColumns);
+        batch = NArrow::TColumnOperator().ErrorIfAbsent().Extract(batch, ResultColumns);
         if (!batch) {
             errString = ErrorPrefix() + "not all result columns present";
         }

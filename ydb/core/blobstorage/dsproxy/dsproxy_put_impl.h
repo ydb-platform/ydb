@@ -8,7 +8,6 @@
 #include "dsproxy_strategy_restore.h"
 #include "dsproxy_strategy_put_m3dc.h"
 #include "dsproxy_strategy_put_m3of4.h"
-#include "request_history.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <util/generic/set.h>
 
@@ -44,6 +43,8 @@ private:
     bool EnableRequestMod3x3ForMinLatecy = false;
 
     const TEvBlobStorage::TEvPut::ETactic Tactic;
+
+    const TAccelerationParams AccelerationParams;
 
     struct TBlobInfo {
         TLogoBlobID BlobId;
@@ -94,8 +95,6 @@ private:
         }
     };
 
-    THistory History;
-
     TBatchedVec<TBlobInfo> Blobs;
     std::unordered_map<TLogoBlobID, size_t> BlobMap;
 
@@ -106,7 +105,8 @@ private:
 public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TEvBlobStorage::TEvPut *ev, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
-            bool enableRequestMod3x3ForMinLatecy, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId)
+            bool enableRequestMod3x3ForMinLatecy, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
+            const TAccelerationParams& accelerationParams)
         : Info(info)
         , Blackboard(info, state, ev->HandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(1)
@@ -116,7 +116,7 @@ public:
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
         , Tactic(ev->Tactic)
-        , History(Info)
+        , AccelerationParams(accelerationParams)
     {
         BlobMap.emplace(ev->Id, Blobs.size());
         Blobs.emplace_back(ev->Id, TRope(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
@@ -130,7 +130,7 @@ public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TBatchedVec<TEvBlobStorage::TEvPut::TPtr> &events, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             NKikimrBlobStorage::EPutHandleClass putHandleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-            bool enableRequestMod3x3ForMinLatecy)
+            bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams)
         : Info(info)
         , Blackboard(info, state, putHandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(events.size())
@@ -140,7 +140,7 @@ public:
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
         , Tactic(tactic)
-        , History(Info)
+        , AccelerationParams(accelerationParams)
     {
         Y_ABORT_UNLESS(events.size(), "TEvPut vector is empty");
 
@@ -191,16 +191,11 @@ public:
     void PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx, TLogContext &logCtx,
             TString errorReason, TPutResultVec &outPutResults);
 
-    ui64 GetTimeToAccelerateNs(TLogContext &logCtx, ui32 nthWorst);
+    ui64 GetTimeToAccelerateNs(TLogContext &logCtx);
 
     TString DumpFullState() const;
 
     TString ToString() const;
-
-    TString PrintHistory() const {
-        Y_DEBUG_ABORT_UNLESS(!Blobs.empty());
-        return History.Print(&Blobs[0].BlobId);
-    }
 
     void InvalidatePartStates(ui32 orderNumber) {
         Blackboard.InvalidatePartStates(orderNumber);
@@ -239,7 +234,6 @@ public:
                     p->SetGeneration(generation);
                 }
 
-                History.AddVPutToWaitingList(ptr->Id.PartId(), 1, orderNumber);
                 events.emplace_back(std::move(ev));
                 HandoffPartsSent += ptr->IsHandoff;
                 ++VPutRequests;
@@ -251,16 +245,12 @@ public:
                 }
                 auto ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(Info->GetVDiskId(it->first), deadline,
                     Blackboard.PutHandleClass, false);
-
-                ui8 firstPartId = it->second->Id.PartId();
-                ui8 orderNumber = it->first;
                 while (it != end) {
                     auto [orderNumber, ptr] = *it++;
                     ev->AddVPut(ptr->Id, TRcBuf(ptr->Buffer), nullptr, &Blobs[ptr->BlobIdx].ExtraBlockChecks,
                         Blobs[ptr->BlobIdx].Span.GetTraceId());
                     HandoffPartsSent += ptr->IsHandoff;
                 }
-                History.AddVPutToWaitingList(firstPartId, ev->Record.ItemsSize(), orderNumber);
                 events.emplace_back(std::move(ev));
                 ++VMultiPutRequests;
             }
@@ -273,29 +263,22 @@ public:
     void ProcessResponse(TEvBlobStorage::TEvVPutResult& msg) {
         ++VPutResponses;
         ProcessResponseCommonPart(msg.Record);
-        ui32 orderNumber = Info->GetOrderNumber(VDiskIDFromVDiskID(msg.Record.GetVDiskID()));
-        ProcessResponseBlob(orderNumber, msg.Record);
-        History.AddVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
+        ProcessResponseBlob(VDiskIDFromVDiskID(msg.Record.GetVDiskID()), msg.Record);
     }
 
     void ProcessResponse(TEvBlobStorage::TEvVMultiPutResult& msg) {
         ++VMultiPutResponses;
         ProcessResponseCommonPart(msg.Record);
-        ui32 orderNumber = Info->GetOrderNumber(VDiskIDFromVDiskID(msg.Record.GetVDiskID()));
+        const TVDiskID vdiskId = VDiskIDFromVDiskID(msg.Record.GetVDiskID());
         for (const auto& item : msg.Record.GetItems()) {
-            ProcessResponseBlob(orderNumber, item);
+            ProcessResponseBlob(vdiskId, item);
         }
-        History.AddVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
     }
 
     size_t GetBlobIdx(const TLogoBlobID& id) const {
         const auto it = BlobMap.find(id.FullID());
         Y_ABORT_UNLESS(it != BlobMap.end());
         return it->second;
-    }
-
-    bool WasNotOkResponses() {
-        return AtLeastOneResponseWasNotOk;
     }
 
 protected:
@@ -305,12 +288,13 @@ protected:
         const TBlobStorageGroupInfo::TGroupVDisks& expired);
 
     template<typename TProtobuf>
-    void ProcessResponseBlob(ui32 orderNumber, TProtobuf& record) {
+    void ProcessResponseBlob(TVDiskID vdiskId, TProtobuf& record) {
         Y_ABORT_UNLESS(record.HasStatus());
         Y_ABORT_UNLESS(record.HasBlobID());
 
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         const TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(record.GetBlobID());
+        const ui32 orderNumber = Info->GetOrderNumber(TVDiskIdShort(vdiskId));
 
         const size_t blobIdx = GetBlobIdx(blobId);
 

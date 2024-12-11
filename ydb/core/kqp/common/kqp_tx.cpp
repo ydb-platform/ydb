@@ -14,17 +14,17 @@ NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const
     if (pathId.OwnerId() != 0) {
         auto table = txCtx.TableByIdMap.FindPtr(pathId);
         if (!table) {
-            return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table.");    
+            return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table.");
         }
-        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << *table);
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << "`" << *table << "`");
     } else {
         // Olap tables don't return SchemeShard in locks, thus we use tableId here.
         for (const auto& [pathId, table] : txCtx.TableByIdMap) {
             if (pathId.TableId() == pathId.TableId()) {
-                return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << table);
+                return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << "`" << table << "`");
             }
         }
-        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table.");    
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table."); 
     }
 }
 
@@ -34,6 +34,27 @@ TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpT
         TKikimrPathId(
             invalidatedLock.GetSchemeShard(),
             invalidatedLock.GetPathId()));
+}
+
+NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId) {
+    TStringBuilder message;
+    message << "Transaction locks invalidated.";
+
+    if (auto tableInfoPtr = shardIdToTableInfo.GetPtr(shardId); tableInfoPtr) {
+        message << " Tables: ";
+        bool first = true;
+        for (const auto& path : tableInfoPtr->Pathes) {
+            if (!first) {
+                message << ", ";
+                first = false;
+            }
+            message << "`" << path << "`";
+        }
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+    } else {
+        message << " Unknown table.";   
+    }
+    return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
 }
 
 std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,
@@ -136,7 +157,8 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 {
     Y_UNUSED(config);
 
-    if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE)
+    if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE &&
+        *txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO)
         return false;
 
     if (txCtx.GetSnapshot().IsValid())
@@ -186,7 +208,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     }
 
     if (txCtx.HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-        YQL_ENSURE(txCtx.EnableImmediateEffects);
         return true;
     }
 

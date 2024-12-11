@@ -5,7 +5,7 @@ namespace NKikimr {
     std::atomic<TMonotonic> TBlobStorageGroupProxy::ThrottlingTimestamp;
 
     TBlobStorageGroupProxy::TBlobStorageGroupProxy(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
-            TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
+            TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, 
             const TBlobStorageProxyParameters& params)
         : GroupId(info->GroupID)
         , Info(std::move(info))
@@ -14,27 +14,27 @@ namespace NKikimr {
         , StoragePoolCounters(std::move(storagePoolCounters))
         , IsEjected(false)
         , ForceWaitAllDrives(forceWaitAllDrives)
-        , EnablePutBatching(params.EnablePutBatching)
-        , EnableVPatch(params.EnableVPatch)
-        , LongRequestThresholdMs(params.LongRequestThresholdMs)
+        , UseActorSystemTimeInBSQueue(params.UseActorSystemTimeInBSQueue)
+        , Controls(std::move(params.Controls))
     {}
 
-    TBlobStorageGroupProxy::TBlobStorageGroupProxy(ui32 groupId, bool isEjected, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+    TBlobStorageGroupProxy::TBlobStorageGroupProxy(ui32 groupId, bool isEjected,TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
             const TBlobStorageProxyParameters& params)
         : GroupId(TGroupId::FromValue(groupId))
         , NodeMon(nodeMon)
         , IsEjected(isEjected)
         , ForceWaitAllDrives(false)
-        , EnablePutBatching(params.EnablePutBatching)
-        , EnableVPatch(params.EnableVPatch)
-        , LongRequestThresholdMs(params.LongRequestThresholdMs)
+        , UseActorSystemTimeInBSQueue(params.UseActorSystemTimeInBSQueue)
+        , Controls(std::move(params.Controls))
     {}
 
     IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon) {
         return new TBlobStorageGroupProxy(groupId, true, nodeMon, 
                 TBlobStorageProxyParameters{
-                    .EnablePutBatching = TControlWrapper(false, false, true),
-                    .EnableVPatch = TControlWrapper(false, false, true),
+                    .Controls = TBlobStorageProxyControlWrappers{
+                        .EnablePutBatching = TControlWrapper(false, false, true),
+                        .EnableVPatch = TControlWrapper(false, false, true),
+                    }
                 }
         );
     }

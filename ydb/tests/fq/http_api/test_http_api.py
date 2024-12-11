@@ -118,14 +118,6 @@ class TestHttpApi(TestBase):
             ):  # noqa
                 client.create_query()
 
-    # def test_invalid_id(self):
-    #     with self.create_client() as client:
-            # resp = client.stop_query(query_id="nevalidno")
-            # assert resp.status_code == 400
-
-            # resp = client.start_query(query_id="snova nevalidno")
-            # assert resp.status_code == 400
-
     def test_warning(self):
         with self.create_client() as client:
             query_id = client.create_query(query_text="select 10000000000000000000+1")

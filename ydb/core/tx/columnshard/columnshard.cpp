@@ -60,20 +60,12 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         const TLogContextGuard gLogging =
             NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId())("process", "SwitchToWork");
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
-
-        for (const auto& [pathId, tiering] : TablesManager.GetTtl()) {
-            THashSet<TString> tiers;
-            for (const auto& [name, config] : tiering.GetTierByName()) {
-                tiers.emplace(name);
-            }
-            ActivateTiering(pathId, tiers);
-        }
-
         Become(&TThis::StateWork);
         SignalTabletActive(ctx);
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SignalTabletActive");
         TryRegisterMediatorTimeCast();
         EnqueueProgressTx(ctx, std::nullopt);
+        OnTieringModified();
     }
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
@@ -115,8 +107,10 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
         ctx.Send(selfActorId, new TEvPrivate::TEvTieringModified);
     });
     Tiers->Start(Tiers);
-    if (!NYDBTest::TControllers::GetColumnShardController()->GetOverrideTierConfigs().empty()) {
-        Send(SelfId(), new TEvPrivate::TEvTieringModified());
+    if (const auto& tiersSnapshot = NYDBTest::TControllers::GetColumnShardController()->GetOverrideTierConfigs(); !tiersSnapshot.empty()) {
+        for (const auto& [id, tier] : tiersSnapshot) {
+            Tiers->UpdateTierConfig(tier, id, false);
+        }
     }
     BackgroundSessionsManager = std::make_shared<NOlap::NBackground::TSessionsManager>(
         std::make_shared<NBackground::TAdapter>(selfActorId, (NOlap::TTabletId)TabletID(), *this));

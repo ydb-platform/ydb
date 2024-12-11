@@ -1585,8 +1585,6 @@ void TColumnShard::ActivateTiering(const ui64 pathId, const THashSet<TString>& u
     AFL_VERIFY(Tiers);
     if (!usedTiers.empty()) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "activate_tiering")("path_id", pathId)("tiers", JoinStrings(usedTiers.begin(), usedTiers.end(), ","));
-    }
-    if (!usedTiers.empty()) {
         Tiers->EnablePathId(pathId, usedTiers);
     } else {
         Tiers->DisablePathId(pathId);

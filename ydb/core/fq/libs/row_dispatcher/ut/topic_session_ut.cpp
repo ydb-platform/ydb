@@ -206,13 +206,14 @@ public:
         return eventHolder->Get()->Record.MessagesSize();
     }
 
-    void ExpectStatisticToReadActor(TSet<NActors::TActorId> readActorIds) {
+    void ExpectStatisticToReadActor(TSet<NActors::TActorId> readActorIds, ui64 expectedNextMessageOffset) {
         size_t count = readActorIds.size();
         for (size_t i = 0; i < count; ++i) {
             auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvStatistics>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
             UNIT_ASSERT(eventHolder.Get() != nullptr);
             UNIT_ASSERT(readActorIds.contains(eventHolder->Get()->ReadActorId));
             readActorIds.erase(eventHolder->Get()->ReadActorId);
+            UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->Record.GetNextMessageOffset(), expectedNextMessageOffset);
         }
     }
 
@@ -244,12 +245,20 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId1, source);
         StartSession(ReadActorId2, source);
 
-        const std::vector<TString> data = { Json1 };
+        std::vector<TString> data = { Json1 };
         PQWrite(data, topicName);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { Json1 });
         ExpectMessageBatch(ReadActorId2, { Json1 });
-        ExpectStatisticToReadActor({ReadActorId1, ReadActorId2});
+        ExpectStatisticToReadActor({ReadActorId1, ReadActorId2}, 1);
+
+        data = { Json2 };
+        PQWrite(data, topicName);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
+        ExpectStatisticToReadActor({ReadActorId1, ReadActorId2}, 1);
+        ExpectMessageBatch(ReadActorId1, data);
+        ExpectMessageBatch(ReadActorId2, data);
+        ExpectStatisticToReadActor({ReadActorId1, ReadActorId2}, 2);
 
         auto source2 = BuildSource(topicName, false, "OtherConsumer");
         StartSession(ReadActorId3, source2, Nothing(), true);

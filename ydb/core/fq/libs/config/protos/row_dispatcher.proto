@@ -26,7 +26,7 @@ message TJsonParserConfig {
 }
 
 message TCompileServiceConfig {
-    uint64 ParallelCompilationLimit = 1;  // 1 by default, 0 <=> unlimited
+    uint64 ParallelCompilationLimit = 1;  // 1 by default
 }
 
 message TRowDispatcherConfig {

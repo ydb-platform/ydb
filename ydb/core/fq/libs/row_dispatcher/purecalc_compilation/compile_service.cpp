@@ -111,7 +111,7 @@ public:
     TPurecalcCompileService(const NConfig::TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters)
         : TBase(&TPurecalcCompileService::StateFunc)
         , Config(config)
-        , InFlightLimit(Config.GetParallelCompilationLimit() ? Config.GetParallelCompilationLimit() : std::numeric_limits<ui64>::max())
+        , InFlightLimit(Config.GetParallelCompilationLimit() ? Config.GetParallelCompilationLimit() : 1)
         , LogPrefix("TPurecalcCompileService: ")
         , Counters(counters)
     {}

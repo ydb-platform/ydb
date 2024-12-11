@@ -169,9 +169,6 @@ private:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         AFL_WARN(NKikimrServices::TX_TIERING)("error", "event_undelivered_to_scheme_cache")("reason", ev->Get()->Reason);
-        if (NYDBTest::TControllers::GetColumnShardController()->GetOverrideTierConfigs().empty()) {
-            AFL_VERIFY(false);
-        }
     }
 
 public:

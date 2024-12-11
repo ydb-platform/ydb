@@ -610,7 +610,7 @@ ListAll(List<Bool>?)->Bool?
 
 ## ListHas {#listhas}
 
-Содержит ли список указанный элемент.
+Содержит ли список указанный элемент. При этом NULL-ы считаются равными друг другу, а при NULL входном списке результат всегда false.
 
 ### Примеры
 
@@ -634,8 +634,8 @@ SELECT ListHas($l1, 6);  -- false
 ### Сигнатура
 
 ```yql
-ListHas(List<T>, T)->Bool
-ListHas(List<T>?, T)->Bool?
+ListHas(List<T>, U)->Bool
+ListHas(List<T>?, U)->Bool
 ```
 
 ## ListHead, ListLast {#listheadlast}

@@ -45,6 +45,61 @@ public:
             (Indexes ? (Indexes->size() * sizeof(TIndexChunk)) : 0);
     }
 
+    class TExtractContext {
+    private:
+        YDB_ACCESSOR_DEF(std::optional<std::set<ui32>>, ColumnIds);
+        YDB_ACCESSOR_DEF(std::optional<std::set<ui32>>, IndexIds);
+
+    public:
+        TExtractContext() = default;
+    };
+
+    TPortionDataAccessor Extract(const std::optional<std::set<ui32>>& columnIds, const std::optional<std::set<ui32>>& indexIds) const {
+        return Extract(TExtractContext().SetColumnIds(columnIds).SetIndexIds(indexIds));
+    }
+
+    TPortionDataAccessor Extract(const TExtractContext& context) const {
+        AFL_VERIFY(Records);
+        std::vector<TColumnRecord> extractedRecords;
+        if (context.GetColumnIds()) {
+            auto itRec = Records->begin();
+            auto itExt = context.GetColumnIds()->begin();
+            while (itRec != Records->end() && itExt != context.GetColumnIds()->end()) {
+                if (itRec->GetEntityId() == *itExt) {
+                    extractedRecords.emplace_back(*itRec);
+                    ++itRec;
+                } else if (itRec->GetEntityId() < *itExt) {
+                    ++itRec;
+                } else {
+                    ++itExt;
+                }
+            }
+        } else {
+            extractedRecords = *Records;
+        }
+
+        AFL_VERIFY(Indexes);
+        std::vector<TIndexChunk> extractedIndexes;
+        if (context.GetIndexIds()) {
+            auto itIdx = Indexes->begin();
+            auto itExt = context.GetIndexIds()->begin();
+            while (itIdx != Indexes->end() && itExt != context.GetIndexIds()->end()) {
+                if (itIdx->GetEntityId() == *itExt) {
+                    extractedIndexes.emplace_back(*itIdx);
+                    ++itIdx;
+                } else if (itIdx->GetEntityId() < *itExt) {
+                    ++itIdx;
+                } else {
+                    ++itExt;
+                }
+            }
+        } else {
+            extractedIndexes = *Indexes;
+        }
+
+        return TPortionDataAccessor(PortionInfo, std::move(extractedRecords), std::move(extractedIndexes), false);
+    }
+
     const std::vector<TColumnRecord>& TestGetRecords() const {
         AFL_VERIFY(Records);
         return std::move(*Records);

@@ -1424,11 +1424,8 @@ public:
         for (auto&& i : PortionsByPath) {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TTxAskPortionChunks::Execute")("size", i.second.size())("path_id", i.first);
             for (auto&& p : i.second) {
-                {
-                    auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
-                    if (!rowset.IsReady()) {
-                        reask = true;
-                    }
+                if (!p->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())->GetIndexesCount()) {
+                    continue;
                 }
                 {
                     auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
@@ -1456,8 +1453,8 @@ public:
                     NOlap::TColumnChunkLoadContextV2 info(rowset);
                     constructor.SetRecords(std::move(info));
                 }
-                {
-                    std::vector<NOlap::TIndexChunkLoadContext> indexes;
+                std::vector<NOlap::TIndexChunkLoadContext> indexes;
+                if (p->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())->GetIndexesCount()) {
                     auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
                     if (!rowset.IsReady()) {
                         return false;
@@ -1468,8 +1465,8 @@ public:
                             return false;
                         }
                     }
-                    constructor.SetIndexes(std::move(indexes));
                 }
+                constructor.SetIndexes(std::move(indexes));
                 FetchedAccessors.emplace_back(std::move(constructor));
                 i.second.pop_back();
             }

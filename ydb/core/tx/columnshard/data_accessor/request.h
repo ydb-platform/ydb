@@ -141,10 +141,11 @@ public:
         AFL_VERIFY(Portions.emplace(portion->GetPortionId(), portion).second);
     }
 
-    void AddAccessor(const TPortionDataAccessor& accessor) {
+    void AddAccessor(
+        const TPortionDataAccessor& accessor, const std::optional<std::set<ui32>>& columnIds, const std::optional<std::set<ui32>>& indexIds) {
         AFL_VERIFY(Stage == EFetchStage::Fetching);
         AFL_VERIFY(Portions.erase(accessor.GetPortionInfo().GetPortionId()));
-        AFL_VERIFY(PortionAccessors.emplace(accessor.GetPortionInfo().GetPortionId(), accessor).second);
+        AFL_VERIFY(PortionAccessors.emplace(accessor.GetPortionInfo().GetPortionId(), accessor.Extract(columnIds, indexIds)).second);
         if (Portions.empty()) {
             AFL_VERIFY(Stage == EFetchStage::Fetching);
             Stage = EFetchStage::Fetched;
@@ -172,8 +173,8 @@ private:
     THashMap<ui64, TPathFetchingState> PathIdStatus;
     THashSet<ui64> PathIds;
     TDataAccessorsResult AccessorsByPathId;
-    std::optional<std::vector<ui32>> ColumnIds;
-    std::optional<std::vector<ui32>> IndexIds;
+    YDB_READONLY_DEF(std::optional<std::set<ui32>>, ColumnIds);
+    std::optional<std::set<ui32>> IndexIds;
 
     TAtomicCounter PreparingCount = 0;
     TAtomicCounter FetchingCount = 0;
@@ -193,6 +194,11 @@ private:
     }
 
 public:
+    void SetColumnIds(const std::set<ui32>& columnIds) {
+        AFL_VERIFY(!ColumnIds);
+        ColumnIds = columnIds;
+    }
+
     TString DebugString() const {
         TStringBuilder sb;
         sb << "request_id=" << RequestId << ";";
@@ -287,7 +293,7 @@ public:
         {
             auto itStatus = PathIdStatus.find(pathId);
             AFL_VERIFY(itStatus != PathIdStatus.end());
-            itStatus->second.AddAccessor(accessor);
+            itStatus->second.AddAccessor(accessor, ColumnIds, IndexIds);
             if (itStatus->second.IsFinished()) {
                 AFL_VERIFY(FetchingCount.Dec() >= 0);
                 ReadyCount.Inc();

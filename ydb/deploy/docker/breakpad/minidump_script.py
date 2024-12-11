@@ -16,7 +16,7 @@ def signal_info(minidump_text):
         line = line.strip()
         if line.startswith('Crash|'):
             # "Crash|SIGSEGV|0x452e|0"
-            signal_name = line.split('|')[1]
+            signal_name = line.split('|')[1].split()[0]
             break
 
     try:
@@ -53,12 +53,12 @@ if __name__ == "__main__":
         stwlk_cmd = ["/usr/bin/minidump_stackwalk", "-m", dmp_file]
         gdb_cmd = [
             "/usr/bin/gdb",
+            "-q",
+            "-batch",
+            "-iex=set auto-load safe-path /",
+            "-ex=thread apply all bt 999",
             "/opt/ydb/bin/ydbd",
             core_file,
-            "-iex=set auto-load safe-path /",
-            "-ex=thread apply all bt",
-            "--batch",
-            "-q"
         ]
 
         elf_resp = subprocess.check_output(elf_cmd).decode("utf-8")

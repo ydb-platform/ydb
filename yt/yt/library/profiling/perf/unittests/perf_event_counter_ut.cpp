@@ -28,6 +28,14 @@ void IgnorePermissionError(const TFn& fn)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+i64 ReadPerfEventCounter(EPerfEventType type)
+{
+    auto counter = CreatePerfEventCounter(type);
+    return counter->Read();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TPerfEventCounterTest, CpuCycles)
 {
     IgnorePermissionError([&] {

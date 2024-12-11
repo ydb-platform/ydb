@@ -1,20 +1,15 @@
 #pragma once
+#include "columns_set.h"
 #include "fetching.h"
-
-#include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/formats/arrow/reader/merger.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
 class IDataSource;
-using TColumnsSet = NCommon::TColumnsSet;
-using EStageFeaturesIndexes = NCommon::EStageFeaturesIndexes;
-using TColumnsSetIds = NCommon::TColumnsSetIds;
-using EMemType = NCommon::EMemType;
 
 class TSpecialReadContext: public NCommon::TSpecialReadContext {
 private:
@@ -24,7 +19,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TStageFeatures>, FetchingStageMemory);
 
     TReadMetadata::TConstPtr ReadMetadata;
-    std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource,
+    std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
+    std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource, 
         const bool partialUsageByPredicate, const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const;
     TMutex Mutex;
     std::array<std::array<std::array<std::array<std::array<std::array<std::optional<std::shared_ptr<TFetchingScript>>, 2>, 2>, 2>, 2>, 2>, 2>
@@ -54,4 +50,4 @@ public:
     std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source);
 };
 
-}   // namespace NKikimr::NOlap::NReader::NPlain
+}

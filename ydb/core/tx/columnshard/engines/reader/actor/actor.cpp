@@ -73,8 +73,8 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
 }
 
 void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
-//    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())(
-//        "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen));
+    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())(
+        "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen));
     auto g = Stats->MakeGuard("bootstrap");
     ScanActorId = ctx.SelfID;
 

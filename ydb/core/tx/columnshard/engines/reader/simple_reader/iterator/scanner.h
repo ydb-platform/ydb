@@ -26,8 +26,8 @@ class TScanHead {
 private:
     std::shared_ptr<TSpecialReadContext> Context;
     THashMap<ui64, std::shared_ptr<IDataSource>> FetchingSourcesByIdx;
-    std::deque<std::shared_ptr<IDataSource>> SortedSources;
-    std::deque<std::shared_ptr<IDataSource>> FetchingSources;
+    std::set<std::shared_ptr<IDataSource>, IDataSource::TCompareStartForScanSequence> SortedSources;
+    std::set<std::shared_ptr<IDataSource>, IDataSource::TCompareStartForScanSequence> FetchingSources;
     std::set<std::shared_ptr<IDataSource>, IDataSource::TCompareFinishForScanSequence> FinishedSources;
     ui64 FetchedCount = 0;
     ui64 InFlightLimit = 1;

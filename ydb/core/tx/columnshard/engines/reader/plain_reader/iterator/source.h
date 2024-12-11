@@ -1,4 +1,5 @@
 #pragma once
+#include "columns_set.h"
 #include "context.h"
 #include "fetched_data.h"
 
@@ -9,7 +10,6 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -319,8 +319,7 @@ private:
 
 public:
     virtual ui64 PredictAccessorsMemory() const override {
-        return Portion->GetApproxChunksCount(GetContext()->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) *
-               sizeof(TColumnRecord);
+        return Portion->GetApproxChunksCount(GetContext()->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) * sizeof(TColumnRecord);
     }
 
     virtual bool NeedAccessorsForRead() const override {
@@ -328,7 +327,7 @@ public:
     }
 
     virtual bool NeedAccessorsFetching() const override {
-        return !StageData || !StageData->HasPortionAccessor();
+        return !StageData  || !StageData->HasPortionAccessor();
     }
 
     virtual bool DoAddTxConflict() override {

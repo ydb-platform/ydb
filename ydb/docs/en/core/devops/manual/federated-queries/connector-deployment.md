@@ -17,7 +17,7 @@ The `fq-connector-go` connector is implemented in Go; its source code is hosted 
 * [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server)
 * [MySQL](https://www.mysql.com/)
 * [PostgreSQL](https://www.postgresql.org/)
-* [YDB](https://ydb.tech/)
+* [{{ ydb-short-name }}](https://ydb.tech/)
 
 The connector can be installed using a binary distribution or a Docker image.
 

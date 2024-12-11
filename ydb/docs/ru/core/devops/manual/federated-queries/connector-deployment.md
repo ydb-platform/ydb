@@ -17,7 +17,7 @@
 * [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server)
 * [MySQL](https://www.mysql.com/)
 * [PostgreSQL](https://www.postgresql.org/)
-* [YDB](https://ydb.tech/)
+* [{{ ydb-short-name }}](https://ydb.tech/)
 
 Коннектор может быть установлен с помощью бинарного дистрибутива или с помощью Docker-образа.
 

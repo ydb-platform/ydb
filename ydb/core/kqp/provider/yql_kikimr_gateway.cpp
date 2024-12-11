@@ -302,12 +302,12 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
     if (!settings.ColumnUnit) {
         auto& opts = *proto.mutable_date_type_column();
         opts.set_column_name(settings.ColumnName);
-        opts.set_expire_after_seconds(tier.ExpireAfter.Seconds());
+        opts.set_expire_after_seconds(settings.ExpireAfter.Seconds());
     } else {
         auto& opts = *proto.mutable_value_since_unix_epoch();
         opts.set_column_name(settings.ColumnName);
         opts.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
-        opts.set_expire_after_seconds(tier.ExpireAfter.Seconds());
+        opts.set_expire_after_seconds(settings.ExpireAfter.Seconds());
     }
 }
 

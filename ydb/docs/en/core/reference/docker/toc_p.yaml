@@ -2,7 +2,7 @@ items:
   - name: Tag naming
     href: naming.md
   - name: Installation
-    href: install.md
+    href: prerequisites.md
   - name: Start
     href: start.md
   - name: Configuration

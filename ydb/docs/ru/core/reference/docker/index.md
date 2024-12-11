@@ -5,6 +5,6 @@
 Документация по Docker контейнеру содержит следующие разделы:
 
 * [{#T}](naming.md)
-* [{#T}](install.md)
+* [{#T}](prerequisites.md)
 * [{#T}](start.md)
 * [{#T}](configuration.md)

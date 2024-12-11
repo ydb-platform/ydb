@@ -106,7 +106,7 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         }
 
         ~TMetrics() {
-            SubGroup->RemoveSubgroup("id", TxId);
+            SubGroup->RemoveSubgroup("tx_id", TxId);
         }
 
         TString TxId;

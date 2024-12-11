@@ -50,7 +50,7 @@ struct TSelectInfo {
 
     TStats Stats() const;
 
-    TString DebugString() const;
+    void DebugStream(IOutputStream& out);
 };
 
 class TColumnEngineStats {

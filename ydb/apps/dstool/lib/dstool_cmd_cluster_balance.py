@@ -174,6 +174,7 @@ class BalancingStrategy(IBalancingStrategy):
     def __init__(self, args, cluster_info, groups_info):
         super().__init__(args, cluster_info, groups_info)
         self.histo = None
+        self.healthy_vslots_from_overpopulated_pdisks = None
 
     def verify_cluster_state(self):
         existing_storage_pools = set(self.cluster_info.group_id_to_storage_pool_name_map.values())
@@ -200,6 +201,10 @@ class BalancingStrategy(IBalancingStrategy):
 
     def calculate_extra_info(self):
         self.histo = Counter(self.cluster_info.pdisk_usage.values())
+        candidate_vslots = self.cluster_info.base_config.VSlot
+        candidate_vslots = filter_vslots_by_group_ids(candidate_vslots, self.args.group_ids)
+        candidate_vslots = self.filter_must_first_vslots(candidate_vslots)
+        self.healthy_vslots_from_overpopulated_pdisks = candidate_vslots
         common.print_if_verbose(self.args, 'Number of used slots -> number pdisks: ' + ' '.join('%d=>%d' % (k, self.histo[k]) for k in sorted(self.histo)), file=sys.stdout)
         return False
 
@@ -280,9 +285,9 @@ class BalancingStrategy(IBalancingStrategy):
                 check_pdisk_id = common.get_pdisk_id(pdisk)
                 disk_is_better = pdisk_usage_w_donors[check_pdisk_id] + 1 <= pdisk_map[check_pdisk_id].ExpectedSlotCount
                 if disk_is_better:
-                    if not self.args.healthy_vslots_from_overpopulated_pdisks and pdisk_usage[check_pdisk_id] + 1 > pdisk_usage[pdisk_id] - 1:
+                    if not self.healthy_vslots_from_overpopulated_pdisks and pdisk_usage[check_pdisk_id] + 1 > pdisk_usage[pdisk_id] - 1:
                         disk_is_better = False
-                    if self.args.healthy_vslots_from_overpopulated_pdisks:
+                    if self.healthy_vslots_from_overpopulated_pdisks:
                         disk_is_better = False
 
                 if not disk_is_better:
@@ -365,11 +370,14 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
 
     def calculate_extra_info(self):
         pdisk_types = set()
-        for pdisk in self.cluster_info.pdisk_map.values():
-            pdisk_types.add((pdisk.BoxId, pdisk.Type))
+        for vslot in self.cluster_info.base_config.VSlot:
+            if vslot.GroupId in self.args.group_ids:
+                pdisk_id = common.get_pdisk_id(vslot.VSlotId)
+                pdisk = self.cluster_info.pdisk_map[pdisk_id]
+                pdisk_types.add((pdisk.BoxId, pdisk.Type))
 
         if len(pdisk_types) != 1:
-            print("All pdisks must be of the same type", file=sys.stderr)
+            print(f"All pdisks must be of the same type, current types(boxId, type) {pdisk_types}", file=sys.stderr)
             return True
 
         self.pdisk_type = pdisk_types.pop()
@@ -407,6 +415,11 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
             self.group_nodes[vslot.GroupId].add(vslot.VSlotId.NodeId)
 
         common.print_if_not_quiet(self.args, f"VSlots distribuition: {self.max_vdisks_per_pdisk}..{self.min_vdisks_per_pdisk} (ideal {self.ideal_distribution})", file=sys.stdout)
+        distr = defaultdict(int)
+        for pdisk_id, count in self.pdisk_groups_usage.items():
+            distr[count] += 1
+        distr_str = ', '.join(f'{k}: {v}' for k, v in sorted(distr.items()))
+        common.print_if_verbose(self.args, f"PDisk usage distribution: {distr_str}", file=sys.stdout)
 
     def filter_must_first_vslots(self, candidate_vslots):
         filtered_vslots = []
@@ -594,7 +607,10 @@ def do(args):
             print("Group vslots balancing requires --group-ids or --storage-pool option", file=sys.stderr)
             sys.exit(1)
 
-    if args.group_ids is not None:
+    if args.group_ids is not None and args.storage_pool is not None:
+        group_ids = set(int(group_id) for group_id in args.group_ids)
+        args.group_ids = set(id for id, pool_name in cluster_info.group_id_to_storage_pool_name_map.items() if pool_name == args.storage_pool and id in group_ids)
+    elif args.group_ids is not None:
         args.group_ids = set(int(group_id) for group_id in args.group_ids)
     elif args.storage_pool is not None:
         args.group_ids = set(id for id, pool_name in cluster_info.group_id_to_storage_pool_name_map.items() if pool_name == args.storage_pool)

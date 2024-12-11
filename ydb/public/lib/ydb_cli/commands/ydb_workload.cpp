@@ -282,6 +282,8 @@ int TWorkloadCommand::RunWorkload(NYdbWorkload::IWorkloadQueryGenerator& workloa
     auto futures = NPar::LocalExecutor().ExecRangeWithFutures([this, &workloadGen, type](int id) {
         try {
             WorkerFn(id, workloadGen, type);
+        } catch (TMisuseException& error) {
+            throw;
         } catch (std::exception& error) {
             Y_FAIL_S(error.what());
         }

@@ -20,6 +20,7 @@ private:
     bool NeedReceiveBroken = false;
     bool ReceiveAck = false;
     bool SelfBroken = false;
+    mutable TAtomicCounter ControlCounter = 0;
     std::optional<bool> TxBroken;
 
     virtual NKikimrTxColumnShard::TCommitWriteTxBody SerializeToProto() const override {
@@ -37,7 +38,7 @@ private:
 
     virtual bool DoParseImpl(TColumnShard& /*owner*/, const NKikimrTxColumnShard::TCommitWriteTxBody& commitTxBody) override {
         if (!commitTxBody.HasSecondaryTabletData()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("event", "cannot read proto")("proto", commitTxBody.DebugString());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot read proto")("proto", commitTxBody.DebugString());
             return false;
         }
         auto& protoData = commitTxBody.GetSecondaryTabletData();
@@ -186,11 +187,13 @@ private:
         }
     };
 
-    virtual bool DoIsInProgress() const override {
-        return !TxBroken && (NeedReceiveBroken || !ReceiveAck);
-    }
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepare_for_progress_started")("lock_id", LockId);
+        if (TxBroken || (!NeedReceiveBroken && ReceiveAck)) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_prepare_for_progress")("lock_id", LockId);
+            return nullptr;
+        }
+        AFL_VERIFY(ControlCounter.Inc() <= 1);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "prepare_for_progress_started")("lock_id", LockId);
         return std::make_unique<TTxStartPreparation>(owner, GetTxId());
     }
 

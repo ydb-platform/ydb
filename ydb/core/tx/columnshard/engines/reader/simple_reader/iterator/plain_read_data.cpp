@@ -9,7 +9,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
     ui32 sourceIdx = 0;
     std::deque<std::shared_ptr<IDataSource>> sources;
-    const auto& portions = GetReadMetadata()->SelectInfo->Portions;
+    const auto& portions = GetReadMetadata()->SelectInfo->PortionsOrderedPK;
     ui64 compactedPortionsBytes = 0;
     ui64 insertedPortionsBytes = 0;
     for (auto&& i : portions) {
@@ -26,7 +26,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     Scanner = std::make_shared<TScanHead>(std::move(sources), SpecialReadContext);
 
     auto& stats = GetReadMetadata()->ReadStats;
-    stats->IndexPortions = GetReadMetadata()->SelectInfo->Portions.size();
+    stats->IndexPortions = GetReadMetadata()->SelectInfo->PortionsOrderedPK.size();
     stats->IndexBatches = GetReadMetadata()->NumIndexedBlobs();
     stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
     stats->InsertedPortionsBytes = insertedPortionsBytes;

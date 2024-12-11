@@ -502,22 +502,18 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
         return out;
     }
 
-    for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
-        AFL_VERIFY(portionInfo->HasInsertWriteId());
-        if (withUncommitted) {
-            if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
+    if (withUncommitted) {
+        for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
+            AFL_VERIFY(portionInfo->HasInsertWriteId());
+            AFL_VERIFY(!portionInfo->HasCommitSnapshot());
+            const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
+                "portion", portionInfo->DebugString());
+            if (skipPortion) {
                 continue;
             }
-        } else if (!portionInfo->HasCommitSnapshot()) {
-            continue;
+            out->PortionsOrderedPK.emplace_back(portionInfo);
         }
-        const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
-            "portion", portionInfo->DebugString());
-        if (skipPortion) {
-            continue;
-        }
-        out->Portions.emplace_back(portionInfo);
     }
     for (const auto& [_, portionInfo] : spg->GetPortions()) {
         if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
@@ -529,7 +525,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
         if (skipPortion) {
             continue;
         }
-        out->Portions.emplace_back(portionInfo);
+        out->PortionsOrderedPK.emplace_back(portionInfo);
     }
 
     return out;

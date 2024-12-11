@@ -688,15 +688,15 @@ namespace {
             } else if (name == "password_secret_name") {
                 dstSettings.EnsureStaticCredentials().PasswordSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "consistency_mode") {
+            } else if (name == "consistency_mode" || name == "consistency_level") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-                if (to_lower(value) == "strong") {
-                    dstSettings.EnsureStrongConsistency();
-                } else if (to_lower(value) == "weak") {
-                    dstSettings.EnsureWeakConsistency();
+                if (to_lower(value) == "global") {
+                    dstSettings.EnsureGlobalConsistency();
+                } else if (to_lower(value) == "row") {
+                    dstSettings.EnsureRowConsistency();
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                        TStringBuilder() << "Unknown consistency mode: " << value));
+                        TStringBuilder() << "Unknown consistency level: " << value));
                     return false;
                 }
             } else if (name == "commit_interval") {
@@ -711,7 +711,7 @@ namespace {
                     return false;
                 }
 
-                dstSettings.EnsureStrongConsistency().CommitInterval = TDuration::FromValue(value);
+                dstSettings.EnsureGlobalConsistency().CommitInterval = TDuration::FromValue(value);
             } else if (name == "state") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 if (to_lower(value) == "done") {
@@ -759,8 +759,8 @@ namespace {
             return false;
         }
 
-        if (dstSettings.WeakConsistency && dstSettings.StrongConsistency) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos), "Ambiguous consistency mode"));
+        if (dstSettings.RowConsistency && dstSettings.GlobalConsistency) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), "Ambiguous consistency level"));
             return false;
         }
 

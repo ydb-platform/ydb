@@ -60,9 +60,9 @@ Y_UNIT_TEST_SUITE(AssignTxId) {
         const auto& repl = desc.GetPathDescription().GetReplicationDescription();
         const auto tabletId = repl.GetControllerId();
 
-        const auto& cfg = repl.GetConfig();
-        UNIT_ASSERT(cfg.HasStrongConsistency());
-        UNIT_ASSERT_VALUES_EQUAL(cfg.GetStrongConsistency().GetCommitIntervalMilliSeconds(), 10000);
+        const auto& cfg = repl.GetConfig().GetConsistencySettings();
+        UNIT_ASSERT(cfg.HasGlobal());
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetGlobal().GetCommitIntervalMilliSeconds(), 10000);
 
         TVector<ui64> txIds;
 

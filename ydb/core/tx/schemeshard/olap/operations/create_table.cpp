@@ -834,6 +834,13 @@ public:
         }
 
         NIceDb::TNiceDb db(context.GetDB());
+
+        for (const auto& tier : tableInfo->GetUsedTiers()) {
+            auto tierPath = TPath::Resolve(tier, context.SS);
+            AFL_VERIFY(tierPath.IsResolved())("path", tier);
+            context.SS->PersistExternalDataSourceReference(db, tierPath->PathId, dstPath);
+        }
+
         context.SS->PersistTxState(db, OperationId);
 
         context.OnComplete.ActivateTx(OperationId);

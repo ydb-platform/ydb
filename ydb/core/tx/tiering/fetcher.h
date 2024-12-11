@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/tiering/tier/object.h>

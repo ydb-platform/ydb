@@ -231,15 +231,7 @@ public:
 
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
-        RETURN_RESULT_UNLESS(IsDescriptionValid(result,
-                                externalDataSourceDescription,
-                                context.SS->ExternalSourceFactory));
-        if (!context.SS->ColumnTables.GetTablesWithTier(dstPath.PathString()).empty()) {
-            if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(externalDataSourceDescription); status.IsFail()) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot make this change while the external data source is used as a tiered storage: " + status.GetErrorMessage());
-                return result;
-            }
-        }
+        RETURN_RESULT_UNLESS(IsDescriptionValid(result, externalDataSourceDescription, context.SS->ExternalSourceFactory));
 
         const auto oldExternalDataSourceInfo =
         context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);
@@ -248,6 +240,24 @@ public:
             NExternalDataSource::CreateExternalDataSource(externalDataSourceDescription,
                                      oldExternalDataSourceInfo->AlterVersion + 1);
         Y_ABORT_UNLESS(externalDataSourceInfo);
+
+        {
+            bool isTieredStorage = false;
+            for (const auto& referrer : externalDataSourceInfo->ExternalTableReferences.GetReferences()) {
+                if (TPath::Init(PathIdFromPathId(referrer.GetPathId()), context.SS)->PathType ==
+                    NKikimrSchemeOp::EPathType::EPathTypeColumnTable) {
+                    isTieredStorage = true;
+                    break;
+                }
+            }
+            if (isTieredStorage) {
+                if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(externalDataSourceDescription); status.IsFail()) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter,
+                        "Cannot make this change while the external data source is used as a tiered storage: " + status.GetErrorMessage());
+                    return result;
+                }
+            }
+        }
 
         AddPathInSchemeShard(result, dstPath);
         const TPathElement::TPtr externalDataSource =

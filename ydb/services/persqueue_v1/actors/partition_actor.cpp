@@ -1153,7 +1153,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     if (WaitDataInfly.size() > 1) { //already got 2 requests inflight
         return;
     }
-    if (!WaitForData && !ReadingFinishedSent) {
+    if (!WaitForData) {
         return;
     }
 
@@ -1397,12 +1397,11 @@ void TPartitionActor::Handle(TEvPQProxy::TEvDeadlineExceeded::TPtr& ev, const TA
 
 void TPartitionActor::HandleWakeup(const TActorContext& ctx) {
     DoWakeup(ctx);
-    const auto interval = ReadingFinishedSent ? READING_FINISHED_CHECK_INTERVAL : PREWAIT_DATA;
-    ctx.Schedule(interval, new TEvents::TEvWakeup());
+    ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
 }
 
 void TPartitionActor::DoWakeup(const TActorContext& ctx) {
-    if ((WaitForData || ReadingFinishedSent) && ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) { //send one more
+    if (WaitForData && ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) { //send one more
         WaitDataInPartition(ctx);
     }
 }

@@ -2438,7 +2438,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     Y_ABORT_UNLESS(InitDone);
     Y_ABORT_UNLESS(PipeClient);
 
-    if (!WaitForData && !ReadingFinishedSent) {
+    if (!WaitForData) {
         return;
     }
 
@@ -2639,6 +2639,7 @@ void TPartitionActor::HandlePoison(TEvents::TEvPoisonPill::TPtr&, const TActorCo
 void TPartitionActor::Handle(TEvPQProxy::TEvDeadlineExceeded::TPtr& ev, const TActorContext& ctx) {
     WaitDataInfly.erase(ev->Get()->Cookie);
     if (ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) {
+        Y_ABORT_UNLESS(WaitForData);
         WaitDataInPartition(ctx);
     }
 
@@ -2646,6 +2647,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvDeadlineExceeded::TPtr& ev, const TA
 
 void TPartitionActor::HandleWakeup(const TActorContext& ctx) {
     if (ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) {
+        Y_ABORT_UNLESS(WaitForData);
         WaitDataInPartition(ctx);
     }
 }

@@ -8,6 +8,16 @@
 
 namespace NYdb::NBackup::NFiles {
 
+enum EFilesType {
+    SCHEME = 0,
+    PERMISSIONS,
+    CHANGEFEED_DESCRIPTION,
+    TOPIC_DESCRIPTION,
+    INCOMPLETE_DATA,
+    INCOMPLETE,
+    EMPTY
+};
+
 static constexpr TFileInfo FILES_INFO[] = {
     {"scheme.pb", "scheme"},
     {"permissions.pb", "ACL"},
@@ -17,15 +27,6 @@ static constexpr TFileInfo FILES_INFO[] = {
     {"incomplete", "incomplete"},
     {"empty_dir", "empty_dir"}
 };
-
-void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& folderPath, EFilesType type) {
-    TString protoStr;
-    google::protobuf::TextFormat::PrintToString(proto, &protoStr);
-    const char* FILE_NAME = FILES_INFO[type].FileName;
-    LOG_D("Write " << FILES_INFO[type].LogObjectType << " into " << folderPath.Child(FILE_NAME).GetPath().Quote());
-    TFile outFile(folderPath.Child(FILE_NAME), CreateAlways | WrOnly);
-    outFile.Write(protoStr.data(), protoStr.size());
-}
 
 const TFileInfo& TableScheme() {
     return FILES_INFO[SCHEME];

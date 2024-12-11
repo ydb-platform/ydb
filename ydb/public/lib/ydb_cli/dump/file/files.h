@@ -11,18 +11,6 @@ struct TFileInfo {
     const char* LogObjectType;
 };
 
-enum EFilesType {
-    SCHEME = 0,
-    PERMISSIONS,
-    CHANGEFEED_DESCRIPTION,
-    TOPIC_DESCRIPTION,
-    INCOMPLETE_DATA,
-    INCOMPLETE,
-    EMPTY
-};
-
-void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& folderPath, EFilesType type);
-
 const TFileInfo& TableScheme();
 const TFileInfo& TablePermissions();
 const TFileInfo& Changefeed();

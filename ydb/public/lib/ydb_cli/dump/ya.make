@@ -9,6 +9,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/protobuf
     library/cpp/bucket_quoter
     library/cpp/logger
     library/cpp/regex/pcre

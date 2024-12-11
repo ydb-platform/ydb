@@ -8,7 +8,6 @@ import stat
 import sys
 import argparse
 
-import yatest
 from library.python import resource
 
 logging.getLogger().setLevel(logging.DEBUG)
@@ -22,30 +21,6 @@ from ydb.tests.library.wardens.factories import safety_warden_factory, liveness_
 logger = logging.getLogger('ydb.connection')
 logger.setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
-
-
-def get_slice_directory():
-    return os.getenv('YDB_CLUSTER_YAML_PATH')
-
-
-def get_ssh_username():
-    return yatest.common.get_param("kikimr.ci.ssh_username")
-
-
-def get_slice_name():
-    return yatest.common.get_param("kikimr.ci.cluster_name", None)
-
-
-def next_version_kikimr_driver_path():
-    return yatest.common.get_param("kikimr.ci.kikimr_driver_next", None)
-
-
-def kikimr_driver_path():
-    return yatest.common.get_param("kikimr.ci.kikimr_driver", None)
-
-
-def is_deploy_cluster():
-    return yatest.common.get_param("kikimr.ci.deploy_cluster", "false").lower() == "true"
 
 
 STRESS_BINARIES_DEPLOY_PATH = '/Berkanavt/nemesis/bin/'
@@ -94,7 +69,7 @@ class StabilityCluster:
         for node in self.kikimr_cluster.nodes.values():
             node.ssh_command("sudo service nemesis stop", raise_on_error=False)
 
-    def setup(self):
+    def setup(self, is_deploy_cluster):
         self._stop_nemesis()
         self.kikimr_cluster.start()
 
@@ -185,7 +160,7 @@ def main():
     for action in args.actions:
         setup_command = False
         if setup_command:
-            stability_cluster.setup()
+            stability_cluster.setup(True)
 
         if action == "start_workload_simple_queue":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):

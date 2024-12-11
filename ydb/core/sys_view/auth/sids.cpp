@@ -1,20 +1,8 @@
 #include "sids.h"
 
-#include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
-
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NSysView {
-
-using namespace NActors;
-using namespace NNodeWhiteboard;
 
 class TSidsScan : public TScanActorBase<TSidsScan> {
 public:
@@ -28,7 +16,15 @@ public:
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
     {
-        // TODO: fill range
+        if (auto cellsFrom = TableRange.From.GetCells(); cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
+            From = TString(cellsFrom[0].Data(), cellsFrom[0].Size());
+        }
+        FromInclusive = TableRange.FromInclusive;
+
+        if (auto cellsTo = TableRange.To.GetCells(); cellsTo.size() > 0 && !cellsTo[0].IsNull()) {
+            To = TString(cellsTo[0].Data(), cellsTo[0].Size());
+        }
+        ToInclusive = TableRange.ToInclusive;
     }
 
     STFUNC(StateScan) {
@@ -56,10 +52,7 @@ private:
     }
 
     void StartScan() {
-        if (IsEmptyRange) {
-            ReplyEmptyAndDie();
-            return;
-        }
+        
 
         RequestDone();
     }
@@ -76,7 +69,11 @@ private:
     }
 
 private:
-    bool IsEmptyRange = false;
+    TString From;
+    bool FromInclusive = false;
+
+    TString To;
+    bool ToInclusive = false;
 };
 
 THolder<NActors::IActor> CreateSidsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,

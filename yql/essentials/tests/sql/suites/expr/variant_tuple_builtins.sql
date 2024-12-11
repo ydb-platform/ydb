@@ -12,7 +12,7 @@ SELECT
     $visitor(NULL)
 ;
 
-$visitor_def = ($var) -> { return VisitOrDefault($var, $handle_num, $handle_flag, 999); };
+$visitor_def = ($var) -> { return VisitOrDefault($var, 999, $handle_num, $handle_flag); };
 SELECT
     $visitor_def(Variant(5, "0", $vartype)),
     $visitor_def(Just(Variant(True, "1", $vartype))),

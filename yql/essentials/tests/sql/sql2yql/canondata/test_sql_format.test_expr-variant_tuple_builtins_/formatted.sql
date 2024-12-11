@@ -25,7 +25,7 @@ SELECT
 ;
 
 $visitor_def = ($var) -> {
-    RETURN VisitOrDefault($var, $handle_num, $handle_flag, 999);
+    RETURN VisitOrDefault($var, 999, $handle_num, $handle_flag);
 };
 
 SELECT

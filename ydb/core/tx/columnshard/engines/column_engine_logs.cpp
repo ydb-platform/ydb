@@ -139,6 +139,7 @@ void TColumnEngineForLogs::UpdatePortionStats(
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
+    TMemoryProfileGuard g("TColumnEngineForLogs::RegisterSchemaVersion");
     AFL_VERIFY(DataAccessorsManager);
     bool switchOptimizer = false;
     bool switchAccessorsManager = false;
@@ -152,18 +153,21 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
     if (isCriticalScheme) {
+        TMemoryProfileGuard g("TColumnEngineForLogs::RegisterSchemaVersion::StartActualization");
         StartActualization({});
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
         }
     }
     if (switchAccessorsManager) {
+        TMemoryProfileGuard g("TColumnEngineForLogs::RegisterSchemaVersion::AccessorsManager");
         NDataAccessorControl::TManagerConstructionContext context(DataAccessorsManager->GetTabletActorId(), true);
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->ResetAccessorsManager(indexInfoActual->GetMetadataManagerConstructor(), context);
         }
     }
     if (switchOptimizer) {
+        TMemoryProfileGuard g("TColumnEngineForLogs::RegisterSchemaVersion::Optimizer");
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->ResetOptimizer(indexInfoActual->GetCompactionPlannerConstructor(), StoragesManager, indexInfoActual->GetPrimaryKey());
         }

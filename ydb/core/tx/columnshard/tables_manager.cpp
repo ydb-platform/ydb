@@ -176,32 +176,39 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             }
         }
     }
-
-    TMemoryProfileGuard g("TTablesManager/InitFromDB::Other");
-    for (auto& [id, preset] : schemaPresets) {
-        if (isFakePresetOnly) {
-            Y_ABORT_UNLESS(id == 0);
-        } else {
-            Y_ABORT_UNLESS(id > 0);
-        }
-        for (auto it = preset.MutableVersionsById().begin(); it != preset.MutableVersionsById().end();) {
-            const auto version = it->first;
-            const auto& schemaInfo = it->second;
-            AFL_VERIFY(schemaInfo.HasSchema());
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "index_schema")("preset_id", id)("snapshot", version)(
-                "version", schemaInfo.GetSchema().GetVersion());
-            NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(schemaInfo);
-            if (!PrimaryIndex) {
-                PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, DataAccessorsManager, StoragesManager,
-                    preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInitializationData);
+    {
+        TMemoryProfileGuard g("TTablesManager/InitFromDB::Other");
+        for (auto& [id, preset] : schemaPresets) {
+            if (isFakePresetOnly) {
+                Y_ABORT_UNLESS(id == 0);
             } else {
-                PrimaryIndex->RegisterSchemaVersion(preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInitializationData);
+                Y_ABORT_UNLESS(id > 0);
             }
-            it = preset.MutableVersionsById().erase(it);
+            for (auto it = preset.MutableVersionsById().begin(); it != preset.MutableVersionsById().end();) {
+                const auto version = it->first;
+                const auto& schemaInfo = it->second;
+                AFL_VERIFY(schemaInfo.HasSchema());
+                AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "index_schema")("preset_id", id)("snapshot", version)(
+                    "version", schemaInfo.GetSchema().GetVersion());
+                NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(schemaInfo);
+                if (!PrimaryIndex) {
+                    TMemoryProfileGuard g("TTablesManager/InitFromDB::InitIndex");
+                    PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, DataAccessorsManager, StoragesManager,
+                        preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInitializationData);
+                } else {
+                    TMemoryProfileGuard g("TTablesManager/InitFromDB::RegisterSchema");
+                    PrimaryIndex->RegisterSchemaVersion(
+                        preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInitializationData);
+                }
+                it = preset.MutableVersionsById().erase(it);
+            }
         }
     }
-    for (auto&& i : Tables) {
-        PrimaryIndex->RegisterTable(i.first);
+    {
+        TMemoryProfileGuard g("TTxInit/RegisterTables");
+        for (auto&& i : Tables) {
+            PrimaryIndex->RegisterTable(i.first);
+        }
     }
     return true;
 }

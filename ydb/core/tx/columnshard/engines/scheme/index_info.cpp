@@ -310,6 +310,7 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
 
 std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema,
     const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache) {
+    TMemoryProfileGuard g("TIndexInfo::BuildFromProto::Parse");
     TIndexInfo result;
     if (!result.DeserializeFromProto(schema, operators, cache)) {
         return std::nullopt;
@@ -319,6 +320,7 @@ std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TCol
 
 std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& diff, const TIndexInfo& prevSchema,
     const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache) {
+    TMemoryProfileGuard g("TIndexInfo::BuildFromProto::Diff");
     TSchemaDiffView diffView;
     diffView.DeserializeFromProto(diff).Validate();
     return TIndexInfo(prevSchema, diffView, operators, cache);
@@ -492,6 +494,7 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexV
 TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, const std::shared_ptr<IStoragesManager>& operators,
     const std::shared_ptr<TSchemaObjectsCache>& cache) {
     {
+        TMemoryProfileGuard g1("TIndexInfo::ApplyDiff::Prepare");
         std::vector<std::shared_ptr<arrow::Field>> fields;
         const auto addFromOriginal = [&](const ui32 index) {
             AFL_VERIFY(index < original.SchemaColumnIdsWithSpecials.size());
@@ -515,14 +518,18 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
             fields.emplace_back(BuildArrowField(tableCol, cache));
         };
         diff.ApplyForColumns(original.SchemaColumnIdsWithSpecials, addFromOriginal, addFromDiff);
+        TMemoryProfileGuard g2("TIndexInfo::ApplyDiff::Prepare::Schema");
         Schema = std::make_shared<NArrow::TSchemaLite>(fields);
         IIndexInfo::AddSpecialFields(fields);
+        TMemoryProfileGuard g3("TIndexInfo::ApplyDiff::Prepare::SchemaWithSpecials");
         SchemaWithSpecials = std::make_shared<NArrow::TSchemaLite>(fields);
         std::sort(ColumnNames.begin(), ColumnNames.end(), TNameInfo::TNameComparator());
+        TMemoryProfileGuard g4("TIndexInfo::ApplyDiff::Prepare::PK");
         PKColumnIds = original.PKColumnIds;
         PKColumns = original.PKColumns;
     }
     {
+        TMemoryProfileGuard g("TIndexInfo::ApplyDiff::Columns");
         const auto addFromOriginal = [&](const ui32 index) {
             ColumnFeatures.emplace_back(original.ColumnFeatures[index]);
         };
@@ -555,6 +562,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
         }
     }
 
+    TMemoryProfileGuard g("TIndexInfo::ApplyDiff::Options");
     DeserializeOptionsFromProto(diff.GetSchemaOptions());
     Version = diff.GetVersion();
     PrimaryKey = original.PrimaryKey;

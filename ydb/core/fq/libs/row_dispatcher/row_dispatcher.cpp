@@ -586,6 +586,7 @@ void TRowDispatcher::UpdateMetrics() {
     }
     for (const auto& key : toDelete) {
          SetQueryMetrics(key, 0, 0, 0);
+         Metrics.Counters->RemoveSubgroup("query_id", key.QueryId);
          AggrStats.LastQueryStats.erase(key);
     }
     PrintStateToLog();

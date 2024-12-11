@@ -126,20 +126,30 @@ private:
         TDuration ParseAndFilterLatency;
     };
 
-    struct TClientsInfo {
-        TClientsInfo(
-            const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev,
-            NMonitoring::TDynamicCounterPtr& counters)
-            : Settings(ev->Get()->Record)
+    struct TClientsInfo : public IClientDataConsumer {
+        using TPtr = TIntrusivePtr<TClientsInfo>;
+
+        TClientsInfo(TTopicSession& self, const TString& logPrefix, const ITopicFormatHandler::TSettings& handlerSettings, const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev, const NMonitoring::TDynamicCounterPtr& counters, const TString& readGroup)
+            : Self(self)
+            , LogPrefix(logPrefix)
+            , HandlerSettings(handlerSettings)
+            , Settings(ev->Get()->Record)
             , ReadActorId(ev->Sender)
-            , FilteredDataRate(counters->GetCounter("FilteredDataRate", true))
-            , RestartSessionByOffsetsByQuery(counters->GetCounter("RestartSessionByOffsetsByQuery", true))
+            , Counters(counters)
         {
             if (Settings.HasOffset()) {
                 NextMessageOffset = Settings.GetOffset();
                 InitialOffset = Settings.GetOffset();
             }
             Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
+            auto queryGroup = Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
+            auto topicGroup = queryGroup->GetSubgroup("read_group", CleanupCounterValueString(readGroup));
+            FilteredDataRate = topicGroup->GetCounter("FilteredDataRate", true);
+            RestartSessionByOffsetsByQuery = counters->GetCounter("RestartSessionByOffsetsByQuery", true);
+        }
+
+        ~TClientsInfo() {
+            Counters->RemoveSubgroup("query_id", Settings.GetQueryId());
         }
         NFq::NRowDispatcherProto::TEvStartSession Settings;
         NActors::TActorId ReadActorId;
@@ -153,6 +163,7 @@ private:
         TVector<ui64> FieldsIds;
         TDuration ReconnectPeriod;
         TStats Stat;        // Send (filtered) to read_actor
+        const ::NMonitoring::TDynamicCounterPtr Counters;
         NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
         NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsetsByQuery;
         ui64 InitialOffset = 0;
@@ -840,52 +851,10 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto columns = GetVector(ev->Get()->Record.GetSource().GetColumns());
     auto types = GetVector(ev->Get()->Record.GetSource().GetColumnTypes());
 
-    try {
-        if (Parser) {
-            // Parse remains data before adding new client
-            DoParsing(true);
-        }
-        auto queryGroup = Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
-        auto readGroup = queryGroup->GetSubgroup("read_group", CleanupCounterValueString(ReadGroup));
-        auto& clientInfo = Clients.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(ev->Sender), 
-            std::forward_as_tuple(ev, readGroup)).first->second;
-        UpdateFieldsIds(clientInfo);
-
-        const auto& source = clientInfo.Settings.GetSource();
-        TString predicate = source.GetPredicate();
-
-        // TODO: remove this when the re-parsing is removed from pq read actor
-        if (predicate.empty() && HasJsonColumns(source)) {
-            predicate = "WHERE TRUE";
-        }
-
-        if (!predicate.empty()) {
-            clientInfo.Filter = NewJsonFilter(
-                columns,
-                types,
-                predicate,
-                [&, actorId = clientInfo.ReadActorId](ui64 offset, const TString& json){
-                    Send(SelfId(), new NFq::TEvPrivate::TEvDataAfterFilteration(offset, json, actorId));
-                },
-                {.EnabledLLVM = source.GetEnabledLLVM()}
-            );
-
-            clientInfo.InFlightCompilationId = ++FiltersCompilation.FreeId;
-            Y_ENSURE(FiltersCompilation.InFlightCompilations.emplace(clientInfo.InFlightCompilationId, ev->Sender).second, "Got duplicated compilation event id");
-            LOG_ROW_DISPATCHER_TRACE("Send compile request with id " << clientInfo.InFlightCompilationId);
-
-            Send(CompileServiceActorId, clientInfo.Filter->GetCompileRequest().release(), 0, clientInfo.InFlightCompilationId);
-            Metrics.InFlightCompileRequests->Inc();
-        } else {
-            ClientsWithoutPredicate.insert(ev->Sender);
-
-            // In case of in flight compilation topic session will be checked after getting compile response
-            StartClientSession(clientInfo);
-        }
-    } catch (...) {
-        FatalError("Adding new client failed, got unexpected exception: " + CurrentExceptionMessage(), nullptr, true, Nothing());
+    auto clientInfo = Clients.insert({ev->Sender, MakeIntrusive<TClientsInfo>(*this, LogPrefix, handlerSettings, ev, Counters, ReadGroup)}).first->second;
+    auto formatIt = FormatHandlers.find(handlerSettings);
+    if (formatIt == FormatHandlers.end()) {
+        formatIt = FormatHandlers.insert({handlerSettings, CreateTopicFormatHandler(ActorContext(), FormatHandlerConfig, handlerSettings, Metrics.PartitionGroup)}).first;
     }
     ConsumerName = ev->Get()->Record.GetSource().GetConsumerName();
     SendStatisticToRowDispatcher();

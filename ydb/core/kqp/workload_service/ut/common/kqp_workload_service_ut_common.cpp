@@ -300,6 +300,9 @@ private:
     void InitializeServer() {
         ui32 grpcPort = PortManager_.GetPort();
         TServerSettings serverSettings = GetServerSettings(grpcPort);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetCheckDatabaseAccessPermission(false); // let BUILTIN_SYSTEM_DOMAIN connect to database
+        serverSettings.SetFeatureFlags(featureFlags);
 
         Server_ = MakeIntrusive<TServer>(serverSettings);
         Server_->EnableGRpc(grpcPort);

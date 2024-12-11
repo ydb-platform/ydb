@@ -38,10 +38,10 @@ void IColumnEngine::FetchDataAccessors(const std::shared_ptr<TDataAccessorsReque
 
 TSelectInfo::TStats TSelectInfo::Stats() const {
     TStats out;
-    out.Portions = PortionsOrderedPK.size();
+    out.Portions = Portions.size();
 
     THashSet<TUnifiedBlobId> uniqBlob;
-    for (auto& portionInfo : PortionsOrderedPK) {
+    for (auto& portionInfo : Portions) {
         out.Rows += portionInfo->GetRecordsCount();
         for (auto& blobId : portionInfo->GetBlobIds()) {
             out.Bytes += blobId.BlobSize();
@@ -53,10 +53,10 @@ TSelectInfo::TStats TSelectInfo::Stats() const {
 
 TString TSelectInfo::DebugString() const {
     TStringBuilder result;
-    result << "count:" << PortionsOrderedPK.size() << ";";
-    if (PortionsOrderedPK.size()) {
+    result << "count:" << Portions.size() << ";";
+    if (Portions.size()) {
         result << "portions:";
-        for (auto& portionInfo : PortionsOrderedPK) {
+        for (auto& portionInfo : Portions) {
             result << portionInfo->DebugString();
         }
     }

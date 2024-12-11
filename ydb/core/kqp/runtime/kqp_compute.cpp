@@ -131,6 +131,10 @@ public:
         bool TryBuildResultRow(NUdf::TUnboxedValue inputRow, NUdf::TUnboxedValue& result) {
             auto leftRow = inputRow.GetElement(0);
             auto rightRow = inputRow.GetElement(1);
+            auto seqNo = inputRow.GetElement(2).Get<ui64>();
+            Cerr << "SeqNo: " << seqNo << Endl;
+
+            // TODO: process seq no
 
             bool ok = true;
             switch (Self->JoinType) {

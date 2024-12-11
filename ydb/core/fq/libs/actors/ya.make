@@ -72,7 +72,6 @@ PEERDIR(
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/provider/exec
     ydb/library/yql/providers/dq/worker_manager/interface
-    ydb/library/yql/providers/generic/connector/api/common
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/pq/cm_client

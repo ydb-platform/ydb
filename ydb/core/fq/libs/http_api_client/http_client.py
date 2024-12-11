@@ -149,7 +149,7 @@ class YQHttpClient(object):
 
         self._validate_http_error(response, expected_code=expected_code)
         return response.json()["id"]
-    
+
     def start_query(
         self,
         query_id: str,
@@ -287,9 +287,7 @@ class YQHttpClient(object):
 
         return YQResults(result).results
 
-    def get_query_all_result_sets(
-        self, query_id: str, result_set_count: int, raw_format: bool = False
-    ) -> Any:
+    def get_query_all_result_sets(self, query_id: str, result_set_count: int, raw_format: bool = False) -> Any:
         result = []
         for i in range(0, result_set_count):
             r = self.get_query_result_set(query_id, result_set_index=i, raw_format=raw_format)

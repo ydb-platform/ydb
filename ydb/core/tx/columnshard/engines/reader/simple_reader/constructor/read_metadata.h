@@ -12,7 +12,7 @@ public:
 
     virtual bool Empty() const override {
         Y_ABORT_UNLESS(SelectInfo);
-        return SelectInfo->PortionsOrderedPK.empty();
+        return SelectInfo->Portions.empty();
     }
 
     virtual std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<TReadContext>& context) const override;

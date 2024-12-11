@@ -26,6 +26,8 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
         return node;
     }
 
+    Cerr << "Kal" << Endl;
+
     auto input = maybeSort ? maybeSort.Cast().Input() : maybeTopBase.Cast().Input();
     auto sortDirections = maybeSort ? maybeSort.Cast().SortDirections() : maybeTopBase.Cast().SortDirections();
     auto keySelector = maybeSort ? maybeSort.Cast().KeySelectorLambda() : maybeTopBase.Cast().KeySelectorLambda();
@@ -165,19 +167,24 @@ TExprBase KqpBuildTopStageRemoveSort(
     const auto top = node.Cast<TCoTopBase>();
     const auto dqUnion = top.Input().Cast<TDqCnUnionAll>();
 
-    if (
-        dqUnion.Output().Stage().Program().Body().Maybe<TCoFlatMap>()
-    ) {
+    // skip this rule to activate KqpRemoveRedundantSortByPk later to reduce readings count
+    auto stageBody = dqUnion.Output().Stage().Program().Body();
+    if (stageBody.Maybe<TCoFlatMap>()) {
         auto flatmap = dqUnion.Output().Stage().Program().Body().Cast<TCoFlatMap>();
+        auto input = flatmap.Input();
+        bool isReadTable = input.Maybe<TKqpReadTable>().IsValid();
+        bool isReadTableRanges = input.Maybe<TKqpReadTableRanges>().IsValid() || input.Maybe<TKqpReadOlapTableRanges>().IsValid() ;
         if (IsPassthroughFlatMap(flatmap, nullptr)) {
-            return node;
-            auto input = flatmap.Input();
-            bool isReadTable = input.Maybe<TKqpReadTable>().IsValid();
-            bool isReadTableRanges = input.Maybe<TKqpReadTableRanges>().IsValid() || input.Maybe<TKqpReadOlapTableRanges>().IsValid() ;
-            if (!isReadTable && !isReadTableRanges) {
+            if (isReadTable || isReadTableRanges) {
                 return node;
             }
         }
+    } else if (
+        stageBody.Maybe<TKqpReadTable>().IsValid() ||
+        stageBody.Maybe<TKqpReadTableRanges>().IsValid() ||
+        stageBody.Maybe<TKqpReadOlapTableRanges>().IsValid()
+    ) {
+        return node;
     }
 
     auto inputStats = typeCtx.GetStats(dqUnion.Output().Raw());

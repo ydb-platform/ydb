@@ -7,6 +7,7 @@ LIBRARY()
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/formats/arrow/accessor
+    ydb/library/formats/arrow/csv
     ydb/library/formats/arrow/simple_builder
     ydb/library/formats/arrow/transformer
     ydb/library/formats/arrow/splitter

@@ -42,9 +42,9 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     TErasureSplitContext ErasureSplitContext = TErasureSplitContext::Init(MaxBytesToSplitAtOnce);
     TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>> PartSets;
 
-    static_assert(MaxBatchedPutRequests <= sizeof(ui64) * 8);
-    std::map<TInstant, ui64> PutDeadlineMasks;
-    ui64 DeadlineMask = 0; 
+    using TDeadlineMask = std::bitset<MaxBatchedPutRequests>;
+    std::map<TInstant, TDeadlineMask> PutDeadlineMasks;
+    TDeadlineMask DeadlineMask; 
 
     TStackVec<ui64, TypicalDisksInGroup> WaitingVDiskResponseCount;
     ui64 WaitingVDiskCount = 0;
@@ -651,7 +651,7 @@ public:
             << " RestartCounter# " << RestartCounter);
 
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            PutDeadlineMasks[PutImpl.Blobs[blobIdx].Deadline] |= (1 << blobIdx);
+            PutDeadlineMasks[PutImpl.Blobs[blobIdx].Deadline].set(blobIdx);
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }
 
@@ -738,7 +738,7 @@ public:
 
         TPutImpl::TPutResultVec putResults;
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            if (!PutImpl.Blobs[blobIdx].Replied && (DeadlineMask & (1 << blobIdx))) {
+            if (!PutImpl.Blobs[blobIdx].Replied && DeadlineMask[blobIdx]) {
                 PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, "Deadline timer hit", putResults);
             }
         }

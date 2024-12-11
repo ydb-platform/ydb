@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
     }
 
     template <class TVResult>
-    void TestPut(const TBlobStorageGroupType& erasure, ui32 requests) {
+    void TestPutImpl(const TBlobStorageGroupType& erasure, ui32 requests) {
         TDuration delay = TDuration::Seconds(50);
         TDuration timeout = TDuration::Seconds(40);
 
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
         TestImpl<TVResult, TEvBlobStorage::TEvPutResult>(erasure, delay, timeout, send, requests);
     }
 
-    void TestGet(const TBlobStorageGroupType& erasure, bool restoreGet, bool indexOnly) {
+    void TestGetImpl(const TBlobStorageGroupType& erasure, bool restoreGet, bool indexOnly) {
         TDuration delay = TDuration::Seconds(50);
         TDuration timeout = TDuration::Seconds(40);
 
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
         TestImpl<TEvBlobStorage::TEvVGetResult, TEvBlobStorage::TEvGetResult>(erasure, delay, timeout, send);
     }
 
-    void TestBlock(const TBlobStorageGroupType& erasure) {
+    void TestBlockImpl(const TBlobStorageGroupType& erasure) {
         TDuration delay = TDuration::Seconds(50);
         TDuration timeout = TDuration::Seconds(40);
 
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
         TestImpl<TEvBlobStorage::TEvVBlockResult, TEvBlobStorage::TEvBlockResult>(erasure, delay, timeout, send);
     }
 
-    void TestPatch(const TBlobStorageGroupType& erasure) {
+    void TestPatchImpl(const TBlobStorageGroupType& erasure) {
         TDuration delay = TDuration::Seconds(50);
         TDuration timeout = TDuration::Seconds(40);
 
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
         TestImpl<TEvBlobStorage::TEvVMovedPatchResult, TEvBlobStorage::TEvPatchResult>(erasure, delay, timeout, send);
     }
 
-    void TestDiscover(const TBlobStorageGroupType& erasure, bool readBody) {
+    void TestDiscoverImpl(const TBlobStorageGroupType& erasure, bool readBody) {
         TDuration delay = TDuration::Seconds(50);
         TDuration timeout = TDuration::Seconds(40);
 
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
         TestImpl<TEvBlobStorage::TEvVGetResult, TEvBlobStorage::TEvDiscoverResult>(erasure, delay, timeout, send);
     }
 
-    void TestRange(const TBlobStorageGroupType& erasure, bool restore, bool indexOnly) {
+    void TestRangeImpl(const TBlobStorageGroupType& erasure, bool restore, bool indexOnly) {
         TDuration delay = TDuration::Seconds(50);
         TDuration timeout = TDuration::Seconds(40);
 
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
         TestImpl<TEvBlobStorage::TEvVGetResult, TEvBlobStorage::TEvRangeResult>(erasure, delay, timeout, send);
     }
 
-    void TestCollectGarbage(const TBlobStorageGroupType& erasure, bool multicollect, bool hard) {
+    void TestCollectGarbageImpl(const TBlobStorageGroupType& erasure, bool multicollect, bool hard) {
         TDuration delay = TDuration::Seconds(50);
         TDuration timeout = TDuration::Seconds(40);
 
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
         TestImpl<TEvBlobStorage::TEvVCollectGarbageResult, TEvBlobStorage::TEvCollectGarbageResult>(erasure, delay, timeout, send);
     }
 
-    void TestStatus(const TBlobStorageGroupType& erasure) {
+    void TestStatusImpl(const TBlobStorageGroupType& erasure) {
         TDuration delay = TDuration::Seconds(50);
         TDuration timeout = TDuration::Seconds(40);
 
@@ -325,134 +325,85 @@ Y_UNIT_TEST_SUITE(Deadlines) {
         TestImpl<TEvBlobStorage::TEvVStatusResult, TEvBlobStorage::TEvStatusResult>(erasure, delay, timeout, send);
     }
 
-    template<class Tag>
-    void Test(const TBlobStorageGroupType&) {}
-
-    struct TTagPut {};
-    struct TTagMultiPut {};
-
-    struct TTagGet {};
-    struct TTagRestoreGet {};
-    struct TTagIndexGet {};
-    struct TTagIndexRestoreGet {};
-
-    struct TTagBlock {};
-
-    struct TTagPatch {};
-
-    struct TTagDiscover {};
-    struct TTagDiscoverReadBody {};
-
-    struct TTagRange {};
-    struct TTagRestoreRange {};
-    struct TTagIndexRange {};
-    struct TTagIndexRestoreRange {};
-
-    struct TTagHardCollectGarbage {};
-    struct TTagSoftCollectGarbage {};
-    struct TTagHardMultiCollectGarbage {};
-    struct TTagSoftMultiCollectGarbage {};
-
-    struct TTagStatus {};
-
-    template<>
-    void Test<TTagPut>(const TBlobStorageGroupType& erasure) {
-        TestPut<TEvBlobStorage::TEvVPutResult>(erasure, 1);
+    void TestPut(const TBlobStorageGroupType& erasure) {
+        TestPutImpl<TEvBlobStorage::TEvVPutResult>(erasure, 1);
     }
 
-    template<>
-    void Test<TTagMultiPut>(const TBlobStorageGroupType& erasure) {
-        TestPut<TEvBlobStorage::TEvVMultiPutResult>(erasure, 10);
+    void TestMultiPut(const TBlobStorageGroupType& erasure) {
+        TestPutImpl<TEvBlobStorage::TEvVMultiPutResult>(erasure, 10);
     }
 
-    template<>
-    void Test<TTagGet>(const TBlobStorageGroupType& erasure) {
-        TestGet(erasure, false, false);
+    void TestGet(const TBlobStorageGroupType& erasure) {
+        TestGetImpl(erasure, false, false);
     }
 
-    template<>
-    void Test<TTagRestoreGet>(const TBlobStorageGroupType& erasure) {
-        TestGet(erasure, true, false);
+    void TestRestoreGet(const TBlobStorageGroupType& erasure) {
+        TestGetImpl(erasure, true, false);
     }
 
-    template<>
-    void Test<TTagIndexGet>(const TBlobStorageGroupType& erasure) {
-        TestGet(erasure, false, true);
+    void TestIndexGet(const TBlobStorageGroupType& erasure) {
+        TestGetImpl(erasure, false, true);
     }
 
-    template<>
-    void Test<TTagIndexRestoreGet>(const TBlobStorageGroupType& erasure) {
-        TestGet(erasure, true, true);
+    void TestIndexRestoreGet(const TBlobStorageGroupType& erasure) {
+        TestGetImpl(erasure, true, true);
     }
 
-    template<>
-    void Test<TTagBlock>(const TBlobStorageGroupType& erasure) {
-        TestBlock(erasure);
+    void TestBlock(const TBlobStorageGroupType& erasure) {
+        TestBlockImpl(erasure);
     }
 
-    template<>
-    void Test<TTagPatch>(const TBlobStorageGroupType& erasure) {
-        TestPatch(erasure);
+    void TestPatch(const TBlobStorageGroupType& erasure) {
+        TestPatchImpl(erasure);
     }
 
-    template<>
-    void Test<TTagDiscover>(const TBlobStorageGroupType& erasure) {
-        TestDiscover(erasure, false);
+    void TestDiscover(const TBlobStorageGroupType& erasure) {
+        TestDiscoverImpl(erasure, false);
     }
 
-    template<>
-    void Test<TTagDiscoverReadBody>(const TBlobStorageGroupType& erasure) {
-        TestDiscover(erasure, true);
+    void TestDiscoverReadBody(const TBlobStorageGroupType& erasure) {
+        TestDiscoverImpl(erasure, true);
     }
 
-    template<>
-    void Test<TTagRange>(const TBlobStorageGroupType& erasure) {
-        TestRange(erasure, false, false);
+    void TestRange(const TBlobStorageGroupType& erasure) {
+        TestRangeImpl(erasure, false, false);
     }
 
-    template<>
-    void Test<TTagRestoreRange>(const TBlobStorageGroupType& erasure) {
-        TestRange(erasure, true, false);
+    void TestRestoreRange(const TBlobStorageGroupType& erasure) {
+        TestRangeImpl(erasure, true, false);
     }
 
-    template<>
-    void Test<TTagIndexRange>(const TBlobStorageGroupType& erasure) {
-        TestRange(erasure, false, true);
+    void TestIndexRange(const TBlobStorageGroupType& erasure) {
+        TestRangeImpl(erasure, false, true);
     }
 
-    template<>
-    void Test<TTagIndexRestoreRange>(const TBlobStorageGroupType& erasure) {
-        TestRange(erasure, true, true);
+    void TestIndexRestoreRange(const TBlobStorageGroupType& erasure) {
+        TestRangeImpl(erasure, true, true);
     }
 
-    template<>
-    void Test<TTagHardCollectGarbage>(const TBlobStorageGroupType& erasure) {
-        TestCollectGarbage(erasure, false, true);
+    void TestHardCollectGarbage(const TBlobStorageGroupType& erasure) {
+        TestCollectGarbageImpl(erasure, false, true);
     }
 
-    template<>
-    void Test<TTagSoftCollectGarbage>(const TBlobStorageGroupType& erasure) {
-        TestCollectGarbage(erasure, false, false);
+    void TestSoftCollectGarbage(const TBlobStorageGroupType& erasure) {
+        TestCollectGarbageImpl(erasure, false, false);
     }
 
-    template<>
-    void Test<TTagHardMultiCollectGarbage>(const TBlobStorageGroupType& erasure) {
-        TestCollectGarbage(erasure, false, true);
+    void TestHardMultiCollectGarbage(const TBlobStorageGroupType& erasure) {
+        TestCollectGarbageImpl(erasure, false, true);
     }
 
-    template<>
-    void Test<TTagSoftMultiCollectGarbage>(const TBlobStorageGroupType& erasure) {
-        TestCollectGarbage(erasure, false, false);
+    void TestSoftMultiCollectGarbage(const TBlobStorageGroupType& erasure) {
+        TestCollectGarbageImpl(erasure, false, false);
     }
 
-    template<>
-    void Test<TTagStatus>(const TBlobStorageGroupType& erasure) {
-        TestStatus(erasure);
+    void TestStatus(const TBlobStorageGroupType& erasure) {
+        TestStatusImpl(erasure);
     }
 
-    #define TEST_DEADLINE(method, erasure)                              \
-    Y_UNIT_TEST(Test##method##erasure) {                                \
-        Test<TTag##method>(TBlobStorageGroupType::Erasure##erasure);    \
+    #define TEST_DEADLINE(method, erasure)                      \
+    Y_UNIT_TEST(Test##method##erasure) {                        \
+        Test##method(TBlobStorageGroupType::Erasure##erasure);  \
     }
 
     TEST_DEADLINE(Put, Mirror3dc);

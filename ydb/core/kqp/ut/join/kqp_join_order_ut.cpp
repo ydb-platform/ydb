@@ -524,7 +524,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST(GeneralPrioritiesBug) {
+    Y_UNIT_TEST(GeneralPrioritiesBug1) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug.sql", "stats/general_priorities_bug.json", true, false);
     }
 

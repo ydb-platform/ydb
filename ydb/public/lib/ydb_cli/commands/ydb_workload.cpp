@@ -136,7 +136,7 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
                                     .MaxActiveSessions(10+Threads));
         QueryClient = std::make_unique<NQuery::TQueryClient>(*Driver, queryClientSettings);
     } else {
-        Y_FAIL_S("Unexpected executor Type: " + QueryExecuterType);
+        throw TMisuseException() << "Unexpected executor Type: " << QueryExecuterType;
     }
 }
 
@@ -187,9 +187,9 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
         }
         ++retryCount;
         if (queryInfo.AlterTable) {
-            Y_FAIL_S("Generic query doesn't support alter table.");
+            throw TMisuseException() << "Generic query doesn't support alter table. Use data query (--executer data)";
         } else if (queryInfo.UseReadRows) {
-            Y_FAIL_S("Generic query doesn't support readrows.");
+            throw TMisuseException() << "Generic query doesn't support readrows. Use data query (--executer data)";
         } else {
             auto result = session.ExecuteQuery(queryInfo.Query.c_str(),
                 NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),

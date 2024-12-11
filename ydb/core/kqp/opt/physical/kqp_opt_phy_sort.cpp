@@ -26,8 +26,6 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
         return node;
     }
 
-    Cerr << "Kal" << Endl;
-
     auto input = maybeSort ? maybeSort.Cast().Input() : maybeTopBase.Cast().Input();
     auto sortDirections = maybeSort ? maybeSort.Cast().SortDirections() : maybeTopBase.Cast().SortDirections();
     auto keySelector = maybeSort ? maybeSort.Cast().KeySelectorLambda() : maybeTopBase.Cast().KeySelectorLambda();

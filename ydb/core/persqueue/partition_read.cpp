@@ -113,7 +113,7 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
 
     res->Record.SetEndOffset(EndOffset);
     res->Record.SetSizeLag(lagSize);
-    res->Record.SetWriteTimestampEstimateMS(GetWriteTimestampEstimate(lagSize).MilliSeconds());
+    res->Record.SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
     if (cookie) {
         res->Record.SetCookie(*cookie);
     }
@@ -264,7 +264,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContex
     result.SetStartOffset(StartOffset);
     result.SetEndOffset(EndOffset);
     result.SetErrorCode(NPersQueue::NErrorCode::OK);
-    result.SetWriteTimestampEstimateMS(GetWriteTimestampEstimate(0).MilliSeconds());
+    result.SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
 
     if (!ev->Get()->ClientId.empty()) {
         TUserInfo* userInfo = UsersInfoStorage->GetIfExists(ev->Get()->ClientId);

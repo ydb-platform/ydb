@@ -126,7 +126,6 @@ public:
     const TString& TopicName() const;
 
     ui64 GetUsedStorage(const TInstant& ctx);
-    TInstant GetWriteTimestampEstimate(ui64 lag) const;
 
 private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;

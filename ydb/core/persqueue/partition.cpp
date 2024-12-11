@@ -296,14 +296,6 @@ ui64 TPartition::GetUsedStorage(const TInstant& now) {
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 
-TInstant TPartition::GetWriteTimestampEstimate(ui64 lagSize) const {
-    if (IsActive() || lagSize) {
-        return WriteTimestampEstimate;
-    }
-
-    return std::max(TAppData::TimeProvider->Now(), WriteTimestampEstimate);
-}
-
 ui64 TPartition::ImportantClientsMinOffset() const {
     ui64 minOffset = EndOffset;
     for (const auto& consumer : Config.GetConsumers()) {
@@ -330,21 +322,26 @@ THead& TPartition::GetHead() {
 }
 
 void TPartition::HandleWakeup(const TActorContext& ctx) {
+    const auto now = ctx.Now();
+
     FilterDeadlinedWrites(ctx);
 
     ctx.Schedule(WAKE_TIMEOUT, new TEvents::TEvWakeup());
     ctx.Send(Tablet, new TEvPQ::TEvPartitionCounters(Partition, TabletCounters));
 
-    ui64 usedStorage = GetUsedStorage(ctx.Now());
+    ui64 usedStorage = GetUsedStorage(now);
     if (usedStorage > 0) {
         ctx.Send(Tablet, new TEvPQ::TEvMetering(EMeteringJson::UsedStorageV1, usedStorage));
+    }
+
+    if (ManageWriteTimestampEstimate || !IsActive()) {
+        WriteTimestampEstimate = now;
     }
 
     ReportCounters(ctx);
 
     ProcessHasDataRequests(ctx);
 
-    const auto now = ctx.Now();
     for (auto& userInfo : UsersInfoStorage->GetAll()) {
         userInfo.second.UpdateReadingTimeAndState(EndOffset, now);
         for (auto& avg : userInfo.second.AvgReadBytes) {
@@ -3270,7 +3267,7 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
         user->SetCreateTimestampMS(createTimestamp.MilliSeconds());
     }
     user->SetEndOffset(EndOffset);
-    user->SetWriteTimestampEstimateMS(GetWriteTimestampEstimate(offset > -1 ? EndOffset - offset : 0).MilliSeconds());
+    user->SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
     if (IsActive() || (offset > -1 && offset < (i64)EndOffset)) {
         user->SetSizeLag(GetSizeLag(offset));
     } else {

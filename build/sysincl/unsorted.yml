@@ -261,7 +261,6 @@
   - gcrypt.h
   - gdwmfapi.h
   - winmmap.h
-  - sf_unistd.h
   #endif
   #if defined(__TURBOC__) || defined(__BORLANDC__)
   - alloc.h

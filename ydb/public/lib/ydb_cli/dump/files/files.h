@@ -1,6 +1,6 @@
 #pragma once
 
-namespace NYdb::NBackup::NFiles {
+namespace NYdb::NDump::NFiles {
 
 struct TFileInfo {
     const char* FileName;
@@ -15,4 +15,4 @@ const TFileInfo& IncompleteData();
 const TFileInfo& Incomplete();
 const TFileInfo& Empty();
 
-} // NYdb::NBackup:NFiles
+} // NYdb::NDump:NFiles

@@ -1,6 +1,6 @@
 #include "files.h"
 
-namespace NYdb::NBackup::NFiles {
+namespace NYdb::NDump::NFiles {
 
 enum EFilesType {
     SCHEME = 0,
@@ -50,4 +50,4 @@ const TFileInfo& Empty() {
     return FILES_INFO[EMPTY];
 }
 
-} // NYdb::NBackup::NFiles
+} // NYdb::NDump::NFiles

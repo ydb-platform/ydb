@@ -2,6 +2,7 @@
 
 #include "dump.h"
 
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>

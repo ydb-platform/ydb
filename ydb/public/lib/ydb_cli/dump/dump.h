@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/request_settings.h>

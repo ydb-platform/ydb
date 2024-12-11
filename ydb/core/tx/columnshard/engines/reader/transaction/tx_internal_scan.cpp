@@ -70,7 +70,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
 
     TStringBuilder detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
-        detailedInfo << " read metadata: (" << readMetadataRange->DebugString() << ")";
+        detailedInfo << " read metadata: (" << *readMetadataRange << ")";
     }
 
     const TVersionedIndex* index = nullptr;

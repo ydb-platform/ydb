@@ -1,7 +1,5 @@
 PY3_PROGRAM()
 
-# PY_MAIN(ydb.tests.stability.standalone.stability.main)
-
 PY_SRCS(
     __main__.py
 )

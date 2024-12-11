@@ -504,9 +504,9 @@ void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& fol
     outFile.Write(protoStr.data(), protoStr.size());
 }
 
-void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath, const NTable::TTableDescription& desc) {
+void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
     const auto dirPath = JoinDatabasePath(dbPrefix, path);
-
+    auto desc = DescribeTable(driver, dirPath);
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
         TFsPath changefeedDirPath = CreateDirectory(folderPath, changefeedDesc.GetName());
         
@@ -539,7 +539,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     TFile outFile(folderPath.Child(SCHEME_FILE_NAME), CreateAlways | WrOnly);
     outFile.Write(schemaStr.data(), schemaStr.size());
 
-    BackupChangefeeds(driver, dbPrefix, path, folderPath, desc);
+    BackupChangefeeds(driver, dbPrefix, path, folderPath);
     BackupPermissions(driver, dbPrefix, path, folderPath);
 
     if (!schemaOnly) {

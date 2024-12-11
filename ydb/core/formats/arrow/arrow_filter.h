@@ -4,6 +4,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
 #include <util/system/types.h>
+
 #include <deque>
 
 namespace NKikimr::NArrow {
@@ -21,14 +22,12 @@ class TColumnFilter {
 private:
     bool DefaultFilterValue = true;
     bool LastValue = true;
-    ui32 Count = 0;
+    ui32 RecordsCount = 0;
     YDB_READONLY_DEF(std::vector<ui32>, Filter);
     mutable std::optional<std::vector<bool>> FilterPlain;
     mutable std::optional<ui32> FilteredCount;
     TColumnFilter(const bool defaultFilterValue)
-        : DefaultFilterValue(defaultFilterValue)
-    {
-
+        : DefaultFilterValue(defaultFilterValue) {
     }
 
     static ui32 CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const ui32 f2);
@@ -38,7 +37,81 @@ private:
         FilterPlain.reset();
         FilteredCount.reset();
     }
+
 public:
+    class TSlicesIterator {
+    private:
+        const TColumnFilter& Owner;
+        const std::optional<ui32> Start;
+        const std::optional<ui32> Count;
+        ui32 CurrentStartIndex = 0;
+        bool CurrentIsFiltered = false;
+        std::vector<ui32>::const_iterator CurrentIterator;
+    public:
+        TSlicesIterator(const TColumnFilter& owner, const std::optional<ui32> start, const std::optional<ui32> count)
+            : Start(start)
+            , Count(count) {
+            AFL_VERIFY(!!Start == !!Count);
+            AFL_VERIFY(Owner.GetFilter().size());
+            if (Start) {
+                AFL_VERIFY(*Start + *Count <= owner.GetRecordsCount())("start", *start)("count", *count)("size", owner.GetRecordsCount());
+            }
+        }
+
+        bool IsFiltered() const {
+            return CurrentIsFiltered;
+        }
+
+        ui32 GetStartIndex() const {
+            if (!Start) {
+                return CurrentStartIndex;
+            } else {
+                return std::max<ui32>(CurrentStartIndex, *Start);
+            }
+        }
+
+        ui32 GetSliceSize() const {
+            AFL_VERIFY(IsValid());
+            if (!Start) {
+                return *CurrentIterator;
+            } else {
+                const ui32 startIndex = GetStartIndex();
+                const ui32 finishIndex = std::min<ui32>(CurrentStartIndex + *CurrentIterator, *Start + *Count);
+                AFL_VERIFY(startIndex < finishIndex)("start", startIndex)("finish", finishIndex);
+                return finishIndex - startIndex;
+            }
+        }
+
+        void Start() {
+            CurrentStartIndex = 0;
+            CurrentIsFiltered = Owner.GetStartValue();
+            CurrentIterator = Owner.GetFilter().begin();
+            if (Start) {
+                while (IsValid() && CurrentStartIndex + *CurrentIterator < *Start) {
+                    AFL_VERIFY(Next());
+                }
+                AFL_VERIFY(IsValid());
+            }
+        }
+
+        bool IsValid() const {
+            return CurrentIterator != Owner.GetFilter().end() && (!Start || CurrentStartIndex < *Start + *Count);
+        }
+
+        bool Next() {
+            AFL_VERIFY(IsValid());
+            CurrentIsFiltered = !CurrentIsFiltered;
+            ++CurrentIterator;
+            return IsValid();
+        }
+
+    };
+
+
+    ui32 GetRecordsCount() const {
+        return RecordsCount;
+    }
+
     bool GetStartValue(const bool reverse = false) const {
         if (Filter.empty()) {
             return DefaultFilterValue;
@@ -58,10 +131,11 @@ public:
     void Add(const bool value, const ui32 count = 1);
     std::optional<ui32> GetFilteredCount() const;
     const std::vector<bool>& BuildSimpleFilter() const;
-    std::shared_ptr<arrow::BooleanArray> BuildArrowFilter(const ui32 expectedSize, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {}) const;
+    std::shared_ptr<arrow::BooleanArray> BuildArrowFilter(
+        const ui32 expectedSize, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {}) const;
 
     ui64 GetDataSize() const {
-        return Filter.capacity() * sizeof(ui32) + Count * sizeof(bool);
+        return Filter.capacity() * sizeof(ui32) + RecordsCount * sizeof(bool);
     }
 
     static ui64 GetPredictedMemorySize(const ui32 recordsCount) {
@@ -77,6 +151,7 @@ public:
         bool CurrentValue;
         const i32 FinishPosition;
         const i32 DeltaPosition;
+
     public:
         TString DebugString() const;
 
@@ -84,8 +159,7 @@ public:
             : FilterPointer(&filter)
             , CurrentValue(startValue)
             , FinishPosition(reverse ? -1 : FilterPointer->size())
-            , DeltaPosition(reverse ? -1 : 1)
-        {
+            , DeltaPosition(reverse ? -1 : 1) {
             if (!FilterPointer->size()) {
                 Position = FinishPosition;
             } else {
@@ -158,11 +232,10 @@ public:
     struct TAdapterLambda {
     private:
         TGetterLambda Getter;
+
     public:
         TAdapterLambda(const TGetterLambda& getter)
-            : Getter(getter)
-        {
-
+            : Getter(getter) {
         }
 
         bool operator[](const ui32 index) const {
@@ -173,10 +246,6 @@ public:
     template <class TGetterLambda>
     void ResetWithLambda(const ui32 count, const TGetterLambda getter) {
         return Reset(count, TAdapterLambda<TGetterLambda>(getter));
-    }
-
-    ui32 Size() const {
-        return Count;
     }
 
     bool IsTotalAllowFilter() const;
@@ -213,9 +282,7 @@ public:
 
         TApplyContext(const ui32 start, const ui32 count)
             : StartPos(start)
-            , Count(count)
-        {
-
+            , Count(count) {
         }
 
         TApplyContext& Slice(const ui32 start, const ui32 count);
@@ -230,4 +297,4 @@ public:
     TColumnFilter CombineSequentialAnd(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
 };
 
-}
+}   // namespace NKikimr::NArrow

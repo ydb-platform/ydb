@@ -49,31 +49,16 @@ public:
         return res->record_batch();
     }
     [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> ApplySlicesFilter(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const TColumnFilter& filter, const std::optional<ui32>& startIndex, const std::optional<ui32>& count) {
-        AFL_VERIFY(!count == !startIndex);
-        AFL_VERIFY(!count || *count == batch->num_rows());
-        bool currentFiltered = filter.GetStartValue();
+        const std::shared_ptr<arrow::RecordBatch>& batch, TColumnFilter::TSlicesIterator& filter) {
+        AFL_VERIFY(filter.GetRecordsCount() == batch->num_rows());
         std::vector<std::shared_ptr<arrow::RecordBatch>> slices;
         slices.reserve(filter.GetFilter().size() / 2 + 1);
-        ui32 currentIndex = 0;
-        for (auto&& i : filter.GetFilter()) {
-            if (currentFiltered) {
-                if (!startIndex) {
-                    slices.emplace_back(batch->Slice(currentIndex, i));
-                } else if (*startIndex <= currentIndex + i) {
-                    const ui32 to = std::min<ui32>(*startIndex + *count, currentIndex + i);
-                    const ui32 from = std::max<ui32>(*startIndex, currentIndex);
-                    AFL_VERIFY(from < to);
-                    slices.emplace_back(batch->Slice(from, to - from));
-                }
+        for (filter.Start(); filter.IsValid(); filter.Next()) {
+            if (!filter.IsFiltered()) {
+                continue;
             }
-            currentFiltered = !currentFiltered;
-            currentIndex += i;
-            if (count && *startIndex + *count <= currentIndex) {
-                break;
-            }
+            slices.emplace_back(batch->Slice(filter.GetStartIndex(), filter.GetSliceSize()));
         }
-        AFL_VERIFY(currentIndex == batch->num_rows());
         return NArrow::ToBatch(TStatusValidator::GetValid(arrow::Table::FromRecordBatches(slices)), true);
     }
     [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> GetEmptySame(const std::shared_ptr<arrow::RecordBatch>& batch) {
@@ -105,19 +90,15 @@ public:
         return res->table();
     }
     [[nodiscard]] static std::shared_ptr<arrow::Table> ApplySlicesFilter(
-        const std::shared_ptr<arrow::Table>& batch, const TColumnFilter& filter) {
-        bool currentFiltered = filter.GetStartValue();
+        const std::shared_ptr<arrow::Table>& batch, TColumnFilter::TSlicesIterator& filter) {
         std::vector<std::shared_ptr<arrow::Table>> slices;
         slices.reserve(filter.GetFilter().size() / 2 + 1);
-        ui32 currentIndex = 0;
-        for (auto&& i : filter.GetFilter()) {
-            if (currentFiltered) {
-                slices.emplace_back(batch->Slice(currentIndex, i));
+        for (filter.Start(); filter.IsValid(); filter.Next()) {
+            if (!filter.IsFiltered()) {
+                continue;
             }
-            currentFiltered = !currentFiltered;
-            currentIndex += i;
+            slices.emplace_back(batch->Slice(filter.GetStartIndex(), filter.GetSliceSize()));
         }
-        AFL_VERIFY(currentIndex == batch->num_rows());
         return TStatusValidator::GetValid(arrow::ConcatenateTables(slices));
     }
     [[nodiscard]] static std::shared_ptr<arrow::Table> GetEmptySame(const std::shared_ptr<arrow::Table>& batch) {
@@ -147,7 +128,7 @@ public:
         return std::make_shared<TGeneralContainer>(TDataBuilderPolicy<arrow::Table>::ApplyArrowFilter(table, filter));
     }
     [[nodiscard]] static std::shared_ptr<TGeneralContainer> ApplySlicesFilter(
-        const std::shared_ptr<TGeneralContainer>& batch, const TColumnFilter& filter) {
+        const std::shared_ptr<TGeneralContainer>& batch, TColumnFilter::TSlicesIterator& filter) {
         auto table = batch->BuildTableVerified();
         return std::make_shared<TGeneralContainer>(TDataBuilderPolicy<arrow::Table>::ApplySlicesFilter(table, filter));
     }

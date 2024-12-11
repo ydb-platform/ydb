@@ -237,7 +237,7 @@ bool TColumnFilter::IsTotalDenyFilter() const {
 }
 
 void TColumnFilter::Reset(const ui32 count) {
-    Count = 0;
+    RecordsCount = 0;
     FilterPlain.reset();
     Filter.clear();
     Filter.reserve(count / 4);
@@ -247,13 +247,13 @@ void TColumnFilter::Add(const bool value, const ui32 count) {
     if (!count) {
         return;
     }
-    if (Y_UNLIKELY(LastValue != value || !Count)) {
+    if (Y_UNLIKELY(LastValue != value || !RecordsCount)) {
         Filter.emplace_back(count);
         LastValue = value;
     } else {
         Filter.back() += count;
     }
-    Count += count;
+    RecordsCount += count;
 }
 
 ui32 TColumnFilter::CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const ui32 f2) {
@@ -338,8 +338,10 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
     if (filter.IsTotalAllowFilter()) {
         return true;
     }
-    if (context.GetTrySlices() && filter.GetFilter().size() * 10 < filter.GetCount() && filter.GetCount() < filter.GetFilteredCount() * 50) {
-        batch = NAdapter::TDataBuilderPolicy<TData>::ApplySlicesFilter(batch, filter, context.GetStartPos(), context.GetCount());
+    if (context.GetTrySlices() && filter.GetFilter().size() * 10 < filter.GetCount() &&
+        filter.GetCount() < filter.GetFilteredCount().value_or(batch->num_rows()) * 50) {
+        batch =
+            NAdapter::TDataBuilderPolicy<TData>::ApplySlicesFilter(batch, filter.BuildSlicesIterator(context.GetStartPos(), context.GetCount()));
     } else {
         batch = NAdapter::TDataBuilderPolicy<TData>::ApplyArrowFilter(
             batch, filter.BuildArrowFilter(batch->num_rows(), context.GetStartPos(), context.GetCount()));
@@ -394,9 +396,9 @@ void TColumnFilter::Apply(const ui32 expectedRecordsCount, std::vector<arrow::Da
 
 const std::vector<bool>& TColumnFilter::BuildSimpleFilter() const {
     if (!FilterPlain) {
-        Y_ABORT_UNLESS(Count);
+        Y_ABORT_UNLESS(RecordsCount);
         std::vector<bool> result;
-        result.resize(Count, true);
+        result.resize(RecordsCount, true);
         bool currentValue = GetStartValue();
         ui32 currentPosition = 0;
         for (auto&& i : Filter) {
@@ -462,7 +464,7 @@ public:
         } else if (Filter2.empty()) {
             return TMergePolicy::MergeWithSimple(Filter1, Filter2.DefaultFilterValue);
         } else {
-            Y_ABORT_UNLESS(Filter1.Count == Filter2.Count);
+            Y_ABORT_UNLESS(Filter1.RecordsCount == Filter2.RecordsCount);
             auto it1 = Filter1.Filter.cbegin();
             auto it2 = Filter2.Filter.cbegin();
 
@@ -507,7 +509,7 @@ public:
             TColumnFilter result = TColumnFilter::BuildAllowFilter();
             std::swap(resultFilter, result.Filter);
             std::swap(curCurrent, result.LastValue);
-            std::swap(count, result.Count);
+            std::swap(count, result.RecordsCount);
             return result;
         }
     }
@@ -581,7 +583,7 @@ TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter
         TColumnFilter result = TColumnFilter::BuildAllowFilter();
         std::swap(resultFilter, result.Filter);
         std::swap(curCurrent, result.LastValue);
-        std::swap(count, result.Count);
+        std::swap(count, result.RecordsCount);
         return result;
     }
 }
@@ -600,10 +602,10 @@ TColumnFilter::TIterator TColumnFilter::GetIterator(const bool reverse, const ui
 std::optional<ui32> TColumnFilter::GetFilteredCount() const {
     if (!FilteredCount) {
         if (IsTotalAllowFilter()) {
-            if (!Count) {
+            if (!RecordsCount) {
                 return {};
             } else {
-                FilteredCount = Count;
+                FilteredCount = RecordsCount;
             }
         } else if (IsTotalDenyFilter()) {
             FilteredCount = 0;

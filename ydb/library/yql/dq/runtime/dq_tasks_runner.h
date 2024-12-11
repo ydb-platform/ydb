@@ -211,7 +211,7 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& channels);
+    TVector<IDqOutput::TPtr>&& channels, TMaybe<ui8> minFillPercentage = {});
 
 using TDqTaskRunnerParameterProvider = std::function<
     bool(std::string_view name, NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -433,8 +433,8 @@ public:
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, 
-    const TDqTaskRunnerContext& ctx, 
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+    const TDqTaskRunnerContext& ctx,
     const TDqTaskRunnerSettings& settings,
     const TLogFunc& logFunc
 );

@@ -146,6 +146,10 @@ public:
         , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(tableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
     {
+        if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
+            ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
+        }
+
         Target = creator;
 
         YQL_ENSURE(!TxManager || tableServiceConfig.GetEnableOltpSink());
@@ -2671,7 +2675,8 @@ private:
             .MayRunTasksLocally = mayRunTasksLocally,
             .ResourceManager_ = Request.ResourceManager_,
             .CaFactory_ = Request.CaFactory_,
-            .BlockTrackingMode = BlockTrackingMode
+            .BlockTrackingMode = BlockTrackingMode,
+            .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
         });
 
         auto err = Planner->PlanExecution();
@@ -2994,6 +2999,7 @@ private:
 
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TDuration WaitCAStatsTimeout;
+    TMaybe<ui8> ArrayBufferMinFillPercentage;
 };
 
 } // namespace

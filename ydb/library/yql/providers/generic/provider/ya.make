@@ -1,0 +1,68 @@
+LIBRARY()
+
+SRCS(
+    yql_generic_cluster_config.cpp
+    yql_generic_datasink.cpp
+    yql_generic_datasink_execution.cpp
+    yql_generic_datasink_type_ann.cpp
+    yql_generic_datasource.cpp
+    yql_generic_datasource_type_ann.cpp
+    yql_generic_dq_integration.cpp
+    yql_generic_io_discovery.cpp
+    yql_generic_load_meta.cpp
+    yql_generic_logical_opt.cpp
+    yql_generic_mkql_compiler.cpp
+    yql_generic_physical_opt.cpp
+    yql_generic_predicate_pushdown.cpp
+    yql_generic_provider.cpp
+    yql_generic_provider.h
+    yql_generic_provider_impl.h
+    yql_generic_settings.h
+    yql_generic_settings.cpp
+    yql_generic_state.h
+    yql_generic_state.cpp
+    yql_generic_utils.h
+    yql_generic_utils.cpp
+)
+
+YQL_LAST_ABI_VERSION()
+
+PEERDIR(
+    contrib/libs/fmt
+    library/cpp/json
+    library/cpp/random_provider
+    library/cpp/time_provider
+    ydb/core/fq/libs/common
+    ydb/core/fq/libs/result_formatter
+    yql/essentials/ast
+    yql/essentials/core
+    yql/essentials/core/type_ann
+    ydb/library/yql/dq/expr_nodes
+    yql/essentials/core/dq_integration
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/providers/common/config
+    ydb/library/yql/providers/common/db_id_async_resolver
+    yql/essentials/providers/common/dq
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/provider
+    ydb/library/yql/providers/common/pushdown
+    yql/essentials/providers/common/structured_token
+    ydb/library/yql/providers/common/token_accessor/client
+    yql/essentials/providers/common/transform
+    ydb/library/yql/providers/dq/common
+    ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/providers/generic/expr_nodes
+    ydb/library/yql/providers/generic/proto
+    yql/essentials/providers/common/proto
+    ydb/library/yql/providers/generic/connector/libcpp
+    yql/essentials/providers/result/expr_nodes
+    ydb/library/yql/utils/plan
+    ydb/public/sdk/cpp/client/ydb_types/credentials
+)
+
+END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

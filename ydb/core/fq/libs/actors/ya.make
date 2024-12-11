@@ -1,0 +1,104 @@
+LIBRARY()
+
+SRCS(
+    clusters_from_connections.cpp
+    database_resolver.cpp
+    error.cpp
+    nodes_health_check.cpp
+    nodes_manager.cpp
+    pending_fetcher.cpp
+    proxy.cpp
+    proxy_private.cpp
+    rate_limiter.cpp
+    rate_limiter_resources.cpp
+    result_writer.cpp
+    run_actor.cpp
+    table_bindings_from_bindings.cpp
+    task_get.cpp
+    task_ping.cpp
+    task_result_write.cpp
+)
+
+PEERDIR(
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
+    library/cpp/json/yson
+    library/cpp/monlib/dynamic_counters
+    library/cpp/random_provider
+    library/cpp/scheme
+    library/cpp/string_utils/quote
+    library/cpp/time_provider
+    library/cpp/yson
+    library/cpp/yson/node
+    ydb/core/base
+    ydb/core/fq/libs/actors/logging
+    ydb/core/fq/libs/checkpointing
+    ydb/core/fq/libs/checkpointing_common
+    ydb/core/fq/libs/common
+    ydb/core/fq/libs/compute/common
+    ydb/core/fq/libs/compute/ydb
+    ydb/core/fq/libs/config/protos
+    ydb/core/fq/libs/control_plane_storage
+    ydb/core/fq/libs/control_plane_storage/events
+    ydb/core/fq/libs/db_id_async_resolver_impl
+    ydb/core/fq/libs/db_schema
+    ydb/core/fq/libs/events
+    ydb/core/fq/libs/grpc
+    ydb/core/fq/libs/private_client
+    ydb/core/fq/libs/rate_limiter/utils
+    ydb/core/fq/libs/result_formatter
+    ydb/core/fq/libs/shared_resources
+    ydb/core/fq/libs/signer
+    ydb/core/protos
+    ydb/core/util
+    ydb/library/mkql_proto
+    ydb/library/security
+    yql/essentials/ast
+    yql/essentials/core/facade
+    yql/essentials/core/services/mounts
+    yql/essentials/core/dq_integration/transform
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/comp_nodes
+    ydb/library/yql/providers/common/db_id_async_resolver
+    yql/essentials/providers/common/metrics
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/mkql
+    ydb/library/yql/providers/common/token_accessor/client
+    yql/essentials/providers/common/udf_resolve
+    ydb/library/yql/providers/dq/actors
+    ydb/library/yql/providers/dq/common
+    ydb/library/yql/providers/dq/counters
+    ydb/library/yql/providers/dq/provider
+    ydb/library/yql/providers/dq/provider/exec
+    ydb/library/yql/providers/dq/worker_manager/interface
+    ydb/library/yql/providers/generic/connector/libcpp
+    ydb/library/yql/providers/generic/provider
+    ydb/library/yql/providers/pq/cm_client
+    ydb/library/yql/providers/pq/provider
+    ydb/library/yql/providers/pq/task_meta
+    ydb/library/yql/providers/s3/actors_factory
+    ydb/library/yql/providers/s3/provider
+    yql/essentials/public/issue
+    yql/essentials/public/issue/protos
+    yql/essentials/sql/settings
+    yql/essentials/utils
+    ydb/library/yql/utils/actor_log
+    ydb/public/api/protos
+    ydb/public/lib/fq
+    ydb/public/sdk/cpp/client/ydb_query
+    ydb/public/sdk/cpp/client/ydb_operation
+    ydb/public/sdk/cpp/client/ydb_table
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()
+
+RECURSE(
+    logging
+)
+
+RECURSE_FOR_TESTS(
+    ut
+)

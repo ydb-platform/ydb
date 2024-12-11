@@ -1,0 +1,511 @@
+syntax = "proto3";
+
+package NYql.NConnector.NApi;
+
+import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "yql/essentials/providers/common/proto/gateways_config.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/library/yql/providers/generic/connector/libgo/service/protos";
+
+// ---------- API Requests ----------
+
+// TListTablesRequest requests the list of tables in a particular database of the data source
+message TListTablesRequest {
+    // Data source instance to connect
+    NYql.TGenericDataSourceInstance data_source_instance = 1;
+
+    // There may be a huge number of tables in the data source,
+    // and here are ways to extract only necessary ones:
+    oneof filtering {
+        // Regexp to filter table names
+        string pattern = 2;
+    }
+}
+
+// TListTablesResponse returns the list of tables in a particular database of the data source
+message TListTablesResponse {
+    // Table names list
+    repeated string tables = 1;
+
+    // Call result
+    TError error = 100;
+}
+
+// TDescribeTableRequest requests table metadata
+message TDescribeTableRequest {
+    // Data source instance to connect
+    NYql.TGenericDataSourceInstance data_source_instance = 1;
+    // Table to describe
+    string table = 2;
+    // Rules for type mapping
+    TTypeMappingSettings type_mapping_settings = 3;
+}
+
+message TTypeMappingSettings {
+    // Determines the format of date or time representation
+    EDateTimeFormat date_time_format = 1;
+}
+
+enum EDateTimeFormat {
+    DATE_TIME_FORMAT_UNSPECIFIED = 0;
+    STRING_FORMAT = 1;
+    YQL_FORMAT = 2;
+}
+
+
+// TDescribeTableResponse returns table metadata
+message TDescribeTableResponse {
+    // The whole schema of a table
+    TSchema schema = 1;
+    // Call result
+    TError error = 100;
+}
+
+// TSchema represents the schema of the table
+message TSchema {
+    // Columns with YQL types
+    repeated Ydb.Column columns = 1;
+    // TODO: optional metadata?
+}
+
+// TListSplitRequest asks Connector to split the requested data into elementary parts.
+message TListSplitsRequest {
+    // YQ engine may want to read data from different tables simultaneously.
+    // Perhaps Connector will provide consistency guarantees across the tables some day.
+    repeated TSelect selects = 2;
+
+    // Defines the number of splits (and, as a consequence, affects the size of the split).
+    // If you don't want splitting, set 1.
+    uint32 max_split_count = 3;
+
+    // Connector will try to divide the data into the splits of this size,
+    // but the exact match is not guaranteed.
+    // Also this setting can be overridden by max_split_count.
+    uint64 split_size = 4;
+
+    // Sometimes YQ doesn't know the exact size of the data set,
+    // so it asks Connector to split the data into the splits of $split_size,
+    // and the $max_split_count = MaxUINT32.
+    // But if the data is too large, and too many splits will be generated,
+    // this may exceed the memory available for YQ.
+    // In such case, it's better to fail fast. This limit helps to implement it:
+    uint64 split_number_limit = 5;
+
+    reserved 1;
+}
+
+// TListSplitResponse returns the list of splits for a particular set of table partitions
+message TListSplitsResponse {
+    // the list of splits for concurrent reading
+    repeated TSplit splits = 1;
+
+    // Call result
+    TError error = 100;
+}
+
+// Select describes what to read from the data source.
+//
+// In RDBMS systems this call internally transforms into SQL expression using this template:
+// SELECT $what
+// FROM $from
+// WHERE $filter
+// LIMIT $limit [OFFSET $offset]
+// TODO: support JOIN, ORDER BY, GROUP BY
+message TSelect {
+    // Data source instance to connect
+    NYql.TGenericDataSourceInstance data_source_instance = 1;
+
+    // Describes what particularly to get from the data source
+    message TWhat {
+        message TItem {
+            // TODO: support aggregate functions
+            // TODO: support subqueries?
+            // TODO: support aggregates?
+
+            // YQ can read particular table columns or call aggregate functions, for example.
+            oneof payload {
+                // a column to read
+                Ydb.Column column = 1;
+            }
+        }
+
+        // NOTE: this API intentionally makes it not possible to request 'SELECT *'.
+        // YQ must provide all the column names explicitly.
+        //
+        // Еmpty list means that YQ wants to get empty tuples in the response.
+        // On the connector's side this request will be transformed into something like
+        // SELECT 1 FROM $table (...)
+        repeated TItem items = 1;
+    }
+
+    // Transforms into SELECT $what.
+    TWhat what = 2;
+
+    message TFrom {
+        // Table name for RDBMs
+        string table = 1;
+        // Unique identifier of an object stored within S3
+        string object_key = 2;
+    }
+
+    // Transforms into FROM $from
+    TFrom from = 3;
+
+    message TWhere {
+        // Strongly typed tree of predicates
+        TPredicate filter_typed = 1;
+
+        // An internal representation of YQL request part describing filters.
+        // Advanced connectors may use it for the full-fledged implementations of the push down.
+        TAst filter_raw = 2;
+    }
+
+    // Transforms into WHERE $filter.
+    // Optional field.
+    TWhere where = 4;
+
+    message TLimit {
+        uint64 limit = 1;
+        uint64 offset = 2;
+    }
+
+    // Transforms into LIMIT $limit [OFFSET $offset].
+    // Optional field.
+    TLimit limit = 5;
+
+    // For schemaless data sources, when it's hard for us to infer schema for the query result,
+    // user can supply the schema himself.
+    // Optional field that must be empty for schematized data sources.
+    TSchema predefined_schema = 6;
+}
+
+// Split is a certain part of a table. In general, it should be much smaller than a partition.
+// It also represents a unit of a parallel work for YQ engine.
+message TSplit {
+    // Every split contains the description of SELECT it was generated for.
+    TSelect select = 1;
+
+    oneof payload {
+        // Different data sources may use different ways to describe a split,
+        // and we don't want YQ to dig into its internals (at least now),
+        // so we make the description opaque for YQ.
+        bytes description = 2;
+    }
+}
+
+// ReadDataRequest reads the data associated with a particular table split.
+message TReadSplitsRequest {
+    // Data source instance to connect.
+    // Deprecated field: server implementations must rely on
+    // TDataSourceInstance provided in each TSelect.
+    NYql.TGenericDataSourceInstance data_source_instance = 1 [deprecated = true];
+
+    // Splits that YQ engine would like to read.
+    repeated TSplit splits = 2;
+
+    enum EMode {
+        MODE_UNSPECIFIED = 0;
+        // Connector will read splits in a single thread one by one.
+        // The data will be returned in the order corresponding to the order of requested splits.
+        ORDERED = 1;
+        // Connector may read different splits concurrently and send the split fragments to the response stream
+        // as soon as the data is obtained from the data source. Thus the stream is multiplexed between splits.
+        UNORDERED = 2;
+    }
+
+    // Determines the mode of data extraction
+    EMode mode = 3;
+
+    enum EFormat {
+        FORMAT_UNSPECIFIED = 0;
+        // Arrow IPC Streaming format:
+        // https://arrow.apache.org/docs/format/Columnar.html#ipc-streaming-format
+        ARROW_IPC_STREAMING = 2;
+        reserved 1;
+    }
+
+    // Determines the format of data representation
+    EFormat format = 4;
+
+    // Specifies the location of split from where to start reading.
+    // If stream has been recently interrupted, YQ may retry reading the split from the interrupted block
+    // instead of reading the split from scratch.
+    // If empty, the connector will return the split data from the very beginning.
+    TContinuation continuation = 6;
+
+    enum EFiltering {
+        FILTERING_UNSPECIFIED = 0;
+        // If Connector cannot push down the predicate to the data source completely
+        // (due to the lack of data type support, for example), it doesn't apply filter at all
+        // and returns the full result of `SELECT columns FROM table` (no WHERE clause).
+        // It's YDB's duty to filter the output on its own side. 
+        FILTERING_OPTIONAL = 1;
+        // If Connector cannot push down the predicate to the data source completely,
+        // it terminates the request and returns an error.
+        FILTERING_MANDATORY = 2;
+    }
+
+    // Determines various modes of server behavior in the context of predicate pushdown.
+    // If not set, the default value is `FILTERING_OPTIONAL`. 
+    EFiltering filtering = 7;
+
+    reserved 5;
+}
+
+
+// ReadDataResponse returns the data corresponding to a particular split
+message TReadSplitsResponse {
+    // Protobuf columnar representation of data.
+    // Use it only for debugging, don't use in production.
+    message TColumnSet {
+        message TColumn {
+            repeated Ydb.Value data = 1;
+        }
+
+        repeated Ydb.Column meta = 1;
+        repeated TColumn data = 2;
+    }
+
+    // There may be various formats to represent data
+    oneof payload {
+        // Columnar data in protobuf format with YDB types.
+        // Use it only for debugging, don't use in production.
+        TColumnSet column_set = 1;
+
+        // Data in Arrow IPC streaming format.
+        bytes arrow_ipc_streaming = 2;
+    }
+
+    // Since multiple splits can be read within one request, it's important to
+    // match the received data with the requested split.
+    uint32 split_index_number = 3;
+
+    // Specifies the location where the next block starts.
+    // If stream has been interrupted, YQ may retry reading using the Continuation message
+    // received for the last time.
+    TContinuation continuation = 4;
+
+    // Contains information about the page (a particular block of data
+    // returned by the Connector within a ReadSplits stream).
+    message TStats {
+        // Number of rows read from the data source in order to make this page.
+        uint64 rows = 1;
+        // Number of bytes read from the data source in order to make this page.
+        // (measured in terms of Go type system).
+        uint64 bytes = 2;
+    }
+
+    TStats stats = 5;
+
+    // Call result
+    TError error = 100;
+}
+
+// Continuation is a special type useful for the request retry.
+// In case if split reading was interrupted,
+// the engine does not have to read all the split data from the very beginning,
+// it can specify the location from where it wants to reread the data instead.
+message TContinuation {
+    oneof payload {
+        // In general description should be opaque to YQ.
+        bytes description = 1;
+    }
+}
+
+// ---------- Filters ----------
+
+// Expression with value (value can be expression of any type)
+// Can be a column, a constant or a result of, for example,
+// some arithmetical operation
+message TExpression {
+    message TArithmeticalExpression {
+        // An operation code.
+        enum EOperation {
+            EXPRESSION_OPERATION_UNSPECIFIED = 0;
+            MUL = 1; // left_value * right_value
+            ADD = 2; // left_value + right_value
+            SUB = 3; // left_value - right_value
+            DIV = 7; // left_value / right_value
+            MOD = 8; // left_value % right_value
+            BIT_AND = 4; // left_value & right_value
+            BIT_OR = 5; // left_value | right_value
+            BIT_XOR = 6; // left_value ^ right_value
+        }
+        EOperation operation = 1;
+        TExpression left_value = 2;
+        TExpression right_value = 3;
+    }
+
+    // "COALESCE($expression_1, $expression_2, ..., $expression_n)"
+    message TCoalesce {
+        repeated TExpression operands = 1;
+    }
+
+    // "IF($predicate, $then_expression, $else_expression)"
+    // Example predicate:
+    // WHERE IF($A IS NOT NULL, $A, $B) + $B = 0
+    message TIf {
+        TPredicate predicate = 1;
+        TExpression then_expression = 2;
+        TExpression else_expression = 3;
+    }
+
+    // CAST($value AS $type)
+    message TCast {
+        TExpression value = 1;
+        Ydb.Type type = 2;
+    }
+
+    message TNull {
+    }
+
+    oneof payload {
+        // A scalar value
+        Ydb.TypedValue typed_value = 1;
+        // A name of another column to compare with
+        string column = 2;
+
+        TArithmeticalExpression arithmetical_expression = 3;
+
+        TNull null = 4;
+
+        TCoalesce coalesce = 5;
+
+        TIf if = 6;
+
+        TCast cast = 7;
+    }
+}
+
+// Predicate (use this types only for bool expressions)
+message TPredicate {
+    // NOT
+    message TNegation {
+        TPredicate operand = 1;
+    }
+
+    // AND
+    message TConjunction {
+        repeated TPredicate operands = 1;
+    }
+
+    // OR
+    message TDisjunction {
+        repeated TPredicate operands = 1;
+    }
+
+    // "COALESCE($predicate_1, $predicate_2, ..., $predicate_n)"
+    message TCoalesce {
+        repeated TPredicate operands = 1;
+    }
+
+    // "IF($predicate, $then_predicate, $else_predicate)"
+    // Example predicate:
+    // WHERE IF($A IS NOT NULL, $A + $B = 0, $B = 0)
+    message TIf {
+        TPredicate predicate = 1;
+        TPredicate then_predicate = 2;
+        TPredicate else_predicate = 3;
+    }
+
+    // "$column BETWEEN $least AND $greatest"
+    message TBetween {
+        TExpression value = 1;
+        TExpression least = 2;
+        TExpression greatest = 3;
+    }
+
+    // "$column IN $(set)"
+    message TIn {
+        TExpression value = 1;
+        repeated TExpression set = 2;
+    }
+
+    // "$column IS NULL"
+    message TIsNull {
+        TExpression value = 1;
+    }
+
+    // "$column IS NOT NULL"
+    // TODO: maybe it is better to express with TNegation here
+    message TIsNotNull {
+        TExpression value = 1;
+    }
+
+    // Expression wich has bool type
+    // For example, bool column
+    message TBoolExpression {
+        TExpression value = 1;
+    }
+
+    // A subset of comparators corresponding to the binary logical operators
+    message TComparison {
+        // An operation code.
+        enum EOperation {
+            COMPARISON_OPERATION_UNSPECIFIED = 0;
+            L = 1;  // "$column < value"
+            LE = 2; // "$column <= value"
+            EQ = 3; // "$column = value"
+            NE = 4; // "$column != value"
+            GE = 5; // "$column >= value"
+            G = 6;  // "$column > value"
+            IND = 7;// "$column IS NOT DISTINCT value"
+            ID = 8; // "$column IS DISTINCT value"
+        }
+
+        EOperation operation = 1;
+        TExpression left_value = 2;
+        TExpression right_value = 3;
+    }
+
+    // "$column REGEXP $pattern"
+    message TRegexp {
+        TExpression value = 1;
+        TExpression pattern = 2;
+    }
+
+    oneof payload {
+        TNegation negation = 1;
+        TConjunction conjunction = 2;
+        TDisjunction disjunction = 3;
+        TBetween between = 4;
+        TIn in = 5;
+        TIsNull is_null = 6;
+        TIsNotNull is_not_null = 7;
+        TComparison comparison = 8;
+        TBoolExpression bool_expression = 9;
+        TCoalesce coalesce = 10;
+        TIf if = 11;
+        TRegexp regexp = 12;
+    }
+}
+
+// ---------- Utils ----------
+
+// Special type to describe the result of any operation
+message TError {
+    // High-level code
+    Ydb.StatusIds.StatusCode status = 1;
+
+    // Error message
+    string message = 2;
+
+    // Detailed explanation of a problem;
+    // must be empty if status == SUCCESS
+    repeated Ydb.Issue.IssueMessage issues = 3;
+}
+
+// TAst is an internal representation of an YQL request.
+// Advanced connectors may use it for the full-fledged implementations of the push down.
+message TAst {
+    message TList {
+        repeated TAst children = 1;
+    }
+
+    oneof payload {
+        bytes atom = 1;
+        TList list = 2;
+    }
+}

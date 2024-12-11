@@ -89,7 +89,7 @@ TConclusion<bool> TFilterProgramStep::DoExecuteInplace(const std::shared_ptr<IDa
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter =
         source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(source->GetStageData().GetTable()->BuildTableVerified());
-    source->MutableStageData().AddFilter(filter, true);
+    source->MutableStageData().AddFilter(filter);
     return true;
 }
 

@@ -1,21 +1,23 @@
 #include "arrow_filter.h"
-#include "switch/switch_type.h"
-#include "common/container.h"
+
 #include "common/adapter.h"
+#include "common/container.h"
+#include "switch/switch_type.h"
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NArrow {
 
 #define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
 
 namespace {
-enum class ECompareResult: i8 {
+enum class ECompareResult : i8 {
     LESS = -1,
     BORDER = 0,
     GREATER = 1
@@ -50,8 +52,7 @@ inline void UpdateCompare(const T& value, const T& border, ECompareResult& res) 
 }
 
 template <typename TArray, typename T>
-bool CompareImpl(const std::shared_ptr<arrow::Array>& column, const T& border,
-    std::vector<NArrow::ECompareResult>& rowsCmp) {
+bool CompareImpl(const std::shared_ptr<arrow::Array>& column, const T& border, std::vector<NArrow::ECompareResult>& rowsCmp) {
     bool hasBorder = false;
     ECompareResult* res = &rowsCmp[0];
     auto array = std::static_pointer_cast<TArray>(column);
@@ -64,8 +65,7 @@ bool CompareImpl(const std::shared_ptr<arrow::Array>& column, const T& border,
 }
 
 template <typename TArray, typename T>
-bool CompareImpl(const std::shared_ptr<arrow::ChunkedArray>& column, const T& border,
-    std::vector<NArrow::ECompareResult>& rowsCmp) {
+bool CompareImpl(const std::shared_ptr<arrow::ChunkedArray>& column, const T& border, std::vector<NArrow::ECompareResult>& rowsCmp) {
     bool hasBorder = false;
     ECompareResult* res = &rowsCmp[0];
 
@@ -82,8 +82,7 @@ bool CompareImpl(const std::shared_ptr<arrow::ChunkedArray>& column, const T& bo
 
 /// @return true in case we have no borders in compare: no need for future keys, allow early exit
 template <typename TArray>
-bool Compare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& borderArray,
-    std::vector<NArrow::ECompareResult>& rowsCmp) {
+bool Compare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& borderArray, std::vector<NArrow::ECompareResult>& rowsCmp) {
     auto border = GetValue(std::static_pointer_cast<TArray>(borderArray), 0);
 
     switch (column.kind()) {
@@ -98,8 +97,7 @@ bool Compare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& bo
     return false;
 }
 
-bool SwitchCompare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& border,
-    std::vector<NArrow::ECompareResult>& rowsCmp) {
+bool SwitchCompare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& border, std::vector<NArrow::ECompareResult>& rowsCmp) {
     Y_ABORT_UNLESS(border->length() == 1);
 
     // first time it's empty
@@ -111,12 +109,11 @@ bool SwitchCompare(const arrow::Datum& column, const std::shared_ptr<arrow::Arra
         using TWrap = std::decay_t<decltype(type)>;
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
         return Compare<TArray>(column, border, rowsCmp);
-        });
+    });
 }
 
 template <typename T>
-void CompositeCompare(std::shared_ptr<T> some, std::shared_ptr<arrow::RecordBatch> borderBatch,
-    std::vector<NArrow::ECompareResult>& rowsCmp) {
+void CompositeCompare(std::shared_ptr<T> some, std::shared_ptr<arrow::RecordBatch> borderBatch, std::vector<NArrow::ECompareResult>& rowsCmp) {
     auto key = borderBatch->schema()->fields();
     Y_ABORT_UNLESS(key.size());
 
@@ -130,11 +127,22 @@ void CompositeCompare(std::shared_ptr<T> some, std::shared_ptr<arrow::RecordBatc
         Y_ABORT_UNLESS(some->schema()->GetFieldByName(field->name())->type()->id() == typeId);
 
         if (SwitchCompare(column, border, rowsCmp)) {
-            break; // early exit in case we have all rows compared: no borders, can omit key tail
+            break;   // early exit in case we have all rows compared: no borders, can omit key tail
         }
     }
 }
 
+}   // namespace
+
+TColumnFilter::TSlicesIterator::TSlicesIterator(const TColumnFilter& owner, const std::optional<ui32> start, const std::optional<ui32> count)
+    : Owner(owner)
+    , StartIndex(start)
+    , Count(count) {
+    AFL_VERIFY(!!StartIndex == !!Count);
+    AFL_VERIFY(Owner.GetFilter().size());
+    if (StartIndex) {
+        AFL_VERIFY(*StartIndex + *Count <= owner.GetRecordsCountVerified())("start", *StartIndex)("count", *count)("size", owner.GetRecordsCount());
+    }
 }
 
 TColumnFilter::TApplyContext& TColumnFilter::TApplyContext::Slice(const ui32 start, const ui32 count) {
@@ -142,6 +150,37 @@ TColumnFilter::TApplyContext& TColumnFilter::TApplyContext::Slice(const ui32 sta
     StartPos = start;
     Count = count;
     return *this;
+}
+
+ui32 TColumnFilter::TSlicesIterator::GetSliceSize() const {
+    AFL_VERIFY(IsValid());
+    if (!StartIndex) {
+        return *CurrentIterator;
+    } else {
+        const ui32 startIndex = GetStartIndex();
+        const ui32 finishIndex = std::min<ui32>(CurrentStartIndex + *CurrentIterator, *StartIndex + *Count);
+        AFL_VERIFY(startIndex < finishIndex)("start", startIndex)("finish", finishIndex);
+        return finishIndex - startIndex;
+    }
+}
+
+void TColumnFilter::TSlicesIterator::Start() {
+    CurrentStartIndex = 0;
+    CurrentIsFiltered = Owner.GetStartValue();
+    CurrentIterator = Owner.GetFilter().begin();
+    if (StartIndex) {
+        while (IsValid() && CurrentStartIndex + *CurrentIterator < *StartIndex) {
+            AFL_VERIFY(Next());
+        }
+        AFL_VERIFY(IsValid());
+    }
+}
+
+bool TColumnFilter::TSlicesIterator::Next() {
+    AFL_VERIFY(IsValid());
+    CurrentIsFiltered = !CurrentIsFiltered;
+    ++CurrentIterator;
+    return IsValid();
 }
 
 bool TColumnFilter::TIterator::Next(const ui32 size) {
@@ -200,7 +239,8 @@ TString TColumnFilter::TIterator::DebugString() const {
     return sb;
 }
 
-std::shared_ptr<arrow::BooleanArray> TColumnFilter::BuildArrowFilter(const ui32 expectedSize, const std::optional<ui32> startPos, const std::optional<ui32> count) const {
+std::shared_ptr<arrow::BooleanArray> TColumnFilter::BuildArrowFilter(
+    const ui32 expectedSize, const std::optional<ui32> startPos, const std::optional<ui32> count) const {
     AFL_VERIFY(!!startPos == !!count);
     auto& simpleFilter = BuildSimpleFilter();
     arrow::BooleanBuilder builder;
@@ -263,7 +303,8 @@ ui32 TColumnFilter::CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const
     return f - s;
 }
 
-NKikimr::NArrow::TColumnFilter TColumnFilter::MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border, ECompareType compareType) {
+NKikimr::NArrow::TColumnFilter TColumnFilter::MakePredicateFilter(
+    const arrow::Datum& datum, const arrow::Datum& border, ECompareType compareType) {
     std::vector<ECompareResult> cmps;
 
     switch (datum.kind()) {
@@ -324,11 +365,13 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
     }
     if (!filter.IsEmpty()) {
         if (context.HasSlice()) {
-            AFL_VERIFY(filter.Size() >= *context.GetStartPos() + *context.GetCount())("filter_size", filter.Size())("start", context.GetStartPos())(
-                                                                 "count", context.GetCount());
+            AFL_VERIFY(filter.GetRecordsCountVerified() >= *context.GetStartPos() + *context.GetCount())(
+                                                                                    "filter_size", filter.GetRecordsCountVerified())(
+                                                                                    "start", context.GetStartPos())("count", context.GetCount());
             AFL_VERIFY(*context.GetCount() == (size_t)batch->num_rows())("count", context.GetCount())("batch_size", batch->num_rows());
         } else {
-            AFL_VERIFY(filter.Size() == (size_t)batch->num_rows())("filter_size", filter.Size())("batch_size", batch->num_rows());
+            AFL_VERIFY(filter.GetRecordsCountVerified() == (size_t)batch->num_rows())("filter_size", filter.GetRecordsCountVerified())(
+                                                             "batch_size", batch->num_rows());
         }
     }
     if (filter.IsTotalDenyFilter()) {
@@ -338,8 +381,8 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
     if (filter.IsTotalAllowFilter()) {
         return true;
     }
-    if (context.GetTrySlices() && filter.GetFilter().size() * 10 < filter.GetCount() &&
-        filter.GetCount() < filter.GetFilteredCount().value_or(batch->num_rows()) * 50) {
+    if (context.GetTrySlices() && filter.GetFilter().size() * 10 < filter.GetRecordsCountVerified() &&
+        filter.GetRecordsCountVerified() < filter.GetFilteredCountVerified() * 50) {
         batch =
             NAdapter::TDataBuilderPolicy<TData>::ApplySlicesFilter(batch, filter.BuildSlicesIterator(context.GetStartPos(), context.GetCount()));
     } else {
@@ -447,12 +490,11 @@ class TColumnFilter::TMergerImpl {
 private:
     const TColumnFilter& Filter1;
     const TColumnFilter& Filter2;
+
 public:
     TMergerImpl(const TColumnFilter& filter1, const TColumnFilter& filter2)
         : Filter1(filter1)
-        , Filter2(filter2)
-    {
-
+        , Filter2(filter2) {
     }
 
     template <class TMergePolicy>
@@ -513,7 +555,6 @@ public:
             return result;
         }
     }
-
 };
 
 TColumnFilter TColumnFilter::And(const TColumnFilter& extFilter) const {
@@ -594,7 +635,8 @@ TColumnFilter::TIterator TColumnFilter::GetIterator(const bool reverse, const ui
     } else if (IsTotalDenyFilter()) {
         return TIterator(reverse, expectedSize, false);
     } else {
-        AFL_VERIFY(expectedSize == Size())("expected", expectedSize)("size", Size())("reverse", reverse);
+        AFL_VERIFY(expectedSize == GetRecordsCountVerified())("expected", expectedSize)("count", GetRecordsCountVerified())(
+            "reverse", reverse);
         return TIterator(reverse, Filter, GetStartValue(reverse));
     }
 }
@@ -631,4 +673,25 @@ void TColumnFilter::Append(const TColumnFilter& filter) {
     }
 }
 
+std::optional<ui32> TColumnFilter::GetRecordsCount() const {
+    if (Filter.size()) {
+        AFL_VERIFY(RecordsCount);
+        return RecordsCount;
+    } else {
+        return std::nullopt;
+    }
 }
+
+ui32 TColumnFilter::GetRecordsCountVerified() const {
+    AFL_VERIFY(Filter.size());
+    AFL_VERIFY(RecordsCount);
+    return RecordsCount;
+}
+
+ui32 TColumnFilter::GetFilteredCountVerified() const {
+    const std::optional<ui32> result = GetFilteredCount();
+    AFL_VERIFY(!!result);
+    return *result;
+}
+
+}   // namespace NKikimr::NArrow

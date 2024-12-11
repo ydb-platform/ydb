@@ -962,12 +962,13 @@ arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> TProgramStep::BuildFilter(
     if (Filters.empty()) {
         return nullptr;
     }
-    TableBatchReader reader(t->BuildTableVerified(GetColumnsInUsage(true)));
+    auto table = t->BuildTableVerified(GetColumnsInUsage(true));
+    arrow::TableBatchReader reader(*table);
     NArrow::TColumnFilter fullLocal = NArrow::TColumnFilter::BuildAllowFilter();
     std::shared_ptr<arrow::RecordBatch> rb;
     while (true) {
         {
-            auto statusRead = reader.ReadNext(rb);
+            auto statusRead = reader.ReadNext(&rb);
             if (!statusRead.ok()) {
                 return statusRead;
             }
@@ -984,10 +985,11 @@ arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> TProgramStep::BuildFilter(
         }
         NArrow::TColumnFilter local = NArrow::TColumnFilter::BuildAllowFilter();
         NArrow::TStatusValidator::Validate(MakeCombinedFilter(*datumBatch, local));
-        AFL_VERIFY(local.Size() == datumBatch->GetRecordsCount())("local", local.Size())("datum", datumBatch->GetRecordsCount());
+        AFL_VERIFY(local.GetRecordsCountVerified() == datumBatch->GetRecordsCount())("local", local.GetRecordsCount())(
+                                                                                        "datum", datumBatch->GetRecordsCount());
         fullLocal.Append(local);
     }
-    AFL_VERIFY(fullLocal.Size() == t->num_rows())("filter", fullLocal.Size())("t", t->num_rows());
+    AFL_VERIFY(fullLocal.GetRecordsCountVerified() == t->num_rows())("filter", fullLocal.GetRecordsCountVerified())("t", t->num_rows());
     return std::make_shared<NArrow::TColumnFilter>(std::move(fullLocal));
 }
 

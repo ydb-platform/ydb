@@ -49,10 +49,9 @@ public:
         return res->record_batch();
     }
     [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> ApplySlicesFilter(
-        const std::shared_ptr<arrow::RecordBatch>& batch, TColumnFilter::TSlicesIterator& filter) {
+        const std::shared_ptr<arrow::RecordBatch>& batch, TColumnFilter::TSlicesIterator filter) {
         AFL_VERIFY(filter.GetRecordsCount() == batch->num_rows());
         std::vector<std::shared_ptr<arrow::RecordBatch>> slices;
-        slices.reserve(filter.GetFilter().size() / 2 + 1);
         for (filter.Start(); filter.IsValid(); filter.Next()) {
             if (!filter.IsFiltered()) {
                 continue;
@@ -90,9 +89,8 @@ public:
         return res->table();
     }
     [[nodiscard]] static std::shared_ptr<arrow::Table> ApplySlicesFilter(
-        const std::shared_ptr<arrow::Table>& batch, TColumnFilter::TSlicesIterator& filter) {
+        const std::shared_ptr<arrow::Table>& batch, TColumnFilter::TSlicesIterator filter) {
         std::vector<std::shared_ptr<arrow::Table>> slices;
-        slices.reserve(filter.GetFilter().size() / 2 + 1);
         for (filter.Start(); filter.IsValid(); filter.Next()) {
             if (!filter.IsFiltered()) {
                 continue;
@@ -128,7 +126,7 @@ public:
         return std::make_shared<TGeneralContainer>(TDataBuilderPolicy<arrow::Table>::ApplyArrowFilter(table, filter));
     }
     [[nodiscard]] static std::shared_ptr<TGeneralContainer> ApplySlicesFilter(
-        const std::shared_ptr<TGeneralContainer>& batch, TColumnFilter::TSlicesIterator& filter) {
+        const std::shared_ptr<TGeneralContainer>& batch, TColumnFilter::TSlicesIterator filter) {
         auto table = batch->BuildTableVerified();
         return std::make_shared<TGeneralContainer>(TDataBuilderPolicy<arrow::Table>::ApplySlicesFilter(table, filter));
     }

@@ -42,75 +42,53 @@ public:
     class TSlicesIterator {
     private:
         const TColumnFilter& Owner;
-        const std::optional<ui32> Start;
+        const std::optional<ui32> StartIndex;
         const std::optional<ui32> Count;
         ui32 CurrentStartIndex = 0;
         bool CurrentIsFiltered = false;
         std::vector<ui32>::const_iterator CurrentIterator;
     public:
-        TSlicesIterator(const TColumnFilter& owner, const std::optional<ui32> start, const std::optional<ui32> count)
-            : Start(start)
-            , Count(count) {
-            AFL_VERIFY(!!Start == !!Count);
-            AFL_VERIFY(Owner.GetFilter().size());
-            if (Start) {
-                AFL_VERIFY(*Start + *Count <= owner.GetRecordsCount())("start", *start)("count", *count)("size", owner.GetRecordsCount());
-            }
-        }
+        TSlicesIterator(const TColumnFilter& owner, const std::optional<ui32> start, const std::optional<ui32> count);
 
         bool IsFiltered() const {
             return CurrentIsFiltered;
         }
 
+        ui32 GetRecordsCount() const {
+            if (StartIndex) {
+                return *Count;
+            } else {
+                return Owner.GetRecordsCountVerified();
+            }
+        }
+
         ui32 GetStartIndex() const {
-            if (!Start) {
+            if (!StartIndex) {
                 return CurrentStartIndex;
             } else {
-                return std::max<ui32>(CurrentStartIndex, *Start);
+                return std::max<ui32>(CurrentStartIndex, *StartIndex);
             }
         }
 
-        ui32 GetSliceSize() const {
-            AFL_VERIFY(IsValid());
-            if (!Start) {
-                return *CurrentIterator;
-            } else {
-                const ui32 startIndex = GetStartIndex();
-                const ui32 finishIndex = std::min<ui32>(CurrentStartIndex + *CurrentIterator, *Start + *Count);
-                AFL_VERIFY(startIndex < finishIndex)("start", startIndex)("finish", finishIndex);
-                return finishIndex - startIndex;
-            }
-        }
+        ui32 GetSliceSize() const;
 
-        void Start() {
-            CurrentStartIndex = 0;
-            CurrentIsFiltered = Owner.GetStartValue();
-            CurrentIterator = Owner.GetFilter().begin();
-            if (Start) {
-                while (IsValid() && CurrentStartIndex + *CurrentIterator < *Start) {
-                    AFL_VERIFY(Next());
-                }
-                AFL_VERIFY(IsValid());
-            }
-        }
+        void Start();
 
         bool IsValid() const {
-            return CurrentIterator != Owner.GetFilter().end() && (!Start || CurrentStartIndex < *Start + *Count);
+            return CurrentIterator != Owner.GetFilter().end() && (!StartIndex || CurrentStartIndex < *StartIndex + *Count);
         }
 
-        bool Next() {
-            AFL_VERIFY(IsValid());
-            CurrentIsFiltered = !CurrentIsFiltered;
-            ++CurrentIterator;
-            return IsValid();
-        }
+        bool Next();
 
     };
 
-
-    ui32 GetRecordsCount() const {
-        return RecordsCount;
+    TSlicesIterator BuildSlicesIterator(const std::optional<ui32> startIndex, const std::optional<ui32> count) const {
+        return TSlicesIterator(*this, startIndex, count);
     }
+
+    std::optional<ui32> GetRecordsCount() const;
+
+    ui32 GetRecordsCountVerified() const;
 
     bool GetStartValue(const bool reverse = false) const {
         if (Filter.empty()) {
@@ -130,6 +108,7 @@ public:
     void Append(const TColumnFilter& filter);
     void Add(const bool value, const ui32 count = 1);
     std::optional<ui32> GetFilteredCount() const;
+    ui32 GetFilteredCountVerified() const;
     const std::vector<bool>& BuildSimpleFilter() const;
     std::shared_ptr<arrow::BooleanArray> BuildArrowFilter(
         const ui32 expectedSize, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {}) const;

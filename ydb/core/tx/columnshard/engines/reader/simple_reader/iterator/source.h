@@ -120,7 +120,6 @@ private:
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
 
 protected:
-    std::optional<ui64> UsedRawBytes;
     std::optional<bool> IsSourceInMemoryFlag;
 
     std::unique_ptr<TFetchedData> StageData;
@@ -140,18 +139,6 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
-    virtual void InitUsedRawBytes() = 0;
-
-    ui64 GetUsedRawBytes() const {
-        AFL_VERIFY(UsedRawBytes);
-        return *UsedRawBytes;
-    }
-
-    void SetUsedRawBytes(const ui64 value) {
-        AFL_VERIFY(!UsedRawBytes);
-        UsedRawBytes = value;
-    }
-
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }
@@ -392,11 +379,6 @@ private:
 
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
-
-    virtual void InitUsedRawBytes() override {
-        AFL_VERIFY(!UsedRawBytes);
-        UsedRawBytes = StageData->GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
-    }
 
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
     virtual bool DoStartFetchingColumns(

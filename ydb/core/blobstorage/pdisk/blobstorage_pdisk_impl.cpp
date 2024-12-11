@@ -916,7 +916,7 @@ void TPDisk::SendChunkWriteError(TChunkWrite &chunkWrite, const TString &errorRe
 void TPDisk::SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringStream& error, NKikimrProto::EReplyStatus status) {
     error << " for ownerId# " << read->Owner << " can't read chunkIdx# " << read->ChunkIdx;
     Y_ABORT_UNLESS(status != NKikimrProto::OK);
-    P_LOG(PRI_ERROR, BPD01, error.Str());
+    P_LOG(PRI_ERROR, BPD01, "SendChunkReadError" + error.Str(), (ReqId, read->ReqId));
 
     THolder<NPDisk::TEvChunkReadResult> result = MakeHolder<NPDisk::TEvChunkReadResult>(status,
             read->ChunkIdx, read->Offset, read->Cookie, GetStatusFlags(read->Owner, read->OwnerGroupType), error.Str());
@@ -2214,8 +2214,10 @@ void TPDisk::ProcessChunkWriteQueue() {
     size_t processed = 0;
     size_t processedBytes = 0;
     double processedCostMs = 0;
-    for (; JointChunkWrites.size(); JointChunkWrites.pop()) {
+    while (JointChunkWrites.size()) {
         TRequestBase *req = JointChunkWrites.front();
+        JointChunkWrites.pop();
+
         req->SpanStack.PopOk();
         req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
 
@@ -2257,8 +2259,9 @@ void TPDisk::ProcessChunkReadQueue() {
     size_t processed = 0;
     size_t processedBytes = 0;
     double processedCostMs = 0;
-    for (; JointChunkReads.size(); JointChunkReads.pop()) {
-        auto& req = JointChunkReads.front();
+    while (JointChunkReads.size()) {
+        auto req = std::move(JointChunkReads.front());
+        JointChunkReads.pop();
         req->SpanStack.PopOk();
         req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
 
@@ -2273,7 +2276,7 @@ void TPDisk::ProcessChunkReadQueue() {
         ui32 chunkIdx = read->ChunkIdx;
         ui8 priorityClass = read->PriorityClass;
         NHPTimer::STime creationTime = read->CreationTime;
-        Y_VERIFY(!read->IsReplied);
+        Y_VERIFY_S(!read->IsReplied, "read's reqId# " << read->ReqId);
         P_LOG(PRI_DEBUG, BPD36, "Performing TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx),
             (PieceCurrentSector, piece->PieceCurrentSector),
             (PieceSizeLimit, piece->PieceSizeLimit),
@@ -3580,7 +3583,6 @@ void TPDisk::Update() {
     Mon.UpdateDurationTracker.SchedulingStart();
 
     // Schedule using Forseti Scheduler
-    //if (!UseNoopSchedulerCached || !ForsetiScheduler.IsEmpty()) {
     if (!UseNoopSchedulerCached) {
         GetJobsFromForsetti();
     }

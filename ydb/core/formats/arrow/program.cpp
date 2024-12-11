@@ -554,9 +554,6 @@ arrow::Status TDatumBatch::AddColumn(const std::string& name, arrow::Datum&& col
     }
 
     auto field = arrow::field(name, column.type());
-    if (!field || !field->type()->Equals(column.type())) {
-        return arrow::Status::Invalid("Cannot create field " + name + ". type:" + field->type()->ToString() + " vs " + column.type()->ToString());
-    }
     if (!column.is_scalar() && column.length() != Rows) {
         return arrow::Status::Invalid("Wrong column length.");
     }
@@ -965,9 +962,19 @@ arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> TProgramStep::BuildFilter(
     if (Filters.empty()) {
         return nullptr;
     }
-    std::vector<std::shared_ptr<arrow::RecordBatch>> batches = NArrow::SliceToRecordBatches(t->BuildTableVerified(GetColumnsInUsage(true)));
+    TableBatchReader reader(t->BuildTableVerified(GetColumnsInUsage(true)));
     NArrow::TColumnFilter fullLocal = NArrow::TColumnFilter::BuildAllowFilter();
-    for (auto&& rb : batches) {
+    std::shared_ptr<arrow::RecordBatch> rb;
+    while (true) {
+        {
+            auto statusRead = reader.ReadNext(rb);
+            if (!statusRead.ok()) {
+                return statusRead;
+            }
+        }
+        if (!rb) {
+            break;
+        }
         auto datumBatch = TDatumBatch::FromRecordBatch(rb);
         {
             auto statusAssign = ApplyAssignes(*datumBatch, NArrow::GetCustomExecContext());

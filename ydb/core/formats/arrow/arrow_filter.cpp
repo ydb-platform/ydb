@@ -338,8 +338,8 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
     if (filter.IsTotalAllowFilter()) {
         return true;
     }
-    if (context.GetUseSlices() && !context.GetStartPos() && !context.GetCount()) {
-        batch = NAdapter::TDataBuilderPolicy<TData>::ApplySlicesFilter(batch, filter);
+    if (context.GetTrySlices() && filter.GetFilter().size() * 10 < filter.GetCount() && filter.GetCount() < filter.GetFilteredCount() * 50) {
+        batch = NAdapter::TDataBuilderPolicy<TData>::ApplySlicesFilter(batch, filter, context.GetStartPos(), context.GetCount());
     } else {
         batch = NAdapter::TDataBuilderPolicy<TData>::ApplyArrowFilter(
             batch, filter.BuildArrowFilter(batch->num_rows(), context.GetStartPos(), context.GetCount()));

@@ -372,7 +372,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
         resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
         AFL_VERIFY((ui32)resultBatch->num_columns() == context->GetProgramInputColumns()->GetColumnNamesVector().size());
         if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
-            filter->Apply(resultBatch, NArrow::TColumnFilter::TApplyContext(StartIndex, RecordsCount));
+            filter->Apply(resultBatch, NArrow::TColumnFilter::TApplyContext(StartIndex, RecordsCount).SetTrySlices(true));
         }
         if (resultBatch && resultBatch->num_rows()) {
             NArrow::TStatusValidator::Validate(context->GetReadMetadata()->GetProgram().ApplyProgram(resultBatch));

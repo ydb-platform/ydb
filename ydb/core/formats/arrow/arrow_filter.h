@@ -203,7 +203,7 @@ public:
     private:
         YDB_READONLY_DEF(std::optional<ui32>, StartPos);
         YDB_READONLY_DEF(std::optional<ui32>, Count);
-        YDB_ACCESSOR(bool, UseSlices, false);
+        YDB_ACCESSOR(bool, TrySlices, false);
 
     public:
         TApplyContext() = default;

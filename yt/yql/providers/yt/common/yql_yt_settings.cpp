@@ -510,6 +510,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
     REGISTER_SETTING(*this, JobBlockInput);
     REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
+    REGISTER_SETTING(*this, CompactForDistinct);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

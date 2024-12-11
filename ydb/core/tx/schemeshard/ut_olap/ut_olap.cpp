@@ -500,7 +500,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             NLs::HasColumnTableSchemaPreset("default"),
             NLs::HasColumnTableSchemaVersion(1),
             NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsTiering("Tiering1")));
+            NLs::HasColumnTableTtlSettingsTier("timestamp", TDuration::Seconds(360), "Tier1")));
 
         TString tableSchema4 = R"(
             Name: "Table4"

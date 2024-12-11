@@ -1174,7 +1174,7 @@ TCheckFunc HasColumnTableTtlSettingsDisabled() {
     };
 }
 
-TCheckFunc HasColumnTableTtlSettingsTiering(const TString& tieringName) {
+TCheckFunc HasColumnTableTtlSettingsTier(const TString& columnName, const TDuration& evictAfter, const std::optional<TString>& storageName) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
         UNIT_ASSERT(table.HasTtlSettings());

@@ -313,7 +313,6 @@ private:
 TConclusion<std::vector<INormalizerTask::TPtr>> TCleanEmptyPortionsNormalizer::DoInit(
     const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     auto batchesToDelete = GetPortionsToDelete(txc, DsGroupSelector);
     if (!batchesToDelete) {
         return TConclusionStatus::Fail("Not ready");

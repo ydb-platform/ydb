@@ -46,10 +46,12 @@ bool TDbWrapper::Load(TInsertTableAccessor& insertTable, const TInstant& loadTim
 }
 
 void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) {
+    if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage() && !AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+        return;
+    }
     NIceDb::TNiceDb db(Database);
     using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
     auto rowProto = row.GetMeta().SerializeToProto();
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage() || AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage());
     if (AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage()) {
         db.Table<IndexColumnsV1>()
             .Key(portion.GetPathId(), portion.GetPortionId(), row.ColumnId, row.Chunk)
@@ -290,7 +292,6 @@ TConclusion<THashMap<ui64, std::map<NOlap::TSnapshot, TGranuleShardingInfo>>> TD
 void TDbWrapper::WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) {
     NIceDb::TNiceDb db(Database);
     using IndexColumnsV2 = NColumnShard::Schema::IndexColumnsV2;
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     db.Table<IndexColumnsV2>()
         .Key(portion.GetPathId(), portion.GetPortionId())
         .Update(NIceDb::TUpdate<IndexColumnsV2::Metadata>(proto.SerializeAsString()));

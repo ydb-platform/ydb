@@ -265,5 +265,4 @@ TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchem
     });
 }
 
-
 }  // namespace NKikimr::NKqp

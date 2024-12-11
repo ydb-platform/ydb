@@ -7507,7 +7507,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             CREATE RESOURCE POOL MyResourcePool WITH (
                 ANOTHER_LIMIT=20
             );)").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown property: another_limit");
 
         result = session.ExecuteSchemeQuery(R"(
@@ -7515,14 +7515,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 SET (ANOTHER_LIMIT = 5),
                 RESET (SOME_LIMIT);
             )").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown property: another_limit, some_limit");
 
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL MyResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT="StringValue"
             );)").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to parse property concurrent_query_limit:");
 
         result = session.ExecuteSchemeQuery(TStringBuilder() << R"(

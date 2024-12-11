@@ -1,5 +1,6 @@
 #include "files.h"
-#include "util.h"
+
+#include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 

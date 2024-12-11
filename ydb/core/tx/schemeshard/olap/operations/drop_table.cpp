@@ -267,7 +267,6 @@ private:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistColumnTableRemove(db, txState->TargetPathId);
 
         bool isStandalone = false;
         {
@@ -281,6 +280,8 @@ private:
                 context.SS->PersistRemoveExternalDataSourceReference(db, tierPath->PathId, txState->TargetPathId);
             }
         }
+
+        context.SS->PersistColumnTableRemove(db, txState->TargetPathId);
 
         if (isStandalone) {
             for (auto& shard : txState->Shards) {

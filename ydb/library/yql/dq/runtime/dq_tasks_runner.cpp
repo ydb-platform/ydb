@@ -163,7 +163,7 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& outputs)
+    TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui8> minFillPercentage)
 {
     TMaybe<ui32> outputWidth;
     if (type->IsMulti()) {
@@ -184,7 +184,7 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
             GetColumnsInfo(type, outputDesc.GetHashPartition().GetKeyColumns(), keyColumns);
             YQL_ENSURE(!keyColumns.empty());
             YQL_ENSURE(outputDesc.GetHashPartition().GetPartitionsCount() == outputDesc.ChannelsSize());
-            return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), type, holderFactory);
+            return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), type, holderFactory, minFillPercentage);
         }
 
         case NDqProto::TTaskOutput::kBroadcast: {
@@ -240,10 +240,10 @@ public:
 
         if (Context.TypeEnv) {
             YQL_ENSURE(std::addressof(alloc) == std::addressof(TypeEnv().GetAllocator()));
-        } else {            
+        } else {
             AllocatedHolder->SelfTypeEnv = std::make_unique<TTypeEnvironment>(alloc);
         }
-        
+
     }
 
     ~TDqTaskRunner() {
@@ -828,7 +828,7 @@ public:
     const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override {
         return AllocatedHolder->ProgramParsed.CompGraph->GetHolderFactory();
     }
-    
+
     NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() const override {
         return Alloc();
     }

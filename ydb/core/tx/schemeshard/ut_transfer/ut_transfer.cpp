@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         });
     }
 
-    Y_UNIT_TEST(ConsistencyMode) {
+    Y_UNIT_TEST(ConsistencyLevel) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
         ui64 txId = 100;
@@ -215,7 +215,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         {
             const auto desc = DescribePath(runtime, "/MyRoot/Transfer1");
             const auto& config = desc.GetPathDescription().GetReplicationDescription().GetConfig();
-            UNIT_ASSERT(config.HasWeakConsistency());
+            UNIT_ASSERT(config.GetConsistencySettings().HasRow());
         }
 
         TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
@@ -227,7 +227,8 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
                   DstPath: "/MyRoot2/Table"
                 }
               }
-              WeakConsistency {
+              ConsistencySettings {
+                Row {}
               }
             }
         )");
@@ -235,7 +236,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         {
             const auto desc = DescribePath(runtime, "/MyRoot/Transfer2");
             const auto& config = desc.GetPathDescription().GetReplicationDescription().GetConfig();
-            UNIT_ASSERT(config.HasWeakConsistency());
+            UNIT_ASSERT(config.GetConsistencySettings().HasRow());
         }
 
         TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
@@ -247,8 +248,10 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
                   DstPath: "/MyRoot2/Table"
                 }
               }
-              StrongConsistency {
-                CommitIntervalMilliSeconds: 10000
+              ConsistencySettings {
+                GlobalConsistency {
+                  CommitIntervalMilliSeconds: 10000
+                }
               }
             }
         )");
@@ -256,8 +259,8 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         {
             const auto desc = DescribePath(runtime, "/MyRoot/Transfer3");
             const auto& config = desc.GetPathDescription().GetReplicationDescription().GetConfig();
-            UNIT_ASSERT(config.HasStrongConsistency());
-            UNIT_ASSERT_VALUES_EQUAL(config.GetStrongConsistency().GetCommitIntervalMilliSeconds(), 10000);
+            UNIT_ASSERT(config.GetConsistencySettings().HasGlobal());
+            UNIT_ASSERT_VALUES_EQUAL(config.GetConsistencySettings().GetGlobal().GetCommitIntervalMilliSeconds(), 10000);
         }
     }
 

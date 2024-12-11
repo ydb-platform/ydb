@@ -13,6 +13,7 @@
 # changes in this file.
 
 add_subdirectory(ut)
+add_subdirectory(auth_config_validator_ut)
 
 add_library(core-config-validation)
 
@@ -25,6 +26,7 @@ target_link_libraries(core-config-validation PUBLIC
 
 target_sources(core-config-validation PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/config/validation/validators.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/config/validation/auth_config_validator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/config/validation/validators.h
 )
 

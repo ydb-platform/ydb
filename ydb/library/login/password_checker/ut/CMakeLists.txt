@@ -12,27 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(protos)
-add_subdirectory(password_checker)
-add_subdirectory(ut)
-
-add_library(ydb-library-login)
-
-
-target_link_libraries(ydb-library-login PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-jwt-cpp
-  contrib-libs-protobuf
-  cpp-digest-argonish
-  library-cpp-json
-  cpp-string_utils-base64
-  library-login-protos
-  library-login-password_checker
-)
-
-target_sources(ydb-library-login PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/login/login.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/login/login.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

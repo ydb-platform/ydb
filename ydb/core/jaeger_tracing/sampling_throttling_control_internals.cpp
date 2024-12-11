@@ -26,7 +26,9 @@ void TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
     auto requestType = static_cast<size_t>(discriminator.RequestType);
     auto database = std::move(discriminator.Database);
 
+    TMaybe<ui8> level;
     if (traceId) {
+        level = traceId.GetVerbosity();
         bool throttle = true;
 
         ForEachMatchingRule(
@@ -36,12 +38,11 @@ void TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
             });
 
         if (throttle) {
-            traceId = {};
+            level = Nothing();
         }
     }
 
-    if (!traceId) {
-        TMaybe<ui8> level;
+    if (!level) {
         ForEachMatchingRule(
             Setup.SamplingRules[requestType], database,
             [&level](auto& samplingRule) {
@@ -52,9 +53,15 @@ void TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
                     level = samplingRule.Level;
                 }
             });
+    }
 
-        if (level) {
+    if (level) {
+        if (!traceId) {
             traceId = NWilson::TTraceId::NewTraceId(*level, Max<ui32>());
+        }
+    } else {
+        if (traceId) {
+            traceId = {};
         }
     }
 }

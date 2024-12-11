@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/library/wilson_ids
     library/cpp/containers/disjoint_interval_tree
     library/cpp/string_utils/base64
     ydb/core/util

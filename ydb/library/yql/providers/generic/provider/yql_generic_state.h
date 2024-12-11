@@ -21,7 +21,7 @@ namespace NYql {
             const TStructExprType* ItemType = nullptr;
             TVector<TString> ColumnOrder;
             NYql::NConnector::NApi::TSchema Schema;
-            NYql::NConnector::NApi::TDataSourceInstance DataSourceInstance;
+            NYql::TGenericDataSourceInstance DataSourceInstance;
         };
 
         using TGetTableResult = std::pair<std::optional<const TTableMeta*>, std::optional<TIssue>>;

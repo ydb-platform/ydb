@@ -127,7 +127,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     if (!ready) {
         return TConclusionStatus::Fail("Not ready");
     }
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     THashSet<TPortionAddress> readyPortions;
     THashMap<TPortionAddress, TV2BuildTask> buildPortions;
     {

@@ -22,7 +22,7 @@ add_subdirectory(pg_tables)
 add_subdirectory(query_stats)
 add_subdirectory(storage)
 add_subdirectory(tablets)
-add_subdirectory(ut_kqp)
+add_subdirectory(ut)
 
 add_library(ydb-core-sys_view)
 

@@ -614,9 +614,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
     }
     auto partitionIt = session->Partitions.find(ev->Get()->Record.GetPartitionId());
     if (partitionIt == session->Partitions.end()) {
-        SRC_LOG_T("Ignore TEvNe wDataArrived from " << ev->Sender << ", partition " << ev->Get()->Record.GetPartitionId() << ", no session");
-
-        SRC_LOG_W("???");
+        SRC_LOG_T("Ignore TEvNewDataArrived from " << ev->Sender << ", partition " << ev->Get()->Record.GetPartitionId() << ", no session");
         return;
     }
     partitionIt->second.HasPendingData = true;

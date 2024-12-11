@@ -261,8 +261,8 @@ struct TFixture : public TPqIoTestFixture {
     void ProcessSomeMessages(ui64 offset, const std::vector<std::pair<ui64, TString>>& messages, NActors::TActorId rowDispatcherId,
         std::function<std::vector<std::pair<ui64, TString>>(const NUdf::TUnboxedValue&)> uvParser = UVPairParser, ui64 generation = 1,
         ui64 partitionId = PartitionId1, bool readedByCA = true) {
-        MockNewDataArrived(rowDispatcherId, generation);
-        ExpectGetNextBatch(rowDispatcherId);
+        MockNewDataArrived(rowDispatcherId, generation, partitionId);
+        ExpectGetNextBatch(rowDispatcherId, partitionId);
 
         MockMessageBatch(offset, messages, rowDispatcherId, generation, partitionId);
         if (readedByCA) {
@@ -386,12 +386,12 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         // change active Coordinator 
         MockCoordinatorChanged(Coordinator2Id);
         // continue use old sessions
-        MockMessageBatch(3, {Json4}, RowDispatcher1);
+        MockMessageBatch(3, {Message4}, RowDispatcher1);
 
         auto req = ExpectCoordinatorRequest(Coordinator2Id);
 
-        auto result = SourceReadDataUntil<TString>(UVParser, 2);
-        AssertDataWithWatermarks(result, {Json3, Json4}, {});
+        auto result = SourceReadDataUntil<std::pair<ui64, TString>>(UVPairParser, 2);
+        AssertDataWithWatermarks(result, {Message3, Message4}, {});
 
         MockCoordinatorResult({{RowDispatcher2, PartitionId1}}, req->Cookie);       // change distribution
         ExpectStopSession(RowDispatcher1);
@@ -409,7 +409,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         req = ExpectCoordinatorRequest(Coordinator1Id);
         MockCoordinatorResult({{RowDispatcher2, PartitionId1}}, req->Cookie);       // distribution is not changed
 
-        ProcessSomeMessages(5, {Json2}, RowDispatcher2, UVParser, 2);
+        ProcessSomeMessages(5, {Message2}, RowDispatcher2, UVPairParser, 2);
     }
 
     Y_UNIT_TEST_F(Backpressure, TFixture) {
@@ -463,8 +463,8 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockAck(RowDispatcher1, 1, PartitionId1);
         MockAck(RowDispatcher2, 2, PartitionId2);
         
-        ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1, UVParser, 1, PartitionId1);
-        ProcessSomeJsons(0, {Json3}, RowDispatcher2, UVParser, 2, PartitionId2, false);     // not read by CA
+        ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1, UVPairParser, 1, PartitionId1);
+        ProcessSomeMessages(0, {Message3}, RowDispatcher2, UVPairParser, 2, PartitionId2, false);     // not read by CA
         MockStatistics(RowDispatcher2, 10,  2, PartitionId2);
 
         // Restart node 2 (RowDispatcher2)
@@ -473,7 +473,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockUndelivered(RowDispatcher2, 2);
 
         // session1 is still working
-        ProcessSomeJsons(2, {Json4}, RowDispatcher1, UVParser, 1, PartitionId1, false); 
+        ProcessSomeMessages(2, {Message4}, RowDispatcher1, UVPairParser, 1, PartitionId1, false); 
 
         // Reinit session to RowDispatcher2
         auto req2 = ExpectCoordinatorRequest(Coordinator1Id);
@@ -481,12 +481,12 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         ExpectStartSession({{PartitionId2, 10}}, RowDispatcher2, 3);
         MockAck(RowDispatcher2, 3, PartitionId2);
 
-        ProcessSomeJsons(3, {Json4}, RowDispatcher1, UVParser, 1, PartitionId1, false);
-        ProcessSomeJsons(10, {Json4}, RowDispatcher2, UVParser, 3, PartitionId2, false);
+        ProcessSomeMessages(3, {Message4}, RowDispatcher1, UVPairParser, 1, PartitionId1, false);
+        ProcessSomeMessages(10, {Message4}, RowDispatcher2, UVPairParser, 3, PartitionId2, false);
 
-        std::vector<TString> expectedJson{Json3, Json4, Json4, Json4};
-        auto result = SourceReadDataUntil<TString>(UVParser, expectedJson.size());
-        AssertDataWithWatermarks(result, expectedJson, {});
+        std::vector<std::pair<ui64, TString>> expected{Message3, Message4, Message4, Message4};
+        auto result = SourceReadDataUntil<std::pair<ui64, TString>>(UVPairParser, expected.size());
+        AssertDataWithWatermarks(result, expected, {});
     }
 
     Y_UNIT_TEST_F(IgnoreMessageIfNoSessions, TFixture) {

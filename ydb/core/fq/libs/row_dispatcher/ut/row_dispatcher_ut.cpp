@@ -396,12 +396,12 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
     }
 
     Y_UNIT_TEST_F(TwoClientTwoConnection, TFixture) {
-        MockAddSession(Source1, PartitionId0, ReadActorId1);
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1);
         auto session1 = ExpectRegisterTopicSession();
         ExpectStartSessionAck(ReadActorId1);
         ExpectStartSession(session1);
 
-        MockAddSession(Source1Connection2, PartitionId0, ReadActorId2);
+        MockAddSession(Source1Connection2, {PartitionId0}, ReadActorId2);
         auto session2 = ExpectRegisterTopicSession();
         ExpectStartSessionAck(ReadActorId2);
         ExpectStartSession(session2);
@@ -410,10 +410,10 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ProcessData(ReadActorId2, PartitionId0, session2);
 
         MockStopSession(Source1, PartitionId0, ReadActorId1);
-        ExpectStopSession(session1, PartitionId0);
+        ExpectStopSession(session1);
 
         MockStopSession(Source1Connection2, PartitionId0, ReadActorId2);
-        ExpectStopSession(session2, PartitionId0);
+        ExpectStopSession(session2);
     }
 }
 

@@ -2134,6 +2134,22 @@ Y_UNIT_TEST_SUITE(SystemView) {
             [[0u]];
         ])", ysonString);
     }
+
+    Y_UNIT_TEST(Sids) {
+        TTestEnv env;
+        CreateTenantsAndTables(env, false);
+        TTableClient client(env.GetDriver());
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/Tenant1/.sys/sids`;
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            Cerr << "RESULT: " << NKqp::StreamResultToYson(it) << Endl;
+        }
+    }
 }
 
 } // NSysView

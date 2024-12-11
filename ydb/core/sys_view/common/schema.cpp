@@ -286,6 +286,8 @@ private:
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);
 
         RegisterPgTablesSystemViews();
+
+        RegisterSystemView<Schema::Nodes>(SidsName);
     }
 
 private:

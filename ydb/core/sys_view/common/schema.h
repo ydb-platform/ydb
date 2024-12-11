@@ -49,6 +49,8 @@ constexpr TStringBuf PgTablesName = "pg_tables";
 constexpr TStringBuf InformationSchemaTablesName = "tables";
 constexpr TStringBuf PgClassName = "pg_class";
 
+constexpr TStringBuf SidsName = "sids";
+
 
 struct Schema : NIceDb::Schema {
     struct PartitionStats : Table<1> {
@@ -611,6 +613,12 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct Sids : Table<15> {
+        struct Name: Column<1, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Name>;
+        using TColumns = TableColumns<Name>;
+    };
 
     struct PgColumn {
         NIceDb::TColumnId _ColumnId;

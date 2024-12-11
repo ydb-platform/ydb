@@ -1,4 +1,4 @@
-#include "nodes.h"
+#include "sids.h"
 
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -11,8 +11,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-namespace NKikimr {
-namespace NSysView {
+namespace NKikimr::NSysView {
 
 using namespace NActors;
 using namespace NNodeWhiteboard;
@@ -274,11 +273,10 @@ private:
     THashMap<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> WBSystemInfo;
 };
 
-THolder<NActors::IActor> CreateNodesScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateSidsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     return MakeHolder<TSidsScan>(ownerId, scanId, tableId, tableRange, columns);
 }
 
-} // NSysView
-} // NKikimr
+}

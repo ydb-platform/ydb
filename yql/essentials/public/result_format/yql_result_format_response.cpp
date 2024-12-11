@@ -43,19 +43,19 @@ TVector<TResult> ParseResponse(const NYT::TNode& responseNode) {
             if (writeNode.HasKey("Type")) {
                 write.Type = &writeNode["Type"];
             }
-            
+
             if (writeNode.HasKey("Data")) {
                 write.Data = &writeNode["Data"];
             }
-            
+
             if (writeNode.HasKey("Truncated")) {
                 const auto& truncatedNode = writeNode["Truncated"];
                 CHECK(truncatedNode.IsBool());
                 write.IsTruncated = truncatedNode.AsBool();
             }
 
-            if (writeNode.HasKey("Refs")) {
-                const auto& refsNodeList = writeNode["Refs"];
+            if (writeNode.HasKey("Ref")) {
+                const auto& refsNodeList = writeNode["Ref"];
                 CHECK(refsNodeList.IsList());
                 for (const auto& refNode : refsNodeList.AsList()) {
                     CHECK(refNode.IsMap());

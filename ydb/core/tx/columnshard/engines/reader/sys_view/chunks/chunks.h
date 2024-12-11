@@ -27,7 +27,7 @@ private:
 public:
     using TBase::TBase;
 
-    virtual std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& /*readContext*/) const override;
+    virtual std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& readContext) const override;
     virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 };
 
@@ -127,7 +127,7 @@ private:
                 AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
                 NActors::TActivationContext::AsActorContext().Send(
                     OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-                                 std::make_shared<TApplyResult>(result.GetPortions(), std::move(WaitingCountersGuard))));
+                                 std::make_shared<TApplyResult>(result.ExtractPortionsVector(), std::move(WaitingCountersGuard))));
             }
         }
 
@@ -153,9 +153,8 @@ public:
 
 class TStoreSysViewPolicy: public NAbstract::ISysViewPolicy {
 protected:
-    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(
-        const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const override {
-        return std::make_unique<TConstructor>(snapshot, itemsLimit, reverse);
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TScannerConstructorContext& request) const override {
+        return std::make_unique<TConstructor>(request);
     }
     virtual std::shared_ptr<NAbstract::IMetadataFiller> DoCreateMetadataFiller() const override {
         return std::make_shared<NAbstract::TMetadataFromStore>();
@@ -168,9 +167,8 @@ public:
 
 class TTableSysViewPolicy: public NAbstract::ISysViewPolicy {
 protected:
-    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(
-        const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const override {
-        return std::make_unique<TConstructor>(snapshot, itemsLimit, reverse);
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TScannerConstructorContext& request) const override {
+        return std::make_unique<TConstructor>(request);
     }
     virtual std::shared_ptr<NAbstract::IMetadataFiller> DoCreateMetadataFiller() const override {
         return std::make_shared<NAbstract::TMetadataFromTable>();

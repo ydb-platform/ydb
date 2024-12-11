@@ -38,13 +38,13 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     const NActors::TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build()("tablet", Self->TabletID())("snapshot", snapshot.DebugString());
     TReadMetadataPtr readMetadataRange;
+    TScannerConstructorContext context(snapshot, 0, request.GetReverse());
     {
         TReadDescription read(snapshot, request.GetReverse());
         read.PathId = request.GetPathId();
         read.LockId = LockId;
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
-        std::unique_ptr<IScannerConstructor> scannerConstructor(
-            new NPlain::TIndexScannerConstructor(snapshot, request.GetItemsLimit(), request.GetReverse()));
+        std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
         read.ColumnNames = request.GetColumnNames();
         if (request.RangesFilter) {
@@ -70,7 +70,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
 
     TStringBuilder detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
-        detailedInfo << " read metadata: (" << *readMetadataRange << ")";
+        detailedInfo << " read metadata: (" << readMetadataRange->DebugString() << ")";
     }
 
     const TVersionedIndex* index = nullptr;

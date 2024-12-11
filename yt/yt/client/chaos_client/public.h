@@ -24,6 +24,7 @@ constexpr int MaxReplicasPerReplicationCard = 128;
 DECLARE_REFCOUNTED_STRUCT(TReplicationCard)
 
 DECLARE_REFCOUNTED_STRUCT(IReplicationCardCache)
+DECLARE_REFCOUNTED_CLASS(TChaosCacheChannelConfig)
 DECLARE_REFCOUNTED_CLASS(TReplicationCardCacheConfig)
 DECLARE_REFCOUNTED_CLASS(TReplicationCardCacheDynamicConfig)
 

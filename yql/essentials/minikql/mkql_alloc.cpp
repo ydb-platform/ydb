@@ -55,8 +55,8 @@ void TAllocState::CleanupArrowList(TListEntry* root) {
         auto size = ((TMkqlArrowHeader*)curr)->Size;
         auto fullSize = size + sizeof(TMkqlArrowHeader);
         ReleaseAlignedPage(curr, fullSize);
-        curr = next;
 #endif
+        curr = next;
     }
 
     root->InitLinks();

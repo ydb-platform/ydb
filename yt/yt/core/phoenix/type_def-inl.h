@@ -1055,6 +1055,12 @@ struct TSerializer
     }
 
     template <class T, class C>
+    static void Save(C& context, const TWeakPtr<T>& ptr)
+    {
+        SaveImpl(context, ptr.Lock().Get());
+    }
+
+    template <class T, class C>
     static void SaveImpl(C& context, T* ptr)
     {
         using NYT::Save;
@@ -1127,6 +1133,14 @@ struct TSerializer
         LoadImpl</*Inplace*/ true>(context, rawPtr);
     }
 
+    template <class T, class C>
+    static void Load(C& context, TWeakPtr<T>& ptr)
+    {
+        T* rawPtr = nullptr;
+        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        ptr.Reset(rawPtr);
+    }
+
     template <bool Inplace, class T, class C>
     static void LoadImpl(C& context, T*& rawPtr)
     {
@@ -1188,7 +1202,8 @@ template <class T, class C>
     requires (std::derived_from<C, NPhoenix2::NDetail::TContextBase>) && (
         std::same_as<T, TIntrusivePtr<typename T::TUnderlying>> ||
         std::same_as<T, std::unique_ptr<typename T::element_type>> ||
-        std::is_pointer_v<T>)
+        std::is_pointer_v<T> ||
+        std::same_as<T, TWeakPtr<typename T::TUnderlying>>)
 struct TSerializerTraits<T, C>
 {
     using TSerializer = NPhoenix2::NDetail::TSerializer;

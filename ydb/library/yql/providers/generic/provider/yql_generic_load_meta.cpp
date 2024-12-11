@@ -29,7 +29,7 @@ namespace NYql {
         using TPtr = std::shared_ptr<TGenericTableDescription>;
 
         NConnector::NApi::TDataSourceInstance DataSourceInstance;
-        NConnector::NApi::TDescribeTableResponse Response;
+        std::optional<NConnector::NApi::TDescribeTableResponse> Response;
     };
 
     class TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
@@ -114,7 +114,7 @@ namespace NYql {
                         // Check only transport errors;
                         // logic errors will be checked later in DoApplyAsyncChanges
                         if (result.Status.Ok()) {
-                            desc->Response = std::move(*result.Response);
+                            desc->Response = std::move(result.Response);
                             promise.SetValue();
                         } else {
                             promise.SetException(result.Status.ToDebugString());
@@ -156,9 +156,10 @@ namespace NYql {
                 const auto it = Results_.find(TGenericState::TTableAddress(clusterName, tableName));
                 if (Results_.cend() != it) {
                     const auto& response = it->second->Response;
-                    if (NConnector::IsSuccess(response)) {
+
+                    if (NConnector::IsSuccess(*response)) {
                         TGenericState::TTableMeta tableMeta;
-                        tableMeta.Schema = response.schema();
+                        tableMeta.Schema = response->schema();
                         tableMeta.DataSourceInstance = it->second->DataSourceInstance;
 
                         const auto& parse = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
@@ -192,7 +193,7 @@ namespace NYql {
                             break;
                         }
                     } else {
-                        const auto& error = response.error();
+                        const auto& error = response->error();
                         NConnector::ErrorToExprCtx(error, ctx, ctx.GetPosition(read.Pos()),
                                                    TStringBuilder() << "Loading metadata for table: " << clusterName << '.' << tableName);
                         hasErrors = true;
@@ -327,10 +328,17 @@ namespace NYql {
             request.set_schema(schema);
         }
 
-        void GetServiceName(NYql::NConnector::NApi::TOracleDataSourceOptions& request, const TGenericClusterConfig& clusterConfig) {
+        void SetOracleServiceName(NYql::NConnector::NApi::TOracleDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
             const auto it = clusterConfig.GetDataSourceOptions().find("service_name");
             if (it != clusterConfig.GetDataSourceOptions().end()) {
-                request.set_service_name(it->second);
+                options.set_service_name(it->second);
+            }
+        }
+
+        void SetLoggingFolderId(NYql::NConnector::NApi::TLoggingDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
+            const auto it = clusterConfig.GetDataSourceOptions().find("folder_id");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                options.set_folder_id(it->second);
             }
         }
 
@@ -355,9 +363,12 @@ namespace NYql {
                 } break;
                 case NYql::NConnector::NApi::ORACLE: {
                     auto* options = request.mutable_data_source_instance()->mutable_oracle_options();
-                    GetServiceName(*options, clusterConfig);
+                    SetOracleServiceName(*options, clusterConfig);
                 } break;
-
+                case NYql::NConnector::NApi::LOGGING: {
+                    auto* options = request.mutable_data_source_instance()->mutable_logging_options();
+                    SetLoggingFolderId(*options, clusterConfig);
+                } break;
                 default:
                     ythrow yexception() << "Unexpected data source kind: '" << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind)
                                         << "'";

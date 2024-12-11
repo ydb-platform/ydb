@@ -134,7 +134,7 @@ namespace NLs {
     TCheckFunc HasColumnTableTtlSettingsVersion(ui64 ttlSettingsVersion);
     TCheckFunc HasColumnTableTtlSettingsEnabled(const TString& columnName, const TDuration& expireAfter);
     TCheckFunc HasColumnTableTtlSettingsDisabled();
-    TCheckFunc HasColumnTableTtlSettingsTiering(const TString& tierName);
+    TCheckFunc HasColumnTableTtlSettingsTier(const TString& columnName, const TDuration& evictAfter, const std::optional<TString>& storageName);
 
     TCheckFunc CheckPartCount(const TString& name, ui32 partCount, ui32 maxParts, ui32 tabletCount, ui32 groupCount,
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
@@ -146,9 +146,11 @@ namespace NLs {
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
 
-    TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Metric metric,
-                                      Ydb::Table::VectorIndexSettings_VectorType vectorType,
-                                      ui32 vectorDimension
+    TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
+                                     Ydb::Table::VectorIndexSettings_VectorType vectorType,
+                                     ui32 vectorDimension,
+                                     ui32 clusters,
+                                     ui32 levels
                                   );
 
     TCheckFunc SequenceName(const TString& name);

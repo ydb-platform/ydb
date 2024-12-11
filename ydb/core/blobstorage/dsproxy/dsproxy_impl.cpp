@@ -15,12 +15,7 @@ namespace NKikimr {
         , IsEjected(false)
         , ForceWaitAllDrives(forceWaitAllDrives)
         , UseActorSystemTimeInBSQueue(params.UseActorSystemTimeInBSQueue)
-        , EnablePutBatching(params.EnablePutBatching)
-        , EnableVPatch(params.EnableVPatch)
-        , SlowDiskThreshold(params.SlowDiskThreshold)
-        , PredictedDelayMultiplier(params.PredictedDelayMultiplier)
-        , MaxNumOfSlowDisks(params.MaxNumOfSlowDisks)
-        , LongRequestThresholdMs(params.LongRequestThresholdMs)
+        , Controls(std::move(params.Controls))
     {}
 
     TBlobStorageGroupProxy::TBlobStorageGroupProxy(ui32 groupId, bool isEjected,TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
@@ -30,21 +25,16 @@ namespace NKikimr {
         , IsEjected(isEjected)
         , ForceWaitAllDrives(false)
         , UseActorSystemTimeInBSQueue(params.UseActorSystemTimeInBSQueue)
-        , EnablePutBatching(params.EnablePutBatching)
-        , EnableVPatch(params.EnableVPatch)
-        , SlowDiskThreshold(params.SlowDiskThreshold)
-        , PredictedDelayMultiplier(params.PredictedDelayMultiplier)
-        , MaxNumOfSlowDisks(params.MaxNumOfSlowDisks)
-        , LongRequestThresholdMs(params.LongRequestThresholdMs)
+        , Controls(std::move(params.Controls))
     {}
 
     IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon) {
         return new TBlobStorageGroupProxy(groupId, true, nodeMon, 
                 TBlobStorageProxyParameters{
-                    .EnablePutBatching = TControlWrapper(false, false, true),
-                    .EnableVPatch = TControlWrapper(false, false, true),
-                    .SlowDiskThreshold = TControlWrapper(2000, 1, 1000000),
-                    .PredictedDelayMultiplier = TControlWrapper(1000, 1, 1000000),
+                    .Controls = TBlobStorageProxyControlWrappers{
+                        .EnablePutBatching = TControlWrapper(false, false, true),
+                        .EnableVPatch = TControlWrapper(false, false, true),
+                    }
                 }
         );
     }

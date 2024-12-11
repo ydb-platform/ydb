@@ -33,13 +33,13 @@ namespace scipy
                                          make_policy(promote_double<true>()));
         }
       }
-    }
+    } // namespace details
 
 #define NUMPY_NARY_FUNC_NAME spherical_jn
 #define NUMPY_NARY_FUNC_SYM details::spherical_jn
 #include "pythonic/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

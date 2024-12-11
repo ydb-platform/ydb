@@ -17,37 +17,37 @@ namespace functools
   {
 
     template <typename... ClosureTypes>
-    task<ClosureTypes...>::task()
-        : closure()
+    task<ClosureTypes...>::task() : closure()
     {
     }
 
     template <typename... ClosureTypes>
-    task<ClosureTypes...>::task(ClosureTypes const &... types)
+    task<ClosureTypes...>::task(ClosureTypes const &...types)
         : closure(types...)
     {
     }
 
     template <typename... ClosureTypes>
     template <typename... Types>
-    auto task<ClosureTypes...>::operator()(Types &&... types) const -> decltype(
-        this->call(utils::make_index_sequence<sizeof...(ClosureTypes)-1>(),
-                   std::forward<Types>(types)...))
+    auto task<ClosureTypes...>::operator()(Types &&...types) const
+        -> decltype(this->call(
+            utils::make_index_sequence<sizeof...(ClosureTypes) - 1>(),
+            std::forward<Types>(types)...))
     {
-      return call(utils::make_index_sequence<sizeof...(ClosureTypes)-1>(),
+      return call(utils::make_index_sequence<sizeof...(ClosureTypes) - 1>(),
                   std::forward<Types>(types)...);
     }
-  }
+  } // namespace details
 
   template <typename... Types>
   // remove references as closure capture the env by copy
   details::task<typename std::remove_cv<
       typename std::remove_reference<Types>::type>::type...>
-  partial(Types &&... types)
+  partial(Types &&...types)
   {
     return {std::forward<Types>(types)...};
   }
-}
+} // namespace functools
 PYTHONIC_NS_END
 
 #endif

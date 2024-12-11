@@ -33,6 +33,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
     def __init__(
             self,
             config_path,
+            kikimr_configure_binary_path,
             kikimr_path,
             kikimr_next_path=None,
             ssh_username=None,
@@ -41,6 +42,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         self.__config_path = config_path
         with open(config_path, 'r') as r:
             self.__yaml_config = yaml.safe_load(r.read())
+        self.__kikimr_configure_binary_path = kikimr_configure_binary_path
         self.__hosts = [host['name'] for host in self.__yaml_config.get('hosts')]
         self._slots = None
         self.__kikimr_path = kikimr_path
@@ -188,6 +190,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
     def nodes(self):
         return {
             node_id: KikimrExternalNode(
+                kikimr_configure_binary_path=self.__kikimr_configure_binary_path,
                 kikimr_path=self.__kikimr_path,
                 kikimr_next_path=self.__kikimr_next_path,
                 node_id=node_id,
@@ -218,6 +221,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                     ic_port = start + 3
 
                     self._slots[slot_idx] = KikimrExternalNode(
+                        kikimr_configure_binary_path=self.__kikimr_configure_binary_path,
                         kikimr_path=self.__kikimr_path,
                         kikimr_next_path=self.__kikimr_next_path,
                         node_id=node_id,

@@ -9,6 +9,7 @@ RECURSE(
     providers
     public
     sql
+    tests
     tools
     types
     udfs

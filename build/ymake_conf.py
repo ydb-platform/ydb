@@ -786,11 +786,6 @@ class YMake(object):
         else:
             print('@import "${CONF_ROOT}/conf/coverage_selective_instrumentation.conf"')
 
-        if presets:
-            print('# Variables set from command line by -D options')
-            for key in sorted(presets):
-                emit(key, opts().presets[key])
-
     @staticmethod
     def _print_conf_content(path):
         with open(path, 'r') as fin:
@@ -801,6 +796,13 @@ class YMake(object):
 
     def print_settings(self):
         pass
+
+    def print_epilogue(self):
+        presets = opts().presets
+        if presets:
+            print('# Variables set from command line by -D options')
+            for key in sorted(presets):
+                emit(key, opts().presets[key])
 
 
 class System(object):
@@ -1008,9 +1010,6 @@ class ToolchainOptions(object):
         self.arch_opt = self.params.get('arch_opt', [])
         self.triplet_opt = self.params.get('triplet_opt', {})
         self.target_opt = self.params.get('target_opt', [])
-
-        # TODO(somov): Убрать чтение настройки из os.environ.
-        self.werror_mode = preset('WERROR_MODE') or os.environ.get('WERROR_MODE') or self.params.get('werror_mode') or 'compiler_specific'
 
         # default C++ standard is set here, some older toolchains might need to redefine it in ya.conf.json
         self.cxx_std = self.params.get('cxx_std', 'c++20')
@@ -1450,7 +1449,6 @@ class GnuCompiler(Compiler):
                 '-fcolor-diagnostics',
                 # Enable aligned allocation
                 '-faligned-allocation',
-                '-fdebug-default-version=4',
             ]
         elif self.tc.is_gcc:
             if self.target.is_xtensa or self.target.is_tc32:
@@ -1464,19 +1462,13 @@ class GnuCompiler(Compiler):
                 ]
 
         self.c_warnings = [
+            # Fail compilation whenever a warning appears
+            '-Werror',
             # Enable default warnings subset
             '-Wall',
             '-Wextra',
         ]
-        self.cxx_warnings = [
-            # Issue a warning if certain overload is hidden due to inheritance
-            '-Woverloaded-virtual',
-        ]
-
-        # Disable some warnings which will fail compilation at the time
-        self.c_warnings += [
-            '-Wno-parentheses',
-        ]
+        self.cxx_warnings = []
 
         self.c_defines = ['${hide:CPP_FAKEID}']
         if self.target.is_android:
@@ -1537,13 +1529,16 @@ class GnuCompiler(Compiler):
             self.sfdl_flags.append('-Qunused-arguments')
 
             self.c_warnings += [
+                '-Wno-parentheses',
                 '-Wno-implicit-const-int-float-conversion',
-                # For nvcc to accept the above.
+                # For nvcc to accept the above
                 '-Wno-unknown-warning-option',
             ]
 
             self.cxx_warnings += [
                 '-Wimport-preprocessor-directive-pedantic',
+                # Issue a warning if certain overload is hidden due to inheritance
+                '-Woverloaded-virtual',
                 '-Wno-ambiguous-reversed-operator',
                 '-Wno-defaulted-function-deleted',
                 '-Wno-deprecated-anon-enum-enum-conversion',
@@ -1551,7 +1546,6 @@ class GnuCompiler(Compiler):
                 '-Wno-deprecated-enum-float-conversion',
                 '-Wno-deprecated-volatile',
                 '-Wno-pessimizing-move',
-                '-Wno-return-std-move',
                 '-Wno-undefined-var-template',
             ]
 
@@ -1601,7 +1595,6 @@ class GnuCompiler(Compiler):
 
         emit('C_COMPILER', '"{}"'.format(self.tc.c_compiler))
         emit('OPTIMIZE', self.optimize)
-        emit('WERROR_MODE', self.tc.werror_mode)
         emit('_C_FLAGS', self.c_flags)
         emit('_C_FOPTIONS', self.c_foptions)
         emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
@@ -1845,12 +1838,7 @@ class MSVCToolchainOptions(ToolchainOptions):
             # TODO(somov): Определять автоматически self.version в этом случае
 
         else:
-            if self.version_at_least(2019):
-                self.sdk_version = '10.0.18362.0'
-                if is_positive('MSVC20'):  # XXX: temporary flag, remove after DTCC-123 is completed
-                    self.cxx_std = 'c++latest'
-            else:
-                self.sdk_version = '10.0.16299.0'
+            self.sdk_version = '10.0.18362.0'
             sdk_dir = '$WINDOWS_KITS_RESOURCE_GLOBAL'
 
             self.vc_root = self.name_marker if not self.use_clang else '$MSVC_FOR_CLANG_RESOURCE_GLOBAL'
@@ -1921,9 +1909,6 @@ class MSVCToolchain(MSVC, Toolchain):
         super(MSVCToolchain, self).print_toolchain()
 
         emit('TOOLCHAIN_ENV', format_env(self.tc.get_env(), list_separator=';'))
-
-        if self.tc.sdk_version:
-            emit('WINDOWS_KITS_VERSION', self.tc.sdk_version)
 
         if self.tc.under_wine_tools:
             emit('_UNDER_WINE_TOOLS', 'yes')
@@ -2049,7 +2034,10 @@ class MSVCCompiler(MSVC, Compiler):
         ]
         flags += self.tc.arch_opt
 
-        c_warnings = ['/we{}'.format(code) for code in warns_as_error]
+        c_warnings = [
+            "/WX",
+        ]
+        c_warnings += ['/we{}'.format(code) for code in warns_as_error]
         c_warnings += ['/w1{}'.format(code) for code in warns_enabled]
         c_warnings += ['/wd{}'.format(code) for code in warns_disabled]
         cxx_warnings = []
@@ -2082,14 +2070,18 @@ class MSVCCompiler(MSVC, Compiler):
             elif target.is_x86_64:
                 flags.append('-m64')
 
-            c_warnings.extend((
-                '-Wno-format',
+            c_warnings += [
+                # Fail compilation whenever a warning appears
+                '-Werror',
+                # FIXME: enable -Wall and -Wextra in IGNIETFERRO-1992
                 '-Wno-parentheses',
+                # For nvcc to accept the above
                 '-Wno-unknown-warning-option',
-            ))
+            ]
 
             cxx_warnings += [
                 '-Wimport-preprocessor-directive-pedantic',
+                # Issue a warning if certain overload is hidden due to inheritance
                 '-Woverloaded-virtual',
                 '-Wno-ambiguous-reversed-operator',
                 '-Wno-defaulted-function-deleted',
@@ -2157,8 +2149,6 @@ class MSVCCompiler(MSVC, Compiler):
             emit('_CFLAGS_UCRT_VC_INCLUDES', '/DY_UCRT_INCLUDE="%s"' % ucrt_include, '/DY_MSVC_INCLUDE="%s"' % vc_include)
         else:
             emit('_CFLAGS_UCRT_VC_INCLUDES')
-
-        emit('WERROR_MODE', self.tc.werror_mode)
 
         print('@import "${CONF_ROOT}/conf/compilers/msvc_compiler.conf"')
 
@@ -2472,7 +2462,7 @@ class Cuda(object):
 
     def auto_cuda_version(self):
         if self.use_arcadia_cuda.value:
-            return '12.2'
+            return '12.6'
 
         if not self.have_cuda.value:
             return None
@@ -2649,6 +2639,7 @@ def main():
     build.print_build()
 
     custom_conf.print_epilogue()
+    ymake.print_epilogue()
 
 
 if __name__ == '__main__':

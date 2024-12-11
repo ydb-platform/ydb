@@ -134,7 +134,6 @@ ELSEIF (PY3)
         with_coverage.py
         with_kapt_args.py
         with_pathsep_resolve.py
-        wrap_groovyc.py
         wrapcc.py
         wrapper.py
         write_file_size.py

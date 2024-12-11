@@ -9,11 +9,11 @@
 
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
 
 namespace NKikimr::NColumnShard {
 class TTiersManager;
-class TTtl;
 }   // namespace NKikimr::NColumnShard
 
 namespace NKikimr::NOlap {
@@ -50,7 +50,7 @@ struct TSelectInfo {
 
     TStats Stats() const;
 
-    void DebugStream(IOutputStream& out);
+    TString DebugString() const;
 };
 
 class TColumnEngineStats {
@@ -74,6 +74,7 @@ public:
         i64 Rows = 0;
         i64 Bytes = 0;
         i64 RawBytes = 0;
+        std::vector<i64> ByChannel;
 
         TString DebugString() const {
             return TStringBuilder() << "portions=" << Portions << ";blobs=" << Blobs << ";rows=" << Rows << ";bytes=" << Bytes
@@ -92,6 +93,10 @@ public:
             result.Rows = kff * Rows;
             result.Bytes = kff * Bytes;
             result.RawBytes = kff * RawBytes;
+            result.ByChannel.reserve(ByChannel.size());
+            for (ui64 channelBytes: ByChannel) {
+                result.ByChannel.push_back(channelBytes * kff);
+            }
             return result;
         }
 
@@ -105,6 +110,12 @@ public:
             Rows = SumVerifiedPositive(Rows, item.Rows);
             Bytes = SumVerifiedPositive(Bytes, item.Bytes);
             RawBytes = SumVerifiedPositive(RawBytes, item.RawBytes);
+            if (ByChannel.size() < item.ByChannel.size()) {
+                ByChannel.resize(item.ByChannel.size());
+            }
+            for (ui32 ch = 0; ch < item.ByChannel.size(); ch++) {
+                ByChannel[ch] = SumVerifiedPositive(ByChannel[ch], item.ByChannel[ch]);
+            }
             return *this;
         }
     };
@@ -242,12 +253,12 @@ public:
 class TColumnEngineForLogs;
 class IMetadataAccessorResultProcessor {
 private:
-    virtual void DoApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& engine) = 0;
+    virtual void DoApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& engine) = 0;
 
 public:
     virtual ~IMetadataAccessorResultProcessor() = default;
 
-    void ApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& engine) {
+    void ApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& engine) {
         return DoApplyResult(std::move(result), engine);
     }
 
@@ -318,6 +329,7 @@ public:
 
     virtual std::vector<TCSMetadataRequest> CollectMetadataRequests() const = 0;
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
+    virtual const std::shared_ptr<TVersionedIndex>& GetVersionedIndexReadonlyCopy() = 0;
     virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const = 0;
     virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const;
 
@@ -354,8 +366,8 @@ public:
     virtual TSnapshot LastUpdate() const {
         return TSnapshot::Zero();
     }
-    virtual void OnTieringModified(
-        const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) = 0;
+    virtual void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const ui64 pathId) = 0;
+    virtual void OnTieringModified(const THashMap<ui64, NOlap::TTiering>& ttl) = 0;
 };
 
 }   // namespace NKikimr::NOlap

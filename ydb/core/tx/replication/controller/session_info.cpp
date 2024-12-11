@@ -83,4 +83,17 @@ void TWorkerInfo::SetDataEnded(bool value) {
     DataEnded = value;
 }
 
+void TWorkerInfo::SetHeartbeat(const TRowVersion& value) {
+    Heartbeat = value;
+}
+
+bool TWorkerInfo::HasHeartbeat() const {
+    return Heartbeat.Defined();
+}
+
+const TRowVersion& TWorkerInfo::GetHeartbeat() const {
+    Y_ABORT_UNLESS(Heartbeat.Defined());
+    return *Heartbeat;
+}
+
 }

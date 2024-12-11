@@ -3,6 +3,8 @@
 
 #include <util/system/types.h>
 
+#include <unordered_set>
+
 namespace NYql::NPushdown {
 
 struct TSettings {
@@ -36,7 +38,9 @@ struct TSettings {
         // May be partially pushdowned as:
         // $A OR $C
         // In case of unsupported / complicated expressions $B and $D
-        SplitOrOperator = 1 << 22
+        SplitOrOperator = 1 << 22,
+        ToBytesFromStringExpressions = 1 << 23, // ToBytes(string like)
+        FlatMapOverOptionals = 1 << 24 // FlatMap(Optional<T>, Lmabda (T) -> Optional<U>)
     };
 
     explicit TSettings(NLog::EComponent logComponent)
@@ -48,7 +52,11 @@ struct TSettings {
 
     void Enable(ui64 flagsMask, bool set = true);
 
+    void EnableFunction(const TString& functionName);
+
     bool IsEnabled(EFeatureFlag flagMask) const;
+
+    bool IsEnabledFunction(const TString& functionName) const;
 
     NLog::EComponent GetLogComponent() const {
         return LogComponent;
@@ -57,6 +65,7 @@ struct TSettings {
 private:
     const NLog::EComponent LogComponent;
     ui64 FeatureFlags = 0;
+    std::unordered_set<TString> EnabledFunctions;
 };
 
 } // namespace NYql::NPushdown

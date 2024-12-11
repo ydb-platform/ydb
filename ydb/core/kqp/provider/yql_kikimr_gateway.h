@@ -44,6 +44,7 @@ namespace NKikimr {
 namespace NKikimrReplication {
     class TOAuthToken;
     class TStaticCredentials;
+    class TReplicationConfig_TStrongConsistency;
 }
 
 namespace NYql {
@@ -221,9 +222,14 @@ struct TTtlSettings {
         Nanoseconds = 4,
     };
 
+    struct TTier {
+        TDuration ApplyAfter;
+        std::optional<TString> StorageName;
+    };
+
     TString ColumnName;
-    TDuration ExpireAfter;
     TMaybe<EUnit> ColumnUnit;
+    std::vector<TTier> Tiers;
 
     static bool TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error);
 };
@@ -241,7 +247,6 @@ struct TTableSettings {
     TMaybe<TString> KeyBloomFilter;
     TMaybe<TString> ReadReplicasSettings;
     TResetableSetting<TTtlSettings, void> TtlSettings;
-    TResetableSetting<TString, void> Tiering;
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
 
@@ -699,6 +704,7 @@ struct TCreateTableStoreSettings {
     TVector<TString> KeyColumnNames;
     TVector<TString> ColumnOrder;
     TVector<TIndexDescription> Indexes;
+    TVector<TColumnFamily> ColumnFamilies;
 };
 
 struct TAlterTableStoreSettings {
@@ -739,6 +745,8 @@ struct TSequenceSettings {
     TMaybe<bool> Cycle;
     TMaybe<TString> OwnedBy;
     TMaybe<TString> DataType;
+    TMaybe<bool> Restart;
+    TMaybe<i64> RestartValue;
 };
 
 struct TCreateSequenceSettings {
@@ -789,11 +797,21 @@ struct TReplicationSettings {
         void Serialize(NKikimrReplication::TStaticCredentials& proto) const;
     };
 
+    struct TWeakConsistency {};
+
+    struct TStrongConsistency {
+        TDuration CommitInterval;
+
+        void Serialize(NKikimrReplication::TReplicationConfig_TStrongConsistency& proto) const;
+    };
+
     TMaybe<TString> ConnectionString;
     TMaybe<TString> Endpoint;
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
+    TMaybe<TWeakConsistency> WeakConsistency;
+    TMaybe<TStrongConsistency> StrongConsistency;
     TMaybe<TStateDone> StateDone;
 
     TOAuthToken& EnsureOAuthToken() {
@@ -810,6 +828,22 @@ struct TReplicationSettings {
         }
 
         return *StaticCredentials;
+    }
+
+    TWeakConsistency& EnsureWeakConsistency() {
+        if (!WeakConsistency) {
+            WeakConsistency = TWeakConsistency();
+        }
+
+        return *WeakConsistency;
+    }
+
+    TStrongConsistency& EnsureStrongConsistency() {
+        if (!StrongConsistency) {
+            StrongConsistency = TStrongConsistency();
+        }
+
+        return *StrongConsistency;
     }
 
     using EFailoverMode = TStateDone::EFailoverMode;
@@ -872,6 +906,10 @@ struct TDropBackupCollectionSettings {
     TString Name;
     TString Prefix;
     bool Cascade = false;
+};
+
+struct TBackupSettings {
+    TString Name;
 };
 
 struct TKikimrListPathItem {
@@ -1064,6 +1102,12 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropBackupCollection(const TString& cluster, const TDropBackupCollectionSettings& settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> Backup(const TString& cluster, const TBackupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> BackupIncremental(const TString& cluster, const TBackupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> Restore(const TString& cluster, const TBackupSettings& settings) = 0;
+
     virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterUser(const TString& cluster, const TAlterUserSettings& settings) = 0;
@@ -1117,6 +1161,8 @@ public:
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 
     virtual NThreading::TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
+
+    virtual TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
 
 public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;

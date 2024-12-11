@@ -64,7 +64,7 @@ const TIntrusivePtr<TTcpDispatcher::TImpl>& TTcpDispatcher::TImpl::Get()
     return TTcpDispatcher::Get()->Impl_;
 }
 
-const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const TString& networkName, bool encrypted)
+const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const std::string& networkName, bool encrypted)
 {
     auto [statistics, ok] = NetworkStatistics_.FindOrInsert(networkName, [] {
         return std::array<TNetworkStatistics, 2>{};
@@ -118,7 +118,7 @@ bool TTcpDispatcher::TImpl::IsNetworkingDisabled()
     return NetworkingDisabled_.load();
 }
 
-const TString& TTcpDispatcher::TImpl::GetNetworkNameForAddress(const TNetworkAddress& address)
+const std::string& TTcpDispatcher::TImpl::GetNetworkNameForAddress(const TNetworkAddress& address)
 {
     if (address.IsUnix()) {
         return LocalNetworkName;
@@ -186,8 +186,8 @@ void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
         Config_ = config;
 
         if (XferPoller_) {
-            XferPoller_->Reconfigure(Config_->ThreadPoolSize);
-            XferPoller_->Reconfigure(Config_->ThreadPoolPollingPeriod);
+            XferPoller_->SetThreadCount(Config_->ThreadPoolSize);
+            XferPoller_->SetPollingPeriod(Config_->ThreadPoolPollingPeriod);
         }
     }
 

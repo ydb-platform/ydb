@@ -148,11 +148,12 @@ TString ToUnderscoreCase(const TString& protobufName)
 
 TString DeriveYsonName(const TString& protobufName, const google::protobuf::FileDescriptor* fileDescriptor)
 {
-    if (fileDescriptor->options().GetExtension(NYT::NYson::NProto::derive_underscore_case_names)) {
+    if (fileDescriptor->options().GetExtension(NYT::NYson::NProto::derive_underscore_case_names)
+        || GetProtobufInteropConfig()->ForceSnakeCaseNames)
+    {
         return ToUnderscoreCase(protobufName);
-    } else {
-        return protobufName;
     }
+    return protobufName;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -167,16 +168,16 @@ TProtobufInteropConfigSingleton* GlobalProtobufInteropConfig()
     return LeakySingleton<TProtobufInteropConfigSingleton>();
 }
 
-TProtobufInteropConfigPtr GetProtobufInteropConfig()
-{
-    return GlobalProtobufInteropConfig()->Config.Acquire();
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TProtobufInteropConfigPtr GetProtobufInteropConfig()
+{
+    return GlobalProtobufInteropConfig()->Config.Acquire();
+}
 
 void SetProtobufInteropConfig(TProtobufInteropConfigPtr config)
 {
@@ -1150,6 +1151,8 @@ private:
             switch (field->GetType()) {
                 case FieldDescriptor::TYPE_STRING:
                     ValidateString(value, field->GetFullName());
+                    [[fallthrough]];
+
                 case FieldDescriptor::TYPE_BYTES:
                     BodyCodedStream_.WriteVarint64(value.length());
                     BodyCodedStream_.WriteRaw(value.begin(), static_cast<int>(value.length()));

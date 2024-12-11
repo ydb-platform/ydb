@@ -14,7 +14,8 @@
 #include "schemeshard_domain_links.h"
 #include "schemeshard_info_types.h"
 #include "schemeshard_tx_infly.h"
-#include "schemeshard_utils.h"
+#include "schemeshard_self_pinger.h"
+#include "schemeshard_shard_deleter.h"
 #include "schemeshard_schema.h"
 #include "schemeshard__operation.h"
 #include "schemeshard__stats.h"
@@ -58,6 +59,10 @@
 
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
+
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/blob_depot/events.h>
 
 #include <ydb/library/login/login.h>
 
@@ -795,8 +800,10 @@ public:
 
     // Sequence
     void PersistSequence(NIceDb::TNiceDb& db, TPathId pathId, const TSequenceInfo& sequenceInfo);
+    void PersistSequence(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistSequenceRemove(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId, const TSequenceInfo& sequenceInfo);
+    void PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistSequenceAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 
     // Replication
@@ -1068,7 +1075,7 @@ public:
 
     void Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TActorContext &ctx);
 
-    void Handle(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);

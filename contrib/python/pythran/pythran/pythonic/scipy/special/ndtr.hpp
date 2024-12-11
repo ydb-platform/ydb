@@ -25,13 +25,13 @@ namespace scipy
         boost::math::normal dist(0.0, 1.0);
         return cdf(dist, x);
       }
-    }
+    } // namespace details
 
 #define NUMPY_NARY_FUNC_NAME ndtr
 #define NUMPY_NARY_FUNC_SYM details::ndtr
 #include "pythonic/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

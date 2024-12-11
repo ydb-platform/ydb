@@ -39,6 +39,12 @@ enum class EFrameType
     KeepAlive = 0x02,
 };
 
+struct TRequestContext
+{
+    TString RequestId;
+    TString HostName;
+    TString Method;
+};
 
 class THttpHeader
 {
@@ -82,24 +88,23 @@ private:
     bool ShouldAcceptFraming() const;
 
 private:
-    const TString Method;
-    const TString Command;
-    const bool IsApi;
+    const TString Method_;
+    const TString Command_;
+    const bool IsApi_;
 
-    TNode::TMapType Parameters;
-    TString ImpersonationUser;
-    TString Token;
-    TString ServiceTicket;
-    TNode Attributes;
-    TString ProxyAddress;
-    TString HostPort;
+    TNode::TMapType Parameters_;
+    TString ImpersonationUser_;
+    TString Token_;
+    TString ServiceTicket_;
+    TNode Attributes_;
+    TString ProxyAddress_;
+    TString HostPort_;
 
-private:
-    TMaybe<TFormat> InputFormat = TFormat::YsonText();
-    TMaybe<TFormat> OutputFormat = TFormat::YsonText();
+    TMaybe<TFormat> InputFormat_ = TFormat::YsonText();
+    TMaybe<TFormat> OutputFormat_ = TFormat::YsonText();
 
-    TString RequestCompression = "identity";
-    TString ResponseCompression = "identity";
+    TString RequestCompression_ = "identity";
+    TString ResponseCompression_ = "identity";
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -172,9 +177,10 @@ public:
     // 'requestId' and 'hostName' are provided for debug reasons
     // (they will appear in some error messages).
     THttpResponse(
-        IInputStream* socketStream,
-        const TString& requestId,
-        const TString& hostName);
+        TRequestContext context,
+        IInputStream* socketStream);
+
+    ~THttpResponse();
 
     const THttpHeaders& Headers() const;
 
@@ -196,13 +202,17 @@ private:
     bool RefreshFrameIfNecessary();
 
 private:
-    THttpInput HttpInput_;
-    const TString RequestId_;
-    const TString HostName_;
+    class THttpInputWrapped;
+
+private:
+    THolder<THttpInputWrapped> HttpInput_;
+
+    const bool Unframe_;
+
+    TRequestContext Context_;
     int HttpCode_ = 0;
     TMaybe<TErrorResponse> ErrorResponse_;
     bool IsExhausted_ = false;
-    const bool Unframe_;
     size_t RemainingFrameSize_ = 0;
 };
 
@@ -211,18 +221,15 @@ private:
 class THttpRequest
 {
 public:
-    THttpRequest();
-    THttpRequest(const TString& requestId);
+    THttpRequest(TString requestId, TString hostName, THttpHeader header, TDuration socketTimeout);
     ~THttpRequest();
 
     TString GetRequestId() const;
 
-    void Connect(TString hostName, TDuration socketTimeout = TDuration::Zero());
-
-    IOutputStream* StartRequest(const THttpHeader& header);
+    IOutputStream* StartRequest();
     void FinishRequest();
 
-    void SmallRequest(const THttpHeader& header, TMaybe<TStringBuf> body);
+    void SmallRequest(TMaybe<TStringBuf> body);
 
     THttpResponse* GetResponseStream();
 
@@ -233,26 +240,28 @@ public:
     int GetHttpCode();
 
 private:
-    IOutputStream* StartRequestImpl(const THttpHeader& header, bool includeParameters);
+    IOutputStream* StartRequestImpl(bool includeParameters);
 
 private:
     class TRequestStream;
 
 private:
-    TString HostName;
-    TString RequestId;
-    TString Url_;
+    const TRequestContext Context_;
+    const THttpHeader Header_;
+    const TString Url_;
+    const TDuration SocketTimeout_;
+
     TInstant StartTime_;
     TString LoggedAttributes_;
 
-    TConnectionPtr Connection;
+    TConnectionPtr Connection_;
 
     THolder<TRequestStream> RequestStream_;
 
-    THolder<TSocketInput> SocketInput;
-    THolder<THttpResponse> Input;
+    THolder<TSocketInput> SocketInput_;
+    THolder<THttpResponse> Input_;
 
-    bool LogResponse = false;
+    bool LogResponse_ = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

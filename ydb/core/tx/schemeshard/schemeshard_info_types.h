@@ -1,6 +1,5 @@
 #pragma once
 
-#include "schemeshard.h"
 #include "schemeshard_types.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_path_element.h"
@@ -2372,11 +2371,16 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
     using EType = NKikimrSchemeOp::EIndexType;
     using EState = NKikimrSchemeOp::EIndexState;
 
-    TTableIndexInfo(ui64 version, EType type, EState state)
+    TTableIndexInfo(ui64 version, EType type, EState state, std::string_view description)
         : AlterVersion(version)
         , Type(type)
         , State(state)
-    {}
+    {
+        if (type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+            Y_ABORT_UNLESS(SpecializedIndexDescription.emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>()
+                               .ParseFromString(description));
+        }
+    }
 
     TTableIndexInfo(const TTableIndexInfo&) = default;
 
@@ -2392,8 +2396,20 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         return result;
     }
 
+    TString SerializeDescription() const {
+        return std::visit([]<typename T>(const T& v) {
+            if constexpr (std::is_same_v<std::monostate, T>) {
+                return TString{};
+            } else {
+                TString str{v.SerializeAsString()};
+                Y_ABORT_UNLESS(!str.empty());
+                return str;
+            }
+        }, SpecializedIndexDescription);
+    }
+
     static TPtr NotExistedYet(EType type) {
-        return new TTableIndexInfo(0, type, EState::EIndexStateInvalid);
+        return new TTableIndexInfo(0, type, EState::EIndexStateInvalid, {});
     }
 
     static TPtr Create(const NKikimrSchemeOp::TIndexCreationConfig& config, TString& errMsg) {
@@ -2406,7 +2422,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
         TPtr alterData = result->CreateNextVersion();
         alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
-        Y_ABORT_UNLESS(alterData->IndexKeys.size());
+        Y_ABORT_UNLESS(!alterData->IndexKeys.empty());
         alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
 
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
@@ -3025,7 +3041,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Reshuffle,
             Local,
         };
-        ui32 Level = 0;
+        ui32 Level = 1;
 
         ui32 Parent = 0;
         ui32 ParentEnd = 0;  // included
@@ -3033,6 +3049,14 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         EState State = Sample;
 
         ui32 ChildBegin = 1;  // included
+
+        TString ToStr() const {
+            return TStringBuilder()
+                << "{ K = " << K
+                << ", Level = " << Level << " / " << Levels
+                << ", Parent = " << Parent << " / " << ParentEnd
+                << ", State = " << State << " }";
+        }
 
         static ui32 BinPow(ui32 k, ui32 l) {
             ui32 r = 1;
@@ -3087,7 +3111,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         }
 
         NKikimrTxDataShard::TEvLocalKMeansRequest::EState GetUpload() const {
-            if (Level == 0) {
+            if (Parent == 0) {
                 if (NeedsAnotherLevel()) {
                     return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD;
                 } else {
@@ -3106,15 +3130,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
             if (needsBuildTable || NeedsAnotherLevel()) {
-                name += Level % 2 == 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
+                name += Level % 2 != 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
             }
             return name;
         }
         TString ReadFrom() const {
-            Y_ASSERT(Level != 0);
+            Y_ASSERT(Parent != 0);
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
-            name += Level % 2 == 0 ? BuildPostingTableSuffix1 : BuildPostingTableSuffix0;
+            name += Level % 2 != 0 ? BuildPostingTableSuffix1 : BuildPostingTableSuffix0;
             return name;
         }
     };
@@ -3196,7 +3220,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TBillingStats Processed;
     TBillingStats Billed;
 
-    struct TSampleK {
+    struct TSample {
         struct TRow {
             ui64 P = 0;
             TString Row;
@@ -3260,8 +3284,26 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             MaxProbability = kth->P;
         }
     };
+    TSample Sample;
 
-    TSampleK Sample;
+    TString KMeansTreeToDebugStr() const {
+        return TStringBuilder()
+            << KMeans.ToStr() << ", "
+            << "{ Rows = " << Sample.Rows.size()
+            << ", Sent = " << Sample.Sent << " }, "
+            << "{ Done = " << DoneShards.size()
+            << ", ToUpload = " << ToUploadShards.size()
+            << ", InProgress = " << InProgressShards.size() << " }";
+    }
+
+    struct TClusterShards {
+        ui32 From = std::numeric_limits<ui32>::max();
+        TShardIdx Local = InvalidShardIdx;
+        std::vector<TShardIdx> Global;
+    };
+    TMap<ui32, TClusterShards> Cluster2Shards;
+
+    void AddParent(const TSerializedTableRange& range, TShardIdx shard);
 
     TIndexBuildInfo(TIndexBuildId id, TString uid)
         : Id(id)
@@ -3454,9 +3496,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         TString lastKeyAck =
             row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
+        TSerializedTableRange bound{range};
+        AddParent(bound, shardIdx);
         Shards.emplace(
-            shardIdx, TIndexBuildInfo::TShardStatus(
-                          TSerializedTableRange(range), std::move(lastKeyAck)));
+            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck)));
         TIndexBuildInfo::TShardStatus &shardStatus = Shards.at(shardIdx);
 
         shardStatus.Status =
@@ -3525,11 +3568,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     float CalcProgressPercent() const {
         if (IsBuildVectorIndex()) {
+            Y_ASSERT(KMeans.Level != 0);
             // TODO(mbkkt) better calculation for vector index
-            if (KMeans.Level == 0) {
-                return 0.0;
-            }
-            return KMeans.Levels * 100. / KMeans.Level;
+            return KMeans.Level * 100.0 / KMeans.Levels;
         }
         if (Shards) {
             float totalShards = Shards.size();
@@ -3606,6 +3647,8 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr);
+
+TConclusion<TDuration> GetExpireAfter(const NKikimrSchemeOp::TTTLSettings::TEnabled& settings, const bool allowNonDeleteTiers);
 
 std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
     const NKikimr::NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr);

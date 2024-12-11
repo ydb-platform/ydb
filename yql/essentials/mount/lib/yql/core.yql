@@ -479,6 +479,56 @@ def signature(script, name):
         (lambda '() (Apply ListToTupleImpl list n)))
 ))
 
+(let ListSampleImpl (lambda '(list probability dependsOn)
+    (Filter list (lambda '(x) (< (Random (DependsOn '(x probability dependsOn))) probability)))
+))
+
+(let ListSampleNImpl (lambda '(list count dependsOn) (block '(
+    (let value_type (ListItemType (TypeOf list)))
+
+    (let UdfVectorCreate (Udf 'Vector.Create (Void) (TupleType (TupleType value_type (DataType 'Uint64)) (StructType) value_type)))
+
+    (let resource_type (TypeOf (Apply UdfVectorCreate (Uint32 '0))))
+
+    (let UdfVectorEmplace (Udf 'Vector.Emplace (Void) (TupleType (TupleType resource_type (DataType 'Uint64) value_type) (StructType) value_type)))
+    (let UdfVectorSwap (Udf 'Vector.Swap (Void) (TupleType (TupleType resource_type (DataType 'Uint64) (DataType 'Uint64)) (StructType) value_type)))
+    (let UdfVectorGetResult (Udf 'Vector.GetResult (Void) (TupleType (TupleType resource_type) (StructType) value_type)))
+
+    (return (Apply UdfVectorGetResult (Fold
+        (Skip (Enumerate list) count)
+        (Fold
+            (Take list count)
+            (NamedApply UdfVectorCreate '(count) (AsStruct) (DependsOn '(list dependsOn)))
+            (lambda '(x y) (Apply UdfVectorEmplace y count x))
+        )
+        (lambda '(x y) (block '(
+            (let pos (Coalesce (% (RandomNumber (DependsOn '(x count dependsOn))) (+ (Nth x '0) (Uint64 '1))) (Uint64 '0)))
+            (return (If (< pos count) (Apply UdfVectorEmplace y pos (Nth x '1)) y))
+        )))
+    )))
+))))
+
+(let ListShuffleImpl (lambda '(list dependsOn) (block '(
+    (let value_type (ListItemType (TypeOf list)))
+
+    (let UdfVectorCreate (Udf 'Vector.Create (Void) (TupleType (TupleType value_type (DataType 'Uint64)) (StructType) value_type)))
+
+    (let resource_type (TypeOf (Apply UdfVectorCreate (Uint32 '0))))
+
+    (let UdfVectorEmplace (Udf 'Vector.Emplace (Void) (TupleType (TupleType resource_type (DataType 'Uint64) value_type) (StructType) value_type)))
+    (let UdfVectorSwap (Udf 'Vector.Swap (Void) (TupleType (TupleType resource_type (DataType 'Uint64) (DataType 'Uint64)) (StructType) value_type)))
+    (let UdfVectorGetResult (Udf 'Vector.GetResult (Void) (TupleType (TupleType resource_type) (StructType) value_type)))
+
+    (return (Apply UdfVectorGetResult (Fold
+        (Enumerate list)
+        (NamedApply UdfVectorCreate '((Uint32 '1)) (AsStruct) (DependsOn '(list dependsOn)))
+        (lambda '(x y) (block '(
+            (let pos (Coalesce (% (RandomNumber (DependsOn '(x dependsOn))) (+ (Nth x '0) (Uint64 '1))) (Uint64 '0)))
+            (return (Apply UdfVectorSwap (Apply UdfVectorEmplace y (Nth x '0) (Nth x '1)) pos (Nth x '0)))
+        )))
+    )))
+))))
+
 (export Equals)
 (export Unequals)
 (export FindIndex)
@@ -516,4 +566,7 @@ def signature(script, name):
 (export ForceSpreadMembers)
 (export ListFromTuple)
 (export ListToTuple)
+(export ListSampleImpl)
+(export ListSampleNImpl)
+(export ListShuffleImpl)
 )

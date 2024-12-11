@@ -3,8 +3,8 @@
 
 #include "pythonic/include/builtins/hex.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/str.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #include <sstream>
 
@@ -20,7 +20,7 @@ namespace builtins
     oss << "0x" << std::hex << v;
     return oss.str();
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

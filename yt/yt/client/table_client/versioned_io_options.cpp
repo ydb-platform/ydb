@@ -4,6 +4,7 @@
 
 namespace NYT::NTableClient {
 
+using NYT::FromProto;
 using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -31,7 +32,7 @@ void FromProto(
     TVersionedReadOptions* options,
     const NProto::TVersionedReadOptions& protoOptions)
 {
-    options->ReadMode = CheckedEnumCast<EVersionedIOMode>(protoOptions.read_mode());
+    options->ReadMode = FromProto<EVersionedIOMode>(protoOptions.read_mode());
 }
 
 void ToProto(
@@ -45,7 +46,7 @@ void FromProto(
     NTableClient::TVersionedWriteOptions* options,
     const NProto::TVersionedWriteOptions& protoOptions)
 {
-    options->WriteMode = CheckedEnumCast<EVersionedIOMode>(protoOptions.write_mode());
+    FromProto(&options->WriteMode, protoOptions.write_mode());
 }
 
 std::optional<TString> GetTimestampColumnOriginalNameOrNull(TStringBuf name)

@@ -3,15 +3,16 @@
 
 #include "pythonic/include/numpy/split.hpp"
 
-#include "pythonic/numpy/array_split.hpp"
 #include "pythonic/builtins/ValueError.hpp"
+#include "pythonic/numpy/array_split.hpp"
 
 PYTHONIC_NS_BEGIN
 
 namespace numpy
 {
   template <class T, class pS>
-  types::list<types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>>
+  types::list<
+      types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>>
   split(types::ndarray<T, pS> const &a, long nb_split)
   {
     if (a.flat_size() % nb_split != 0)
@@ -23,19 +24,20 @@ namespace numpy
   typename std::enable_if<
       types::is_iterable<I>::value,
       types::list<types::ndarray<
-          T, types::array<long, std::tuple_size<pS>::value>>>>::type
+          T, types::array_tuple<long, std::tuple_size<pS>::value>>>>::type
   split(types::ndarray<T, pS> const &a, I const &split_mask)
   {
     return array_split(a, split_mask);
   }
 
   template <class E, class I>
-  types::list<types::ndarray<typename E::dtype, types::array<long, E::value>>>
+  types::list<
+      types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>>
   split(E const &a, I const &)
   {
     throw std::runtime_error("split only partially implemented");
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

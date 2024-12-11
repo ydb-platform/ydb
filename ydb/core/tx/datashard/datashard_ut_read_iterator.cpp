@@ -4073,12 +4073,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
 Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
     Y_UNIT_TEST(CancelPageFaultedReadThenDropTable) {
         TPortManager pm;
-        NFake::TCaches caches;
-        caches.Shared = 1 /* bytes */;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetCacheParams(caches);
+            .SetUseRealThreads(false);
+        serverSettings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
         TServer::TPtr server = new TServer(serverSettings);
 
         auto& runtime = *server->GetRuntime();
@@ -4163,18 +4161,17 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
 
     Y_UNIT_TEST(LocksNotLostOnPageFault) {
         TPortManager pm;
-        NFake::TCaches caches;
-        caches.Shared = 1 /* bytes */;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetCacheParams(caches);
+            .SetUseRealThreads(false);
+        serverSettings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
         TServer::TPtr server = new TServer(serverSettings);
 
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_INFO);
 
         InitRoot(server, sender);
 

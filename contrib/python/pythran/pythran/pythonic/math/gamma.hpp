@@ -14,7 +14,7 @@ namespace math
   {
     return std::tgamma(x);
   }
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

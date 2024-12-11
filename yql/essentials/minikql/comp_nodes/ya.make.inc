@@ -143,7 +143,7 @@ COPY(
     AUTO
     FROM ${ORIG_SRC_DIR}
     ${ORIG_SOURCES}
-    OUTPUT_INCLUDES 
+    OUTPUT_INCLUDES
     ${BINDIR}/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
     ${BINDIR}/yql/essentials/minikql/computation/mkql_block_impl_codegen.h
     ${BINDIR}/yql/essentials/minikql/computation/mkql_llvm_base.h
@@ -154,6 +154,7 @@ COPY(
 
 PEERDIR(
     contrib/libs/apache/arrow
+    contrib/libs/xxhash
     yql/essentials/types/binary_json
     yql/essentials/minikql
     yql/essentials/minikql/arrow

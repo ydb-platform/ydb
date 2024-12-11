@@ -84,7 +84,15 @@
                     "clang-format"
                 ]
             },
-            "formula": "build/platform/clang/clang-format16.json"
+            "formula": "build/platform/clang/clang-format/clang-format16.json"
+        },
+        "clang-format-18": {
+            "executable": {
+                "clang-format": [
+                    "clang-format"
+                ]
+            },
+            "formula": "build/platform/clang/clang-format/clang-format18.json"
         },
         "clang16": {
             "executable": {
@@ -484,6 +492,49 @@
                 }
             }
         },
+        "clang-format-18": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "clang-format-18": {
+                    "bottle": "clang-format-18",
+                    "executable": "clang-format"
+                }
+            }
+        },
         "clang16": {
             "env": {
                 "CPATH": [
@@ -507,8 +558,7 @@
                 "simctl": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/SystemRoot/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simctl",
                 "strip": "$(CLANG)/bin/llvm-strip",
                 "type": "clang",
-                "use_bundle": true,
-                "werror_mode": "all"
+                "use_bundle": true
             },
             "platforms": [
                 {
@@ -1075,8 +1125,7 @@
                 "type": "msvc",
                 "use_bundle": true,
                 "use_clang": true,
-                "version": "2019",
-                "werror_mode": "all"
+                "version": "2019"
             },
             "platforms": [
                 {
@@ -1186,8 +1235,7 @@
                 "simctl": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/SystemRoot/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simctl",
                 "strip": "$(CLANG)/bin/llvm-strip",
                 "type": "clang",
-                "use_bundle": true,
-                "werror_mode": "all"
+                "use_bundle": true
             },
             "platforms": [
                 {
@@ -1754,8 +1802,7 @@
                 "type": "msvc",
                 "use_bundle": true,
                 "use_clang": true,
-                "version": "2019",
-                "werror_mode": "all"
+                "version": "2019"
             },
             "platforms": [
                 {
@@ -2301,6 +2348,9 @@
         },
         "clang-format": {
             "description": "Run Clang-Format source code formatter"
+        },
+        "clang-format-18": {
+            "description": "Run Clang-Format source code formatter (18 version)"
         },
         "clang-rename": {
             "description": "Run Clang-Rename refactoring tool"

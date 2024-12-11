@@ -11,7 +11,7 @@ namespace numpy
   types::ndarray<long, types::pshape<long>> flatnonzero(E const &expr);
 
   DEFINE_FUNCTOR(pythonic::numpy, flatnonzero);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -26,7 +26,7 @@ namespace numpy
         _flatnonzero((*begin).begin(), (*begin).end(), out, i,
                      utils::int_<N - 1>());
     }
-  }
+  } // namespace
   template <class E>
   types::ndarray<long, types::pshape<long>> flatnonzero(E const &expr)
   {
@@ -38,7 +38,7 @@ namespace numpy
     types::pshape<long> shape = iter - buffer->data;
     return types::ndarray<long, types::pshape<long>>(std::move(buffer), shape);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

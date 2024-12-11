@@ -1,6 +1,7 @@
 #include "yql_s3_provider_impl.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
@@ -491,6 +492,10 @@ public:
             auto format = s3Object.Format().Ref().Content();
             const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
 
+            if (!NS3Util::ValidateS3ReadWriteSchema(structRowType, ctx)) {
+                return TStatus::Error;
+            }
+
             THashSet<TStringBuf> columns;
             for (const TItemExprType* item : structRowType->GetItems()) {
                 columns.emplace(item->GetName());
@@ -708,6 +713,14 @@ public:
                     return true;
                 }
 
+                if (name == "data.date.format"sv) {
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "data.date.format"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
+                }
+
                 if (name == "readmaxbytes"sv) {
                     TStringBuf unused;
                     if (!ExtractSettingValue(setting.Tail(), "read_max_bytes"sv, format, "raw"sv, ctx, unused)) {
@@ -785,7 +798,7 @@ public:
             };
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
                                      { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv, "constraints"sv,
-                                        "data.datetime.formatname"sv, "data.datetime.format"sv, "data.timestamp.formatname"sv, "data.timestamp.format"sv,
+                                        "data.datetime.formatname"sv, "data.datetime.format"sv, "data.timestamp.formatname"sv, "data.timestamp.format"sv, "data.date.format"sv,
                                         "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv, "pathpattern"sv, "pathpatternvariant"sv }, validator, ctx))
             {
                 return TStatus::Error;

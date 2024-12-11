@@ -13,6 +13,7 @@ namespace NKikimr {
 namespace NDataShard {
 
 using namespace NResourceBroker;
+using namespace NSharedCache;
 using namespace NTable;
 
 struct TTableStatsCoroBuilderArgs {
@@ -122,6 +123,7 @@ public:
         
         for (auto& loaded : msg->Loaded) {
             partPages.emplace(pageId, TPinnedPageRef(loaded.Page).GetData());
+            PageRefs.emplace_back(std::move(loaded.Page));
         }
 
         page = partPages.FindPtr(pageId);
@@ -229,6 +231,7 @@ private:
     }
 
     THashMap<const TPart*, THashMap<TPageId, TSharedData>> Pages;
+    TVector<TSharedPageRef> PageRefs;
     ui64 PagesSize = 0;
     ui64 CoroutineDeadline;
     TAutoPtr<TSpent> Spent;

@@ -146,7 +146,7 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Filter",
-                                                                "Predicate": "item.d < 110 Or item.d > 150"
+                                                                "Predicate": "item.d < 110 OR item.d > 150"
                                                             }
                                                         ],
                                                         "PlanNodeId": 10,

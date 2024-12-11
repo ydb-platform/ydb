@@ -1,0 +1,179 @@
+package NKikimrSchemeOp;
+option java_package = "ru.yandex.kikimr.proto";
+
+enum EOperationType {
+    ESchemeOpMkDir = 1;
+    ESchemeOpCreateTable = 2;
+    ESchemeOpCreatePersQueueGroup = 3;
+    ESchemeOpDropTable = 4;
+    ESchemeOpDropPersQueueGroup = 5;
+    ESchemeOpAlterTable = 6;
+    ESchemeOpAlterPersQueueGroup = 7;
+    ESchemeOpModifyACL = 8;
+    ESchemeOpRmDir = 9;
+    ESchemeOpSplitMergeTablePartitions = 10;
+    ESchemeOpBackup = 11;
+    ESchemeOpCreateSubDomain = 12;
+    ESchemeOpDropSubDomain = 13;
+    ESchemeOpCreateRtmrVolume = 14;
+    ESchemeOpCreateBlockStoreVolume = 15;
+    ESchemeOpAlterBlockStoreVolume = 16;
+    ESchemeOpAssignBlockStoreVolume = 17;
+    ESchemeOpDropBlockStoreVolume = 18;
+    ESchemeOpCreateKesus = 19;
+    ESchemeOpDropKesus = 20;
+    ESchemeOpForceDropSubDomain = 21;
+    ESchemeOpCreateSolomonVolume = 22;
+    ESchemeOpDropSolomonVolume = 23;
+    ESchemeOpAlterKesus = 24;
+    ESchemeOpAlterSubDomain = 25;
+    ESchemeOpAlterUserAttributes = 26;
+
+    // *************
+    // Unsafe operation. Nornally it is used for deleting database. It called by CMS, and CMS takes care of remaining resourses.
+    // If you apply it manually to an ordinary path in cases of emergenses, be aware of:
+    // 1 -- data transactions are ignored. Distributed transactions colud be broken so progress on other shards would be blocked forever
+    // 2 -- boorowed/loans blobs could be lost forever.
+    //
+    ESchemeOpForceDropUnsafe = 27;
+    //
+    // *************
+
+    ESchemeOpCreateIndexedTable = 28;
+    ESchemeOpCreateTableIndex = 29;
+    ESchemeOpCreateConsistentCopyTables = 30;
+    ESchemeOpDropTableIndex = 31;
+    ESchemeOpCreateExtSubDomain = 32;
+    ESchemeOpAlterExtSubDomain = 33;
+    ESchemeOpForceDropExtSubDomain = 34;
+    ESchemeOp_DEPRECATED_35 = 35;
+    ESchemeOpUpgradeSubDomain = 36;
+    ESchemeOpUpgradeSubDomainDecision = 37;
+    ESchemeOpCreateIndexBuild = 38;
+    ESchemeOpInitiateBuildIndexMainTable = 39;
+    ESchemeOpCreateLock = 40;
+    ESchemeOpApplyIndexBuild = 41;
+    ESchemeOpFinalizeBuildIndexMainTable = 42;
+    ESchemeOpAlterTableIndex = 43;
+    ESchemeOpAlterSolomonVolume = 44;
+    ESchemeOpDropLock = 45;
+
+    ESchemeOpFinalizeBuildIndexImplTable = 46;
+    ESchemeOpInitiateBuildIndexImplTable = 47;
+
+    ESchemeOpDropIndex = 48;
+    ESchemeOpDropTableIndexAtMainTable = 49;
+
+    ESchemeOpCancelIndexBuild = 50;
+
+    ESchemeOpCreateFileStore = 51;
+    ESchemeOpAlterFileStore = 52;
+    ESchemeOpDropFileStore = 53;
+
+    ESchemeOpRestore = 54;
+
+    ESchemeOpCreateColumnStore = 55;
+    ESchemeOpAlterColumnStore = 56;
+    ESchemeOpDropColumnStore = 57;
+    ESchemeOpCreateColumnTable = 58;
+    ESchemeOpAlterColumnTable = 59;
+    ESchemeOpDropColumnTable = 60;
+
+    ESchemeOpAlterLogin = 61;
+
+    /// CDC
+    // Create
+    ESchemeOpCreateCdcStream = 62;
+    ESchemeOpCreateCdcStreamImpl = 63;
+    ESchemeOpCreateCdcStreamAtTable = 64;
+    // Alter
+    ESchemeOpAlterCdcStream = 65;
+    ESchemeOpAlterCdcStreamImpl = 66;
+    ESchemeOpAlterCdcStreamAtTable = 67;
+    // Drop
+    ESchemeOpDropCdcStream = 68;
+    ESchemeOpDropCdcStreamImpl = 69;
+    ESchemeOpDropCdcStreamAtTable = 70;
+
+    ESchemeOpMoveTable = 71;
+    ESchemeOpMoveTableIndex = 72;
+
+    // Sequences
+    ESchemeOpCreateSequence = 73;
+    ESchemeOpAlterSequence = 74;
+    ESchemeOpDropSequence = 75;
+
+    // Replication
+    ESchemeOpCreateReplication = 76;
+    ESchemeOpAlterReplication = 77;
+    ESchemeOpDropReplicationCascade = 78;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // BlobDepot
+    ESchemeOpCreateBlobDepot = 79;
+    ESchemeOpAlterBlobDepot = 80;
+    ESchemeOpDropBlobDepot = 81;
+
+    // Move index
+    ESchemeOpMoveIndex = 82;
+
+    reserved 83, 84; // ESchemeOpAllocatePersQueueGroup and ESchemeOpDeallocatePersQueueGroup
+
+    // AlterExtSubDomain suboperations
+    ESchemeOpAlterExtSubDomainCreateHive = 85;
+
+    // External Table
+    ESchemeOpCreateExternalTable = 86;
+    ESchemeOpDropExternalTable = 87;
+    ESchemeOpAlterExternalTable = 88;
+
+    // External Data Source
+    ESchemeOpCreateExternalDataSource = 89;
+    ESchemeOpDropExternalDataSource = 90;
+    ESchemeOpAlterExternalDataSource = 91;
+
+    ESchemeOpCreateColumnBuild = 92;
+
+    // View
+    ESchemeOpCreateView = 93;
+    ESchemeOpAlterView = 94;
+    ESchemeOpDropView = 95;
+
+    ESchemeOpDropReplication = 96;
+
+    /// ContinuousBackup
+    // Create
+    ESchemeOpCreateContinuousBackup = 97;
+    // Alter
+    ESchemeOpAlterContinuousBackup = 98;
+    // Drop
+    ESchemeOpDropContinuousBackup = 99;
+
+    // Resource Pool
+    ESchemeOpCreateResourcePool = 100;
+    ESchemeOpDropResourcePool = 101;
+    ESchemeOpAlterResourcePool = 102;
+
+    ESchemeOpRestoreMultipleIncrementalBackups = 103;
+    ESchemeOpRestoreIncrementalBackupAtTable = 104;
+
+    // BackupCollection
+    ESchemeOpCreateBackupCollection = 105;
+    ESchemeOpAlterBackupCollection = 106;
+    ESchemeOpDropBackupCollection = 107;
+    ESchemeOpBackupBackupCollection = 109;
+    ESchemeOpBackupIncrementalBackupCollection = 110;
+    ESchemeOpRestoreBackupCollection = 111;
+
+    // Move sequence
+    ESchemeOpMoveSequence = 108;
+
+    // Transfer
+    ESchemeOpCreateTransfer = 112;
+    ESchemeOpAlterTransfer = 113;
+    ESchemeOpDropTransfer = 114;
+    ESchemeOpDropTransferCascade = 115;
+    
+    
+    // Some entries are grouped by semantics, so are out of order
+}

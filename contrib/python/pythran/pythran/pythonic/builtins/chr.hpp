@@ -15,7 +15,7 @@ namespace builtins
   {
     return types::str((char)v);
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

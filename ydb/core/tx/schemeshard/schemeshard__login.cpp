@@ -83,6 +83,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
             }
             if (loginResponse.Token) {
                 result->Record.SetToken(loginResponse.Token);
+                result->Record.SetSanitizedToken(loginResponse.SanitizedToken);
             }
 
         } else {

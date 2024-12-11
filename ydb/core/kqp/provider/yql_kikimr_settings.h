@@ -34,6 +34,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> _KqpSlowLogNoticeThresholdMs;
     NCommon::TConfSetting<ui32, false> _KqpSlowLogTraceThresholdMs;
     NCommon::TConfSetting<ui32, false> _KqpYqlSyntaxVersion;
+    NCommon::TConfSetting<bool, false> _KqpYqlAntlr4Parser;
     NCommon::TConfSetting<bool, false> _KqpAllowUnsafeCommit;
     NCommon::TConfSetting<ui32, false> _KqpMaxComputeActors;
     NCommon::TConfSetting<bool, false> _KqpEnableSpilling;
@@ -54,6 +55,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
     NCommon::TConfSetting<TString, false> OverridePlanner;
     NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
+    NCommon::TConfSetting<bool, false> EnableOrderPreservingLookupJoin;
 
     NCommon::TConfSetting<TString, false> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, false> OptimizerHints;
@@ -68,10 +70,11 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
 
-    NCommon::TConfSetting<ui32, false> MaxDPccpDPTableSize;
+    NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;
 
 
     NCommon::TConfSetting<ui32, false> MaxTasksPerStage;
+    NCommon::TConfSetting<ui32, false> MaxSequentialReadsInFlight;
 
     /* Runtime */
     NCommon::TConfSetting<bool, true> ScanQuery;
@@ -88,7 +91,8 @@ struct TKikimrSettings {
     bool HasOptEnableOlapPushdown() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
-
+    bool HasMaxSequentialReadsInFlight() const;
+    bool OrderPreservingLookupJoinEnabled() const;
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetUseLlvm() const;
     NDq::EHashJoinMode GetHashJoinMode() const;
@@ -164,6 +168,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnablePerStatementQueryExecution = false;
     bool EnableCreateTableAs = false;
     ui64 IdxLookupJoinsPrefixPointLimit = 1;
+    bool AllowOlapDataQuery = false;
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
     bool EnableHtapTx = false;

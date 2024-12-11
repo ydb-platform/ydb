@@ -58,8 +58,8 @@ class Daemon(object):
         command,
         cwd,
         timeout,
-        stdout_file,
-        stderr_file,
+        stdout_file="/dev/null",
+        stderr_file="/dev/null",
         stderr_on_error_lines=0,
         core_pattern=None,
     ):

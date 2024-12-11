@@ -1,11 +1,13 @@
 #include "cs_helper.h"
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <yql/essentials/types/binary_json/write.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <ydb/library/actors/core/event.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+
+#include <yql/essentials/types/binary_json/write.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>

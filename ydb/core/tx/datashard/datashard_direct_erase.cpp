@@ -105,13 +105,6 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         for (size_t ki : xrange(tableInfo.KeyColumnTypes.size())) {
             const NScheme::TTypeId kt = tableInfo.KeyColumnTypes[ki].GetTypeId();
             const TCell& cell = keyCells.GetCells()[ki];
-
-            if (kt == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127) {
-                status = NKikimrTxDataShard::TEvEraseRowsResponse::BAD_REQUEST;
-                error = "Keys with Uint8 column values >127 are currently prohibited";
-                return EStatus::Error;
-            }
-
             keyBytes += cell.Size();
             key.emplace_back(TRawTypeValue(cell.AsRef(), kt));
         }

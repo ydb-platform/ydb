@@ -1,14 +1,12 @@
 #pragma once
 
 #include "executor_pool.h"
-#include "executor_thread_ctx.h"
 
 
 namespace NActors {
 
-    struct TExecutorThreadCtx;
     struct TSharedExecutorPoolConfig;
-    class TBasicExecutorPool;
+    struct TSharedExecutorThreadCtx;
 
     struct TSharedPoolState {
         std::vector<i16> ThreadByPool;
@@ -22,48 +20,30 @@ namespace NActors {
             , BorrowedThreadByPool(poolCount, -1)
             , PoolByBorrowedThread(threadCount, -1)
         {}
+
+        TString ToString() const;
     };
 
-    class TSharedExecutorPool: public IActorThreadPool {
+    class ISharedExecutorPool : public IActorThreadPool {
     public:
-        TSharedExecutorPool(const TSharedExecutorPoolConfig &config, i16 poolCount, std::vector<i16> poolsWithThreads);
+        virtual ~ISharedExecutorPool() = default;
 
-        // IThreadPool
-        void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
-        void Start() override;
-        void PrepareStop() override;
-        void Shutdown() override;
-        bool Cleanup() override;
+        virtual TSharedExecutorThreadCtx *GetSharedThread(i16 poolId) = 0;
+        virtual void GetSharedStats(i16 pool, std::vector<TExecutorThreadStats>& statsCopy) = 0;
+        virtual void GetSharedStatsForHarmonizer(i16 pool, std::vector<TExecutorThreadStats>& statsCopy) = 0;
+        virtual TCpuConsumption GetThreadCpuConsumption(i16 poolId, i16 threadIdx) = 0;
+        virtual std::vector<TCpuConsumption> GetThreadsCpuConsumption(i16 poolId) = 0;
+        virtual void Init(const std::vector<IExecutorPool*>& pools, bool withThreads) = 0;
 
-        TSharedExecutorThreadCtx *GetSharedThread(i16 poolId);
-        void GetSharedStats(i16 pool, std::vector<TExecutorThreadStats>& statsCopy);
-        void GetSharedStatsForHarmonizer(i16 pool, std::vector<TExecutorThreadStats>& statsCopy);
-        TCpuConsumption GetThreadCpuConsumption(i16 poolId, i16 threadIdx);
-        std::vector<TCpuConsumption> GetThreadsCpuConsumption(i16 poolId);
+        virtual i16 ReturnOwnHalfThread(i16 pool) = 0;
+        virtual i16 ReturnBorrowedHalfThread(i16 pool) = 0;
+        virtual void GiveHalfThread(i16 from, i16 to) = 0;
 
-        void ReturnOwnHalfThread(i16 pool);
-        void ReturnBorrowedHalfThread(i16 pool);
-        void GiveHalfThread(i16 from, i16 to);
+        virtual i16 GetSharedThreadCount() const = 0;
 
-        i16 GetSharedThreadCount() const;
-
-        TSharedPoolState GetState() const;
-
-    private:
-        TSharedPoolState State;
-   
-        std::vector<TBasicExecutorPool*> Pools;
-
-        i16 PoolCount;
-        i16 SharedThreadCount;
-        std::unique_ptr<TSharedExecutorThreadCtx[]> Threads;
-
-        std::unique_ptr<NSchedulerQueue::TReader[]> ScheduleReaders;
-        std::unique_ptr<NSchedulerQueue::TWriter[]> ScheduleWriters;
-
-        TDuration TimePerMailbox;
-        ui32 EventsPerMailbox;
-        ui64 SoftProcessingDurationTs;
+        virtual TSharedPoolState GetState() const = 0;
     };
+
+    ISharedExecutorPool *CreateSharedExecutorPool(const TSharedExecutorPoolConfig &config, i16 poolCount, std::vector<i16> poolsWithThreads);
 
 }

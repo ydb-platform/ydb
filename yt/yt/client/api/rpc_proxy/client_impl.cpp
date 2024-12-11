@@ -112,7 +112,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool
 IChannelPtr TClient::CreateNonRetryingChannelByAddress(const std::string& address) const
 {
     return CreateCredentialsInjectingChannel(
-        Connection_->CreateChannelByAddress(TString(address)),
+        Connection_->CreateChannelByAddress(address),
         ClientOptions_);
 }
 
@@ -629,7 +629,7 @@ TFuture<std::vector<TTabletInfo>> TClient::GetTabletInfos(
                 auto& currentReplica = tabletInfo.TableReplicaInfos->emplace_back();
                 currentReplica.ReplicaId = FromProto<TGuid>(protoReplicaInfo.replica_id());
                 currentReplica.LastReplicationTimestamp = protoReplicaInfo.last_replication_timestamp();
-                currentReplica.Mode = CheckedEnumCast<ETableReplicaMode>(protoReplicaInfo.mode());
+                currentReplica.Mode = FromProto<ETableReplicaMode>(protoReplicaInfo.mode());
                 currentReplica.CurrentReplicationRowIndex = protoReplicaInfo.current_replication_row_index();
                 currentReplica.CommittedReplicationRowIndex = protoReplicaInfo.committed_replication_row_index();
                 currentReplica.ReplicationError = FromProto<TError>(protoReplicaInfo.replication_error());
@@ -1486,6 +1486,15 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
     }
+    if (options.FromTime) {
+        req->set_from_time(NYT::ToProto(*options.FromTime));
+    }
+    if (options.ToTime) {
+        req->set_to_time(NYT::ToProto(*options.ToTime));
+    }
+    if (options.ContinuationToken) {
+        req->set_continuation_token(*options.ContinuationToken);
+    }
 
     req->set_sort_field(static_cast<NProto::EJobSortField>(options.SortField));
     req->set_sort_order(static_cast<NProto::EJobSortDirection>(options.SortOrder));
@@ -2066,16 +2075,16 @@ TFuture<TMaintenanceCountsPerTarget> TClient::RemoveMaintenance(
                 counts[EMaintenanceType::DisableTabletCells] = rspValue->disable_tablet_cells();
                 counts[EMaintenanceType::PendingRestart] = rspValue->pending_restart();
             } else {
-                for (const auto& [type, count] : rspValue->removed_maintenance_counts()) {
-                    counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
+                for (auto [type, count] : rspValue->removed_maintenance_counts()) {
+                    counts[FromProto<EMaintenanceType>(type)] = count;
                 }
             }
         } else {
             result.reserve(rspValue->removed_maintenance_counts_per_target_size());
             for (const auto& [target, protoCounts] : rspValue->removed_maintenance_counts_per_target()) {
                 auto& counts = result[target];
-                for (const auto& [type, count] : protoCounts.counts()) {
-                    counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
+                for (auto [type, count] : protoCounts.counts()) {
+                    counts[FromProto<EMaintenanceType>(type)] = count;
                 }
             }
         }
@@ -2444,8 +2453,8 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
         return TGetQueryTrackerInfoResult{
-            .QueryTrackerStage = rsp->query_tracker_stage(),
-            .ClusterName = rsp->cluster_name(),
+            .QueryTrackerStage = FromProto<TString>(rsp->query_tracker_stage()),
+            .ClusterName = FromProto<TString>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
         };
@@ -2667,7 +2676,7 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
 }
 
 TFuture<TShuffleHandlePtr> TClient::StartShuffle(
-    const TString& account,
+    const std::string& account,
     int partitionCount,
     TTransactionId parentTransactionId,
     const TStartShuffleOptions& options)
@@ -2680,6 +2689,12 @@ TFuture<TShuffleHandlePtr> TClient::StartShuffle(
     req->set_account(account);
     req->set_partition_count(partitionCount);
     ToProto(req->mutable_parent_transaction_id(), parentTransactionId);
+    if (options.MediumName) {
+        req->set_medium_name(*options.MediumName);
+    }
+    if (options.ReplicationFactor) {
+        req->set_replication_factor(*options.ReplicationFactor);
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
         return ConvertTo<TShuffleHandlePtr>(TYsonString(rsp->shuffle_handle()));

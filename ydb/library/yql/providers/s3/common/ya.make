@@ -18,6 +18,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/events
     yql/essentials/public/issue
     yql/essentials/public/issue/protos
+    yql/essentials/ast
 )
 
 IF (CLANG AND NOT WITH_VALGRIND)

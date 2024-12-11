@@ -7,12 +7,31 @@
 namespace NKikimr {
 namespace NKqp {
 
-std::pair<TVector<NYql::TExprNode::TPtr>, NYql::TIssues> RewriteExpression(
+bool NeedToSplit(
     const NYql::TExprNode::TPtr& root,
-    NYql::TExprContext& ctx,
+    NYql::TExprContext& exprCtx);
+
+bool CheckRewrite(
+    const NYql::TExprNode::TPtr& root,
+    NYql::TExprContext& exprCtx);
+
+struct TPrepareRewriteInfo {
+    NYql::TExprNode::TPtr InputExpr;
+    TAutoPtr<NYql::IGraphTransformer> Transformer; 
+};
+
+TPrepareRewriteInfo PrepareRewrite(
+    const NYql::TExprNode::TPtr& root,
+    NYql::TExprContext& exprCtx,
     NYql::TTypeAnnotationContext& typeCtx,
     const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
     const TString& cluster);
+
+TVector<NYql::TExprNode::TPtr> RewriteExpression(
+    const NYql::TExprNode::TPtr& root,
+    NYql::TExprContext& ctx,
+    const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+    NYql::TExprNode::TPtr insertDataPtr);
 
 }
 }

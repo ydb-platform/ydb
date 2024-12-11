@@ -2,6 +2,9 @@
 
 #include "read_balancer.h"
 
+namespace NKikimr::NPQ::NApp {
+struct TNavigationBar;
+}
 namespace NKikimr::NPQ::NBalancing {
 
 using namespace NTabletFlatExecutor;
@@ -334,7 +337,7 @@ public:
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void ProcessPendingStats(const TActorContext& ctx);
 
-    void RenderApp(TStringStream& str) const;
+    void RenderApp(NApp::TNavigationBar&) const;
 
 private:
     TString LogPrefix() const;

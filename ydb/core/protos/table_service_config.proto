@@ -88,6 +88,7 @@ message TTableServiceConfig {
         optional uint32 DataQueryTimeoutMs = 3 [default = 300000];
         optional uint32 ScanQueryTimeoutMs = 4 [default = 600000];
         optional uint32 ResultRowsLimit = 5;
+        optional uint32 WaitCAStatsTimeoutMs = 6 [default = 1000];
     }
 
     message TShutdownSettings {
@@ -273,7 +274,7 @@ message TTableServiceConfig {
         ONLY_POINTS = 2; // Accepts iff point prefix len > 0
         MAX_USED_PREFIX = 3;
     }
-    optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = DISABLED];
+    optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = MAX_USED_PREFIX];
 
     optional bool EnableColumnsWithDefault = 51 [default = true];
 
@@ -347,4 +348,6 @@ message TTableServiceConfig {
     }
 
     optional EBlockTrackingMode BlockTrackingMode = 73 [ default = BLOCK_TRACKING_SERIALIZE ];
+
+    optional bool AllowOlapDataQuery = 74 [default = false];
 };

@@ -23,11 +23,11 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
 YT_DEFINE_GLOBAL(const NYT::NLogging::TLogger, Logger, "OOM");
 
-////////////////////////////////////////////////////////////////////////////////
-
-static const char* TCMallocStats[] = {
+const char* TCMallocStats[] = {
     "tcmalloc.per_cpu_caches_active",
     "generic.virtual_memory_used",
     "generic.physical_memory_used",
@@ -56,10 +56,10 @@ void OomWatchdog(TOomWatchdogOptions options)
         auto rss = GetProcessMemoryUsage().Rss;
 
         if (options.MemoryLimit && static_cast<i64>(rss) > *options.MemoryLimit) {
-            auto profile = NYTProf::ReadHeapProfile(tcmalloc::ProfileType::kHeap);
+            auto profile = NYTProf::CaptureHeapProfile(tcmalloc::ProfileType::kHeap);
 
             TFileOutput output(options.HeapDumpPath);
-            NYTProf::WriteProfile(&output, profile);
+            NYTProf::WriteCompressedProfile(&output, profile);
             output.Finish();
 
             auto rctDump = TRefCountedTracker::Get()->GetDebugInfo();
@@ -125,6 +125,10 @@ void OomWatchdog(TOomWatchdogOptions options)
         Sleep(TDuration::MilliSeconds(10));
     }
 }
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
 
 void EnableEarlyOomWatchdog(TOomWatchdogOptions options)
 {

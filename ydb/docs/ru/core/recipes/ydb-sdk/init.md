@@ -1,7 +1,5 @@
 # Инициализация драйвера
 
-{% include [work in progress message](_includes/addition.md) %}
-
 Для подключения к {{ ydb-short-name }} требуется указать обязательные параметры (подробнее читайте в разделе [Подключение к серверу {{ ydb-short-name }}](../../concepts/connect.md)) и дополнительные, которые определяют поведение драйвера при работе.
 
 Ниже приведены примеры кода подлкючения к {{ ydb-short-name }} (создания драйвера) в разных {{ ydb-short-name }} SDK.
@@ -100,10 +98,6 @@
     ```
 
   {% endcut %}
-
-- Java
-
-  {% include [work in progress message](_includes/addition.md) %}
 
 - Python
 

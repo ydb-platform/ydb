@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/io_formats/arrow)
 SIZE(SMALL)
 
 PEERDIR(
-    ydb/core/io_formats/arrow
+    ydb/core/io_formats/arrow/scheme
 
     # for NYql::NUdf alloc stuff used in binary_json
     yql/essentials/public/udf/service/exception_policy

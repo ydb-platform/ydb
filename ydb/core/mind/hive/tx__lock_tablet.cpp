@@ -95,6 +95,7 @@ public:
                 follower.InitiateStop(SideEffects);
             }
             tablet->InitiateStop(SideEffects);
+            db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::LeaderNode>(0);
         }
         if (tablet->LockedToActor == OwnerActor && tablet->PendingUnlockSeqNo == 0) {
             // Lock is still valid, watch for node disconnections

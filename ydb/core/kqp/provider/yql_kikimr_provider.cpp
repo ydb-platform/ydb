@@ -2,7 +2,7 @@
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
@@ -77,6 +77,9 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateBackupCollection::CallableName());
         DataSinkNames.insert(TKiAlterBackupCollection::CallableName());
         DataSinkNames.insert(TKiDropBackupCollection::CallableName());
+        DataSinkNames.insert(TKiBackup::CallableName());
+        DataSinkNames.insert(TKiBackupIncremental::CallableName());
+        DataSinkNames.insert(TKiRestore::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -126,7 +129,10 @@ struct TKikimrData {
             TYdbOperation::ModifyPermission |
             TYdbOperation::CreateBackupCollection |
             TYdbOperation::AlterBackupCollection |
-            TYdbOperation::DropBackupCollection;
+            TYdbOperation::DropBackupCollection |
+            TYdbOperation::Backup |
+            TYdbOperation::BackupIncremental |
+            TYdbOperation::Restore;
 
         SystemColumns = {
             {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
@@ -434,11 +440,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
     } else if(tagName == "permission") {
         KeyType = Type::Permission;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
+    } else if (tagName == "sequence") {
+        KeyType = Type::Sequence;
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
     } else if (tagName == "pgObject") {
         KeyType = Type::PGObject;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ObjectType = key.Child(0)->Child(2)->Child(0)->Content();
-    } else if (tagName == "backupCollection") {
+    } else if (tagName == "backupCollection" || tagName == "backup" || tagName == "restore") {
         KeyType = Type::BackupCollection;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ExplicitPrefix = key.Child(0)->Child(2)->Child(0)->Content();
@@ -572,7 +581,7 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
     YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId));
-    YQL_ENSURE(typeId == NKikimr::NScheme::NTypeIds::Decimal || NKikimr::NSchemeShard::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
+    YQL_ENSURE(typeId == NKikimr::NScheme::NTypeIds::Decimal || NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
 
     auto& protoType = *proto.MutableType();
     auto& protoValue = *proto.MutableValue();

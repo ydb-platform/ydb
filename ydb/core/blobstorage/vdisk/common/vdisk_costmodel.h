@@ -58,11 +58,11 @@ namespace NKikimr {
         ui64 WriteSpeedBps;
         ui64 ReadBlockSize;
         ui64 WriteBlockSize;
-        ui32 MinREALHugeBlobInBytes;
+        ui32 MinHugeBlobInBytes;
         TBlobStorageGroupType GType;
 
         TCostModel(ui64 seekTimeUs, ui64 readSpeedBps, ui64 writeSpeedBps, ui64 readBlockSize, ui64 writeBlockSize,
-                   ui32 minREALHugeBlobInBytes, TBlobStorageGroupType gType);
+                   ui32 minHugeBlobInBytes, TBlobStorageGroupType gType);
         TCostModel(const NKikimrBlobStorage::TVDiskCostSettings &settings, TBlobStorageGroupType gType);
 
         /// SETTINGS
@@ -95,7 +95,7 @@ namespace NKikimr {
                 WriteSpeedBps != other.WriteSpeedBps ||
                 ReadBlockSize != other.ReadBlockSize ||
                 WriteBlockSize != other.WriteBlockSize ||
-                MinREALHugeBlobInBytes != other.MinREALHugeBlobInBytes;
+                MinHugeBlobInBytes != other.MinHugeBlobInBytes;
         }
 
         // PDisk messages cost

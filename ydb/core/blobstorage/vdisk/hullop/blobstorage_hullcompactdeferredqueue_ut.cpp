@@ -6,6 +6,8 @@
 
 #include <util/system/sanitizers.h>
 
+#include <bit>
+
 using namespace NKikimr;
 
 const TBlobStorageGroupType GType(TBlobStorageGroupType::Erasure4Plus2Block);
@@ -115,7 +117,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
 
         TVector<ui32> maskopts;
         for (ui32 mask = 0; mask < 64; ++mask) {
-            ui32 num = PopCount(mask);
+            ui32 num = std::popcount(mask);
             if (1 <= num && num <= 3) {
                 maskopts.push_back(mask);
             }

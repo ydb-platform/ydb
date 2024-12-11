@@ -1,8 +1,8 @@
 diff --git a/include/__filesystem/directory_entry.h b/include/__filesystem/directory_entry.h
-index bb7a061..a839bcf 100644
+index fe3cace..96cfabf 100644
 --- a/include/__filesystem/directory_entry.h
 +++ b/include/__filesystem/directory_entry.h
-@@ -271,6 +271,8 @@ private:
+@@ -270,6 +270,8 @@ private:
      _Empty,
      _IterSymlink,
      _IterNonSymlink,
@@ -11,11 +11,11 @@ index bb7a061..a839bcf 100644
      _RefreshSymlink,
      _RefreshSymlinkUnresolved,
      _RefreshNonSymlink
-@@ -315,6 +317,30 @@ private:
+@@ -314,6 +316,30 @@ private:
      return __data;
    }
  
-+  _LIBCPP_INLINE_VISIBILITY
++  _LIBCPP_HIDE_FROM_ABI
 +  static __cached_data __create_iter_cached_result(file_type __ft, uintmax_t __size,
 +                                                   perms __perm, file_time_type __write_time) {
 +    __cached_data __data;
@@ -39,10 +39,10 @@ index bb7a061..a839bcf 100644
 +    return __data;
 +  }
 +
-   _LIBCPP_INLINE_VISIBILITY
+   _LIBCPP_HIDE_FROM_ABI
    void __assign_iter_entry(_Path&& __p, __cached_data __dt) {
-     __p_ = _VSTD::move(__p);
-@@ -359,12 +385,14 @@ private:
+     __p_ = std::move(__p);
+@@ -358,12 +384,14 @@ private:
      case _Empty:
        return __symlink_status(__p_, __ec).type();
      case _IterSymlink:
@@ -56,8 +56,8 @@ index bb7a061..a839bcf 100644
 +    case _IterCachedNonSymlink:
      case _RefreshNonSymlink:
        file_status __st(__data_.__type_);
-       if (__ec && !_VSTD_FS::exists(__st))
-@@ -381,9 +409,11 @@ private:
+       if (__ec && !filesystem::exists(__st))
+@@ -380,9 +408,11 @@ private:
      switch (__data_.__cache_type_) {
      case _Empty:
      case _IterSymlink:
@@ -69,7 +69,7 @@ index bb7a061..a839bcf 100644
      case _RefreshNonSymlink:
      case _RefreshSymlink: {
        file_status __st(__data_.__type_);
-@@ -403,8 +433,10 @@ private:
+@@ -402,8 +432,10 @@ private:
      case _Empty:
      case _IterNonSymlink:
      case _IterSymlink:
@@ -80,7 +80,7 @@ index bb7a061..a839bcf 100644
      case _RefreshNonSymlink:
      case _RefreshSymlink:
        return file_status(__get_ft(__ec), __data_.__non_sym_perms_);
-@@ -419,8 +451,10 @@ private:
+@@ -418,8 +450,10 @@ private:
      case _IterNonSymlink:
      case _IterSymlink:
        return __symlink_status(__p_, __ec);
@@ -91,37 +91,37 @@ index bb7a061..a839bcf 100644
      case _RefreshSymlink:
      case _RefreshSymlinkUnresolved:
        return file_status(__get_sym_ft(__ec), __data_.__sym_perms_);
-@@ -434,8 +468,10 @@ private:
+@@ -433,8 +467,10 @@ private:
      case _Empty:
      case _IterNonSymlink:
      case _IterSymlink:
 +    case _IterCachedSymlink:
      case _RefreshSymlinkUnresolved:
-       return _VSTD_FS::__file_size(__p_, __ec);
+       return filesystem::__file_size(__p_, __ec);
 +    case _IterCachedNonSymlink:
      case _RefreshSymlink:
      case _RefreshNonSymlink: {
        error_code __m_ec;
-@@ -459,6 +495,8 @@ private:
+@@ -458,6 +494,8 @@ private:
      case _Empty:
      case _IterNonSymlink:
      case _IterSymlink:
 +    case _IterCachedNonSymlink:
 +    case _IterCachedSymlink:
      case _RefreshSymlinkUnresolved:
-       return _VSTD_FS::__hard_link_count(__p_, __ec);
+       return filesystem::__hard_link_count(__p_, __ec);
      case _RefreshSymlink:
-@@ -480,6 +518,8 @@ private:
+@@ -479,6 +517,8 @@ private:
      case _IterSymlink:
      case _RefreshSymlinkUnresolved:
-       return _VSTD_FS::__last_write_time(__p_, __ec);
+       return filesystem::__last_write_time(__p_, __ec);
 +    case _IterCachedNonSymlink:
 +    case _IterCachedSymlink:
      case _RefreshSymlink:
      case _RefreshNonSymlink: {
        error_code __m_ec;
 diff --git a/src/filesystem/directory_iterator.cpp b/src/filesystem/directory_iterator.cpp
-index 151fb2f..cf9d631 100644
+index 0fd6265..a705c5b 100644
 --- a/src/filesystem/directory_iterator.cpp
 +++ b/src/filesystem/directory_iterator.cpp
 @@ -80,14 +80,12 @@ public:
@@ -144,7 +144,7 @@ index 151fb2f..cf9d631 100644
    }
  
 diff --git a/src/filesystem/file_descriptor.h b/src/filesystem/file_descriptor.h
-index d3a668f..7bc0a4d 100644
+index 67f6708..03c52e7 100644
 --- a/src/filesystem/file_descriptor.h
 +++ b/src/filesystem/file_descriptor.h
 @@ -99,11 +99,18 @@ inline uintmax_t get_file_size(const WIN32_FIND_DATAW& data) {

@@ -90,6 +90,10 @@ public:
         return !ItemCount_;
     }
 
+    bool IsBlock() const {
+        return IsBlock_;
+    }
+
     void Clear();
     NYql::TChunkedBuffer Finish();
 

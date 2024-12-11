@@ -3,7 +3,6 @@ IF (NOT OPENSOURCE)
 UNITTEST_FOR(yql/essentials/core)
 
 SRCS(
-    yql_csv_ut.cpp
     yql_column_order_ut.cpp
     yql_execution_ut.cpp
     yql_expr_constraint_ut.cpp
@@ -22,6 +21,7 @@ PEERDIR(
     library/cpp/yson/node
     yql/essentials/ast
     yql/essentials/core
+    yql/essentials/core/cbo/simple
     yql/essentials/core/facade
     yql/essentials/core/services
     yql/essentials/core/services/mounts
@@ -35,10 +35,10 @@ PEERDIR(
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/schema/parser
     yql/essentials/providers/result/provider
-    contrib/ydb/library/yql/providers/yt/gateway/file
-    contrib/ydb/library/yql/providers/yt/provider
-    contrib/ydb/library/yql/providers/yt/codec/codegen
-    contrib/ydb/library/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/gateway/file
+    yt/yql/providers/yt/provider
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/llvm14
     yql/essentials/minikql/comp_nodes/llvm14
     yql/essentials/minikql/invoke_builtins/llvm14
     yql/essentials/sql/pg
@@ -46,7 +46,7 @@ PEERDIR(
 )
 
 RESOURCE(
-    contrib/ydb/library/yql/cfg/tests/fs.conf fs.conf
+    yql/essentials/cfg/tests/fs.conf fs.conf
 )
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)

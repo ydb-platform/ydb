@@ -397,7 +397,7 @@ private:
 
                 switch (column->Type.GetTypeId()) {
                 case NScheme::NTypeIds::Pg: {
-                    // TODO: support pg types
+                    // no need to support pg types in the deprecated minikql engine
                     YQL_ENSURE(false, "pg types are not supported");
                     break;
                 }

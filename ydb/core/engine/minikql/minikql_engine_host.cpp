@@ -498,7 +498,7 @@ public:
                     }
                     firstKey.AppendNoAlias((const char*)typeIds.data(), tuple.ColumnCount * sizeof(NScheme::TTypeId));
                     firstKey.AppendNoAlias(cells);
-                    // TODO: support pg types
+                    // no need to support pg types in the deprecated minikql engine
 
                     if (List.FirstKey) {
                         Y_DEBUG_ABORT_UNLESS(*List.FirstKey == firstKey);

@@ -11,8 +11,8 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  auto average(E const &expr, types::none_type const &axis)
-      -> decltype(sum(expr, axis) / 1.)
+  auto average(E const &expr,
+               types::none_type const &axis) -> decltype(sum(expr, axis) / 1.)
   {
     return sum(expr, axis) / double(expr.flat_size());
   }
@@ -26,13 +26,13 @@ namespace numpy
 
   template <class E, class W>
   auto average(E const &expr, types::none_type const &axis, W const &weights)
-      -> decltype(average(expr *asarray(weights) / average(asarray(weights))))
+      -> decltype(average(expr * asarray(weights) / average(asarray(weights))))
   {
     auto aweights = asarray(weights);
     auto weighted_expr = expr * aweights / average(aweights);
     return average(weighted_expr);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

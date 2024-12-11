@@ -88,7 +88,7 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
         }
 
         auto& back = cells.emplace_back();
-        if (!CellFromProtoVal(typeInfo, typeMod, &column.default_from_literal().value(), back, err, valueDataPool)) {
+        if (!CellFromProtoVal(typeInfo, typeMod, &column.default_from_literal().value(), false, back, err, valueDataPool)) {
             return false;
         }
     }

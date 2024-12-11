@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_OPERATOR_ITEMGETTER_HPP
 #define PYTHONIC_INCLUDE_OPERATOR_ITEMGETTER_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/tuple.hpp"
+#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/utils/int_.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -44,7 +44,7 @@ namespace operator_
   itemgetter(long const &item1, long const &item2, L... items);
 
   DEFINE_FUNCTOR(pythonic::operator_, itemgetter);
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

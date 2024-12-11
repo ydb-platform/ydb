@@ -537,6 +537,9 @@ public:
 
         TMaybe<Ydb::Cms::SchemaOperationQuotas> SchemaOperationQuotas;
         TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
+        TMaybe<Ydb::Cms::ScaleRecommenderPolicies> ScaleRecommenderPolicies;
+        bool ScaleRecommenderPoliciesConfirmed;
+        TActorId ScaleRecommenderPoliciesWorker;
         TString CreateIdempotencyKey;
         TString AlterIdempotencyKey;
     };
@@ -799,6 +802,7 @@ public:
     void RequestTenantSlotsState(TTenant::TPtr tenant, const TActorContext &ctx);
     void RequestTenantSlotsStats(const TActorContext &ctx);
     void RetryResourcesRequests(const TActorContext &ctx);
+    void CongifureScaleRecommender(TTenant::TPtr tenant, const TActorContext &ctx);
 
     void FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status);
     void FillTenantAllocatedSlots(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status,
@@ -914,6 +918,10 @@ public:
                                 const Ydb::Cms::DatabaseQuotas &quotas,
                                 TTransactionContext &txc,
                                 const TActorContext &ctx);
+    void DbUpdateScaleRecommenderPolicies(TTenant::TPtr tenant,
+                                          const Ydb::Cms::ScaleRecommenderPolicies &policies,
+                                          TTransactionContext &txc,
+                                          const TActorContext &ctx);
 
     void Handle(TEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvCreateTenantRequest::TPtr &ev, const TActorContext &ctx);

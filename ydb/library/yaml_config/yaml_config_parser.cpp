@@ -18,6 +18,7 @@
 #include <ydb/core/protos/tablet.pb.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/util.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
 
 #include <util/generic/string.h>
 
@@ -32,17 +33,6 @@ NKikimrConfig::TExtendedHostConfigDrive::TransformTypeToTypeForTHostConfigDrive<
 }
 
 namespace NKikimr::NYaml {
-
-    template<typename T>
-    bool SetScalarFromYaml(const YAML::Node& yaml, NJson::TJsonValue& json, NJson::EJsonValueType jsonType) {
-        T data;
-        if (YAML::convert<T>::decode(yaml, data)) {
-            json.SetType(jsonType);
-            json.SetValue(data);
-            return true;
-        }
-        return false;
-    }
 
     const NJson::TJsonValue::TMapType& GetMapSafe(const NJson::TJsonValue& json) {
         try {
@@ -60,57 +50,6 @@ namespace NKikimr::NYaml {
 
     void EnsureJsonFieldIsArray(const NJson::TJsonValue& json, const TStringBuf& key) {
         Y_ENSURE_BT(json.Has(key) && GetMapSafe(json).at(key).IsArray(), "Array field `" << key << "` must be specified.");
-    }
-
-    NJson::TJsonValue Yaml2Json(const YAML::Node& yaml, bool isRoot) {
-        Y_ENSURE_BT(!isRoot || yaml.IsMap(), "YAML root is expected to be a map");
-
-        NJson::TJsonValue json;
-
-        if (yaml.IsMap()) {
-            for (const auto& it : yaml) {
-                const auto& key = it.first.as<TString>();
-
-                Y_ENSURE_BT(!json.Has(key), "Duplicate key entry: " << key);
-
-                json[key] = Yaml2Json(it.second, false);
-            }
-            return json;
-        } else if (yaml.IsSequence()) {
-            json.SetType(NJson::EJsonValueType::JSON_ARRAY);
-            for (const auto& it : yaml) {
-                json.AppendValue(Yaml2Json(it, false));
-            }
-            return json;
-        } else if (yaml.IsScalar()) {
-            if (SetScalarFromYaml<ui64>(yaml, json, NJson::EJsonValueType::JSON_UINTEGER)) {
-                return json;
-            }
-
-            if (SetScalarFromYaml<i64>(yaml, json, NJson::EJsonValueType::JSON_INTEGER)) {
-                return json;
-            }
-
-            if (SetScalarFromYaml<bool>(yaml, json, NJson::EJsonValueType::JSON_BOOLEAN)) {
-                return json;
-            }
-
-            if (SetScalarFromYaml<double>(yaml, json, NJson::EJsonValueType::JSON_DOUBLE)) {
-                return json;
-            }
-
-            if (SetScalarFromYaml<TString>(yaml, json, NJson::EJsonValueType::JSON_STRING)) {
-                return json;
-            }
-        } else if (yaml.IsNull()) {
-            json.SetType(NJson::EJsonValueType::JSON_NULL);
-            return json;
-        } else if (!yaml.IsDefined()) {
-            json.SetType(NJson::EJsonValueType::JSON_UNDEFINED);
-            return json;
-        }
-
-        ythrow yexception() << "Unknown type of YAML node: '" << yaml.as<TString>() << "'";
     }
 
     YAML::Node Json2Yaml(const NJson::TJsonValue& json) {
@@ -1504,6 +1443,15 @@ namespace NKikimr::NYaml {
         TTransformContext ctx;
         NKikimrConfig::TEphemeralInputFields ephemeralConfig;
 
+        if (json.Has("metadata")) {
+            ValidateMetadata(json["metadata"]);
+
+            Y_ENSURE_BT(json.Has("config") && json["config"].IsMap(),
+                       "'config' must be an object when 'metadata' is present");
+
+            jsonNode = json["config"];
+        }
+
         if (transform) {
             ExtractExtraFields(jsonNode, ctx);
 
@@ -1525,9 +1473,15 @@ namespace NKikimr::NYaml {
         NJson::TJsonValue jsonNode = Yaml2Json(yamlNode, true);
 
         NKikimrConfig::TAppConfig config;
+
         Parse(jsonNode, GetJsonToProtoConfig(), config, transform);
 
         return config;
+    }
+
+    void ValidateMetadata(const NJson::TJsonValue& metadata) {
+        Y_ENSURE_BT(metadata.Has("cluster") && metadata["cluster"].IsString(), "Metadata must contain a string 'cluster' field");
+        Y_ENSURE_BT(metadata.Has("version") && metadata["version"].IsUInteger(), "Metadata must contain an unsigned int 'version' field");
     }
 
 } // NKikimr::NYaml

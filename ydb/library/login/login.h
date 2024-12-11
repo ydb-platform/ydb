@@ -48,6 +48,7 @@ public:
 
     struct TLoginUserResponse : TBasicResponse {
         TString Token;
+        TString SanitizedToken; // Token for audit logs
     };
 
     struct TValidateTokenRequest : TBasicRequest {
@@ -178,6 +179,7 @@ public:
     std::vector<TString> GetGroupsMembership(const TString& member);
     static TString GetTokenAudience(const TString& token);
     static std::chrono::system_clock::time_point GetTokenExpiresAt(const TString& token);
+    static TString SanitizeJwtToken(const TString& token);
 
 private:
     std::deque<TKeyRecord>::iterator FindKeyIterator(ui64 keyId);

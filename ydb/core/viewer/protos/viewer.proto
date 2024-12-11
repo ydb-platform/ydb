@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import "ydb/core/graph/protos/graph.proto";
 import "ydb/core/protos/tablet_counters.proto";
+import "ydb/core/protos/memory_stats.proto";
 import "ydb/core/protos/node_whiteboard.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/tablet.proto";
@@ -396,6 +397,7 @@ message TTenant {
     repeated TStorageUsage TablesStorage = 44;
     repeated TStorageUsage DatabaseStorage = 45;
     uint32 CoresTotal = 50;
+    optional NKikimrMemory.TMemoryStats MemoryStats = 51;
 }
 
 message TTenants {

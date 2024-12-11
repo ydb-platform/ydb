@@ -1050,6 +1050,98 @@ TEST(TPhoenixTest, RawPtrCycle2)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NWeakPtrCycle {
+
+struct A
+    : public TRefCounted
+{
+    TWeakPtr<A> X;
+
+    PHOENIX_DECLARE_TYPE(A, 0x5e1325ef);
+};
+
+void A::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, X)();
+}
+
+PHOENIX_DEFINE_TYPE(A);
+
+struct B
+    : public TRefCounted
+{
+    TIntrusivePtr<A> L;
+    TIntrusivePtr<A> R;
+
+    PHOENIX_DECLARE_TYPE(B, 0x7ccd0099);
+};
+
+void B::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, L)();
+    PHOENIX_REGISTER_FIELD(2, R)();
+}
+
+PHOENIX_DEFINE_TYPE(B);
+
+} // namespace NWeakPtrCycle
+
+TEST(TPhoenixTest, WeakPtrCycle1)
+{
+    using namespace NWeakPtrCycle;
+
+    auto a1 = New<A>();
+    EXPECT_EQ(a1->GetWeakRefCount(), 1);
+
+    a1->X = a1;
+
+    auto a2 = Deserialize<TIntrusivePtr<A>>(Serialize(a1));
+    EXPECT_EQ(a2->GetRefCount(), 1);
+    EXPECT_EQ(a2->GetWeakRefCount(), 2);
+    EXPECT_TRUE(a2->X.Lock());
+    EXPECT_EQ(a2->X.Lock(), a2);
+}
+
+TEST(TPhoenixTest, WeakPtrCycle2)
+{
+    using namespace NWeakPtrCycle;
+
+    auto a1 = New<A>();
+    auto a2 = New<A>();
+    a1->X = a2;
+    a2->X = a1;
+    a2 = nullptr;
+
+    auto a3 = Deserialize<TIntrusivePtr<A>>(Serialize(a1));
+    EXPECT_EQ(a3->GetRefCount(), 1);
+    EXPECT_EQ(a3->GetWeakRefCount(), 1);
+    EXPECT_TRUE(!a3->X.Lock());
+
+    auto a4 = Deserialize<TWeakPtr<A>>(Serialize(a1->X));
+    EXPECT_TRUE(!a4.Lock());
+}
+
+TEST(TPhoenixTest, WeakPtrCycle3)
+{
+    using namespace NWeakPtrCycle;
+
+    auto b1 = New<B>();
+    b1->L = New<A>();
+    b1->R = New<A>();
+    b1->L->X = b1->R;
+    b1->R->X = b1->L;
+
+    auto b2 = Deserialize<TIntrusivePtr<B>>(Serialize(b1));
+    EXPECT_EQ(b2->L->GetRefCount(), 1);
+    EXPECT_EQ(b2->L->GetWeakRefCount(), 2);
+    EXPECT_EQ(b2->R->GetRefCount(), 1);
+    EXPECT_EQ(b2->R->GetWeakRefCount(), 2);
+    EXPECT_EQ(b2->L->X.Lock(), b2->R);
+    EXPECT_EQ(b2->R->X.Lock(), b2->L);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NIntrusiveAndRawPtr {
 
 struct A;
@@ -1103,6 +1195,104 @@ TEST(TPhoenixTest, IntrusiveAndRawPtr)
     EXPECT_EQ(a2->Y->GetRefCount(), 1);
     EXPECT_EQ(a2->Y->V, 7);
     EXPECT_EQ(a2->X, a2->Y);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NIntrusiveAndWeakPtr {
+
+struct A;
+struct B;
+
+struct A
+    : public TRefCounted
+{
+    B* X = nullptr;
+    TIntrusivePtr<B> Y;
+
+    PHOENIX_DECLARE_TYPE(A, 0xab7d77a9);
+};
+
+void A::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, X)();
+    PHOENIX_REGISTER_FIELD(2, Y)();
+}
+
+PHOENIX_DEFINE_TYPE(A);
+
+struct B
+    : public TRefCounted
+{
+    int V = -1;
+    TWeakPtr<A> W;
+
+    PHOENIX_DECLARE_TYPE(B, 0xea924741);
+};
+
+void B::RegisterMetadata(auto&& registrar)
+{
+    registrar.template Field<1, &B::V>("v")();
+    PHOENIX_REGISTER_FIELD(2, W)();
+}
+
+PHOENIX_DEFINE_TYPE(B);
+
+struct C
+    : public TRefCounted
+{
+    TIntrusivePtr<A> APtr;
+    TIntrusivePtr<B> BPtr;
+    TWeakPtr<B> BWeakPtr;
+
+    PHOENIX_DECLARE_TYPE(C, 0xea038112);
+};
+
+void C::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, APtr)();
+    PHOENIX_REGISTER_FIELD(2, BPtr)();
+    PHOENIX_REGISTER_FIELD(3, BWeakPtr)();
+}
+
+PHOENIX_DEFINE_TYPE(C);
+
+} // namespace NIntrusiveAndWeakPtr
+
+TEST(TPhoenixTest, IntrusiveAndWeakPtr)
+{
+    using namespace NIntrusiveAndWeakPtr;
+
+    auto c1 = New<C>();
+    c1->APtr = New<A>();
+    c1->BPtr = New<B>();
+    c1->BWeakPtr = c1->BPtr;
+    c1->BPtr->W = c1->APtr;
+    c1->APtr->Y = c1->BPtr;
+    EXPECT_EQ(c1->BPtr->GetRefCount(), 2);
+    EXPECT_EQ(c1->APtr->Y->GetRefCount(), 2);
+
+    c1->APtr->Y->V = 7;
+    c1->APtr->X = c1->APtr->Y.Get();
+
+    auto c2 = Deserialize<TIntrusivePtr<C>>(Serialize(c1));
+    EXPECT_EQ(c2->APtr->GetRefCount(), 1);
+    EXPECT_EQ(c2->APtr->GetWeakRefCount(), c1->APtr->GetWeakRefCount());
+    EXPECT_EQ(c2->APtr->Y->GetRefCount(), 2);
+    EXPECT_EQ(c2->APtr->Y->GetWeakRefCount(), c1->APtr->Y->GetWeakRefCount());
+    EXPECT_EQ(c2->APtr->Y->W.Lock(), c2->APtr);
+    EXPECT_EQ(c2->APtr->Y->V, 7);
+    EXPECT_EQ(c2->APtr->X, c2->APtr->Y);
+
+    EXPECT_EQ(c2->BPtr->GetRefCount(), 2);
+    EXPECT_EQ(c2->BPtr->GetWeakRefCount(), c1->BPtr->GetWeakRefCount());
+    EXPECT_EQ(c2->BPtr->W.Lock(), c2->APtr);
+    EXPECT_EQ(c2->BPtr->W.Lock()->Y, c2->BPtr);
+    EXPECT_EQ(c2->BPtr->V, 7);
+
+    EXPECT_EQ(c2->BWeakPtr.Lock()->GetWeakRefCount(), c1->BPtr->GetWeakRefCount());
+    EXPECT_EQ(c2->BWeakPtr.Lock()->GetRefCount(), 3);
+    EXPECT_EQ(c2->BWeakPtr.Lock(), c2->BPtr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

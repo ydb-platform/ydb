@@ -776,8 +776,7 @@ protected:
             }
 
             LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
-            bool sent = this->Send(computeActorId, channelsInfoEv.Release());
-            YQL_ENSURE(sent, "Failed to send event to " << computeActorId.ToString());
+            this->Send(computeActorId, channelsInfoEv.Release());
         }
     }
 
@@ -1794,7 +1793,8 @@ protected:
 
         LOG_E("Sending timeout response to: " << Target);
 
-        this->Shutdown();
+        // Pass away immediately, since we already sent response - don't wait for stats.
+        this->PassAway();
     }
 
     virtual void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,

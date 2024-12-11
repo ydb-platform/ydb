@@ -17,15 +17,15 @@ namespace builtins
       return {};
     }
     template <class T, size_t N>
-    types::static_list<T, N> static_list(types::array<T, N> const &other);
+    types::static_list<T, N> static_list(types::array_tuple<T, N> const &other);
     template <class T, size_t N>
-    types::static_list<T, N> static_list(types::array<T, N> &other);
+    types::static_list<T, N> static_list(types::array_tuple<T, N> &other);
     template <class T, size_t N>
-    types::static_list<T, N> static_list(types::array<T, N> &&other);
+    types::static_list<T, N> static_list(types::array_tuple<T, N> &&other);
 
     template <class T>
-    auto static_list(T &&other) -> decltype(
-        pythonic::builtins::functor::list{}(std::forward<T>(other)));
+    auto static_list(T &&other) -> decltype(pythonic::builtins::functor::list{}(
+                                    std::forward<T>(other)));
 
     template <class T0, class... Tys>
     types::static_list<typename __combined<T0, Tys...>::type,

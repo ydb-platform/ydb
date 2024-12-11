@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import ssl
 import typing
-from typing import Optional
 
 from .._exceptions import ReadError
 from .base import (
@@ -21,19 +22,19 @@ class MockSSLObject:
 
 
 class MockStream(NetworkStream):
-    def __init__(self, buffer: typing.List[bytes], http2: bool = False) -> None:
+    def __init__(self, buffer: list[bytes], http2: bool = False) -> None:
         self._buffer = buffer
         self._http2 = http2
         self._closed = False
 
-    def read(self, max_bytes: int, timeout: Optional[float] = None) -> bytes:
+    def read(self, max_bytes: int, timeout: float | None = None) -> bytes:
         if self._closed:
             raise ReadError("Connection closed")
         if not self._buffer:
             return b""
         return self._buffer.pop(0)
 
-    def write(self, buffer: bytes, timeout: Optional[float] = None) -> None:
+    def write(self, buffer: bytes, timeout: float | None = None) -> None:
         pass
 
     def close(self) -> None:
@@ -42,8 +43,8 @@ class MockStream(NetworkStream):
     def start_tls(
         self,
         ssl_context: ssl.SSLContext,
-        server_hostname: Optional[str] = None,
-        timeout: Optional[float] = None,
+        server_hostname: str | None = None,
+        timeout: float | None = None,
     ) -> NetworkStream:
         return self
 
@@ -55,7 +56,7 @@ class MockStream(NetworkStream):
 
 
 class MockBackend(NetworkBackend):
-    def __init__(self, buffer: typing.List[bytes], http2: bool = False) -> None:
+    def __init__(self, buffer: list[bytes], http2: bool = False) -> None:
         self._buffer = buffer
         self._http2 = http2
 
@@ -63,17 +64,17 @@ class MockBackend(NetworkBackend):
         self,
         host: str,
         port: int,
-        timeout: Optional[float] = None,
-        local_address: Optional[str] = None,
-        socket_options: typing.Optional[typing.Iterable[SOCKET_OPTION]] = None,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: typing.Iterable[SOCKET_OPTION] | None = None,
     ) -> NetworkStream:
         return MockStream(list(self._buffer), http2=self._http2)
 
     def connect_unix_socket(
         self,
         path: str,
-        timeout: Optional[float] = None,
-        socket_options: typing.Optional[typing.Iterable[SOCKET_OPTION]] = None,
+        timeout: float | None = None,
+        socket_options: typing.Iterable[SOCKET_OPTION] | None = None,
     ) -> NetworkStream:
         return MockStream(list(self._buffer), http2=self._http2)
 
@@ -82,19 +83,19 @@ class MockBackend(NetworkBackend):
 
 
 class AsyncMockStream(AsyncNetworkStream):
-    def __init__(self, buffer: typing.List[bytes], http2: bool = False) -> None:
+    def __init__(self, buffer: list[bytes], http2: bool = False) -> None:
         self._buffer = buffer
         self._http2 = http2
         self._closed = False
 
-    async def read(self, max_bytes: int, timeout: Optional[float] = None) -> bytes:
+    async def read(self, max_bytes: int, timeout: float | None = None) -> bytes:
         if self._closed:
             raise ReadError("Connection closed")
         if not self._buffer:
             return b""
         return self._buffer.pop(0)
 
-    async def write(self, buffer: bytes, timeout: Optional[float] = None) -> None:
+    async def write(self, buffer: bytes, timeout: float | None = None) -> None:
         pass
 
     async def aclose(self) -> None:
@@ -103,8 +104,8 @@ class AsyncMockStream(AsyncNetworkStream):
     async def start_tls(
         self,
         ssl_context: ssl.SSLContext,
-        server_hostname: Optional[str] = None,
-        timeout: Optional[float] = None,
+        server_hostname: str | None = None,
+        timeout: float | None = None,
     ) -> AsyncNetworkStream:
         return self
 
@@ -116,7 +117,7 @@ class AsyncMockStream(AsyncNetworkStream):
 
 
 class AsyncMockBackend(AsyncNetworkBackend):
-    def __init__(self, buffer: typing.List[bytes], http2: bool = False) -> None:
+    def __init__(self, buffer: list[bytes], http2: bool = False) -> None:
         self._buffer = buffer
         self._http2 = http2
 
@@ -124,17 +125,17 @@ class AsyncMockBackend(AsyncNetworkBackend):
         self,
         host: str,
         port: int,
-        timeout: Optional[float] = None,
-        local_address: Optional[str] = None,
-        socket_options: typing.Optional[typing.Iterable[SOCKET_OPTION]] = None,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: typing.Iterable[SOCKET_OPTION] | None = None,
     ) -> AsyncNetworkStream:
         return AsyncMockStream(list(self._buffer), http2=self._http2)
 
     async def connect_unix_socket(
         self,
         path: str,
-        timeout: Optional[float] = None,
-        socket_options: typing.Optional[typing.Iterable[SOCKET_OPTION]] = None,
+        timeout: float | None = None,
+        socket_options: typing.Iterable[SOCKET_OPTION] | None = None,
     ) -> AsyncNetworkStream:
         return AsyncMockStream(list(self._buffer), http2=self._http2)
 

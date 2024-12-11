@@ -92,6 +92,11 @@ public:
         TabletCounters->OnWritePutBlobsSuccess(rowsWritten);
         CSCounters.OnWritePutBlobsSuccess(d);
     }
+
+    void OnWritePutBlobsFailed(const TDuration d, const ui64 /*rowsWritten*/) const {
+        TabletCounters->OnWriteFailure();
+        CSCounters.OnWritePutBlobsFail(d);
+    }
 };
 
 } // namespace NKikimr::NColumnShard

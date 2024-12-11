@@ -225,7 +225,7 @@ class ResponseSource:
             chunks = deque()
             done = False
             current_size = 0
-            read_gen = response.read_chunked(chunk_size, decompress is None)
+            read_gen = response.stream(chunk_size, decompress is None)
             while True:
                 while not done:
                     chunk = next(read_gen, None) # Always try to read at least one chunk if there are any left

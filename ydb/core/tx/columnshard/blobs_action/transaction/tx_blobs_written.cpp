@@ -105,26 +105,51 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
             AFL_VERIFY(CommitSnapshot);
             Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
             Self->OperationsManager->CommitTransactionOnComplete(*Self, op->GetLockId(), *CommitSnapshot);
+            Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
         }
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
     }
     Self->SetupCompaction(pathIds);
-    Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
 }
 
 TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus,
     const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, std::vector<TInsertedPortions>&& packs,
-    const std::vector<TFailedWrite>& fails)
+    const std::vector<TNoDataWrite>& noDataWrites)
     : TBase(self, "TTxBlobsWritingFinished")
-    , PutBlobResult(writeStatus)
     , Packs(std::move(packs))
     , WritingActions(writingActions) {
-    Y_UNUSED(PutBlobResult);
-    for (auto&& i : fails) {
+    for (auto&& i : noDataWrites) {
         auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)i.GetWriteMeta().GetWriteId());
         Results.emplace_back(std::move(ev), i.GetWriteMeta().GetSource(), op->GetCookie());
+    }
+}
+
+bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorContext& ctx) {
+    for (auto&& pack : Packs) {
+        const auto& writeMeta = pack.GetWriteMeta();
+        AFL_VERIFY(!writeMeta.HasLongTxId());
+        auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
+        Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
+        Self->OperationsManager->AbortTransactionOnExecute(*Self, op->GetLockId(), txc);
+
+        auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(),
+            NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, "cannot write blob: " + ::ToString(PutBlobResult));
+        Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
+    }
+    return true;
+}
+
+void TTxBlobsWritingFailed::DoComplete(const TActorContext& ctx) {
+    for (auto&& i : Results) {
+        i.DoSendReply(ctx);
+        Self->Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::PutBlob);
+    }
+    for (auto&& pack : Packs) {
+        const auto& writeMeta = pack.GetWriteMeta();
+        auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
+        Self->OperationsManager->AbortTransactionOnComplete(*Self, op->GetLockId());
     }
 }
 

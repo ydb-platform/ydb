@@ -168,6 +168,74 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         UNIT_ASSERT_VALUES_UNEQUAL("root@builtin", params.GetOAuthToken().GetToken());
     }
 
+    Y_UNIT_TEST(ConsistencyMode) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication1"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication1");
+            const auto& config = desc.GetPathDescription().GetReplicationDescription().GetConfig();
+            UNIT_ASSERT(config.HasWeakConsistency());
+        }
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication2"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+              WeakConsistency {
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication2");
+            const auto& config = desc.GetPathDescription().GetReplicationDescription().GetConfig();
+            UNIT_ASSERT(config.HasWeakConsistency());
+        }
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication3"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+              StrongConsistency {
+                CommitIntervalMilliSeconds: 10000
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication3");
+            const auto& config = desc.GetPathDescription().GetReplicationDescription().GetConfig();
+            UNIT_ASSERT(config.HasStrongConsistency());
+            UNIT_ASSERT_VALUES_EQUAL(config.GetStrongConsistency().GetCommitIntervalMilliSeconds(), 10000);
+        }
+    }
+
     Y_UNIT_TEST(Alter) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));

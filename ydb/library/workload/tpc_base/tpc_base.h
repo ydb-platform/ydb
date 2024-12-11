@@ -30,9 +30,6 @@ public:
     TQueryInfoList GetInitialData() override final;
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override final;
 
-protected:
-    virtual TVector<TString> GetTablesList() const = 0;
-
 private:
     const TTpcBaseWorkloadParams& Params;
     void PatchQuery(TString& query) const;

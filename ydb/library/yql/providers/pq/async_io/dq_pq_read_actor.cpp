@@ -101,6 +101,8 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
             InFlySubscribe = task->GetCounter("InFlySubscribe");
             AsyncInputDataRate = task->GetCounter("AsyncInputDataRate", true);
             ReconnectRate = task->GetCounter("ReconnectRate", true);
+            DataRate = task->GetCounter("DataRate", true);
+            WaitEventTimeMs = sink->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(13, 2, 1)); // ~ 1ms -> ~ 8s
         }
 
         ~TMetrics() {
@@ -114,6 +116,8 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
         ::NMonitoring::TDynamicCounters::TCounterPtr AsyncInputDataRate;
         ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
+        ::NMonitoring::TDynamicCounters::TCounterPtr DataRate;
+        NMonitoring::THistogramPtr WaitEventTimeMs;
     };
 
 public:
@@ -222,6 +226,11 @@ private:
         SubscribedOnEvent = false;
         if (ev.Get()->Cookie) {
             Metrics.InFlySubscribe->Dec();
+        }
+        if (WaitEventStartedAt) {
+            auto waitEventDurationMs = (TInstant::Now() - *WaitEventStartedAt).MilliSeconds();
+            Metrics.WaitEventTimeMs->Collect(waitEventDurationMs);
+            WaitEventStartedAt.Clear();
         }
         Metrics.InFlyAsyncInputData->Set(1);
         Metrics.AsyncInputDataRate->Inc();
@@ -385,6 +394,7 @@ private:
             SubscribedOnEvent = true;
             Metrics.InFlySubscribe->Inc();
             NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
+            WaitEventStartedAt = TInstant::Now();
             EventFuture = GetReadSession().WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
                 actorSystem->Send(selfId, new TEvPrivate::TEvSourceDataReady(), 0, 1);
             });
@@ -416,6 +426,7 @@ private:
         std::move(readyBatch.Data.begin(), readyBatch.Data.end(), std::back_inserter(buffer));
         watermark = readyBatch.Watermark;
         usedSpace = readyBatch.UsedSpace;
+        Metrics.DataRate->Add(readyBatch.UsedSpace);
 
         for (const auto& [PartitionSession, ranges] : readyBatch.OffsetRanges) {
             for (const auto& [start, end] : ranges) {
@@ -607,6 +618,7 @@ private:
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
     IPqGateway::TPtr PqGateway;
+    TMaybe<TInstant> WaitEventStartedAt;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
@@ -686,6 +698,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         }
 
         return CreateDqPqRdReadActor(
+            args.TypeEnv,
             std::move(settings),
             args.InputIndex,
             args.StatsLevel,

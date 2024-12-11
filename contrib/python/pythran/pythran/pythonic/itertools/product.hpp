@@ -2,11 +2,11 @@
 #define PYTHONIC_ITERTOOLS_PRODUCT_HPP
 
 #include "pythonic/include/itertools/product.hpp"
-#include "pythonic/utils/int_.hpp"
-#include "pythonic/utils/seq.hpp"
-#include "pythonic/utils/iterator.hpp"
 #include "pythonic/itertools/common.hpp"
 #include "pythonic/utils/functor.hpp"
+#include "pythonic/utils/int_.hpp"
+#include "pythonic/utils/iterator.hpp"
+#include "pythonic/utils/seq.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -48,7 +48,7 @@ namespace itertools
 
     template <typename... Iters>
     types::make_tuple_t<typename Iters::value_type...>
-        product_iterator<Iters...>::operator*() const
+    product_iterator<Iters...>::operator*() const
     {
       return get_value(utils::make_index_sequence<sizeof...(Iters)>{});
     }
@@ -73,27 +73,27 @@ namespace itertools
     template <typename... Iters>
     product_iterator<Iters...> &product_iterator<Iters...>::operator++()
     {
-      advance(utils::int_<sizeof...(Iters)-1>{});
+      advance(utils::int_<sizeof...(Iters) - 1>{});
       return *this;
     }
 
     template <typename... Iters>
-    bool product_iterator<Iters...>::
-    operator==(product_iterator<Iters...> const &other) const
+    bool product_iterator<Iters...>::operator==(
+        product_iterator<Iters...> const &other) const
     {
       return end == other.end;
     }
 
     template <typename... Iters>
-    bool product_iterator<Iters...>::
-    operator!=(product_iterator<Iters...> const &other) const
+    bool product_iterator<Iters...>::operator!=(
+        product_iterator<Iters...> const &other) const
     {
       return end != other.end;
     }
 
     template <typename... Iters>
-    bool product_iterator<Iters...>::
-    operator<(product_iterator<Iters...> const &other) const
+    bool product_iterator<Iters...>::operator<(
+        product_iterator<Iters...> const &other) const
     {
       return end != other.end;
     }
@@ -103,7 +103,7 @@ namespace itertools
     // FIXME: Iterators need to be evaluated as they may be used multiple
     // times
     template <typename... Iters>
-    product<Iters...>::product(Iters const &... _iters)
+    product<Iters...>::product(Iters const &..._iters)
         : utils::iterator_reminder<true, Iters...>(_iters...),
           iterator(this->values,
                    utils::make_index_sequence<sizeof...(Iters)>{}),
@@ -129,16 +129,16 @@ namespace itertools
     {
       return end_iter;
     }
-  }
+  } // namespace details
 
   template <typename... Iter>
   details::product<typename std::remove_cv<
       typename std::remove_reference<Iter>::type>::type...>
-  product(Iter &&... iters)
+  product(Iter &&...iters)
   {
     return {std::forward<Iter>(iters)...};
   }
-}
+} // namespace itertools
 PYTHONIC_NS_END
 
 #endif

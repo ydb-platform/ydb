@@ -669,7 +669,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     template <typename SK = ui32>
-    void Run(const NFake::TCaches& cacheParams, const TString& path,
+    void Run(const NSharedCache::TSharedCacheConfig& sharedCacheConfig, const TString& path,
             const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
@@ -686,14 +686,15 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             .SetDomainName(domainName)
             .SetUseRealThreads(false)
             .SetEnableDataColumnForIndexTable(true)
-            .SetCacheParams(cacheParams)
             .SetEnableUuidAsPrimaryKey(true);
+        serverSettings.AppConfig->MutableSharedCacheConfig()->CopyFrom(sharedCacheConfig);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
         const TActorId sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_INFO);
         InitRoot(server, sender);
 
         // prevent change sending
@@ -768,14 +769,16 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         }
     }
 
-    NFake::TCaches DefaultCacheParams() {
-        return {};
+    const NSharedCache::TSharedCacheConfig DefaultCacheParams() {
+        NSharedCache::TSharedCacheConfig config;
+        config.SetMemoryLimit(32_MB);
+        return config;
     }
 
-    NFake::TCaches TinyCacheParams() {
-        auto params = DefaultCacheParams();
-        params.Shared = 1; // byte
-        return params;
+    const NSharedCache::TSharedCacheConfig TinyCacheParams() {
+        NSharedCache::TSharedCacheConfig config;
+        config.SetMemoryLimit(0);
+        return config;
     }
 
     template <typename SK = ui32>

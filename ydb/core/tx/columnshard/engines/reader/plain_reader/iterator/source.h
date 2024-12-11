@@ -1,5 +1,4 @@
 #pragma once
-#include "columns_set.h"
 #include "context.h"
 #include "fetched_data.h"
 
@@ -10,6 +9,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -75,13 +75,12 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    virtual bool NeedAccessorsForRead() const = 0;
     virtual bool NeedAccessorsFetching() const = 0;
-
+    virtual ui64 PredictAccessorsMemory() const = 0;
     bool StartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
         return DoStartFetchingAccessor(sourcePtr, step);
     }
-
-    virtual ui64 PredictAccessorMemoryBytes() const = 0;
 
     bool AddTxConflict() {
         if (!Context->GetCommonContext()->HasLock()) {
@@ -112,7 +111,7 @@ public:
     void SetSourceInMemory(const bool value) {
         AFL_VERIFY(!IsSourceInMemoryFlag);
         IsSourceInMemoryFlag = value;
-        if (NeedAccessorsFetching()) {
+        if (NeedAccessorsForRead()) {
             AFL_VERIFY(StageData);
             if (!value) {
                 StageData->SetUseFilter(value);
@@ -317,13 +316,19 @@ private:
     }
 
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
-    virtual ui64 PredictAccessorMemoryBytes() const override {
-        return Portion->PredictMetadataMemorySize(Schema->GetColumnsCount());
-    }
 
 public:
+    virtual ui64 PredictAccessorsMemory() const override {
+        return Portion->GetApproxChunksCount(GetContext()->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) *
+               sizeof(TColumnRecord);
+    }
+
+    virtual bool NeedAccessorsForRead() const override {
+        return true;
+    }
+
     virtual bool NeedAccessorsFetching() const override {
-        return !StageData  || !StageData->HasPortionAccessor();
+        return !StageData || !StageData->HasPortionAccessor();
     }
 
     virtual bool DoAddTxConflict() override {
@@ -430,6 +435,14 @@ private:
     }
 
 public:
+    virtual ui64 PredictAccessorsMemory() const override {
+        return 0;
+    }
+
+    virtual bool NeedAccessorsForRead() const override {
+        return false;
+    }
+
     virtual bool NeedAccessorsFetching() const override {
         return false;
     }
@@ -458,9 +471,6 @@ public:
 
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/) override {
         return false;
-    }
-    virtual ui64 PredictAccessorMemoryBytes() const override {
-        return 0;
     }
 
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const override {

@@ -1,20 +1,21 @@
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/core/cbo/simple/cbo_simple.h>
 #include <yql/essentials/core/facade/yql_facade.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
-#include "contrib/ydb/library/yql/providers/yt/common/yql_names.h"
-#include <contrib/ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
+#include "yt/yql/providers/yt/common/yql_names.h"
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
-#include <contrib/ydb/library/yql/providers/yt/lib/schema/schema.h>
+#include <yt/yql/providers/yt/lib/schema/schema.h>
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
 
 #include <library/cpp/getopt/last_getopt.h>
@@ -1169,7 +1170,7 @@ int Main(int argc, char* argv[])
     }
 
     TVector<TDataProviderInitializer> dataProvidersInit;
-    dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+    dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, MakeSimpleCBOOptimizerFactory(), {}));
     dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     TExprContext ctx;

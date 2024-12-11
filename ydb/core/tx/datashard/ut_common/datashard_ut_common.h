@@ -709,8 +709,14 @@ ui64 AsyncAlterTakeIncrementalBackup(
 ui64 AsyncAlterRestoreIncrementalBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
-        const TString& srcTableName,
-        const TString& dstTableName);
+        const TString& srcTablePath,
+        const TString& dstTablePath);
+
+ui64 AsyncAlterRestoreMultipleIncrementalBackups(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TVector<TString>& srcTablePaths,
+        const TString& dstTablePAth);
 
 struct TReadShardedTableState {
     TActorId Sender;

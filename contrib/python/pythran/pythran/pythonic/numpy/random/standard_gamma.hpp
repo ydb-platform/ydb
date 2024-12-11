@@ -26,9 +26,9 @@ namespace numpy
     }
 
     inline auto standard_gamma(double s, long size)
-        -> decltype(standard_gamma(s, types::array<long, 1>{{size}}))
+        -> decltype(standard_gamma(s, types::array_tuple<long, 1>{{size}}))
     {
-      return standard_gamma(s, types::array<long, 1>{{size}});
+      return standard_gamma(s, types::array_tuple<long, 1>{{size}});
     }
 
     inline double standard_gamma(double s, types::none_type d)

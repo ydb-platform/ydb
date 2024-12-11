@@ -14,7 +14,6 @@
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
-#include <util/system/type_name.h>
 #include <util/generic/vector.h>
 
 #include <google/protobuf/message.h>
@@ -1025,7 +1024,7 @@ struct TRichYPath
     ///
     /// @{
     ///
-    /// Get range view, that is convenient way to iterate through all ranges.
+    /// Get range view, that is a convenient way to iterate through all ranges.
     TArrayRef<TReadRange> MutableRangesView()
     {
         if (Ranges_.Defined()) {
@@ -1124,10 +1123,21 @@ struct TRichYPath
     /// Allows to start cross-transactional operations.
     FLUENT_FIELD_OPTION(TTransactionId, TransactionId);
 
+    ///
+    /// @brief Wether to create operation output path.
+    ///
+    /// If set to `true` output path is created by YT server.
+    /// If set to `false` output path is not created explicitly (and operation will fail if it doesn't exist)
+    /// If attribute is not set output path is created by this library using explicit master call.
+    FLUENT_FIELD_OPTION(bool, Create);
+
     using TRenameColumnsDescriptor = THashMap<TString, TString>;
 
     /// Specifies columnar mapping which will be applied to columns before transfer to job.
     FLUENT_FIELD_OPTION(TRenameColumnsDescriptor, RenameColumns);
+
+    /// Specifies cluster for the YPath
+    FLUENT_FIELD_OPTION(TString, Cluster);
 
     /// Create empty path with no attributes
     TRichYPath()

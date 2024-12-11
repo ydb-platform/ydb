@@ -32,8 +32,8 @@
 #include <netinet/udp.h>
 #endif
 
-#error #include <ngtcp2/ngtcp2_crypto.h>
-#error #include <nghttp3/nghttp3.h>
+#include <ngtcp2/ngtcp2_crypto.h>
+#include <nghttp3/nghttp3.h>
 #ifdef USE_OPENSSL
 #include <openssl/ssl.h>
 #elif defined(USE_WOLFSSL)

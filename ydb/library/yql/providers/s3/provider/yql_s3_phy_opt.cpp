@@ -46,6 +46,10 @@ TExprNode::TPtr GetTimestampFormat(const TExprNode& settings) {
     return GetSetting(settings, "data.timestamp.format"sv);
 }
 
+TExprNode::TPtr GetDateFormat(const TExprNode& settings) {
+    return GetSetting(settings, "data.date.format"sv);
+}
+
 TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
     if (partBy) {
         auto children = partBy->ChildrenList();
@@ -169,6 +173,10 @@ public:
             pair.push_back(ctx.NewAtom(target.Pos(), "data.timestamp.formatname"));
             pair.push_back(ctx.NewAtom(target.Pos(), "POSIX"));
             sinkOutputSettingsBuilder.Add(ctx.NewList(target.Pos(), std::move(pair)));
+        }
+
+        if (auto dateFormat = GetDateFormat(settings)) {
+            sinkOutputSettingsBuilder.Add(std::move(dateFormat));
         }
 
         const TStringBuf format = target.Format();

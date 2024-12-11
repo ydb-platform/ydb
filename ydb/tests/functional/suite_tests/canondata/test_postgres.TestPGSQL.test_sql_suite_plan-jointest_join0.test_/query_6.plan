@@ -150,7 +150,7 @@
                                                                                                     }
                                                                                                 ],
                                                                                                 "Name": "Filter",
-                                                                                                "Predicate": "Exist(item.unique2) And item.unique2 < 42"
+                                                                                                "Predicate": "Exist(item.unique2) AND item.unique2 < 42"
                                                                                             }
                                                                                         ],
                                                                                         "PlanNodeId": 21,

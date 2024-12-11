@@ -317,7 +317,7 @@ namespace NPQ {
             HTML(out)
             {
                 DIV_CLASS_ID("tab-pane fade", "cache") {
-                    TABLE_SORTABLE_CLASS("table") {
+                    TABLE_CLASS("table") {
                         TABLEHEAD() {
                             TABLER() {
                                 TABLEH() {out << "Partition";}
@@ -345,7 +345,7 @@ namespace NPQ {
                     }
                 }
             }
-            ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(TVector<TString>(), out.Str()));
+            ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(out.Str()));
         }
 
         void UpdateCounters(const TActorContext& ctx)

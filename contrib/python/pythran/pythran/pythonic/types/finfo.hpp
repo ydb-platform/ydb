@@ -22,7 +22,7 @@ namespace types
   {
     return std::numeric_limits<T>::epsilon();
   }
-}
+} // namespace types
 PYTHONIC_NS_END
 
 /* pythran attribute system { */
@@ -30,12 +30,12 @@ PYTHONIC_NS_BEGIN
 namespace builtins
 {
   template <class T>
-  auto getattr(types::attr::EPS, pythonic::types::finfo<T> const &f)
-      -> decltype(f.eps())
+  auto getattr(types::attr::EPS,
+               pythonic::types::finfo<T> const &f) -> decltype(f.eps())
   {
     return f.eps();
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 /* } */
 #endif

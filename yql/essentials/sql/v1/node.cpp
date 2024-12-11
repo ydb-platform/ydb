@@ -172,6 +172,14 @@ const TString* INode::GetColumnName() const {
     return nullptr;
 }
 
+bool INode::IsPlainColumn() const {
+    return GetColumnName() != nullptr;
+}
+
+bool INode::IsTableRow() const {
+    return false;
+}
+
 void INode::AssumeColumn() {
 }
 
@@ -464,6 +472,14 @@ const TString* IProxyNode::GetLiteral(const TString& type) const {
 
 const TString* IProxyNode::GetColumnName() const {
     return Inner->GetColumnName();
+}
+
+bool IProxyNode::IsPlainColumn() const {
+    return Inner->IsPlainColumn();
+}
+
+bool IProxyNode::IsTableRow() const {
+    return Inner->IsTableRow();
 }
 
 void IProxyNode::AssumeColumn() {
@@ -1894,9 +1910,14 @@ TMaybe<TStringContent> StringContentOrIdContent(TContext& ctx, TPosition pos, co
         (ctx.AnsiQuotedIdentifiers && input.StartsWith('"'))? EStringContentMode::AnsiIdent : EStringContentMode::Default);
 }
 
-TTtlSettings::TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr, const TMaybe<EUnit>& columnUnit)
+TTtlSettings::TTierSettings::TTierSettings(const TNodePtr& evictionDelay, const std::optional<TIdentifier>& storageName)
+    : EvictionDelay(evictionDelay)
+    , StorageName(storageName) {
+}
+
+TTtlSettings::TTtlSettings(const TIdentifier& columnName, const std::vector<TTierSettings>& tiers, const TMaybe<EUnit>& columnUnit)
     : ColumnName(columnName)
-    , Expr(expr)
+    , Tiers(tiers)
     , ColumnUnit(columnUnit)
 {
 }
@@ -2473,6 +2494,18 @@ public:
 
     const TString* GetColumnName() const override {
         return ColumnOnly ? Ids[0].Expr->GetColumnName() : nullptr;
+    }
+
+    bool IsPlainColumn() const override {
+        if (GetColumnName()) {
+            return true;
+        }
+
+        if (Ids[0].Expr->IsTableRow()) {
+            return true;
+        }
+
+        return false;
     }
 
     const TString* GetSourceName() const override {
@@ -3131,10 +3164,10 @@ public:
         Y_DEBUG_ABORT_UNLESS(FuncNode);
         FuncNode->VisitTree(func, visited);
     }
-    
+
     void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
         if (ctx.DistinctOverWindow) {
-            FuncNode->CollectPreaggregateExprs(ctx, src, exprs);   
+            FuncNode->CollectPreaggregateExprs(ctx, src, exprs);
         } else {
             INode::CollectPreaggregateExprs(ctx, src, exprs);
         }
@@ -3274,7 +3307,7 @@ TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TStri
         return nullptr;
     }
 
-    auto wrappedNode = new TAstListNodeImpl(pos, { 
+    auto wrappedNode = new TAstListNodeImpl(pos, {
         new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
         node
     });
@@ -3303,7 +3336,7 @@ void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDefer
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = new TAstListNodeImpl(pos, { 
+    auto wrappedNode = new TAstListNodeImpl(pos, {
         new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
         node
     });
@@ -3320,7 +3353,7 @@ TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = new TAstListNodeImpl(pos, { 
+    auto wrappedNode = new TAstListNodeImpl(pos, {
         new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
         node
     });
@@ -3462,7 +3495,7 @@ bool TVectorIndexSettings::Validate(TContext& ctx) const {
     if (!Distance && !Similarity) {
         ctx.Error() << "either distance or similarity should be set";
         return false;
-    } 
+    }
     if (!VectorType) {
         ctx.Error() << "vector_type should be set";
         return false;

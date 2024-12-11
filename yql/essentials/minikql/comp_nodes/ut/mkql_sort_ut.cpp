@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
         eng.seed(std::time(nullptr));
 
         std::uniform_real_distribution<double> unifd(-999.0, +999.0);
-        std::uniform_real_distribution<ui64> unifi;
+        std::uniform_int_distribution<ui64> unifi;
 
         constexpr ui64 total = 999ULL;
 
@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
         eng.seed(std::time(nullptr));
 
         std::uniform_real_distribution<double> unifd(-999.0, +999.0);
-        std::uniform_real_distribution<ui64> unifi;
+        std::uniform_int_distribution<ui64> unifi;
 
         constexpr ui64 total = 999ULL;
 
@@ -322,7 +322,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
         eng.seed(std::time(nullptr));
 
         std::uniform_real_distribution<double> unifd(-999.0, +999.0);
-        std::uniform_real_distribution<ui64> unifi;
+        std::uniform_int_distribution<ui64> unifi;
 
         constexpr ui64 total = 999ULL;
 
@@ -377,7 +377,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
         eng.seed(std::time(nullptr));
 
         std::uniform_real_distribution<double> unifd(-999.0, +999.0);
-        std::uniform_real_distribution<ui64> unifi;
+        std::uniform_int_distribution<ui64> unifi;
 
         constexpr ui64 total = 999ULL;
 
@@ -428,7 +428,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
         std::default_random_engine eng;
         eng.seed(std::time(nullptr));
 
-        std::uniform_real_distribution<ui64> unifi;
+        std::uniform_int_distribution<ui64> unifi;
 
         constexpr ui64 total = 999ULL;
 
@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
         std::default_random_engine eng;
         eng.seed(std::time(nullptr));
 
-        std::uniform_real_distribution<ui64> unifi;
+        std::uniform_int_distribution<ui64> unifi;
 
         constexpr ui64 total = 99ULL;
 
@@ -536,7 +536,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLStreamKeyExtractorCacheTest) {
         echoCounter = 0;
         constexpr ui64 total = 999ULL;
 
-        std::uniform_real_distribution<ui64> urdist;
+        std::uniform_int_distribution<ui64> urdist;
         std::default_random_engine rand;
         rand.seed(std::time(nullptr));
 
@@ -588,7 +588,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLStreamKeyExtractorCacheTest) {
         echoCounter = 0;
         constexpr ui64 total = 999ULL;
 
-        std::uniform_real_distribution<ui64> urdist;
+        std::uniform_int_distribution<ui64> urdist;
         std::default_random_engine rand;
         rand.seed(std::time(nullptr));
 
@@ -619,7 +619,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLStreamKeyExtractorCacheTest) {
         };
         const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
         const auto pgmRoot = pgmBuilder.Top(pgmBuilder.Iterator(list, {}), limit, ascending, extractor);
-        const auto graph = setup.BuildGraph(pgmRoot);
+        // XXX: The order of the result being yielded by Top
+        // computation node is not defined by design, hence
+        // manually sort the result to match the canonical one.
+        const auto pgmSorted = pgmBuilder.Sort(pgmRoot, pgmBuilder.NewDataLiteral(false),
+                                               [&](TRuntimeNode item) { return item; });
+        const auto graph = setup.BuildGraph(pgmSorted);
         const auto& value = graph->GetValue();
 
         NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
@@ -640,7 +645,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLStreamKeyExtractorCacheTest) {
         echoCounter = 0;
         constexpr ui64 total = 999ULL;
 
-        std::uniform_real_distribution<ui64> urdist;
+        std::uniform_int_distribution<ui64> urdist;
         std::default_random_engine rand;
         rand.seed(std::time(nullptr));
 
@@ -692,7 +697,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLStreamKeyExtractorCacheTest) {
         echoCounter = 0;
         constexpr ui64 total = 999ULL;
 
-        std::uniform_real_distribution<ui64> urdist;
+        std::uniform_int_distribution<ui64> urdist;
         std::default_random_engine rand;
         rand.seed(std::time(nullptr));
 
@@ -723,7 +728,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLStreamKeyExtractorCacheTest) {
         };
         const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
         const auto pgmRoot = pgmBuilder.FromFlow(pgmBuilder.Top(pgmBuilder.ToFlow(list), limit, ascending, extractor));
-        const auto graph = setup.BuildGraph(pgmRoot);
+        // XXX: The order of the result being yielded by Top
+        // computation node is not defined by design, hence
+        // manually sort the result to match the canonical one.
+        const auto pgmSorted = pgmBuilder.Sort(pgmRoot, pgmBuilder.NewDataLiteral(false),
+                                               [&](TRuntimeNode item) { return item; });
+        const auto graph = setup.BuildGraph(pgmSorted);
         const auto& value = graph->GetValue();
 
         NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());

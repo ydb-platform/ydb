@@ -544,7 +544,13 @@ namespace NYql::NDqs {
         TVector<TString> parts;
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
             TString clusterName;
-            _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*Settings, maxPartitions, *read, parts, &clusterName, ExprContext, canFallback));
+            IDqIntegration::TPartitionSettings settings {
+                .DataSizePerJob = Settings->DataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::DataSizePerJob),
+                .MaxPartitions = maxPartitions,
+                .EnableComputeActor = Settings->EnableComputeActor.Get(),
+                .CanFallback = canFallback
+            };
+            _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*read, parts, &clusterName, ExprContext, settings));
             TMaybe<::google::protobuf::Any> sourceSettings;
             TString sourceType;
             if (dqSource) {
@@ -585,7 +591,7 @@ namespace NYql::NDqs {
         YQL_ENSURE(dataSource);
         auto dqIntegration = (*dataSource)->GetDqIntegration();
         YQL_ENSURE(dqIntegration);
-        
+
         google::protobuf::Any providerSpecificLookupSourceSettings;
         TString sourceType;
         dqIntegration->FillLookupSourceSettings(*rightInput.Raw(), providerSpecificLookupSourceSettings, sourceType);

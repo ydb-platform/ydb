@@ -718,7 +718,7 @@ private:
                 header.clear_timeout();
             }
 
-            if (options.RequestHeavy) {
+            if (options.RequestHeavy || request->IsAttachmentCompressionEnabled()) {
                 BIND(&IClientRequest::Serialize, request)
                     .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
                     .Run()
@@ -897,16 +897,40 @@ private:
                 auto guard = Guard(*bucket);
 
                 if (bucket->Terminated) {
-                    YT_LOG_WARNING("Response received via a terminated channel (RequestId: %v)",
-                        requestId);
+                    YT_LOG_WARNING("Response received via a terminated channel "
+                        "(RequestId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
+                        requestId,
+                        header.service(),
+                        header.method(),
+                        GetMessageBodySize(message),
+                        GetTotalMessageAttachmentSize(message));
+
                     return;
                 }
 
                 auto it = bucket->ActiveRequestMap.find(requestId);
                 if (it == bucket->ActiveRequestMap.end()) {
                     // This may happen when the other party responds to an already timed-out request.
-                    YT_LOG_DEBUG("Response for an incorrect or obsolete request received (RequestId: %v)",
-                        requestId);
+                    YT_LOG_DEBUG("Response for an incorrect or obsolete request received "
+                        "(RequestId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
+                        requestId,
+                        header.service(),
+                        header.method(),
+                        GetMessageBodySize(message),
+                        GetTotalMessageAttachmentSize(message));
+
+                    if (header.has_service()) {
+                        const auto* counters = TClientRequestPerformanceProfiler::FindPerformanceCounters(
+                            FromProto<std::string>(header.service()),
+                            FromProto<std::string>(header.method()));
+                        if (counters) {
+                            TClientRequestPerformanceProfiler::ProfileReplyWithoutContext(
+                                message,
+                                counters,
+                                /*recognized*/ false);
+                        }
+                    }
+
                     return;
                 }
 
@@ -927,7 +951,7 @@ private:
                     message = TrackMemory(MemoryUsageTracker_, std::move(message));
                     if (MemoryUsageTracker_->IsExceeded()) {
                         auto error = TError(
-                            NRpc::EErrorCode::MemoryPressure,
+                            NRpc::EErrorCode::ResponseMemoryPressure,
                             "Response is dropped due to high memory pressure");
                         requestControl->ProfileError(error);
                         NotifyError(

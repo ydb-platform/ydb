@@ -9,10 +9,10 @@ namespace utils
 {
 
   template <typename... Types>
-  void fwd(Types const &... types)
+  void fwd(Types const &...types)
   {
   }
-}
+} // namespace utils
 PYTHONIC_NS_END
 
 #endif

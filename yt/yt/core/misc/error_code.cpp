@@ -2,8 +2,6 @@
 
 #include <yt/yt/core/logging/log.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <library/cpp/yt/misc/global.h>
 
 #include <util/string/split.h>
@@ -15,7 +13,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(achulkov2): Remove this once we find all duplicate error codes.
-YT_DEFINE_GLOBAL(NLogging::TLogger, Logger, "ErrorCode")
+static YT_DEFINE_GLOBAL(NLogging::TLogger, Logger, "ErrorCode")
 
 ////////////////////////////////////////////////////////////////////////////////
 

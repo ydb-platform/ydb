@@ -16,7 +16,7 @@ namespace builtins
   {
     return {filename, strmode};
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

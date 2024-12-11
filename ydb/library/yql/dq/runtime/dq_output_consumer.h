@@ -6,8 +6,8 @@
 #include <yql/essentials/minikql/mkql_alloc.h>
 
 namespace NKikimr::NMiniKQL {
-class TTypeEnvironment;
-class THolderFactory;
+    class TTypeEnvironment;
+    class THolderFactory;
 } // namespace NKikimr::NMiniKQL
 
 namespace NYql::NDq {
@@ -28,7 +28,7 @@ public:
     }
     virtual bool IsFull() const = 0;
     virtual void Consume(NKikimr::NUdf::TUnboxedValue&& value) = 0;
-    virtual void WideConsume(NKikimr::NUdf::TUnboxedValue* values, ui32 count) = 0;
+    virtual void WideConsume(NKikimr::NUdf::TUnboxedValue values[], ui32 count) = 0;
     virtual void Consume(NDqProto::TCheckpoint&& checkpoint) = 0;
     virtual void Finish() = 0;
     bool IsFinishing() const {
@@ -50,6 +50,5 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth);
-
 
 } // namespace NYql::NDq

@@ -26,9 +26,9 @@ namespace numpy
     }
 
     inline auto standard_normal(long size)
-        -> decltype(standard_normal(types::array<long, 1>{{size}}))
+        -> decltype(standard_normal(types::array_tuple<long, 1>{{size}}))
     {
-      return standard_normal(types::array<long, 1>{{size}});
+      return standard_normal(types::array_tuple<long, 1>{{size}});
     }
 
     inline double standard_normal(types::none_type d)

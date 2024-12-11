@@ -8,8 +8,15 @@
 
 namespace NYql {
 
+enum class ETypeCheckMode {
+    Single,
+    Initial,
+    Repeat
+};
+
 TAutoPtr<IGraphTransformer> CreateTypeAnnotationTransformer(
-        TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types);
+    TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types,
+    ETypeCheckMode mode = ETypeCheckMode::Single);
 
 TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(bool instant, bool wholeProgram, TTypeAnnotationContext& types);
 
@@ -25,5 +32,7 @@ TExprNode::TPtr ParseAndAnnotate(
         const TStringBuf& str,
         TExprContext& exprCtx, bool instant, bool wholeProgram,
         TTypeAnnotationContext& typeAnnotationContext);
+
+void CheckFatalTypeError(IGraphTransformer::TStatus status);
 
 }

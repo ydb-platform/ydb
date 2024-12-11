@@ -7,7 +7,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/intrlist.h>
 
-namespace NKikimr::NCache {
+namespace NKikimr::NSharedCache {
 
 enum class ECacheCacheGeneration {
     None,

@@ -16,7 +16,7 @@ from yql_utils import (
     normalize_source_code_path,
     yql_binary_path)
 
-from utils import (
+from test_utils import (
     get_config,
     pytest_generate_tests_for_run)
 
@@ -83,6 +83,9 @@ def test(suite, case, cfg, solomon):
     if xfail:
         assert yqlrun_res.execution_result.exit_code != 0
         return [normalize_source_code_path(sanitize_issues(yqlrun_res.std_err))]
+
+    with open(yqlrun_res.opt_file, 'w') as f:
+        f.write(re.sub(r"""("?_logical_id"?) '\d+""", r"""\1 '0""", yqlrun_res.opt).encode('utf-8'))
 
     return [yatest.common.canonical_file(yqlrun_res.results_file, local=True),
             yatest.common.canonical_file(yqlrun_res.opt_file, local=True, diff_tool=ASTDIFF_PATH),

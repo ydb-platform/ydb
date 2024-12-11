@@ -14,7 +14,7 @@ namespace math
     return std::isinf(v);
   }
   DEFINE_FUNCTOR(pythonic::math, isinf);
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

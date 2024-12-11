@@ -88,7 +88,7 @@ public:
             ReplyErrorAndPassAway(Ydb::StatusIds::INTERNAL_ERROR, "Failed to produce a token");
         } else {
             // success = token + no errors
-            ReplyAndPassAway(loginResult.token());
+            ReplyAndPassAway(loginResult.GetToken(), loginResult.GetSanitizedToken());
         }
     }
 
@@ -113,7 +113,7 @@ public:
         }
     }
 
-    void ReplyAndPassAway(const TString& resultToken) {
+    void ReplyAndPassAway(const TString& resultToken, const TString& sanitizedToken) {
         TResponse response;
 
         Ydb::Operations::Operation& operation = *response.mutable_operation();
@@ -126,7 +126,7 @@ public:
             operation.mutable_result()->PackFrom(result);
         }
 
-        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, /* errorDetails */ TString());
+        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, /* errorDetails */ TString(), sanitizedToken);
 
         return CleanupAndReply(response);
     }
@@ -143,7 +143,7 @@ public:
             issue->set_message(error);
         }
 
-        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, reason);
+        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, reason, {});
 
         return CleanupAndReply(response);
     }

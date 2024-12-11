@@ -292,7 +292,7 @@ runs:
           debug)
             TESTMO_SOURCE="ya-${TESTMO_ARCH}-debug"
             ;;
-          release-*)
+          release*)
             TESTMO_SOURCE="ya-${TESTMO_ARCH}-${BUILD_PRESET/release-/}"
             ;;
           *)

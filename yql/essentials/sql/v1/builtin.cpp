@@ -1907,6 +1907,10 @@ public:
         return new TTableRow<Join>(Pos, ArgsCount);
     }
 
+    bool IsTableRow() const final {
+        return true;
+    }
+
 private:
     const size_t ArgsCount;
     TNodePtr Node;
@@ -2916,6 +2920,9 @@ struct TBuiltinFuncData {
             {"listtopsort", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopSort", 2, 3)},
             {"listtopsortasc", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopSortAsc", 2, 3)},
             {"listtopsortdesc", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopSortDesc", 2, 3)},
+            {"listsample", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListSample", 2, 3)},
+            {"listsamplen", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListSampleN", 2, 3)},
+            {"listshuffle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListShuffle", 1, 2)},
 
             // Dict builtins
             {"dictlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},
@@ -3003,6 +3010,7 @@ struct TBuiltinFuncData {
             {"callableresulttype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableResultType", 1, 1) },
             {"callableargumenttype", BuildSimpleBuiltinFactoryCallback<TYqlCallableArgumentType>() },
             {"variantunderlyingtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantUnderlyingType", 1, 1) },
+            {"variantitem", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SqlVariantItem", 1, 1) },
             {"fromysonsimpletype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromYsonSimpleType", 2, 2) },
             {"currentutcdate", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcDate", 0, -1) },
             {"currentutcdatetime", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcDatetime", 0, -1) },
@@ -3698,6 +3706,54 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 BuildTuple(pos, {BuildQuotedAtom(pos, ""), args[1]}),
             };
             return new TCallNodeImpl(pos, "FlattenMembers", 2, 2, flattenMembersArgs);
+        } else if (normalizedName == "visit" || normalizedName == "visitordefault") {
+            bool withDefault = normalizedName == "visitordefault";
+            TNodePtr variant;
+            TVector<TNodePtr> labels, handlers;
+            TMaybe<TNodePtr> dflt;
+            if (mustUseNamed && *mustUseNamed) {
+                *mustUseNamed = false;
+                auto &positional = *args[0]->GetTupleNode();
+                if (positional.GetTupleSize() != (withDefault ? 2 : 1)) {
+                    return new TInvalidBuiltin(pos, TStringBuilder() << name
+                        << " requires exactly " << (withDefault ? 2 : 1) << " positional arguments when named args are used");
+                }
+                auto &named = *args[1]->GetStructNode();
+                variant = positional.GetTupleElement(0);
+                auto &namedExprs = named.GetExprs();
+                labels.reserve(namedExprs.size());
+                handlers.reserve(namedExprs.size());
+                for (size_t idx = 0; idx < namedExprs.size(); idx++) {
+                    labels.push_back(BuildQuotedAtom(pos, namedExprs[idx]->GetLabel()));
+                    handlers.push_back(namedExprs[idx]);
+                }
+                if (withDefault) {
+                    dflt = positional.GetTupleElement(positional.GetTupleSize() - 1);
+                }
+            } else {
+                variant = args[0];
+                size_t defaultSuffix = withDefault ? 1 : 0;
+                labels.reserve(args.size() - 1 - defaultSuffix);
+                handlers.reserve(args.size() - 1 - defaultSuffix);
+                for (size_t idx = 0; idx + 1 < args.size() - defaultSuffix; idx++) {
+                    labels.push_back(BuildQuotedAtom(pos, ToString(idx)));
+                    handlers.push_back(args[idx + 1]);
+                }
+                if (withDefault) {
+                    dflt = args.back();
+                }
+            }
+            TVector<TNodePtr> resultArgs;
+            resultArgs.reserve(1 + labels.size() + handlers.size());
+            resultArgs.emplace_back(std::move(variant));
+            for (size_t idx = 0; idx < labels.size(); idx++) {
+                resultArgs.emplace_back(std::move(labels[idx]));
+                resultArgs.emplace_back(std::move(handlers[idx]));
+            }
+            if (dflt.Defined()) {
+                resultArgs.emplace_back(std::move(dflt->Get()));
+            }
+            return new TCallNodeImpl(pos, "SqlVisit", 1, -1, resultArgs);
         } else if (normalizedName == "sqlexternalfunction") {
             return new TCallNodeImpl(pos, "SqlExternalFunction", args);
         } else {

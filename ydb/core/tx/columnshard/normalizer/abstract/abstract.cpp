@@ -7,8 +7,8 @@
 namespace NKikimr::NOlap {
 
 TNormalizationController::INormalizerComponent::TPtr TNormalizationController::RegisterNormalizer(INormalizerComponent::TPtr normalizer) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_register")("description", normalizer->DebugString());
     AFL_VERIFY(normalizer);
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_register")("description", normalizer->DebugString());
     Counters.emplace_back(normalizer->GetClassName());
     Normalizers.emplace_back(normalizer);
     return normalizer;
@@ -74,8 +74,10 @@ void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
             if (FinishedNormalizers.contains(TNormalizerFullId(i.GetClassName(), i.GetDescription()))) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("warning", "repair already processed")("description", i.GetDescription());
             } else {
-                auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(INormalizerComponent::TFactory::Construct(i.GetClassName(), ctx)));
-                normalizer->SetIsRepair(true).SetUniqueDescription(i.GetDescription());
+                auto component = INormalizerComponent::TFactory::MakeHolder(i.GetClassName(), ctx);
+                AFL_VERIFY(component)("class_name", i.GetClassName());
+                auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(component.Release()));
+                normalizer->SetIsRepair(true).SetIsDryRun(i.GetDryRun()).SetUniqueDescription(i.GetDescription());
             }
         }
     }

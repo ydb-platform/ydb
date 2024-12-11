@@ -18,8 +18,8 @@ namespace builtins
     {
       return {filename, strmode};
     }
-  }
-}
+  } // namespace anonymous
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

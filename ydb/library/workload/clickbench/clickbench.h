@@ -30,7 +30,8 @@ public:
 
     class TBulkDataGenerator;
 protected:
-    TString DoGetDDLQueries() const override;
+    TString GetTablesYaml() const override;
+    TWorkloadGeneratorBase::TSpecialDataTypes GetSpecialDataTypes() const override;
     TQueryInfoList GetInitialData() override;
 
 private:

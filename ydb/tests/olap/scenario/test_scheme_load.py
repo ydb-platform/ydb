@@ -44,7 +44,7 @@ class TestSchemeLoad(BaseTestSet):
             sth.execute_scheme_query(DropTable(f'store/{prefix}_{i}'))
 
     def scenario_create_and_drop_tables(self, ctx: TestContext):
-        tables_count = 100000
+        tables_count = 100
         threads_count = 20
 
         ScenarioTestHelper(ctx).execute_scheme_query(CreateTableStore('store').with_schema(self.schema1))

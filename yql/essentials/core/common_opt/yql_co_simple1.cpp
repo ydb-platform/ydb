@@ -3675,6 +3675,28 @@ bool IsEarlyExpandOfSkipNullAllowed(const TOptimizeContext& optCtx) {
     return optCtx.Types->OptimizerFlags.contains(skipNullFlags);
 }
 
+TExprNode::TPtr ReplaceFuncWithImpl(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/core.yql");
+    YQL_ENSURE(exportsPtr);
+    const auto& exports = exportsPtr->Symbols();
+    const auto ex = exports.find(TString(node->Content()) + "Impl");
+    YQL_ENSURE(exports.cend() != ex);
+    TNodeOnNodeOwnedMap deepClones;
+    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
+
+    YQL_CLOG(DEBUG, Core) << "Replace " << node->Content() << " with implementation";
+    return ctx.Builder(node->Pos())
+        .Apply(lambda)
+            .Do([&node](TExprNodeReplaceBuilder& builder) -> TExprNodeReplaceBuilder& {
+                for (size_t i = 0; i < node->ChildrenSize(); i++) {
+                    builder.With(i, node->ChildPtr(i));
+                }
+                return builder;
+            })
+        .Seal()
+        .Build();
+}
+
 } // namespace
 
 void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
@@ -4895,6 +4917,65 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         return node;
+    };
+
+    map["ListSample"] = map["ListSampleN"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (node->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            YQL_CLOG(DEBUG, Core) << "Handle optional list in " << node->Content();
+            return ctx.Builder(node->Pos())
+                .Callable("Map")
+                    .Add(0, node->Child(0))
+                    .Lambda(1)
+                        .Param("list")
+                        .Callable(node->Content())
+                            .Arg(0, "list")
+                            .Add(1, node->Child(1))
+                            .Add(2, node->Child(2))
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        if (node->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            YQL_CLOG(DEBUG, Core) << "Handle optional prob arg in " << node->Content();
+            return ctx.Builder(node->Pos())
+                .Callable("IfPresent")
+                    .Add(0, node->Child(1))
+                    .Lambda(1)
+                        .Param("probArg")
+                        .Callable(node->Content())
+                            .Add(0, node->Child(0))
+                            .Arg(1, "probArg")
+                            .Add(2, node->Child(2))
+                        .Seal()
+                    .Seal()
+                    .Add(2, node->Child(0))
+                .Seal()
+                .Build();
+        }
+
+        return ReplaceFuncWithImpl(node, ctx, optCtx);
+    };
+
+    map["ListShuffle"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            YQL_CLOG(DEBUG, Core) << "Handle optionals args in " << node->Content();
+            return ctx.Builder(node->Pos())
+                .Callable("Map")
+                    .Add(0, node->Child(0))
+                    .Lambda(1)
+                        .Param("list")
+                        .Callable(node->Content())
+                            .Arg(0, "list")
+                            .Add(1, node->Child(1))
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        return ReplaceFuncWithImpl(node, ctx, optCtx);
     };
 
     map["OptionalReduce"] = std::bind(&RemoveOptionalReduceOverData, _1, _2);
@@ -6424,7 +6505,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["UnionAllPositional"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map["UnionAllPositional"] = map["UnionMergePositional"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
         if (node->ChildrenSize() == 1) {
             return node->HeadPtr();
@@ -6703,6 +6784,39 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         return node;
+    };
+
+    map["FailMe"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << "Expand FailMe";
+        auto failureKind = node->Child(0)->Content();
+        if (failureKind == "expr") {
+            return ctx.Builder(node->Pos())
+                .Callable("String")
+                    .Atom(0, "foo")
+                    .Atom(1, "bar")
+                .Seal()
+                .Build();
+        }
+
+        if (failureKind == "type") {
+            return ctx.Builder(node->Pos())
+                .Callable("Int32")
+                    .Atom(0, "1")
+                .Seal()
+                .Build();
+        }
+
+        if (failureKind == "constraint") {
+            return ctx.Builder(node->Pos())
+                .Callable("AsList")
+                    .Callable(0, "String")
+                        .Atom(0, "foo")
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        throw yexception() << "Unknown failure kind: " << failureKind;
     };
 
     // will be applied to any callable after all above

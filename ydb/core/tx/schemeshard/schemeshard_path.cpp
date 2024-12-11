@@ -317,6 +317,19 @@ const TPath::TChecker& TPath::TChecker::IsReplication(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsTransfer(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsTransfer()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a transfer"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::IsCommonSensePath(EStatus status) const {
     if (Failed) {
         return *this;
@@ -1307,6 +1320,17 @@ TPath TPath::Child(const TString& name) const {
     return result;
 }
 
+TPath TPath::Child(const TString& name, TSplitChildTag) const {
+    TPath result = *this;
+
+    auto pathParts = SplitPath(name);
+    for (const auto& part : pathParts) {
+        result.Dive(part);
+    }
+
+    return result;
+}
+
 TPath TPath::Resolve(const TString path, TSchemeShard* ss) {
     Y_ABORT_UNLESS(ss);
 
@@ -1700,6 +1724,12 @@ bool TPath::IsReplication() const {
     Y_ABORT_UNLESS(IsResolved());
 
     return Base()->IsReplication();
+}
+
+bool TPath::IsTransfer() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->IsTransfer();
 }
 
 ui32 TPath::Depth() const {

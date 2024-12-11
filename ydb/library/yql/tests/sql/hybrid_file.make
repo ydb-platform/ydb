@@ -25,17 +25,18 @@ SPLIT_FACTOR(10)
 DEPENDS(
     yql/essentials/tools/astdiff
     ydb/library/yql/tools/dqrun
-    ydb/library/yql/tools/yqlrun
-    ydb/library/yql/tests/common/test_framework/udfs_deps
+    yql/tools/yqlrun
+    yql/essentials/tests/common/test_framework/udfs_deps
     yql/essentials/udfs/test/test_import
 )
 DATA(
     arcadia/ydb/library/yql/tests/sql # python files
+    arcadia/yql/essentials/tests/sql/suites
     arcadia/yql/essentials/mount
-    arcadia/ydb/library/yql/cfg/tests
+    arcadia/yql/essentials/cfg/tests
 )
 PEERDIR(
-    ydb/library/yql/tests/common/test_framework
+    yql/essentials/tests/common/test_framework
     library/python/testing/swag/lib
 )
 

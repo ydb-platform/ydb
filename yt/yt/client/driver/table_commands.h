@@ -400,7 +400,7 @@ public:
 private:
     NYPath::TRichYPath Path;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
     bool HasResponseParameters() const override;
 };
 
@@ -585,7 +585,7 @@ public:
 private:
     NApi::TBackupManifestPtr Manifest;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -601,7 +601,7 @@ public:
 private:
     NApi::TBackupManifestPtr Manifest;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

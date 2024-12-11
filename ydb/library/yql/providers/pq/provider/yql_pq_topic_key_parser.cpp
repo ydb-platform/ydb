@@ -67,6 +67,10 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
                 TimestampFormat = readSettings->Child(i);
                 continue;
             }
+            if (readSettings->Child(i)->Head().IsAtom("data.date.format")) {
+                DateFormat = readSettings->Child(i);
+                continue;
+            }
         }
     }
 

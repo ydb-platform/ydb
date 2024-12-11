@@ -22,7 +22,7 @@
 
 #include <yt/yt/core/logging/log_manager.h>
 
-#include <yt/yt/core/misc/crash_handler.h>
+#include <yt/yt/core/misc/codicil.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/net/address.h>
@@ -109,62 +109,6 @@ THandlerInvocationOptions THandlerInvocationOptions::SetResponseCodec(NCompressi
     auto result = *this;
     result.ResponseCodec = value;
     return result;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TDynamicConcurrencyLimit::Reconfigure(int limit)
-{
-    ConfigLimit_.store(limit, std::memory_order::relaxed);
-    SetDynamicLimit(limit);
-}
-
-int TDynamicConcurrencyLimit::GetLimitFromConfiguration() const
-{
-    return ConfigLimit_.load(std::memory_order::relaxed);
-}
-
-int TDynamicConcurrencyLimit::GetDynamicLimit() const
-{
-    return DynamicLimit_.load(std::memory_order::relaxed);
-}
-
-void TDynamicConcurrencyLimit::SetDynamicLimit(std::optional<int> dynamicLimit)
-{
-    auto limit = dynamicLimit.has_value() ? *dynamicLimit : ConfigLimit_.load(std::memory_order::relaxed);
-    auto oldLimit = DynamicLimit_.exchange(limit, std::memory_order::relaxed);
-
-    if (oldLimit != limit) {
-        Updated_.Fire();
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TDynamicConcurrencyByteLimit::Reconfigure(i64 limit)
-{
-    ConfigByteLimit_.store(limit, std::memory_order::relaxed);
-    SetDynamicByteLimit(limit);
-}
-
-i64 TDynamicConcurrencyByteLimit::GetByteLimitFromConfiguration() const
-{
-    return ConfigByteLimit_.load(std::memory_order::relaxed);
-}
-
-i64 TDynamicConcurrencyByteLimit::GetDynamicByteLimit() const
-{
-    return DynamicByteLimit_.load(std::memory_order::relaxed);
-}
-
-void TDynamicConcurrencyByteLimit::SetDynamicByteLimit(std::optional<i64> dynamicLimit)
-{
-    auto limit = dynamicLimit.has_value() ? *dynamicLimit : ConfigByteLimit_.load(std::memory_order::relaxed);
-    auto oldLimit = DynamicByteLimit_.exchange(limit, std::memory_order::relaxed);
-
-    if (oldLimit != limit) {
-        Updated_.Fire();
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -402,7 +346,6 @@ public:
             std::move(logger),
             incomingRequest.RuntimeInfo->LogLevel.load(std::memory_order::relaxed))
         , Service_(std::move(service))
-        , RequestId_(incomingRequest.RequestId)
         , ReplyBus_(std::move(incomingRequest.ReplyBus))
         , RuntimeInfo_(incomingRequest.RuntimeInfo)
         , TraceContext_(std::move(incomingRequest.TraceContext))
@@ -561,8 +504,7 @@ public:
             RequestId_);
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
-            static const auto CanceledError = TError(NYT::EErrorCode::Canceled, "Request canceled");
-            AbortStreamsUnlessClosed(CanceledError);
+            AbortStreamsUnlessClosed(TError(NYT::EErrorCode::Canceled, "Request canceled"));
         }
 
         CancelInstant_ = NProfiling::GetInstant();
@@ -586,8 +528,7 @@ public:
             stage);
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
-            static const auto TimedOutError = TError(NYT::EErrorCode::Timeout, "Request timed out");
-            AbortStreamsUnlessClosed(TimedOutError);
+            AbortStreamsUnlessClosed(TError(NYT::EErrorCode::Timeout, "Request timed out"));
         }
 
         CanceledList_.Fire(GetCanceledError());
@@ -744,7 +685,6 @@ public:
 
 private:
     const TServiceBasePtr Service_;
-    const TRequestId RequestId_;
     const IBusPtr ReplyBus_;
     TRuntimeMethodInfo* const RuntimeInfo_;
     const TTraceContextPtr TraceContext_;
@@ -800,10 +740,10 @@ private:
     {
         // COMPAT(danilalexeev): legacy RPC codecs
         RequestCodec_ = RequestHeader_->has_request_codec()
-            ? CheckedEnumCast<NCompression::ECodec>(RequestHeader_->request_codec())
+            ? FromProto<NCompression::ECodec>(RequestHeader_->request_codec())
             : NCompression::ECodec::None;
         ResponseCodec_ = RequestHeader_->has_response_codec()
-            ? CheckedEnumCast<NCompression::ECodec>(RequestHeader_->response_codec())
+            ? FromProto<NCompression::ECodec>(RequestHeader_->response_codec())
             : NCompression::ECodec::None;
 
         Service_->IncrementActiveRequestCount();
@@ -895,8 +835,7 @@ private:
         }
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
-            static const auto FinishedError = TError("Request finished");
-            AbortStreamsUnlessClosed(Error_.IsOK() ? Error_ : FinishedError);
+            AbortStreamsUnlessClosed(Error_.IsOK() ? Error_ : TError("Request finished"));
         }
 
         DoSetComplete();
@@ -996,11 +935,20 @@ private:
 
         {
             const auto& authenticationIdentity = GetAuthenticationIdentity();
-            TCodicilGuard codicilGuard(Format("RequestId: %v, Method: %v.%v, AuthenticationIdentity: %v",
-                GetRequestId(),
-                GetService(),
-                GetMethod(),
-                authenticationIdentity));
+            TCodicilGuard codicilGuard([&] (TCodicilFormatter* formatter) {
+                formatter->AppendString("RequestId: ");
+                formatter->AppendGuid(RequestId_);
+                formatter->AppendString(", Service: ");
+                formatter->AppendString(GetService());
+                formatter->AppendString(", Method: ");
+                formatter->AppendString(GetMethod());
+                formatter->AppendString(", User: ");
+                formatter->AppendString(authenticationIdentity.User);
+                if (!authenticationIdentity.UserTag.empty() && authenticationIdentity.UserTag != authenticationIdentity.User) {
+                    formatter->AppendString(", UserTag: ");
+                    formatter->AppendString(authenticationIdentity.UserTag);
+                }
+            });
             TCurrentAuthenticationIdentityGuard identityGuard(&authenticationIdentity);
             handler(this, descriptor.Options);
         }
@@ -1110,9 +1058,9 @@ private:
 
         {
             TNullTraceContextGuard nullGuard;
-            YT_LOG_DEBUG("Request logging suppressed (RequestId: %v)", GetRequestId());
+            YT_LOG_DEBUG("Request logging suppressed (RequestId: %v)", RequestId_);
         }
-        NLogging::TLogManager::Get()->SuppressRequest(GetRequestId());
+        NLogging::TLogManager::Get()->SuppressRequest(RequestId_);
     }
 
     void DoSetComplete()
@@ -1123,7 +1071,7 @@ private:
         }
 
         if (RequestRun_) {
-            RequestQueue_->OnRequestFinished(TotalSize_);
+            RequestQueue_->OnRequestFinished(GetTotalSize());
         }
 
         if (ActiveRequestCountIncremented_) {
@@ -1275,10 +1223,10 @@ private:
 
         NProto::TStreamingPayloadHeader header;
         ToProto(header.mutable_request_id(), RequestId_);
-        ToProto(header.mutable_service(), GetService());
-        ToProto(header.mutable_method(), GetMethod());
-        if (GetRealmId()) {
-            ToProto(header.mutable_realm_id(), GetRealmId());
+        ToProto(header.mutable_service(), ServiceName_);
+        ToProto(header.mutable_method(), MethodName_);
+        if (RealmId_) {
+            ToProto(header.mutable_realm_id(), RealmId_);
         }
         header.set_sequence_number(payload->SequenceNumber);
         header.set_codec(ToProto(payload->Codec));
@@ -1317,10 +1265,10 @@ private:
 
         NProto::TStreamingFeedbackHeader header;
         ToProto(header.mutable_request_id(), RequestId_);
-        header.set_service(GetService());
-        header.set_method(GetMethod());
-        if (GetRealmId()) {
-            ToProto(header.mutable_realm_id(), GetRealmId());
+        header.set_service(ToProto(ServiceName_));
+        header.set_method(ToProto(MethodName_));
+        if (RealmId_) {
+            ToProto(header.mutable_realm_id(), RealmId_);
         }
         header.set_read_position(feedback.ReadPosition);
 
@@ -1470,20 +1418,17 @@ i64 TRequestQueue::GetConcurrencyByte() const
     return ConcurrencyByte_.load(std::memory_order::relaxed);
 }
 
-void TRequestQueue::OnRequestArrived(const TServiceBase::TServiceContextPtr& context)
+void TRequestQueue::OnRequestArrived(TServiceBase::TServiceContextPtr context)
 {
     // Fast path.
-    auto concurrencyExceeded = IncrementConcurrency(context);
-    if (concurrencyExceeded &&
-        !AreThrottlersOverdrafted())
-    {
+    if (IncrementConcurrency(context->GetTotalSize()) && !AreThrottlersOverdrafted()) {
         RunRequest(std::move(context));
         return;
     }
 
     // Slow path.
     DecrementConcurrency(context->GetTotalSize());
-    IncrementQueueSize(context);
+    IncrementQueueSize(context->GetTotalSize());
 
     context->BeforeEnqueued();
     YT_VERIFY(Queue_.enqueue(std::move(context)));
@@ -1525,7 +1470,7 @@ void TRequestQueue::ScheduleRequestsFromQueue()
 
     // NB: Racy, may lead to overcommit in concurrency semaphore and request bytes throttler.
     auto concurrencyLimit = RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit();
-    auto concurrencyByteLimit = RuntimeInfo_->ConcurrencyByteLimit.GetDynamicByteLimit();
+    auto concurrencyByteLimit = RuntimeInfo_->ConcurrencyByteLimit.GetDynamicLimit();
     while (QueueSize_.load() > 0 && Concurrency_.load() < concurrencyLimit && ConcurrencyByte_.load() < concurrencyByteLimit) {
         if (AreThrottlersOverdrafted()) {
             SubscribeToThrottlers();
@@ -1542,14 +1487,14 @@ void TRequestQueue::ScheduleRequestsFromQueue()
                 return;
             }
 
-            DecrementQueueSize(context);
+            DecrementQueueSize(context->GetTotalSize());
             context->AfterDequeued();
             if (context->IsCanceled()) {
                 context.Reset();
             }
         }
 
-        IncrementConcurrency(context);
+        IncrementConcurrency(context->GetTotalSize());
         RunRequest(std::move(context));
     }
 }
@@ -1575,26 +1520,29 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
     }
 }
 
-void TRequestQueue::IncrementQueueSize(const TServiceBase::TServiceContextPtr& context)
+void TRequestQueue::IncrementQueueSize(i64 requestTotalSize)
 {
     ++QueueSize_;
-    QueueByteSize_.fetch_add(context->GetTotalSize());
+    QueueByteSize_.fetch_add(requestTotalSize);
 }
 
-void  TRequestQueue::DecrementQueueSize(const TServiceBase::TServiceContextPtr& context)
+void TRequestQueue::DecrementQueueSize(i64 requestTotalSize)
 {
     auto newQueueSize = --QueueSize_;
-    auto oldQueueByteSize = QueueByteSize_.fetch_sub(context->GetTotalSize());
+    auto oldQueueByteSize = QueueByteSize_.fetch_sub(requestTotalSize);
 
     YT_ASSERT(newQueueSize >= 0);
     YT_ASSERT(oldQueueByteSize >= 0);
 }
 
-bool TRequestQueue::IncrementConcurrency(const TServiceBase::TServiceContextPtr& context)
+// Returns true if concurrency limits are not exceeded.
+bool TRequestQueue::IncrementConcurrency(i64 requestTotalSize)
 {
-    auto resultSize = ++Concurrency_ <= RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit();
-    auto resultByteSize = ConcurrencyByte_.fetch_add(context->GetTotalSize()) <= RuntimeInfo_->ConcurrencyByteLimit.GetDynamicByteLimit();
-    return resultSize && resultByteSize;
+    auto newConcurrencySemaphore = ++Concurrency_;
+    auto newConcurrencyByteSemaphore = ConcurrencyByte_.fetch_add(requestTotalSize);
+
+    return newConcurrencySemaphore <= RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit() &&
+        newConcurrencyByteSemaphore <= RuntimeInfo_->ConcurrencyByteLimit.GetDynamicLimit();
 }
 
 void TRequestQueue::DecrementConcurrency(i64 requestTotalSize)
@@ -1685,7 +1633,7 @@ TServiceBase::TServiceBase(
     , ServiceDescriptor_(descriptor)
     , ServiceId_(descriptor.FullServiceName, options.RealmId)
     , MemoryUsageTracker_(std::move(options.MemoryUsageTracker))
-    , Profiler_(RpcServerProfiler
+    , Profiler_(RpcServerProfiler()
         .WithHot(options.UseHotProfiler)
         .WithTag("yt_service", ServiceId_.ServiceName))
     , AuthenticationTimer_(Profiler_.Timer("/authentication_time"))
@@ -1693,7 +1641,7 @@ TServiceBase::TServiceBase(
         TDispatcher::Get()->GetLightInvoker(),
         BIND(&TServiceBase::OnServiceLivenessCheck, MakeWeak(this)),
         ServiceLivenessCheckPeriod))
-    , PerformanceCounters_(New<TServiceBase::TPerformanceCounters>(RpcServerProfiler))
+    , PerformanceCounters_(New<TServiceBase::TPerformanceCounters>(RpcServerProfiler()))
     , UnknownMethodPerformanceCounters_(CreateUnknownMethodPerformanceCounters())
 {
     RegisterMethod(RPC_SERVICE_METHOD_DESC(Discover)
@@ -1776,7 +1724,7 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
 
     if (MemoryUsageTracker_ && MemoryUsageTracker_->IsExceeded()) {
         ReplyError(
-            TError(NRpc::EErrorCode::MemoryPressure, "Request is dropped due to high memory pressure"),
+            TError(NRpc::EErrorCode::RequestMemoryPressure, "Request is dropped due to high memory pressure"),
             std::move(incomingRequest));
         return;
     }
@@ -2622,7 +2570,7 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
         return runtimeInfo->ConcurrencyLimit.GetDynamicLimit();
     });
     profiler.AddFuncGauge("/concurrency_byte_limit", MakeStrong(this), [=] {
-        return runtimeInfo->ConcurrencyByteLimit.GetDynamicByteLimit();
+        return runtimeInfo->ConcurrencyByteLimit.GetDynamicLimit();
     });
 
     return runtimeInfo;

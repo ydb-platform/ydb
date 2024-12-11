@@ -458,11 +458,15 @@ private:
                 response << "HTTP/1.1 200 Ok\r\n";
                 response << "Content-Type: " << type << "\r\n";
                 response << "Content-Length: " << blob.size() << "\r\n";
-                response << "Date: " << TInstant::Now().ToRfc822String() << "\r\n";
-                if (lastModified) {
-                    response << "Last-Modified: " << lastModified << "\r\n";
+                if (name == "/monitoring/index.html") {
+                    response << "Cache-Control: no-store,max-age=0\r\n"; // do not cache
+                } else {
+                    response << "Date: " << TInstant::Now().ToRfc822String() << "\r\n";
+                    if (lastModified) {
+                        response << "Last-Modified: " << lastModified << "\r\n";
+                    }
+                    response << "Cache-Control: max-age=604800\r\n"; // one week
                 }
-                response << "Cache-Control: max-age=604800\r\n"; // one week
                 response << "\r\n";
                 response.Write(blob.data(), blob.size());
                 Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));

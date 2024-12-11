@@ -89,11 +89,13 @@ void FromProto(
     TSortColumns* sortColumns,
     const NProto::TSortColumnsExt& protoSortColumns)
 {
+    using NYT::FromProto;
+
     YT_VERIFY(protoSortColumns.names_size() == protoSortColumns.sort_orders_size());
     for (int columnIndex = 0; columnIndex < protoSortColumns.names_size(); ++columnIndex) {
         TColumnSortSchema sortColumn{
             .Name = protoSortColumns.names(columnIndex),
-            .SortOrder = CheckedEnumCast<ESortOrder>(protoSortColumns.sort_orders(columnIndex))
+            .SortOrder = FromProto<ESortOrder>(protoSortColumns.sort_orders(columnIndex)),
         };
         sortColumns->push_back(sortColumn);
     }

@@ -48,7 +48,7 @@ TString SecurityPrint(const NKikimrClient::TSqsResponse& resp) {
         case NKikimrClient::TSqsResponse::kReceiveMessage: {
             NKikimrClient::TSqsResponse respCopy = resp;
             for (auto& msg : *respCopy.MutableReceiveMessage()->MutableMessages()) {
-                msg.SetData(TStringBuilder() << "[...user_data_" << msg.GetData().size() << "bytes" << "...]"); 
+                msg.SetData(TStringBuilder() << "[...user_data_" << msg.GetData().size() << "bytes" << "...]");
             }
             return TStringBuilder() << respCopy;
         }
@@ -82,6 +82,7 @@ void TProxyActor::Bootstrap() {
 
     const auto& cfg = Cfg();
     if (cfg.GetRequestTimeoutMs()) {
+        TimeoutCookie_.Reset(ISchedulerCookie::Make2Way());
         this->Schedule(TDuration::MilliSeconds(cfg.GetRequestTimeoutMs()), new TEvWakeup(), TimeoutCookie_.Get());
     }
 

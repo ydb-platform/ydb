@@ -15,7 +15,7 @@ namespace builtins
     types::str strip(types::str const &self, types::str const &to_del = " \n");
 
     DEFINE_FUNCTOR(pythonic::builtins::str, strip);
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

@@ -162,7 +162,7 @@ public:
         UNIT_ASSERT(genericDataSource != Types->DataSourceMap.end());
         auto dqIntegration = genericDataSource->second->GetDqIntegration();
         UNIT_ASSERT(dqIntegration);
-        auto newRead = dqIntegration->WrapRead(TDqSettings(), input.Ptr(), ctx);
+        auto newRead = dqIntegration->WrapRead(input.Ptr(), ctx, IDqIntegration::TWrapReadSettings{});
         BuildSettings(newRead, dqIntegration, ctx);
         return newRead;
     }

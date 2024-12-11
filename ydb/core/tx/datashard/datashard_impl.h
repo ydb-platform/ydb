@@ -3340,6 +3340,10 @@ protected:
                 resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
             }
 
+            ev->Record.MutableTableStats()->SetLocksAcquired(TabletCounters->Cumulative()[COUNTER_LOCKS_ACQUIRED].Get());
+            ev->Record.MutableTableStats()->SetLocksWholeShard(TabletCounters->Cumulative()[COUNTER_LOCKS_WHOLE_SHARD].Get());
+            ev->Record.MutableTableStats()->SetLocksBroken(TabletCounters->Cumulative()[COUNTER_LOCKS_BROKEN].Get());
+
             ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
             ev->Record.SetStartTime(StartTime().MilliSeconds());
 

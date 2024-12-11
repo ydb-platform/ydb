@@ -330,6 +330,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
     }
 
     Y_UNIT_TEST(SharedCacheGarbage) {
+        using namespace NSharedCache;
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -373,7 +374,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         }
 
         // each batch ~70KB, ~700KB in total
-        auto counters = MakeIntrusive<TSharedPageCacheCounters>(runtime.GetDynamicCounters());
+        auto counters = MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(runtime.GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
         Cerr << "ActiveBytes = " << counters->ActiveBytes->Val() << " PassiveBytes = " << counters->PassiveBytes->Val() << Endl;
         UNIT_ASSERT_LE(counters->ActiveBytes->Val(), 800*1024); // one index
     }
@@ -541,6 +542,91 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRangeReadRows(), 2);
         }
     }
+
+    Y_UNIT_TEST(Tli) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        const ui64 lockTxId = 1011121314;
+        i64 txId = 100;
+        TShardedTableOptions opts;        
+        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        ui64 shard1 = shards.at(0);
+
+        auto [tablesMap, ownerId] = GetTablesByPathId(server, shard1);
+        const auto& userTable = tablesMap.at(tableId1.PathId);
+        const auto& description = userTable.GetDescription();
+
+        {
+            Cerr << "... UPSERT" << Endl;
+            UpsertOneKeyValue(runtime, sender, shard1, tableId1, opts.Columns_, 1, 1, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }
+
+        {
+            Cerr << "... waiting for UPSERT stats" << Endl;
+            auto stats = WaitTableStats(runtime, shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowUpdates(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 1);
+        }          
+
+        {
+            Cerr << "... Read and set lock" << Endl;
+            auto request1 = GetBaseReadRequest(tableId1, description, 1);
+            request1->Record.SetLockTxId(lockTxId);
+            AddKeyQuery(*request1, {1});
+
+            auto readResult1 = SendRead(server, shard1, request1.release(), sender);
+
+            UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.BrokenTxLocksSize(), 0);
+        }
+
+        {
+            Cerr << "... waiting for SELECT stats" << Endl;
+            auto stats = WaitTableStats(runtime, shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowReads(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetLocksAcquired(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetLocksBroken(), 0);
+        }        
+
+        {
+            Cerr << "... UPSERT and break lock" << Endl;
+            UpsertOneKeyValue(runtime, sender, shard1, tableId1, opts.Columns_, 1, 101, ++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }
+
+        {
+            Cerr << "... Read and check broken lock" << Endl;
+            auto request2 = GetBaseReadRequest(tableId1, description, 1);
+            request2->Record.SetLockTxId(lockTxId);
+            AddKeyQuery(*request2, {1});
+
+            auto readResult2 = SendRead(server, shard1, request2.release(), sender);
+
+            UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.TxLocksSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.BrokenTxLocksSize(), 1);
+        }     
+
+        {
+            Cerr << "... waiting for SELECT stats with broken locks" << Endl;
+            auto stats = WaitTableStats(runtime, shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowReads(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetLocksAcquired(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetLocksBroken(), 1);
+        }
+    }    
 
     Y_UNIT_TEST(HasSchemaChanges_BTreeIndex) {
         TPortManager pm;

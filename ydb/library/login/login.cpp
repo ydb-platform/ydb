@@ -352,6 +352,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
     auto encoded_token = token.sign(algorithm);
 
     response.Token = TString(encoded_token);
+    response.SanitizedToken = SanitizeJwtToken(response.Token);
 
     return response;
 }
@@ -648,6 +649,14 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             }
         }
     }
+}
+
+TString TLoginProvider::SanitizeJwtToken(const TString& token) {
+    const size_t signaturePos = token.find_last_of('.');
+    if (signaturePos == TString::npos || signaturePos == token.size() - 1) {
+        return {};
+    }
+    return TStringBuilder() << TStringBuf(token).SubString(0, signaturePos) << ".**"; // <token>.**
 }
 
 }

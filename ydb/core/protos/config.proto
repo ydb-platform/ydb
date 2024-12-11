@@ -287,6 +287,7 @@ message TBlobStorageConfig {
 
         // some extra settings
         optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically
+        optional bool AutomaticBootstrap = 9; // whether bootstrap should be performed automatically; PROHIBITED for production
 
         // filled in by config parser, not by user; required for automatic static group creation
         repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 5;
@@ -538,6 +539,7 @@ message TMonitoringConfig {
     optional string MonitoringCertificateFile = 15;
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
+    optional string InactivityTimeout = 18 [default = "2m"];
 }
 
 message TRestartsCountConfig {
@@ -1404,6 +1406,38 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 2,
             DefaultValue: 2 }];
+
+        optional uint64 SlowDiskThresholdHDD = 6 [(ControlOptions) = {
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille, option for HDD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 2000 }];
+        optional uint64 PredictedDelayMultiplierHDD = 7 [(ControlOptions) = {
+            Description: "Predicted time of VDisk's response multiplier, promille, option for HDD",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+        optional uint64 MaxNumOfSlowDisksHDD = 8 [(ControlOptions) = {
+            Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations, option for HDD",
+            MinValue: 1,
+            MaxValue: 2,
+            DefaultValue: 2 }];
+
+        optional uint64 SlowDiskThresholdSSD = 9 [(ControlOptions) = {
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille, option for SSD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 2000 }];
+        optional uint64 PredictedDelayMultiplierSSD = 10 [(ControlOptions) = {
+            Description: "Predicted time of VDisk's response multiplier, promille, option for SSD",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+        optional uint64 MaxNumOfSlowDisksSSD = 11 [(ControlOptions) = {
+            Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations, option for SSD",
+            MinValue: 1,
+            MaxValue: 2,
+            DefaultValue: 2 }];
     }
 
     message TPDiskControls {
@@ -1417,6 +1451,17 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 200 }];
+        optional uint64 UseNoopSchedulerHDD = 3 [(ControlOptions) = {
+            Description: "Enables noop scheduler for HDD disks only",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 UseNoopSchedulerSSD = 4 [(ControlOptions) = {
+            Description: "Enables noop scheduler for SSD, NVME",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+
     }
 
     message TBlobStorageControllerControls {
@@ -1612,6 +1657,10 @@ message THiveConfig {
     optional string CutHistoryDenyList = 76 [default = "ColumnShard,KeyValue,PersQueue,BlobDepot"];
     optional string CutHistoryAllowList = 79 [default = "DataShard"];
     optional uint64 ScaleRecommendationRefreshFrequency = 80 [default = 60000]; // calculate scale recommendation every x milliseconds
+    optional uint64 ScaleOutWindowSize = 81 [default = 15]; // buckets
+    optional uint64 ScaleInWindowSize = 82 [default = 5]; // buckets
+    optional double TargetTrackingCPUMargin = 83 [default = 0.1]; // percent
+    optional double DryRunTargetTrackingCPU = 84; // percent
 }
 
 message TBlobCacheConfig {
@@ -1632,7 +1681,7 @@ message TColumnShardConfig {
         }
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
-    optional bool DisabledOnSchemeShard = 2 [default = true];
+    optional bool DisabledOnSchemeShard = 2 [default = false];
     optional bool IndexationEnabled = 4 [default = true];
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
@@ -1653,6 +1702,7 @@ message TColumnShardConfig {
     message TRepairInfo {
         optional string ClassName = 1;
         optional string Description = 2;
+        optional bool DryRun = 3;
     }
     repeated TRepairInfo Repairs = 15;
 
@@ -1666,6 +1716,9 @@ message TColumnShardConfig {
     optional uint32 SmallPortionDetectSizeLimit = 24 [default = 1048576];  // 1 << 20
     optional bool ColumnChunksV0Usage = 25 [default = true];
     optional bool ColumnChunksV1Usage = 26 [default = true];
+    optional uint64 MemoryLimitScanPortion = 27 [default = 100000000];
+    optional string ReaderClassName = 28;
+    optional bool AllowNullableColumnsInPK = 29 [default = false];
 }
 
 message TSchemeShardConfig {

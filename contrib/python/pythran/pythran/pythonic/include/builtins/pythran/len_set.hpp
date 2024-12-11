@@ -15,8 +15,8 @@ namespace builtins
     long len_set(Iterable const &s);
 
     DEFINE_FUNCTOR(pythonic::builtins::pythran, len_set);
-  }
-}
+  } // namespace pythran
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

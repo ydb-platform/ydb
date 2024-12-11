@@ -17,15 +17,15 @@ namespace NSysView {
 using namespace NActors;
 using namespace NNodeWhiteboard;
 
-class TSidsScan : public TScanActorBase<TSidsScan> {
+class TNodesScan : public TScanActorBase<TNodesScan> {
 public:
-    using TBase  = TScanActorBase<TSidsScan>;
+    using TBase  = TScanActorBase<TNodesScan>;
 
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TSidsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TNodesScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
     {
@@ -73,7 +73,7 @@ public:
 
 private:
     void ProceedToScan() override {
-        Become(&TSidsScan::StateScan);
+        Become(&TNodesScan::StateScan);
         if (AckReceived) {
             StartScan();
         }
@@ -277,7 +277,7 @@ private:
 THolder<NActors::IActor> CreateNodesScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TSidsScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TNodesScan>(ownerId, scanId, tableId, tableRange, columns);
 }
 
 } // NSysView

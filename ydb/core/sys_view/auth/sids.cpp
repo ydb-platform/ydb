@@ -60,6 +60,8 @@ private:
             ReplyEmptyAndDie();
             return;
         }
+
+        RequestDone();
     }
 
     void RequestDone() {

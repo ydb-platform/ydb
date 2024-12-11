@@ -287,7 +287,7 @@ private:
 
         RegisterPgTablesSystemViews();
 
-        RegisterSystemView<Schema::Nodes>(SidsName);
+        RegisterSystemView<Schema::Sids>(SidsName);
     }
 
 private:

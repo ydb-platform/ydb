@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(kikimr_backup)
-
-
-target_link_libraries(kikimr_backup PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-bucket_quoter
-  library-cpp-logger
-  cpp-regex-pcre
-  cpp-string_utils-quote
-  essentials-types-dynumber
-  api-protos
-  common
-  ydb_cli-dump-util
-  public-lib-yson_value
-  ydb_cli-dump-files
-  cpp-client-ydb_driver
-  cpp-client-ydb_result
-  cpp-client-ydb_table
-  cpp-client-ydb_value
-)
-
-target_sources(kikimr_backup PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/backup/backup.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/backup/query_builder.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/backup/query_uploader.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/backup/util.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

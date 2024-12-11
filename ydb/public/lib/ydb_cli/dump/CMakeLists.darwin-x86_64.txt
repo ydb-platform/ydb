@@ -20,6 +20,7 @@ get_built_tool_path(
 )
 
 add_subdirectory(util)
+add_subdirectory(files)
 
 add_library(lib-ydb_cli-dump)
 
@@ -34,6 +35,7 @@ target_link_libraries(lib-ydb_cli-dump PUBLIC
   kikimr_backup
   api-protos
   common
+  ydb_cli-dump-files
   ydb_cli-dump-util
   cpp-client-ydb_proto
   tools-enum_parser-enum_serialization_runtime

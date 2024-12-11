@@ -52,6 +52,7 @@ target_link_libraries(clicommands PUBLIC
   ydb_cli_command_ydb_discovery
   ydb_sdk_core_access
   lib-ydb_cli-dump
+  ydb_cli-dump-files
   lib-ydb_cli-import
   topic
   cpp-client-draft

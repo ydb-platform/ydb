@@ -29,6 +29,7 @@ target_link_libraries(kikimr_backup PUBLIC
   common
   ydb_cli-dump-util
   public-lib-yson_value
+  ydb_cli-dump-files
   cpp-client-ydb_driver
   cpp-client-ydb_result
   cpp-client-ydb_table

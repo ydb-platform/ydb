@@ -4,6 +4,9 @@ import logging
 import os
 import requests
 from ydb.tests.olap.lib.utils import get_external_param
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+
 import ydb
 from copy import deepcopy
 from time import sleep, time
@@ -48,11 +51,13 @@ class YdbCluster:
                 self.role = YdbCluster.Node.Role.UNKNOWN
             self.tablets = [YdbCluster.Node.Tablet(t) for t in desc.get('Tablets', [])]
 
+    _ydb_cluster = None
     _ydb_driver = None
     _results_driver = None
     _cluster_info = None
-    ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
-    ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
+
+    ydb_endpoint = get_external_param('ydb-endpoint', "")
+    ydb_database = get_external_param('ydb-db', "/Root").lstrip('/')
     ydb_mon_port = 8765
     tables_path = get_external_param('tables-path', 'olap_yatests')
     _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
@@ -126,6 +131,13 @@ class YdbCluster:
             }
         return deepcopy(cls._cluster_info)
 
+    @staticmethod 
+    def _start_ydb_cluster():
+        config = KikimrConfigGenerator(extra_feature_flags=[])
+        cluster = KiKiMR(configurator=config)
+        cluster.start()
+        return cluster
+
     @staticmethod
     def _create_ydb_driver(endpoint, database, oauth=None, iam_file=None):
         credentials = None
@@ -156,8 +168,15 @@ class YdbCluster:
     @classmethod
     def get_ydb_driver(cls):
         if cls._ydb_driver is None:
+            endpoint = cls.ydb_endpoint
+            if not endpoint:
+                if cls._ydb_cluster is not None:
+                    raise "Double temporary cluster initialization attempt"
+                cls._ydb_cluster = cls._start_ydb_cluster()
+                node = cls._ydb_cluster.nodes[1]
+                endpoint = "%s:%d" % (node.host, node.port)
             cls._ydb_driver = cls._create_ydb_driver(
-                cls.ydb_endpoint, cls.ydb_database, oauth=os.getenv('OLAP_YDB_OAUTH', None)
+                endpoint, cls.ydb_database, oauth=os.getenv('OLAP_YDB_OAUTH', None)
             )
         return cls._ydb_driver
 

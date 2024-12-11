@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/tiering/tier/object.h>
@@ -112,22 +113,20 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
         for (auto entry : result->ResultSet) {
+            AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "TSchemeObjectWatcher")("event", ev->ToString())("path", JoinPath(entry.Path));
             switch (entry.Status) {
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-                    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "path_fetched")("path", JoinPath(entry.Path));
                     WatchPathId(entry.TableId.PathId);
                     break;
 
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
-                    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "path_not_found")("path", JoinPath(entry.Path));
                     Send(Owner, new NTiers::TEvSchemeObjectResolutionFailed(
                                     JoinPath(entry.Path), NTiers::TEvSchemeObjectResolutionFailed::EReason::NOT_FOUND));
                     break;
 
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
-                    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "lookup_error")("path", JoinPath(entry.Path));
                     Send(Owner, new NTiers::TEvSchemeObjectResolutionFailed(
                                     JoinPath(entry.Path), NTiers::TEvSchemeObjectResolutionFailed::EReason::LOOKUP_ERROR));
                     break;
@@ -170,6 +169,9 @@ private:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         AFL_WARN(NKikimrServices::TX_TIERING)("error", "event_undelivered_to_scheme_cache")("reason", ev->Get()->Reason);
+        if (NYDBTest::TControllers::GetColumnShardController()->GetOverrideTierConfigs().empty()) {
+            AFL_VERIFY(false);
+        }
     }
 
 public:

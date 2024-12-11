@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/tx/tiering
+    ydb/core/tx/tiering/tier
 )
 
 END()

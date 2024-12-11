@@ -296,6 +296,14 @@ ui64 TPartition::GetUsedStorage(const TInstant& now) {
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 
+TInstant TPartition::GetWriteTimestampEstimate(ui64 lagSize) const {
+    if (IsActive() || lagSize) {
+        return WriteTimestampEstimate;
+    }
+
+    return TAppData::TimeProvider->Now();
+}
+
 ui64 TPartition::ImportantClientsMinOffset() const {
     ui64 minOffset = EndOffset;
     for (const auto& consumer : Config.GetConsumers()) {
@@ -3262,12 +3270,11 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
         user->SetCreateTimestampMS(createTimestamp.MilliSeconds());
     }
     user->SetEndOffset(EndOffset);
-    if (IsActive() || offset < (i64)EndOffset) {
+    user->SetWriteTimestampEstimateMS(GetWriteTimestampEstimate(offset > -1 ? EndOffset - offset : 0).MilliSeconds());
+    if (IsActive() || (offset > -1 && offset < (i64)EndOffset)) {
         user->SetSizeLag(GetSizeLag(offset));
-        user->SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
     } else {
         user->SetSizeLag(0);
-        user->SetWriteTimestampEstimateMS(TAppData::TimeProvider->Now().MilliSeconds());
     }
 
     return response;

@@ -3180,7 +3180,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
             ScheduleReplyGetClientOffsetOk(act.Cookie,
                                            offset,
-                                           ts.first, ts.second, ui->AnyCommits);
+                                           ts.first, ts.second, ui ? ui->AnyCommits : false);
         } else {
             ScheduleReplyOk(act.Cookie);
         }

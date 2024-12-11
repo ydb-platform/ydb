@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/request_settings.h>
@@ -15,11 +16,6 @@ namespace NYdb {
 class TDriver;
 
 namespace NDump {
-
-extern const char SCHEME_FILE_NAME[10];
-extern const char PERMISSIONS_FILE_NAME[15];
-extern const char INCOMPLETE_FILE_NAME[11];
-extern const char EMPTY_FILE_NAME[10];
 
 TString DataFileName(ui32 id);
 

@@ -119,10 +119,6 @@ protected:
         TBase::PassAway();
     }
 
-    ui64 GetBSControllerId() {
-        return MakeBSControllerID();
-    }
-
     template <typename TResponse, typename TEntry, typename TExtractorsMap, bool BatchSupport = false>
     void ReplyBatch(typename TResponse::TPtr& ev) {
         static TExtractorsMap extractors;

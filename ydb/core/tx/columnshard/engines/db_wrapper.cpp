@@ -118,16 +118,16 @@ void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRe
     }
 }
 
-bool TDbWrapper::LoadColumns(const std::optional<ui64> pathId, const std::function<void(TColumnChunkLoadContextV1&&)>& callback) {
+bool TDbWrapper::LoadColumns(const std::optional<ui64> pathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) {
     NIceDb::TNiceDb db(Database);
-    using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
+    using IndexColumnsV2 = NColumnShard::Schema::IndexColumnsV2;
     const auto pred = [&](auto& rowset) {
         if (!rowset.IsReady()) {
             return false;
         }
 
         while (!rowset.EndOfSet()) {
-            NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset);
+            NOlap::TColumnChunkLoadContextV2 chunkLoadContext(rowset);
             callback(std::move(chunkLoadContext));
 
             if (!rowset.Next()) {
@@ -137,10 +137,10 @@ bool TDbWrapper::LoadColumns(const std::optional<ui64> pathId, const std::functi
         return true;
     };
     if (pathId) {
-        auto rowset = db.Table<IndexColumnsV1>().Prefix(*pathId).Select();
+        auto rowset = db.Table<IndexColumnsV2>().Prefix(*pathId).Select();
         return pred(rowset);
     } else {
-        auto rowset = db.Table<IndexColumnsV1>().Select();
+        auto rowset = db.Table<IndexColumnsV2>().Select();
         return pred(rowset);
     }
 }

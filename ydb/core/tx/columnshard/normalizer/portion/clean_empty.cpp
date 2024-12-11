@@ -234,13 +234,14 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
     std::vector<TPortionAddress> pack;
     std::map<TPortionAddress, std::vector<TIterator>> iteration;
     const bool v0Usage = AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage();
+    const bool v1Usage = AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage();
     const ui32 SourcesCount = v0Usage ? 4 : 3;
     if (v0Usage) {
         if (v0Portions.size()) {
             iteration[v0Portions.begin()->first].emplace_back(v0Portions);
         }
     }
-    {
+    if (v1Usage) {
         if (v1Portions.size()) {
             iteration[v1Portions.begin()->first].emplace_back(v1Portions);
         }

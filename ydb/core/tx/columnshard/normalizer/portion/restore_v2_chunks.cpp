@@ -168,6 +168,11 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     }
 
     std::vector<INormalizerTask::TPtr> tasks;
+    if (buildPortions.empty()) {
+        return tasks;
+    }
+    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
+
     {
         std::vector<TV2BuildTask> package;
         for (auto&& [portionAddress, portionInfos] : buildPortions) {

@@ -69,6 +69,7 @@ target_sources(ydb-core-blobstorage-ut_blobstorage PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/gc.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/gc_quorum_3dc.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/get.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/get_block.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/group_reconfiguration.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/incorrect_queries.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/index_restore_get.cpp

@@ -39,6 +39,7 @@ target_sources(core-blob_depot-agent PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/status.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_put.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_get.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_get_block.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_block.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_discover.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_range.cpp

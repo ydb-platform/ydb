@@ -50,6 +50,7 @@ target_sources(core-blobstorage-dsproxy PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_discover_m3dc.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_discover_m3of4.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_get.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_get_block.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_get_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_indexrestoreget.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_mon.cpp

@@ -1,0 +1,11 @@
+--- contrib/python/moto/py3/moto/iam/access_control.py
++++ contrib/python/moto/py3/moto/iam/access_control.py
+@@ -390,7 +390,7 @@ class IAMPolicyStatement(object):
+                 is_action_concerned = True
+
+         if is_action_concerned:
+-            same_resource = self._match(self._statement["Resource"], resource)
++            same_resource = self._check_element_matches("Resource", resource)
+             if self._statement["Effect"] == "Allow" and same_resource:
+                 return PermissionResult.PERMITTED
+             else:  # Deny

@@ -1,9 +1,10 @@
 import json
+from typing import Any, Dict, List
 from urllib.parse import unquote
 
 from moto.utilities.utils import merge_multiple_dicts
-from moto.core.responses import BaseResponse
-from .models import apigateway_backends
+from moto.core.responses import BaseResponse, TYPE_RESPONSE
+from .models import apigateway_backends, APIGatewayBackend
 from .utils import deserialize_body
 from .exceptions import InvalidRequestInput
 
@@ -13,16 +14,19 @@ ENDPOINT_CONFIGURATION_TYPES = ["PRIVATE", "EDGE", "REGIONAL"]
 
 
 class APIGatewayResponse(BaseResponse):
-    def error(self, type_, message, status=400):
+    def __init__(self) -> None:
+        super().__init__(service_name="apigateway")
+
+    def error(self, type_: str, message: str, status: int = 400) -> TYPE_RESPONSE:
         headers = self.response_headers or {}
         headers["X-Amzn-Errortype"] = type_
         return (status, headers, json.dumps({"__type": type_, "message": message}))
 
     @property
-    def backend(self):
-        return apigateway_backends[self.region]
+    def backend(self) -> APIGatewayBackend:
+        return apigateway_backends[self.current_account][self.region]
 
-    def __validate_api_key_source(self, api_key_source):
+    def __validate_api_key_source(self, api_key_source: str) -> TYPE_RESPONSE:  # type: ignore[return]
         if api_key_source and api_key_source not in API_KEY_SOURCES:
             return self.error(
                 "ValidationException",
@@ -34,7 +38,7 @@ class APIGatewayResponse(BaseResponse):
                 ).format(api_key_source=api_key_source),
             )
 
-    def __validate_endpoint_configuration(self, endpoint_configuration):
+    def __validate_endpoint_configuration(self, endpoint_configuration: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         if endpoint_configuration and "types" in endpoint_configuration:
             invalid_types = list(
                 set(endpoint_configuration["types"]) - set(ENDPOINT_CONFIGURATION_TYPES)
@@ -50,7 +54,7 @@ class APIGatewayResponse(BaseResponse):
                     ).format(endpoint_type=invalid_types[0]),
                 )
 
-    def restapis(self, request, full_url, headers):
+    def restapis(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
 
         if self.method == "GET":
@@ -59,7 +63,7 @@ class APIGatewayResponse(BaseResponse):
         elif self.method == "POST":
             api_doc = deserialize_body(self.body)
             if api_doc:
-                fail_on_warnings = self._get_bool_param("failonwarnings")
+                fail_on_warnings = self._get_bool_param("failonwarnings") or False
                 rest_api = self.backend.import_rest_api(api_doc, fail_on_warnings)
 
                 return 200, {}, json.dumps(rest_api.to_dict())
@@ -94,14 +98,16 @@ class APIGatewayResponse(BaseResponse):
 
             return 200, {}, json.dumps(rest_api.to_dict())
 
-    def __validte_rest_patch_operations(self, patch_operations):
+    def __validte_rest_patch_operations(self, patch_operations: List[Dict[str, str]]) -> TYPE_RESPONSE:  # type: ignore[return]
         for op in patch_operations:
             path = op["path"]
             if "apiKeySource" in path:
                 value = op["value"]
                 return self.__validate_api_key_source(value)
 
-    def restapis_individual(self, request, full_url, headers):
+    def restapis_individual(
+        self, request: Any, full_url: str, headers: Dict[str, str]
+    ) -> TYPE_RESPONSE:
         self.setup_class(request, full_url, headers)
         function_id = self.path.replace("/restapis/", "", 1).split("/")[0]
 
@@ -111,12 +117,12 @@ class APIGatewayResponse(BaseResponse):
             rest_api = self.backend.delete_rest_api(function_id)
         elif self.method == "PUT":
             mode = self._get_param("mode", "merge")
-            fail_on_warnings = self._get_bool_param("failonwarnings", False)
+            fail_on_warnings = self._get_bool_param("failonwarnings") or False
 
             api_doc = deserialize_body(self.body)
 
             rest_api = self.backend.put_rest_api(
-                function_id, api_doc, mode, fail_on_warnings
+                function_id, api_doc, mode=mode, fail_on_warnings=fail_on_warnings
             )
         elif self.method == "PATCH":
             patch_operations = self._get_param("patchOperations")
@@ -127,7 +133,7 @@ class APIGatewayResponse(BaseResponse):
 
         return 200, {}, json.dumps(rest_api.to_dict())
 
-    def resources(self, request, full_url, headers):
+    def resources(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         function_id = self.path.replace("/restapis/", "", 1).split("/")[0]
 
@@ -139,7 +145,7 @@ class APIGatewayResponse(BaseResponse):
                 json.dumps({"item": [resource.to_dict() for resource in resources]}),
             )
 
-    def gateway_response(self, request, full_url, headers):
+    def gateway_response(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         if request.method == "PUT":
             return self.put_gateway_response()
@@ -148,26 +154,30 @@ class APIGatewayResponse(BaseResponse):
         elif request.method == "DELETE":
             return self.delete_gateway_response()
 
-    def gateway_responses(self, request, full_url, headers):
+    def gateway_responses(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         if request.method == "GET":
             return self.get_gateway_responses()
 
-    def resource_individual(self, request, full_url, headers):
+    def resource_individual(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         function_id = self.path.replace("/restapis/", "", 1).split("/")[0]
         resource_id = self.path.split("/")[-1]
 
         if self.method == "GET":
             resource = self.backend.get_resource(function_id, resource_id)
+            return 200, {}, json.dumps(resource.to_dict())
         elif self.method == "POST":
             path_part = self._get_param("pathPart")
             resource = self.backend.create_resource(function_id, resource_id, path_part)
+            return 201, {}, json.dumps(resource.to_dict())
         elif self.method == "DELETE":
             resource = self.backend.delete_resource(function_id, resource_id)
-        return 200, {}, json.dumps(resource.to_dict())
+            return 202, {}, json.dumps(resource.to_dict())
 
-    def resource_methods(self, request, full_url, headers):
+    def resource_methods(
+        self, request: Any, full_url: str, headers: Dict[str, str]
+    ) -> TYPE_RESPONSE:
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         function_id = url_path_parts[2]
@@ -185,6 +195,7 @@ class APIGatewayResponse(BaseResponse):
             authorizer_id = self._get_param("authorizerId")
             authorization_scopes = self._get_param("authorizationScopes")
             request_validator_id = self._get_param("requestValidatorId")
+            request_parameters = self._get_param("requestParameters")
             method = self.backend.put_method(
                 function_id,
                 resource_id,
@@ -192,26 +203,23 @@ class APIGatewayResponse(BaseResponse):
                 authorization_type,
                 api_key_required,
                 request_models=request_models,
+                request_parameters=request_parameters,
                 operation_name=operation_name,
                 authorizer_id=authorizer_id,
                 authorization_scopes=authorization_scopes,
                 request_validator_id=request_validator_id,
             )
-            return 200, {}, json.dumps(method)
+            return 201, {}, json.dumps(method)
 
         elif self.method == "DELETE":
             self.backend.delete_method(function_id, resource_id, method_type)
-            return 200, {}, ""
-
-        elif self.method == "PATCH":
-            patch_operations = self._get_param("patchOperations")
-            self.backend.update_method(
-                function_id, resource_id, method_type, patch_operations
-            )
+            return 204, {}, ""
 
         return 200, {}, ""
 
-    def resource_method_responses(self, request, full_url, headers):
+    def resource_method_responses(
+        self, request: Any, full_url: str, headers: Dict[str, str]
+    ) -> TYPE_RESPONSE:
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         function_id = url_path_parts[2]
@@ -223,6 +231,7 @@ class APIGatewayResponse(BaseResponse):
             method_response = self.backend.get_method_response(
                 function_id, resource_id, method_type, response_code
             )
+            return 200, {}, json.dumps(method_response)
         elif self.method == "PUT":
             response_models = self._get_param("responseModels")
             response_parameters = self._get_param("responseParameters")
@@ -234,20 +243,15 @@ class APIGatewayResponse(BaseResponse):
                 response_models,
                 response_parameters,
             )
+            return 201, {}, json.dumps(method_response)
         elif self.method == "DELETE":
             method_response = self.backend.delete_method_response(
                 function_id, resource_id, method_type, response_code
             )
-        elif self.method == "PATCH":
-            patch_operations = self._get_param("patchOperations")
-            method_response = self.backend.update_method_response(
-                function_id, resource_id, method_type, response_code, patch_operations
-            )
-        else:
-            raise Exception('Unexpected HTTP method "%s"' % self.method)
-        return 200, {}, json.dumps(method_response)
+            return 204, {}, json.dumps(method_response)
+        raise Exception('Unexpected HTTP method "%s"' % self.method)
 
-    def restapis_authorizers(self, request, full_url, headers):
+    def restapis_authorizers(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         restapi_id = url_path_parts[2]
@@ -292,13 +296,12 @@ class APIGatewayResponse(BaseResponse):
                 identiy_validation_expression=identiy_validation_expression,
                 authorizer_result_ttl=authorizer_result_ttl,
             )
+            return 201, {}, json.dumps(authorizer_response)
         elif self.method == "GET":
             authorizers = self.backend.get_authorizers(restapi_id)
             return 200, {}, json.dumps({"item": authorizers})
 
-        return 200, {}, json.dumps(authorizer_response)
-
-    def request_validators(self, request, full_url, headers):
+    def request_validators(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         restapi_id = url_path_parts[2]
@@ -316,9 +319,9 @@ class APIGatewayResponse(BaseResponse):
             validator = self.backend.create_request_validator(
                 restapi_id, name, body, params
             )
-            return 200, {}, json.dumps(validator)
+            return 201, {}, json.dumps(validator)
 
-    def request_validator_individual(self, request, full_url, headers):
+    def request_validator_individual(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         restapi_id = url_path_parts[2]
@@ -337,7 +340,7 @@ class APIGatewayResponse(BaseResponse):
             )
             return 200, {}, json.dumps(validator)
 
-    def authorizers(self, request, full_url, headers):
+    def authorizers(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         restapi_id = url_path_parts[2]
@@ -345,17 +348,18 @@ class APIGatewayResponse(BaseResponse):
 
         if self.method == "GET":
             authorizer_response = self.backend.get_authorizer(restapi_id, authorizer_id)
+            return 200, {}, json.dumps(authorizer_response)
         elif self.method == "PATCH":
             patch_operations = self._get_param("patchOperations")
             authorizer_response = self.backend.update_authorizer(
                 restapi_id, authorizer_id, patch_operations
             )
+            return 200, {}, json.dumps(authorizer_response)
         elif self.method == "DELETE":
             self.backend.delete_authorizer(restapi_id, authorizer_id)
             return 202, {}, "{}"
-        return 200, {}, json.dumps(authorizer_response)
 
-    def restapis_stages(self, request, full_url, headers):
+    def restapis_stages(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         function_id = url_path_parts[2]
@@ -381,13 +385,12 @@ class APIGatewayResponse(BaseResponse):
                 tags=tags,
                 tracing_enabled=tracing_enabled,
             )
+            return 201, {}, json.dumps(stage_response)
         elif self.method == "GET":
             stages = self.backend.get_stages(function_id)
             return 200, {}, json.dumps({"item": stages})
 
-        return 200, {}, json.dumps(stage_response)
-
-    def restapis_stages_tags(self, request, full_url, headers):
+    def restapis_stages_tags(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         function_id = url_path_parts[4]
@@ -400,12 +403,12 @@ class APIGatewayResponse(BaseResponse):
             return 200, {}, json.dumps({"item": tags})
         if self.method == "DELETE":
             stage = self.backend.get_stage(function_id, stage_name)
-            for tag in stage.get("tags").copy():
-                if tag in self.querystring.get("tagKeys"):
+            for tag in stage.get("tags", {}).copy():
+                if tag in (self.querystring.get("tagKeys") or {}):
                     stage["tags"].pop(tag, None)
             return 200, {}, json.dumps({"item": ""})
 
-    def stages(self, request, full_url, headers):
+    def stages(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         function_id = url_path_parts[2]
@@ -413,30 +416,29 @@ class APIGatewayResponse(BaseResponse):
 
         if self.method == "GET":
             stage_response = self.backend.get_stage(function_id, stage_name)
-
+            return 200, {}, json.dumps(stage_response)
         elif self.method == "PATCH":
             patch_operations = self._get_param("patchOperations")
             stage_response = self.backend.update_stage(
                 function_id, stage_name, patch_operations
             )
+            return 200, {}, json.dumps(stage_response)
         elif self.method == "DELETE":
             self.backend.delete_stage(function_id, stage_name)
             return 202, {}, "{}"
-        return 200, {}, json.dumps(stage_response)
 
-    def integrations(self, request, full_url, headers):
+    def integrations(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         function_id = url_path_parts[2]
         resource_id = url_path_parts[4]
         method_type = url_path_parts[6]
 
-        integration_response = {}
-
         if self.method == "GET":
             integration_response = self.backend.get_integration(
                 function_id, resource_id, method_type
             )
+            return 200, {}, json.dumps(integration_response)
         elif self.method == "PUT":
             integration_type = self._get_param("type")
             uri = self._get_param("uri")
@@ -446,6 +448,7 @@ class APIGatewayResponse(BaseResponse):
             tls_config = self._get_param("tlsConfig")
             cache_namespace = self._get_param("cacheNamespace")
             timeout_in_millis = self._get_param("timeoutInMillis")
+            request_parameters = self._get_param("requestParameters")
             self.backend.get_method(function_id, resource_id, method_type)
 
             integration_http_method = self._get_param(
@@ -465,15 +468,16 @@ class APIGatewayResponse(BaseResponse):
                 tls_config=tls_config,
                 cache_namespace=cache_namespace,
                 timeout_in_millis=timeout_in_millis,
+                request_parameters=request_parameters,
             )
+            return 201, {}, json.dumps(integration_response)
         elif self.method == "DELETE":
             integration_response = self.backend.delete_integration(
                 function_id, resource_id, method_type
             )
+            return 204, {}, json.dumps(integration_response)
 
-        return 200, {}, json.dumps(integration_response)
-
-    def integration_responses(self, request, full_url, headers):
+    def integration_responses(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         function_id = url_path_parts[2]
@@ -485,6 +489,7 @@ class APIGatewayResponse(BaseResponse):
             integration_response = self.backend.get_integration_response(
                 function_id, resource_id, method_type, status_code
             )
+            return 200, {}, json.dumps(integration_response)
         elif self.method == "PUT":
             if not self.body:
                 raise InvalidRequestInput()
@@ -501,13 +506,14 @@ class APIGatewayResponse(BaseResponse):
                 response_templates,
                 content_handling,
             )
+            return 201, {}, json.dumps(integration_response)
         elif self.method == "DELETE":
             integration_response = self.backend.delete_integration_response(
                 function_id, resource_id, method_type, status_code
             )
-        return 200, {}, json.dumps(integration_response)
+            return 204, {}, json.dumps(integration_response)
 
-    def deployments(self, request, full_url, headers):
+    def deployments(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         function_id = self.path.replace("/restapis/", "", 1).split("/")[0]
 
@@ -521,9 +527,9 @@ class APIGatewayResponse(BaseResponse):
             deployment = self.backend.create_deployment(
                 function_id, name, description, stage_variables
             )
-            return 200, {}, json.dumps(deployment)
+            return 201, {}, json.dumps(deployment)
 
-    def individual_deployment(self, request, full_url, headers):
+    def individual_deployment(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         function_id = url_path_parts[2]
@@ -536,7 +542,7 @@ class APIGatewayResponse(BaseResponse):
             deployment = self.backend.delete_deployment(function_id, deployment_id)
             return 202, {}, json.dumps(deployment)
 
-    def apikeys(self, request, full_url, headers):
+    def apikeys(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
 
         if self.method == "POST":
@@ -544,19 +550,20 @@ class APIGatewayResponse(BaseResponse):
             return 201, {}, json.dumps(apikey_response)
 
         elif self.method == "GET":
-            include_values = self._get_bool_param("includeValues")
+            include_values = self._get_bool_param("includeValues") or False
             apikeys_response = self.backend.get_api_keys(include_values=include_values)
             return 200, {}, json.dumps({"item": apikeys_response})
 
-    def apikey_individual(self, request, full_url, headers):
+    def apikey_individual(
+        self, request: Any, full_url: str, headers: Dict[str, str]
+    ) -> TYPE_RESPONSE:
         self.setup_class(request, full_url, headers)
 
         url_path_parts = self.path.split("/")
         apikey = url_path_parts[2]
 
-        status_code = 200
         if self.method == "GET":
-            include_value = self._get_bool_param("includeValue")
+            include_value = self._get_bool_param("includeValue") or False
             apikey_response = self.backend.get_api_key(
                 apikey, include_value=include_value
             )
@@ -564,22 +571,22 @@ class APIGatewayResponse(BaseResponse):
             patch_operations = self._get_param("patchOperations")
             apikey_response = self.backend.update_api_key(apikey, patch_operations)
         elif self.method == "DELETE":
-            apikey_response = self.backend.delete_api_key(apikey)
-            status_code = 202
+            self.backend.delete_api_key(apikey)
+            return 202, {}, "{}"
 
-        return status_code, {}, json.dumps(apikey_response)
+        return 200, {}, json.dumps(apikey_response)
 
-    def usage_plans(self, request, full_url, headers):
+    def usage_plans(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         if self.method == "POST":
             usage_plan_response = self.backend.create_usage_plan(json.loads(self.body))
+            return 201, {}, json.dumps(usage_plan_response)
         elif self.method == "GET":
             api_key_id = self.querystring.get("keyId", [None])[0]
             usage_plans_response = self.backend.get_usage_plans(api_key_id=api_key_id)
             return 200, {}, json.dumps({"item": usage_plans_response})
-        return 200, {}, json.dumps(usage_plan_response)
 
-    def usage_plan_individual(self, request, full_url, headers):
+    def usage_plan_individual(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
 
         url_path_parts = self.path.split("/")
@@ -587,16 +594,18 @@ class APIGatewayResponse(BaseResponse):
 
         if self.method == "GET":
             usage_plan_response = self.backend.get_usage_plan(usage_plan)
+            return 200, {}, json.dumps(usage_plan_response)
         elif self.method == "DELETE":
-            usage_plan_response = self.backend.delete_usage_plan(usage_plan)
+            self.backend.delete_usage_plan(usage_plan)
+            return 202, {}, "{}"
         elif self.method == "PATCH":
             patch_operations = self._get_param("patchOperations")
             usage_plan_response = self.backend.update_usage_plan(
                 usage_plan, patch_operations
             )
-        return 200, {}, json.dumps(usage_plan_response)
+            return 200, {}, json.dumps(usage_plan_response)
 
-    def usage_plan_keys(self, request, full_url, headers):
+    def usage_plan_keys(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
 
         url_path_parts = self.path.split("/")
@@ -611,7 +620,7 @@ class APIGatewayResponse(BaseResponse):
             usage_plans_response = self.backend.get_usage_plan_keys(usage_plan_id)
             return 200, {}, json.dumps({"item": usage_plans_response})
 
-    def usage_plan_key_individual(self, request, full_url, headers):
+    def usage_plan_key_individual(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
 
         url_path_parts = self.path.split("/")
@@ -620,13 +629,12 @@ class APIGatewayResponse(BaseResponse):
 
         if self.method == "GET":
             usage_plan_response = self.backend.get_usage_plan_key(usage_plan_id, key_id)
+            return 200, {}, json.dumps(usage_plan_response)
         elif self.method == "DELETE":
-            usage_plan_response = self.backend.delete_usage_plan_key(
-                usage_plan_id, key_id
-            )
-        return 200, {}, json.dumps(usage_plan_response)
+            self.backend.delete_usage_plan_key(usage_plan_id, key_id)
+            return 202, {}, "{}"
 
-    def domain_names(self, request, full_url, headers):
+    def domain_names(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
 
         if self.method == "GET":
@@ -645,7 +653,6 @@ class APIGatewayResponse(BaseResponse):
             regional_certificate_arn = self._get_param("regionalCertificateArn")
             endpoint_configuration = self._get_param("endpointConfiguration")
             security_policy = self._get_param("securityPolicy")
-            generate_cli_skeleton = self._get_param("generateCliSkeleton")
             domain_name_resp = self.backend.create_domain_name(
                 domain_name,
                 certificate_name,
@@ -658,33 +665,31 @@ class APIGatewayResponse(BaseResponse):
                 regional_certificate_arn,
                 endpoint_configuration,
                 security_policy,
-                generate_cli_skeleton,
             )
-            return 200, {}, json.dumps(domain_name_resp)
+            return 201, {}, json.dumps(domain_name_resp)
 
-    def domain_name_induvidual(self, request, full_url, headers):
+    def domain_name_induvidual(
+        self, request: Any, full_url: str, headers: Dict[str, str]
+    ) -> TYPE_RESPONSE:
         self.setup_class(request, full_url, headers)
 
         url_path_parts = self.path.split("/")
         domain_name = url_path_parts[2]
-        domain_names = {}
 
         if self.method == "GET":
             if domain_name is not None:
                 domain_names = self.backend.get_domain_name(domain_name)
+                return 200, {}, json.dumps(domain_names)
+            return 200, {}, "{}"
         elif self.method == "DELETE":
             if domain_name is not None:
                 self.backend.delete_domain_name(domain_name)
-        elif self.method == "PATCH":
-            if domain_name is not None:
-                patch_operations = self._get_param("patchOperations")
-                self.backend.update_domain_name(domain_name, patch_operations)
+            return 202, {}, json.dumps({})
         else:
             msg = 'Method "%s" for API GW domain names not implemented' % self.method
             return 404, {}, json.dumps({"error": msg})
-        return 200, {}, json.dumps(domain_names)
 
-    def models(self, request, full_url, headers):
+    def models(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         rest_api_id = self.path.replace("/restapis/", "", 1).split("/")[0]
 
@@ -697,31 +702,29 @@ class APIGatewayResponse(BaseResponse):
             description = self._get_param("description")
             schema = self._get_param("schema")
             content_type = self._get_param("contentType")
-            cli_input_json = self._get_param("cliInputJson")
-            generate_cli_skeleton = self._get_param("generateCliSkeleton")
             model = self.backend.create_model(
                 rest_api_id,
                 name,
                 content_type,
                 description,
                 schema,
-                cli_input_json,
-                generate_cli_skeleton,
             )
+            return 201, {}, json.dumps(model)
 
-            return 200, {}, json.dumps(model)
-
-    def model_induvidual(self, request, full_url, headers):
+    def model_induvidual(
+        self, request: Any, full_url: str, headers: Dict[str, str]
+    ) -> TYPE_RESPONSE:
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         rest_api_id = url_path_parts[2]
         model_name = url_path_parts[4]
-        model_info = {}
+
         if self.method == "GET":
             model_info = self.backend.get_model(rest_api_id, model_name)
-        return 200, {}, json.dumps(model_info)
+            return 200, {}, json.dumps(model_info)
+        return 200, {}, "{}"
 
-    def base_path_mappings(self, request, full_url, headers):
+    def base_path_mappings(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
 
         url_path_parts = self.path.split("/")
@@ -740,7 +743,7 @@ class APIGatewayResponse(BaseResponse):
             )
             return 201, {}, json.dumps(base_path_mapping_resp)
 
-    def base_path_mapping_individual(self, request, full_url, headers):
+    def base_path_mapping_individual(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
 
         self.setup_class(request, full_url, headers)
 
@@ -761,21 +764,21 @@ class APIGatewayResponse(BaseResponse):
             base_path_mapping = self.backend.update_base_path_mapping(
                 domain_name, base_path, patch_operations
             )
-        return 200, {}, json.dumps(base_path_mapping)
+            return 200, {}, json.dumps(base_path_mapping)
 
-    def vpc_link(self, request, full_url, headers):
+    def vpc_link(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         url_path_parts = self.path.split("/")
         vpc_link_id = url_path_parts[-1]
 
         if self.method == "DELETE":
             self.backend.delete_vpc_link(vpc_link_id=vpc_link_id)
-            return 200, {}, "{}"
+            return 202, {}, "{}"
         if self.method == "GET":
             vpc_link = self.backend.get_vpc_link(vpc_link_id=vpc_link_id)
             return 200, {}, json.dumps(vpc_link)
 
-    def vpc_links(self, request, full_url, headers):
+    def vpc_links(self, request: Any, full_url: str, headers: Dict[str, str]) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
 
         if self.method == "GET":
@@ -789,9 +792,9 @@ class APIGatewayResponse(BaseResponse):
             vpc_link = self.backend.create_vpc_link(
                 name=name, description=description, target_arns=target_arns, tags=tags
             )
-            return 200, {}, json.dumps(vpc_link)
+            return 202, {}, json.dumps(vpc_link)
 
-    def put_gateway_response(self):
+    def put_gateway_response(self) -> TYPE_RESPONSE:
         rest_api_id = self.path.split("/")[-3]
         response_type = self.path.split("/")[-1]
         params = json.loads(self.body)
@@ -805,9 +808,9 @@ class APIGatewayResponse(BaseResponse):
             response_parameters=response_parameters,
             response_templates=response_templates,
         )
-        return 200, {}, json.dumps(response)
+        return 201, {}, json.dumps(response)
 
-    def get_gateway_response(self):
+    def get_gateway_response(self) -> TYPE_RESPONSE:
         rest_api_id = self.path.split("/")[-3]
         response_type = self.path.split("/")[-1]
         response = self.backend.get_gateway_response(
@@ -815,12 +818,12 @@ class APIGatewayResponse(BaseResponse):
         )
         return 200, {}, json.dumps(response)
 
-    def get_gateway_responses(self):
+    def get_gateway_responses(self) -> TYPE_RESPONSE:
         rest_api_id = self.path.split("/")[-2]
         responses = self.backend.get_gateway_responses(rest_api_id=rest_api_id)
         return 200, {}, json.dumps(dict(item=responses))
 
-    def delete_gateway_response(self):
+    def delete_gateway_response(self) -> TYPE_RESPONSE:
         rest_api_id = self.path.split("/")[-3]
         response_type = self.path.split("/")[-1]
         self.backend.delete_gateway_response(

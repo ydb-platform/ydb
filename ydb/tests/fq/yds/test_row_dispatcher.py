@@ -216,7 +216,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
-        assert "Cannot parse JSON string" in issues, "Incorrect Issues: " + issues
+        assert "Failed to parse json message for offset" in issues, "Incorrect Issues: " + issues
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 0)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)

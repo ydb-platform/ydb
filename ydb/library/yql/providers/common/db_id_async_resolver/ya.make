@@ -7,8 +7,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/threading/future
-    ydb/library/yql/providers/generic/connector/api/common
-    ydb/library/yql/public/issue
+    ydb/library/yql/providers/common/proto
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

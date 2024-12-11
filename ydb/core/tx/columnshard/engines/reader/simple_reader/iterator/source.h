@@ -1,4 +1,5 @@
 #pragma once
+#include "columns_set.h"
 #include "context.h"
 #include "fetched_data.h"
 
@@ -9,7 +10,6 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -38,53 +38,9 @@ public:
     TPortionPage(const ui32 startIndex, const ui32 recordsCount, const ui64 memoryBytes)
         : StartIndex(startIndex)
         , RecordsCount(recordsCount)
-        , MemoryBytes(memoryBytes) {
-    }
-};
+        , MemoryBytes(memoryBytes)
+    {
 
-class TReplaceKeyAdapter {
-private:
-    const bool Reverse = false;
-    const NArrow::TReplaceKey Value;
-
-public:
-    TReplaceKeyAdapter(const NArrow::TReplaceKey& rk, const bool reverse)
-        : Reverse(reverse)
-        , Value(rk) {
-    }
-
-    std::partial_ordering Compare(const TReplaceKeyAdapter& item) const {
-        AFL_VERIFY(Reverse == item.Reverse);
-        const std::partial_ordering result = Value.CompareNotNull(item.Value);
-        if (result == std::partial_ordering::equivalent) {
-            return std::partial_ordering::equivalent;
-        } else if (result == std::partial_ordering::less) {
-            return Reverse ? std::partial_ordering::greater : std::partial_ordering::less;
-        } else if (result == std::partial_ordering::greater) {
-            return Reverse ? std::partial_ordering::less : std::partial_ordering::greater;
-        } else {
-            AFL_VERIFY(false);
-            return std::partial_ordering::less;
-        }
-    }
-
-    bool operator<(const TReplaceKeyAdapter& item) const {
-        AFL_VERIFY(Reverse == item.Reverse);
-        const std::partial_ordering result = Value.CompareNotNull(item.Value);
-        if (result == std::partial_ordering::equivalent) {
-            return false;
-        } else if (result == std::partial_ordering::less) {
-            return !Reverse;
-        } else if (result == std::partial_ordering::greater) {
-            return Reverse;
-        } else {
-            AFL_VERIFY(false);
-            return false;
-        }
-    }
-
-    TString DebugString() const {
-        return TStringBuilder() << "point:{" << Value.DebugString() << "};reverse:" << Reverse << ";";
     }
 };
 
@@ -92,8 +48,10 @@ class IDataSource: public ICursorEntity {
 private:
     YDB_READONLY(ui32, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
-    const TReplaceKeyAdapter Start;
-    const TReplaceKeyAdapter Finish;
+    YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Start);
+    YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Finish);
+    NArrow::TReplaceKey StartReplaceKey;
+    NArrow::TReplaceKey FinishReplaceKey;
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
     YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
@@ -104,7 +62,6 @@ private:
     std::shared_ptr<TFetchingScript> FetchingPlan;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);
     YDB_READONLY(TPKRangeFilter::EUsageClass, UsageClass, TPKRangeFilter::EUsageClass::PartialUsage);
-    YDB_ACCESSOR(ui32, ResultRecordsCount, 0);
     bool ProcessingStarted = false;
     bool IsStartedByCursor = false;
 
@@ -118,7 +75,6 @@ private:
 
     std::optional<TFetchingScriptCursor> ScriptCursor;
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
-
 protected:
     std::optional<bool> IsSourceInMemoryFlag;
 
@@ -139,13 +95,6 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
-    const TReplaceKeyAdapter& GetStart() const {
-        return Start;
-    }
-    const TReplaceKeyAdapter GetFinish() const {
-        return Finish;
-    }
-
     bool GetIsStartedByCursor() const {
         return IsStartedByCursor;
     }
@@ -205,7 +154,7 @@ public:
     virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const = 0;
 
     void StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr);
-    virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
+    virtual ui64 PredictAccessorsSize() const = 0;
 
     bool StartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
         return DoStartFetchingAccessor(sourcePtr, step);
@@ -249,6 +198,13 @@ public:
     virtual ui64 GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
+    const NArrow::TReplaceKey& GetStartReplaceKey() const {
+        return StartReplaceKey;
+    }
+    const NArrow::TReplaceKey& GetFinishReplaceKey() const {
+        return FinishReplaceKey;
+    }
+
     bool HasStageResult() const {
         return !!StageResult;
     }
@@ -268,12 +224,11 @@ public:
         AFL_VERIFY(StageData);
         TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
 
+        const auto accessor = StageData->GetPortionAccessor();
+        StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
         if (memoryLimit) {
-            const auto accessor = StageData->GetPortionAccessor();
-            StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
             StageResult->SetPages(accessor.BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
         } else {
-            StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
             StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
         }
     }
@@ -300,6 +255,10 @@ public:
     }
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
 
+    std::shared_ptr<arrow::RecordBatch> GetLastPK() const {
+        return Finish.BuildSortingCursor().ExtractSortingPosition(Finish.GetSortFields());
+    }
+
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const = 0;
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
@@ -320,8 +279,8 @@ public:
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("source_idx", SourceIdx);
-        result.InsertValue("start", Start.DebugString());
-        result.InsertValue("finish", Finish.DebugString());
+        result.InsertValue("start", Start.DebugJson());
+        result.InsertValue("finish", Finish.DebugJson());
         result.InsertValue("specific", DoDebugJson());
         return result;
     }
@@ -329,12 +288,11 @@ public:
     bool OnIntervalFinished(const ui32 intervalIdx);
 
     void OnEmptyStageData() {
-        ResourceGuards.clear();
+        if (!ResourceGuards.size()) {
+            return;
+        }
+        ResourceGuards.back()->Update(0);
         Finalize(std::nullopt);
-    }
-
-    bool HasStageData() const {
-        return !!StageData;
     }
 
     const TFetchedData& GetStageData() const {
@@ -347,13 +305,16 @@ public:
         return *StageData;
     }
 
-    IDataSource(const ui32 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TReplaceKey& start,
+    IDataSource(const ui32 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
+        const NArrow::TReplaceKey& start,
         const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : SourceId(sourceId)
         , SourceIdx(sourceIdx)
-        , Start(context->GetReadMetadata()->IsDescSorted() ? finish : start, context->GetReadMetadata()->IsDescSorted())
-        , Finish(context->GetReadMetadata()->IsDescSorted() ? start : finish, context->GetReadMetadata()->IsDescSorted())
+        , Start(context->GetReadMetadata()->BuildSortedPosition(start))
+        , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
+        , StartReplaceKey(start)
+        , FinishReplaceKey(finish)
         , Context(context)
         , RecordSnapshotMin(recordSnapshotMin)
         , RecordSnapshotMax(recordSnapshotMax)
@@ -361,10 +322,12 @@ public:
         , ShardingVersionOptional(shardingVersion)
         , HasDeletions(hasDeletions) {
         StageData = std::make_unique<TFetchedData>(true);
-        UsageClass = Context->GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(start, finish);
+        UsageClass = Context->GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(GetStartReplaceKey(), GetFinishReplaceKey());
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::DontUsage);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())(
-            "finish", Finish.DebugString());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
+        if (Start.IsReverseSort()) {
+            std::swap(Start, Finish);
+        }
         Y_ABORT_UNLESS(Start.Compare(Finish) != std::partial_ordering::greater);
     }
 
@@ -417,17 +380,12 @@ private:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
-    virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const override {
-        return Portion->GetApproxChunksCount(entityIds.size()) * sizeof(TColumnRecord);
+    virtual ui64 PredictAccessorsSize() const override {
+        return Portion->GetApproxChunksCount(GetContext()->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) * sizeof(TColumnRecord);
     }
 
     virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const override {
-        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            AFL_VERIFY(Portion->GetMeta().GetFirstLastPK().GetBatch()->num_rows());
-            return Portion->GetMeta().GetFirstLastPK().GetBatch()->Slice(Portion->GetMeta().GetFirstLastPK().GetBatch()->num_rows() - 1, 1);
-        } else {
-            return Portion->GetMeta().GetFirstLastPK().GetBatch()->Slice(0, 1);
-        }
+        return Portion->GetMeta().GetFirstLastPK().GetBatch()->Slice(0, 1);
     }
 
     virtual bool DoAddTxConflict() override {

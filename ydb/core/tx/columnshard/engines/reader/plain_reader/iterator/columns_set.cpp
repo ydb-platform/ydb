@@ -2,7 +2,7 @@
 #include <util/string/join.h>
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 
-namespace NKikimr::NOlap::NReader::NCommon {
+namespace NKikimr::NOlap::NReader::NPlain {
 
 TString TColumnsSet::DebugString() const {
     return TStringBuilder() << "("

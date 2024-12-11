@@ -7,6 +7,7 @@ DEFINE SUBQUERY $get_tables_list($dir) AS
         Unwrap($dir || "/" || CAST(TableName(Path, "yt") AS String)) AS Path,
     FROM
         FOLDER($dir)
+    ;
 END DEFINE;
 
 DEFINE SUBQUERY $get_all_tables_list($dirs) AS

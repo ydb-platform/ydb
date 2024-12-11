@@ -18,7 +18,7 @@ DEFINE SUBQUERY $last_tables($path, $limit) AS
         ORDER BY
             Name DESC
         LIMIT $limit
-    )
+    );
 END DEFINE;
 
 $logs = (

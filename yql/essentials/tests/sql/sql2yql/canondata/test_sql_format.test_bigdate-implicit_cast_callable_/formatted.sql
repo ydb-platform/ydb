@@ -2,7 +2,7 @@
 USE plato;
 
 $identity = ($x) -> {
-    RETURN $x
+    RETURN $x;
 };
 
 $idDate32 = CALLABLE (Callable<(date32) -> date32>, $identity);

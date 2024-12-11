@@ -37,7 +37,7 @@ $i3 = (
 );
 
 $udf = ($x) -> {
-    RETURN Yql::VariantItem($x)
+    RETURN Yql::VariantItem($x);
 };
 
 PROCESS $i1, $i2, $i3

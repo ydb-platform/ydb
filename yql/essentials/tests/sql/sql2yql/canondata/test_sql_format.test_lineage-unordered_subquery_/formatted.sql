@@ -5,6 +5,7 @@ DEFINE SUBQUERY $f() AS
         *
     FROM
         Input
+    ;
 END DEFINE;
 
 INSERT INTO Output WITH truncate

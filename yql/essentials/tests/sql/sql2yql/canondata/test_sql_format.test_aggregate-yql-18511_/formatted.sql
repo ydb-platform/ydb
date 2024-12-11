@@ -5,7 +5,7 @@ $round_period = ($day, $period) -> {
         WHEN $period == 'w' THEN DateTime::MakeDate(DateTime::StartOfWeek($day))
         WHEN $period == 'm' THEN DateTime::MakeDate(DateTime::StartOfMonth($day))
         ELSE $day
-    END
+    END;
 };
 
 $data =

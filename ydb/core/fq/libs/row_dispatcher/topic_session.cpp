@@ -308,7 +308,7 @@ private:
         ExceptionFunc(std::exception, HandleException)
     )
 
-    STRICT_STFUNC(ErrorState, {
+    STRICT_STFUNC_EXC(ErrorState,
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
         IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
@@ -316,8 +316,10 @@ private:
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
         IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
-        IgnoreFunc(TEvRowDispatcher::TEvPurecalcCompileResponse);
-    })
+        IgnoreFunc(NFq::TEvPrivate::TEvSendStatisticToRowDispatcher);,
+        ExceptionFunc(std::exception, HandleException)
+    )
+
 };
 
 TTopicSession::TTopicSession(

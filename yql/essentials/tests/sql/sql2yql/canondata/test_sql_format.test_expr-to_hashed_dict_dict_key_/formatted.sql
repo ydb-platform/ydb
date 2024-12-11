@@ -1,10 +1,10 @@
 /* postgres can not */
 $first = ($x) -> {
-    RETURN $x.0
+    RETURN $x.0;
 };
 
 $second = ($x) -> {
-    RETURN $x.1
+    RETURN $x.1;
 };
 
 $i = AsDict(AsTuple(1, "A"), AsTuple(2, "B"));
@@ -26,9 +26,9 @@ SELECT
                 DictItems($d), ($x) -> {
                     RETURN ListMap(
                         DictItems($x.0), ($y) -> {
-                            RETURN ($y, $x.1)
+                            RETURN ($y, $x.1);
                         }
-                    )
+                    );
                 }
             )
         )
@@ -37,7 +37,7 @@ SELECT
         ListFlatten(
             ListMap(
                 DictKeys($d), ($x) -> {
-                    RETURN DictItems($x)
+                    RETURN DictItems($x);
                 }
             )
         )
@@ -64,9 +64,9 @@ SELECT
                 DictItems($d), ($x) -> {
                     RETURN ListMap(
                         DictItems($x.0), ($y) -> {
-                            RETURN ($y, $x.1)
+                            RETURN ($y, $x.1);
                         }
-                    )
+                    );
                 }
             )
         )
@@ -75,7 +75,7 @@ SELECT
         ListFlatten(
             ListMap(
                 DictKeys($d), ($x) -> {
-                    RETURN DictItems($x)
+                    RETURN DictItems($x);
                 }
             )
         )
@@ -102,9 +102,9 @@ SELECT
                 DictItems($d), ($x) -> {
                     RETURN ListMap(
                         DictItems($x.0), ($y) -> {
-                            RETURN ($y, $x.1)
+                            RETURN ($y, $x.1);
                         }
-                    )
+                    );
                 }
             )
         )
@@ -113,7 +113,7 @@ SELECT
         ListFlatten(
             ListMap(
                 DictKeys($d), ($x) -> {
-                    RETURN DictItems($x)
+                    RETURN DictItems($x);
                 }
             )
         )
@@ -140,9 +140,9 @@ SELECT
                 DictItems($d), ($x) -> {
                     RETURN ListMap(
                         DictItems($x.0), ($y) -> {
-                            RETURN ($y, $x.1)
+                            RETURN ($y, $x.1);
                         }
-                    )
+                    );
                 }
             )
         )
@@ -151,7 +151,7 @@ SELECT
         ListFlatten(
             ListMap(
                 DictKeys($d), ($x) -> {
-                    RETURN DictItems($x)
+                    RETURN DictItems($x);
                 }
             )
         )

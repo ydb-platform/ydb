@@ -42,7 +42,7 @@ $age_suffixes = ($interval, $age_segments) -> {
             ListMap(
                 $age_segments,
                 ($i) -> {
-                    RETURN <|age_suffix: ":Age:"u || $i.suffix, age_weight: $interval_fits_in($interval, $i)|>
+                    RETURN <|age_suffix: ":Age:"u || $i.suffix, age_weight: $interval_fits_in($interval, $i)|>;
                 }
             ),
             ($i) -> {

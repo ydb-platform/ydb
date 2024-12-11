@@ -1124,13 +1124,14 @@ namespace NKikimr::NYaml {
             autoconfigSettings->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
         }
         if (!autoconfigSettings->HasGeometry()) {
-            // mirror-3-dc-3-nodes case
-            if (ephemeralConfig.GetStaticErasure() == "mirror-3-dc" && \
-                ephemeralConfig.HostsSize() == 3) {
-                autoconfigSettings->MutableGeometry()->SetRealmLevelBegin(10);
-                autoconfigSettings->MutableGeometry()->SetRealmLevelEnd(20);
-                autoconfigSettings->MutableGeometry()->SetDomainLevelBegin(10);
-                autoconfigSettings->MutableGeometry()->SetDomainLevelEnd(256);
+            if (ephemeralConfig.HasFailDomainType() &&
+                ephemeralConfig.GetFailDomainType() != NKikimrConfig::TEphemeralInputFields::Rack) {
+                auto* geometry = autoconfigSettings->MutableGeometry();
+                const auto& range = FailDomainGeometryRanges.at(ephemeralConfig.GetFailDomainType());
+                geometry->SetRealmLevelBegin(range.RealmLevelBegin);
+                geometry->SetRealmLevelEnd(range.RealmLevelEnd);
+                geometry->SetDomainLevelBegin(range.DomainLevelBegin);
+                geometry->SetDomainLevelEnd(range.DomainLevelEnd);
             }
         }
 
@@ -1155,7 +1156,9 @@ namespace NKikimr::NYaml {
         }
 
         Y_ENSURE_BT(!hostConfigIdProvided || !hostConfigIdAssigned, "mixed host configs with explicit id and without one");
-        Y_ENSURE_BT(!validHostConfigIds.empty(), "autoconfiguration is enabled, but no host configs provided");
+        if (validHostConfigIds.empty()) {
+            return; // nothing to configure
+        }
 
         TMap<std::tuple<TString, ui32>, ui32> hostNodeMap; // (.nameservice_config.node[].interconnect_host, .nameservice_config.node[].port) -> .nameservice_config.node[].node_id
         Y_ENSURE_BT(config.HasNameserviceConfig());

@@ -91,20 +91,27 @@ private:
     struct TClientsInfo : public IClientDataConsumer {
         using TPtr = TIntrusivePtr<TClientsInfo>;
 
-        TClientsInfo(TTopicSession& self, const TString& logPrefix, const ITopicFormatHandler::TSettings& handlerSettings, const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev, const NMonitoring::TDynamicCounterPtr& counters, TMaybe<ui64> offset)
+        TClientsInfo(TTopicSession& self, const TString& logPrefix, const ITopicFormatHandler::TSettings& handlerSettings, const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev, const NMonitoring::TDynamicCounterPtr& counters, const TString& readGroup, TMaybe<ui64> offset)
             : Self(self)
             , LogPrefix(logPrefix)
             , HandlerSettings(handlerSettings)
             , Settings(ev->Get()->Record)
             , ReadActorId(ev->Sender)
-            , FilteredDataRate(counters->GetCounter("FilteredDataRate", true))
-            , RestartSessionByOffsetsByQuery(counters->GetCounter("RestartSessionByOffsetsByQuery", true))
+            , Counters(counters)
         {
             if (offset) {
                 NextMessageOffset = *offset;
                 InitialOffset = *offset;
             }
             Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
+            auto queryGroup = Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
+            auto topicGroup = queryGroup->GetSubgroup("read_group", CleanupCounterValueString(readGroup));
+            FilteredDataRate = topicGroup->GetCounter("FilteredDataRate", true);
+            RestartSessionByOffsetsByQuery = counters->GetCounter("RestartSessionByOffsetsByQuery", true);
+        }
+
+        ~TClientsInfo() {
+            Counters->RemoveSubgroup("query_id", Settings.GetQueryId());
         }
 
         TActorId GetClientId() const override {
@@ -186,6 +193,7 @@ private:
         // Metrics
         ui64 InitialOffset = 0;
         TStats FilteredStat;
+        const ::NMonitoring::TDynamicCounterPtr Counters;
         NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
         NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsetsByQuery;
     };
@@ -684,10 +692,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     const TString& format = source.GetFormat();
     ITopicFormatHandler::TSettings handlerSettings = {.ParsingFormat = format ? format : "raw"};
 
-    auto queryGroup = Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
-    auto readGroup = queryGroup->GetSubgroup("read_group", CleanupCounterValueString(ReadGroup));
-    auto clientInfo = Clients.insert({ev->Sender, MakeIntrusive<TClientsInfo>(*this, LogPrefix, handlerSettings, ev, readGroup, offset)}).first->second;
-
+    auto clientInfo = Clients.insert({ev->Sender, MakeIntrusive<TClientsInfo>(*this, LogPrefix, handlerSettings, ev, Counters, ReadGroup, offset)}).first->second;
     auto formatIt = FormatHandlers.find(handlerSettings);
     if (formatIt == FormatHandlers.end()) {
         formatIt = FormatHandlers.insert({handlerSettings, CreateTopicFormatHandler(ActorContext(), FormatHandlerConfig, handlerSettings, Metrics.PartitionGroup)}).first;

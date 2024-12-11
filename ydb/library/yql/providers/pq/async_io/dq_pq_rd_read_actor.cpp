@@ -87,7 +87,7 @@ struct TRowDispatcherReadActorMetrics {
     }
 
     ~TRowDispatcherReadActorMetrics() {
-        SubGroup->RemoveSubgroup("id", TxId);
+        SubGroup->RemoveSubgroup("tx_id", TxId);
     }
 
     TString TxId;

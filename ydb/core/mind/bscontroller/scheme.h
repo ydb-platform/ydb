@@ -107,13 +107,16 @@ struct Schema : NIceDb::Schema {
         struct CompatibilityInfo : Column<21, NScheme::NTypeIds::String> {};
         struct UseSelfHealLocalPolicy : Column<22, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct TryToRelocateBrokenDisksLocallyFirst : Column<23, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct YamlConfig : Column<24, NScheme::NTypeIds::String> {};
+        struct ConfigVersion : Column<25, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        struct IsOngoingCommit : Column<26, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
               InstanceId, SelfHealEnable, DonorModeEnable, ScrubPeriodicity, SerialManagementStage, NextStoragePoolId,
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
-              UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst>;
+              UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ConfigVersion, IsOngoingCommit>;
     };
 
     struct VSlot : Table<5> {

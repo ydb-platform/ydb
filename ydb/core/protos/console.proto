@@ -72,3 +72,7 @@ message TGetLogTailResponse {
     optional TStatus Status = 1;
     repeated TLogRecord LogRecords = 4;
 }
+
+message TCloseSession {
+
+}

@@ -12,6 +12,7 @@ SRCS(
     config_fit_groups.cpp
     config_fit_pdisks.cpp
     config.h
+    console_handshake.cpp
     defs.h
     diff.h
     disk_metrics.cpp

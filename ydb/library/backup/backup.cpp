@@ -383,6 +383,7 @@ Ydb::Table::CreateTableRequest ProtoFromTableDescription(const NTable::TTableDes
 
         if (profile.has_storage_policy()) {
             auto& policy = *profile.mutable_storage_policy();
+            
             policy.clear_syslog();
             policy.clear_log();
             policy.clear_data();

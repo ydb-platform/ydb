@@ -44,7 +44,6 @@ bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionConte
 }
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
-    THashMap<ui32, TSchemaPreset> schemaPresets;
     {
         TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableLoadTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Tables");
@@ -73,8 +72,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         }
     }
 
+    std::optional<TSchemaPreset> preset;
     {
-        bool isFakePresetOnly = true;
         TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetLoadTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTablesManager/InitFromDB::SchemaPresets");
         auto rowset = db.Table<Schema::SchemaPresetInfo>().Select();
@@ -83,31 +82,24 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             return false;
         }
 
-        while (!rowset.EndOfSet()) {
-            TSchemaPreset preset;
-            preset.InitFromDB(rowset);
+        if (!rowset.EndOfSet()) {
+            preset->InitFromDB(rowset);
 
-            if (preset.IsStandaloneTable()) {
-                Y_VERIFY_S(!preset.GetName(), "Preset name: " + preset.GetName());
+            if (preset->IsStandaloneTable()) {
+                Y_VERIFY_S(!preset->GetName(), "Preset name: " + preset->GetName());
+                AFL_VERIFY(!preset->Id);
             } else {
-                Y_VERIFY_S(preset.GetName() == "default", "Preset name: " + preset.GetName());
-                isFakePresetOnly = false;
+                Y_VERIFY_S(preset->GetName() == "default", "Preset name: " + preset->GetName());
+                AFL_VERIFY(preset->Id);
             }
-            AFL_VERIFY(schemaPresets.emplace(preset.GetId(), preset).second);
-            AFL_VERIFY(SchemaPresetsIds.emplace(preset.GetId()).second);
+            AFL_VERIFY(SchemaPresetsIds.emplace(preset->GetId()).second);
             if (!rowset.Next()) {
                 timer.AddLoadingFail();
                 return false;
             }
         }
 
-        for (const auto& [presetId, _] : schemaPresets) {
-            if (isFakePresetOnly) {
-                Y_ABORT_UNLESS(presetId == 0);
-            } else {
-                Y_ABORT_UNLESS(presetId > 0);
-            }
-        }
+        AFL_VERIFY(rowset.EndOfSet())("reson", "multiple_presets_not_supported");
     }
 
     {
@@ -130,7 +122,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             NKikimrTxColumnShard::TTableVersionInfo versionInfo;
             Y_ABORT_UNLESS(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "load_table_version")("path_id", pathId)("snapshot", version);
-            Y_ABORT_UNLESS(schemaPresets.contains(versionInfo.GetSchemaPresetId()));
+            AFL_VERIFY(preset);
+            AFL_VERIFY(preset->Id == versionInfo.GetSchemaPresetId())("preset", preset->Id)("table", versionInfo.GetSchemaPresetId());
 
             if (!table.IsDropped()) {
                 auto& ttlSettings = versionInfo.GetTtlSettings();
@@ -157,8 +150,6 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         }
     }
 
-    AFL_VERIFY(schemaPresets.size() <= 1)("size", schemaPresets.size());
-
     {
         TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetVersionsLoadTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTablesManager/InitFromDB::PresetVersions");
@@ -171,7 +162,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
         while (!rowset.EndOfSet()) {
             const ui32 id = rowset.GetValue<Schema::SchemaPresetVersionInfo::Id>();
-            Y_ABORT_UNLESS(schemaPresets.contains(id));
+            AFL_VERIFY(preset);
+            AFL_VERIFY(preset->Id == id)("preset", preset->Id)("schema", id);
             NOlap::TSnapshot version(
                 rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceStep>(), rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceTxId>());
 

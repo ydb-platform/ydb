@@ -8,7 +8,7 @@ struct TFileInfo {
 };
 
 const TFileInfo& TableScheme();
-const TFileInfo& TablePermissions();
+const TFileInfo& Permissions();
 const TFileInfo& Changefeed();
 const TFileInfo& Topic();
 const TFileInfo& IncompleteData();

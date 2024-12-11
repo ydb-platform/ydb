@@ -550,13 +550,13 @@ TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const T
         return Result<TRestoreResult>();
     }
 
-    if (!fsPath.Child(NBackup::NFiles::TablePermissions().FileName).Exists()) {
+    if (!fsPath.Child(NBackup::NFiles::Permissions().FileName).Exists()) {
         return Result<TRestoreResult>();
     }
 
     LOG_D("Restore ACL " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
-    auto permissions = ReadPermissions(fsPath.Child(NBackup::NFiles::TablePermissions().FileName), Log.get());
+    auto permissions = ReadPermissions(fsPath.Child(NBackup::NFiles::Permissions().FileName), Log.get());
     return ModifyPermissions(SchemeClient, dbPath, TModifyPermissionsSettings(permissions));
 }
 

@@ -460,9 +460,9 @@ void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& p
 
     TString permissionsStr;
     google::protobuf::TextFormat::PrintToString(proto, &permissionsStr);
-    LOG_D("Write ACL into " << folderPath.Child(NFiles::TablePermissions().FileName).GetPath().Quote());
+    LOG_D("Write ACL into " << folderPath.Child(NFiles::Permissions().FileName).GetPath().Quote());
 
-    TFile outFile(folderPath.Child(NFiles::TablePermissions().FileName), CreateAlways | WrOnly);
+    TFile outFile(folderPath.Child(NFiles::Permissions().FileName), CreateAlways | WrOnly);
     outFile.Write(permissionsStr.data(), permissionsStr.size());
 }
 

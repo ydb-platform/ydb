@@ -26,7 +26,7 @@ const TFileInfo& TableScheme() {
     return FILES_INFO[SCHEME];
 }
 
-const TFileInfo& TablePermissions() {
+const TFileInfo& Permissions() {
     return FILES_INFO[PERMISSIONS];
 }
 

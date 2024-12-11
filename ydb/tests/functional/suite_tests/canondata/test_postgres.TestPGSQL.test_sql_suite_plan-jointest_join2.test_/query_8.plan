@@ -76,9 +76,9 @@
                                                                     "y1",
                                                                     "y2"
                                                                 ],
-                                                                "E-Cost": "No estimate",
-                                                                "E-Rows": "No estimate",
-                                                                "E-Size": "No estimate",
+                                                                "E-Cost": "0",
+                                                                "E-Rows": "0",
+                                                                "E-Size": "0",
                                                                 "LookupKeyColumns": [
                                                                     "y1"
                                                                 ],

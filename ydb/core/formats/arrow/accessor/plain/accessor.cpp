@@ -43,10 +43,11 @@ public:
         return (ui64)ChunkedArray->num_chunks();
     }
     ui64 GetChunkLength(const ui32 idx) const {
-        return (ui64)ChunkedArray->chunks()[idx]->length();
+        return (ui64)ChunkedArray->chunk(idx)->length();
     }
     void OnArray(const ui32 idx, const ui32 startPosition) const {
-        *Result = IChunkedArray::TLocalDataAddress(ChunkedArray->chunk(idx), startPosition, idx);
+        const auto& arr = ChunkedArray->chunk(idx);
+        *Result = IChunkedArray::TLocalDataAddress(arr, startPosition, idx);
     }
 };
 

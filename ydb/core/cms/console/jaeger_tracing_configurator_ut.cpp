@@ -124,31 +124,22 @@ private:
     TVector<TIntrusivePtr<TSamplingThrottlingControl>> Controls;
 
     TString GenerateTraceparentHeader() {
-        std::array<char, NWilson::TTraceId::GetTraceIdSize()> traceId;
-        for (;;) {
-            ui32 *p = reinterpret_cast<ui32*>(traceId.data());
-
-            TReallyFastRng32 rng(RandomNumber<ui64>());
-            p[0] = rng();
-            p[1] = rng();
-            p[2] = rng();
-            p[3] = rng();
-
-            if (traceId[0] || traceId[1]) {
-                break;
-            }
+        static_assert(NWilson::TTraceId::GetTraceIdSize() == 2 * sizeof(ui64));
+        std::array<ui64, 2> traceId = {0, 0};
+        while (!traceId[0] && !traceId[1]) {
+            traceId[0] = RandomNumber<ui64>();
+            traceId[1] = RandomNumber<ui64>();
         }
 
-        ui64 spanId;
-        for (;;) {
-            if (spanId = RandomNumber<ui64>(); spanId) {
-                break;
-            }
+        ui64 spanId = 0;
+        static_assert(NWilson::TTraceId::GetSpanIdSize() == sizeof(ui64));
+        while (!spanId) {
+            spanId = RandomNumber<ui64>();
         }
 
         TString result;
         result += "00-";
-        result += HexEncode(traceId.data(), NWilson::TTraceId::GetTraceIdSize());
+        result += HexEncode(reinterpret_cast<char*>(traceId.data()), sizeof(traceId));
         result += "-";
         result += HexEncode(reinterpret_cast<char*>(&spanId), sizeof(spanId));
         result += "-00";

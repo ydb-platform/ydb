@@ -28,7 +28,7 @@
             (let inputType (CallableArgumentType (TypeOf (ScriptUdf 'Python3 '"f" (CallableType '() '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"pass" (DataType 'Int32)) '('"skey" (DataType 'Uint32))))) '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"skey" (DataType 'Uint32))))) '((DataType 'Int32))) (String '@@
 def f(input,x):
    for i in list(input):
-      d = i.__dict__
+      d = {name: getattr(i, name) for name in i.__class__.__match_args__}
       d["pass"] = x
       yield d
 
@@ -39,7 +39,7 @@ def f2(a,b,c):
             (return (Apply (ScriptUdf 'Python3 '"f" (CallableType '() '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"pass" (DataType 'Int32)) '('"skey" (DataType 'Uint32))))) '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"skey" (DataType 'Uint32))))) '((DataType 'Int32))) (String '@@
 def f(input,x):
    for i in list(input):
-      d = i.__dict__
+      d = {name: getattr(i, name) for name in i.__class__.__match_args__}
       d["pass"] = x
       yield d
 
@@ -55,7 +55,7 @@ def f2(a,b,c):
         (let res (Apply (ScriptUdf 'Python3 '"f2" (CallableType '() '((StructType '('"a" (DataType 'Uint32)) '('"b" (DataType 'Uint64)) '('"c" (DataType 'Int32)))) '((DataType 'Uint32) 'skey) '((DataType 'Uint64) 'cnt) '((DataType 'Int32) 'pass)) (String '@@
 def f(input,x):
    for i in list(input):
-      d = i.__dict__
+      d = {name: getattr(i, name) for name in i.__class__.__match_args__}
       d["pass"] = x
       yield d
 

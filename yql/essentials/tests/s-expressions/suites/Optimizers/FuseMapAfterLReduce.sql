@@ -8,7 +8,7 @@ GROUP BY Length(key) as skey);
 $udfScript = @@
 def f(input,x):
    for i in list(input):
-      d = i.__dict__
+      d = {name: getattr(i, name) for name in i.__class__.__match_args__}
       d["pass"] = x
       yield d
       

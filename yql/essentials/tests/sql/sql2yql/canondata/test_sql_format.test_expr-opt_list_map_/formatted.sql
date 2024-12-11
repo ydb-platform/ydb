@@ -11,7 +11,7 @@ SELECT
 ;
 
 $p = ($x) -> {
-    RETURN $x < 3
+    RETURN $x < 3;
 };
 
 SELECT
@@ -21,7 +21,7 @@ SELECT
 ;
 
 $m = ($x) -> {
-    RETURN $x * 2
+    RETURN $x * 2;
 };
 
 SELECT
@@ -31,7 +31,7 @@ SELECT
 ;
 
 $f = ($x) -> {
-    RETURN AsList($x, $x * 2)
+    RETURN AsList($x, $x * 2);
 };
 
 SELECT

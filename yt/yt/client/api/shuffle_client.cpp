@@ -6,6 +6,20 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void FormatValue(TStringBuilderBase* builder, const TShuffleHandlePtr& shuffleHandle, TStringBuf /*spec*/)
+{
+    builder->AppendFormat(
+        "{TransactionId: %v, CoordinatorAddress: %v, Account: %v, MediumName: %v, PartitionCount: %v, ReplicationFactor: %v}",
+        shuffleHandle->TransactionId,
+        shuffleHandle->CoordinatorAddress,
+        shuffleHandle->Account,
+        shuffleHandle->MediumName,
+        shuffleHandle->PartitionCount,
+        shuffleHandle->ReplicationFactor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TShuffleHandle::Register(TRegistrar registrar)
 {
     registrar.Parameter("transaction_id", &TThis::TransactionId);

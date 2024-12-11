@@ -25,7 +25,7 @@ SELECT
 $f = () -> {
     RETURN () -> {
         RETURN AsDict(AsTuple("foo", AsList(AsStruct(AsTuple(1) AS bar))));
-    }
+    };
 };
 
 SELECT
@@ -34,7 +34,7 @@ SELECT
 
 SELECT
     () -> {
-        RETURN 1
+        RETURN 1;
     }()
 ;
 
@@ -43,7 +43,7 @@ $type = Callable<() -> List<Int32>>;
 $g = AsStruct(
     Yql::Callable(
         $type, () -> {
-            RETURN AsList(1, 2, 3)
+            RETURN AsList(1, 2, 3);
         }
     ) AS foo
 );

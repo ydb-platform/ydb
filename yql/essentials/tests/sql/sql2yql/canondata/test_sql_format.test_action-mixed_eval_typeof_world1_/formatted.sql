@@ -9,7 +9,7 @@ $force_remove_members = ($struct, $to_remove) -> {
             ($st) -> {
                 $to_keep = ListFlatMap(
                     StructTypeComponents(TypeHandle(TypeOf($struct))), ($x) -> {
-                        RETURN IF($x.Name NOT IN $to_remove, $x.Name)
+                        RETURN IF($x.Name NOT IN $to_remove, $x.Name);
                     }
                 );
                 RETURN FuncCode(
@@ -17,14 +17,14 @@ $force_remove_members = ($struct, $to_remove) -> {
                     ListMap(
                         $to_keep,
                         ($x) -> {
-                            RETURN ListCode(AtomCode($x), FuncCode("Member", $st, AtomCode($x)))
+                            RETURN ListCode(AtomCode($x), FuncCode("Member", $st, AtomCode($x)));
                         }
                     )
-                )
+                );
             }
         )
     );
-    RETURN $remover($struct)
+    RETURN $remover($struct);
 };
 
 DEFINE ACTION $func($input, $output) AS

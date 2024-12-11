@@ -1,26 +1,26 @@
 /* postgres can not */
 $create = ($item, $_parent) -> {
-    RETURN $item
+    RETURN $item;
 };
 
 $add = ($state, $item, $_parent) -> {
-    RETURN $item + $state
+    RETURN $item + $state;
 };
 
 $merge = ($state1, $state2) -> {
-    RETURN $state1 + $state2
+    RETURN $state1 + $state2;
 };
 
 $get_result = ($state) -> {
-    RETURN $state
+    RETURN $state;
 };
 
 $serialize = ($state) -> {
-    RETURN $state
+    RETURN $state;
 };
 
 $deserialize = ($state) -> {
-    RETURN $state
+    RETURN $state;
 };
 
 SELECT

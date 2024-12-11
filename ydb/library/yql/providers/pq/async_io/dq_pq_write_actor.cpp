@@ -106,7 +106,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
         }
 
         ~TMetrics() {
-            SubGroup->RemoveSubgroup("id", TxId);
+            SubGroup->RemoveSubgroup("tx_id", TxId);
         }
 
         TString TxId;

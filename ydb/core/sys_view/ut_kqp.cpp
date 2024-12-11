@@ -338,8 +338,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(Nodes) {
-        return; // table is currenty switched off
-
         TTestEnv env;
         CreateTenantsAndTables(env, false);
         TTableClient client(env.GetDriver());
@@ -386,11 +384,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ui32 offset = env.GetServer().GetRuntime()->GetNodeId(0);
             auto expected = Sprintf(R"([
                 [["::1"];[%du]];
-                [["::1"];[%du]];
-                [["::1"];[%du]];
-                [["::1"];[%du]];
-                [["::1"];[%du]];
-            ])", offset, offset + 1, offset + 2, offset + 3, offset + 4);
+            ])", offset);
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }

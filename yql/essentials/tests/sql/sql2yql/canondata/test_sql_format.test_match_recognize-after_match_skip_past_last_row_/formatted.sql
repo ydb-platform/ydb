@@ -16,7 +16,14 @@ $input =
 SELECT
     *
 FROM
-    $input MATCH_RECOGNIZE (ORDER BY
-        CAST(time AS Timestamp)
-    MEASURES FIRST(X.time) AS first_time, LAST(X.time) AS last_time PATTERN (X {2}) DEFINE X AS TRUE)
+    $input MATCH_RECOGNIZE (
+        ORDER BY
+            CAST(time AS Timestamp)
+        MEASURES
+            FIRST(X.time) AS first_time,
+            LAST(X.time) AS last_time
+        PATTERN (X {2})
+        DEFINE
+            X AS TRUE
+    )
 ;

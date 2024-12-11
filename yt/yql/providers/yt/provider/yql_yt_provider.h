@@ -123,6 +123,7 @@ struct TYtState : public TThrRefBase {
     i32 FlowDependsOnId = 0;
     IOptimizerFactory::TPtr OptimizerFactory_;
     IDqHelper::TPtr DqHelper;
+    bool IsDqTimeout = false;
 private:
     std::unordered_map<ui64, TYtVersionedConfiguration::TState> ConfigurationEvalStates_;
     std::unordered_map<ui64, ui32> EpochEvalStates_;

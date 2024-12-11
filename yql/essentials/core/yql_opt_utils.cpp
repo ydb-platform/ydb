@@ -1814,7 +1814,8 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
                 || TCoApply::Match(node.Get())
                 || TCoSwitch::Match(node.Get())
                 || node->IsCallable("DqReplicate")
-                || TCoPartitionsByKeys::Match(node.Get());
+                || TCoPartitionByKeyBase::Match(node.Get())
+                || TCoChopper::Match(node.Get());
         }
     );
 
@@ -1852,9 +1853,14 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
                     return node;
                 }
             }
-        } else if (TCoPartitionsByKeys::Match(candidate.Get())) {
-            const auto handlerChild = candidate->Child(TCoPartitionsByKeys::idx_ListHandlerLambda);
+        } else if (TCoPartitionByKeyBase::Match(candidate.Get())) {
+            const auto handlerChild = candidate->Child(TCoPartitionByKeyBase::idx_ListHandlerLambda);
             if (auto node = FindNonYieldTransparentNodeImpl(handlerChild->TailPtr(), udfSupportsYield, TNodeSet{&handlerChild->Head().Head()})) {
+                return node;
+            }
+        } else if (TCoChopper::Match(candidate.Get())) {
+            const auto handlerChild = candidate->Child(TCoChopper::idx_Handler);
+            if (auto node = FindNonYieldTransparentNodeImpl(handlerChild->TailPtr(), udfSupportsYield, TNodeSet{&handlerChild->Head().Tail()})) {
                 return node;
             }
         }

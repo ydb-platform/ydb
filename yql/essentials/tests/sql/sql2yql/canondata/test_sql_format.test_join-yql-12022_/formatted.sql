@@ -7,6 +7,7 @@ DEFINE SUBQUERY $sub($name) AS
         *
     FROM
         $name
+    ;
 END DEFINE;
 
 SELECT

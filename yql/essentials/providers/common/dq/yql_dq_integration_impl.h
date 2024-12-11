@@ -28,6 +28,7 @@ public:
     bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override;
     bool FillSinkPlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override;
     void ConfigurePeepholePipeline(bool beforeDqTransforms, const THashMap<TString, TString>& params, TTransformationPipeline* pipeline) override;
+    void NotifyDqTimeout() override;
 
 protected:
     bool CanBlockReadTypes(const TStructExprType* node);

@@ -13,22 +13,22 @@ SELECT
                                             RETURN MIN_OF(
                                                 $x, Yql::Fold(
                                                     AsList(11, 12), 10, ($e, $f) -> {
-                                                        RETURN MIN_OF($f, $y, $e)
+                                                        RETURN MIN_OF($f, $y, $e);
                                                     }
                                                 )
-                                            )
+                                            );
                                         }
                                     ), 100, ($a, $b) -> {
                                         RETURN MIN_OF(
                                             $a, $b, Yql::Fold(
                                                 AsList(13, 14), 100, ($i, $j) -> {
-                                                    RETURN MIN_OF($i, $j, $a)
+                                                    RETURN MIN_OF($i, $j, $a);
                                                 }
                                             )
-                                        )
+                                        );
                                     }
                                 )
-                            )
+                            );
                         }
                     ),
                     Yql::Fold(
@@ -37,22 +37,22 @@ SELECT
                                 RETURN MIN_OF(
                                     $x, Yql::Fold(
                                         AsList(11, 12), 10, ($e, $f) -> {
-                                            RETURN MIN_OF($e, $f, $y)
+                                            RETURN MIN_OF($e, $f, $y);
                                         }
                                     )
-                                )
+                                );
                             }
                         ), 100, ($a, $b) -> {
                             RETURN MIN_OF(
                                 $b, Yql::Fold(
                                     AsList(13, 14), 100, ($i, $j) -> {
-                                        RETURN MIN_OF($a, $j, $i)
+                                        RETURN MIN_OF($a, $j, $i);
                                     }
                                 ), $a
-                            )
+                            );
                         }
                     )
-                )
+                );
             }
         )
     )

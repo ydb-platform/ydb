@@ -5,8 +5,6 @@ SRCS(
     yql_callable_transform.cpp
     yql_callable_transform.h
     yql_cost_function.cpp
-    yql_csv.cpp
-    yql_csv.h
     yql_data_provider.h
     yql_execution.cpp
     yql_execution.h

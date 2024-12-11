@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/io_formats/arrow/csv_arrow/csv_arrow.h>
+#include <ydb/library/formats/arrow/csv/converter/csv_arrow.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 namespace NKikimr::NFormats {

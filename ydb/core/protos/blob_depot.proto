@@ -112,17 +112,6 @@ message TEvBlockResult {
     optional uint32 TimeToLiveMs = 3;
 }
 
-message TEvGetBlock {
-    optional fixed64 TabletId = 1;
-}
-
-message TEvGetBlockResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional string ErrorReason = 2;
-    optional fixed64 TabletId = 3;
-    optional uint32 BlockedGeneration = 4;
-}
-
 message TEvPushNotify {
     message TBlockedTablet {
         optional fixed64 TabletId = 1;

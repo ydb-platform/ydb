@@ -13,6 +13,7 @@ struct TSchemeShard::TTxLogin : TTransactionBase<TSchemeShard> {
     TPathId SubDomainPathId;
     bool NeedPublishOnComplete = false;
     THolder<TEvSchemeShard::TEvLoginResult> Result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
+    size_t CurrentFailedAttemptCount = 0;
 
     TTxLogin(TSelf *self, TEvSchemeShard::TEvLogin::TPtr &ev)
         : TTransactionBase<TSchemeShard>(self)
@@ -129,8 +130,9 @@ private:
             Result->Record.SetError(TStringBuilder() << "Cannot find user: " << loginRequest.User);
             return true;
         }
-        const size_t failedAttemptCount = row.GetValueOrDefault<Schema::LoginSids::FailedAttemptCount>();
-        if (CheckAccountLockout(failedAttemptCount, ctx)) {
+        CurrentFailedAttemptCount = row.GetValueOrDefault<Schema::LoginSids::FailedAttemptCount>();
+        Cerr << "+++FailedAttemptCount: " << CurrentFailedAttemptCount << Endl;
+        if (CheckAccountLockout(ctx)) {
             TInstant lastFailedAttempt = TInstant::FromValue(row.GetValue<Schema::LoginSids::LastFailedAttempt>());
             if (ShouldUnlockAccount(lastFailedAttempt, ctx)) {
                 UnlockAccount(loginRequest, db);
@@ -138,7 +140,7 @@ private:
                 Result->Record.SetError(TStringBuilder() << "User " << loginRequest.User << " is locked out");
                 return true;
             }
-        }
+        } // обнулить счетчик по истечению времени даже, если аккаунт не заблокирован
         const NLogin::TLoginProvider::TLoginUserResponse loginResponse = Self->LoginProvider.LoginUser(loginRequest);
         switch (loginResponse.Status) {
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::SUCCESS: {
@@ -146,7 +148,7 @@ private:
             break;
         }
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD: {
-            HandleLoginAuthInvalidPassword(loginRequest, loginResponse, failedAttemptCount, db);
+            HandleLoginAuthInvalidPassword(loginRequest, loginResponse, db);
             break;
         }
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_USER:
@@ -158,9 +160,9 @@ private:
         return true;
     }
 
-    bool CheckAccountLockout(size_t failedAttemptCount, const TActorContext& ctx) const {
+    bool CheckAccountLockout(const TActorContext& ctx) const {
         const auto& accountLockout = AppData(ctx)->AuthConfig.GetAccountLockout();
-        if (failedAttemptCount >= accountLockout.GetAttemptThreshold()) {
+        if (CurrentFailedAttemptCount >= accountLockout.GetAttemptThreshold()) {
             return true;
         }
         return false;
@@ -176,6 +178,10 @@ private:
             if (attemptResetDuration.Seconds() == 0) {
                 return false;
             }
+            auto now = TAppData::TimeProvider->Now();
+            Cerr << "+++Now: " << now.ToString() << Endl;
+            Cerr << "+++lastFailedAttempt: " << lastFailedAttempt.ToString() << Endl;
+            Cerr << "+++attemptResetDuration: " << attemptResetDuration.ToString() << Endl;
             return lastFailedAttempt + attemptResetDuration < TAppData::TimeProvider->Now();
         }
         return false;
@@ -183,6 +189,8 @@ private:
 
     void UnlockAccount(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, NIceDb::TNiceDb& db) {
         ResetFailedAttemptCount(loginRequest, db);
+        CurrentFailedAttemptCount = Schema::LoginSids::FailedAttemptCount::Default;
+        Cerr << "+++Reset FailedAttemptCount: " << CurrentFailedAttemptCount << Endl;
     }
 
     void ResetFailedAttemptCount(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, NIceDb::TNiceDb& db) const {
@@ -194,9 +202,9 @@ private:
         db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastSuccessfulAttempt, Schema::LoginSids::FailedAttemptCount>(TAppData::TimeProvider->Now().MicroSeconds(), Schema::LoginSids::FailedAttemptCount::Default);
     }
 
-    void HandleLoginAuthInvalidPassword(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& loginResponse, size_t failedAttemptCount, NIceDb::TNiceDb& db) {
-        Cerr << "+++: " << failedAttemptCount << Endl;
-        db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastFailedAttempt, Schema::LoginSids::FailedAttemptCount>(TAppData::TimeProvider->Now().MicroSeconds(), failedAttemptCount + 1);
+    void HandleLoginAuthInvalidPassword(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& loginResponse, NIceDb::TNiceDb& db) {
+        Cerr << "+++Write FailedAttemptCount: " << CurrentFailedAttemptCount + 1 << Endl;
+        db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastFailedAttempt, Schema::LoginSids::FailedAttemptCount>(TAppData::TimeProvider->Now().MicroSeconds(), CurrentFailedAttemptCount + 1);
         Result->Record.SetError(loginResponse.Error);
     }
 };

@@ -389,6 +389,47 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         resultLogin = Login(runtime, "user12", "passwordu12*#");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
     }
+
+    Y_UNIT_TEST(AccountLockout) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        auto accountLockout = runtime.GetAppData().AuthConfig.MutableAccountLockout();
+        accountLockout->SetAttemptResetDuration("5s");
+        ui64 txId = 100;
+        TString username = "user1";
+        TString password = "password1";
+        TString database = "/MyRoot";
+        CreateAlterLoginCreateUser(runtime, ++txId, database, username, password);
+        TString wrongPassword = "wrongpassword";
+        auto resultLogin = Login(runtime, username, wrongPassword);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username, wrongPassword);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username, wrongPassword);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username, wrongPassword);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username, wrongPassword);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User " << username << " is locked out");
+
+        runtime.SimulateSleep(TDuration::Seconds(7));
+
+        resultLogin = Login(runtime, username, wrongPassword);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username, password);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, database);
+        UNIT_ASSERT(describe.HasPathDescription());
+        UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
+        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
+        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0);
+
+        // check token
+        NLogin::TLoginProvider login;
+        login.UpdateSecurityState(describe.GetPathDescription().GetDomainDescription().GetSecurityState());
+        auto resultValidate = login.ValidateToken({.Token = resultLogin.token()});
+        UNIT_ASSERT_VALUES_EQUAL(resultValidate.User, "user1");
+    }
 }
 
 namespace NSchemeShardUT_Private {

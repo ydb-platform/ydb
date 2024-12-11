@@ -379,6 +379,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 FROM `Root/.sys/nodes`;
             )").GetValueSync();
 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
             ui32 offset = env.GetServer().GetRuntime()->GetNodeId(0);
             auto expected = Sprintf(R"([
                 [["::1"];[%du]];

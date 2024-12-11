@@ -313,6 +313,10 @@ namespace NKikimr::NBlobDepot {
         TActivationContext::Send(response.release()); // not sent if the request got processed and response now is nullptr
     }
 
+    void TBlobDepot::TBlocksManager::Handle(TEvBlobDepot::TEvGetBlock::TPtr ev) {
+        // TODO: implement GetBlock logic for BlobDepot
+    }
+
     void TBlobDepot::TBlocksManager::Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev) {
         TAgent& agent = Self->GetAgent(ev->Recipient);
         const ui32 agentId = agent.Connection->NodeId;

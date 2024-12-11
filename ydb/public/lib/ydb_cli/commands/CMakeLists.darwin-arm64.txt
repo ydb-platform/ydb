@@ -38,6 +38,7 @@ target_link_libraries(clicommands PUBLIC
   cpp-regex-pcre
   cpp-threading-local_executor
   kikimr_backup
+  arrow-csv-table
   ydb-library-workload
   library-yaml_config-public
   public-lib-operation_id
@@ -66,7 +67,6 @@ target_link_libraries(clicommands PUBLIC
   cpp-client-ydb_table
   cpp-client-ydb_topic
   ydb_types-credentials-login
-  io_formats-arrow-table
   tools-enum_parser-enum_serialization_runtime
 )
 

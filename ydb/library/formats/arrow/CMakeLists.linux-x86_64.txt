@@ -23,6 +23,7 @@ add_subdirectory(transformer)
 add_subdirectory(modifier)
 add_subdirectory(scalar)
 add_subdirectory(hash)
+add_subdirectory(csv)
 add_subdirectory(ut)
 
 add_library(library-formats-arrow)

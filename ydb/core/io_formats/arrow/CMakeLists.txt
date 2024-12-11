@@ -13,6 +13,3 @@
 # changes in this file.
 
 add_subdirectory(scheme)
-add_subdirectory(csv_arrow)
-add_subdirectory(table)
-add_subdirectory(ut)

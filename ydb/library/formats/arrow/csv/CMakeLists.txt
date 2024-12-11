@@ -12,24 +12,5 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(io_formats-arrow-scheme)
-
-
-target_compile_options(io_formats-arrow-scheme PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(io_formats-arrow-scheme PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  core-formats-arrow
-  arrow-csv-converter
-  ydb-core-scheme_types
-)
-
-target_sources(io_formats-arrow-scheme PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/io_formats/arrow/scheme/scheme.cpp
-)
-
+add_subdirectory(converter)
+add_subdirectory(table)

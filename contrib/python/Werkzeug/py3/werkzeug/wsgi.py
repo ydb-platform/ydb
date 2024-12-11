@@ -1,6 +1,7 @@
 import io
 import re
 import typing as t
+import warnings
 from functools import partial
 from functools import update_wrapper
 from itertools import chain
@@ -126,16 +127,10 @@ def get_content_length(environ: "WSGIEnvironment") -> t.Optional[int]:
 
     :param environ: the WSGI environ to fetch the content length from.
     """
-    if environ.get("HTTP_TRANSFER_ENCODING", "") == "chunked":
-        return None
-
-    content_length = environ.get("CONTENT_LENGTH")
-    if content_length is not None:
-        try:
-            return max(0, int(content_length))
-        except (ValueError, TypeError):
-            pass
-    return None
+    return _sansio_utils.get_content_length(
+        http_content_length=environ.get("CONTENT_LENGTH"),
+        http_transfer_encoding=environ.get("HTTP_TRANSFER_ENCODING", ""),
+    )
 
 
 def get_input_stream(
@@ -183,8 +178,16 @@ def get_query_string(environ: "WSGIEnvironment") -> str:
 
     :param environ: WSGI environment to get the query string from.
 
+    .. deprecated:: 2.2
+        Will be removed in Werkzeug 2.3.
+
     .. versionadded:: 0.9
     """
+    warnings.warn(
+        "'get_query_string' is deprecated and will be removed in Werkzeug 2.3.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     qs = environ.get("QUERY_STRING", "").encode("latin1")
     # QUERY_STRING really should be ascii safe but some browsers
     # will send us some unicode stuff (I am looking at you IE).
@@ -220,8 +223,16 @@ def get_script_name(
         should be performed.
     :param errors: The decoding error handling.
 
+    .. deprecated:: 2.2
+        Will be removed in Werkzeug 2.3.
+
     .. versionadded:: 0.9
     """
+    warnings.warn(
+        "'get_script_name' is deprecated and will be removed in Werkzeug 2.3.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     path = environ.get("SCRIPT_NAME", "").encode("latin1")
     return _to_str(path, charset, errors, allow_none_charset=True)  # type: ignore
 
@@ -247,6 +258,9 @@ def pop_path_info(
     >>> env['SCRIPT_NAME']
     '/foo/a/b'
 
+    .. deprecated:: 2.2
+        Will be removed in Werkzeug 2.3.
+
     .. versionadded:: 0.5
 
     .. versionchanged:: 0.9
@@ -259,6 +273,12 @@ def pop_path_info(
     :param errors: The ``errors`` paramater passed to
         :func:`bytes.decode`.
     """
+    warnings.warn(
+        "'pop_path_info' is deprecated and will be removed in Werkzeug 2.3.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     path = environ.get("PATH_INFO")
     if not path:
         return None
@@ -299,6 +319,9 @@ def peek_path_info(
 
     If the `charset` is set to `None` bytes are returned.
 
+    .. deprecated:: 2.2
+        Will be removed in Werkzeug 2.3.
+
     .. versionadded:: 0.5
 
     .. versionchanged:: 0.9
@@ -307,6 +330,12 @@ def peek_path_info(
 
     :param environ: the WSGI environment that is checked.
     """
+    warnings.warn(
+        "'peek_path_info' is deprecated and will be removed in Werkzeug 2.3.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     segments = environ.get("PATH_INFO", "").lstrip("/").split("/", 1)
     if segments:
         return _to_str(  # type: ignore
@@ -354,12 +383,21 @@ def extract_path_info(
                                   same server point to the same
                                   resource.
 
+    .. deprecated:: 2.2
+        Will be removed in Werkzeug 2.3.
+
     .. versionchanged:: 0.15
         The ``errors`` parameter defaults to leaving invalid bytes
         quoted instead of replacing them.
 
     .. versionadded:: 0.6
+
     """
+    warnings.warn(
+        "'extract_path_info' is deprecated and will be removed in Werkzeug 2.3.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     def _normalize_netloc(scheme: str, netloc: str) -> str:
         parts = netloc.split("@", 1)[-1].split(":", 1)

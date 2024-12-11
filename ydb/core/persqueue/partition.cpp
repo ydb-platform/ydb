@@ -301,7 +301,7 @@ TInstant TPartition::GetWriteTimestampEstimate(ui64 lagSize) const {
         return WriteTimestampEstimate;
     }
 
-    return TAppData::TimeProvider->Now();
+    return std::max(TAppData::TimeProvider->Now(), WriteTimestampEstimate);
 }
 
 ui64 TPartition::ImportantClientsMinOffset() const {

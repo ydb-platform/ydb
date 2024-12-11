@@ -179,6 +179,7 @@ void TColumnFilter::TSlicesIterator::Start() {
 bool TColumnFilter::TSlicesIterator::Next() {
     AFL_VERIFY(IsValid());
     CurrentIsFiltered = !CurrentIsFiltered;
+    CurrentStartIndex += *CurrentIterator;
     ++CurrentIterator;
     return IsValid();
 }
@@ -381,7 +382,7 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
     if (filter.IsTotalAllowFilter()) {
         return true;
     }
-    if (context.GetTrySlices() && !context.GetStartPos() && filter.GetFilter().size() * 10 < filter.GetRecordsCountVerified() &&
+    if (context.GetTrySlices() && filter.GetFilter().size() * 10 < filter.GetRecordsCountVerified() &&
         filter.GetRecordsCountVerified() < filter.GetFilteredCountVerified() * 50) {
         batch =
             NAdapter::TDataBuilderPolicy<TData>::ApplySlicesFilter(batch, filter.BuildSlicesIterator(context.GetStartPos(), context.GetCount()));

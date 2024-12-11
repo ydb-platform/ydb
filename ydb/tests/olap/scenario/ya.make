@@ -25,7 +25,6 @@ PY3TEST()
         ydb/public/sdk/python
         ydb/public/sdk/python/enable_v3_new_behavior
         ydb/tests/olap/lib
-        ydb/tests/library
         ydb/tests/olap/scenario/helpers
         library/python/testing/yatest_common
     )

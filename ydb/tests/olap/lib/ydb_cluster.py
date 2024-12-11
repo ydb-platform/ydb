@@ -131,7 +131,7 @@ class YdbCluster:
             }
         return deepcopy(cls._cluster_info)
 
-    @staticmethod 
+    @staticmethod
     def _start_ydb_cluster():
         config = KikimrConfigGenerator(extra_feature_flags=[])
         cluster = KiKiMR(configurator=config)

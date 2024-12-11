@@ -15,6 +15,7 @@ PY3_LIBRARY()
         library/python/testing/yatest_common
         ydb/public/api/client/yc_public/iam
         ydb/tests/oss/ydb_sdk_import
+        ydb/tests/library
     )
 
 END()

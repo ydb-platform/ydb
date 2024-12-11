@@ -10,97 +10,37 @@
           {
             "NodeId":1,
             "Port":19001,
-            "Host":"ydb-node-zone-a-1.local",
-            "InterconnectHost":"ydb-node-zone-a-1.local",
+            "Host":"ydb-node-zone-a.local",
+            "InterconnectHost":"ydb-node-zone-a.local",
             "Location":
               {
                 "Body":1,
-                "DataCenter":"default",
+                "DataCenter":"zone-a",
                 "Rack":"generated-rack-1"
               }
           },
           {
             "NodeId":2,
             "Port":19001,
-            "Host":"ydb-node-zone-a-2.local",
-            "InterconnectHost":"ydb-node-zone-a-2.local",
+            "Host":"ydb-node-zone-b.local",
+            "InterconnectHost":"ydb-node-zone-b.local",
             "Location":
               {
                 "Body":2,
-                "DataCenter":"default",
+                "DataCenter":"zone-b",
                 "Rack":"generated-rack-2"
               }
           },
           {
             "NodeId":3,
             "Port":19001,
-            "Host":"ydb-node-zone-a-3.local",
-            "InterconnectHost":"ydb-node-zone-a-3.local",
+            "Host":"ydb-node-zone-c.local",
+            "InterconnectHost":"ydb-node-zone-c.local",
             "Location":
               {
                 "Body":3,
-                "DataCenter":"default",
+                "DataCenter":"zone-c",
                 "Rack":"generated-rack-3"
-              }
-          },
-          {
-            "NodeId":4,
-            "Port":19001,
-            "Host":"ydb-node-zone-a-4.local",
-            "InterconnectHost":"ydb-node-zone-a-4.local",
-            "Location":
-              {
-                "Body":4,
-                "DataCenter":"default",
-                "Rack":"generated-rack-4"
-              }
-          },
-          {
-            "NodeId":5,
-            "Port":19001,
-            "Host":"ydb-node-zone-a-5.local",
-            "InterconnectHost":"ydb-node-zone-a-5.local",
-            "Location":
-              {
-                "Body":5,
-                "DataCenter":"default",
-                "Rack":"generated-rack-5"
-              }
-          },
-          {
-            "NodeId":6,
-            "Port":19001,
-            "Host":"ydb-node-zone-a-6.local",
-            "InterconnectHost":"ydb-node-zone-a-6.local",
-            "Location":
-              {
-                "Body":6,
-                "DataCenter":"default",
-                "Rack":"generated-rack-6"
-              }
-          },
-          {
-            "NodeId":7,
-            "Port":19001,
-            "Host":"ydb-node-zone-a-7.local",
-            "InterconnectHost":"ydb-node-zone-a-7.local",
-            "Location":
-              {
-                "Body":7,
-                "DataCenter":"default",
-                "Rack":"generated-rack-7"
-              }
-          },
-          {
-            "NodeId":8,
-            "Port":19001,
-            "Host":"ydb-node-zone-a-8.local",
-            "InterconnectHost":"ydb-node-zone-a-8.local",
-            "Location":
-              {
-                "Body":8,
-                "DataCenter":"default",
-                "Rack":"generated-rack-8"
               }
           }
         ]
@@ -128,10 +68,15 @@
                   "Kind":"ssd",
                   "PoolConfig":
                     {
-                      "BoxId":1,
-                      "ErasureSpecies":"block-4-2",
+                      "ErasureSpecies":"mirror-3-dc",
+                      "Geometry":
+                        {
+                          "RealmLevelBegin":10,
+                          "RealmLevelEnd":20,
+                          "DomainLevelBegin":10,
+                          "DomainLevelEnd":256
+                        },
                       "VDiskKind":"Default",
-                      "Kind":"ssd",
                       "PDiskFilter":
                         [
                           {
@@ -164,27 +109,6 @@
                 72057594046447618,
                 72057594046447619
               ]
-          }
-        ],
-      "StateStorage":
-        [
-          {
-            "SSId":1,
-            "Ring":
-              {
-                "NToSelect":5,
-                "Node":
-                  [
-                    1,
-                    2,
-                    3,
-                    4,
-                    5,
-                    6,
-                    7,
-                    8
-                  ]
-              }
           }
         ],
       "HiveConfig":
@@ -286,320 +210,108 @@
     {
       "ServiceSet":
         {
-          "PDisks":
-            [
-              {
-                "NodeID":1,
-                "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
-              },
-              {
-                "NodeID":2,
-                "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
-              },
-              {
-                "NodeID":3,
-                "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
-              },
-              {
-                "NodeID":4,
-                "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
-              },
-              {
-                "NodeID":5,
-                "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
-              },
-              {
-                "NodeID":6,
-                "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
-              },
-              {
-                "NodeID":7,
-                "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
-              },
-              {
-                "NodeID":8,
-                "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
-              }
-            ],
-          "VDisks":
-            [
-              {
-                "VDiskID":
-                  {
-                    "GroupID":0,
-                    "GroupGeneration":1,
-                    "Ring":0,
-                    "Domain":0,
-                    "VDisk":0
-                  },
-                "VDiskLocation":
-                  {
-                    "NodeID":1,
-                    "PDiskID":1,
-                    "VDiskSlotID":0,
-                    "PDiskGuid":1
-                  },
-                "VDiskKind":"Default"
-              },
-              {
-                "VDiskID":
-                  {
-                    "GroupID":0,
-                    "GroupGeneration":1,
-                    "Ring":0,
-                    "Domain":1,
-                    "VDisk":0
-                  },
-                "VDiskLocation":
-                  {
-                    "NodeID":2,
-                    "PDiskID":1,
-                    "VDiskSlotID":0,
-                    "PDiskGuid":1
-                  },
-                "VDiskKind":"Default"
-              },
-              {
-                "VDiskID":
-                  {
-                    "GroupID":0,
-                    "GroupGeneration":1,
-                    "Ring":0,
-                    "Domain":2,
-                    "VDisk":0
-                  },
-                "VDiskLocation":
-                  {
-                    "NodeID":3,
-                    "PDiskID":1,
-                    "VDiskSlotID":0,
-                    "PDiskGuid":1
-                  },
-                "VDiskKind":"Default"
-              },
-              {
-                "VDiskID":
-                  {
-                    "GroupID":0,
-                    "GroupGeneration":1,
-                    "Ring":0,
-                    "Domain":3,
-                    "VDisk":0
-                  },
-                "VDiskLocation":
-                  {
-                    "NodeID":4,
-                    "PDiskID":1,
-                    "VDiskSlotID":0,
-                    "PDiskGuid":1
-                  },
-                "VDiskKind":"Default"
-              },
-              {
-                "VDiskID":
-                  {
-                    "GroupID":0,
-                    "GroupGeneration":1,
-                    "Ring":0,
-                    "Domain":4,
-                    "VDisk":0
-                  },
-                "VDiskLocation":
-                  {
-                    "NodeID":5,
-                    "PDiskID":1,
-                    "VDiskSlotID":0,
-                    "PDiskGuid":1
-                  },
-                "VDiskKind":"Default"
-              },
-              {
-                "VDiskID":
-                  {
-                    "GroupID":0,
-                    "GroupGeneration":1,
-                    "Ring":0,
-                    "Domain":5,
-                    "VDisk":0
-                  },
-                "VDiskLocation":
-                  {
-                    "NodeID":6,
-                    "PDiskID":1,
-                    "VDiskSlotID":0,
-                    "PDiskGuid":1
-                  },
-                "VDiskKind":"Default"
-              },
-              {
-                "VDiskID":
-                  {
-                    "GroupID":0,
-                    "GroupGeneration":1,
-                    "Ring":0,
-                    "Domain":6,
-                    "VDisk":0
-                  },
-                "VDiskLocation":
-                  {
-                    "NodeID":7,
-                    "PDiskID":1,
-                    "VDiskSlotID":0,
-                    "PDiskGuid":1
-                  },
-                "VDiskKind":"Default"
-              },
-              {
-                "VDiskID":
-                  {
-                    "GroupID":0,
-                    "GroupGeneration":1,
-                    "Ring":0,
-                    "Domain":7,
-                    "VDisk":0
-                  },
-                "VDiskLocation":
-                  {
-                    "NodeID":8,
-                    "PDiskID":1,
-                    "VDiskSlotID":0,
-                    "PDiskGuid":1
-                  },
-                "VDiskKind":"Default"
-              }
-            ],
-          "Groups":
-            [
-              {
-                "GroupID":0,
-                "GroupGeneration":1,
-                "ErasureSpecies":4,
-                "Rings":
-                  [
-                    {
-                      "FailDomains":
-                        [
-                          {
-                            "VDiskLocations":
-                              [
-                                {
-                                  "NodeID":1,
-                                  "PDiskID":1,
-                                  "VDiskSlotID":0,
-                                  "PDiskGuid":1
-                                }
-                              ]
-                          },
-                          {
-                            "VDiskLocations":
-                              [
-                                {
-                                  "NodeID":2,
-                                  "PDiskID":1,
-                                  "VDiskSlotID":0,
-                                  "PDiskGuid":1
-                                }
-                              ]
-                          },
-                          {
-                            "VDiskLocations":
-                              [
-                                {
-                                  "NodeID":3,
-                                  "PDiskID":1,
-                                  "VDiskSlotID":0,
-                                  "PDiskGuid":1
-                                }
-                              ]
-                          },
-                          {
-                            "VDiskLocations":
-                              [
-                                {
-                                  "NodeID":4,
-                                  "PDiskID":1,
-                                  "VDiskSlotID":0,
-                                  "PDiskGuid":1
-                                }
-                              ]
-                          },
-                          {
-                            "VDiskLocations":
-                              [
-                                {
-                                  "NodeID":5,
-                                  "PDiskID":1,
-                                  "VDiskSlotID":0,
-                                  "PDiskGuid":1
-                                }
-                              ]
-                          },
-                          {
-                            "VDiskLocations":
-                              [
-                                {
-                                  "NodeID":6,
-                                  "PDiskID":1,
-                                  "VDiskSlotID":0,
-                                  "PDiskGuid":1
-                                }
-                              ]
-                          },
-                          {
-                            "VDiskLocations":
-                              [
-                                {
-                                  "NodeID":7,
-                                  "PDiskID":1,
-                                  "VDiskSlotID":0,
-                                  "PDiskGuid":1
-                                }
-                              ]
-                          },
-                          {
-                            "VDiskLocations":
-                              [
-                                {
-                                  "NodeID":8,
-                                  "PDiskID":1,
-                                  "VDiskSlotID":0,
-                                  "PDiskGuid":1
-                                }
-                              ]
-                          }
-                        ]
-                    }
-                  ]
-              }
-            ],
           "AvailabilityDomains":
             [
               1
             ]
+        },
+      "AutoconfigSettings":
+        {
+          "ErasureSpecies":"mirror-3-dc",
+          "Geometry":
+            {
+              "RealmLevelBegin":10,
+              "RealmLevelEnd":20,
+              "DomainLevelBegin":10,
+              "DomainLevelEnd":256
+            },
+          "PDiskFilter":
+            [
+              {
+                "Property":
+                  [
+                    {
+                      "Type":"SSD"
+                    }
+                  ]
+              }
+            ],
+          "DefineHostConfig":
+            [
+              {
+                "HostConfigId":1,
+                "Drive":
+                  [
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
+                      "Type":"SSD"
+                    },
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_02",
+                      "Type":"SSD"
+                    },
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_03",
+                      "Type":"SSD"
+                    }
+                  ]
+              },
+              {
+                "HostConfigId":2,
+                "Drive":
+                  [
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
+                      "Type":"SSD"
+                    },
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_02",
+                      "Type":"SSD"
+                    },
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_03",
+                      "Type":"SSD"
+                    }
+                  ]
+              },
+              {
+                "HostConfigId":3,
+                "Drive":
+                  [
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
+                      "Type":"SSD"
+                    },
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_02",
+                      "Type":"SSD"
+                    },
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_03",
+                      "Type":"SSD"
+                    }
+                  ]
+              }
+            ],
+          "DefineBox":
+            {
+              "BoxId":1,
+              "Host":
+                [
+                  {
+                    "HostConfigId":1,
+                    "EnforcedNodeId":1
+                  },
+                  {
+                    "HostConfigId":2,
+                    "EnforcedNodeId":2
+                  },
+                  {
+                    "HostConfigId":3,
+                    "EnforcedNodeId":3
+                  }
+                ]
+            }
         }
     },
   "ChannelProfileConfig":
@@ -611,17 +323,17 @@
             "Channel":
               [
                 {
-                  "ErasureSpecies":"block-4-2",
+                  "ErasureSpecies":"mirror-3-dc",
                   "PDiskCategory":1,
                   "StoragePoolKind":"ssd"
                 },
                 {
-                  "ErasureSpecies":"block-4-2",
+                  "ErasureSpecies":"mirror-3-dc",
                   "PDiskCategory":1,
                   "StoragePoolKind":"ssd"
                 },
                 {
-                  "ErasureSpecies":"block-4-2",
+                  "ErasureSpecies":"mirror-3-dc",
                   "PDiskCategory":1,
                   "StoragePoolKind":"ssd"
                 }
@@ -639,12 +351,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -660,7 +367,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -671,7 +378,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -682,7 +389,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -693,12 +400,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -714,7 +416,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -725,7 +427,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -736,7 +438,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -747,12 +449,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -768,7 +465,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -779,7 +476,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -790,7 +487,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -801,12 +498,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -822,7 +514,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -833,7 +525,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -844,7 +536,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -855,12 +547,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -876,7 +563,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -887,7 +574,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -898,7 +585,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -909,12 +596,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -930,7 +612,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -941,7 +623,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -952,7 +634,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -963,12 +645,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -984,7 +661,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -995,7 +672,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -1006,7 +683,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -1017,12 +694,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -1038,7 +710,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -1049,7 +721,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -1060,7 +732,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -1071,12 +743,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -1092,7 +759,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -1103,7 +770,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -1114,7 +781,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -1125,12 +792,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -1146,7 +808,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -1157,7 +819,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -1168,7 +830,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -1179,12 +841,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -1200,7 +857,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -1211,7 +868,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -1222,7 +879,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -1233,12 +890,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -1254,7 +906,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -1265,7 +917,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -1276,7 +928,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -1287,12 +939,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -1308,7 +955,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -1319,7 +966,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -1330,7 +977,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -1341,12 +988,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -1362,7 +1004,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -1373,7 +1015,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -1384,7 +1026,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -1395,12 +1037,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -1416,7 +1053,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -1427,7 +1064,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -1438,7 +1075,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -1449,12 +1086,7 @@
               [
                 1,
                 2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8
+                3
               ],
             "Info":
               {
@@ -1470,7 +1102,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":1,
@@ -1481,7 +1113,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     },
                     {
                       "Channel":2,
@@ -1492,7 +1124,7 @@
                             "GroupID":0
                           }
                         ],
-                      "ChannelErasureName":"block-4-2"
+                      "ChannelErasureName":"mirror-3-dc"
                     }
                   ]
               }
@@ -1501,13 +1133,10 @@
     },
   "GRpcConfig":
     {
+      "Port":2135,
       "CA":"/opt/ydb/certs/ca.crt",
       "Cert":"/opt/ydb/certs/node.crt",
-      "Key":"/opt/ydb/certs/node.key",
-      "ServicesEnabled":
-        [
-          "legacy"
-        ]
+      "Key":"/opt/ydb/certs/node.key"
     },
   "AuthConfig":
     {

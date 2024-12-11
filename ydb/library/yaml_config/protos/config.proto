@@ -155,4 +155,13 @@ message TEphemeralInputFields {
     optional string Erasure = 6;
     optional string DefaultDiskType = 7 [default = "SSD"];
     optional TTls Tls = 8;
+    optional FailDomainKind FailDomainType = 9 [default = Rack];
+
+    enum FailDomainKind {
+        DC = 0;
+        Room = 1;
+        Rack = 2;
+        Body = 3;
+        Disk = 4;
+    }
 }

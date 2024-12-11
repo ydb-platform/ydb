@@ -34,6 +34,23 @@ NKikimrConfig::TExtendedHostConfigDrive::TransformTypeToTypeForTHostConfigDrive<
 
 namespace NKikimr::NYaml {
 
+    struct TFailDomainGeometryRange {
+        ui32 RealmLevelBegin;
+        ui32 RealmLevelEnd;
+        ui32 DomainLevelBegin;
+        ui32 DomainLevelEnd;
+    };
+
+    const static std::unordered_map<
+        NKikimrConfig::TEphemeralInputFields::FailDomainKind, TFailDomainGeometryRange
+    > FailDomainGeometryRanges = {
+        {NKikimrConfig::TEphemeralInputFields::DC, {10, 20, 10, 20}},
+        {NKikimrConfig::TEphemeralInputFields::Room, {10, 20, 10, 30}},
+        {NKikimrConfig::TEphemeralInputFields::Rack, {10, 20, 10, 40}},
+        {NKikimrConfig::TEphemeralInputFields::Body, {10, 20, 10, 50}},
+        {NKikimrConfig::TEphemeralInputFields::Disk, {10, 20, 10, 256}},
+    };
+
     const NJson::TJsonValue::TMapType& GetMapSafe(const NJson::TJsonValue& json) {
         try {
             return json.GetMapSafe();
@@ -67,7 +84,7 @@ namespace NKikimr::NYaml {
                 driveNode["expected_slot_count"] = 9; // Default value
                 configNode["drive"].push_back(driveNode);
             }
-            
+
             yamlNode["host_configs"].push_back(configNode);
         }
 
@@ -733,13 +750,14 @@ namespace NKikimr::NYaml {
                 prop.SetType(*dtEnum);
 
                 if (!poolConfig.HasGeometry()) {
-                    // mirror-3-dc-3-nodes case
-                    if (ephemeralConfig.GetStaticErasure() == "mirror-3-dc" && \
-                        ephemeralConfig.HostsSize() == 3) {
-                        poolConfig.MutableGeometry()->SetRealmLevelBegin(10);
-                        poolConfig.MutableGeometry()->SetRealmLevelEnd(20);
-                        poolConfig.MutableGeometry()->SetDomainLevelBegin(10);
-                        poolConfig.MutableGeometry()->SetDomainLevelEnd(256);
+                    if (ephemeralConfig.HasFailDomainType() &&
+                        ephemeralConfig.GetFailDomainType() != NKikimrConfig::TEphemeralInputFields::Rack) {
+                        auto* geometry = poolConfig.MutableGeometry();
+                        const auto& range = FailDomainGeometryRanges.at(ephemeralConfig.GetFailDomainType());
+                        geometry->SetRealmLevelBegin(range.RealmLevelBegin);
+                        geometry->SetRealmLevelEnd(range.RealmLevelEnd);
+                        geometry->SetDomainLevelBegin(range.DomainLevelBegin);
+                        geometry->SetDomainLevelEnd(range.DomainLevelEnd);
                     }
                 }
 
@@ -1409,7 +1427,7 @@ namespace NKikimr::NYaml {
         for(const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
             auto *hostConfigProto = result.AddCommand()->MutableDefineHostConfig();
             hostConfig.CopyToTDefineHostConfig(*hostConfigProto);
-        
+
             // KIKIMR-16712
             // Avoid checking the version number for "host_config" configuration items.
             // This allows to add new host configuration items after the initial cluster setup.

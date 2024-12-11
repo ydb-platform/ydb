@@ -1,4 +1,5 @@
 erasure: mirror-3-dc
+fail_domain_type: Disk
 default_disk_type: SSD
 hosts:
 - host: ydb-node-zone-a.local

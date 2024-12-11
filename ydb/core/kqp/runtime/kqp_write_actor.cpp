@@ -2106,7 +2106,9 @@ public:
             "BufferWriteActorState::Writing", NWilson::EFlags::AUTO_END);
         CA_LOG_D("Flushed");
         State = EState::WRITING;
-        Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+        Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{
+            BuildStats()
+        });
         ExecuterActorId = {};
         Y_ABORT_UNLESS(GetTotalMemory() == 0);
     }

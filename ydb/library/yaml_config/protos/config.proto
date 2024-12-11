@@ -158,10 +158,8 @@ message TEphemeralInputFields {
     optional FailDomainKind FailDomainType = 9 [default = Rack];
 
     enum FailDomainKind {
-        DC = 0;
-        Room = 1;
-        Rack = 2;
-        Body = 3;
-        Disk = 4;
+        Rack = 0;
+        Body = 1;
+        Disk = 2;
     }
 }

@@ -44,8 +44,6 @@ namespace NKikimr::NYaml {
     const static std::unordered_map<
         NKikimrConfig::TEphemeralInputFields::FailDomainKind, TFailDomainGeometryRange
     > FailDomainGeometryRanges = {
-        {NKikimrConfig::TEphemeralInputFields::DC, {10, 20, 10, 20}},
-        {NKikimrConfig::TEphemeralInputFields::Room, {10, 20, 10, 30}},
         {NKikimrConfig::TEphemeralInputFields::Rack, {10, 20, 10, 40}},
         {NKikimrConfig::TEphemeralInputFields::Body, {10, 20, 10, 50}},
         {NKikimrConfig::TEphemeralInputFields::Disk, {10, 20, 10, 256}},

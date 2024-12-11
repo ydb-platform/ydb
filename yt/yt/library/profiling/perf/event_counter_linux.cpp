@@ -1,4 +1,4 @@
-#include "counters.h"
+#include "event_counter.h"
 
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/error.h>
@@ -8,8 +8,6 @@
 #include <library/cpp/yt/assert/assert.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
-
-#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <linux/perf_event.h>
 
@@ -21,18 +19,18 @@ namespace NYT::NProfiling {
 
 namespace {
 
-struct TPerfEventDescription final
+struct TPerfEventDescription
 {
-    int EventType;
-    int EventConfig;
+    ui32 EventType;
+    ui64 EventConfig;
 };
 
-constexpr TPerfEventDescription SoftwareEvent(int perfName) noexcept
+constexpr TPerfEventDescription SoftwareEvent(ui64 perfName) noexcept
 {
     return {PERF_TYPE_SOFTWARE, perfName};
 }
 
-constexpr TPerfEventDescription HardwareEvent(int perfName) noexcept
+constexpr TPerfEventDescription HardwareEvent(ui64 perfName) noexcept
 {
     return {PERF_TYPE_HARDWARE, perfName};
 }
@@ -60,27 +58,28 @@ TPerfEventDescription CacheEvent(
 
     int cacheActionTypeForConfig = [&] {
         switch (eventType) {
-        case ECacheActionType::Load:
-            return PERF_COUNT_HW_CACHE_OP_READ;
-        case ECacheActionType::Store:
-            return PERF_COUNT_HW_CACHE_OP_WRITE;
-        default:
-            YT_ABORT();
+            case ECacheActionType::Load:
+                return PERF_COUNT_HW_CACHE_OP_READ;
+            case ECacheActionType::Store:
+                return PERF_COUNT_HW_CACHE_OP_WRITE;
+            default:
+                YT_ABORT();
         }
     }();
 
     int eventTypeForConfig = [&] {
         switch (eventResultType) {
-        case ECacheEventType::Access:
-            return PERF_COUNT_HW_CACHE_RESULT_ACCESS;
-        case ECacheEventType::Miss:
-            return PERF_COUNT_HW_CACHE_RESULT_MISS;
-        default:
-            YT_ABORT();
+            case ECacheEventType::Access:
+                return PERF_COUNT_HW_CACHE_RESULT_ACCESS;
+            case ECacheEventType::Miss:
+                return PERF_COUNT_HW_CACHE_RESULT_MISS;
+            default:
+                YT_ABORT();
         }
     }();
 
-    int eventConfig = (perfName << kEventNameShift) |
+    ui64 eventConfig =
+        (perfName << kEventNameShift) |
         (cacheActionTypeForConfig << kCacheActionTypeShift) |
         (eventTypeForConfig << kEventTypeShift);
 
@@ -157,94 +156,73 @@ TPerfEventDescription GetDescription(EPerfEventType type)
     }
 }
 
-int OpenPerfEvent(int tid, int eventType, int eventConfig)
-{
-    perf_event_attr attr{};
-
-    attr.type = eventType;
-    attr.size = sizeof(attr);
-    attr.config = eventConfig;
-    attr.inherit = 1;
-
-    int fd = HandleEintr(syscall, SYS_perf_event_open, &attr, tid, -1, -1, PERF_FLAG_FD_CLOEXEC);
-    if (fd == -1) {
-        THROW_ERROR_EXCEPTION("Failed to open perf event descriptor")
-            << TError::FromSystem()
-            << TErrorAttribute("type", eventType)
-            << TErrorAttribute("config", eventConfig);
-    }
-    return fd;
-}
-
-ui64 FetchPerfCounter(int fd)
-{
-    ui64 num{};
-    if (HandleEintr(read, fd, &num, sizeof(num)) != sizeof(num)) {
-        THROW_ERROR_EXCEPTION("Failed to read perf event counter")
-            << TError::FromSystem();
-    }
-    return num;
-}
-
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPerfEventCounter::TPerfEventCounter(EPerfEventType type)
-    : FD_(OpenPerfEvent(
-        0,
-        GetDescription(type).EventType,
-        GetDescription(type).EventConfig))
-{ }
-
-TPerfEventCounter::~TPerfEventCounter()
+class TPerfEventCounter
+    : public IPerfEventCounter
 {
-    if (FD_ != -1) {
-        SafeClose(FD_, false);
+public:
+    explicit TPerfEventCounter(EPerfEventType type)
+        : Type_(type)
+    {
+        const auto& description =  GetDescription(type);
+
+        perf_event_attr attr{};
+        attr.type = description.EventType;
+        attr.size = sizeof(attr);
+        attr.config = description.EventConfig;
+        attr.inherit = true;
+
+        FD_ = HandleEintr(
+            syscall,
+            SYS_perf_event_open,
+            &attr,
+            /*pid*/ 0,
+            /*cpu*/ -1,
+            /*group_fd*/ -1,
+            PERF_FLAG_FD_CLOEXEC);
+
+        if (FD_ == -1) {
+            THROW_ERROR_EXCEPTION("Failed to open %Qlv perf event descriptor",
+                type)
+                << TError::FromSystem();
+        }
     }
-}
 
-ui64 TPerfEventCounter::Read()
+    ~TPerfEventCounter()
+    {
+        if (FD_ != -1) {
+            SafeClose(FD_, /*ignoreBadFD*/ false);
+        }
+    }
+
+    i64 Read() final
+    {
+        i64 result = 0;
+        if (HandleEintr(read, FD_, &result, sizeof(result)) != sizeof(result)) {
+            THROW_ERROR_EXCEPTION("Failed to read perf event counter %Qlv",
+                Type_)
+                << TError::FromSystem();
+        }
+        return result;
+    }
+
+private:
+    const EPerfEventType Type_;
+    int FD_ = -1;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::unique_ptr<IPerfEventCounter> CreatePerfEventCounter(EPerfEventType type)
 {
-    return FetchPerfCounter(FD_);
+    return std::make_unique<TPerfEventCounter>(type);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_STRUCT(TCounterOwner)
-
-struct TCounterOwner
-    : public TRefCounted
-{
-    std::vector<std::unique_ptr<TPerfEventCounter>> Counters;
-};
-
-DEFINE_REFCOUNTED_TYPE(TCounterOwner)
-
-void EnablePerfCounters()
-{
-    auto owner = LeakyRefCountedSingleton<TCounterOwner>();
-
-    auto exportCounter = [&] (const std::string& category, const std::string& name, EPerfEventType type) {
-        try {
-            owner->Counters.emplace_back(new TPerfEventCounter{type});
-            TProfiler{category}.AddFuncCounter(name, owner, [counter=owner->Counters.back().get()] {
-                return counter->Read();
-            });
-        } catch (const std::exception&) {
-        }
-    };
-
-    exportCounter("/cpu/perf", "/cycles", EPerfEventType::CpuCycles);
-    exportCounter("/cpu/perf", "/instructions", EPerfEventType::Instructions);
-    exportCounter("/cpu/perf", "/branch_instructions", EPerfEventType::BranchInstructions);
-    exportCounter("/cpu/perf", "/branch_misses", EPerfEventType::BranchMisses);
-    exportCounter("/cpu/perf", "/context_switches", EPerfEventType::ContextSwitches);
-
-    exportCounter("/memory/perf", "/page_faults", EPerfEventType::PageFaults);
-    exportCounter("/memory/perf", "/minor_page_faults", EPerfEventType::MinorPageFaults);
-    exportCounter("/memory/perf", "/major_page_faults", EPerfEventType::MajorPageFaults);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 

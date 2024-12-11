@@ -38,24 +38,15 @@ DEFINE_ENUM(EPerfEventType,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPerfEventCounter final
+struct IPerfEventCounter
 {
-public:
-    explicit TPerfEventCounter(EPerfEventType type);
-    ~TPerfEventCounter();
+    virtual ~IPerfEventCounter() = default;
 
-    TPerfEventCounter(const TPerfEventCounter&) = delete;
-
-    ui64 Read();
-
-private:
-    int FD_ = -1;
+    //! Returns the counter increment since the last read.
+    virtual i64 Read() = 0;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
-//! EnablePerfCounters creates selected set of perf counters.
-void EnablePerfCounters();
+std::unique_ptr<IPerfEventCounter> CreatePerfEventCounter(EPerfEventType type);
 
 ////////////////////////////////////////////////////////////////////////////////
 

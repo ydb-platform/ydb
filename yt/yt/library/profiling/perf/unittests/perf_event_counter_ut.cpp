@@ -1,10 +1,11 @@
-#include "util/system/yield.h"
 #include <gtest/gtest.h>
 
-#include <yt/yt/library/profiling/perf/counters.h>
+#include <yt/yt/library/profiling/perf/event_counter.h>
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/proc.h>
+
+#include <util/system/yield.h>
 
 namespace NYT::NProfiling {
 namespace {
@@ -21,40 +22,32 @@ void IgnorePermissionError(const TFn& fn)
         if (ex.Error().FindMatching(PermissionErrorCode)) {
             return;
         }
-
         throw;
     }
 }
 
-TEST(TPerfCounters, Cycles)
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TPerfEventCounterTest, CpuCycles)
 {
     IgnorePermissionError([&] {
-        TPerfEventCounter counter(EPerfEventType::CpuCycles);
-        ASSERT_GE(counter.Read(), 0u);
+        ASSERT_GE(ReadPerfEventCounter(EPerfEventType::CpuCycles), 0);
     });
 }
 
-TEST(TPerfCounters, ContextSwitches)
+TEST(TPerfEventCounterTest, ContextSwitches)
 {
     IgnorePermissionError([&] {
-        TPerfEventCounter counter(EPerfEventType::ContextSwitches);
-
         for (int i = 0; i < 10; i++) {
             SchedYield();
         }
-
-        ASSERT_GE(counter.Read(), 0u);
+        ASSERT_GE(ReadPerfEventCounter(EPerfEventType::ContextSwitches), 0);
     });
 }
 
-TEST(TPerfCounters, CounterError)
+TEST(TPerfEventCounterTest, CounterError)
 {
-    auto createCounter = [] {
-        TPerfEventCounter counter{EPerfEventType::StalledCyclesBackend};
-        return 0;
-    };
-
-    ASSERT_THROW(createCounter(), TErrorException);
+    ASSERT_THROW(ReadPerfEventCounter(EPerfEventType::StalledCyclesBackend), TErrorException);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

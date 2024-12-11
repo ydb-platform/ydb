@@ -29,6 +29,9 @@ struct TEvFlush : public TEventLocal<TEvFlush, TKqpBufferWriterEvents::EvFlush> 
 };
 
 struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResult> {
+    TEvResult() = default;
+    TEvResult(NYql::NDqProto::TDqTaskStats&& stats) : Stats(std::move(stats)) {}
+
     std::optional<NYql::NDqProto::TDqTaskStats> Stats;
 };
 

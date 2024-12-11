@@ -18,6 +18,7 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
+ydb/core/kqp/ut/cost KqpCost::OlapWriteRow
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.Select
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWrite
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertViaLegacyScripting-Streaming

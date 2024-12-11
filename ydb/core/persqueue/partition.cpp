@@ -741,18 +741,17 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             read->SetCreateTimestamp(userInfo.GetReadCreateTimestamp(EndOffset).MilliSeconds());
             read->SetSize(GetSizeLag(userInfo.GetReadOffset()));
 
+            clientInfo->SetLastReadTimestampMs(userInfo.GetReadTimestamp().MilliSeconds());
             if (IsActive() || userInfo.GetReadOffset() < (i64)EndOffset) {
                 clientInfo->SetReadLagMs(userInfo.GetReadOffset() < (i64)EndOffset
                                             ? (userInfo.GetReadTimestamp() - TInstant::MilliSeconds(read->GetWriteTimestamp())).MilliSeconds()
                                             : 0);
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
-                clientInfo->SetLastReadTimestampMs(userInfo.GetReadTimestamp().MilliSeconds());
                 ui64 totalLag = clientInfo->GetReadLagMs() + userInfo.GetWriteLagMs() + (now - userInfo.GetReadTimestamp()).MilliSeconds();
                 clientInfo->SetTotalLagMs(totalLag);
             } else {
                 clientInfo->SetReadLagMs(0);
                 clientInfo->SetWriteLagMs(0);
-                clientInfo->SetLastReadTimestampMs(now.MilliSeconds());
                 clientInfo->SetTotalLagMs(0);
             }
         }
@@ -760,17 +759,16 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         if (ev->Get()->GetStatForAllConsumers) { //fill lags
             auto* clientInfo = result.AddConsumerResult();
             clientInfo->SetConsumer(userInfo.User);
+            clientInfo->SetLastReadTimestampMs(userInfo.GetReadTimestamp().MilliSeconds());
 
             if (IsActive() || userInfo.GetReadOffset() < (i64)EndOffset) {
                 clientInfo->SetReadLagMs(userInfo.GetReadOffset() < (i64)EndOffset
                                             ? (userInfo.GetReadTimestamp() - estimateReadWriteTimestamp()).MilliSeconds()
                                             : 0);
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
-                clientInfo->SetLastReadTimestampMs(userInfo.GetReadTimestamp().MilliSeconds());
             } else {
                 clientInfo->SetReadLagMs(0);
                 clientInfo->SetWriteLagMs(0);
-                clientInfo->SetLastReadTimestampMs(now.MilliSeconds());
             }
 
             clientInfo->SetAvgReadSpeedPerMin(userInfo.AvgReadBytes[1].GetValue());
@@ -1458,7 +1456,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_TIME].Set(totalLag);
         }
 
-        ts = ((IsActive() || off < (i64)EndOffset) ? readTimestamp : now).MilliSeconds();
+        ts = readTimestamp.MilliSeconds();
         if (userInfo.LabeledCounters->GetCounters()[METRIC_LAST_READ_TIME].Get() != ts) {
             haveChanges = true;
             userInfo.LabeledCounters->GetCounters()[METRIC_LAST_READ_TIME].Set(ts);

@@ -4,12 +4,15 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+#include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -475,6 +478,36 @@ void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& p
     WriteProtoToFile(proto, folderPath, NDump::NFiles::Permissions());
 }
 
+Ydb::Table::ChangefeedDescription ProtoFromChangefeedDesc(const NTable::TChangefeedDescription& changefeedDesc) {
+    Ydb::Table::ChangefeedDescription protoChangeFeedDesc;
+    changefeedDesc.SerializeTo(protoChangeFeedDesc);
+    return protoChangeFeedDesc;
+}
+
+NTopic::TDescribeTopicResult DescribeTopic(TDriver driver, const TString& path) {
+    NYdb::NTopic::TTopicClient client(driver);
+    return NConsoleClient::RetryFunction([&]() {
+        return client.DescribeTopic(path).GetValueSync();
+    });
+}
+
+void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& folderPath) {
+    auto desc = DescribeTable(driver, tablePath);
+
+    for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
+        TFsPath changefeedDirPath = CreateDirectory(folderPath, changefeedDesc.GetName());
+        
+        auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
+        const auto descTopicResult = DescribeTopic(driver, JoinDatabasePath(tablePath, changefeedDesc.GetName()));
+        VerifyStatus(descTopicResult);
+        const auto& topicDescription = descTopicResult.GetTopicDescription();
+        const auto protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
+
+        WriteProtoToFile(protoChangeFeedDesc, changefeedDirPath, NDump::NFiles::Changefeed());
+        WriteProtoToFile(protoTopicDescription, changefeedDirPath, NDump::NFiles::Topic());
+    }
+}
+
 void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, const TString& path,
         const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered) {
     Y_ENSURE(!path.empty());
@@ -486,8 +519,9 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
 
     auto desc = DescribeTable(driver, fullPath);
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
-
     WriteProtoToFile(proto, folderPath, NDump::NFiles::TableScheme());
+  
+    BackupChangefeeds(driver, JoinDatabasePath(dbPrefix, path), folderPath);
     BackupPermissions(driver, dbPrefix, path, folderPath);
 
     if (!schemaOnly) {

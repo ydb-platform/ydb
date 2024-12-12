@@ -21,6 +21,8 @@ public:
         , LogPrefix("TPurecalcCompileService: ")
     {}
 
+    static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_COMPILER";
+
     STRICT_STFUNC(StateFunc,
         hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle);
     )

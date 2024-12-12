@@ -174,8 +174,8 @@ private:
     std::vector<std::optional<ui64>> ColumnIndexes;  // Output column index in schema passed into RowDispatcher
     const TType* InputDataType = nullptr;  // Multi type (comes from Row Dispatcher)
     std::unique_ptr<NKikimr::NMiniKQL::TValuePackerTransport<true>> DataUnpacker;
-
     THashMap<ui32, TMaybe<ui64>> NextOffsetFromRD;
+    ui64 CpuMicrosec = 0;
 
     struct TPartition {
         bool HasPendingData = false;
@@ -288,6 +288,7 @@ public:
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override;
     void PassAway() override;
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override;
+    TDuration GetCpuTime() override;
     std::vector<ui64> GetPartitionsToRead() const;
     void AddMessageBatch(TRope&& serializedBatch, NKikimr::NMiniKQL::TUnboxedValueBatch& buffer);
     void ProcessState();
@@ -534,6 +535,12 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     return usedSpace;
 }
 
+TDuration TDqPqRdReadActor::GetCpuTime() {
+    TDuration value = TDuration::MicroSeconds(CpuMicrosec);
+    CpuMicrosec = 0;
+    return value;
+}
+
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
     std::vector<ui64> res;
     ui64 currentPartition = ReadParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
@@ -576,6 +583,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_T("Received TEvStatistics from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.Statistics++;
+    CpuMicrosec += ev->Get()->Record.GetCpuMicrosec();
 
     auto* session = FindSession(ev->Sender, ev);
     if (!session) {

@@ -50,6 +50,19 @@ struct TRowDispatcherMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr NodesReconnect;
 };
 
+struct TUserPoolMetrics {
+    explicit TUserPoolMetrics(const ::NMonitoring::TDynamicCounterPtr& utilsCounters) {
+        auto execpoolGroup = utilsCounters->GetSubgroup("execpool", "User");
+        auto microsecGroup = execpoolGroup->GetSubgroup("sensor", "ElapsedMicrosecByActivity");
+        Session = microsecGroup->GetNamedCounter("activity", "FQ_ROW_DISPATCHER_SESSION", true);
+        RowDispatcher = microsecGroup->GetNamedCounter("activity", "FQ_ROW_DISPATCHER", true);
+        Compiler = microsecGroup->GetNamedCounter("activity", "FQ_ROW_DISPATCHER_COMPILER", true);
+    }
+    ::NMonitoring::TDynamicCounters::TCounterPtr Session;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RowDispatcher;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Compiler;
+};
+
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
@@ -261,12 +274,15 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     ui64 NextEventQueueId = 0;
     TString Tenant;
     NFq::NRowDispatcher::IActorFactory::TPtr ActorFactory;
-    const ::NMonitoring::TDynamicCounterPtr Counters;
+    const ::NMonitoring::TDynamicCounterPtr YqCounters;
+    const ::NMonitoring::TDynamicCounterPtr UtilsCounters;
     TRowDispatcherMetrics Metrics;
+    TUserPoolMetrics UserPoolMetrics;
     NYql::IPqGateway::TPtr PqGateway;
     NActors::TMon* Monitoring;
     TNodesTracker NodesTracker;
     TAggregatedStats AggrStats; 
+    ui64 LastCpuTime = 0;
 
     struct TConsumerCounters {
         ui64 NewDataArrived = 0;
@@ -309,6 +325,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         const TString QueryId;
         TConsumerCounters Counters;
         TTopicSessionClientStatistic Stat;
+        ui64 CpuMicrosec = 0;               // Increment.
         ui64 Generation;
     };
 
@@ -341,7 +358,8 @@ public:
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         const TString& tenant,
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
-        const ::NMonitoring::TDynamicCounterPtr& counters,
+        const ::NMonitoring::TDynamicCounterPtr& yqCounters,
+        const ::NMonitoring::TDynamicCounterPtr& utilsCounters,
         const NYql::IPqGateway::TPtr& pqGateway,
         NActors::TMon* monitoring = nullptr);
 
@@ -383,6 +401,7 @@ public:
     bool CheckSession(TAtomicSharedPtr<TConsumerInfo>& consumer, const TEventPtr& ev);
     void SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax);
     void PrintStateToLog();
+    void UpdateCpuTime();
 
     STRICT_STFUNC(
         StateFunc, {
@@ -418,7 +437,8 @@ TRowDispatcher::TRowDispatcher(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& yqCounters,
+    const ::NMonitoring::TDynamicCounterPtr& utilsCounters,
     const NYql::IPqGateway::TPtr& pqGateway,
     NActors::TMon* monitoring)
     : Config(config)
@@ -428,8 +448,10 @@ TRowDispatcher::TRowDispatcher(
     , LogPrefix("RowDispatcher: ")
     , Tenant(tenant)
     , ActorFactory(actorFactory)
-    , Counters(counters)
-    , Metrics(counters)
+    , YqCounters(yqCounters)
+    , UtilsCounters(utilsCounters)
+    , Metrics(yqCounters)
+    , UserPoolMetrics(utilsCounters)
     , PqGateway(pqGateway)
     , Monitoring(monitoring)
 {
@@ -440,8 +462,8 @@ void TRowDispatcher::Bootstrap() {
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped row dispatcher, id " << SelfId() << ", tenant " << Tenant);
 
     const auto& config = Config.GetCoordinator();
-    auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, Counters).release());
-    Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, Counters).release());
+    auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, YqCounters).release());
+    Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, YqCounters).release());
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService());
 
@@ -612,6 +634,7 @@ TString TRowDispatcher::GetInternalState() {
     str << "Consumers count: " << Consumers.size() << "\n";
     str << "TopicSessions count: " << TopicSessions.size() << "\n";
     str << "Max session buffer size: " << toHuman(MaxSessionBufferSizeBytes) << "\n";
+    str << "CpuMicrosec: " << toHuman(LastCpuTime) << "\n";
     str << "DataRate (all sessions): ";
     printDataRate(AggrStats.AllSessionsReadBytes);
     str << "\n";
@@ -780,7 +803,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                     CredentialsFactory,
                     ev->Get()->Record.GetToken(),
                     source.GetAddBearerToToken()),
-                Counters,
+                YqCounters,
                 PqGateway,
                 MaxSessionBufferSizeBytes
                 );
@@ -979,6 +1002,7 @@ void TRowDispatcher::PrintStateToLog() {
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
     LOG_ROW_DISPATCHER_TRACE("TEvPrivate::TEvSendStatistic");
 
+    UpdateCpuTime();
     Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvSendStatistic());
     for (auto& [actorId, consumer] : Consumers) {
         if (!NodesTracker.GetNodeConnected(actorId.NodeId())) {
@@ -998,6 +1022,8 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
             partition.StatisticsUpdated = false;
         }
         event->Record.SetReadBytes(readBytes);
+        event->Record.SetCpuMicrosec(consumer->CpuMicrosec);
+        consumer->CpuMicrosec = 0;
         consumer->EventsQueue.Send(event.release(), consumer->Generation);
     }
 }
@@ -1057,6 +1083,20 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetInternalStateResponse::
     readActorInternalState.ResponseTime = TInstant::Now();
 }
 
+void TRowDispatcher::UpdateCpuTime() {
+    if (Consumers.empty()) {
+        return;
+    }
+    auto currentCpuTime = UserPoolMetrics.Session->Val()
+        + UserPoolMetrics.RowDispatcher->Val()
+        + UserPoolMetrics.Compiler->Val();
+    auto diff = (currentCpuTime - LastCpuTime) / Consumers.size();
+    for (auto& [actorId, consumer] : Consumers) {
+        consumer->CpuMicrosec += diff;
+    }
+    LastCpuTime = currentCpuTime;
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1068,7 +1108,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& yqCounters,
+    const ::NMonitoring::TDynamicCounterPtr& utilsCounters,
     const NYql::IPqGateway::TPtr& pqGateway,
     NActors::TMon* monitoring)
 {
@@ -1079,7 +1120,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         credentialsFactory,
         tenant,
         actorFactory,
-        counters,
+        yqCounters,
+        utilsCounters,
         pqGateway,
         monitoring));
 }

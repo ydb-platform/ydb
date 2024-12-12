@@ -4,6 +4,8 @@
 
 namespace NKikimr::NSysView {
 
+using namespace NSchemeShard;
+
 class TSidsScan : public TScanActorBase<TSidsScan> {
 public:
     using TBase = TScanActorBase<TSidsScan>;
@@ -30,6 +32,8 @@ public:
     STFUNC(StateScan) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            HFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -52,9 +56,31 @@ private:
     }
 
     void StartScan() {
-        
+        auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(TenantName);
 
-        RequestDone();
+        // request->Record.MutableOptions()->SetReturnPartitioningInfo(false);
+        // request->Record.MutableOptions()->SetReturnPartitionConfig(false);
+        // request->Record.MutableOptions()->SetReturnChildren(false);
+
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), SchemeShardId, true),
+            IEventHandle::FlagTrackDelivery);
+    }
+
+    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->GetRecord();
+        
+        if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
+            ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Failed to request domain info " << record.GetStatus());
+            return;
+        }
+        
+        const auto& pathDescription = record.GetPathDescription();
+
+        Cerr << "GOT PATH DESCRIPTION " << pathDescription.DebugString() << Endl;
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Failed to request domain info");
     }
 
     void RequestDone() {

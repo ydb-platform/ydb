@@ -2137,8 +2137,33 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(Sids) {
         TTestEnv env;
-        CreateTenantsAndTables(env, false);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        CreateTenantsAndTables(env, true);
         TTableClient client(env.GetDriver());
+
+        Cerr << "DESCRIBE 1 " << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
+        env.GetClient().CreateUser("/Root", "user1", "password1");
+        Cerr << "DESCRIBE 2 " << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
+        env.GetClient().CreateUser("/Root", "user2", "password2");
+        Cerr << "DESCRIBE 3 " << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
+        return;
+
+        env.GetClient().CreateUser("/Root", "user1", "password1");
+        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
+        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
+        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/sids`;
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            Cerr << "RESULT: " << NKqp::StreamResultToYson(it) << Endl;
+        }
+
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *

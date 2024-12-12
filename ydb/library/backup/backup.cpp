@@ -492,9 +492,8 @@ NTopic::TDescribeTopicResult DescribeTopic(TDriver driver, const TString& path) 
     });
 }
 
-void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
+void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath, const NTable::TTableDescription& desc) {
     const auto dirPath = JoinDatabasePath(dbPrefix, path);
-    auto desc = DescribeTable(driver, dirPath);
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
         TFsPath changefeedDirPath = CreateDirectory(folderPath, changefeedDesc.GetName());
         
@@ -514,7 +513,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     Y_ENSURE(!path.empty());
     Y_ENSURE(path.back() != '/', path.Quote() << " path contains / in the end");
 
-    const auto fullPath = JoinDatabasePath(schemaOnly ? dbPrefix : backupPrefix, path);
+    const auto fullPath = JoinDatabasePath(dbPrefix, path);
 
     LOG_I("Backup table " << fullPath.Quote() << " to " << folderPath.GetPath().Quote());
 
@@ -522,7 +521,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::TableScheme());
   
-    BackupChangefeeds(driver, dbPrefix, path, folderPath);
+    BackupChangefeeds(driver, dbPrefix, path, folderPath, desc);
     BackupPermissions(driver, dbPrefix, path, folderPath);
 
     if (!schemaOnly) {

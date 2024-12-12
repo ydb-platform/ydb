@@ -9,6 +9,8 @@
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <util/string/join.h>
 
@@ -92,7 +94,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
             return TConclusionStatus::Success();
         }
         const std::optional<i32> pkFieldIdx = GetIndexInfo().GetPKColumnIndexByIndexVerified(targetIdx);
-        if (!NArrow::HasNulls(incomingBatch->column(incomingIdx))) {
+        if (AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK() || !NArrow::HasNulls(incomingBatch->column(incomingIdx))) {
             if (pkFieldIdx) {
                 AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
                 AFL_VERIFY(!pkColumns[*pkFieldIdx]);

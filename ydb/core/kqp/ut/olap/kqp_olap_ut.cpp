@@ -2994,6 +2994,56 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 .GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
+
+    Y_UNIT_TEST(SelectNullPk) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/ColumnShard` (
+                a Uint64,
+                b Int64,
+                PRIMARY KEY (a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/ColumnShard` (a, b) VALUES
+                    (NULL, 5),
+                    (2u, 5)
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(prepareResult.IsSuccess());;
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT
+                    COUNT(*)
+                FROM `/Root/ColumnShard`
+                WHERE a is NULL;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            Cout << output << Endl;
+            CompareYson(output, R"([[2u;]])"); // Should be 1u after fix
+        }
+    }
+
 }
 
 }

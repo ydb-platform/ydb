@@ -228,6 +228,9 @@ protected:
             return EExecutionStatus::Continue;
         }
 
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed a " << GetKind() << " operation"
+            << " at " << DataShard.TabletID());
+
         return EExecutionStatus::Executed;
     }
 
@@ -247,9 +250,10 @@ protected:
         return false;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override final {
+    void Complete(TOperation::TPtr, const TActorContext& ctx) override final {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Complete a " << GetKind() << " operation"
+            << " at " << DataShard.TabletID());
     }
-
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, TOperation::TPtr op, const TActorContext& ctx) {
         Y_UNUSED(ev, op, ctx);

@@ -295,6 +295,8 @@ public:
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
+        return false; // intentionally hang
+
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
 
         return true;
@@ -461,6 +463,7 @@ class TNewRestoreFromAtTable : public TSubOperation {
             return MakeHolder<NIncrRestore::TProposeAtTable>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups(), txState->LoopStep);
         }
         case TTxState::ProposedWaitParts:
+            LOG_N("TNewRestoreFromAtTable ProposedWaitParts XMARK");
             // TODO: check the right next state always choosen
             return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:

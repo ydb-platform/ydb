@@ -524,20 +524,28 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    bool CheckLimitOnlyNotTopSort(const TString& plan) {
+        return plan.Contains("Limit") && !plan.Contains("Top");
+    }
+
     Y_UNIT_TEST(GeneralPrioritiesBug1) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug.sql", "stats/general_priorities_bug.json", true, false);
+        auto plan = ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug.sql", "stats/general_priorities_bug.json", true, false);
+        UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
     }
 
     Y_UNIT_TEST(GeneralPrioritiesBug2) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug2.sql", "stats/general_priorities_bug.json", true, false);
+        auto plan = ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug2.sql", "stats/general_priorities_bug.json", true, false);
+        UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
     }
 
     Y_UNIT_TEST(GeneralPrioritiesBug3) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug3.sql", "stats/general_priorities_bug.json", true, false);
+        auto plan = ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug3.sql", "stats/general_priorities_bug.json", true, false);
+        UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
     }
 
     Y_UNIT_TEST(GeneralPrioritiesBug4) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug4.sql", "stats/general_priorities_bug.json", true, false);
+        auto plan = ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug4.sql", "stats/general_priorities_bug.json", true, false);
+        UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS34, StreamLookupJoin, ColumnStore) {

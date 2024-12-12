@@ -29,8 +29,18 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "LeftJoin (MapJoin)-Filter",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.name"
+                                            },
                                             {
                                                 "Condition": "c.a = ss.a.code",
                                                 "Inputs": [
@@ -38,7 +48,7 @@
                                                         "ExternalPlanNodeId": 17
                                                     },
                                                     {
-                                                        "InternalOperatorId": 1
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

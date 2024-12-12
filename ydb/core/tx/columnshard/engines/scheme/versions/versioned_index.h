@@ -100,14 +100,14 @@ public:
     }
 
     ISnapshotSchema::TPtr GetLastSchemaBeforeOrEqualSnapshotOptional(const ui64 version) const {
-        ISnapshotSchema::TPtr res = nullptr;
-        for (auto it = SnapshotByVersion.rbegin(); it != SnapshotByVersion.rend(); ++it) {
-            if (it->first <= version) {
-                res = it->second;
-                break;
-            }
+        if (SnapshotByVersion.empty()) {
+            return nullptr;
         }
-        return res;
+        auto upperBound = SnapshotByVersion.upper_bound(version);
+        if (upperBound == SnapshotByVersion.begin()) {
+            return nullptr;
+        }
+        return std::prev(upperBound)->second;
     }
 
     ISnapshotSchema::TPtr GetLastSchema() const {

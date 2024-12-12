@@ -438,6 +438,10 @@ public:
         return static_cast<bool>(Progress[lastImportedLineKey]);
     }
 
+    TString GetSourcveFilePath() const {
+        return SourceFilePath.GetPath();
+    }
+
     TString GetProgressFilePath() const {
         return ProgressFilePath.GetPath();
     }
@@ -521,8 +525,7 @@ private:
     THolder<TStatus> ErrorStatus;
     size_t FilesPreviouslyCompleted = 0;
     size_t FilesPreviouslyStarted = 0;
-    TString PreviouslyStartedFileName;
-    TString PreviouslyStartedProgressFileName;
+    std::shared_ptr<TProgressFile> PreviouslyStartedProgressFile;
     std::vector<std::shared_ptr<TProgressFile>> ProgressFiles;
 
     static constexpr ui32 VerboseModeStepSize = 1 << 27; // 128 MB
@@ -712,9 +715,10 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
     }
     if (FilesPreviouslyStarted) {
         if (FilesPreviouslyStarted == 1) {
-            std::cerr << "(!) Found existing import progress for file \"" << PreviouslyStartedFileName
-                << "\". Continuing from where it was interrupted. If you want to reset import progress, "
-                "remove progress file \"" << PreviouslyStartedProgressFileName << "\"" << std::endl;
+            std::cerr << "(!) Found existing import progress for file \"" << PreviouslyStartedProgressFile->GetSourcveFilePath()
+                << "\". Continuing from line " << PreviouslyStartedProgressFile->GetLastImportedLine()
+                << " where it was interrupted. If you want to reset import progress, remove progress file \""
+                << PreviouslyStartedProgressFile->GetProgressFilePath() << "\"" << std::endl;
         } else {
             std::cerr << "(!) Found existing import progress for " << FilesPreviouslyStarted
                 << " files. Continuing from where they were interrupted. If you want to reset import progress, "
@@ -759,9 +763,8 @@ std::shared_ptr<TProgressFile> TImportFileClient::TImpl::LoadOrStartImportProgre
                 --CurrentFileCount;
             } else if (progressFile->HasLastImportedLine()) { // File hase saved progress from previous import
                 ++FilesPreviouslyStarted;
-                if (!PreviouslyStartedFileName) {
-                    PreviouslyStartedFileName = filePath;
-                    PreviouslyStartedProgressFileName = progressFile->GetProgressFilePath();
+                if (!PreviouslyStartedProgressFile) {
+                    PreviouslyStartedProgressFile = progressFile;
                 }
             }
         }

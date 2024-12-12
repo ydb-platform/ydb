@@ -646,9 +646,11 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
                 progressCallback = [&, oldProgress](ui64 current, ui64 total) mutable {
                     ui64 progress = static_cast<ui64>((static_cast<double>(current) / total) * 100.0);
                     ui64 progressDiff = progress - oldProgress;
-                    globalProgress.fetch_add(progressDiff);
-                    oldProgress = progress;
-                    writeProgress();
+                    if (progressDiff > 0) {
+                        globalProgress.fetch_add(progressDiff);
+                        oldProgress = progress;
+                        writeProgress();
+                    }
                 };
             }
 

@@ -94,17 +94,20 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
             return TConclusionStatus::Success();
         }
         const std::optional<i32> pkFieldIdx = GetIndexInfo().GetPKColumnIndexByIndexVerified(targetIdx);
-        if (AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK() || !NArrow::HasNulls(incomingBatch->column(incomingIdx))) {
-            if (pkFieldIdx) {
-                AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
-                AFL_VERIFY(!pkColumns[*pkFieldIdx]);
-                pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
-                ++pkColumnsCount;
+
+        const bool isNull = NArrow::HasNulls(incomingBatch->column(incomingIdx));
+        if (pkFieldIdx) {
+            if (isNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
+                return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema->field(targetIdx)->name() + "'");
             }
+            AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
+            AFL_VERIFY(!pkColumns[*pkFieldIdx]);
+            pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
+            ++pkColumnsCount;
             return TConclusionStatus::Success();
         }
-        if (pkFieldIdx) {
-            return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema->field(targetIdx)->name() + "'");
+        if (!isNull) {
+            return TConclusionStatus::Success();
         }
         switch (mType) {
             case NEvWrite::EModificationType::Replace:

@@ -3731,16 +3731,20 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                     dflt = positional.GetTupleElement(positional.GetTupleSize() - 1);
                 }
             } else {
+                size_t minArgs = withDefault ? 2 : 1;
+                if (args.size() < minArgs) {
+                    return new TInvalidBuiltin(pos, TStringBuilder() << name
+                        << " requires at least " << minArgs << " positional arguments");
+                }
                 variant = args[0];
-                size_t defaultSuffix = withDefault ? 1 : 0;
-                labels.reserve(args.size() - 1 - defaultSuffix);
-                handlers.reserve(args.size() - 1 - defaultSuffix);
-                for (size_t idx = 0; idx + 1 < args.size() - defaultSuffix; idx++) {
+                labels.reserve(args.size() - minArgs);
+                handlers.reserve(args.size() - minArgs);
+                for (size_t idx = 0; idx < args.size() - minArgs; idx++) {
                     labels.push_back(BuildQuotedAtom(pos, ToString(idx)));
-                    handlers.push_back(args[idx + 1]);
+                    handlers.push_back(args[minArgs + idx]);
                 }
                 if (withDefault) {
-                    dflt = args.back();
+                    dflt = args[1];
                 }
             }
             TVector<TNodePtr> resultArgs;

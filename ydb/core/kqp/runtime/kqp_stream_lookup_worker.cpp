@@ -206,12 +206,15 @@ public:
     virtual ~TKqpLookupRows() {}
 
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
+        NMiniKQL::TStringProviderBackend backend;
         std::vector<TCell> keyCells(LookupKeyColumns.size());
         for (size_t colId = 0; colId < LookupKeyColumns.size(); ++colId) {
             const auto* lookupKeyColumn = LookupKeyColumns[colId];
             YQL_ENSURE(lookupKeyColumn->KeyOrder < static_cast<i64>(keyCells.size()));
+            // when making a cell we don't really need to make a copy of data, because
+            // TOwnedCellVec will make its' own copy.
             keyCells[lookupKeyColumn->KeyOrder] = MakeCell(lookupKeyColumn->PType,
-                inputRow.GetElement(colId), TypeEnv, /* copy */ true);
+                inputRow.GetElement(colId), backend, /* copy */ false);
         }
 
         if (keyCells.size() < KeyColumns.size()) {
@@ -488,13 +491,16 @@ public:
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
         auto joinKey = inputRow.GetElement(0);
         std::vector<TCell> joinKeyCells(LookupKeyColumns.size());
+        NMiniKQL::TStringProviderBackend backend;
 
         if (joinKey.HasValue()) {
             for (size_t colId = 0; colId < LookupKeyColumns.size(); ++colId) {
                 const auto* joinKeyColumn = LookupKeyColumns[colId];
                 YQL_ENSURE(joinKeyColumn->KeyOrder < static_cast<i64>(joinKeyCells.size()));
+                // when making a cell we don't really need to make a copy of data, because
+                // TOwnedCellVec will make its' own copy.
                 joinKeyCells[joinKeyColumn->KeyOrder] = MakeCell(joinKeyColumn->PType,
-                    joinKey.GetElement(colId), TypeEnv, true);
+                    joinKey.GetElement(colId), backend,  /* copy */ false);
             }
         }
 

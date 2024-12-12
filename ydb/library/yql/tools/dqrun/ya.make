@@ -12,6 +12,11 @@ ELSE()
     ENDIF()
 ENDIF()
 
+
+IF (OOM_HELPER)
+    PEERDIR(yql/essentials/utils/oom_helper)
+ENDIF()
+
     SRCS(
         dqrun.cpp
     )

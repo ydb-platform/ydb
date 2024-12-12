@@ -151,7 +151,7 @@ public:
                         response.operation().result().UnpackTo(&rs);
                         result->Message = std::move(rs);
                     } else if constexpr (std::is_same_v<TProtoResult, Ydb::Operations::Operation>) {
-                        result->Message = std::move(*reinterpret_cast<const TProtoResult*>(&response.operation()));
+                        result->Message = std::move(response.operation());
                     }
                 }
                 NYql::TIssues issues;

@@ -321,9 +321,9 @@ private:
     std::counting_semaphore<> JobsSemaphore;
 }; // TJobInflightManager
 
-static const TString pathToProgressFiles = "~/.config/ydb/import_progress/";
-static const TString sourceModifiedKey = "source_modified"; // Timestamp of source modification
-static const TString lastImportedLineKey = "last_imported_line"; // Last line that was imported with confirmation
+static const TFsPath pathToProgressFiles = TFsPath(HomeDir).Child(".config").Child("ydb").Child("import_progress");
+static const TString sourceModifiedKey = "source_modified_ts"; // Timestamp of source modification
+static const TString lastImportedLineKey = "last_imported_row"; // Last line that was imported with confirmation
 static const TString completedKey = "completed"; // File was successfully imported
 static const TDuration minSaveInterval = TDuration::Seconds(10);
 
@@ -334,14 +334,14 @@ public:
     {
         std::vector<TString> pathParts;
         StringSplitter(sourceFilePath).Split('/').Collect(&pathParts);
-        TString progressFileName = pathToProgressFiles;
+        TString progressFileName;
         for (ui32 i = 0; i < pathParts.size(); ++i) {
             if (i > 0) {
                 progressFileName += '_';
             }
             progressFileName += pathParts[i];
         }
-        ProgressFilePath = TFsPath(progressFileName);
+        ProgressFilePath = TFsPath(pathToProgressFiles).Child(progressFileName);
         ProgressFilePath.Fix();
     }
 
@@ -719,7 +719,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
             existingProgressMessage << "(!) If you want to reset file import progress, remove progress file \""
                 << PreviouslyStartedProgressFile->GetProgressFilePath() << "\"" << Endl;
         } else {
-            existingProgressMessage << "(!) If you want to fully reset import progress, remove progress files from " << pathToProgressFiles << Endl;
+            existingProgressMessage << "(!) If you want to fully reset import progress, remove progress files from " << pathToProgressFiles.GetPath() << Endl;
         }
         Cerr << existingProgressMessage;
     }

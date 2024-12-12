@@ -351,7 +351,6 @@ public:
                 Progress = YAML::LoadFile(ProgressFilePath.GetPath());
                 if (static_cast<bool>(Progress[lastImportedLineKey])
                         && Progress[sourceModifiedKey].as<i64>() == TFileStat(SourceFilePath).MTime) {
-                    Cerr << "File " << ProgressFilePath.GetPath() << " loaded" << Endl;
                     return true;
                 } else {
                     if (!static_cast<bool>(Progress[lastImportedLineKey])) {
@@ -377,7 +376,7 @@ public:
 
     bool Save() {
         if (FailedToSave) {
-            Cerr << "Failed to save once, do not try to save again" << Endl;
+            // Failed to save once, do not try to save again
             return false;
         }
         try {
@@ -387,14 +386,14 @@ public:
             if (TFileStat(ProgressFilePath).Mode & (S_IRGRP | S_IROTH)) {
                 int chmodResult = Chmod(ProgressFilePath.GetPath().c_str(), S_IRUSR | S_IWUSR);
                 if (chmodResult) {
-                    Cerr << "Couldn't change permissions for the file \"" << ProgressFilePath.GetPath() << "\"" << Endl;
+                    Cerr << "Couldn't change permissions for the file \"" << ProgressFilePath.GetPath()
+                        << "\" to save progress" << Endl;
                     FailedToSave = true;
                     return false;
                 }
             }
             TFileOutput resultConfigFile(TFile(ProgressFilePath, CreateAlways | WrOnly | AWUser | ARUser));
             resultConfigFile << YAML::Dump(Progress);
-            Cerr << "File " << ProgressFilePath.GetPath() << " saved" << Endl;
         } catch (const std::exception& e) {
             Cerr << "(!) Couldn't save progress to file \"" << ProgressFilePath.GetPath()
                 << "\". " << e.what() << Endl;

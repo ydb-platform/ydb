@@ -230,6 +230,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         }
         pathBatches.AddChunkInfo(inserted, context);
     }
+    NoAppendIsCorrect = pathBatches.GetData().empty();
 
     pathBatches.FinishChunksInfo();
 

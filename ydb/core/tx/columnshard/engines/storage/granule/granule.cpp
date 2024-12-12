@@ -162,6 +162,7 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
 
 void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
     if (context.GetActualInstant() < NextActualizations) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_actualization")("waiting", NextActualizations - context.GetActualInstant());
         return;
     }
     NActualizer::TExternalTasksContext extTasks(Portions);
@@ -242,9 +243,11 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
 
     {
         TPortionInfo::TSchemaCursor schema(versionedIndex);
-        if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV1&& loadContext) {
+        if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV2&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPortionId());
-                constructor->LoadRecord(std::move(loadContext));
+                for (auto&& i : loadContext.BuildRecordsV1()) {
+                    constructor->LoadRecord(std::move(i));
+                }
             })) {
             return false;
         }

@@ -7,10 +7,12 @@ SELECT
     key,
     subkey,
     some(value) AS value
-FROM Input
+FROM
+    Input
 GROUP BY
     key,
     subkey
 ORDER BY
     key,
-    subkey;
+    subkey
+;

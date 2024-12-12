@@ -6,12 +6,13 @@ SELECT
     ListExtend(
         ListMap(
             $list, ($x) -> {
-                RETURN $x + 1
+                RETURN $x + 1;
             }
         ),
         ListMap(
             $list, ($x) -> {
-                RETURN $x + 2
+                RETURN $x + 2;
             }
         )
-    );
+    )
+;

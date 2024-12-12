@@ -6,21 +6,30 @@ USE plato;
 $var =
     SELECT
         *
-    FROM Input;
+    FROM
+        Input
+;
 
 INSERT INTO @tmp
 SELECT
     *
-FROM $var
-    TABLESAMPLE BERNOULLI (100);
+FROM
+    $var
+    TABLESAMPLE BERNOULLI (100)
+;
 
 INSERT INTO @tmp
 SELECT
     *
-FROM $var
-    TABLESAMPLE BERNOULLI (50);
+FROM
+    $var
+    TABLESAMPLE BERNOULLI (50)
+;
+
 COMMIT;
 
 SELECT
     *
-FROM @tmp;
+FROM
+    @tmp
+;

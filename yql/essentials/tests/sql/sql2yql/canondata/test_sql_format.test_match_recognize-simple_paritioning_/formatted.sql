@@ -1,6 +1,8 @@
 PRAGMA FeatureR010 = "prototype";
 PRAGMA config.flags("MatchRecognizeStream", "disable");
+
 USE plato;
+
 $data = [
     <|dt: 15, host: "fqdn1", key: 0|>,
     <|dt: 16, host: "fqdn1", key: 1|>,
@@ -28,9 +30,22 @@ $data = [
 
 SELECT
     *
-FROM AS_TABLE($data) MATCH_RECOGNIZE (PARTITION BY
-    host ORDER BY
-    dt MEASURES Last(Q.dt) AS T, First(Y.key) AS Key ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW PATTERN ((Y Q)) DEFINE Y AS (Y.key) % 3 == 0, Q AS (Q.key) % 3 != 0)
-    AS MR
+FROM
+    AS_TABLE($data) MATCH_RECOGNIZE (
+        PARTITION BY
+            host
+        ORDER BY
+            dt
+        MEASURES
+            Last(Q.dt) AS T,
+            First(Y.key) AS Key
+        ONE ROW PER MATCH
+        AFTER MATCH SKIP TO NEXT ROW
+        PATTERN ((Y Q))
+        DEFINE
+            Y AS (Y.key) % 3 == 0,
+            Q AS (Q.key) % 3 != 0
+    ) AS MR
 ORDER BY
-    MR.T;
+    MR.T
+;

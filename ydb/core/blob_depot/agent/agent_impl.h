@@ -11,6 +11,7 @@ namespace NKikimr::NBlobDepot {
         XX(EvPut) \
         XX(EvGet) \
         XX(EvBlock) \
+        XX(EvGetBlock) \
         XX(EvDiscover) \
         XX(EvRange) \
         XX(EvCollectGarbage) \

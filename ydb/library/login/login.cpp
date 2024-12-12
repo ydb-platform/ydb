@@ -12,6 +12,8 @@
 
 #include <deque>
 
+#include <ydb/library/login/password_checker/password_checker.h>
+
 #include "login.h"
 
 namespace NLogin {
@@ -35,6 +37,12 @@ struct TLoginProvider::TImpl {
 
 TLoginProvider::TLoginProvider()
     : Impl(new TImpl())
+    , PasswordChecker(TPasswordComplexity())
+{}
+
+TLoginProvider::TLoginProvider(const TPasswordComplexity& passwordComplexity)
+    : Impl(new TImpl())
+    , PasswordChecker(passwordComplexity)
 {}
 
 TLoginProvider::~TLoginProvider()
@@ -51,6 +59,13 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
         response.Error = "Name is not allowed";
         return response;
     }
+
+    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
+    if (!passwordCheckResult.Success) {
+        response.Error = passwordCheckResult.Error;
+        return response;
+    }
+
     auto itUserCreate = Sids.emplace(request.User, TSidRecord{.Type = NLoginProto::ESidType::USER});
     if (!itUserCreate.second) {
         if (itUserCreate.first->second.Type == ESidType::USER) {
@@ -83,6 +98,12 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
     auto itUserModify = Sids.find(request.User);
     if (itUserModify == Sids.end() || itUserModify->second.Type != ESidType::USER) {
         response.Error = "User not found";
+        return response;
+    }
+
+    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
+    if (!passwordCheckResult.Success) {
+        response.Error = passwordCheckResult.Error;
         return response;
     }
 
@@ -657,6 +678,10 @@ TString TLoginProvider::SanitizeJwtToken(const TString& token) {
         return {};
     }
     return TStringBuilder() << TStringBuf(token).SubString(0, signaturePos) << ".**"; // <token>.**
+}
+
+void TLoginProvider::UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity) {
+    PasswordChecker.Update(passwordComplexity);
 }
 
 }

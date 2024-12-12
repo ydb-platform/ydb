@@ -6,4 +6,6 @@ SELECT
     k,
     s,
     v
-FROM concat(Input VIEW ksv, Input VIEW ksv);
+FROM
+    concat(Input VIEW ksv, Input VIEW ksv)
+;

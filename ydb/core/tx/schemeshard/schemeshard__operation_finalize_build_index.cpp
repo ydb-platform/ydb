@@ -19,7 +19,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TFinalizeBuildIndex TConfigureParts"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -105,7 +105,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TFinalizeBuildIndex TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -236,7 +236,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
             LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

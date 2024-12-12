@@ -1369,7 +1369,9 @@ private:
 
     void OnForwardingFinished(TString itemKey)
     {
-        YT_VERIFY(Map_->AddChild(itemKey, TreeBuilder_->EndTree()));
+        if (!Map_->AddChild(itemKey, TreeBuilder_->EndTree())) {
+            THROW_ERROR_EXCEPTION("Duplicate key %Qv", itemKey);
+        }
     }
 
     void OnMyEndMap() override

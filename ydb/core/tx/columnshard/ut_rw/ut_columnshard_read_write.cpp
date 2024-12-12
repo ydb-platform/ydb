@@ -552,7 +552,7 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
 void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString codec = "") {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-    csControllerGuard->SetOverrideReadTimeoutClean(TDuration::Max());
+    csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -2462,10 +2462,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 // Cerr <<  "EvWriteIndex" << Endl << *msg->IndexChanges << Endl;
 
                 if (auto append = dynamic_pointer_cast<NOlap::TChangesWithAppend>(msg->IndexChanges)) {
-                    Y_ABORT_UNLESS(append->AppendedPortions.size());
+                    Y_ABORT_UNLESS(append->GetAppendedPortions().size());
                     TStringBuilder sb;
                     sb << "Added portions:";
-                    for (const auto& portion : append->AppendedPortions) {
+                    for (const auto& portion : append->GetAppendedPortions()) {
                         Y_UNUSED(portion);
                         ++addedPortions;
                         sb << " " << addedPortions;
@@ -2654,7 +2654,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             PlanCommit(runtime, sender, planStep, txId);
         }
         UNIT_ASSERT_EQUAL(cleanupsHappened, 0);
-        csDefaultControllerGuard->SetOverrideRequestsTracePingCheckPeriod(TDuration::Zero());
+        csDefaultControllerGuard->SetOverrideStalenessLivetimePing(TDuration::Zero());
+        csDefaultControllerGuard->SetOverrideUsedSnapshotLivetime(TDuration::Zero());
         {
             auto read = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());

@@ -4,16 +4,20 @@ DECLARE $x2 AS Double;
 DECLARE $x3 AS Bool;
 DECLARE $x4 AS Float;
 DECLARE $x5 AS String;
+
 -- unicode
 DECLARE $x6 AS Int64;
 DECLARE $x7 AS Uint64;
 DECLARE $x8 AS String;
+
 -- binary
 DECLARE $x9 AS Utf8;
 DECLARE $x10 AS Uuid;
 DECLARE $x11 AS String?;
+
 -- null
 DECLARE $x12 AS String?;
+
 -- not null
 DECLARE $x13 AS Yson;
 DECLARE $x14 AS Json;
@@ -50,4 +54,5 @@ SELECT
     CAST($x20 AS string),
     CAST($x21 AS string),
     $x22,
-    CAST($x23 AS string);
+    CAST($x23 AS string)
+;

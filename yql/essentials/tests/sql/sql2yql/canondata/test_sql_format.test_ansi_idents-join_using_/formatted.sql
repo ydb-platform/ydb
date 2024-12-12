@@ -4,8 +4,8 @@ USE plato;
 
 SELECT
     count(*)
-FROM Input2
-    AS a
-JOIN Input3
-    AS b
+FROM
+    Input2 AS a
+JOIN
+    Input3 AS b
 USING ("key");

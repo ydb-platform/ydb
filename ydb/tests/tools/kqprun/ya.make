@@ -8,7 +8,7 @@ PEERDIR(
     library/cpp/getopt
 
     yql/essentials/parser/pg_wrapper
-    ydb/library/yql/providers/yt/gateway/file
+    yt/yql/providers/yt/gateway/file
     yql/essentials/sql/pg
 
     ydb/tests/tools/kqprun/src

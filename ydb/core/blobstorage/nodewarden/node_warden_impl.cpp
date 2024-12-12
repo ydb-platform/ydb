@@ -66,6 +66,7 @@ STATEFN(TNodeWarden::StateOnline) {
     switch (ev->GetTypeRewrite()) {
         fFunc(TEvBlobStorage::TEvPut::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvGet::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvGetBlock::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvBlock::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvPatch::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvDiscover::EventType, HandleForwarded);
@@ -279,7 +280,7 @@ void TNodeWarden::StopInvalidGroupProxy() {
 }
 
 void TNodeWarden::StartRequestReportingThrottler() {
-    STLOG(PRI_DEBUG, BS_NODE, NW27, "StartRequestReportingThrottler");
+    STLOG(PRI_DEBUG, BS_NODE, NW62, "StartRequestReportingThrottler");
     Register(CreateRequestReportingThrottler(LongRequestReportingDelayMs));
 }
 

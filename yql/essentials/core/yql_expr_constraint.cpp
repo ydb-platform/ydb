@@ -79,6 +79,7 @@ public:
         : TCallableTransformerBase<TCallableConstraintTransformer>(types, instantOnly)
         , SubGraph(subGraph)
     {
+        Functions["FailMe"] = &TCallableConstraintTransformer::FailMe;
         Functions["Unordered"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["UnorderedSubquery"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Sort"] = &TCallableConstraintTransformer::SortWrap;
@@ -324,6 +325,14 @@ private:
 
     TStatus FromEmpty(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
         input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+        return TStatus::Ok;
+    }
+
+    TStatus FailMe(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        if (input->Child(0)->Content() == "constraint") {
+            input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+        }
+
         return TStatus::Ok;
     }
 

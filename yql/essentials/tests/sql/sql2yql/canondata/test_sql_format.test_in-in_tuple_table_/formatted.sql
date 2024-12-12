@@ -2,4 +2,6 @@ USE Plato;
 
 SELECT
     'c' IN t
-FROM InputWithTuples;
+FROM
+    InputWithTuples
+;

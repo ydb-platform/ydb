@@ -1,7 +1,9 @@
 USE plato;
 
 $stream =
-    PROCESS InputView;
+    PROCESS InputView
+;
+
 $type = EvaluateType(TypeHandle(ListItemType(TypeOf($stream))));
 $lambda = ($row) -> (CAST($row AS $type));
 

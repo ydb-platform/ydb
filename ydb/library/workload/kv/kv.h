@@ -22,7 +22,7 @@ enum KvWorkloadConstants : ui64 {
     PARTITIONS_BY_LOAD = true,
 
     MIXED_CHANGE_PARTITIONS_SIZE = false,
-    MIXED_DO_READ_ROWS = true,
+    MIXED_DO_READ_ROWS = false,
     MIXED_DO_SELECT = true,
 
     STALE_RO = false,

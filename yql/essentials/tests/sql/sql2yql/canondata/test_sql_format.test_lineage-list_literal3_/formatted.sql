@@ -3,12 +3,16 @@ USE plato;
 $key =
     SELECT
         min(key)
-    FROM Input;
+    FROM
+        Input
+;
 
 $value =
     SELECT
         min(value)
-    FROM Input;
+    FROM
+        Input
+;
 
 INSERT INTO Output
 SELECT

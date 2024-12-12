@@ -4,5 +4,8 @@ SELECT
     key,
     subkey,
     value
-FROM plato.Input
-WHERE value MATCH "q";
+FROM
+    plato.Input
+WHERE
+    value MATCH "q"
+;

@@ -3,7 +3,10 @@ USE plato;
 
 SELECT
     key
-FROM Input3
+FROM
+    Input3
 GROUP BY
     key
-HAVING count(DISTINCT subkey || subkey) > 1;
+HAVING
+    count(DISTINCT subkey || subkey) > 1
+;

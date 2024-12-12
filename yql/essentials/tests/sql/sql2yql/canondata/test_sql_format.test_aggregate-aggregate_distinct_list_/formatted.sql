@@ -10,16 +10,22 @@ SELECT
     AsList(1, 3) AS x
 UNION ALL
 SELECT
-    AsList(1, 2) AS x;
+    AsList(1, 2) AS x
+;
+
 COMMIT;
 
 SELECT
     listlength(aggregate_list(DISTINCT x)) AS c
-FROM @foo;
+FROM
+    @foo
+;
 
 SELECT
     count(DISTINCT x) AS c
-FROM @foo;
+FROM
+    @foo
+;
 
 INSERT INTO @bar
 SELECT
@@ -44,14 +50,18 @@ SELECT
 UNION ALL
 SELECT
     AsList(1, 2) AS x,
-    AsList(5) AS y;
+    AsList(5) AS y
+;
+
 COMMIT;
 
 SELECT
     x,
     count(DISTINCT y) AS c
-FROM @bar
+FROM
+    @bar
 GROUP BY
     x
 ORDER BY
-    c;
+    c
+;

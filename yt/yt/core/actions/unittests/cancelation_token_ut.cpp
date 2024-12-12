@@ -78,7 +78,7 @@ TEST(TAnyTokenTest, JustWorks)
 TEST(TAnyTokenTest, Copy)
 {
     ResetCounters();
-    TSimpleToken token{TError(EErrorCode::Canceled, "Boo")};
+    TSimpleToken token{TError(NYT::EErrorCode::Canceled, "Boo")};
 
     TAnyCancelationToken any{token};
     EXPECT_EQ(TSimpleToken::CtorCount, 0);
@@ -110,7 +110,7 @@ TEST(TAnyTokenTest, Copy)
 TEST(TAnyTokenTest, MoveSmallToken)
 {
     ResetCounters();
-    TSimpleToken token{TError(EErrorCode::Canceled, "Oi")};
+    TSimpleToken token{TError(NYT::EErrorCode::Canceled, "Oi")};
 
     TAnyCancelationToken any{std::move(token)};
     EXPECT_EQ(TSimpleToken::CtorCount, 0);

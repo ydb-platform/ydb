@@ -3,5 +3,8 @@ USE plato;
 SELECT
     count(*),
     count(key)
-FROM Input
-WHERE subkey != 5;
+FROM
+    Input
+WHERE
+    subkey != 5
+;

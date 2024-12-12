@@ -11,6 +11,7 @@ SELECT
 FROM (
     SELECT
         NULL AS x
-)
-    AS sq
-WHERE x IS NULL;
+) AS sq
+WHERE
+    x IS NULL
+;

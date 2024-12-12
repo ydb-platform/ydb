@@ -120,4 +120,5 @@ SELECT
     83,
     Yql::Timestamp64(AsAtom("86400000000")) != Yql::Timestamp(AsAtom("86400000000")),
     85,
-    Yql::Interval64(AsAtom("1")) != Yql::Interval(AsAtom("1"));
+    Yql::Interval64(AsAtom("1")) != Yql::Interval(AsAtom("1"))
+;

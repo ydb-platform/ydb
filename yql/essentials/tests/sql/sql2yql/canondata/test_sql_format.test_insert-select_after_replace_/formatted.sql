@@ -10,11 +10,16 @@ SELECT
     key,
     subkey,
     value
-FROM plato.Input;
+FROM
+    plato.Input
+;
+
 COMMIT;
 
 SELECT
     key,
     subkey,
     value
-FROM plato.Output;
+FROM
+    plato.Output
+;

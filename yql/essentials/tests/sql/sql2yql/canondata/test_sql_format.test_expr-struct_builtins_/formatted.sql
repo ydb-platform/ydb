@@ -14,4 +14,5 @@ SELECT
     ForceRemoveMember($ad, $c_name) AS ad,
     ExpandStruct($b, 1 AS a) AS ab,
     CombineMembers($ad, $b) AS abd,
-    FlattenMembers(AsTuple("fo" || "o", $ad), AsTuple("bar", $b)) AS foobar;
+    FlattenMembers(AsTuple("fo" || "o", $ad), AsTuple("bar", $b)) AS foobar
+;

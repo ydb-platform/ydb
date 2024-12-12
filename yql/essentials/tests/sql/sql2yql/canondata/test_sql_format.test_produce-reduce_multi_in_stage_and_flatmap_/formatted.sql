@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 $udf = YQL::@@
 (lambda '(key stream)
     (PartitionByKey stream
@@ -19,7 +20,7 @@ $udf = YQL::@@
 $r = (
     REDUCE Input, AS_TABLE(ListMap(
         ListFromRange(0, 10), ($val) -> {
-            RETURN AsStruct(CAST($val AS String) AS key, CAST($val AS String) AS subkey, CAST($val AS String) AS value)
+            RETURN AsStruct(CAST($val AS String) AS key, CAST($val AS String) AS subkey, CAST($val AS String) AS value);
         }
     ))
     ON
@@ -31,8 +32,10 @@ SELECT
     key,
     src,
     cnt
-FROM $r
+FROM
+    $r
 ORDER BY
     key,
     src,
-    cnt;
+    cnt
+;

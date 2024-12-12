@@ -11,4 +11,5 @@ SELECT
         Struct<x: Uint32>,
         ($row) -> ($row.x IN ListFromRange(-1, 10001)),
         AsTuple(AsAtom("x"))
-    );
+    )
+;

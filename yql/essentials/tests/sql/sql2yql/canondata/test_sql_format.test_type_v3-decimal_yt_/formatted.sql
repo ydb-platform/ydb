@@ -13,4 +13,5 @@ SELECT
     Decimal("inf", 35, 4),
     Decimal("-inf", 5, 4),
     Decimal("-inf", 15, 4),
-    Decimal("-inf", 35, 4);
+    Decimal("-inf", 35, 4)
+;

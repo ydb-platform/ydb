@@ -23,6 +23,7 @@ class TDqAsyncIoFactory;
 const i64 PQRdReadDefaultFreeSpace = 256_MB;
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     NPq::NProto::TDqPqTopicSource&& settings,
     ui64 inputIndex,
     TCollectStatsLevel statsLevel,

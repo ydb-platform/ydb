@@ -29,27 +29,36 @@ $my_table =
     SELECT
         3 AS id,
         10 AS ts,
-        40 AS value1;
+        40 AS value1
+;
+
 $cnt_create = ($_item, $_parent) -> {
-    RETURN 1ul
+    RETURN 1ul;
 };
+
 $cnt_add = ($state, $_item, $_parent) -> {
-    RETURN 1ul + $state
+    RETURN 1ul + $state;
 };
+
 $cnt_merge = ($state1, $state2) -> {
-    RETURN $state1 + $state2
+    RETURN $state1 + $state2;
 };
+
 $cnt_get_result = ($state) -> {
-    RETURN $state
+    RETURN $state;
 };
+
 $cnt_serialize = ($state) -> {
-    RETURN $state
+    RETURN $state;
 };
+
 $cnt_deserialize = ($state) -> {
-    RETURN $state
+    RETURN $state;
 };
+
 -- non-trivial default value 
 $cnt_default = 0.0;
+
 $cnt_udaf_factory = AggregationFactory(
     "UDAF",
     $cnt_create,
@@ -71,7 +80,8 @@ SELECT
     AGGREGATE_BY(ts, $cnt_udaf_factory) OVER generic AS generic,
     AGGREGATE_BY(value1, $cnt_udaf_factory) OVER empty AS empty_opt,
     AGGREGATE_BY(ts, $cnt_udaf_factory) OVER empty AS empty
-FROM $my_table
+FROM
+    $my_table
 WINDOW
     lagging AS (
         ORDER BY
@@ -93,4 +103,5 @@ WINDOW
     )
 ORDER BY
     ts,
-    id;
+    id
+;

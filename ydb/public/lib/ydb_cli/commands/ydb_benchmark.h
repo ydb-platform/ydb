@@ -22,7 +22,7 @@ private:
     template <typename TClient>
     bool RunBench(TClient& client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen);
     void SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, ui32 queryNum, const TStringBuf name) const;
-    void PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out) const;
+    void PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const;
     BenchmarkUtils::TQueryBenchmarkDeadline GetDeadline() const;
 
 private:

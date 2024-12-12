@@ -3,7 +3,8 @@
 SELECT
     EvaluateCode(
         ReprCode(1)
-    );
+    )
+;
 
 SELECT
     EvaluateCode(
@@ -11,7 +12,8 @@ SELECT
             "EvaluateCode",
             FuncCode("ReprCode", ReprCode(1))
         )
-    );
+    )
+;
 
 SELECT
     EvaluateCode(
@@ -25,7 +27,8 @@ SELECT
                 )
             )
         )
-    );
+    )
+;
 
 SELECT
     EvaluateCode(
@@ -33,4 +36,5 @@ SELECT
             "EvaluateExpr",
             QuoteCode(1 + 2)
         )
-    );
+    )
+;

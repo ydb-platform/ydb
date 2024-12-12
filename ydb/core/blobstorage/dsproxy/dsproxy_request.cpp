@@ -259,6 +259,29 @@ namespace NKikimr {
         );
     }
 
+    void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvGetBlock::TPtr &ev) {
+        EnsureMonitoring(true);
+        Mon->EventGetBlock->Inc();
+        PushRequest(CreateBlobStorageGroupGetBlockRequest(
+            TBlobStorageGroupGetBlockParameters{
+                .Common = {
+                    .GroupInfo = Info,
+                    .GroupQueues = Sessions->GroupQueues,
+                    .Mon = Mon,
+                    .Source = ev->Sender,
+                    .Cookie = ev->Cookie,
+                    .Now = TActivationContext::Monotonic(),
+                    .StoragePoolCounters = StoragePoolCounters,
+                    .RestartCounter = ev->Get()->RestartCounter,
+                    .TraceId = std::move(ev->TraceId),
+                    .Event = ev->Get(),
+                    .ExecutionRelay = ev->Get()->ExecutionRelay
+                }
+            }),
+            ev->Get()->Deadline
+        );
+    }
+
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvPatch::TPtr &ev) {
         if (IsLimitedKeyless) {
             ErrorDescription = "Created as LIMITED without keys. It happens when tenant keys are missing on the node.";
@@ -808,6 +831,7 @@ namespace NKikimr {
 
             XX(Put)
             XX(Get)
+            XX(GetBlock)
             XX(Block)
             XX(Discover)
             XX(Range)

@@ -7,7 +7,8 @@ $data = (
         CAST(key AS uint32) AS age,
         CAST(subkey AS uint32) AS region,
         value AS name
-    FROM Input
+    FROM
+        Input
 );
 
 -- insert into Output
@@ -38,7 +39,8 @@ SELECT
     median(age) OVER w1 AS median,
     percentile(age, 0.9) OVER w1 AS perc90,
     aggregate_by(age, aggregation_factory("count")) OVER w1 AS aggby
-FROM $data
+FROM
+    $data
 WINDOW
     w1 AS (
         PARTITION BY
@@ -48,4 +50,5 @@ WINDOW
     )
 ORDER BY
     region,
-    name DESC;
+    name DESC
+;

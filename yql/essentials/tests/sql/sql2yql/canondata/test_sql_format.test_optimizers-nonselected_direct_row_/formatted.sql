@@ -10,6 +10,9 @@ FROM (
         key,
         subkey,
         value
-    FROM concat(Input1, Input2)
+    FROM
+        concat(Input1, Input2)
 )
-WHERE tbl == "Input" AND value != "";
+WHERE
+    tbl == "Input" AND value != ""
+;

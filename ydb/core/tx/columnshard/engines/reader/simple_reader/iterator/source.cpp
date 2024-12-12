@@ -28,7 +28,7 @@ void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr)
     SourceGroupGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
         GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", SourceIdx);
-    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
+//    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
     TFetchingScriptCursor cursor(FetchingPlan, 0);
     auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), Context->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
@@ -168,7 +168,7 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
             constructor.Add(false, p.GetRecordsCount());
         }
     }
-    AFL_VERIFY(constructor.Size() == Portion->GetRecordsCount());
+    AFL_VERIFY(constructor.GetRecordsCountVerified() == Portion->GetRecordsCount());
     if (constructor.IsTotalDenyFilter()) {
         StageData->AddFilter(NArrow::TColumnFilter::BuildDenyFilter());
     } else if (constructor.IsTotalAllowFilter()) {
@@ -209,6 +209,7 @@ private:
         AFL_VERIFY(!result.HasErrors());
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
+        Source->InitUsedRawBytes();
         AFL_VERIFY(Step.Next());
         auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId());
         NConveyor::TScanServiceOperator::SendTaskToExecute(task);
@@ -230,6 +231,7 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSour
 
     std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>();
     request->AddPortion(Portion);
+    request->SetColumnIds(GetContext()->GetAllUsageColumns()->GetColumnIds());
     request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(step, sourcePtr));
     GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
     return true;

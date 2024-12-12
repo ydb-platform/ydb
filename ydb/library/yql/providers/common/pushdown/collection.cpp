@@ -646,7 +646,7 @@ private:
 
 } // anonymous namespace end
 
-void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprBase& lambdaArg, const TExprBase& /*lambdaBody*/, const TSettings& settings) {
     TPredicateMarkup markup(lambdaArg, settings);
     markup.MarkupPredicates(predicate, predicateTree);
 }

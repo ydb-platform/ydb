@@ -2,11 +2,9 @@
 
 #include "public.h"
 
-#include <yt/yt/core/tracing/config.h>
+#include <yt/yt/core/concurrency/config.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
-
-#include <yt/yt/core/ytalloc/config.h>
 
 #include <yt/yt/core/net/config.h>
 
@@ -17,8 +15,6 @@
 
 #include <yt/yt/core/logging/config.h>
 
-#include <yt/yt/core/tracing/config.h>
-
 #include <yt/yt/core/service_discovery/yp/config.h>
 
 #include <yt/yt/core/yson/config.h>
@@ -27,104 +23,13 @@
 
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
-#include <library/cpp/yt/stockpile/stockpile.h>
+#include <yt/yt/library/profiling/resource_tracker/config.h>
+
+#include <yt/yt/library/tcmalloc/config.h>
+
+#include <yt/yt/library/stockpile/config.h>
 
 namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-class THeapSizeLimitConfig
-    : public virtual NYTree::TYsonStruct
-{
-public:
-    //! Limit program memory in terms of container memory.
-    // If program heap size exceeds the limit tcmalloc is instructed to release memory to the kernel.
-    std::optional<double> ContainerMemoryRatio;
-
-    //! Similar to #ContainerMemoryRatio, but is set in terms of absolute difference from
-    //! the container memory limit.
-    //! For example, if ContainerMemoryLimit=200Gb and ContainerMemoryMargin=1Gb
-    // then tcmalloc limit will be 199Gb.
-    std::optional<double> ContainerMemoryMargin;
-
-    //! If true tcmalloc crashes when system allocates more memory than #ContainerMemoryRatio/#ContainerMemoryMargin.
-    bool Hard;
-
-    bool DumpMemoryProfileOnViolation;
-    TDuration DumpMemoryProfileTimeout;
-    TString DumpMemoryProfilePath;
-
-    REGISTER_YSON_STRUCT(THeapSizeLimitConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(THeapSizeLimitConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TTCMallocConfig
-    : public virtual NYTree::TYsonStruct
-{
-public:
-    i64 BackgroundReleaseRate;
-    int MaxPerCpuCacheSize;
-
-    //! Threshold in bytes
-    i64 AggressiveReleaseThreshold;
-
-    //! Threshold in fractions of total memory of the container
-    std::optional<double> AggressiveReleaseThresholdRatio;
-
-    i64 AggressiveReleaseSize;
-    TDuration AggressiveReleasePeriod;
-
-    //! Approximately 1/#GuardedSamplingRate of all allocations of
-    //! size <= 256 KiB will be under GWP-ASAN.
-    std::optional<i64> GuardedSamplingRate;
-
-    THeapSizeLimitConfigPtr HeapSizeLimit;
-
-    REGISTER_YSON_STRUCT(TTCMallocConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TTCMallocConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TStockpileConfig
-    : public TStockpileOptions
-    , public NYTree::TYsonStruct
-{
-public:
-    TStockpileConfigPtr ApplyDynamic(const TStockpileDynamicConfigPtr& dynamicConfig) const;
-
-    REGISTER_YSON_STRUCT(TStockpileConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TStockpileConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TStockpileDynamicConfig
-    : public NYTree::TYsonStruct
-{
-public:
-    std::optional<i64> BufferSize;
-    std::optional<int> ThreadCount;
-    std::optional<EStockpileStrategy> Strategy;
-    std::optional<TDuration> Period;
-
-    REGISTER_YSON_STRUCT(TStockpileDynamicConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TStockpileDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -152,9 +57,7 @@ class TSingletonsConfig
     : public virtual NYTree::TYsonStruct
 {
 public:
-    TDuration SpinWaitSlowPathLoggingThreshold;
-    NYTAlloc::TYTAllocConfigPtr YTAlloc;
-    THashMap<TString, int> FiberStackPoolSizes;
+    NConcurrency::TFiberManagerConfigPtr FiberManager;
     NNet::TAddressResolverConfigPtr AddressResolver;
     NBus::TTcpDispatcherConfigPtr TcpDispatcher;
     NPipes::TIODispatcherConfigPtr IODispatcher;
@@ -163,12 +66,10 @@ public:
     NServiceDiscovery::NYP::TServiceDiscoveryConfigPtr YPServiceDiscovery;
     NLogging::TLogManagerConfigPtr Logging;
     NTracing::TJaegerTracerConfigPtr Jaeger;
-    NTracing::TTracingTransportConfigPtr TracingTransport;
-    TTCMallocConfigPtr TCMalloc;
+    NTCMalloc::TTCMallocConfigPtr TCMalloc;
     TStockpileConfigPtr Stockpile;
     bool EnableRefCountedTrackerProfiling;
-    bool EnableResourceTracker;
-    std::optional<double> ResourceTrackerVCpuFactor;
+    NProfiling::TResourceTrackerConfigPtr ResourceTracker;
     THeapProfilerConfigPtr HeapProfiler;
     NYson::TProtobufInteropConfigPtr ProtobufInterop;
 
@@ -185,16 +86,13 @@ class TSingletonsDynamicConfig
     : public virtual NYTree::TYsonStruct
 {
 public:
-    std::optional<TDuration> SpinWaitSlowPathLoggingThreshold;
-    ui64 MaxIdleFibers;
-    NYTAlloc::TYTAllocConfigPtr YTAlloc;
+    NConcurrency::TFiberManagerDynamicConfigPtr FiberManager;
     NBus::TTcpDispatcherDynamicConfigPtr TcpDispatcher;
     NPipes::TIODispatcherConfigPtr IODispatcher;
     NRpc::TDispatcherDynamicConfigPtr RpcDispatcher;
     NLogging::TLogManagerDynamicConfigPtr Logging;
     NTracing::TJaegerTracerDynamicConfigPtr Jaeger;
-    NTracing::TTracingTransportConfigPtr TracingTransport;
-    TTCMallocConfigPtr TCMalloc;
+    NTCMalloc::TTCMallocConfigPtr TCMalloc;
     TStockpileDynamicConfigPtr Stockpile;
     NYson::TProtobufInteropDynamicConfigPtr ProtobufInterop;
 
@@ -204,22 +102,6 @@ public:
 };
 
 DEFINE_REFCOUNTED_TYPE(TSingletonsDynamicConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TDiagnosticDumpConfig
-    : public virtual NYTree::TYsonStruct
-{
-public:
-    std::optional<TDuration> YTAllocDumpPeriod;
-    std::optional<TDuration> RefCountedTrackerDumpPeriod;
-
-    REGISTER_YSON_STRUCT(TDiagnosticDumpConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TDiagnosticDumpConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -4,6 +4,8 @@ SELECT
 FROM (
     SELECT
         lead(TableRow()) OVER ()
-    FROM plato.Input
+    FROM
+        plato.Input
 )
-    FLATTEN COLUMNS;
+    FLATTEN COLUMNS
+;

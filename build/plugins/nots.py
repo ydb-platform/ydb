@@ -593,7 +593,10 @@ def _setup_eslint(unit: NotsUnitType) -> None:
 
     extra_deps = df.CustomDependencies.test_depends_only(unit, (), {})[df.CustomDependencies.KEY].split()
     dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
-    dart_record[df.LintFileProcessingTime.KEY] = str(ESLINT_FILE_PROCESSING_TIME_DEFAULT)
+
+    if unit.get("TS_LOCAL_CLI") != "yes":
+        # disable chunks for `ya tool nots`
+        dart_record[df.LintFileProcessingTime.KEY] = str(ESLINT_FILE_PROCESSING_TIME_DEFAULT)
 
     data = ytest.dump_test(unit, dart_record)
     if data:

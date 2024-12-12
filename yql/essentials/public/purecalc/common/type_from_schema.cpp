@@ -210,7 +210,9 @@ namespace NYql::NPureCalc {
         const auto* type = NCommon::ParseTypeFromYson(yson, ctx);
 
         if (!type) {
-            ythrow TCompileError("", ctx.IssueManager.GetIssues().ToString())
+            auto issues = ctx.IssueManager.GetIssues();
+            CheckFatalIssues(issues);
+            ythrow TCompileError("", issues.ToString())
                 << "Incorrect schema: " << NYT::NodeToYsonString(yson, NYson::EYsonFormat::Text);
         }
 
@@ -232,7 +234,9 @@ namespace NYql::NPureCalc {
         auto result = ctx.MakeType<TStructExprType>(items);
 
         if (!result->Validate(TPosition(), ctx)) {
-            ythrow TCompileError("", ctx.IssueManager.GetIssues().ToString()) << "Incorrect extended struct type";
+            auto issues = ctx.IssueManager.GetIssues();
+            CheckFatalIssues(issues);
+            ythrow TCompileError("", issues.ToString()) << "Incorrect extended struct type";
         }
 
         return result;

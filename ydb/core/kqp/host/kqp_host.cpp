@@ -24,8 +24,8 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider_impl.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
-#include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 

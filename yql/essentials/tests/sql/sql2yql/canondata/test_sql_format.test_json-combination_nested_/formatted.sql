@@ -26,7 +26,8 @@ SELECT
             "strict $.c"
         ),
         "strict $.d"
-    );
+    )
+;
 
 SELECT
     JSON_EXISTS (
@@ -41,7 +42,8 @@ SELECT
             "strict $.c"
         ),
         "strict $.d"
-    );
+    )
+;
 
 SELECT
     JSON_QUERY (
@@ -53,4 +55,5 @@ SELECT
             "strict $.b"
         ),
         "strict $.c"
-    );
+    )
+;

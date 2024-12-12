@@ -26,7 +26,7 @@ YDS_CONNECTION = "yds"
 @pytest.fixture
 def kikimr(request):
     kikimr_conf = StreamingOverKikimrConfig(
-        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(2)}
+        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(3)}
     )
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.compute_plane.fq_config['row_dispatcher']['enabled'] = True
@@ -216,7 +216,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
-        assert "Cannot parse JSON string" in issues, "Incorrect Issues: " + issues
+        assert "Failed to parse json message for offset" in issues, "Incorrect Issues: " + issues
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 0)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
@@ -687,7 +687,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
-        self.init_topics("test_restart_compute_node")
+        self.init_topics("test_restart_compute_node", partitions_count=4)
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -695,20 +695,18 @@ class TestPqRowDispatcher(TestYdsBase):
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
 
         query_id = start_yds_query(kikimr, client, sql)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 4)
 
-        data = ['{"time": 101, "data": "hello1"}', '{"time": 102, "data": "hello2"}']
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(100, 102)], "partition_key1")
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(102, 104)], "partition_key2")
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(104, 106)], "partition_key3")
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(106, 108)], "partition_key4")
 
-        self.write_stream(data)
-        expected = ['101', '102']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        expected = [Rf'''{c}''' for c in range(100, 108)]
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
 
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
-        )
-
-        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
 
         node_index = 2
         logging.debug("Restart compute node {}".format(node_index))
@@ -716,10 +714,14 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
         kikimr.compute_plane.wait_bootstrap(node_index)
 
-        data = ['{"time": 103, "data": "hello3"}', '{"time": 104, "data": "hello4"}']
-        self.write_stream(data)
-        expected = ['103', '104']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(108, 110)], "partition_key1")
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(110, 112)], "partition_key2")
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(112, 114)], "partition_key3")
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(114, 116)], "partition_key4")
+
+        expected = [Rf'''{c}''' for c in range(108, 116)]
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
+
         kikimr.compute_plane.wait_completed_checkpoints(
             query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
         )
@@ -730,10 +732,31 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
         kikimr.compute_plane.wait_bootstrap(node_index)
 
-        data = ['{"time": 105, "data": "hello5"}', '{"time": 106, "data": "hello6"}']
-        self.write_stream(data)
-        expected = ['105', '106']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(116, 118)], "partition_key1")
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(118, 120)], "partition_key2")
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(120, 122)], "partition_key3")
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(122, 124)], "partition_key4")
+
+        expected = [Rf'''{c}''' for c in range(116, 124)]
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
+
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
+        )
+
+        node_index = 3
+        logging.debug("Restart compute node {}".format(node_index))
+        kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
+        kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
+        kikimr.compute_plane.wait_bootstrap(node_index)
+
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(124, 126)], "partition_key1")
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(126, 128)], "partition_key2")
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(128, 130)], "partition_key3")
+        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(130, 132)], "partition_key4")
+
+        expected = [Rf'''{c}''' for c in range(124, 132)]
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
 
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
@@ -853,6 +876,38 @@ class TestPqRowDispatcher(TestYdsBase):
         assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
 
         stop_yds_query(client, query_id)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+
+    @yq_v1
+    def test_2_connection(self, kikimr, client):
+        client.create_yds_connection("name1", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
+        client.create_yds_connection("name2", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
+        self.init_topics("test_2_connection", partitions_count=2)
+        create_read_rule(self.input_topic, "best")
+
+        sql1 = Rf'''
+            INSERT INTO `name1`.`{self.output_topic}`
+            SELECT Cast(time as String) FROM `name1`.`{self.input_topic}` WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
+        sql2 = Rf'''
+            INSERT INTO `name2`.`{self.output_topic}`
+            SELECT Cast(time as String) FROM `name2`.`{self.input_topic}` WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
+        query_id1 = start_yds_query(kikimr, client, sql1)
+        query_id2 = start_yds_query(kikimr, client, sql2)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 4)
+
+        input_messages1 = [Rf'''{{"time": {c}}}''' for c in range(100, 110)]
+        write_stream(self.input_topic, input_messages1, "partition_key1")
+
+        input_messages2 = [Rf'''{{"time": {c}}}''' for c in range(110, 120)]
+        write_stream(self.input_topic, input_messages2, "partition_key2")
+
+        expected = [Rf'''{c}''' for c in range(100, 120)]
+        expected = [item for item in expected for i in range(2)]
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
+
+        stop_yds_query(client, query_id1)
+        stop_yds_query(client, query_id2)
+
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1

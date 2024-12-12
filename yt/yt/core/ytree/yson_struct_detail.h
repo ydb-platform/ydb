@@ -317,6 +317,12 @@ public:
     TYsonStructParameter& Alias(const TString& name);
     // Set field to T() (or suitable analogue) before deserializations.
     TYsonStructParameter& ResetOnLoad();
+    // Uses given unrecognized strategy in |Load| if there was no strategy supplied.
+    TYsonStructParameter& DefaultUnrecognizedStrategy(EUnrecognizedStrategy strategy);
+    // Forces given parameter to ignore unrecognized strategy even if it set to
+    // some recursive version. Combination with |DefaultUnrecognizedStrategy| enables
+    // behavior which ensures selected default strategy for all fields below.
+    TYsonStructParameter& EnforceDefaultUnrecognizedStrategy();
 
     // Register constructor with parameters as initializer of default value for ref-counted class.
     template <class... TArgs>
@@ -333,6 +339,8 @@ private:
     bool TriviallyInitializedIntrusivePtr_ = false;
     bool Optional_ = false;
     bool ResetOnLoad_ = false;
+    std::optional<EUnrecognizedStrategy> DefaultUnrecognizedStrategy_;
+    bool EnforceDefaultUnrecognizedStrategy_ = false;
     const int FieldIndex_ = -1;
 };
 

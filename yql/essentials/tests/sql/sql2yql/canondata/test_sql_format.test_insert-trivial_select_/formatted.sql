@@ -8,4 +8,6 @@ SELECT
     key,
     subkey,
     value
-FROM plato.Input;
+FROM
+    plato.Input
+;

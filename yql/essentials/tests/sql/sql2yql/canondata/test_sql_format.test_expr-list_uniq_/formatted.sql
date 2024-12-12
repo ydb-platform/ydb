@@ -6,4 +6,5 @@ SELECT
     ListUniqStable([1, 2, 3, NULL, 1, 7, 4, 3]),
     ListUniqStable(["a", "b", "c", "a", "ab", "ac", "ab"]),
     ListUniqStable(Just(["a", "b", "c", "a", "ab", "ac", "ab"])),
-    ListUniqStable(NULL);
+    ListUniqStable(NULL)
+;

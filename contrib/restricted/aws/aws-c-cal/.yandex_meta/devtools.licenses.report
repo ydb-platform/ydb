@@ -129,6 +129,11 @@ BELONGS ya.make
         source/unix/opensslcrypto_ecc.c [3:3]
         source/unix/opensslcrypto_hash.c [3:3]
         source/unix/opensslcrypto_hmac.c [3:3]
+        source/windows/bcrypt_aes.c [3:3]
+        source/windows/bcrypt_ecc.c [3:3]
+        source/windows/bcrypt_hash.c [3:3]
+        source/windows/bcrypt_hmac.c [3:3]
+        source/windows/bcrypt_platform_init.c [3:3]
 
 SKIP     LicenseRef-scancode-generic-cla ee24fdc60600747c7d12c32055b0011d
 BELONGS ya.make

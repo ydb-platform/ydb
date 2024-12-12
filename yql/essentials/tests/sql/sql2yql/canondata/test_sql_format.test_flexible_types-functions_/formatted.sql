@@ -5,21 +5,26 @@
 /* yt can not */
 PRAGMA FlexibleTypes;
 PRAGMA warning("disable", "4510");
+
 $x1 = () -> (Int32);
 $x2 = () -> (Tuple<Int32>);
+
 $y1 = () -> {
     $a = String;
-    RETURN $a
+    RETURN $a;
 };
+
 $y2 = () -> {
     $a = Tuple<String>;
-    RETURN $a
+    RETURN $a;
 };
+
 $z1 = () -> {
-    RETURN Double
+    RETURN Double;
 };
+
 $z2 = () -> {
-    RETURN Tuple<Double>
+    RETURN Tuple<Double>;
 };
 
 SELECT

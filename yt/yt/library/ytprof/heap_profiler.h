@@ -2,30 +2,13 @@
 
 #include "public.h"
 
-#include <yt/yt/library/ytprof/proto/profile.pb.h>
-
 #include <util/datetime/base.h>
 
 #include <library/cpp/yt/memory/allocation_tags.h>
 
 #include <util/generic/hash.h>
 
-#include <tcmalloc/malloc_extension.h>
-
 namespace NYT::NYTProf {
-
-////////////////////////////////////////////////////////////////////////////////
-
-NProto::Profile ConvertAllocationProfile(const tcmalloc::Profile& snapshot);
-NProto::Profile ReadHeapProfile(tcmalloc::ProfileType profileType);
-
-int AbslStackUnwinder(
-    void** frames,
-    int* framesSizes,
-    int maxFrames,
-    int skipFrames,
-    const void* uc,
-    int* minDroppedFrames);
 
 ////////////////////////////////////////////////////////////////////////////////
 

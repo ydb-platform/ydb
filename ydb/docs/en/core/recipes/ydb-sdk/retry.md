@@ -1,7 +1,5 @@
 # Retrying
 
-{% include [work in progress message](_includes/addition.md) %}
-
 {{ ydb-short-name }} is a distributed database management system with automatic load scaling.
 Routine maintenance can be carried out on the server side, with server racks or entire data centers temporarily shut down.
 This may result in errors arising from {{ ydb-short-name }} operation.

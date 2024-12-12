@@ -833,6 +833,10 @@ TNode SerializeParamsForSkyShareTable(
         result["enable_fastbone"] = *options.EnableFastbone_;
     }
 
+    if (options.Pool_) {
+        result["pool"] = *options.Pool_;
+    }
+
     return result;
 }
 

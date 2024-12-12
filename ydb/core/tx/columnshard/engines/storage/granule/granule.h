@@ -165,6 +165,10 @@ public:
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
 
+    const NStorageOptimizer::IOptimizerPlanner& GetOptimizerPlanner() const {
+        return *OptimizerPlanner;
+    }
+
     std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
     bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
@@ -305,7 +309,9 @@ public:
 
             DataAccessorsManager->AskData(request);
         }
-        
+        if (ActualizationIndex->IsStarted()) {
+            RefreshScheme();
+        }
     }
 
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;

@@ -166,6 +166,9 @@ void SafeMakeNonblocking(TFileDescriptor fd);
 bool TrySetPipeCapacity(TFileDescriptor fd, int capacity);
 void SafeSetPipeCapacity(TFileDescriptor fd, int capacity);
 
+bool TryEnableEmptyPipeEpollEvent(TFileDescriptor fd);
+void SafeEnableEmptyPipeEpollEvent(TFileDescriptor fd);
+
 bool TrySetUid(int uid);
 void SafeSetUid(int uid);
 

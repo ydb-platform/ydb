@@ -57,7 +57,6 @@ private:
     // Types of columns in a single row in resulting TValue.
     // Column order according to the header, though can have less elements than the Header
     std::vector<const TType*> ResultLineTypesSorted;
-    std::vector<const TString*> ResultLineNamesSorted;
 };
 
 }

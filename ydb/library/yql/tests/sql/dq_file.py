@@ -26,16 +26,16 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         sql_query = program_file_descr.read()
 
     force_blocks = what == 'ForceBlocks'
+    xfail = is_xfail(config)
+
     if force_blocks:
         if is_skip_forceblocks(config):
             pytest.skip('skip force blocks requested')
         if re.search(r"skip force_blocks", sql_query):
             pytest.skip('skip force blocks requested')
     else:
-        if 'ytfile can not' in sql_query or 'yt' not in get_supported_providers(config):
+        if not xfail and ('ytfile can not' in sql_query or 'yt' not in get_supported_providers(config)):
             pytest.skip('yqlrun is not supported')
-
-    xfail = is_xfail(config)
 
     extra_args=["--emulate-yt"]
     if is_with_final_result_issues(config):

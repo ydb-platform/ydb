@@ -63,7 +63,8 @@ SELECT
     JSON_EXISTS (
         $json,
         "strict $var" PASSING NULL AS var
-    );
+    )
+;
 
 -- Check various ways to pass variable name
 SELECT
@@ -80,4 +81,5 @@ SELECT
     ),
     JSON_EXISTS (
         $json, "strict $VaR1" PASSING 123 AS "VaR1"
-    );
+    )
+;

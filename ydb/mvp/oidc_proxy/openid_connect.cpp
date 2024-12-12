@@ -1,17 +1,17 @@
-#include <util/random/random.h>
-#include <util/string/builder.h>
-#include <util/string/hex.h>
+#include "context.h"
+#include "openid_connect.h"
+#include "oidc_settings.h"
+#include <ydb/library/security/util.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
-#include "context.h"
-#include "openid_connect.h"
-#include "oidc_settings.h"
+#include <util/random/random.h>
+#include <util/string/builder.h>
+#include <util/string/hex.h>
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 namespace {
 
@@ -111,6 +111,10 @@ TString CreateNameSessionCookie(TStringBuf key) {
     return "__Host_" + TOpenIdConnectSettings::SESSION_COOKIE + "_" + HexEncode(key);
 }
 
+TString CreateNameImpersonatedCookie(TStringBuf key) {
+    return "__Host_" + TOpenIdConnectSettings::IMPERSONATED_COOKIE + "_" + HexEncode(key);
+}
+
 const TString& GetAuthCallbackUrl() {
     static const TString callbackUrl = "/auth/callback";
     return callbackUrl;
@@ -120,6 +124,12 @@ TString CreateSecureCookie(const TString& name, const TString& value) {
     TStringBuilder cookieBuilder;
     cookieBuilder << name << "=" << value
             << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned";
+    return cookieBuilder;
+}
+
+TString ClearSecureCookie(const TString& name) {
+    TStringBuilder cookieBuilder;
+    cookieBuilder << name << "=; Path=/; Secure; HttpOnly; SameSite=None; Partitioned; Max-Age=0";
     return cookieBuilder;
 }
 
@@ -227,5 +237,23 @@ TCheckStateResult CheckState(const TString& state, const TString& key) {
     return TCheckStateResult();
 }
 
-}  // NOIDC
-}  // NMVP
+TString DecodeToken(const TStringBuf& cookie) {
+    TString token;
+    try {
+        Base64StrictDecode(cookie, token);
+    } catch (std::exception& e) {
+        BLOG_D("Base64Decode " << NKikimr::MaskTicket(cookie) << " cookie: " << e.what());
+        token.clear();
+    }
+    return token;
+}
+
+TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName) {
+    TStringBuf cookieValue = cookies.Get(cookieName);
+    if (!cookieValue.Empty()) {
+        BLOG_D("Using cookie (" << cookieName << ": " << NKikimr::MaskTicket(cookieValue) << ")");
+    }
+    return cookieValue;
+}
+
+} // NMVP::NOIDC

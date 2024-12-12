@@ -260,6 +260,10 @@ class YtError(Exception):
         """Rpc unavailable."""
         return self.contains_code(105)
 
+    def is_rpc_response_memory_pressure(self):
+        """Rpc response memory pressure."""
+        return self.contains_code(122)
+
     def is_master_communication_error(self):
         """Master communication error."""
         return self.contains_code(712)

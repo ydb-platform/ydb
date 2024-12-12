@@ -3645,5 +3645,75 @@ TEST(TYsonStructTest, OverrideWithComparisonFromTemplatedFunction)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct THasFieldWithDefaultedStrategy
+    : public TYsonStructLite
+{
+    TIntrusivePtr<TConfigWithOneLevelNesting> Field;
+
+    REGISTER_YSON_STRUCT_LITE(THasFieldWithDefaultedStrategy);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field", &TThis::Field)
+            .Default()
+            .DefaultUnrecognizedStrategy(EUnrecognizedStrategy::Throw);
+    }
+};
+
+struct THasFieldWithDefaultedStrategyAndOwnRecursiveStrategy
+    : public TYsonStructLite
+{
+    TIntrusivePtr<TConfigWithOneLevelNesting> Field;
+
+    REGISTER_YSON_STRUCT_LITE(THasFieldWithDefaultedStrategyAndOwnRecursiveStrategy);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.UnrecognizedStrategy(EUnrecognizedStrategy::KeepRecursive);
+
+        registrar.Parameter("field", &TThis::Field)
+            .Default()
+            .DefaultUnrecognizedStrategy(EUnrecognizedStrategy::Throw)
+            .EnforceDefaultUnrecognizedStrategy();
+    }
+};
+
+TEST(TYsonStructTest, DefaultUnrecognizedStrategy1)
+{
+    auto source = BuildYsonNodeFluently().BeginMap()
+        .Item("field").BeginMap()
+            .Item("unrecognized").Value(42)
+        .EndMap()
+    .EndMap();
+
+    THasFieldWithDefaultedStrategy yson = {};
+    EXPECT_ANY_THROW(Deserialize(yson, source->AsMap()));
+}
+
+TEST(TYsonStructTest, DefaultUnrecognizedStrategy2)
+{
+    auto source = BuildYsonNodeFluently().BeginMap()
+        .Item("field").BeginMap()
+            .Item("sub").BeginMap()
+            .EndMap()
+        .EndMap()
+    .EndMap();
+
+    THasFieldWithDefaultedStrategy yson = {};
+    Deserialize(yson, source->AsMap());
+}
+
+TEST(TYsonStructTest, DefaultUnrecognizedStrategy3)
+{
+    auto source = BuildYsonNodeFluently().BeginMap()
+        .Item("field").BeginMap()
+            .Item("unrecognized").Value(42)
+        .EndMap()
+    .EndMap();
+
+    THasFieldWithDefaultedStrategyAndOwnRecursiveStrategy yson = {};
+    EXPECT_ANY_THROW(Deserialize(yson, source->AsMap()));
+}
+
 } // namespace
 } // namespace NYT::NYTree

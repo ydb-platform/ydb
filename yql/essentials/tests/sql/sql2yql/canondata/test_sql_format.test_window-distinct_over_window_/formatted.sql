@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 PRAGMA DistinctOverWindow;
 
 $input = (
@@ -8,7 +9,8 @@ $input = (
         CAST(key AS Int32) AS key,
         CAST(subkey AS Int32) AS subkey,
         value
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
@@ -41,8 +43,10 @@ SELECT
         ORDER BY
             key
     ) AS median,
-FROM $input
+FROM
+    $input
 ORDER BY
     subkey,
     key,
-    value;
+    value
+;

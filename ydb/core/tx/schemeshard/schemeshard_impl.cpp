@@ -12,6 +12,7 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/statistics/events.h>
@@ -19,6 +20,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <util/random/random.h>
@@ -1538,6 +1540,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateSequence:
     case TTxState::TxCopySequence:
     case TTxState::TxCreateReplication:
+    case TTxState::TxCreateTransfer:
     case TTxState::TxCreateBlobDepot:
     case TTxState::TxCreateExternalTable:
     case TTxState::TxCreateExternalDataSource:
@@ -1573,6 +1576,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropCdcStreamAtTableDropSnapshot:
     case TTxState::TxAlterSequence:
     case TTxState::TxAlterReplication:
+    case TTxState::TxAlterTransfer:
     case TTxState::TxAlterBlobDepot:
     case TTxState::TxUpdateMainTableOnIndexMove:
     case TTxState::TxAlterExternalTable:
@@ -1599,6 +1603,8 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropSequence:
     case TTxState::TxDropReplication:
     case TTxState::TxDropReplicationCascade:
+    case TTxState::TxDropTransfer:
+    case TTxState::TxDropTransferCascade:
     case TTxState::TxDropBlobDepot:
     case TTxState::TxDropExternalTable:
     case TTxState::TxDropExternalDataSource:
@@ -4290,7 +4296,8 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetSequenceVersion();
                 break;
             }
-            case NKikimrSchemeOp::EPathType::EPathTypeReplication: {
+            case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+            case NKikimrSchemeOp::EPathType::EPathTypeTransfer: {
                 auto it = Replications.find(pathId);
                 Y_ABORT_UNLESS(it != Replications.end());
                 result.SetReplicationVersion(it->second->AlterVersion);
@@ -4435,6 +4442,15 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
             COUNTER_PQ_STATS_WRITTEN,
             COUNTER_PQ_STATS_BATCH_LATENCY)
     , AllowDataColumnForIndexTable(0, 0, 1)
+    , LoginProvider(NLogin::TPasswordComplexity({
+        .MinLength = AppData()->AuthConfig.GetPasswordComplexity().GetMinLength(),
+        .MinLowerCaseCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinLowerCaseCount(),
+        .MinUpperCaseCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinUpperCaseCount(),
+        .MinNumbersCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinNumbersCount(),
+        .MinSpecialCharsCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinSpecialCharsCount(),
+        .SpecialChars = AppData()->AuthConfig.GetPasswordComplexity().GetSpecialChars(),
+        .CanContainUsername = AppData()->AuthConfig.GetPasswordComplexity().GetCanContainUsername()
+    }))
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
@@ -5143,6 +5159,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         break;
     case TPathElement::EPathType::EPathTypeReplication:
         TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Sub(1);
+        break;
+    case TPathElement::EPathType::EPathTypeTransfer:
+        TabletCounters->Simple()[COUNTER_TRANSFER_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeBlobDepot:
         TabletCounters->Simple()[COUNTER_BLOB_DEPOT_COUNT].Sub(1);
@@ -7120,6 +7139,10 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         );
     }
 
+    if (appConfig.HasAuthConfig()) {
+        ConfigureLoginProvider(appConfig.GetAuthConfig(), ctx);
+    }
+
     if (IsSchemeShardConfigured()) {
         StartStopCompactionQueues();
         if (BackgroundCleaningQueue) {
@@ -7311,6 +7334,32 @@ void TSchemeShard::ConfigureBackgroundCleaningQueue(
                  << ", Rate# " << BackgroundCleaningQueue->GetRate()
                  << ", WakeupInterval# " << cleaningConfig.WakeupInterval
                  << ", InflightLimit# " << cleaningConfig.InflightLimit);
+}
+
+void TSchemeShard::ConfigureLoginProvider(
+        const ::NKikimrProto::TAuthConfig& config,
+        const TActorContext &ctx)
+{
+    const auto& passwordComplexityConfig = config.GetPasswordComplexity();
+    NLogin::TPasswordComplexity passwordComplexity({
+        .MinLength = passwordComplexityConfig.GetMinLength(),
+        .MinLowerCaseCount = passwordComplexityConfig.GetMinLowerCaseCount(),
+        .MinUpperCaseCount = passwordComplexityConfig.GetMinUpperCaseCount(),
+        .MinNumbersCount = passwordComplexityConfig.GetMinNumbersCount(),
+        .MinSpecialCharsCount = passwordComplexityConfig.GetMinSpecialCharsCount(),
+        .SpecialChars = (passwordComplexityConfig.GetSpecialChars().empty() ? NLogin::TPasswordComplexity::VALID_SPECIAL_CHARS : passwordComplexityConfig.GetSpecialChars()),
+        .CanContainUsername = passwordComplexityConfig.GetCanContainUsername()
+    });
+    LoginProvider.UpdatePasswordCheckParameters(passwordComplexity);
+
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 "PasswordComplexity for LoginProvider configured: MinLength# " << passwordComplexity.MinLength
+                 << ", MinLowerCaseCount# " << passwordComplexity.MinLowerCaseCount
+                 << ", MinUpperCaseCount# " << passwordComplexity.MinUpperCaseCount
+                 << ", MinNumbersCount# " << passwordComplexity.MinNumbersCount
+                 << ", MinSpecialCharsCount# " << passwordComplexity.MinSpecialCharsCount
+                 << ", SpecialChars# " << (passwordComplexityConfig.GetSpecialChars().empty() ? NLogin::TPasswordComplexity::VALID_SPECIAL_CHARS : passwordComplexityConfig.GetSpecialChars())
+                 << ", CanContainUsername# " << (passwordComplexity.CanContainUsername ? "true" : "false"));
 }
 
 void TSchemeShard::StartStopCompactionQueues() {

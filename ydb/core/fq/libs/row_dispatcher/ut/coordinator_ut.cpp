@@ -35,6 +35,7 @@ public:
 
         NConfig::TRowDispatcherCoordinatorConfig config;
         config.SetCoordinationNodePath("RowDispatcher");
+        config.SetTopicPartitionsLimitPerNode(1);
         auto& database = *config.MutableDatabase();
         database.SetEndpoint("YDB_ENDPOINT");
         database.SetDatabase("YDB_DATABASE");
@@ -59,12 +60,12 @@ public:
     }
 
     NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
-        TString topic)
+        TString endpoint, TString topic)
     {
         NYql::NPq::NProto::TDqPqTopicSource settings;
         settings.SetTopicPath(topic);
         settings.SetConsumerName("PqConsumer");
-        settings.SetEndpoint("Endpoint");
+        settings.SetEndpoint(endpoint);
         settings.MutableToken()->SetName("token");
         settings.SetDatabase("Database");
         return settings;
@@ -84,9 +85,9 @@ public:
         //UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
-    void MockRequest(NActors::TActorId readActorId, TString topicName, const std::vector<ui64>& partitionId) {
+    void MockRequest(NActors::TActorId readActorId, TString endpoint, TString topicName, const std::vector<ui64>& partitionId) {
         auto event = new NFq::TEvRowDispatcher::TEvCoordinatorRequest(
-            BuildPqTopicSourceSettings(topicName),
+            BuildPqTopicSourceSettings(endpoint, topicName),
             partitionId);
         Runtime.Send(new NActors::IEventHandle(Coordinator, readActorId, event));
     }
@@ -107,8 +108,6 @@ public:
     NActors::TActorId RowDispatcher2Id;
     NActors::TActorId ReadActor1;
     NActors::TActorId ReadActor2;
-
-    NYql::NPq::NProto::TDqPqTopicSource Source1 = BuildPqTopicSourceSettings("Source1");
 };
 
 Y_UNIT_TEST_SUITE(CoordinatorTests) {
@@ -121,17 +120,17 @@ Y_UNIT_TEST_SUITE(CoordinatorTests) {
             Ping(id);
         }
 
-        MockRequest(ReadActor1, "topic1", {0});
+        MockRequest(ReadActor1, "endpoint", "topic1", {0});
         auto result1 = ExpectResult(ReadActor1);
         
-        MockRequest(ReadActor2, "topic1", {0});
+        MockRequest(ReadActor2, "endpoint", "topic1", {0});
         auto result2 = ExpectResult(ReadActor2);
 
         UNIT_ASSERT(result1.PartitionsSize() == 1);
         UNIT_ASSERT(result2.PartitionsSize() == 1);
         UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(result1, result2));
 
-        MockRequest(ReadActor2, "topic1", {1});
+        MockRequest(ReadActor2, "endpoint", "topic1", {1});
         auto result3 = ExpectResult(ReadActor2);
 
         TActorId actualRowDispatcher1 = ActorIdFromProto(result1.GetPartitions(0).GetActorId());
@@ -151,14 +150,28 @@ Y_UNIT_TEST_SUITE(CoordinatorTests) {
         auto newDispatcher2Id = Runtime.AllocateEdgeActor(1);
         Ping(newDispatcher2Id);
 
-        MockRequest(ReadActor1, "topic1", {0});
+        MockRequest(ReadActor1, "endpoint", "topic1", {0});
         auto result4 = ExpectResult(ReadActor1);
 
-        MockRequest(ReadActor2, "topic1", {1});
+        MockRequest(ReadActor2, "endpoint", "topic1", {1});
         auto result5 = ExpectResult(ReadActor2);
 
         UNIT_ASSERT(!google::protobuf::util::MessageDifferencer::Equals(result1, result4)
             || !google::protobuf::util::MessageDifferencer::Equals(result3, result5));
+    }
+
+    Y_UNIT_TEST_F(RouteTwoTopicWichSameName, TFixture) {
+        ExpectCoordinatorChangesSubscribe();
+        TSet<NActors::TActorId> rowDispatcherIds{RowDispatcher1Id, RowDispatcher2Id, LocalRowDispatcherId};
+        for (auto id : rowDispatcherIds) {
+            Ping(id);
+        }
+
+        MockRequest(ReadActor1, "endpoint1", "topic1", {0, 1, 2});
+        ExpectResult(ReadActor1);
+
+        MockRequest(ReadActor2, "endpoint2", "topic1", {3});
+        ExpectResult(ReadActor2);
     }
 }
 

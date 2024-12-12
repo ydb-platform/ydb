@@ -5,8 +5,12 @@ USE plato;
 INSERT INTO @a
 SELECT
     *
-FROM Input
-WHERE key > "020";
+FROM
+    Input
+WHERE
+    key > "020"
+;
+
 COMMIT;
 
 SELECT
@@ -14,7 +18,8 @@ SELECT
 FROM (
     SELECT
         *
-    FROM @a
+    FROM
+        @a
         TABLESAMPLE BERNOULLI (50.0) REPEATABLE (1)
 )
 LIMIT 10;

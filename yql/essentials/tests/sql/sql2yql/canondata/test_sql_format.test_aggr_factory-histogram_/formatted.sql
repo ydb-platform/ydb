@@ -9,12 +9,14 @@ SELECT
             AsTuple(
                 AsAtom("res"), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN AsTuple($z.a, 1.0)
+                        RETURN AsTuple($z.a, 1.0);
                     }
                 )
             )
         )
-    );
+    )
+;
+
 $f = AGGREGATION_FACTORY("histogram", 5);
 
 SELECT
@@ -23,20 +25,27 @@ SELECT
             AsTuple(
                 AsAtom("res"), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN AsTuple($z.a, 1.0)
+                        RETURN AsTuple($z.a, 1.0);
                     }
                 )
             )
         )
-    );
+    )
+;
+
 USE plato;
 
 INSERT INTO @a
 SELECT
     AsTuple(a, 1.0) AS aa
-FROM as_table($t);
+FROM
+    as_table($t)
+;
+
 COMMIT;
 
 SELECT
     AGGREGATE_BY(aa, $f)
-FROM @a;
+FROM
+    @a
+;

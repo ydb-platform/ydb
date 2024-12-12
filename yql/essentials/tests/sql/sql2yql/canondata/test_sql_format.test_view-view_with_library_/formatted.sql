@@ -2,5 +2,6 @@ USE plato;
 
 SELECT
     *
-FROM Input
-    VIEW `library`;
+FROM
+    Input VIEW `library`
+;

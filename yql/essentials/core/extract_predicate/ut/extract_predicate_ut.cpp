@@ -1,8 +1,8 @@
 #include "extract_predicate_impl.h"
 
-#include <contrib/ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <yql/essentials/providers/config/yql_config_provider.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>

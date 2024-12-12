@@ -15,7 +15,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TCreateTableIndex TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:

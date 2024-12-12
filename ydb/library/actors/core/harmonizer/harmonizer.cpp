@@ -41,13 +41,13 @@ private:
     std::vector<std::unique_ptr<TPoolInfo>> Pools;
     std::vector<ui16> PriorityOrder;
 
-    TValueHistory<16> CpuUs;
-    TValueHistory<16> Elapsed;
+    TValueHistory<16> UsedCpu;
+    TValueHistory<16> ElapsedCpu;
 
-    std::atomic<i64> MaxCpuUs = 0;
-    std::atomic<i64> MinCpuUs = 0;
-    std::atomic<i64> MaxElapsedUs = 0;
-    std::atomic<i64> MinElapsedUs = 0;
+    std::atomic<float> MaxUsedCpu = 0;
+    std::atomic<float> MinUsedCpu = 0;
+    std::atomic<float> MaxElapsedCpu = 0;
+    std::atomic<float> MinElapsedCpu = 0;
 
     ISharedExecutorPool* Shared = nullptr;
     TSharedInfo SharedInfo;
@@ -93,12 +93,12 @@ void THarmonizer::PullStats(ui64 ts) {
         TCpuConsumption consumption = pool->PullStats(ts);
         acc.Add(consumption);
     }
-    CpuUs.Register(ts, acc.CpuUs);
-    MaxCpuUs.store(CpuUs.GetMaxInt(), std::memory_order_relaxed);
-    MinCpuUs.store(CpuUs.GetMinInt(), std::memory_order_relaxed);
-    Elapsed.Register(ts, acc.ElapsedUs);
-    MaxElapsedUs.store(Elapsed.GetMaxInt(), std::memory_order_relaxed);
-    MinElapsedUs.store(Elapsed.GetMinInt(), std::memory_order_relaxed);
+    UsedCpu.Register(ts, acc.CpuUs / 1'000'000.0);
+    MaxUsedCpu.store(UsedCpu.GetMax(), std::memory_order_relaxed);
+    MinUsedCpu.store(UsedCpu.GetMin(), std::memory_order_relaxed);
+    ElapsedCpu.Register(ts, acc.ElapsedUs / 1'000'000.0);
+    MaxElapsedCpu.store(ElapsedCpu.GetMax(), std::memory_order_relaxed);
+    MinElapsedCpu.store(ElapsedCpu.GetMin(), std::memory_order_relaxed);
 
     WaitingInfo.Pull(Pools);
     if (Shared) {
@@ -327,7 +327,7 @@ void THarmonizer::CalculatePriorityOrder() {
 
 void THarmonizer::Harmonize(ui64 ts) {
     if (IsDisabled.load(std::memory_order_relaxed) || NextHarmonizeTs.load(std::memory_order_acquire) > ts || !Lock.TryAcquire()) {
-        LWPROBE_WITH_DEBUG(TryToHarmonizeFailed, ts, NextHarmonizeTs.load(std::memory_order_relaxed), IsDisabled.load(std::memory_order_relaxed), false);
+        LWPROBE(TryToHarmonizeFailed, ts, NextHarmonizeTs.load(std::memory_order_relaxed), IsDisabled.load(std::memory_order_relaxed), false);
         return;
     }
 
@@ -338,7 +338,7 @@ void THarmonizer::Harmonize(ui64 ts) {
 
     // Check again under the lock
     if (IsDisabled.load(std::memory_order_relaxed)) {
-        LWPROBE_WITH_DEBUG(TryToHarmonizeFailed, ts, NextHarmonizeTs.load(std::memory_order_relaxed), IsDisabled.load(std::memory_order_relaxed), true);
+        LWPROBE(TryToHarmonizeFailed, ts, NextHarmonizeTs.load(std::memory_order_relaxed), IsDisabled.load(std::memory_order_relaxed), true);
         Lock.Release();
         return;
     }
@@ -421,11 +421,12 @@ TPoolHarmonizerStats THarmonizer::GetPoolStats(i16 poolId) const {
         .GivenHalfThreadByOtherNeedyState = pool.GivenHalfThreadByOtherNeedyState.load(std::memory_order_relaxed),
         .ReturnedHalfThreadByStarvedState = pool.ReturnedHalfThreadByStarvedState.load(std::memory_order_relaxed),
         .ReturnedHalfThreadByOtherHoggishState = pool.ReturnedHalfThreadByOtherHoggishState.load(std::memory_order_relaxed),
-        .MaxCpuUs = pool.MaxCpuUs.load(std::memory_order_relaxed),
-        .MinCpuUs = pool.MinCpuUs.load(std::memory_order_relaxed),
-        .AvgCpuUs = pool.AvgCpuUs.load(std::memory_order_relaxed),
-        .MaxElapsedUs = pool.MaxElapsedUs.load(std::memory_order_relaxed),
-        .MinElapsedUs = pool.MinElapsedUs.load(std::memory_order_relaxed),
+        .MaxUsedCpu = pool.MaxUsedCpu.load(std::memory_order_relaxed),
+        .MinUsedCpu = pool.MinUsedCpu.load(std::memory_order_relaxed),
+        .AvgUsedCpu = pool.AvgUsedCpu.load(std::memory_order_relaxed),
+        .MaxElapsedCpu = pool.MaxElapsedCpu.load(std::memory_order_relaxed),
+        .MinElapsedCpu = pool.MinElapsedCpu.load(std::memory_order_relaxed),
+        .AvgElapsedCpu = pool.AvgElapsedCpu.load(std::memory_order_relaxed),
         .PotentialMaxThreadCount = pool.PotentialMaxThreadCount.load(std::memory_order_relaxed),
         .IsNeedy = static_cast<bool>(flags & 1),
         .IsStarved = static_cast<bool>(flags & 2),
@@ -435,10 +436,10 @@ TPoolHarmonizerStats THarmonizer::GetPoolStats(i16 poolId) const {
 
 THarmonizerStats THarmonizer::GetStats() const {
     return THarmonizerStats{
-        .MaxCpuUs = MaxCpuUs.load(std::memory_order_relaxed),
-        .MinCpuUs = MinCpuUs.load(std::memory_order_relaxed),
-        .MaxElapsedUs = MaxElapsedUs.load(std::memory_order_relaxed),
-        .MinElapsedUs = MinElapsedUs.load(std::memory_order_relaxed),
+        .MaxUsedCpu = MaxUsedCpu.load(std::memory_order_relaxed),
+        .MinUsedCpu = MinUsedCpu.load(std::memory_order_relaxed),
+        .MaxElapsedCpu = MaxElapsedCpu.load(std::memory_order_relaxed),
+        .MinElapsedCpu = MinElapsedCpu.load(std::memory_order_relaxed),
         .AvgAwakeningTimeUs = WaitingInfo.AvgAwakeningTimeUs.load(std::memory_order_relaxed),
         .AvgWakingUpTimeUs = WaitingInfo.AvgWakingUpTimeUs.load(std::memory_order_relaxed),
     };
@@ -461,11 +462,12 @@ TString TPoolHarmonizerStats::ToString() const {
         << "GivenHalfThreadByOtherNeedyState: " << GivenHalfThreadByOtherNeedyState << ", "
         << "ReturnedHalfThreadByStarvedState: " << ReturnedHalfThreadByStarvedState << ", "
         << "ReturnedHalfThreadByOtherHoggishState: " << ReturnedHalfThreadByOtherHoggishState << ", "
-        << "MaxCpuUs: " << MaxCpuUs << ", "
-        << "MinCpuUs: " << MinCpuUs << ", "
-        << "AvgCpuUs: " << AvgCpuUs << ", "
-        << "MaxElapsedUs: " << MaxElapsedUs << ", "
-        << "MinElapsedUs: " << MinElapsedUs << ", "
+        << "MaxUsedCpu: " << MaxUsedCpu << ", "
+        << "MinUsedCpu: " << MinUsedCpu << ", "
+        << "AvgUsedCpu: " << AvgUsedCpu << ", "
+        << "MaxElapsedCpu: " << MaxElapsedCpu << ", "
+        << "MinElapsedCpu: " << MinElapsedCpu << ", "
+        << "AvgElapsedCpu: " << AvgElapsedCpu << ", "
         << "PotentialMaxThreadCount: " << PotentialMaxThreadCount << ", "
         << "IsNeedy: " << IsNeedy << ", "
         << "IsStarved: " << IsStarved << ", "
@@ -474,10 +476,10 @@ TString TPoolHarmonizerStats::ToString() const {
 
 TString THarmonizerStats::ToString() const {
     return TStringBuilder() << '{'
-        << "MaxCpuUs: " << MaxCpuUs << ", "
-        << "MinCpuUs: " << MinCpuUs << ", "
-        << "MaxElapsedUs: " << MaxElapsedUs << ", "
-        << "MinElapsedUs: " << MinElapsedUs << ", "
+        << "MaxUsedCpu: " << MaxUsedCpu << ", "
+        << "MinUsedCpu: " << MinUsedCpu << ", "
+        << "MaxElapsedCpu: " << MaxElapsedCpu << ", "
+        << "MinElapsedCpu: " << MinElapsedCpu << ", "
         << "AvgAwakeningTimeUs: " << AvgAwakeningTimeUs << ", "
         << "AvgWakingUpTimeUs: " << AvgWakingUpTimeUs << '}';
 }

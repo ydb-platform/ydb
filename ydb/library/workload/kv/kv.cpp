@@ -565,7 +565,7 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
                 .DefaultValue((ui64)KvWorkloadConstants::MIXED_CHANGE_PARTITIONS_SIZE).StoreResult(&MixedChangePartitionsSize);
             opts.AddLongOption("do-select", "Do SELECT operations")
                 .DefaultValue((ui64)KvWorkloadConstants::MIXED_DO_SELECT).StoreResult(&MixedDoSelect);
-            opts.AddLongOption("do-read-rows", "Do ReadRows operations")
+            opts.AddLongOption("do-read-rows", "Do ReadRows operations. Not available in QueryService (--executer generic)")
                 .DefaultValue((ui64)KvWorkloadConstants::MIXED_DO_READ_ROWS).StoreResult(&MixedDoReadRows);
         }
         break;

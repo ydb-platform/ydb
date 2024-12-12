@@ -587,7 +587,9 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
 
     auto start = TInstant::Now();
 
-    auto pool = CreateThreadPool(filePathsSize);
+
+    TThreadPool jobPool;
+    jobPool.Start(filePathsSize);
     TVector<NThreading::TFuture<TStatus>> asyncResults;
 
     // If the single empty filename passed, read from stdin, else from the file
@@ -686,7 +688,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
         };
 
         if (!progressFile || !progressFile->IsCompleted()) {
-            asyncResults.push_back(NThreading::Async(std::move(func), *pool));
+            asyncResults.push_back(NThreading::Async(std::move(func), jobPool));
         }
     }
 
@@ -706,6 +708,8 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
                 << " files. Continuing from where they were interrupted. If you want to reset import progress, "
                 "remove progress files from " << pathToProgressFiles << std::endl;
         }
+    } else {
+        std::cerr << "(!) No existing import progress found. Starting from scratch." << std::endl;
     }
 
     NThreading::WaitAll(asyncResults).GetValueSync();

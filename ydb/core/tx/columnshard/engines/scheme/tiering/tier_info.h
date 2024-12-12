@@ -268,6 +268,16 @@ public:
         return sb;
     }
 
+    THashSet<TString> GetUsedTiers() const {
+        THashSet<TString> tiers;
+        for (const auto& [name, info] : TierByName) {
+            if (name != NTiering::NCommon::DeleteTierName) {
+                tiers.emplace(name);
+            }
+        }
+        return tiers;
+    }
+
     static THashSet<TString> GetUsedTiers(const TProto& ttlSettings) {
         THashSet<TString> usedTiers;
         for (const auto& tier : ttlSettings.GetTiers()) {

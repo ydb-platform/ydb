@@ -108,11 +108,7 @@ void TTxInit::Complete(const TActorContext& ctx) {
     Self->IsTxInitFinished = true;
 
     for (const auto& [pathId, tiering] : Self->TablesManager.GetTtl()) {
-        THashSet<TString> tiers;
-        for (const auto& [name, config] : tiering.GetTierByName()) {
-            tiers.emplace(name);
-        }
-        Self->Tiers->EnablePathId(pathId, tiers);
+        Self->Tiers->EnablePathId(pathId, tiering.GetUsedTiers());
     }
 
     Self->TrySwitchToWork(ctx);

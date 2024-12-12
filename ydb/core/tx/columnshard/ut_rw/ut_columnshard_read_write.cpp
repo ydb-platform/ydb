@@ -2462,10 +2462,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 // Cerr <<  "EvWriteIndex" << Endl << *msg->IndexChanges << Endl;
 
                 if (auto append = dynamic_pointer_cast<NOlap::TChangesWithAppend>(msg->IndexChanges)) {
-                    Y_ABORT_UNLESS(append->AppendedPortions.size());
+                    Y_ABORT_UNLESS(append->GetAppendedPortions().size());
                     TStringBuilder sb;
                     sb << "Added portions:";
-                    for (const auto& portion : append->AppendedPortions) {
+                    for (const auto& portion : append->GetAppendedPortions()) {
                         Y_UNUSED(portion);
                         ++addedPortions;
                         sb << " " << addedPortions;

@@ -169,7 +169,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
             if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOptionalColumnsInColumnShard() &&
                 WriteData.GetWriteMeta().GetModificationType() != NEvWrite::EModificationType::Delete) {
                 subset = NArrow::TSchemaSubset::AllFieldsAccepted();
-                const std::vector<ui32>& columnIdsVector = Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false);
+                const std::span<const ui32> columnIdsVector = Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false);
                 const std::set<ui32> columnIdsSet(columnIdsVector.begin(), columnIdsVector.end());
                 auto normalized =
                     Context.GetActualSchema()

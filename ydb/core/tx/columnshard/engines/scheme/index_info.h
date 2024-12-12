@@ -67,7 +67,6 @@ private:
     std::optional<TString> ScanReaderPolicyName;
 
     ui64 Version = 0;
-    std::vector<ui32> SchemaColumnIds;   // .5 wpc
     std::vector<ui32> SchemaColumnIdsWithSpecials;   // .5 wpc
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;   // 2 wpc
     std::shared_ptr<NArrow::TSchemaLite> Schema;   // 2 wpc
@@ -370,8 +369,8 @@ public:
 
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
-    std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
-    const std::vector<ui32>& GetColumnIds(const bool withSpecial = true) const;
+    std::vector<std::string> GetColumnSTLNames(const std::span<const ui32>& ids) const;
+    std::span<const ui32> GetColumnIds(const bool withSpecial = true) const;
     ui32 GetColumnIdByIndexVerified(const ui32 index) const {
         AFL_VERIFY(index < SchemaColumnIdsWithSpecials.size());
         return SchemaColumnIdsWithSpecials[index];

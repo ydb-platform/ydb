@@ -25,7 +25,7 @@ public:
     }
 
     template <class T>
-    std::vector<T> Apply(const std::vector<T>& fullSchema) const {
+    std::vector<T> Apply(const std::span<const T>& fullSchema) const {
         if (FieldIdx.empty()) {
             return fullSchema;
         }

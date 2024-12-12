@@ -23,7 +23,7 @@ protected:
 public:
     TSnapshotSchema(TIndexInfo&& indexInfo, const TSnapshot& snapshot);
 
-    virtual const std::vector<ui32>& GetColumnIds() const override {
+    virtual std::span<const ui32> GetColumnIds() const override {
         return IndexInfo.GetColumnIds();
     }
 

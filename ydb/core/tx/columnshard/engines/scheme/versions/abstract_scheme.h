@@ -29,7 +29,7 @@ public:
     std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderVerified(const std::string& columnName) const;
 
     bool IsSpecialColumnId(const ui32 columnId) const;
-    virtual const std::vector<ui32>& GetColumnIds() const = 0;
+    virtual std::span<const ui32> GetColumnIds() const = 0;
 
     virtual NArrow::NAccessor::TColumnSaver GetColumnSaver(const ui32 columnId) const = 0;
     NArrow::NAccessor::TColumnSaver GetColumnSaver(const TString& columnName) const {

@@ -521,7 +521,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         ctx.Send(source, result.release(), 0, cookie);
         return;
     }
-    TMemoryProfileGuard mpg2("NEvents::TDataEvents::TEvWrite::Continue");
+    TMemoryProfileGuard mpg20_0("NEvents::TDataEvents::TEvWrite::Continue::0");
 
     const auto& operation = record.GetOperations()[0];
     const std::optional<NEvWrite::EModificationType> mType =
@@ -560,7 +560,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    TMemoryProfileGuard mpg21("NEvents::TDataEvents::TEvWrite::Continue::1");
+    TMemoryProfileGuard mpg21_1("NEvents::TDataEvents::TEvWrite::Continue::1");
     auto overloadStatus = CheckOverloaded(pathId);
     if (overloadStatus != EOverloadStatus::None) {
         std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(

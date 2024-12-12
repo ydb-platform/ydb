@@ -1070,6 +1070,12 @@ public:
         MetadataProto = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
     }
 
+    TColumnChunkLoadContextV2(const ui64 pathId, const ui64 portionId, const NKikimrTxColumnShard::TIndexPortionAccessor& proto)
+        : PathId(pathId)
+        , PortionId(portionId)
+        , MetadataProto(proto.SerializeAsString()) {
+    }
+
     std::vector<TColumnChunkLoadContextV1> BuildRecordsV1() const {
         std::vector<TColumnChunkLoadContextV1> records;
         NKikimrTxColumnShard::TIndexPortionAccessor metaProto;

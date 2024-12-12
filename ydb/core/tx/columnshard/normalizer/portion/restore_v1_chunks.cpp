@@ -212,6 +212,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     }
 
     AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage());
+    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     {
         std::vector<TPatchItemRemoveV1> package;
         for (auto&& [portionId, chunkInfo] : columns1Remove) {

@@ -400,8 +400,8 @@ public:
             desc.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken(BUILTIN_ACL_ROOT);
         }
 
-        if (desc.GetConfig().GetConsistencyCase() == NKikimrReplication::TReplicationConfig::CONSISTENCY_NOT_SET) {
-            desc.MutableConfig()->MutableWeakConsistency();
+        if (desc.GetConfig().GetConsistencySettings().GetLevelCase() == NKikimrReplication::TConsistencySettings::LEVEL_NOT_SET) {
+            desc.MutableConfig()->MutableConsistencySettings()->MutableRow();
         }
 
         desc.MutableState()->MutableStandBy();

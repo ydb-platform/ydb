@@ -76,7 +76,7 @@ void TReplicationSettings::TStaticCredentials::Serialize(NKikimrReplication::TSt
     }
 }
 
-void TReplicationSettings::TStrongConsistency::Serialize(NKikimrReplication::TReplicationConfig_TStrongConsistency& proto) const {
+void TReplicationSettings::TGlobalConsistency::Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const {
     proto.SetCommitIntervalMilliSeconds(CommitInterval.MilliSeconds());
 }
 

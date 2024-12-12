@@ -137,6 +137,8 @@ public:
     TAsyncBulkUpsertResult BulkUpsert(const TString& table, TValue&& rows, const TBulkUpsertSettings& settings);
     TAsyncBulkUpsertResult BulkUpsert(const TString& table, EDataFormat format,
         const TString& data, const TString& schema, const TBulkUpsertSettings& settings);
+    TAsyncBulkUpsertResult BulkUpsert(const TVector<TString> &tables, const TVector<ui64> &numrows,
+    const TString& data, const TString& schema, const TBulkUpsertSettings& settings);
 
     TFuture<std::pair<TPlainStatus, TScanQueryProcessorPtr>> StreamExecuteScanQueryInternal(const TString& query,
         const ::google::protobuf::Map<TString, Ydb::TypedValue>* params,

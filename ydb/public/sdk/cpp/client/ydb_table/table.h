@@ -1265,6 +1265,8 @@ public:
         const TBulkUpsertSettings& settings = TBulkUpsertSettings());
     TAsyncBulkUpsertResult BulkUpsert(const TString& table, EDataFormat format,
         const TString& data, const TString& schema = {}, const TBulkUpsertSettings& settings = TBulkUpsertSettings());
+    TAsyncBulkUpsertResult BulkUpsert(const TVector<TString> &tables, const TVector<ui64> &numrows,
+        const TString& data, const TString& schema, const TBulkUpsertSettings& settings);
 
     TAsyncReadRowsResult ReadRows(const TString& table, TValue&& keys, const TVector<TString>& columns = {},
         const TReadRowsSettings& settings = TReadRowsSettings());

@@ -15,9 +15,7 @@ void TServiceOperator::Register(const TConfig& config) {
 }
 
 bool TServiceOperator::IsEnabled() {
-    auto* service = Singleton<TServiceOperator>();
-    std::shared_lock<std::shared_mutex> lock(service->Lock);
-    return service->EnabledFlag;
+    return false;
 }
 
 }

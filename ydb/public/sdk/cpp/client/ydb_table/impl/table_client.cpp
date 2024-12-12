@@ -999,6 +999,41 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const TString& table, EDa
     return promise.GetFuture();
 }
 
+TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const TVector<TString> &tables, const TVector<ui64> &numrows,
+    const TString& data, const TString& schema, const TBulkUpsertSettings& settings) {
+    auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
+
+    Ydb::Table::MultiTable multiTable;
+
+    for(ui64 i=0; i < tables.size(); i++) {
+        multiTable.add_tables(tables[i]);
+        multiTable.add_numrows(numrows[i]);
+    }
+
+    *request.mutable_multi_table() = std::move(multiTable);
+    request.mutable_arrow_batch_settings()->set_schema(schema);
+    request.set_data(data);
+
+    auto promise = NewPromise<TBulkUpsertResult>();
+
+    auto extractor = [promise]
+        (google::protobuf::Any* any, TPlainStatus status) mutable {
+            Y_UNUSED(any);
+            TBulkUpsertResult val(TStatus(std::move(status)));
+            promise.SetValue(std::move(val));
+        };
+
+    Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
+        std::move(request),
+        extractor,
+        &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert,
+        DbDriverState_,
+        INITIAL_DEFERRED_CALL_DELAY,
+        TRpcRequestSettings::Make(settings));
+
+    return promise.GetFuture();
+}
+
 TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TTableClient::TImpl::StreamExecuteScanQueryInternal(const TString& query,
     const ::google::protobuf::Map<TString, Ydb::TypedValue>* params,
     const TStreamExecScanQuerySettings& settings)

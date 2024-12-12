@@ -643,7 +643,7 @@ message TGroupedMemoryLimiterConfig {
 }
 
 message TExternalIndexConfig {
-    optional bool Enabled = 1 [default = true];
+    optional bool Enabled = 1 [default = false];
     optional TInternalRequestConfig RequestConfig = 2;
     optional string InternalTablePath = 3;
 }

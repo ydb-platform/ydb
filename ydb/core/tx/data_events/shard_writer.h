@@ -123,6 +123,7 @@ private:
             Counters->OnSucceedFullReply(TMonotonic::Now() - StartInstant);
             LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(Ydb::StatusIds::SUCCESS));
         } else {
+            AFL_VERIFY(false);
             Counters->OnSucceedFullReply(TMonotonic::Now() - StartInstant);
             auto req = MakeHolder<NLongTxService::TEvLongTxService::TEvAttachColumnShardWrites>(LongTxId);
             for (auto&& i : WriteIds) {

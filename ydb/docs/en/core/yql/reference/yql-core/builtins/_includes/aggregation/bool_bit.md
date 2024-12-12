@@ -1,5 +1,13 @@
 ## BOOL_AND, BOOL_OR and BOOL_XOR {#bool-and-or-xor}
 
+### Signature
+
+```yql
+BOOL_AND(Bool?)->Bool?
+BOOL_OR(Bool?)->Bool?
+BOOL_XOR(Bool?)->Bool?
+```
+
 Apply the relevant logical operation  (`AND`/`OR`/`XOR`) to all values in a Boolean column or expression.
 
 These functions **don't skip** `NULL` during aggregation, with even one `NULL` turning the result into `NULL`. To skip `NULLs` during aggregation, you can use the functions `MIN`/`MAX` or `BIT_AND`/`BIT_OR`/`BIT_XOR`.

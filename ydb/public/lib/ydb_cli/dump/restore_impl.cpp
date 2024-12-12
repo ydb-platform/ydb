@@ -36,11 +36,24 @@ bool IsFileExists(const TFsPath& path) {
     return path.Exists() && path.IsFile();
 }
 
-Ydb::Table::CreateTableRequest ReadTableScheme(const TString& fsPath, const TLog* log) {
-    LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read scheme from " << fsPath.Quote());
-    Ydb::Table::CreateTableRequest proto;
+template<typename TProtoType>
+TProtoType ReadProtoFromFile(const TString& fsPath, const TLog* log, const NDump::NFiles::TFileInfo fileInfo) {
+    LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read " << fileInfo.LogObjectType << " from " << fsPath.Quote());
+    TProtoType proto;
     Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
     return proto;
+}
+
+Ydb::Table::CreateTableRequest ReadTableScheme(const TString& fsPath, const TLog* log) {
+    return ReadProtoFromFile<Ydb::Table::CreateTableRequest>(fsPath, log, NDump::NFiles::TableScheme());
+}
+
+Ydb::Table::ChangefeedDescription ReadChangefeedDescription(const TString& fsPath, const TLog* log) {
+    return ReadProtoFromFile<Ydb::Table::ChangefeedDescription>(fsPath, log, NDump::NFiles::Changefeed());
+}
+
+Ydb::Table::TDescribeTopicResult ReadTopicDescription(const TString& fsPath, const TLog* log) {
+    return ReadProtoFromFile<Ydb::Table::ChangefeedDescription>(fsPath, log, NDump::NFiles::Changefeed());
 }
 
 TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTableRequest& proto) {
@@ -285,6 +298,10 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
         return RestoreTable(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
     }
 
+    if (settings.RestoreChangefeeds_ && IsFileExists(fsPath.Child(NFiles::Changefeed().FileName))) {
+        return RestoreChangefeeds(fsPath);
+    }
+
     if (IsFileExists(fsPath.Child(NFiles::Empty().FileName))) {
         return RestoreEmptyDir(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
     }
@@ -308,6 +325,15 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     }
    
     return RestorePermissions(fsPath, dbPath, settings, oldEntries);
+}
+
+TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath) {
+    LOG_D("Process " << fsPath.GetPath().Quote());
+
+    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
+        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    }
 }
 
 TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath,

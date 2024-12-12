@@ -35,11 +35,16 @@ std::shared_ptr<NDataLocks::TManager> EmptyDataLocksManager = std::make_shared<N
 
 class TTestDbWrapper: public IDbWrapper {
 private:
-    std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContextV1>> LoadContexts;
+    std::map<TPortionAddress, TColumnChunkLoadContextV2> LoadContexts;
 
 public:
-    virtual void WriteColumns(const NOlap::TPortionInfo& /*portion*/, const NKikimrTxColumnShard::TIndexPortionAccessor& /*proto*/) override {
-
+    virtual void WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) override {
+        auto it = LoadContexts.find(portion.GetAddress());
+        if (it == LoadContexts.end()) {
+            LoadContexts.emplace(portion.GetAddress(), TColumnChunkLoadContextV2(portion.GetPathId(), portion.GetPortionId(), proto));
+        } else {
+            it->second = TColumnChunkLoadContextV2(portion.GetPathId(), portion.GetPortionId(), proto);
+        }
     }
 
     virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
@@ -124,11 +129,6 @@ public:
         }
 
         auto& data = Indices[0].Columns[portion.GetPathId()];
-        NOlap::TColumnChunkLoadContextV1 loadContext(portion.GetPathId(), portion.GetPortionId(), row.GetAddress(), row.BlobRange, rowProto);
-        auto itInsertInfo = LoadContexts[portion.GetAddress()].emplace(row.GetAddress(), loadContext);
-        if (!itInsertInfo.second) {
-            itInsertInfo.first->second = loadContext;
-        }
         auto it = data.find(portion.GetPortionId());
         if (it == data.end()) {
             it = data.emplace(portion.GetPortionId(), TPortionInfoConstructor(portion, true, true)).first;
@@ -173,7 +173,7 @@ public:
         portionLocal.TestMutableRecords().swap(filtered);
     }
 
-    bool LoadColumns(const std::optional<ui64> reqPathId, const std::function<void(TColumnChunkLoadContextV1&&)>& callback) override {
+    bool LoadColumns(const std::optional<ui64> reqPathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) override {
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             if (pathId && *reqPathId != pathId) {
@@ -182,14 +182,10 @@ public:
             for (auto& [portionId, portionLocal] : portions) {
                 auto copy = portionLocal.MakeCopy();
                 copy.TestMutableRecords().clear();
-                for (const auto& rec : portionLocal.GetRecords()) {
-                    auto address = copy.GetPortionConstructor().GetAddress();
-                    auto itContextLoader = LoadContexts[address].find(rec.GetAddress());
-                    Y_ABORT_UNLESS(itContextLoader != LoadContexts[address].end());
-                    auto copy = itContextLoader->second;
-                    callback(std::move(copy));
-                    LoadContexts[address].erase(itContextLoader);
-                }
+                auto it = LoadContexts.find(portionLocal.GetPortionConstructor().GetAddress());
+                AFL_VERIFY(it != LoadContexts.end());
+                callback(std::move(it->second));
+                LoadContexts.erase(it);
             }
         }
         return true;

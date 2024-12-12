@@ -532,9 +532,11 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
             structType = joinKeyType->Cast<TStructExprType>();
             auto leftRowType = tupleType->GetItems()[1]->Cast<TStructExprType>();
 
+            // Stream join output row type: tuple<left_row, optional<right_row>, optional<row_seq_no>>
             TVector<const TTypeAnnotationNode*> outputTypes;
             outputTypes.push_back(leftRowType);
             outputTypes.push_back(ctx.MakeType<TOptionalExprType>(rowType));
+            outputTypes.push_back(ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
 
             rowType = ctx.MakeType<TTupleExprType>(outputTypes);
         } else {
@@ -1720,9 +1722,11 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
             return TStatus::Error;
         }
 
+        // Stream join output row type: tuple<left_row, optional<right_row>, optional<row_seq_no>>
         TVector<const TTypeAnnotationNode*> outputTypes;
         outputTypes.push_back(leftRowType);
         outputTypes.push_back(ctx.MakeType<TOptionalExprType>(rightRowType));
+        outputTypes.push_back(ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
 
         auto outputItemType = ctx.MakeType<TTupleExprType>(outputTypes);
         node->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputItemType));
@@ -1753,7 +1757,8 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    if (!EnsureTupleTypeSize(node->Pos(), inputItemType, 2, ctx)) {
+    // Lookup join input row type: tuple<left_row, optional<right_row>, optional<row_seq_no>>
+    if (!EnsureTupleTypeSize(node->Pos(), inputItemType, 3, ctx)) {
         return TStatus::Error;
     }
 
@@ -1770,6 +1775,15 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
 
     auto rightRowType = inputTupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
     if (!EnsureStructType(node->Pos(), *rightRowType, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureOptionalType(node->Pos(), *inputTupleType->GetItems()[2], ctx)) {
+        return TStatus::Error;
+    }
+
+    auto rowSeqNoType = inputTupleType->GetItems()[2]->Cast<TOptionalExprType>()->GetItemType();
+    if (!EnsureSpecificDataType(node->Pos(), *rowSeqNoType, EDataSlot::Uint64, ctx)) {
         return TStatus::Error;
     }
 

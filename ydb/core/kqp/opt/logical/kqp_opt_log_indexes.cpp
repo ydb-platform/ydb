@@ -435,7 +435,7 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
             .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
             .LookupKeys(streamLookupIndex.LookupKeys())
             .Columns(streamLookupIndex.Columns())
-            .Settings(settings.BuildNode(ctx, node.Pos()))
+            .Settings(streamLookupIndex.Settings())
             .Done();
     }
 
@@ -445,7 +445,7 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
         .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
         .LookupKeys(streamLookupIndex.LookupKeys())
         .Columns(keyColumnsList)
-        .Settings(settings.BuildNode(ctx, node.Pos()))
+        .Settings(settings.BuildNode(ctx, node.Pos())) // TODO: we shouldn't allow null keys here
         .Done();
 
     TMaybeNode<TExprBase> lookupKeys;

@@ -875,8 +875,9 @@ private:
         auto outputType = static_cast<NMiniKQL::TType*>(outputTypeNode);
         YQL_ENSURE(outputType->GetKind() == NMiniKQL::TType::EKind::Tuple, "Unexpected stream lookup output type");
 
+        // Stream join output row type: tuple<left_row, optional<right_row>, optional<row_seq_no>>
         const auto outputTupleType = AS_TYPE(NMiniKQL::TTupleType, outputType);
-        YQL_ENSURE(outputTupleType->GetElementsCount() == 2);
+        YQL_ENSURE(outputTupleType->GetElementsCount() == 3);
 
         const auto outputLeftRowType = outputTupleType->GetElementType(0);
         YQL_ENSURE(outputLeftRowType->GetKind() == NMiniKQL::TType::EKind::Struct);
@@ -888,12 +889,14 @@ private:
         TReadResultStats& rowStats, TMaybe<ui64> shardId = {}) {
 
         NUdf::TUnboxedValue* resultRowItems = nullptr;
-        auto resultRow = HolderFactory.CreateDirectArrayHolder(2, resultRowItems);
+        // Stream join result row type: tuple<left_row, optional<right_row>, optional<row_seq_no>>
+        auto resultRow = HolderFactory.CreateDirectArrayHolder(3, resultRowItems);
 
         ui64 leftRowSize = 0;
         ui64 rightRowSize = 0;
 
         resultRowItems[0] = leftRowInfo.Row;
+        resultRowItems[2] = NUdf::TUnboxedValuePod(leftRowInfo.SeqNo);
         auto leftRowType = GetLeftRowType();
         YQL_ENSURE(leftRowType);
 

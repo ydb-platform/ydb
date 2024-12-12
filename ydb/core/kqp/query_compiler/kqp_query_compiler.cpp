@@ -1424,7 +1424,8 @@ private:
 
                     YQL_ENSURE(resultItemType->GetKind() == ETypeAnnotationKind::Tuple);
                     const auto resultTupleType = resultItemType->Cast<TTupleExprType>();
-                    YQL_ENSURE(resultTupleType->GetSize() == 2);
+                    // Stream join result row type: tuple<left_row, optional<right_row>, optional<row_seq_no>>
+                    YQL_ENSURE(resultTupleType->GetSize() == 3);
 
                     YQL_ENSURE(resultTupleType->GetItems()[1]->GetKind() == ETypeAnnotationKind::Optional);
                     auto rightRowOptionalType = resultTupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();

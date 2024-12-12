@@ -428,7 +428,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
 
 template <bool IsMapJoin>
 const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool stream, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 8, 10, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 8, 11, ctx)) {
         return nullptr;
     }
 
@@ -444,7 +444,8 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         }
     }
 
-    if (!EnsureAtom(*input->Child(TDqJoin::idx_JoinType), ctx)) {
+    const auto& joinType = *input->Child(TDqJoin::idx_JoinType);
+    if (!EnsureAtom(joinType, ctx)) {
         return nullptr;
     }
 
@@ -502,9 +503,35 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         ? join.RightLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
 
-    if (input->ChildrenSize() > 9U) {
-        for (auto i = 0U; i < input->Tail().ChildrenSize(); ++i) {
-            if (const auto& flag = *input->Tail().Child(i); !flag.IsAtom({"LeftAny", "RightAny"})) {
+    if (input->ChildrenSize() > TDqJoin::idx_Options) {
+        const auto& joinAlgo = *input->Child(TDqJoin::idx_JoinAlgo);
+        if (!EnsureAtom(joinAlgo, ctx)) {
+            return nullptr;
+        }
+        if (input->ChildrenSize() > TDqJoin::idx_Options) {
+            auto& options = *input->Child(TDqJoin::idx_Options);
+            for (ui32 i = 0; i < options.ChildrenSize(); ++i) {
+                auto& option = *options.Child(i);
+                if (!EnsureTupleOfAtoms(option, ctx) || !EnsureTupleMinSize(option, 1, ctx))
+                    return nullptr;
+                auto& name = *option.Child(TCoNameValueTuple::idx_Name);
+                if (joinAlgo.IsAtom("StreamLookupJoin")) {
+                    if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
+                       if (!EnsureTupleSize(option, 2, ctx))
+                           return nullptr;
+                       continue;
+                    }
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() << "DqJoin: Unsupported DQ join option: " << name.Content()));
+                return nullptr;
+            }
+        }
+    }
+
+    if (input->ChildrenSize() > TDqJoin::idx_Flags) {
+        auto& flags = *input->Child(TDqJoin::idx_Flags);
+        for (auto i = 0U; i < flags.ChildrenSize(); ++i) {
+            if (const auto& flag = *flags.Child(i); !flag.IsAtom({"LeftAny", "RightAny"})) {
                 ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "Unsupported DQ join option: " << flag.Content()));
                 return nullptr;
             }
@@ -581,6 +608,10 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     if (!leftInputType) {
         return TStatus::Error;
     }
+    if (auto joinType = cnStreamLookup.JoinType(); joinType != TStringBuf("Left")) {
+        ctx.AddError(TIssue(ctx.GetPosition(joinType.Pos()), "Streamlookup supports only LEFT JOIN ... ANY"));
+        return TStatus::Error;
+    }
     const auto leftRowType = GetSeqItemType(leftInputType);
     const auto rightRowType = GetSeqItemType(cnStreamLookup.RightInput().Raw()->GetTypeAnn());
     const auto outputRowType = GetDqJoinResultType<true>(
@@ -593,7 +624,20 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         cnStreamLookup.JoinKeys(),
         ctx
     );
-    //TODO (YQ-2068) verify lookup parameters
+    auto validateIntParam = [&ctx=ctx](auto&& value) {
+        // matches dq_tasks.proto
+        if (!TryFromString<ui64>(value.StringValue())) {
+            ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << "Expected integer, but got: " << value.StringValue()));
+            return false;
+        }
+        return true;
+    };
+    if (!validateIntParam(cnStreamLookup.MaxCachedRows()))
+        return TStatus::Error;
+    if (!validateIntParam(cnStreamLookup.TTL()))
+        return TStatus::Error;
+    if (!validateIntParam(cnStreamLookup.MaxDelayedRows()))
+        return TStatus::Error;
     input->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputRowType));
     return TStatus::Ok;
 }

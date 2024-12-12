@@ -252,6 +252,59 @@ protected:
         if (!left) {
             return node;
         }
+
+        bool leftAny = false;
+        bool rightAny = false;
+        if (const auto maybeFlags = join.Flags()) {
+            for (auto&& flag: maybeFlags.Cast()) {
+                auto&& name = flag.StringValue();
+                if (name == "LeftAny"sv) {
+                    leftAny = true;
+                    continue;
+                } else if (name == "RightAny"sv) {
+                    rightAny = true;
+                    continue;
+                }
+            }
+            if (leftAny) {
+                ctx.AddError(TIssue(ctx.GetPosition(maybeFlags.Cast().Pos()), "Streamlookup ANY LEFT join is not implemented"));
+                return {};
+            }
+        }
+        if (!rightAny) {
+            if (false) { // Tempoarily change to waring to allow for smooth transition
+                ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN ANY"));
+                return {};
+            } else {
+                ctx.AddWarning(TIssue(ctx.GetPosition(join.Pos()), "(Deprecation) Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
+            }
+        }
+
+        TExprNode::TPtr ttl = nullptr;
+        TExprNode::TPtr maxCachedRows = nullptr;
+        TExprNode::TPtr maxDelayedRows = nullptr;
+        if (const auto maybeOptions = join.Options()) {
+            for (auto&& option: maybeOptions.Cast()) {
+                auto&& name = option.Name().Value();
+                if (name == "TTL"sv) {
+                    ttl = option.Ref().Child(1);
+                } else if (name == "MaxCachedRows"sv) {
+                    maxCachedRows = option.Ref().Child(1);
+                } else if (name == "MaxDelayedRows"sv) {
+                   maxDelayedRows = option.Ref().Child(1);
+                }
+            }
+        }
+
+        if (!ttl) {
+            ttl = ctx.NewAtom(pos, 300);
+        }
+        if (!maxCachedRows) {
+            maxCachedRows = ctx.NewAtom(pos, 1'000'000);
+        }
+        if (!maxDelayedRows) {
+            maxDelayedRows = ctx.NewAtom(pos, 1'000'000);
+        }
         auto cn = Build<TDqCnStreamLookup>(ctx, pos)
             .Output(left.Output().Cast())
             .LeftLabel(join.LeftLabel().Cast<NNodes::TCoAtom>())
@@ -261,9 +314,9 @@ protected:
             .JoinType(join.JoinType())
             .LeftJoinKeyNames(join.LeftJoinKeyNames())
             .RightJoinKeyNames(join.RightJoinKeyNames())
-            .TTL(ctx.NewAtom(pos, 300)) //TODO configure me
-            .MaxCachedRows(ctx.NewAtom(pos, 1'000'000)) //TODO configure me
-            .MaxDelayedRows(ctx.NewAtom(pos, 1'000'000)) //Configure me
+            .TTL(ttl)
+            .MaxCachedRows(maxCachedRows)
+            .MaxDelayedRows(maxDelayedRows)
         .Done();
 
         auto lambda = Build<TCoLambda>(ctx, pos)

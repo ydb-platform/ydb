@@ -3,7 +3,6 @@
 #include "util.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
@@ -472,8 +471,8 @@ void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& fol
     outFile.Write(protoStr.data(), protoStr.size());
 }
 
-void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
-    auto entry = DescribePath(driver, JoinDatabasePath(dbPrefix, path));
+void BackupPermissions(TDriver driver, const TString& tablePath, const TFsPath& folderPath) {
+    auto entry = DescribePath(driver, tablePath);
     Ydb::Scheme::ModifyPermissionsRequest proto;
     entry.SerializeTo(proto);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::Permissions());
@@ -492,14 +491,16 @@ NTopic::TDescribeTopicResult DescribeTopic(TDriver driver, const TString& path) 
     });
 }
 
-void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath, const NTable::TTableDescription& desc) {
-    const auto dirPath = JoinDatabasePath(dbPrefix, path);
+void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& folderPath) {
+    
+    auto desc = DescribeTable(driver, tablePath);
+
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
         TFsPath changefeedDirPath = CreateDirectory(folderPath, changefeedDesc.GetName());
         
         auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
-        const auto descTopicResult = DescribeTopic(driver, JoinDatabasePath(dirPath, changefeedDesc.GetName()));
-        NConsoleClient::ThrowOnError(descTopicResult);
+        const auto descTopicResult = DescribeTopic(driver, JoinDatabasePath(tablePath, changefeedDesc.GetName()));
+        VerifyStatus(descTopicResult);
         const auto& topicDescription = descTopicResult.GetTopicDescription();
         const auto protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
 
@@ -513,7 +514,8 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     Y_ENSURE(!path.empty());
     Y_ENSURE(path.back() != '/', path.Quote() << " path contains / in the end");
 
-    const auto fullPath = JoinDatabasePath(dbPrefix, path);
+    const auto fullPath = JoinDatabasePath(schemaOnly ? dbPrefix : backupPrefix, path);
+    const auto tablePath = JoinDatabasePath(dbPrefix, path);
 
     LOG_I("Backup table " << fullPath.Quote() << " to " << folderPath.GetPath().Quote());
 
@@ -521,8 +523,8 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::TableScheme());
   
-    BackupChangefeeds(driver, dbPrefix, path, folderPath, desc);
-    BackupPermissions(driver, dbPrefix, path, folderPath);
+    BackupChangefeeds(driver, tablePath, folderPath);
+    BackupPermissions(driver, tablePath, folderPath);
 
     if (!schemaOnly) {
         ReadTable(driver, desc, fullPath, folderPath, ordered);

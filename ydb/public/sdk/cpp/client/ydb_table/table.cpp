@@ -2816,7 +2816,7 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     return ret;
 }
 
-template<typename TProto>
+template <typename TProto>
 void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_name(Name_);
     proto.set_virtual_timestamps(VirtualTimestamps_);

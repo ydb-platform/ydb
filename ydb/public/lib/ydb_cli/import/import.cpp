@@ -414,7 +414,7 @@ public:
         return Progress[completedKey].as<bool>();
     }
 
-    bool SetFinished() {
+    void SetFinished() {
         Finished = true;
     }
 

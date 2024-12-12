@@ -15,15 +15,14 @@ class TestCleanup(TestYdsBase):
     @yq_v1
     def test_cleanup(self, kikimr, client):
         sql = "SELECT 1;"
-        query_name = "simple"
-        query_id = client.create_query(query_name, sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         assert kikimr.compute_plane.get_task_count(1, query_id) == 0
         deadline = time.time() + plain_or_under_sanitizer(120, 500)
         while True:
             value = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-                {"query_id": query_name, "subsystem": "task_controller", "Stage": "Total", "sensor": "Tasks"}
+                {"query_id": query_id, "subsystem": "task_controller", "Stage": "Total", "sensor": "Tasks"}
             )
             if value is None:
                 break
@@ -48,7 +47,7 @@ class TestCleanup(TestYdsBase):
         deadline = time.time() + 90  # x1.5 of 60 sec
         while True:
             value = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-                {"query_id": "simple", "subsystem": "task_controller", "Stage": "Total", "sensor": "Tasks"}
+                {"query_id": query_id, "subsystem": "task_controller", "Stage": "Total", "sensor": "Tasks"}
             )
             assert value is not None, "Tasks was cleaned"
             if time.time() > deadline:

@@ -39,7 +39,12 @@ private:
 
 public:
     virtual void WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) override {
-        LoadContexts[portion.GetAddress()] = TColumnChunkLoadContextV2(portion.GetPathId(), portion.GetPortionId(), proto);
+        auto it = LoadContexts.find(portion.GetAddress());
+        if (it == LoadContexts.end()) {
+            LoadContexts.emplace(portion.GetAddress(), TColumnChunkLoadContextV2(portion.GetPathId(), portion.GetPortionId(), proto));
+        } else {
+            it->second = TColumnChunkLoadContextV2(portion.GetPathId(), portion.GetPortionId(), proto);
+        }
     }
 
     virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
@@ -177,9 +182,9 @@ public:
             for (auto& [portionId, portionLocal] : portions) {
                 auto copy = portionLocal.MakeCopy();
                 copy.TestMutableRecords().clear();
-                auto it = LoadContexts.find(portionLocal.GetAddress());
+                auto it = LoadContexts.find(portionLocal.GetPortionConstructor().GetAddress());
                 AFL_VERIFY(it != LoadContexts.end());
-                callback(it->second);
+                callback(std::move(it->second));
                 LoadContexts.erase(it);
             }
         }

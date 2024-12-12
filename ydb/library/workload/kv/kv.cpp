@@ -169,6 +169,9 @@ std::string TKvWorkloadGenerator::GetDDLQueries() const {
     if (Params.PartitionsByLoad) {
         ss << "AUTO_PARTITIONING_BY_LOAD = ENABLED, ";
     }
+    if (Params.CreateColumnTables) {
+        ss << "STORE = COLUMN" << ", ";
+    }
     ss << "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << Params.MinPartitions << ", ";
     ss << "AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.PartitionSizeMb << ", ";
     ss << "UNIFORM_PARTITIONS = " << Params.MinPartitions << ", ";
@@ -517,6 +520,8 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
             .DefaultValue((ui64)KvWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
         opts.AddLongOption("rows", "Number of rows")
             .DefaultValue((ui64)KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
+        opts.AddLongOption("column-tables", "Use column tables")
+            .DefaultValue(false).StoreResult(&CreateColumnTables);
         break;
     case TWorkloadParams::ECommandType::Run:
         opts.AddLongOption("max-first-key", "Maximum value of a first primary key")

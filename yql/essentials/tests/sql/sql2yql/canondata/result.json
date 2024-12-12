@@ -12368,6 +12368,13 @@
             "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql2yql.test_pg-aggregate_scalar_minus_zero_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-aliased_columns]": [
+        {
+            "checksum": "7ca1f0f6ce1395c4d6f826660886df83",
+            "size": 953,
+            "uri": "https://{canondata_backend}/1777230/27c189b00ecc5d4153899123da0bf3c72d8cfd80/resource.tar.gz#test_sql2yql.test_pg-aliased_columns_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-all_data]": [
         {
             "checksum": "e2e983a696817fe3cbebcbbf79264fd1",

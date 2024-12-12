@@ -359,15 +359,17 @@ private:
         const TString cloudId = task.sensor_labels().at("cloud_id");
         const TString queryId = task.query_id().value();
         const bool isStreaming = task.query_type() == FederatedQuery::QueryContent::STREAMING;
-        TString queryIdLabel = queryId;
+        TString queryIdLabel;
+        TString queryNameLabel;
         if (task.automatic()) {
-            queryIdLabel = isStreaming ? "streaming" : "automatic";
+            queryIdLabel = isStreaming ? "streaming" : "analytics";
         } else {
-            if (!isStreaming) {
-                queryIdLabel = "analytics";
-            } else if (task.query_name()) {
+            if (isStreaming) {
                 // todo: sanitize query name
-                queryIdLabel = task.query_name();
+                queryNameLabel = task.query_name();
+                queryIdLabel = queryId;
+            } else {
+                queryIdLabel = "manual";
             }
         }
 
@@ -377,7 +379,15 @@ private:
         if (cloudId && folderId) {
             publicCountersParent = publicCountersParent->GetSubgroup("cloud_id", cloudId)->GetSubgroup("folder_id", folderId);
         }
-        queryCounters.PublicCounters = publicCountersParent->GetSubgroup("query_id", queryIdLabel);
+
+        if (queryIdLabel) {
+            publicCountersParent = publicCountersParent->GetSubgroup("query_id", queryIdLabel);
+        }
+
+        if (queryNameLabel) {
+            publicCountersParent = publicCountersParent->GetSubgroup("query_name", queryNameLabel);
+        }
+        queryCounters.PublicCounters = publicCountersParent;
 
         auto rootCountersParent = ServiceCounters.RootCounters;
         std::set<std::pair<TString, TString>> sensorLabels(task.sensor_labels().begin(), task.sensor_labels().end());
@@ -385,7 +395,15 @@ private:
             rootCountersParent = rootCountersParent->GetSubgroup(label, item);
         }
 
-        queryCounters.RootCounters = rootCountersParent->GetSubgroup("query_id", queryIdLabel);
+        if (queryIdLabel) {
+            rootCountersParent = rootCountersParent->GetSubgroup("query_id", queryIdLabel);
+        }
+
+        if (queryNameLabel) {
+            rootCountersParent = rootCountersParent->GetSubgroup("query_name", queryNameLabel);
+        }
+
+        queryCounters.RootCounters = rootCountersParent;
         queryCounters.Counters = queryCounters.RootCounters;
 
         queryCounters.InitUptimeCounter();

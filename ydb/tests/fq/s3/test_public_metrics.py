@@ -56,7 +56,7 @@ Pear,15,33'''
         )
         logging.debug(str(metrics))
 
-        query_id_label = "analytics"
+        query_id_label = "manual"
         assert (
             metrics.find_sensor(
                 {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id_label, "name": "query.running_tasks"}

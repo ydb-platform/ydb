@@ -440,7 +440,6 @@ public:
     }
 
     void Cleanup() const {
-        Cerr << "Cleaning up progress file " << ProgressFilePath.GetPath() << Endl;
         ProgressFilePath.DeleteIfExists();
     }
 

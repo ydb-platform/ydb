@@ -880,7 +880,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
             return;
         }
         ui64 maxCompletedLine = 0;
-        while (batchStatuses.front()->Completed) {
+        while (!batchStatuses.empty() && batchStatuses.front()->Completed) {
             maxCompletedLine = batchStatuses.front()->LastRow;
             batchStatuses.pop_front();
         }

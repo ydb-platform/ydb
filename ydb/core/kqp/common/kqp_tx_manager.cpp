@@ -57,7 +57,6 @@ public:
         Y_ABORT_UNLESS(State == ETransactionState::COLLECTING);
         ShardsIds.insert(topicId);
         auto& shardInfo = ShardsInfo[topicId];
-        shardInfo.IsTopic = true;
 
         const auto [stringsIter, _] = TablePathes.insert(path);
         const TStringBuf pathBuf = *stringsIter;
@@ -271,14 +270,11 @@ public:
         for (auto& [shardId, shardInfo] : ShardsInfo) {
             if ((shardInfo.Flags & EAction::WRITE)) {
                 ReceivingShards.insert(shardId);
-                
-                if (!shardInfo.IsTopic) {
-                    if (IsVolatile()) {
-                        SendingShards.insert(shardId);
-                    }
-                    if (shardInfo.IsOlap) {
-                        sendingColumnShardsSet.insert(shardId);
-                    }
+                if (IsVolatile()) {
+                    SendingShards.insert(shardId);
+                }
+                if (shardInfo.IsOlap) {
+                    sendingColumnShardsSet.insert(shardId);
                 }
             }
             if (!shardInfo.Locks.empty()) {
@@ -445,7 +441,6 @@ private:
         THashMap<TKqpLock::TKey, TLockInfo> Locks;
 
         bool IsOlap = false;
-        bool IsTopic = false;
         THashSet<TStringBuf> Pathes;
     };
 

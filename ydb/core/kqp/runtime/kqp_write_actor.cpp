@@ -1651,12 +1651,6 @@ public:
             } else {
                 transaction.AddSendingShards(*prepareSettings.ArbiterColumnShard);
                 transaction.AddReceivingShards(*prepareSettings.ArbiterColumnShard);
-                if (prepareSettings.SendingShards.contains(tabletId)) {
-                    transaction.AddSendingShards(tabletId);
-                }
-                if (prepareSettings.ReceivingShards.contains(tabletId)) {
-                    transaction.AddReceivingShards(tabletId);
-                }
             }
 
             auto ev = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
@@ -1675,9 +1669,8 @@ public:
             SendTime[tabletId] = TInstant::Now();
             auto traceId = BufferWriteActor.GetTraceId();
 
-            CA_LOG_D("SendToTopics traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
             CA_LOG_D("Preparing KQP transaction on topic tablet: " << tabletId << ", writeId: " << writeId);
-
+            
             Send(
                 MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), tabletId, /* subscribe */ true),

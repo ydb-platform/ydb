@@ -2389,11 +2389,8 @@ private:
             }
         }
 
-        if (BufferActorId) {
-            TxManager->GetTopicOperations().BuildTopicTxs(topicTxs);
-        } else {
-            Request.TopicOperations.BuildTopicTxs(topicTxs);
-        }
+        YQL_ENSURE(!TxManager);
+        Request.TopicOperations.BuildTopicTxs(topicTxs);
 
         const bool needRollback = Request.LocksOp == ELocksOp::Rollback;
 
@@ -2428,16 +2425,9 @@ private:
             !topicTxs.empty() ||
             // HTAP transactions always use generic readsets
             !evWriteTxs.empty());
-        
-        auto hasReadOperations = (BufferActorId)
-            ? TxManager->GetTopicOperations().HasReadOperations()
-            : Request.TopicOperations.HasReadOperations();
-        
-        auto hasWriteOperations = (BufferActorId)
-            ? TxManager->GetTopicOperations().HasWriteOperations()
-            : Request.TopicOperations.HasWriteOperations();
 
-        if (!locksMap.empty() || VolatileTx || hasReadOperations || hasWriteOperations)
+        if (!locksMap.empty() || VolatileTx || Request.TopicOperations.HasReadOperations()
+            || Request.TopicOperations.HasWriteOperations())
         {
             YQL_ENSURE(Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback || VolatileTx);
 
@@ -2490,16 +2480,12 @@ private:
                     }
                 }
 
-                if (auto tabletIds = (BufferActorId)
-                    ? TxManager->GetTopicOperations().GetSendingTabletIds()
-                    : Request.TopicOperations.GetSendingTabletIds()) {
+                if (auto tabletIds = Request.TopicOperations.GetSendingTabletIds()) {
                     sendingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                     receivingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                 }
 
-                if (auto tabletIds = (BufferActorId)
-                    ? TxManager->GetTopicOperations().GetReceivingTabletIds()
-                    : Request.TopicOperations.GetReceivingTabletIds()) {
+                if (auto tabletIds = Request.TopicOperations.GetReceivingTabletIds()) {
                     sendingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                     receivingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                 }
@@ -2763,12 +2749,11 @@ private:
             ExecuteTopicTabletTransactions(TopicTxs);
         }
 
-        auto topicSize = (BufferActorId) ? TxManager->GetTopicOperations().GetSize() : Request.TopicOperations.GetSize();
         LOG_I("Total tasks: " << TasksGraph.GetTasks().size()
             << ", readonly: " << ReadOnlyTx
             << ", datashardTxs: " << DatashardTxs.size()
             << ", evWriteTxs: " << EvWriteTxs.size()
-            << ", topicTxs: " << topicSize
+            << ", topicTxs: " << Request.TopicOperations.GetSize()
             << ", volatile: " << VolatileTx
             << ", immediate: " << ImmediateTx
             << ", pending compute tasks" << (Planner ? Planner->GetPendingComputeTasks().size() : 0)
@@ -2789,11 +2774,7 @@ private:
         YQL_ENSURE(!TxManager);
         TMaybe<ui64> writeId;
 
-        if (BufferActorId && TxManager->GetTopicOperations().HasWriteId()) {
-            writeId = TxManager->GetTopicOperations().GetWriteId();
-        }
-
-        if (!BufferActorId && Request.TopicOperations.HasWriteId()) {
+        if (Request.TopicOperations.HasWriteId()) {
             writeId = Request.TopicOperations.GetWriteId();
         }
 
@@ -2831,9 +2812,7 @@ private:
             state.DatashardState.ConstructInPlace();
             state.DatashardState->Follower = false;
 
-            state.DatashardState->ShardReadLocks = (BufferActorId)
-                ? TxManager->GetTopicOperations().TabletHasReadOperations(tabletId)
-                : Request.TopicOperations.TabletHasReadOperations(tabletId);
+            state.DatashardState->ShardReadLocks = Request.TopicOperations.TabletHasReadOperations(tabletId);
 
             auto result = ShardStates.emplace(tabletId, std::move(state));
             YQL_ENSURE(result.second);

@@ -17,6 +17,7 @@
 #include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
 
 #include <yt/cpp/mapreduce/interface/error_codes.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
@@ -395,7 +396,8 @@ TJobPreparer::TJobPreparer(
     size_t outputTableCount,
     const TVector<TSmallJobFile>& smallFileList,
     const TOperationOptions& options)
-    : OperationPreparer_(operationPreparer)
+    : RawClient_(operationPreparer.GetClient()->GetRawClient())
+    , OperationPreparer_(operationPreparer)
     , Spec_(spec)
     , Options_(options)
     , Layers_(spec.Layers_)
@@ -631,6 +633,7 @@ TMaybe<TString> TJobPreparer::TryUploadWithDeduplication(const IItemToUpload& it
     CreateFileInCypress(cypressPath);
 
     auto uploadTx = MakeIntrusive<TTransaction>(
+        OperationPreparer_.GetClient()->GetRawClient(),
         OperationPreparer_.GetClient(),
         OperationPreparer_.GetContext(),
         TTransactionId(),

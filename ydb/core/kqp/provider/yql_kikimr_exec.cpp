@@ -1908,7 +1908,7 @@ public:
                                     );
 
                                     add_changefeed->set_virtual_timestamps(FromString<bool>(to_lower(value)));
-                                } else if (name == "resolved_timestamps") {
+                                } else if (name == "barriers_interval" || name == "resolved_timestamps") {
                                     YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
                                     const auto value = FromString<i64>(
                                         setting.Value().Cast<TCoInterval>().Literal().Value()

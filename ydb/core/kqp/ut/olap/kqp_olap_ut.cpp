@@ -3040,7 +3040,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             Cout << output << Endl;
-            CompareYson(output, R"([[2u;]])"); // Should be 1u after fix
+            CompareYson(output, R"([[1u;]])");
         }
     }
 

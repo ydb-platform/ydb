@@ -3086,11 +3086,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         {
             auto req = R"(
                 USE plato;
-                ALTER ASYNC REPLICATION MyReplication SET (CONSISTENCY_MODE = "STRONG");
+                ALTER ASYNC REPLICATION MyReplication SET (CONSISTENCY_LEVEL = "GLOBAL");
             )";
             auto res = SqlToYql(req);
             UNIT_ASSERT(!res.Root);
-            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:79: Error: CONSISTENCY_MODE is not supported in ALTER\n");
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:80: Error: CONSISTENCY_LEVEL is not supported in ALTER\n");
         }
         {
             auto req = R"(

@@ -67,7 +67,8 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
     };
 
     TSet<TString> modeSettings = {
-        "consistency_mode",
+        "consistency_mode", // TODO(ilnaz): deprecated
+        "consistency_level",
         "commit_interval",
     };
 

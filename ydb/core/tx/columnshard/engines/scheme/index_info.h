@@ -53,51 +53,11 @@ private:
     friend class TPortionInfo;
     friend class TPortionDataAccessor;
 
-    class TNameInfo {
-    private:
-        YDB_READONLY_DEF(TString, Name);
-        YDB_READONLY(ui32, ColumnId, 0);
-        YDB_READONLY(ui32, ColumnIdx, 0);
-
-    public:
-        struct TNameComparator {
-            bool operator()(const TNameInfo& l, const TNameInfo& r) const {
-                return l.Name < r.Name;
-            };
-        };
-
-        struct TColumnIdComparator {
-            bool operator()(const TNameInfo& l, const TNameInfo& r) const {
-                return l.ColumnId < r.ColumnId;
-            };
-        };
-
-        TNameInfo(const TString& name, const ui32 columnId, const ui32 columnIdx)
-            : Name(name)
-            , ColumnId(columnId)
-            , ColumnIdx(columnIdx) {
-        }
-
-        static std::vector<TNameInfo> BuildColumnNames(const TColumns& columns) {
-            std::vector<TNameInfo> result;
-            for (auto&& i : columns) {
-                result.emplace_back(TNameInfo(i.second.Name, i.first, 0));
-            }
-            std::sort(result.begin(), result.end(), TNameInfo::TColumnIdComparator());
-            ui32 idx = 0;
-            for (auto&& i : result) {
-                i.ColumnIdx = idx++;
-            }
-            std::sort(result.begin(), result.end(), TNameInfo::TNameComparator());
-            return result;
-        }
-    };
-
-    std::vector<TNameInfo> ColumnNames;
+    std::vector<ui32> ColumnIdxSortedByName;
     std::vector<ui32> PKColumnIds;
     std::vector<TNameTypeInfo> PKColumns;
 
-    std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
+    std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;   // 2 wpc (1 shared_ptr)
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
     std::shared_ptr<std::set<TString>> UsedStorageIds;
 
@@ -107,10 +67,10 @@ private:
     std::optional<TString> ScanReaderPolicyName;
 
     ui64 Version = 0;
-    std::vector<ui32> SchemaColumnIds;
-    std::vector<ui32> SchemaColumnIdsWithSpecials;
-    std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
-    std::shared_ptr<NArrow::TSchemaLite> Schema;
+    std::vector<ui32> SchemaColumnIds;   // .5 wpc
+    std::vector<ui32> SchemaColumnIdsWithSpecials;   // .5 wpc
+    std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;   // 2 wpc
+    std::shared_ptr<NArrow::TSchemaLite> Schema;   // 2 wpc
     std::shared_ptr<arrow::Schema> PrimaryKey;
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 
@@ -153,6 +113,24 @@ private:
 
     void Validate() const;
     void Precalculate();
+    void BuildColumnIndexByName() {
+        const ui32 columnCount = SchemaColumnIdsWithSpecials.size() - SpecialColumnsCount;
+        std::erase_if(ColumnIdxSortedByName, [columnCount](const ui32 idx) {
+            return idx >= columnCount;
+        });
+        ColumnIdxSortedByName.reserve(columnCount);
+        for (ui32 i = 0; i < columnCount; ++i) {
+            ColumnIdxSortedByName.push_back(i);
+        }
+
+        std::sort(ColumnIdxSortedByName.begin(), ColumnIdxSortedByName.end(), [this](const ui32 lhs, const ui32 rhs) {
+            return CompareColumnIndexByName(lhs, rhs);
+        });
+    }
+
+    bool CompareColumnIndexByName(const ui32 lhs, const ui32 rhs) const {
+        return Schema->GetFieldByIndexVerified(lhs)->name() < Schema->GetFieldByIndexVerified(rhs)->name();
+    }
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
         const std::shared_ptr<TSchemaObjectsCache>& cache);
@@ -263,7 +241,7 @@ public:
     static TIndexInfo BuildDefault(
         const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<TString>& pkNames) {
         TIndexInfo result = BuildDefault();
-        result.ColumnNames = TNameInfo::BuildColumnNames(columns);
+        result.BuildColumnIndexByName();
         for (auto&& i : pkNames) {
             const ui32 columnId = result.GetColumnIdVerified(i);
             result.PKColumnIds.emplace_back(columnId);

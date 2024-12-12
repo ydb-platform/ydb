@@ -148,7 +148,7 @@ struct TEquiJoinLinkSettings {
     // JOIN implementation may ignore this flags if SortedMerge strategy is not supported
     bool ForceSortedMerge = false;
     bool Compact = false;
-    TVector<TString> Options;
+    TVector<TString> JoinAlgoOptions;
 };
 
 TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings);

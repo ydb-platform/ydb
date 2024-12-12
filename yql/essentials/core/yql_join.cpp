@@ -1361,10 +1361,11 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");
 
     if (auto streamlookup = GetSetting(linkSettings, "forceStreamLookup")) {
+        YQL_ENSURE(result.JoinAlgoOptions.empty());
         result.JoinAlgo = EJoinAlgoType::StreamLookupJoin;
         auto size = streamlookup->ChildrenSize();
         for (decltype(size) i = 1; i < size; ++i) {
-            result.Options.push_back(TString(streamlookup->Child(i)->Content()));
+            result.JoinAlgoOptions.push_back(TString(streamlookup->Child(i)->Content()));
         }
     }
 

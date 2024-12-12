@@ -74,24 +74,16 @@ private:
             return;
         }
         
-        const auto& pathDescription = record.GetPathDescription();
+        // const auto& pathDescription = record.GetPathDescription();
 
-        Cerr << "GOT PATH DESCRIPTION " << pathDescription.DebugString() << Endl;
+        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        batch->Finished = true;
+
+        SendBatch(std::move(batch));
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Failed to request domain info");
-    }
-
-    void RequestDone() {
-        if (false) {
-            return;
-        }
-
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
-        batch->Finished = true;        
-
-        SendBatch(std::move(batch));
     }
 
 private:

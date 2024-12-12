@@ -276,7 +276,7 @@ public:
     }
 
     void AddError(const ui64 pathId, const TString& errorMessage) {
-        AFL_VERIFY(FetchStage == 1);
+        AFL_VERIFY(FetchStage <= 1);
         auto itStatus = PathIdStatus.find(pathId);
         AFL_VERIFY(itStatus != PathIdStatus.end());
         itStatus->second.OnError(errorMessage);

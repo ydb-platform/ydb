@@ -11,7 +11,7 @@ private:
     using TBase = TColumnEngineChanges;
     THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToRemove;
     THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToMove;
-    YDB_ACCESSOR_DEF(std::vector<TWritePortionInfoWithBlobsResult>, AppendedPortions);
+    std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;
 
 protected:
     std::optional<ui64> TargetCompactionLevel;
@@ -59,6 +59,14 @@ public:
         , SaverContext(saverContext)
     {
 
+    }
+
+    const std::vector<TWritePortionInfoWithBlobsResult>& GetAppendedPortions() const {
+        return AppendedPortions;
+    }
+
+    std::vector<TWritePortionInfoWithBlobsResult>& MutableAppendedPortions() {
+        return AppendedPortions;
     }
 
     void AddMovePortions(const std::vector<std::shared_ptr<TPortionInfo>>& portions) {

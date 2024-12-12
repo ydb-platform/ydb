@@ -305,6 +305,7 @@ class BaseSuiteRunner(object):
         self.no_cols = '_'.join(list(path_pieces)) in {
             'postgres_case.test',
             'postgres_create_table.test',
+            'postgres_jointest/join0.test',
             'postgres_jointest/join1.test',
             'postgres_jointest/join2.test',
             'postgres_jointest/join3.test',
@@ -529,6 +530,7 @@ class BaseSuiteRunner(object):
 
     def execute_query(self, statement_text):
         yql_text = format_yql_statement(statement_text, self.table_path_prefix)
+
         def execute():
             return self.pool.execute_with_retries(yql_text)
 

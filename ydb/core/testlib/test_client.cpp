@@ -2221,6 +2221,18 @@ namespace Tests {
         return res;
     }
 
+    NKikimrScheme::TEvDescribeSchemeResult TClient::Describe(TTestActorRuntime* runtime, const TString& path) {
+        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
+        request->Record.SetPath(path);
+        const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
+        TActorId sender = runtime->AllocateEdgeActor(0);
+        ForwardToTablet(*runtime, schemeRoot, sender, request.Release(), 0);
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+        return handle->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
+    }
+
     TString TClient::CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups) {
         Y_ABORT_UNLESS(StoragePoolTypes.contains(poolKind));
         const TString poolName = Sprintf("name_%s_kind_%s", partOfName.c_str(), poolKind.c_str());

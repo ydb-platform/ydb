@@ -595,7 +595,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     NOlap::TWritingContext wContext(pathId, SelfId(), schema, StoragesManager, Counters.GetIndexationCounters().SplitterCounters,
         Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max());
     arrowData->SetSeparationPoints(GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(pathId)->GetBucketPositions());
-    TMemoryProfileGuard mpg3("NEvents::TDataEvents::TEvWrite::Continue5");
+    TMemoryProfileGuard mpg5("NEvents::TDataEvents::TEvWrite::Continue5");
     writeOperation->Start(*this, arrowData, source, wContext);
 }
 

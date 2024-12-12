@@ -11,12 +11,12 @@ private:
     using TBase = TColumnEngineChanges;
     THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToRemove;
     THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToMove;
+    YDB_ACCESSOR_DEF(std::vector<TWritePortionInfoWithBlobsResult>, AppendedPortions);
 
 protected:
     std::optional<ui64> TargetCompactionLevel;
     TSaverContext SaverContext;
     bool NoAppendIsCorrect = false;
-    std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;
 
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
 

@@ -333,14 +333,14 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, st
     NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Indexation"), snap);
     Y_ABORT_UNLESS(changes->ConstructBlobs(context).Ok());
 
-    UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(changes->GetAppendedPortions().size(), 1);
     ui32 blobsCount = 0;
-    for (auto&& i : changes->AppendedPortions) {
+    for (auto&& i : changes->GetAppendedPortions()) {
         blobsCount += i.GetBlobs().size();
     }
     UNIT_ASSERT_VALUES_EQUAL(blobsCount, 1);   // add 2 columns: planStep, txId
 
-    AddIdsToBlobs(changes->AppendedPortions, blobs, step);
+    AddIdsToBlobs(changes->MutableAppendedPortions(), blobs, step);
 
     const bool result = engine.ApplyChangesOnTxCreate(changes, snap) && engine.ApplyChangesOnExecute(db, changes, snap);
 
@@ -394,7 +394,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     Y_ABORT_UNLESS(changes->ConstructBlobs(context).Ok());
 
     //    UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
-    AddIdsToBlobs(changes->AppendedPortions, changes->Blobs, step);
+    AddIdsToBlobs(changes->MutableAppendedPortions(), changes->Blobs, step);
 
     //    UNIT_ASSERT_VALUES_EQUAL(changes->GetTmpGranuleIds().size(), expected.NewGranules);
 
@@ -404,7 +404,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine, snap);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     if (blobsPool) {
-        for (auto&& i : changes->AppendedPortions) {
+        for (auto&& i : changes->GetAppendedPortions()) {
             for (auto&& r : i.GetPortionResult().TestGetRecords()) {
                 Y_ABORT_UNLESS(blobsPool
                                    ->emplace(i.GetPortionResult().GetPortionInfo().RestoreBlobRange(r.BlobRange),

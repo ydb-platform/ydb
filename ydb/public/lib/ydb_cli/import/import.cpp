@@ -19,6 +19,7 @@
 
 #include <library/cpp/string_utils/csv/csv.h>
 #include <library/cpp/threading/future/async.h>
+#include <library/cpp/yaml/as/tstring.h>
 
 #include <util/folder/path.h>
 #include <util/generic/vector.h>
@@ -320,6 +321,144 @@ private:
     std::counting_semaphore<> JobsSemaphore;
 }; // TJobInflightManager
 
+static const TString pathToProgressFiles = "~/.config/ydb/import_progress/";
+static const TString sourceModifiedKey = "source_modified"; // Timestamp of source modification
+static const TString lastImportedLineKey = "last_imported_line"; // Last line that was imported with confirmation
+static const TString completedKey = "completed"; // File was successfully imported
+
+class TProgressFile {
+public:
+    TProgressFile(const TString& sourceFilePath)
+        : SourceFilePath(sourceFilePath)
+    {
+        std::vector<TString> pathParts;
+        StringSplitter(sourceFilePath).Split('/').Collect(&pathParts);
+        TString progressFileName = pathToProgressFiles;
+        for (ui32 i = 0; i < pathParts.size(); ++i) {
+            if (i > 0) {
+                progressFileName += '_';
+            }
+            progressFileName += pathParts[i];
+        }
+        ProgressFilePath = TFsPath(progressFileName);
+        ProgressFilePath.Fix();
+    }
+
+    bool Load() {
+        try {
+            if (ProgressFilePath.Exists()) {
+                Progress = YAML::LoadFile(ProgressFilePath.GetPath());
+                if (static_cast<bool>(Progress[lastImportedLineKey])
+                        && Progress[sourceModifiedKey].as<i64>() == TFileStat(SourceFilePath).MTime) {
+                    Cerr << "File " << ProgressFilePath.GetPath() << " loaded" << Endl;
+                    return true;
+                } else {
+                    if (!static_cast<bool>(Progress[lastImportedLineKey])) {
+                        Cerr << "(!) Progress file \"" << ProgressFilePath.GetPath()
+                            << "\" doesn't have modification time" << Endl;
+                    } else {
+                        Cerr << "(!) Progress file \"" << ProgressFilePath.GetPath() << "\" was created for file "
+                            << SourceFilePath << " with modification time "
+                            << TInstant::Seconds(Progress[sourceModifiedKey].as<i64>())
+                            << ", now the file has modification time " << TFileStat(SourceFilePath).MTime
+                            << ", removing progress file..." << Endl;
+                    }
+                    ProgressFilePath.DeleteIfExists();
+                }
+            }
+        } catch (const std::exception& e) {
+            Cerr << "(!) Couldn't load progress from file \"" << ProgressFilePath.GetPath()
+                << "\". " << e.what() << Endl;
+        }
+        StartNewProgress();
+        return false;
+    }
+
+    bool Save() {
+        if (FailedToSave) {
+            Cerr << "Failed to save once, do not try to save again" << Endl;
+            return false;
+        }
+        try {
+            if (!ProgressFilePath.Parent().Exists()) {
+                ProgressFilePath.Parent().MkDirs();
+            }
+            if (TFileStat(ProgressFilePath).Mode & (S_IRGRP | S_IROTH)) {
+                int chmodResult = Chmod(ProgressFilePath.GetPath().c_str(), S_IRUSR | S_IWUSR);
+                if (chmodResult) {
+                    Cerr << "Couldn't change permissions for the file \"" << ProgressFilePath.GetPath() << "\"" << Endl;
+                    FailedToSave = true;
+                    return false;
+                }
+            }
+            TFileOutput resultConfigFile(TFile(ProgressFilePath, CreateAlways | WrOnly | AWUser | ARUser));
+            resultConfigFile << YAML::Dump(Progress);
+            Cerr << "File " << ProgressFilePath.GetPath() << " saved" << Endl;
+        } catch (const std::exception& e) {
+            Cerr << "(!) Couldn't save progress to file \"" << ProgressFilePath.GetPath()
+                << "\". " << e.what() << Endl;
+            FailedToSave = true;
+            return false;
+        }
+        return true;
+    }
+
+    void SetCompleted() {
+        Cerr << "File progress " << ProgressFilePath.GetPath() << " completed" << Endl;
+        Progress[completedKey] = true;
+        Save();
+    }
+
+    bool IsCompleted() const {
+        return Progress[completedKey].as<bool>();
+    }
+
+    void SetLastImportedLine(ui64 lastImportedLine) {
+        static const TDuration minSaveInterval = TDuration::Seconds(3);
+        if (TInstant::Now() - LastSaveTime > minSaveInterval) {
+            Progress[lastImportedLineKey] = lastImportedLine;
+            Save();
+            LastSaveTime = TInstant::Now();
+        }
+    }
+
+    ui64 GetLastImportedLine() const {
+        return Progress[lastImportedLineKey].as<ui64>();
+    }
+
+    bool HasLastImportedLine() const {
+        return static_cast<bool>(Progress[lastImportedLineKey]);
+    }
+
+    TString GetProgressFilePath() const {
+        return ProgressFilePath.GetPath();
+    }
+
+    void Cleanup() const {
+        Cerr << "Cleaning up progress file " << ProgressFilePath.GetPath() << Endl;
+        ProgressFilePath.DeleteIfExists();
+    }
+
+private:
+    void StartNewProgress() {
+        Cerr << "Starting new progress for file " << SourceFilePath << Endl;
+        Progress = YAML::Node();
+        Progress[sourceModifiedKey] = TFileStat(SourceFilePath).MTime;
+        Progress[completedKey] = false;
+    }
+
+    TFsPath SourceFilePath;
+    TFsPath ProgressFilePath;
+    YAML::Node Progress;
+    bool FailedToSave = false; // To prevent error messaging on every save attempt
+    TInstant LastSaveTime = TInstant::Zero();
+};
+
+struct TImportBatchStatus {
+    ui64 LastRow; // Highest row number in batch
+    bool Completed; // Sets upon receiving confirmation from server
+};
+
 } // namespace
 
 class TImportFileClient::TImpl {
@@ -336,7 +475,8 @@ private:
                       const TString& filePath,
                       std::optional<ui64> inputSizeHint,
                       ProgressCallbackFunc & progressCallback,
-                      std::shared_ptr<TJobInFlightManager> jobInflightManager);
+                      std::shared_ptr<TJobInFlightManager> jobInflightManager,
+                      std::shared_ptr<TProgressFile> progressFile);
 
     TStatus UpsertCsvByBlocks(const TString& filePath,
                               const TString& dbPath);
@@ -349,6 +489,7 @@ private:
     TType GetTableType();
     std::map<TString, TType> GetColumnTypes();
     void ValidateTValueUpsertTable();
+    std::shared_ptr<TProgressFile> LoadOrStartImportProgress(const TString& filePath);
 
     std::shared_ptr<NTable::TTableClient> TableClient;
     std::shared_ptr<NScheme::TSchemeClient> SchemeClient;
@@ -366,6 +507,11 @@ private:
     std::atomic<bool> Failed = false;
     std::atomic<bool> InformedAboutLimit = false;
     THolder<TStatus> ErrorStatus;
+    size_t FilesPreviouslyCompleted = 0;
+    size_t FilesPreviouslyStarted = 0;
+    TString PreviouslyStartedFileName;
+    TString PreviouslyStartedProgressFileName;
+    std::vector<std::shared_ptr<TProgressFile>> ProgressFiles;
 
     static constexpr ui32 VerboseModeStepSize = 1 << 27; // 128 MB
 }; // TImpl
@@ -459,7 +605,8 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
 
     for (size_t fileOrderNumber = 0; fileOrderNumber < filePathsSize; ++fileOrderNumber) {
         const auto& filePath = filePaths[fileOrderNumber];
-        auto func = [&, fileOrderNumber, this] {
+        std::shared_ptr<TProgressFile> progressFile = LoadOrStartImportProgress(filePath);
+        auto func = [&, fileOrderNumber, progressFile, this] {
             std::unique_ptr<TFileInput> fileInput;
             std::optional<ui64> fileSizeHint;
 
@@ -504,12 +651,12 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
                 switch (Settings.Format_) {
                     case EDataFormat::Default:
                     case EDataFormat::Csv:
-                    case EDataFormat::Tsv:
+                    case EDataFormat::Tsv: {
                         if (Settings.NewlineDelimited_) {
                             return UpsertCsvByBlocks(filePath, dbPath);
                         } else {
                             auto status = UpsertCsv(input, dbPath, filePath, fileSizeHint, progressCallback,
-                                inflightManagers.at(fileOrderNumber));
+                                inflightManagers.at(fileOrderNumber), progressFile);
                             std::lock_guard<std::mutex> lock(inflightManagersLock);
                             inflightManagers[fileOrderNumber]->Finish();
                             size_t informedManagers = 0;
@@ -520,6 +667,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
                             }
                             return status;
                         }
+                    }
                     case EDataFormat::Json:
                     case EDataFormat::JsonUnicode:
                     case EDataFormat::JsonBase64:
@@ -537,7 +685,27 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
             }
         };
 
-        asyncResults.push_back(NThreading::Async(std::move(func), *pool));
+        if (!progressFile || !progressFile->IsCompleted()) {
+            asyncResults.push_back(NThreading::Async(std::move(func), *pool));
+        }
+    }
+
+    if (FilesPreviouslyCompleted) {
+        std::cerr << "(!) Skipping " << FilesPreviouslyCompleted
+            << " file(s) that was fully imported in a previous (interrupted) import process. "
+            "If you want to fully reset import progress, remove progress files from " << pathToProgressFiles << std::endl;
+
+    }
+    if (FilesPreviouslyStarted) {
+        if (FilesPreviouslyStarted == 1) {
+            std::cerr << "(!) Found existing import progress for file \"" << PreviouslyStartedFileName
+                << "\". Continuing from where it was interrupted. If you want to reset import progress, "
+                "remove progress file \"" << PreviouslyStartedProgressFileName << "\"" << std::endl;
+        } else {
+            std::cerr << "(!) Found existing import progress for " << FilesPreviouslyStarted
+                << " files. Continuing from where they were interrupted. If you want to reset import progress, "
+                "remove progress files from " << pathToProgressFiles << std::endl;
+        }
     }
 
     NThreading::WaitAll(asyncResults).GetValueSync();
@@ -557,7 +725,33 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
             << PrettifyBytes((double)TotalBytesRead / duration.SecondsFloat())  << "/s." << std::endl;
     }
 
+    // Removing all progress files that were a part of this import
+    for (const auto& progressFile : ProgressFiles) {
+        progressFile->Cleanup();
+    }
+
     return MakeStatus(EStatus::SUCCESS);
+}
+
+std::shared_ptr<TProgressFile> TImportFileClient::TImpl::LoadOrStartImportProgress(const TString& filePath) {
+    std::shared_ptr<TProgressFile> progressFile;
+    if (Settings.Format_ == EDataFormat::Csv || Settings.Format_ == EDataFormat::Tsv) {
+        progressFile = std::make_shared<TProgressFile>(filePath);
+        if (progressFile->Load()) {
+            if (progressFile->IsCompleted()) { // File was already fully imported in an interrupted import
+                ++FilesPreviouslyCompleted;
+                --CurrentFileCount;
+            } else if (progressFile->HasLastImportedLine()) { // File hase saved progress from previous import
+                ++FilesPreviouslyStarted;
+                if (!PreviouslyStartedFileName) {
+                    PreviouslyStartedFileName = filePath;
+                    PreviouslyStartedProgressFileName = progressFile->GetProgressFilePath();
+                }
+            }
+        }
+        ProgressFiles.push_back(progressFile);
+    }
+    return progressFile;
 }
 
 inline
@@ -623,7 +817,8 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                                      const TString& filePath,
                                      std::optional<ui64> inputSizeHint,
                                      ProgressCallbackFunc & progressCallback,
-                                     std::shared_ptr<TJobInFlightManager> jobInflightManager) {
+                                     std::shared_ptr<TJobInFlightManager> jobInflightManager,
+                                     std::shared_ptr<TProgressFile> progressFile) {
     TCountingInput countInput(&input);
     NCsvFormat::TLinesSplitter splitter(countInput);
 
@@ -635,38 +830,75 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     bool removeLastDelimiter = false;
     InitCsvParser(parser, removeLastDelimiter, splitter, Settings, &columnTypes, DbTableInfo.get());
 
-    for (ui32 i = 0; i < Settings.SkipRows_; ++i) {
-        splitter.ConsumeLine();
-    }
-
-    ui64 row = Settings.SkipRows_ + Settings.Header_ + 1;
+    ui64 row = Settings.SkipRows_ + Settings.Header_;
     ui64 batchRows = 0;
-    ui64 nextBorder = VerboseModeStepSize;
     ui64 batchBytes = 0;
     ui64 readBytes = 0;
+    ui64 nextReadBorder = VerboseModeStepSize;
+    ui64 skippedBytes = 0;
+    ui64 nextSkipBorder = VerboseModeStepSize;
 
     TString line;
     std::vector<TAsyncStatus> inFlightRequests;
     std::vector<TString> buffer;
+    std::list<std::shared_ptr<TImportBatchStatus>> batchStatuses;
+    TThreadPool statusProcessingPool;
+    statusProcessingPool.Start(1);
 
-    auto upsertCsvFunc = [&, jobInflightManager](std::vector<TString>&& buffer, ui64 row) {
-            auto buildFunc = [jobInflightManager, &parser, buffer = std::move(buffer), &filePath, row, this] () mutable {
-                try {
-                    return parser.BuildList(buffer, filePath, row);
-                } catch (const std::exception& e) {
-                    if (!Failed.exchange(true)) {
-                        ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
-                    }
-                    jobInflightManager->ReleaseJob();
-                    throw;
-                }
-            };
-            UpsertTValueBuffer(dbPath, std::move(buildFunc))
-                .Apply([jobInflightManager](const TAsyncStatus& asyncStatus) {
-                    jobInflightManager->ReleaseJob();
-                    return asyncStatus;
-                });
+    auto createStatus = [&](ui64 lastRowInBatch) {
+        auto batchStatus = std::make_shared<TImportBatchStatus>(lastRowInBatch, false);
+        if (!statusProcessingPool.AddFunc([&batchStatuses, batchStatus]() {
+            batchStatuses.push_back(batchStatus);
+        }) && !Failed.exchange(true)) {
+            ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+                "Couldn't add worker func to add progress"));
+        }
+        return batchStatus;
     };
+
+    auto saveProgressIfAny = [&]() {
+        ui64 maxCompletedLine = 0;
+        while (batchStatuses.front()->Completed) {
+            maxCompletedLine = batchStatuses.front()->LastRow;
+            batchStatuses.pop_front();
+        }
+        if (maxCompletedLine > 0) {
+            progressFile->SetLastImportedLine(maxCompletedLine);
+        }
+    };
+
+    auto upsertCsvFunc = [&](std::vector<TString>&& buffer, ui64 row, std::shared_ptr<TImportBatchStatus> batchStatus) {
+        auto buildFunc = [&, buffer = std::move(buffer), row, this] () mutable {
+            try {
+                return parser.BuildList(buffer, filePath, row);
+            } catch (const std::exception& e) {
+                if (!Failed.exchange(true)) {
+                    ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                }
+                jobInflightManager->ReleaseJob();
+                throw;
+            }
+        };
+        UpsertTValueBuffer(dbPath, std::move(buildFunc))
+            .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
+                jobInflightManager->ReleaseJob();
+                batchStatus->Completed = true;
+                if (!statusProcessingPool.AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
+                    ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+                        "Couldn't add worker func to save progress"));
+                }
+                return asyncStatus;
+            });
+    };
+
+    for (ui32 i = 0; i < Settings.SkipRows_; ++i) {
+        line = splitter.ConsumeLine();
+        skippedBytes += line.size();
+        if (skippedBytes > nextSkipBorder && inputSizeHint.has_value() && progressCallback) {
+            progressCallback(skippedBytes, *inputSizeHint); // Update progress even when skipping lines
+            nextSkipBorder += VerboseModeStepSize;
+        }
+    }
 
     while (TString line = splitter.ConsumeLine()) {
         ++batchRows;
@@ -686,8 +918,8 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
 
         buffer.push_back(line);
 
-        if (readBytes >= nextBorder && Settings.Verbose_) {
-            nextBorder += VerboseModeStepSize;
+        if (readBytes >= nextReadBorder && Settings.Verbose_) {
+            nextReadBorder += VerboseModeStepSize;
             Cerr << (TStringBuilder() << "Processed " << PrettifyBytes(readBytes) << " and " << row + batchRows << " records" << Endl);
         }
 
@@ -696,11 +928,12 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
         }
 
         if (inputSizeHint && progressCallback) {
-            progressCallback(readBytes, *inputSizeHint);
+            //progressCallback(skippedBytes + readBytes, *inputSizeHint);
         }
 
-        auto workerFunc = [&upsertCsvFunc, row, buffer = std::move(buffer)]() mutable {
-            upsertCsvFunc(std::move(buffer), row);
+        auto workerFunc = [&upsertCsvFunc, row, buffer = std::move(buffer),
+                batchStatus = createStatus(row + batchRows)]() mutable {
+            upsertCsvFunc(std::move(buffer), row, batchStatus);
         };
         row += batchRows;
         batchRows = 0;
@@ -721,7 +954,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     // Send the rest if buffer is not empty
     if (!buffer.empty() && countInput.Counter() > 0 && !Failed) {
         jobInflightManager->AcquireJob();
-        upsertCsvFunc(std::move(buffer), row);
+        upsertCsvFunc(std::move(buffer), row, createStatus(row + batchRows));
     }
 
     jobInflightManager->WaitForAllJobs();
@@ -738,9 +971,11 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
         }
         std::cerr << str.str();
     }
+
     if (Failed) {
         return *ErrorStatus;
     } else {
+        progressFile->SetCompleted();
         return MakeStatus();
     }
 }

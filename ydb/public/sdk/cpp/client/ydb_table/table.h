@@ -400,6 +400,9 @@ private:
     template <typename TProto>
     static TChangefeedDescription FromProto(const TProto& proto);
 
+    template<typename TProto>
+    void SerializeCommonFields(TProto& proto) const;
+
 private:
     TString Name_;
     EChangefeedMode Mode_;

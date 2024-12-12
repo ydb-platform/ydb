@@ -621,6 +621,8 @@ namespace NYdb::NTopic::NTests {
             auto setup = CreateSetup(TEST_CASE_NAME);
             auto authToken = "x-user-x@builtin";
 
+            setup->GetServer().AnnoyingClient->AddConnectAccess(authToken);
+
             {
                 // Allow UpdateRow only, no DescribeSchema permission.
                 NACLib::TDiffACL acl;

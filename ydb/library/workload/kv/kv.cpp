@@ -151,10 +151,14 @@ std::string TKvWorkloadGenerator::GetDDLQueries() const {
 
     for (size_t i = 0; i < Params.ColumnsCnt; ++i) {
         if (i < Params.IntColumnsCnt) {
-            ss << "c" << i << " Uint64, ";
+            ss << "c" << i << " Uint64";
         } else {
-            ss << "c" << i << " String, ";
+            ss << "c" << i << " String";
         }
+        if (i < Params.KeyColumnsCnt && Params.GetStoreType() == TKvWorkloadParams::EStoreType::Column) {
+            ss << " NOT NULL";
+        }
+        ss << ", ";
     }
 
     ss << "PRIMARY KEY(";
@@ -166,13 +170,23 @@ std::string TKvWorkloadGenerator::GetDDLQueries() const {
     }
     ss << ")) WITH (";
 
-    if (Params.PartitionsByLoad) {
-        ss << "AUTO_PARTITIONING_BY_LOAD = ENABLED, ";
+    switch (Params.GetStoreType()) {
+        case TKvWorkloadParams::EStoreType::Row:
+            ss << "STORE = ROW, ";
+            if (Params.PartitionsByLoad) {
+                ss << "AUTO_PARTITIONING_BY_LOAD = ENABLED, ";
+            }
+            ss << "UNIFORM_PARTITIONS = " << Params.MinPartitions << ", ";
+            ss << "AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = " << Max(Params.MinPartitions, Params.MaxPartitions) << ", ";
+            ss << "AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.PartitionSizeMb << ", ";
+            break;
+        case TKvWorkloadParams::EStoreType::Column:
+            ss << "STORE = COLUMN, ";
+            break;
+        default:
+            throw yexception() << "Unsupported store type: " << Params.GetStoreType();
     }
-    ss << "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << Params.MinPartitions << ", ";
-    ss << "AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.PartitionSizeMb << ", ";
-    ss << "UNIFORM_PARTITIONS = " << Params.MinPartitions << ", ";
-    ss << "AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = " << Max(Params.MinPartitions, Params.MaxPartitions) << ")";
+    ss << "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << Params.MinPartitions << ")";
 
     return ss.str();
 }
@@ -449,9 +463,13 @@ TQueryInfoList TKvWorkloadGenerator::Mixed() {
 
 TQueryInfoList TKvWorkloadGenerator::GetInitialData() {
     TQueryInfoList res;
+    try {
     for (size_t i = 0; i < Params.InitRowCount; ++i) {
         auto queryInfos = Upsert(GenerateRandomRows());
         res.insert(res.end(), queryInfos.begin(), queryInfos.end());
+    }
+    } catch (const std::exception& e) {
+        Cerr << "Exception in GetInitialData(): " << e.what() << Endl;
     }
 
     return res;
@@ -517,6 +535,17 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
             .DefaultValue((ui64)KvWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
         opts.AddLongOption("rows", "Number of rows")
             .DefaultValue((ui64)KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
+        opts.AddLongOption("store", "Storage type."
+                " Options: row, column\n"
+                "  row - use row-based storage engine;\n"
+                "  column - use column-based storage engine.")
+            .DefaultValue(StoreType)
+            .Handler1T<TStringBuf>([this](TStringBuf arg) {
+                const auto l = to_lower(TString(arg));
+                if (!TryFromString(arg, StoreType)) {
+                    throw yexception() << "Ivalid store type: " << arg;
+                }
+            });
         break;
     case TWorkloadParams::ECommandType::Run:
         opts.AddLongOption("max-first-key", "Maximum value of a first primary key")

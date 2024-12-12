@@ -27,6 +27,7 @@ target_link_libraries(ydb-core-audit PUBLIC
 
 target_sources(ydb-core-audit PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/audit/audit_log_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/audit/audit_log_item_builder.h
   ${PROJECT_SOURCE_DIR}/ydb/core/audit/audit_log.h
   ${PROJECT_SOURCE_DIR}/ydb/core/audit/audit_log_service.h
 )

@@ -4,8 +4,11 @@ RECURSE_FOR_TESTS(
 
 RECURSE(
     accessor
+    common
+    switch
     csv
-    hash
+    validation
+    hash    
     modifier
     scalar
     simple_builder

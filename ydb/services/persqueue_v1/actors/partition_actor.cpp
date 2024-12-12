@@ -1002,10 +1002,6 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
         return;
     }
 
-    if (ReadingFinishedSent) {
-        return;
-    }
-
     Y_ABORT_UNLESS(InitDone);
     Y_ABORT_UNLESS(PipeClient);
     Y_ABORT_UNLESS(ReadOffset >= EndOffset);
@@ -1059,12 +1055,14 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     EndOffset = record.GetEndOffset();
     SizeLag = record.GetSizeLag();
 
-    if (ReadOffset < EndOffset) {
-        WaitForData = false;
-        WaitDataInfly.clear();
-        SendPartitionReady(ctx);
-    } else if (PipeClient) {
-        WaitDataInPartition(ctx);
+    if (!record.GetReadingFinished()) {
+        if (ReadOffset < EndOffset) {
+            WaitForData = false;
+            WaitDataInfly.clear();
+            SendPartitionReady(ctx);
+        } else if (PipeClient) {
+            WaitDataInPartition(ctx);
+        }
     }
 
     if (!ReadingFinishedSent) {
@@ -1227,9 +1225,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvDeadlineExceeded::TPtr& ev, const TA
 
 void TPartitionActor::HandleWakeup(const TActorContext& ctx) {
     DoWakeup(ctx);
-    if (!ReadingFinishedSent) {
-        ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
-    }
+    ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
 }
 
 void TPartitionActor::DoWakeup(const TActorContext& ctx) {

@@ -4304,6 +4304,30 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(NEG_CreateTableWithUnsupportedStoreType) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TKikimrRunner kikimr(runnerSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableStoreName = "/Root/TableStoreTest";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE SomeTable (
+                Key Timestamp NOT NULL,
+                Value1 String,
+                Value2 Int64 NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                STORE = UNSUPPORTED
+            );
+        )"; 
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+
+
     Y_UNIT_TEST(CreateAlterDropTableStore) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

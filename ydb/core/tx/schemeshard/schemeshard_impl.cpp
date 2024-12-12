@@ -4441,7 +4441,6 @@ TActorId TSchemeShard::TPipeClientFactory::CreateClient(const TActorContext& ctx
 TSchemeShard::TAccountLockout::TAccountLockout(const ::NKikimrProto::TAccountLockout& accountLockout)
     : AttemptThreshold(accountLockout.GetAttemptThreshold())
 {
-    Cerr << "+++++accountLockout.GetAttemptResetDuration(): " << accountLockout.GetAttemptResetDuration() << Endl;
     AttemptResetDuration = TDuration::Zero();
     if (accountLockout.GetAttemptResetDuration().empty()) {
         return;

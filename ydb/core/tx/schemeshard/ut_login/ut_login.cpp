@@ -415,29 +415,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         });
         TTestEnv env(runtime);
         ui64 txId = 100;
-        TString username = "user1";
-        TString password = "password1";
-        TString database = "/MyRoot";
-        CreateAlterLoginCreateUser(runtime, ++txId, database, username, password);
-        TString wrongPassword = "wrongpassword";
-        auto resultLogin = Login(runtime, username, wrongPassword);
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        auto resultLogin = Login(runtime, "user1", "wrongpassword1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username, wrongPassword);
+        resultLogin = Login(runtime, "user1", "wrongpassword2");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username, wrongPassword);
+        resultLogin = Login(runtime, "user1", "wrongpassword3");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username, wrongPassword);
+        resultLogin = Login(runtime, "user1", "wrongpassword4");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username, wrongPassword);
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User " << username << " is locked out");
+        resultLogin = Login(runtime, "user1", "wrongpassword5");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
 
         runtime.SimulateSleep(TDuration::Seconds(7));
 
-        resultLogin = Login(runtime, username, wrongPassword);
+        resultLogin = Login(runtime, "user1", "wrongpassword6");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username, password);
+        resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, database);
+        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         UNIT_ASSERT(describe.HasPathDescription());
         UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
         UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
@@ -460,30 +456,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         });
         TTestEnv env(runtime);
         ui64 txId = 100;
-        TString username = "user1";
-        TString password = "password1";
-        TString database = "/MyRoot";
-        CreateAlterLoginCreateUser(runtime, ++txId, database, username, password);
-        TString wrongPassword = "wrongpassword";
-        auto resultLogin = Login(runtime, username, wrongPassword);
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        auto resultLogin = Login(runtime, "user1", "wrongpassword1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username, wrongPassword);
+        resultLogin = Login(runtime, "user1", "wrongpassword2");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username, wrongPassword);
+        resultLogin = Login(runtime, "user1", "wrongpassword3");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
 
         runtime.SimulateSleep(TDuration::Seconds(7));
 
         // FailedAttemptCount should be reset
-        resultLogin = Login(runtime, username, wrongPassword);
+        resultLogin = Login(runtime, "user1", "wrongpassword4");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username, wrongPassword);
+        resultLogin = Login(runtime, "user1", "wrongpassword5");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username, wrongPassword);
+        resultLogin = Login(runtime, "user1", "wrongpassword6");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username, password);
+        resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, database);
+        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         UNIT_ASSERT(describe.HasPathDescription());
         UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
         UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
@@ -506,29 +498,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         });
         TTestEnv env(runtime);
         ui64 txId = 100;
-        TString username1 = "user1";
-        TString password1 = "password1";
-        TString database = "/MyRoot";
-        CreateAlterLoginCreateUser(runtime, ++txId, database, username1, password1);
-        TString wrongPassword1 = "wrongpassword1";
-        auto resultLogin = Login(runtime, username1, wrongPassword1);
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        auto resultLogin = Login(runtime, "user1", "wrongpassword1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username1, wrongPassword1);
+        resultLogin = Login(runtime, "user1", "wrongpassword2");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username1, wrongPassword1);
+        resultLogin = Login(runtime, "user1", "wrongpassword3");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username1, wrongPassword1);
+        resultLogin = Login(runtime, "user1", "wrongpassword4");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username1, wrongPassword1);
+        resultLogin = Login(runtime, "user1", "wrongpassword5");
         // User is locked out after 4 attempts
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User " << username1 << " is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
 
         runtime.SimulateSleep(TDuration::Seconds(7));
 
         // Unlock user after 5 sec
-        resultLogin = Login(runtime, username1, password1);
+        resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, database);
+        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         UNIT_ASSERT(describe.HasPathDescription());
         UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
         UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
@@ -538,42 +526,39 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         NLogin::TLoginProvider login;
         login.UpdateSecurityState(describe.GetPathDescription().GetDomainDescription().GetSecurityState());
         auto resultValidate = login.ValidateToken({.Token = resultLogin.token()});
-        UNIT_ASSERT_VALUES_EQUAL(resultValidate.User, username1);
+        UNIT_ASSERT_VALUES_EQUAL(resultValidate.User, "user1");
 
         SetAccountLockoutParameters(runtime, TTestTxConfig::SchemeShard, {.AttemptThreshold = 6, .AttemptResetDuration = "10s"});
 
-        TString username2 = "user2";
-        TString password2 = "password2";
-        CreateAlterLoginCreateUser(runtime, ++txId, database, username2, password2);
-        TString wrongPassword2 = "wrongpassword2";
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
         // Now user2 have 6 attempts to login
-        resultLogin = Login(runtime, username2, wrongPassword2);
+        resultLogin = Login(runtime, "user2", "wrongpassword21");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username2, wrongPassword2);
+        resultLogin = Login(runtime, "user2", "wrongpassword22");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username2, wrongPassword2);
+        resultLogin = Login(runtime, "user2", "wrongpassword23");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username2, wrongPassword2);
+        resultLogin = Login(runtime, "user2", "wrongpassword24");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username2, wrongPassword2);
+        resultLogin = Login(runtime, "user2", "wrongpassword25");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username2, wrongPassword2);
+        resultLogin = Login(runtime, "user2", "wrongpassword26");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, username2, wrongPassword2);
+        resultLogin = Login(runtime, "user2", "wrongpassword27");
         // User is locked out after 6 attempts
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User " << username2 << " is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is locked out");
 
         // After 7 sec user2 must be locked out
         runtime.SimulateSleep(TDuration::Seconds(7));
-        resultLogin = Login(runtime, username2, wrongPassword2);
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User " << username2 << " is locked out");
+        resultLogin = Login(runtime, "user2", "wrongpassword28");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is locked out");
 
         runtime.SimulateSleep(TDuration::Seconds(5));
 
         // Unlock user after 10 sec
-        resultLogin = Login(runtime, username2, password2);
+        resultLogin = Login(runtime, "user2", "password2");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        describe = DescribePath(runtime, TTestTxConfig::SchemeShard, database);
+        describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         UNIT_ASSERT(describe.HasPathDescription());
         UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
         UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
@@ -582,7 +567,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // check token
         login.UpdateSecurityState(describe.GetPathDescription().GetDomainDescription().GetSecurityState());
         resultValidate = login.ValidateToken({.Token = resultLogin.token()});
-        UNIT_ASSERT_VALUES_EQUAL(resultValidate.User, username2);
+        UNIT_ASSERT_VALUES_EQUAL(resultValidate.User, "user2");
     }
 }
 

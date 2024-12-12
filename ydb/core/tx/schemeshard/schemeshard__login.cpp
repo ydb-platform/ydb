@@ -67,7 +67,7 @@ struct TSchemeShard::TTxLogin : TTransactionBase<TSchemeShard> {
                 }
             }
 
-            NeedPublishOnComplete = true; // Сохранение значения после перезапуска транзакции
+            NeedPublishOnComplete = true;
         }
 
         return LoginAttempt(db, ctx);
@@ -132,7 +132,6 @@ private:
         }
         CurrentFailedAttemptCount = row.GetValueOrDefault<Schema::LoginSids::FailedAttemptCount>();
         TInstant lastFailedAttempt = TInstant::FromValue(row.GetValue<Schema::LoginSids::LastFailedAttempt>());
-        Cerr << "+++FailedAttemptCount: " << CurrentFailedAttemptCount << Endl;
         if (CheckAccountLockout()) {
             if (ShouldUnlockAccount(lastFailedAttempt)) {
                 UnlockAccount(loginRequest, db);
@@ -163,21 +162,13 @@ private:
     }
 
     bool CheckAccountLockout() const {
-        Cerr << "+++CheckAccountLockout+++" << Endl;
-        Cerr << "+++AttemptThreshold: " << Self->AccountLockout.AttemptThreshold << Endl;
-        Cerr << "+++CurrentFailedAttemptCount: " << CurrentFailedAttemptCount << Endl;
         return (Self->AccountLockout.AttemptThreshold != 0 && CurrentFailedAttemptCount >= Self->AccountLockout.AttemptThreshold);
     }
 
     bool ShouldResetFailedAttemptCount(const TInstant& lastFailedAttempt) {
         if (Self->AccountLockout.AttemptResetDuration == TDuration::Zero()) {
-            Cerr << "+++attemptResetDuration: 0" << Endl;
             return false;
         }
-        auto now = TAppData::TimeProvider->Now();
-        Cerr << "+++Now: " << now.ToString() << Endl;
-        Cerr << "+++lastFailedAttempt: " << lastFailedAttempt.ToString() << Endl;
-        Cerr << "+++attemptResetDuration: " << Self->AccountLockout.AttemptResetDuration.ToString() << Endl;
         return lastFailedAttempt + Self->AccountLockout.AttemptResetDuration < TAppData::TimeProvider->Now();
     }
 
@@ -188,7 +179,6 @@ private:
     void ResetFailedAttemptCount(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, NIceDb::TNiceDb& db) {
         db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::FailedAttemptCount>(Schema::LoginSids::FailedAttemptCount::Default);
         CurrentFailedAttemptCount = Schema::LoginSids::FailedAttemptCount::Default;
-        Cerr << "+++Reset FailedAttemptCount: " << CurrentFailedAttemptCount << Endl;
     }
 
     void UnlockAccount(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, NIceDb::TNiceDb& db) {
@@ -201,7 +191,6 @@ private:
     }
 
     void HandleLoginAuthInvalidPassword(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& loginResponse, NIceDb::TNiceDb& db) {
-        Cerr << "+++Write FailedAttemptCount: " << CurrentFailedAttemptCount + 1 << Endl;
         db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastFailedAttempt, Schema::LoginSids::FailedAttemptCount>(TAppData::TimeProvider->Now().MicroSeconds(), CurrentFailedAttemptCount + 1);
         Result->Record.SetError(loginResponse.Error);
     }

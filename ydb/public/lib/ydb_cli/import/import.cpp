@@ -716,10 +716,10 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
             }
         }
         if (FilesPreviouslyStarted == 1) {
-            existingProgressMessage << "If you want to reset file import progress, remove progress file \""
+            existingProgressMessage << "(!) If you want to reset file import progress, remove progress file \""
                 << PreviouslyStartedProgressFile->GetProgressFilePath() << "\"" << Endl;
         } else {
-            existingProgressMessage << "If you want to fully reset import progress, remove progress files from " << pathToProgressFiles << Endl;
+            existingProgressMessage << "(!) If you want to fully reset import progress, remove progress files from " << pathToProgressFiles << Endl;
         }
         Cerr << existingProgressMessage;
     }

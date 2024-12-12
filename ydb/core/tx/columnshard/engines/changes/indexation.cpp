@@ -246,7 +246,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         {
             const auto blobData = Blobs.Extract(IStoragesManager::DefaultStorageId, blobRange);
             auto batchSchema =
-                std::make_shared<arrow::Schema>(inserted.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().ArrowSchema()->fields()));
+                std::make_shared<arrow::Schema>(inserted.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().ArrowSchema().fields()));
             batch = std::make_shared<NArrow::TGeneralContainer>(NArrow::DeserializeBatch(blobData, batchSchema));
             std::set<ui32> columnIdsToDelete = blobSchema->GetColumnIdsToDelete(resultSchema);
             if (!columnIdsToDelete.empty()) {

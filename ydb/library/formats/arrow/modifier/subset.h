@@ -27,7 +27,7 @@ public:
     template <class T>
     std::vector<T> Apply(const std::span<const T>& fullSchema) const {
         if (FieldIdx.empty()) {
-            return fullSchema;
+            return { fullSchema.begin(), fullSchema.end() };
         }
         std::vector<T> fields;
         if (!Exclude) {

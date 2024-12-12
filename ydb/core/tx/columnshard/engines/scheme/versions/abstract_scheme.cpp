@@ -83,7 +83,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     NArrow::TStatusValidator::Validate(incomingBatch->ValidateFull());
 #endif
 
-    const std::shared_ptr<NArrow::TSchemaLite> dstSchema = GetIndexInfo().ArrowSchema();
+    NArrow::TSchemaLiteView dstSchema = GetIndexInfo().ArrowSchema();
     std::vector<std::shared_ptr<arrow::Array>> pkColumns;
     pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
     ui32 pkColumnsCount = 0;
@@ -102,7 +102,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
             return TConclusionStatus::Success();
         }
         if (pkFieldIdx) {
-            return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema->field(targetIdx)->name() + "'");
+            return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
         }
         switch (mType) {
             case NEvWrite::EModificationType::Replace:
@@ -114,7 +114,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
                 if (GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
                     return TConclusionStatus::Success();
                 } else {
-                    return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema->field(targetIdx)->name() + "'");
+                    return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema.field(targetIdx)->name() + "'");
                 }
             }
             case NEvWrite::EModificationType::Delete:
@@ -200,7 +200,7 @@ std::vector<std::string> ISnapshotSchema::GetPKColumnNames() const {
 
 std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(const std::shared_ptr<arrow::Schema>& existsSchema) const {
     std::vector<std::shared_ptr<arrow::Field>> result;
-    for (auto&& f : GetIndexInfo().ArrowSchema()->fields()) {
+    for (auto&& f : GetIndexInfo().ArrowSchema().fields()) {
         if (!existsSchema->GetFieldByName(f->name())) {
             result.emplace_back(f);
         }
@@ -220,7 +220,7 @@ TConclusionStatus ISnapshotSchema::CheckColumnsDefault(const std::vector<std::sh
 }
 
 TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBatch(
-    const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount, const bool force) const {
+    const std::span<const std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount, const bool force) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& i : fields) {
         const ui32 columnId = GetColumnIdVerified(i->name());
@@ -234,7 +234,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBa
         }
         columns.emplace_back(NArrow::TThreadSimpleArraysCache::Get(i->type(), defaultValue, rowsCount));
     }
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), rowsCount, columns);
+    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector(fields.begin(), fields.end())), rowsCount, columns);
 }
 
 std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(const std::string& columnName) const {
@@ -288,8 +288,8 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     AFL_VERIFY(incomingBatch->num_rows());
     auto itIncoming = incomingBatch->schema()->fields().begin();
     auto itIncomingEnd = incomingBatch->schema()->fields().end();
-    auto itIndex = GetIndexInfo().ArrowSchema()->fields().begin();
-    auto itIndexEnd = GetIndexInfo().ArrowSchema()->fields().end();
+    auto itIndex = GetIndexInfo().ArrowSchema().fields().begin();
+    auto itIndexEnd = GetIndexInfo().ArrowSchema().fields().end();
     THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks;
 
     std::shared_ptr<TDefaultSchemaDetails> schemaDetails(
@@ -298,7 +298,7 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     while (itIncoming != itIncomingEnd && itIndex != itIndexEnd) {
         if ((*itIncoming)->name() == (*itIndex)->name()) {
             const ui32 incomingIndex = itIncoming - incomingBatch->schema()->fields().begin();
-            const ui32 columnIndex = itIndex - GetIndexInfo().ArrowSchema()->fields().begin();
+            const ui32 columnIndex = itIndex - GetIndexInfo().ArrowSchema().fields().begin();
             const ui32 columnId = GetIndexInfo().GetColumnIdByIndexVerified(columnIndex);
             auto loader = GetIndexInfo().GetColumnLoaderVerified(columnId);
             auto saver = GetIndexInfo().GetColumnSaver(columnId);

@@ -37,9 +37,9 @@ std::optional<ui32> TIndexInfo::GetColumnIdOptional(const std::string& name) con
 
 std::optional<ui32> TIndexInfo::GetColumnIndexOptional(const std::string& name) const {
     auto it = std::lower_bound(ColumnIdxSortedByName.begin(), ColumnIdxSortedByName.end(), name, [this](const ui32 idx, const std::string name) {
-        return Schema->GetFieldByIndexVerified(idx)->name() < name;
+        return SchemaWithSpecials->GetFieldByIndexVerified(idx)->name() < name;
     });
-    if (it != ColumnIdxSortedByName.end() && Schema->GetFieldByIndexVerified(*it)->name() == name) {
+    if (it != ColumnIdxSortedByName.end() && SchemaWithSpecials->GetFieldByIndexVerified(*it)->name() == name) {
         return *it;
     }
     return std::nullopt;
@@ -81,9 +81,9 @@ std::vector<std::string> TIndexInfo::GetColumnSTLNames(const std::span<const ui3
     return out;
 }
 
-const std::shared_ptr<NArrow::TSchemaLite>& TIndexInfo::ArrowSchema() const {
-    AFL_VERIFY(Schema);
-    return Schema;
+NArrow::TSchemaLiteView TIndexInfo::ArrowSchema() const {
+    const auto& schema = ArrowSchemaWithSpecials();
+    return std::span<const std::shared_ptr<arrow::Field>>(schema->fields().begin(), schema->fields().end() - SpecialColumnsCount);
 }
 
 const std::shared_ptr<NArrow::TSchemaLite>& TIndexInfo::ArrowSchemaWithSpecials() const {
@@ -117,8 +117,7 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
         PKColumns.emplace_back(TNameTypeInfo(it->second.Name, it->second.PType));
     }
 
-    if (!Schema) {
-        AFL_VERIFY(!SchemaWithSpecials);
+    if (!SchemaWithSpecials) {
         InitializeCaches(operators, columns, nullptr);
         Precalculate();
     }
@@ -343,7 +342,7 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
     const std::shared_ptr<TSchemaObjectsCache>& cache, const bool withColumnFeatures) {
     {
         TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::InitializeCaches::Schema");
-        AFL_VERIFY(!Schema);
+        AFL_VERIFY(!SchemaWithSpecials);
         SchemaColumnIdsWithSpecials.reserve(columns.size());
         for (const auto& [id, _] : columns) {
             SchemaColumnIdsWithSpecials.push_back(id);
@@ -351,7 +350,6 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
 
         std::sort(SchemaColumnIdsWithSpecials.begin(), SchemaColumnIdsWithSpecials.end());
         auto originalFields = TIndexInfo::MakeArrowFields(columns, SchemaColumnIdsWithSpecials, cache);
-        Schema = std::make_shared<NArrow::TSchemaLite>(originalFields);
         IIndexInfo::AddSpecialFields(originalFields);
         SchemaWithSpecials = std::make_shared<NArrow::TSchemaLite>(originalFields);
     }
@@ -496,7 +494,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
             SchemaColumnIdsWithSpecials.emplace_back(originalColId);
             if (!IIndexInfo::IsSpecialColumn(originalColId)) {
                 AFL_VERIFY(index < original.SchemaColumnIdsWithSpecials.size() - SpecialColumnsCount);
-                fields.emplace_back(original.Schema->field(index));
+                fields.emplace_back(original.SchemaWithSpecials->field(index));
             }
         };
 
@@ -508,7 +506,6 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
             fields.emplace_back(BuildArrowField(tableCol, cache));
         };
         diff.ApplyForColumns(original.SchemaColumnIdsWithSpecials, addFromOriginal, addFromDiff);
-        Schema = std::make_shared<NArrow::TSchemaLite>(fields);
         IIndexInfo::AddSpecialFields(fields);
         SchemaWithSpecials = std::make_shared<NArrow::TSchemaLite>(fields);
         PKColumnIds = original.PKColumnIds;
@@ -569,20 +566,19 @@ void TIndexInfo::Validate() const {
     AFL_VERIFY(!!UsedStorageIds);
     AFL_VERIFY(ColumnFeatures.size() == SchemaColumnIdsWithSpecials.size());
     AFL_VERIFY(ColumnFeatures.size() == (ui32)SchemaWithSpecials->num_fields());
-    AFL_VERIFY(ColumnFeatures.size() == (ui32)Schema->num_fields() + SpecialColumnsCount);
     {
         ui32 idx = 0;
         for (auto&& i : SchemaColumnIdsWithSpecials) {
             AFL_VERIFY(i == ColumnFeatures[idx]->GetColumnId());
-            AFL_VERIFY(Schema->field(idx)->name() == ColumnFeatures[idx]->GetColumnName());
-            AFL_VERIFY(Schema->field(idx)->Equals(SchemaWithSpecials->field(idx)));
+            AFL_VERIFY(SchemaWithSpecials->field(idx)->name() == ColumnFeatures[idx]->GetColumnName());
+            AFL_VERIFY(SchemaWithSpecials->field(idx)->Equals(SchemaWithSpecials->field(idx)));
             ++idx;
         }
     }
 
     AFL_VERIFY(ColumnFeatures.size() == ColumnIdxSortedByName.size() + SpecialColumnsCount);
     std::is_sorted(ColumnIdxSortedByName.begin(), ColumnIdxSortedByName.end(), [this](const ui32 lhs, const ui32 rhs) {
-        return CompareColumnIndexByName(lhs, rhs);
+        return GetColumnName(lhs) < GetColumnName(rhs);
     });
 
     {

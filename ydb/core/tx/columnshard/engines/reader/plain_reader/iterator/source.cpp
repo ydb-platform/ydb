@@ -273,8 +273,8 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
         AFL_VERIFY(GetStageData().GetBlobs().size() == 1);
         auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
         auto schema = GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion());
-        auto rBatch = NArrow::DeserializeBatch(bData, std::make_shared<arrow::Schema>(CommittedBlob.GetSchemaSubset().Apply(schema->fields())));
-        AFL_VERIFY(rBatch)("schema", schema->ToString());
+        auto rBatch = NArrow::DeserializeBatch(bData, std::make_shared<arrow::Schema>(CommittedBlob.GetSchemaSubset().Apply(schema.fields())));
+        AFL_VERIFY(rBatch)("schema", schema.ToString());
         auto batch = std::make_shared<NArrow::TGeneralContainer>(rBatch);
         std::set<ui32> columnIdsToDelete = batchSchema->GetColumnIdsToDelete(resultSchema);
         if (!columnIdsToDelete.empty()) {

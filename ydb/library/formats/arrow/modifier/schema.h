@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/accessor/validator.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/conclusion/status.h>
 
@@ -8,22 +9,22 @@
 
 namespace NKikimr::NArrow {
 
-class TSchemaLite {
-private:
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
+template <typename TStorage>
+class TSchemaLiteImpl {
+protected:
+    YDB_READONLY_PROTECT_DEF(TStorage, Fields);
 
 public:
-    TSchemaLite() = default;
-    TSchemaLite(const std::shared_ptr<arrow::Schema>& schema) {
-        AFL_VERIFY(schema);
-        Fields = schema->fields();
+    TSchemaLiteImpl(TStorage fields)
+        : Fields(std::move(fields)) {
     }
 
     const std::shared_ptr<arrow::Field>& field(const ui32 index) const {
         return GetFieldByIndexVerified(index);
     }
 
-    bool Equals(const TSchemaLite& schema, const bool withMetadata = false) const {
+    template <typename T>
+    bool Equals(const TSchemaLiteImpl<T>& schema, const bool withMetadata = false) const {
         if (Fields.size() != schema.Fields.size()) {
             return false;
         }
@@ -35,7 +36,7 @@ public:
         return true;
     }
 
-    const std::vector<std::shared_ptr<arrow::Field>>& fields() const {
+    const TStorage& fields() const {
         return Fields;
     }
 
@@ -78,13 +79,37 @@ public:
         }
         return Default<std::shared_ptr<arrow::Field>>();
     }
+};
+
+class TSchemaLite: public TSchemaLiteImpl<std::vector<std::shared_ptr<arrow::Field>>> {
+public:
+    TSchemaLite()
+        : TSchemaLiteImpl({}) {
+    }
+    TSchemaLite(const std::shared_ptr<arrow::Schema>& schema)
+        : TSchemaLiteImpl(TValidator::CheckNotNull(schema)->fields()) {
+    }
 
     TSchemaLite(std::vector<std::shared_ptr<arrow::Field>>&& fields)
-        : Fields(std::move(fields)) {
+        : TSchemaLiteImpl(std::move(fields)) {
     }
 
     TSchemaLite(const std::vector<std::shared_ptr<arrow::Field>>& fields)
-        : Fields(fields) {
+        : TSchemaLiteImpl(fields) {
+    }
+};
+
+class TSchemaLiteView: public TSchemaLiteImpl<std::span<const std::shared_ptr<arrow::Field>>> {
+public:
+    TSchemaLiteView()
+        : TSchemaLiteImpl({}) {
+    }
+    TSchemaLiteView(const TSchemaLite& schema)
+        : TSchemaLiteImpl(schema.fields()) {
+    }
+
+    TSchemaLiteView(const std::span<const std::shared_ptr<arrow::Field>>& fields)
+        : TSchemaLiteImpl(fields) {
     }
 };
 

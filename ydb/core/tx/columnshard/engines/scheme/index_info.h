@@ -57,7 +57,7 @@ private:
     std::vector<ui32> PKColumnIds;
     std::vector<TNameTypeInfo> PKColumns;
 
-    std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;   // 2 wpc (1 shared_ptr)
+    std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
     std::shared_ptr<std::set<TString>> UsedStorageIds;
 
@@ -67,9 +67,8 @@ private:
     std::optional<TString> ScanReaderPolicyName;
 
     ui64 Version = 0;
-    std::vector<ui32> SchemaColumnIdsWithSpecials;   // .5 wpc
-    std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;   // 2 wpc
-    std::shared_ptr<NArrow::TSchemaLite> Schema;   // 2 wpc
+    std::vector<ui32> SchemaColumnIdsWithSpecials;
+    std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> PrimaryKey;
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 
@@ -123,12 +122,8 @@ private:
         }
 
         std::sort(ColumnIdxSortedByName.begin(), ColumnIdxSortedByName.end(), [this](const ui32 lhs, const ui32 rhs) {
-            return CompareColumnIndexByName(lhs, rhs);
+            return GetColumnName(lhs) < GetColumnName(rhs);
         });
-    }
-
-    bool CompareColumnIndexByName(const ui32 lhs, const ui32 rhs) const {
-        return Schema->GetFieldByIndexVerified(lhs)->name() < Schema->GetFieldByIndexVerified(rhs)->name();
     }
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
@@ -401,7 +396,7 @@ public:
 
     std::vector<ui32> GetColumnIds(const std::vector<TString>& columnNames) const;
 
-    const std::shared_ptr<NArrow::TSchemaLite>& ArrowSchema() const;
+    NArrow::TSchemaLiteView ArrowSchema() const;
     const std::shared_ptr<NArrow::TSchemaLite>& ArrowSchemaWithSpecials() const;
 
     bool AllowTtlOverColumn(const TString& name) const;

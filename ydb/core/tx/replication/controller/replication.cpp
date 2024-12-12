@@ -28,6 +28,11 @@ class TReplication::TImpl: public TLagProvider {
             : Ptr(iface)
         {
         }
+
+        inline ITarget* operator->() const {
+            Y_ABORT_UNLESS(Ptr);
+            return Ptr.Get();
+        }
     };
 
     void ResolveSecret(const TString& secretName, const TActorContext& ctx) {
@@ -74,7 +79,7 @@ class TReplication::TImpl: public TLagProvider {
 
     void ProgressTargets(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target.Ptr->Progress(ctx);
+            target->Progress(ctx);
         }
     }
 
@@ -167,7 +172,7 @@ public:
 
     void Shutdown(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target.Ptr->Shutdown(ctx);
+            target->Shutdown(ctx);
         }
 
         for (auto* x : TVector<TActorId*>{&SecretResolver, &TargetDiscoverer, &TenantResolver, &YdbProxy}) {

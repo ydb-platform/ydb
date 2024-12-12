@@ -190,9 +190,6 @@ NYdb::TValue CreateRow(const TVector<TColumn>& columns, const TRandomValueProvid
                     value.AddMember(col.Name).Json(TString(sb));
                 }
             break;
-            case EPrimitiveType::Uuid:
-                value.AddMember(col.Name).Uuid(TUuidValue(rvp.RandomUi64(), rvp.RandomUi64()));
-            break;
 
             default:
                 Y_ABORT_UNLESS(false, "unimplemented");

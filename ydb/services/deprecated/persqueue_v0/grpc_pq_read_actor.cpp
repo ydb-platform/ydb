@@ -2433,10 +2433,6 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
 
 void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
-    if (ReadingFinishedSent) {
-        return;
-    }
-
     if (WaitDataInfly.size() > 1) { //already got 2 requests inflight
         return;
     }
@@ -2507,12 +2503,14 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     EndOffset = record.GetEndOffset();
     SizeLag = record.GetSizeLag();
 
-    if (ReadOffset < EndOffset) {
-        WaitForData = false;
-        WaitDataInfly.clear();
-        SendPartitionReady(ctx);
-    } else if (PipeClient) {
-        WaitDataInPartition(ctx);
+    if (!record.GetReadingFinished()) {
+        if (ReadOffset < EndOffset) {
+            WaitForData = false;
+            WaitDataInfly.clear();
+            SendPartitionReady(ctx);
+        } else if (PipeClient) {
+            WaitDataInPartition(ctx);
+        }
     }
 
     if (!ReadingFinishedSent) {

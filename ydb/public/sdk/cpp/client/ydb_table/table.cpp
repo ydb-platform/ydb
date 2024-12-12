@@ -2816,8 +2816,8 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     return ret;
 }
 
-template<typename ProtoType>
-void TChangefeedDescription::SerializeCommonFields(ProtoType& proto) const {
+template<typename TProto>
+void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_name(Name_);
     proto.set_virtual_timestamps(VirtualTimestamps_);
     proto.set_aws_region(AwsRegion_);

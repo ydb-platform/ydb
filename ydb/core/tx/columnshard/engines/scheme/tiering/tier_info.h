@@ -281,13 +281,8 @@ public:
     static THashSet<TString> GetUsedTiers(const TProto& ttlSettings) {
         THashSet<TString> usedTiers;
         for (const auto& tier : ttlSettings.GetTiers()) {
-            switch (tier.GetActionCase()) {
-                case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
-                    usedTiers.emplace(tier.GetEvictToExternalStorage().GetStorage());
-                    break;
-                case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
-                case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
-                    break;
+            if (tier.HasEvictToExternalStorage()) {
+                usedTiers.emplace(tier.GetEvictToExternalStorage().GetStorage());
             }
         }
         return usedTiers;

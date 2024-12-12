@@ -2823,37 +2823,37 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_aws_region(AwsRegion_);
 
     switch (Mode_) {
-        case EChangefeedMode::KeysOnly:
-            proto.set_mode(Ydb::Table::ChangefeedMode::MODE_KEYS_ONLY);
-            break;
-        case EChangefeedMode::Updates:
-            proto.set_mode(Ydb::Table::ChangefeedMode::MODE_UPDATES);
-            break;
-        case EChangefeedMode::NewImage:
-            proto.set_mode(Ydb::Table::ChangefeedMode::MODE_NEW_IMAGE);
-            break;
-        case EChangefeedMode::OldImage:
-            proto.set_mode(Ydb::Table::ChangefeedMode::MODE_OLD_IMAGE);
-            break;
-        case EChangefeedMode::NewAndOldImages:
-            proto.set_mode(Ydb::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES);
-            break;
-        case EChangefeedMode::Unknown:
-            break;
+    case EChangefeedMode::KeysOnly:
+        proto.set_mode(Ydb::Table::ChangefeedMode::MODE_KEYS_ONLY);
+        break;
+    case EChangefeedMode::Updates:
+        proto.set_mode(Ydb::Table::ChangefeedMode::MODE_UPDATES);
+        break;
+    case EChangefeedMode::NewImage:
+        proto.set_mode(Ydb::Table::ChangefeedMode::MODE_NEW_IMAGE);
+        break;
+    case EChangefeedMode::OldImage:
+        proto.set_mode(Ydb::Table::ChangefeedMode::MODE_OLD_IMAGE);
+        break;
+    case EChangefeedMode::NewAndOldImages:
+        proto.set_mode(Ydb::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES);
+        break;
+    case EChangefeedMode::Unknown:
+        break;
     }
 
     switch (Format_) {
-        case EChangefeedFormat::Json:
-            proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
-            break;
-        case EChangefeedFormat::DynamoDBStreamsJson:
-            proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
-            break;
-        case EChangefeedFormat::DebeziumJson:
-            proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
-            break;
-        case EChangefeedFormat::Unknown:
-            break;
+    case EChangefeedFormat::Json:
+        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        break;
+    case EChangefeedFormat::DynamoDBStreamsJson:
+        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
+        break;
+    case EChangefeedFormat::DebeziumJson:
+        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
+        break;
+    case EChangefeedFormat::Unknown:
+        break;
     }
 
     if (ResolvedTimestamps_) {
@@ -2878,17 +2878,17 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::ChangefeedDescription& prot
     SerializeCommonFields(proto);
 
     switch (State_) {
-        case EChangefeedState::Enabled:
-            proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_ENABLED);
-            break;
-        case EChangefeedState::Disabled:
-            proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_DISABLED);
-            break;
-        case EChangefeedState::InitialScan:
-            proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_INITIAL_SCAN);
-            break;
-        case EChangefeedState::Unknown:
-            break;
+    case EChangefeedState::Enabled:
+        proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_ENABLED);
+        break;
+    case EChangefeedState::Disabled:
+        proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_DISABLED);
+        break;
+    case EChangefeedState::InitialScan:
+        proto.set_state(Ydb::Table::ChangefeedDescription_State::ChangefeedDescription_State_STATE_INITIAL_SCAN);
+        break;
+    case EChangefeedState::Unknown:
+        break;
     }
 }
 

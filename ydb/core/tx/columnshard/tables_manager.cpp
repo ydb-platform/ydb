@@ -83,6 +83,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         }
 
         if (!rowset.EndOfSet()) {
+            preset = TSchemaPreset();
             preset->InitFromDB(rowset);
 
             if (preset->IsStandaloneTable()) {

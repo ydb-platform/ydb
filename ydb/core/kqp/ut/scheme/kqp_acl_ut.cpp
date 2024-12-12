@@ -9,9 +9,46 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+const TString UserName = "user0@builtin";
+
+void AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TString& subject, const TVector<TString>& permissionNames) {
+    auto driver = NYdb::TDriver(NYdb::TDriverConfig()
+    .SetEndpoint(kikimr.GetEndpoint())
+    .SetDatabase("/Root")
+    .SetAuthToken("root@builtin"));
+    auto schemeClient = NYdb::NScheme::TSchemeClient(driver);
+    auto result = schemeClient.ModifyPermissions(path,
+        NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(NYdb::NScheme::TPermissions(subject, permissionNames))
+    ).ExtractValueSync();
+    AssertSuccessResult(result);
+}
+
+void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject) {
+    auto driver = NYdb::TDriver(NYdb::TDriverConfig()
+    .SetEndpoint(kikimr.GetEndpoint())
+    .SetDatabase("/Root")
+    .SetAuthToken(subject));
+
+    NYdb::NQuery::TQueryClient client(driver);            
+    while(true) {
+        auto result = client.ExecuteScript("SELECT 1").ExtractValueSync();
+        NYdb::EStatus scriptStatus = result.Status().GetStatus();
+        UNIT_ASSERT_C(scriptStatus == NYdb::EStatus::UNAVAILABLE || scriptStatus == NYdb::EStatus::SUCCESS || scriptStatus == NYdb::EStatus::UNAUTHORIZED, result.Status().GetIssues().ToString());
+        if (scriptStatus == NYdb::EStatus::SUCCESS)
+            return;
+        Sleep(TDuration::MilliSeconds(10));
+    };
+}
+
+void AddConnectPermission(const TKikimrRunner& kikimr, const TString& subject) {
+    AddPermissions(kikimr, "/Root", subject, {"ydb.database.connect"});
+    WaitForProxy(kikimr, subject);
+}
+
 Y_UNIT_TEST_SUITE(KqpAcl) {
     Y_UNIT_TEST(FailNavigate) {
-        TKikimrRunner kikimr("user0@builtin");
+        TKikimrRunner kikimr(UserName);
+        AddConnectPermission(kikimr, UserName);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -24,20 +61,12 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST(FailResolve) {
         TKikimrRunner kikimr;
-        {
-            NYdb::NScheme::TPermissions permissions("user0@builtin",
-                {"ydb.deprecated.describe_schema"}
-            );
-            auto schemeClient = kikimr.GetSchemeClient();
-            auto result = schemeClient.ModifyPermissions("/Root/TwoShard",
-                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
-            ).ExtractValueSync();
-            AssertSuccessResult(result);
-        }
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.describe_schema"});
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
-            .SetAuthToken("user0@builtin");
+            .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
 
@@ -64,20 +93,12 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST(ReadSuccess) {
         TKikimrRunner kikimr;
-        {
-            NYdb::NScheme::TPermissions permissions("user0@builtin",
-                {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"}
-            );
-            auto schemeClient = kikimr.GetSchemeClient();
-            auto result = schemeClient.ModifyPermissions("/Root/TwoShard",
-                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
-            ).ExtractValueSync();
-            AssertSuccessResult(result);
-        }
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
-            .SetAuthToken("user0@builtin");
+            .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
 
@@ -92,18 +113,12 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST(FailedReadAccessDenied) {
         TKikimrRunner kikimr;
-        {
-            NYdb::NScheme::TPermissions permissions("user0@builtin",{});
-            auto schemeClient = kikimr.GetSchemeClient();
-            auto result = schemeClient.ModifyPermissions("/Root/TwoShard",
-                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
-            ).ExtractValueSync();
-            AssertSuccessResult(result);
-        }
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {});
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
-            .SetAuthToken("user0@builtin");
+            .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -120,20 +135,12 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST(WriteSuccess) {
         TKikimrRunner kikimr;
-        {
-            NYdb::NScheme::TPermissions permissions("user0@builtin",
-                {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"}
-            );
-            auto schemeClient = kikimr.GetSchemeClient();
-            auto result = schemeClient.ModifyPermissions("/Root/TwoShard",
-                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
-            ).ExtractValueSync();
-            AssertSuccessResult(result);
-        }
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"});
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
-            .SetAuthToken("user0@builtin");
+            .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
 
@@ -149,20 +156,12 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST(FailedWriteAccessDenied) {
         TKikimrRunner kikimr;
-        {
-            NYdb::NScheme::TPermissions permissions("user0@builtin",
-                {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"}
-            );
-            auto schemeClient = kikimr.GetSchemeClient();
-            auto result = schemeClient.ModifyPermissions("/Root/TwoShard",
-                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
-            ).ExtractValueSync();
-            AssertSuccessResult(result);
-        }
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
-            .SetAuthToken("user0@builtin");
+            .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -179,21 +178,17 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST(RecursiveCreateTableShouldSuccess) {
         TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+
         {
             auto schemeClient = kikimr.GetSchemeClient();
-
             AssertSuccessResult(schemeClient.MakeDirectory("/Root/PQ").ExtractValueSync());
-
-            NYdb::NScheme::TPermissions permissions("user0@builtin", {"ydb.deprecated.create_table"});
-            AssertSuccessResult(schemeClient.ModifyPermissions("/Root/PQ",
-                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
-                ).ExtractValueSync()
-            );
         }
+        AddPermissions(kikimr, "/Root/PQ", UserName, {"ydb.deprecated.create_table"});
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
-            .SetAuthToken("user0@builtin");
+            .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
 

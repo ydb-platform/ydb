@@ -276,7 +276,7 @@ public:
     }
 
     void AddError(const ui64 pathId, const TString& errorMessage) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_ACCESSORS)("error", errorMessage)("event", "ErrorOnFetching")("path_id", pathId);
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", errorMessage)("event", "ErrorOnFetching")("path_id", pathId);
         AFL_VERIFY(FetchStage <= 1);
         auto itStatus = PathIdStatus.find(pathId);
         AFL_VERIFY(itStatus != PathIdStatus.end());

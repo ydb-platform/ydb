@@ -49,6 +49,7 @@ static TResponseInfo Request(
 
 TResponseInfo RequestWithoutRetry(
     const TClientContext& context,
+    TMutationId& mutationId,
     THttpHeader& header,
     TMaybe<TStringBuf> body,
     const TRequestConfig& config)
@@ -64,8 +65,13 @@ TResponseInfo RequestWithoutRetry(
     }
 
     if (header.HasMutationId()) {
-        header.RemoveParameter("retry");
-        header.AddMutationId();
+        if (mutationId.IsEmpty()) {
+            header.RemoveParameter("retry");
+            mutationId = header.AddMutationId();
+        } else {
+            header.AddParameter("retry", true, /* overwrite */ true);
+            header.SetMutationId(mutationId);
+        }
     }
     auto requestId = CreateGuidAsString();
     return Request(context, header, body, requestId, config);

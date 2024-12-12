@@ -3,7 +3,14 @@ RECURSE_FOR_TESTS(
 )
 
 RECURSE(
+    accessor
     csv
+    hash
+    modifier
+    scalar
+    simple_builder
+    splitter
+    transformer
 )
 
 LIBRARY()

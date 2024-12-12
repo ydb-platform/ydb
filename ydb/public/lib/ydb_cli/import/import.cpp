@@ -703,7 +703,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
         TStringBuilder existingProgressMessage;
         if (FilesPreviouslyCompleted) {
             existingProgressMessage << "(!) Skipping " << FilesPreviouslyCompleted
-                << " file(s) that was fully imported in a previous (interrupted) import process." << Endl;
+                << " file(s) that were fully imported in a previous (interrupted) import process." << Endl;
         }
         if (FilesPreviouslyStarted) {
             if (FilesPreviouslyStarted == 1) {

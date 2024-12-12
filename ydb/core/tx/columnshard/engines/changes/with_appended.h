@@ -15,6 +15,9 @@ private:
 protected:
     std::optional<ui64> TargetCompactionLevel;
     TSaverContext SaverContext;
+    bool NoAppendIsCorrect = false;
+    std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;
+
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
 
     }
@@ -90,7 +93,6 @@ public:
         }
     }
 
-    std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;
     virtual ui32 GetWritePortionsCount() const override {
         return AppendedPortions.size();
     }

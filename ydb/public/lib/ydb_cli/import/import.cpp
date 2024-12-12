@@ -414,6 +414,14 @@ public:
         return Progress[completedKey].as<bool>();
     }
 
+    bool SetFinished() {
+        Finished = true;
+    }
+
+    bool IsFinished() const {
+        return Finished;
+    }
+
     void SetLastImportedLine(ui64 lastImportedLine) {
         if (TInstant::Now() - LastSaveTime > minSaveInterval) {
             Progress[lastImportedLineKey] = lastImportedLine;
@@ -451,6 +459,7 @@ private:
     TFsPath ProgressFilePath;
     YAML::Node Progress;
     bool FailedToSave = false; // To prevent error messaging on every save attempt
+    bool Finished = false; // Import process for this file finished (may be exceptionally)
     TInstant LastSaveTime = TInstant::Zero();
 };
 
@@ -852,9 +861,12 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     std::vector<TString> buffer;
     std::list<std::shared_ptr<TImportBatchStatus>> batchStatuses;
 
-    auto createStatus = [&](ui64 lastRowInBatch) {
+    auto createStatus = [&, progressFile](ui64 lastRowInBatch) {
         auto batchStatus = std::make_shared<TImportBatchStatus>(lastRowInBatch, false);
-        if (!FileProgressPool->AddFunc([&batchStatuses, batchStatus]() {
+        if (!FileProgressPool->AddFunc([&batchStatuses, batchStatus, progressFile]() {
+            if (progressFile->IsFinished()) {
+                return;
+            }
             batchStatuses.push_back(batchStatus);
         }) && !Failed.exchange(true)) {
             ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
@@ -863,7 +875,10 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
         return batchStatus;
     };
 
-    auto saveProgressIfAny = [&]() {
+    auto saveProgressIfAny = [&, progressFile]() {
+        if (progressFile->IsFinished()) {
+            return;
+        }
         ui64 maxCompletedLine = 0;
         while (batchStatuses.front()->Completed) {
             maxCompletedLine = batchStatuses.front()->LastRow;
@@ -979,11 +994,18 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
         std::cerr << str.str();
     }
 
+    NThreading::Async([progressFile, this]() {
+            progressFile->SetFinished();
+            if (!Failed) {
+                progressFile->SetCompleted();
+            }
+        }, *FileProgressPool)
+        // Waiting to make sure FileProgressPool won't access batchStatuses anymore
+        .GetValueSync();
+
     if (Failed) {
         return *ErrorStatus;
     }
-    NThreading::Async([progressFile]() { progressFile->SetCompleted(); }, *FileProgressPool)
-        .GetValueSync();
     return MakeStatus();
 }
 

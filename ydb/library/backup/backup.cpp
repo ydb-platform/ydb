@@ -453,17 +453,26 @@ void DropTable(TDriver driver, const TString& path) {
     VerifyStatus(status, TStringBuilder() << "Drop table " << path.Quote() << " failed");
 }
 
+TFsPath CreateDirectory(const TFsPath& folderPath, const TString& name) {
+    TFsPath childFolderPath = folderPath.Child(name);
+    LOG_D("Process " << childFolderPath.GetPath().Quote());
+    childFolderPath.MkDir();
+    return childFolderPath;
+}
+
+void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& folderPath, const NDump::NFiles::TFileInfo& fileInfo) {
+    TString protoStr;
+    google::protobuf::TextFormat::PrintToString(proto, &protoStr);
+    LOG_D("Write " << fileInfo.LogObjectType << " into " << folderPath.Child(fileInfo.FileName).GetPath().Quote());
+    TFile outFile(folderPath.Child(fileInfo.FileName), CreateAlways | WrOnly);
+    outFile.Write(protoStr.data(), protoStr.size());
+}
+
 void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
     auto entry = DescribePath(driver, JoinDatabasePath(dbPrefix, path));
     Ydb::Scheme::ModifyPermissionsRequest proto;
     entry.SerializeTo(proto);
-
-    TString permissionsStr;
-    google::protobuf::TextFormat::PrintToString(proto, &permissionsStr);
-    LOG_D("Write ACL into " << folderPath.Child(NDump::NFiles::Permissions().FileName).GetPath().Quote());
-
-    TFile outFile(folderPath.Child(NDump::NFiles::Permissions().FileName), CreateAlways | WrOnly);
-    outFile.Write(permissionsStr.data(), permissionsStr.size());
+    WriteProtoToFile(proto, folderPath, NDump::NFiles::Permissions());
 }
 
 void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, const TString& path,
@@ -478,12 +487,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     auto desc = DescribeTable(driver, fullPath);
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
 
-    TString schemaStr;
-    google::protobuf::TextFormat::PrintToString(proto, &schemaStr);
-    LOG_D("Write scheme into " << folderPath.Child(NDump::NFiles::TableScheme().FileName).GetPath().Quote());
-    TFile outFile(folderPath.Child(NDump::NFiles::TableScheme().FileName), CreateAlways | WrOnly);
-    outFile.Write(schemaStr.data(), schemaStr.size());
-
+    WriteProtoToFile(proto, folderPath, NDump::NFiles::TableScheme());
     BackupPermissions(driver, dbPrefix, path, folderPath);
 
     if (!schemaOnly) {
@@ -552,9 +556,7 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                 continue;
             }
 
-            TFsPath childFolderPath = folderPath.Child(dbIt.GetRelPath());
-            LOG_D("Process " << childFolderPath.GetPath().Quote());
-            childFolderPath.MkDir();
+            auto childFolderPath = CreateDirectory(folderPath, dbIt.GetRelPath());
             TFile(childFolderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
             if (schemaOnly) {
                 if (dbIt.IsTable()) {

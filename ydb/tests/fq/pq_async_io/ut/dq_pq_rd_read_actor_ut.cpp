@@ -187,6 +187,7 @@ struct TFixture : public TPqIoTestFixture {
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RowDispatcher1, event, 0, 1));
         });
     }
+
     void MockStatistics(NActors::TActorId rowDispatcherId, ui64 nextOffset, ui64 generation, ui64 partitionId) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvStatistics();

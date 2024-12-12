@@ -82,7 +82,7 @@ public:
     }
 
     void StartSession(TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source, TMaybe<ui64> readOffset = Nothing(), bool expectedError = false) {
-        TMap<ui32, ui64> readOffsets;
+        std::map<ui32, ui64> readOffsets;
         if (readOffset) {
             readOffsets[PartitionId] = *readOffset;
         }
@@ -178,14 +178,15 @@ public:
     void ExpectStatistics(TMap<NActors::TActorId, ui64> clients) {
         auto check = [&]() -> bool {
             auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionStatistic>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
-            if (clients.size() !=  eventHolder->Get()->Stat.Clients.size()) {
+            UNIT_ASSERT(eventHolder.Get() != nullptr);
+            if (clients.size() != eventHolder->Get()->Stat.Clients.size()) {
                 return false;
             }
             for (const auto& client : eventHolder->Get()->Stat.Clients) {
                 if (!clients.contains(client.ReadActorId)) {
                     return false;
                 }
-                if (clients[client.ReadActorId] !=  client.Offset) {
+                if (clients[client.ReadActorId] != client.Offset) {
                     return false;
                 }
             }
@@ -197,7 +198,7 @@ public:
                 return;
             }
         }
-        UNIT_ASSERT_C(false, "ExpectStatistics timeout");
+        UNIT_FAIL("ExpectStatistics timeout");
     }
 
     static TRow JsonMessage(ui64 index) {

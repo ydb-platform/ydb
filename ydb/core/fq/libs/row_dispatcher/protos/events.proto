@@ -11,11 +11,11 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 
 message TEvGetAddressRequest {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
-    repeated uint32 PartitionId = 2;
+    repeated uint32 PartitionIds = 2;
 }
 
 message TEvPartitionAddress {
-    repeated uint32 PartitionId = 1;
+    repeated uint32 PartitionIds = 1;
     NActorsProto.TActorId ActorId = 2;
 }
 
@@ -30,9 +30,9 @@ message TPartitionOffset {
 
 message TEvStartSession {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
-    repeated uint32 PartitionId = 2;
+    repeated uint32 PartitionIds = 2;
     string Token = 3;
-    repeated TPartitionOffset Offset = 4;
+    repeated TPartitionOffset Offsets = 4;
     uint64 StartingMessageTimestampMs = 5;
     string QueryId = 6;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
@@ -72,7 +72,7 @@ message TEvMessageBatch {
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
-message TEvPartitionStatistics {
+message TPartitionStatistics {
     uint32 PartitionId = 1;
     uint64 NextMessageOffset = 2;
 }
@@ -81,7 +81,7 @@ message TEvStatistics {
     uint32 PartitionId = 1;             // deprecated
     uint64 NextMessageOffset = 2;       // deprecated
     uint64 ReadBytes = 3;
-    repeated TEvPartitionStatistics Partition = 4;
+    repeated TPartitionStatistics Partition = 4;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

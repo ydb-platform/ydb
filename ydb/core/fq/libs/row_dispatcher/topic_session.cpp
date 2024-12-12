@@ -326,7 +326,6 @@ private:
         IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);,
         ExceptionFunc(std::exception, HandleException)
     )
-
 };
 
 TTopicSession::TTopicSession(
@@ -664,8 +663,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
 void TTopicSession::StartClientSession(TClientsInfo& info) {
     if (ReadSession) {
         auto offset = GetOffset(info.Settings);
-
-        if (offset && (offset <= LastMessageOffset)) {
+        if (offset && offset <= LastMessageOffset) {
             LOG_ROW_DISPATCHER_INFO("New client has less offset (" << offset << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
             Metrics.RestartSessionByOffsets->Inc();
             ++RestartSessionByOffsets;
@@ -842,7 +840,7 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
 }
 
 TMaybe<ui64> TTopicSession::GetOffset(const NFq::NRowDispatcherProto::TEvStartSession& settings) {
-    for (auto p: settings.GetOffset()) {
+    for (auto p : settings.GetOffsets()) {
         if (p.GetPartitionId() != PartitionId) {
             continue;
         }

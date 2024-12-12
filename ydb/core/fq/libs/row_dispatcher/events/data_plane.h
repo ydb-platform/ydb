@@ -75,7 +75,7 @@ struct TEvRowDispatcher {
             const std::vector<ui64>& partitionIds) {
             *Record.MutableSource() = sourceParams;
             for (const auto& id : partitionIds) {
-                Record.AddPartitionId(id);
+                Record.AddPartitionIds(id);
             }
         }
     };
@@ -91,18 +91,18 @@ struct TEvRowDispatcher {
         TEvStartSession() = default;
         TEvStartSession(
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
-            const TSet<ui32>& partitionIds,
+            const std::set<ui32>& partitionIds,
             const TString token,
-            const TMap<ui32, ui64>& readOffsets,
+            const std::map<ui32, ui64>& readOffsets,
             ui64 startingMessageTimestampMs,
             const TString& queryId) {
             *Record.MutableSource() = sourceParams;
             for (auto partitionId : partitionIds) {
-                Record.AddPartitionId(partitionId);
+                Record.AddPartitionIds(partitionId);
             }
             Record.SetToken(token);
             for (const auto& [partitionId, offset] : readOffsets) {
-                auto* partitionOffset = Record.AddOffset();
+                auto* partitionOffset = Record.AddOffsets();
                 partitionOffset->SetPartitionId(partitionId);
                 partitionOffset->SetOffset(offset);
             }
@@ -145,7 +145,6 @@ struct TEvRowDispatcher {
     struct TEvStatistics : public NActors::TEventPB<TEvStatistics,
         NFq::NRowDispatcherProto::TEvStatistics, EEv::EvStatistics> {
         TEvStatistics() = default;
-        NActors::TActorId ReadActorId;
     };
 
     struct TEvSessionError : public NActors::TEventPB<TEvSessionError,

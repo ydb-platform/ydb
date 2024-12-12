@@ -117,7 +117,7 @@ ui64 MaxSessionBufferSizeBytes = 16000000;
 
 class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
-    struct TopicSessionKey {
+    struct TTopicSessionKey {
         TString ReadGroup;
         TString Endpoint;
         TString Database;
@@ -132,14 +132,14 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             hash = CombineHashes<ui64>(hash, std::hash<ui64>()(PartitionId));
             return hash;
         }
-        bool operator==(const TopicSessionKey& other) const {
+        bool operator==(const TTopicSessionKey& other) const {
             return ReadGroup == other.ReadGroup && Endpoint == other.Endpoint && Database == other.Database
                 && TopicPath == other.TopicPath && PartitionId == other.PartitionId;
         }
     };
 
-    struct TopicSessionKeyHash {
-        int operator()(const TopicSessionKey& k) const {
+    struct TTopicSessionKeyHash {
+        int operator()(const TTopicSessionKey& k) const {
             return k.Hash();
         }
     };
@@ -268,7 +268,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TNodesTracker NodesTracker;
     TAggregatedStats AggrStats; 
 
-    struct ConsumerCounters {
+    struct TConsumerCounters {
         ui64 NewDataArrived = 0;
         ui64 GetNextBatch = 0;
         ui64 MessageBatch = 0;
@@ -282,8 +282,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         bool StatisticsUpdated = false;
     };
 
-    struct ConsumerInfo {
-        ConsumerInfo(
+    struct TConsumerInfo {
+        TConsumerInfo(
             NActors::TActorId readActorId,
             NActors::TActorId selfId,
             ui64 eventQueueId,
@@ -307,31 +307,31 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         NFq::NRowDispatcherProto::TEvStartSession Proto;
         THashMap<ui32, TConsumerPartition> Partitions;
         const TString QueryId;
-        ConsumerCounters Counters;
+        TConsumerCounters Counters;
         TTopicSessionClientStatistic Stat;
         ui64 Generation;
     };
 
-    struct SessionInfo {
-        TMap<TActorId, TAtomicSharedPtr<ConsumerInfo>> Consumers;   // key - ReadActor actor id
+    struct TSessionInfo {
+        TMap<TActorId, TAtomicSharedPtr<TConsumerInfo>> Consumers;   // key - ReadActor actor id
         TTopicSessionCommonStatistic Stat;                           // Increments
         NYql::TCounters::TEntry AggrReadBytes;
     };
 
-    struct TopicSessionInfo {
-        TMap<TActorId, SessionInfo> Sessions;                         // key - TopicSession actor id
+    struct TTopicSessionInfo {
+        TMap<TActorId, TSessionInfo> Sessions;                         // key - TopicSession actor id
     };
 
-    struct ReadActorInfo {
+    struct TReadActorInfo {
         TString InternalState;
         TInstant RequestTime;
         TInstant ResponseTime;
     };
 
-    THashMap<NActors::TActorId, TAtomicSharedPtr<ConsumerInfo>> Consumers;      // key - read actor id
-    TMap<ui64, TAtomicSharedPtr<ConsumerInfo>> ConsumersByEventQueueId;
-    THashMap<TopicSessionKey, TopicSessionInfo, TopicSessionKeyHash> TopicSessions;
-    TMap<TActorId, ReadActorInfo> ReadActorsInternalState;
+    THashMap<NActors::TActorId, TAtomicSharedPtr<TConsumerInfo>> Consumers;      // key - read actor id
+    TMap<ui64, TAtomicSharedPtr<TConsumerInfo>> ConsumersByEventQueueId;
+    THashMap<TTopicSessionKey, TTopicSessionInfo, TTopicSessionKeyHash> TopicSessions;
+    TMap<TActorId, TReadActorInfo> ReadActorsInternalState;
 
 public:
     explicit TRowDispatcher(
@@ -380,7 +380,7 @@ public:
     TString GetReadActorsInternalState();
     void UpdateReadActorsInternalState();
     template <class TEventPtr>
-    bool CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, const TEventPtr& ev);
+    bool CheckSession(TAtomicSharedPtr<TConsumerInfo>& consumer, const TEventPtr& ev);
     void SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax);
     void PrintStateToLog();
 
@@ -730,7 +730,7 @@ void TRowDispatcher::UpdateReadActorsInternalState() {
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", read group " << ev->Get()->Record.GetSource().GetReadGroup() << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
-        " part id " << JoinSeq(',', ev->Get()->Record.GetPartitionId()) << " query id " << ev->Get()->Record.GetQueryId() << " cookie " << ev->Cookie);
+        " part id " << JoinSeq(',', ev->Get()->Record.GetPartitionIds()) << " query id " << ev->Get()->Record.GetQueryId() << " cookie " << ev->Cookie);
     auto queryGroup = Metrics.Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
     auto topicGroup = queryGroup->GetSubgroup("read_group", CleanupCounterValueString(ev->Get()->Record.GetSource().GetReadGroup()));
     topicGroup->GetCounter("StartSession", true)->Inc();
@@ -748,7 +748,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         DeleteConsumer(ev->Sender);
     }
     const auto& source = ev->Get()->Record.GetSource();
-    auto consumerInfo = MakeAtomicShared<ConsumerInfo>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record,
+    auto consumerInfo = MakeAtomicShared<TConsumerInfo>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record,
         NodesTracker.GetNodeConnected(ev->Sender.NodeId()), ev->Cookie);
 
     Consumers[ev->Sender] = consumerInfo;
@@ -757,10 +757,10 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         return;
     }
 
-    for (auto partitionId : ev->Get()->Record.GetPartitionId()) {
+    for (auto partitionId : ev->Get()->Record.GetPartitionIds()) {
         TActorId sessionActorId;
-        TopicSessionKey topicKey{source.GetReadGroup(), source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath(), partitionId};
-        TopicSessionInfo& topicSessionInfo = TopicSessions[topicKey];
+        TTopicSessionKey topicKey{source.GetReadGroup(), source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath(), partitionId};
+        TTopicSessionInfo& topicSessionInfo = TopicSessions[topicKey];
         Y_ENSURE(topicSessionInfo.Sessions.size() <= 1);
 
         if (topicSessionInfo.Sessions.empty()) {
@@ -784,11 +784,11 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 PqGateway,
                 MaxSessionBufferSizeBytes
                 );
-            SessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
+            TSessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
             sessionInfo.Consumers[ev->Sender] = consumerInfo;
         } else {
             auto sessionIt = topicSessionInfo.Sessions.begin();
-            SessionInfo& sessionInfo = sessionIt->second;
+            TSessionInfo& sessionInfo = sessionIt->second;
             sessionInfo.Consumers[ev->Sender] = consumerInfo;
             sessionActorId = sessionIt->first;
         }
@@ -830,7 +830,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
 }
 
 template <class TEventPtr>
-bool TRowDispatcher::CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, const TEventPtr& ev) {
+bool TRowDispatcher::CheckSession(TAtomicSharedPtr<TConsumerInfo>& consumer, const TEventPtr& ev) {
     if (ev->Cookie != consumer->Generation) {
         LOG_ROW_DISPATCHER_WARN("Wrong message generation (" << typeid(TEventPtr).name()  << "), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << consumer->Generation << ", query id " << consumer->QueryId);
         return false;
@@ -870,14 +870,14 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
         *event->Record.MutableSource() = consumer->SourceParams;
         Send(new IEventHandle(partition.TopicSessionId, consumer->ReadActorId, event.release(), 0));
 
-        TopicSessionKey topicKey{
+        TTopicSessionKey topicKey{
             consumer->SourceParams.GetReadGroup(),
             consumer->SourceParams.GetEndpoint(),
             consumer->SourceParams.GetDatabase(),
             consumer->SourceParams.GetTopicPath(),
             partitionId};
-        TopicSessionInfo& topicSessionInfo = TopicSessions[topicKey];
-        SessionInfo& sessionInfo = topicSessionInfo.Sessions[partition.TopicSessionId];
+        TTopicSessionInfo& topicSessionInfo = TopicSessions[topicKey];
+        TSessionInfo& sessionInfo = topicSessionInfo.Sessions[partition.TopicSessionId];
         Y_ENSURE(sessionInfo.Consumers.count(consumer->ReadActorId));
         sessionInfo.Consumers.erase(consumer->ReadActorId);
         if (sessionInfo.Consumers.empty()) {
@@ -1016,7 +1016,7 @@ void TRowDispatcher::Handle(const NMon::TEvHttpInfo::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvSessionStatistic from " << ev->Sender);
     const auto& key = ev->Get()->Stat.SessionKey;
-    TopicSessionKey sessionKey{key.ReadGroup, key.Endpoint, key.Database, key.TopicPath, key.PartitionId};
+    TTopicSessionKey sessionKey{key.ReadGroup, key.Endpoint, key.Database, key.TopicPath, key.PartitionId};
 
     auto sessionsIt = TopicSessions.find(sessionKey);
     if (sessionsIt == TopicSessions.end()) {
@@ -1038,8 +1038,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
         auto consumerInfoPtr = it->second; 
         consumerInfoPtr->Stat.Add(clientStat);
         auto partitionIt = consumerInfoPtr->Partitions.find(key.PartitionId);
-        if ( partitionIt == consumerInfoPtr->Partitions.end())
-        {
+        if (partitionIt == consumerInfoPtr->Partitions.end()) {
             continue;
         }
         partitionIt->second.Stat.Add(clientStat);

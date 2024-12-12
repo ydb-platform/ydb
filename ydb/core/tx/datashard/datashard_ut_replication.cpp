@@ -30,11 +30,11 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
 
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
             .Replicated(true)
-            .ReplicationConsistency(EReplicationConsistency::Strong)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Global)
         );
         CreateShardedTable(server, sender, "/Root", "table-2", TShardedTableOptions()
             .Replicated(true)
-            .ReplicationConsistency(EReplicationConsistency::Strong)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Global)
         );
 
         auto shards1 = GetTableShards(server, sender, "/Root/table-1");
@@ -106,11 +106,11 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
 
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
             .Replicated(true)
-            .ReplicationConsistency(EReplicationConsistency::Strong)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Global)
         );
         CreateShardedTable(server, sender, "/Root", "table-2", TShardedTableOptions()
             .Replicated(true)
-            .ReplicationConsistency(EReplicationConsistency::Strong)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Global)
         );
 
         auto shards1 = GetTableShards(server, sender, "/Root/table-1");
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
             .Replicated(true)
-            .ReplicationConsistency(EReplicationConsistency::Weak)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row)
         );
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
             .Replicated(true)
-            .ReplicationConsistency(EReplicationConsistency::Weak)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row)
         );
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");

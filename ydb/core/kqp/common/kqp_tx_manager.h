@@ -51,7 +51,10 @@ public:
     virtual EShardState GetState(ui64 shardId) const = 0;
     virtual void SetState(ui64 shardId, EShardState state) = 0;
 
-    virtual NTopic::TTopicOperations& GetTopicOperations() = 0;
+    virtual void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) = 0;
+    virtual const NTopic::TTopicOperations& GetTopicOperations() const = 0;
+
+    virtual void BuildTopicTxs(NTopic::TTopicOperationTransactions& txs) = 0;
 
     virtual bool HasTopics() const = 0;
 

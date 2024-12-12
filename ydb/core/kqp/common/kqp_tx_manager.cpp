@@ -68,13 +68,13 @@ public:
             return;
         }
 
-        for (auto& topicId : TopicOperations.GetSendingTabletIds()) {
-            AddTopic(topicId, *TopicOperations.GetTabletName(topicId));
+        for (auto& topicId : GetTopicOperations().GetSendingTabletIds()) {
+            AddTopic(topicId, *GetTopicOperations().GetTabletName(topicId));
             AddAction(topicId, EAction::READ);
         }
 
-        for (auto& topicId : TopicOperations.GetReceivingTabletIds()) {
-            AddTopic(topicId, *TopicOperations.GetTabletName(topicId));
+        for (auto& topicId : GetTopicOperations().GetReceivingTabletIds()) {
+            AddTopic(topicId, *GetTopicOperations().GetTabletName(topicId));
             AddAction(topicId, EAction::WRITE);
         }
     }
@@ -150,8 +150,20 @@ public:
         ShardsInfo.at(shardId).State = state;
     }
 
-    NTopic::TTopicOperations& GetTopicOperations() override {
+    void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
+        TopicOperations = std::move(topicOperations);
+    }
+
+    const NTopic::TTopicOperations& GetTopicOperations() const override {
         return TopicOperations;
+    }
+
+    void BuildTopicTxs(NTopic::TTopicOperationTransactions& txs) override {
+        TopicOperations.BuildTopicTxs(txs);
+    }
+
+    bool HasTopics() const override {
+        return GetTopicOperations().GetSize() != 0;
     }
 
     TVector<NKikimrDataEvents::TLock> GetLocks() const override {
@@ -180,10 +192,6 @@ public:
             }
         }
         return true;
-    }
-
-    bool HasTopics() const override {
-        return TopicOperations.GetSize() != 0;
     }
 
     bool IsTxFinished() const override {

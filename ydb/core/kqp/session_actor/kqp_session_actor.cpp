@@ -1365,7 +1365,7 @@ public:
         if (Settings.TableService.GetEnableOltpSink()
             && !txCtx->BufferActorId
             && (txCtx->HasTableWrite || request.TopicOperations.GetSize() != 0)) {
-            txCtx->TxManager->GetTopicOperations() = std::move(request.TopicOperations);
+            txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
 
             TKqpBufferWriterSettings settings {
                 .SessionActorId = SelfId(),

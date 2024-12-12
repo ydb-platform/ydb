@@ -1629,7 +1629,7 @@ public:
         }
 
         TTopicTabletTxs topicTxs;
-        TxManager->GetTopicOperations().BuildTopicTxs(topicTxs);
+        TxManager->BuildTopicTxs(topicTxs);
 
         TMaybe<ui64> writeId;
         if (TxManager->GetTopicOperations().HasWriteId()) {
@@ -1670,7 +1670,7 @@ public:
             auto traceId = BufferWriteActor.GetTraceId();
 
             CA_LOG_D("Preparing KQP transaction on topic tablet: " << tabletId << ", writeId: " << writeId);
-            
+
             Send(
                 MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), tabletId, /* subscribe */ true),

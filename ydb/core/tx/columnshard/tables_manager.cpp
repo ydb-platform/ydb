@@ -172,10 +172,6 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)(
                 "version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
-            if (!rowset.Next()) {
-                timer.AddLoadingFail();
-                return false;
-            }
 
             AFL_VERIFY(info.HasSchema());
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "index_schema")("preset_id", id)("snapshot", version)(
@@ -189,6 +185,11 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                 PrimaryIndex->RegisterSchemaVersion(version, schemaInitializationData);
             } else {
                 PrimaryIndex->RegisterOldSchemaVersion(version, schemaInitializationData);
+            }
+
+            if (!rowset.Next()) {
+                timer.AddLoadingFail();
+                return false;
             }
         }
     }

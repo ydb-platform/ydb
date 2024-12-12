@@ -49,6 +49,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
         const TString externalDataSourceName = "/Root/external_data_source";
         auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         auto kikimr = MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, s3ActorsFactory);
+        kikimr->GetTestClient().AddConnectAccess("root1@builtin");
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
         const TString query = fmt::format(R"(

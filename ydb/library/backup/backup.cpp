@@ -13,7 +13,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -479,13 +479,6 @@ void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& p
     WriteProtoToFile(proto, folderPath, NDump::NFiles::Permissions());
 }
 
-TFsPath CreateDirectory(const TFsPath& folderPath, const TString& name) {
-    TFsPath childFolderPath = folderPath.Child(name);
-    LOG_D("Process " << childFolderPath.GetPath().Quote());
-    childFolderPath.MkDir();
-    return childFolderPath;
-}
-
 Ydb::Table::ChangefeedDescription ProtoFromChangefeedDesc(const NTable::TChangefeedDescription& changefeedDesc) {
     Ydb::Table::ChangefeedDescription protoChangeFeedDesc;
     changefeedDesc.SerializeTo(protoChangeFeedDesc);
@@ -512,7 +505,7 @@ void BackupChangefeeds(TDriver driver, const TString& dbPrefix, const TString& p
         const auto protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
 
         WriteProtoToFile(protoChangeFeedDesc, changefeedDirPath, NDump::NFiles::Changefeed());
-        WriteProtoToFile(protoTopicDescription, changefeedDirPath, TNDump::NFiles::Topic());
+        WriteProtoToFile(protoTopicDescription, changefeedDirPath, NDump::NFiles::Topic());
     }
 }
 

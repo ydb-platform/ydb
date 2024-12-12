@@ -242,7 +242,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
         rightJoinKeyNames.emplace_back(rightColumnName);
     }
 
-    if ((linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin && (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode)) || !(leftAny || rightAny || !linkSettings.Options.empty())) {
+    if ((linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin && (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode)) || !(leftAny || rightAny || !linkSettings.JoinAlgoOptions.empty())) {
         auto dqJoin = Build<TDqJoin>(ctx, joinTuple.Pos())
             .LeftInput(BuildDqJoinInput(ctx, joinTuple.Pos(), left->Input, leftJoinKeys, leftAny))
             .LeftLabel(leftTableLabel)
@@ -267,11 +267,11 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
             flags.emplace_back(ctx.NewAtom(joinTuple.Pos(), "RightAny", TNodeFlags::Default));
 
         TVector<TCoNameValueTuple> options;
-        for (ui32 i = 0; i + 1 < linkSettings.Options.size(); i += 2)
+        for (ui32 i = 0; i + 1 < linkSettings.JoinAlgoOptions.size(); i += 2)
             options.push_back(
                     Build<TCoNameValueTuple>(ctx, joinTuple.Pos())
-                        .Name().Build(linkSettings.Options[i])
-                        .Value<TCoAtom>().Build(linkSettings.Options[i + 1])
+                        .Name().Build(linkSettings.JoinAlgoOptions[i])
+                        .Value<TCoAtom>().Build(linkSettings.JoinAlgoOptions[i + 1])
                         .Done());
 
         auto dqJoin = Build<TDqJoin>(ctx, joinTuple.Pos())

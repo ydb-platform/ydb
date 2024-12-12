@@ -33,6 +33,21 @@ void SetPasswordCheckerParameters(TTestActorRuntime &runtime, ui64 schemeShard, 
     SetConfig(runtime, schemeShard, std::move(request));
 }
 
+struct TAccountLockoutInitializer {
+    size_t AttemptThreshold = 4;
+    TString AttemptResetDuration = "1h";
+};
+
+void SetAccountLockoutParameters(TTestActorRuntime &runtime, ui64 schemeShard, const TAccountLockoutInitializer& initializer) {
+    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+
+    ::NKikimrProto::TAccountLockout accountLockout;
+    accountLockout.SetAttemptThreshold(initializer.AttemptThreshold);
+    accountLockout.SetAttemptResetDuration(initializer.AttemptResetDuration);
+    *request->Record.MutableConfig()->MutableAuthConfig()->MutableAccountLockout() = accountLockout;
+    SetConfig(runtime, schemeShard, std::move(request));
+}
+
 }  // namespace NSchemeShardUT_Private
 
 Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
@@ -390,11 +405,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
     }
 
-    Y_UNIT_TEST(AccountLockout) {
+    Y_UNIT_TEST(AccountLockoutAndAutomaticallyUnlock) {
         TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([](ui32 nodeIdx, NKikimr::TAppData& appData) {
+            Y_UNUSED(nodeIdx);
+            auto accountLockout = appData.AuthConfig.MutableAccountLockout();
+            // AttemptThreshold = 4
+            accountLockout->SetAttemptResetDuration("5s");
+        });
         TTestEnv env(runtime);
-        auto accountLockout = runtime.GetAppData().AuthConfig.MutableAccountLockout();
-        accountLockout->SetAttemptResetDuration("5s");
         ui64 txId = 100;
         TString username = "user1";
         TString password = "password1";
@@ -429,6 +448,141 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         login.UpdateSecurityState(describe.GetPathDescription().GetDomainDescription().GetSecurityState());
         auto resultValidate = login.ValidateToken({.Token = resultLogin.token()});
         UNIT_ASSERT_VALUES_EQUAL(resultValidate.User, "user1");
+    }
+
+    Y_UNIT_TEST(ResetFailedAttemptCount) {
+        TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([](ui32 nodeIdx, NKikimr::TAppData& appData) {
+            Y_UNUSED(nodeIdx);
+            auto accountLockout = appData.AuthConfig.MutableAccountLockout();
+            // AttemptThreshold = 4
+            accountLockout->SetAttemptResetDuration("5s");
+        });
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TString username = "user1";
+        TString password = "password1";
+        TString database = "/MyRoot";
+        CreateAlterLoginCreateUser(runtime, ++txId, database, username, password);
+        TString wrongPassword = "wrongpassword";
+        auto resultLogin = Login(runtime, username, wrongPassword);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username, wrongPassword);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username, wrongPassword);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+
+        runtime.SimulateSleep(TDuration::Seconds(7));
+
+        // FailedAttemptCount should be reset
+        resultLogin = Login(runtime, username, wrongPassword);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username, wrongPassword);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username, wrongPassword);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username, password);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, database);
+        UNIT_ASSERT(describe.HasPathDescription());
+        UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
+        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
+        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0);
+
+        // check token
+        NLogin::TLoginProvider login;
+        login.UpdateSecurityState(describe.GetPathDescription().GetDomainDescription().GetSecurityState());
+        auto resultValidate = login.ValidateToken({.Token = resultLogin.token()});
+        UNIT_ASSERT_VALUES_EQUAL(resultValidate.User, "user1");
+    }
+
+    Y_UNIT_TEST(ChangeAccountLockoutParameters) {
+        TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([](ui32 nodeIdx, NKikimr::TAppData& appData) {
+            Y_UNUSED(nodeIdx);
+            auto accountLockout = appData.AuthConfig.MutableAccountLockout();
+            // AttemptThreshold = 4
+            accountLockout->SetAttemptResetDuration("5s");
+        });
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TString username1 = "user1";
+        TString password1 = "password1";
+        TString database = "/MyRoot";
+        CreateAlterLoginCreateUser(runtime, ++txId, database, username1, password1);
+        TString wrongPassword1 = "wrongpassword1";
+        auto resultLogin = Login(runtime, username1, wrongPassword1);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username1, wrongPassword1);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username1, wrongPassword1);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username1, wrongPassword1);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username1, wrongPassword1);
+        // User is locked out after 4 attempts
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User " << username1 << " is locked out");
+
+        runtime.SimulateSleep(TDuration::Seconds(7));
+
+        // Unlock user after 5 sec
+        resultLogin = Login(runtime, username1, password1);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, database);
+        UNIT_ASSERT(describe.HasPathDescription());
+        UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
+        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
+        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0);
+
+        // check token
+        NLogin::TLoginProvider login;
+        login.UpdateSecurityState(describe.GetPathDescription().GetDomainDescription().GetSecurityState());
+        auto resultValidate = login.ValidateToken({.Token = resultLogin.token()});
+        UNIT_ASSERT_VALUES_EQUAL(resultValidate.User, username1);
+
+        SetAccountLockoutParameters(runtime, TTestTxConfig::SchemeShard, {.AttemptThreshold = 6, .AttemptResetDuration = "10s"});
+
+        TString username2 = "user2";
+        TString password2 = "password2";
+        CreateAlterLoginCreateUser(runtime, ++txId, database, username2, password2);
+        TString wrongPassword2 = "wrongpassword2";
+        // Now user2 have 6 attempts to login
+        resultLogin = Login(runtime, username2, wrongPassword2);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username2, wrongPassword2);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username2, wrongPassword2);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username2, wrongPassword2);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username2, wrongPassword2);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username2, wrongPassword2);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        resultLogin = Login(runtime, username2, wrongPassword2);
+        // User is locked out after 6 attempts
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User " << username2 << " is locked out");
+
+        // After 7 sec user2 must be locked out
+        runtime.SimulateSleep(TDuration::Seconds(7));
+        resultLogin = Login(runtime, username2, wrongPassword2);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User " << username2 << " is locked out");
+
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        // Unlock user after 10 sec
+        resultLogin = Login(runtime, username2, password2);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        describe = DescribePath(runtime, TTestTxConfig::SchemeShard, database);
+        UNIT_ASSERT(describe.HasPathDescription());
+        UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
+        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
+        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0);
+
+        // check token
+        login.UpdateSecurityState(describe.GetPathDescription().GetDomainDescription().GetSecurityState());
+        resultValidate = login.ValidateToken({.Token = resultLogin.token()});
+        UNIT_ASSERT_VALUES_EQUAL(resultValidate.User, username2);
     }
 }
 

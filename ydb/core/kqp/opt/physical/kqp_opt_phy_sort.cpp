@@ -156,8 +156,13 @@ TExprBase KqpBuildTopStageRemoveSort(
     IOptimizationContext& optCtx, 
     TTypeAnnotationContext& typeCtx,
     const TParentsMap& parentsMap, 
-    bool allowStageMultiUsage
+    bool allowStageMultiUsage,
+    bool ruleEnabled
 ) {
+    if (!ruleEnabled) {
+        return node;
+    }
+
     if (!node.Maybe<TCoTopBase>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }

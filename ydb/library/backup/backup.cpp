@@ -471,8 +471,8 @@ void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& fol
     outFile.Write(protoStr.data(), protoStr.size());
 }
 
-void BackupPermissions(TDriver driver, const TString& tablePath, const TFsPath& folderPath) {
-    auto entry = DescribePath(driver, tablePath);
+void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
+    auto entry = DescribePath(driver, JoinDatabasePath(dbPrefix, path));
     Ydb::Scheme::ModifyPermissionsRequest proto;
     entry.SerializeTo(proto);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::Permissions());

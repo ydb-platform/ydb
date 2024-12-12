@@ -21,6 +21,8 @@ void AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TStr
         NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(NYdb::NScheme::TPermissions(subject, permissionNames))
     ).ExtractValueSync();
     AssertSuccessResult(result);
+
+    Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), path);    
 }
 
 void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject) {
@@ -36,7 +38,7 @@ void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject) {
         UNIT_ASSERT_C(scriptStatus == NYdb::EStatus::UNAVAILABLE || scriptStatus == NYdb::EStatus::SUCCESS || scriptStatus == NYdb::EStatus::UNAUTHORIZED, result.Status().GetIssues().ToString());
         if (scriptStatus == NYdb::EStatus::SUCCESS)
             return;
-        Sleep(TDuration::MilliSeconds(10));
+        Sleep(TDuration::Seconds(1));
     };
 }
 

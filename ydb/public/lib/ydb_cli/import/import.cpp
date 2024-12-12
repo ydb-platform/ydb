@@ -952,7 +952,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
         }
 
         if (inputSizeHint && progressCallback) {
-            //progressCallback(skippedBytes + readBytes, *inputSizeHint);
+            progressCallback(skippedBytes + readBytes, *inputSizeHint);
         }
 
         auto workerFunc = [&upsertCsvFunc, row, buffer = std::move(buffer),

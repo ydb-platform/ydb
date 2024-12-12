@@ -14,7 +14,7 @@ class TDatabase;
 
 namespace NKikimr::NOlap {
 
-class TColumnChunkLoadContextV1;
+class TColumnChunkLoadContextV2;
 class TIndexChunkLoadContext;
 class TInsertedData;
 class TCommittedData;

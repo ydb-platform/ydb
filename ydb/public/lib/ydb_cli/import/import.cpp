@@ -356,12 +356,6 @@ public:
                     if (!static_cast<bool>(Progress[lastImportedLineKey])) {
                         Cerr << "(!) Progress file \"" << ProgressFilePath.GetPath()
                             << "\" doesn't have modification time" << Endl;
-                    } else {
-                        Cerr << "(!) Progress file \"" << ProgressFilePath.GetPath() << "\" was created for file "
-                            << SourceFilePath << " with modification time "
-                            << TInstant::Seconds(Progress[sourceModifiedKey].as<i64>())
-                            << ", now the file has modification time " << TFileStat(SourceFilePath).MTime
-                            << ", removing progress file..." << Endl;
                     }
                     ProgressFilePath.DeleteIfExists();
                 }
@@ -452,7 +446,6 @@ public:
 
 private:
     void StartNewProgress() {
-        Cerr << "Starting new progress for file " << SourceFilePath << Endl;
         Progress = YAML::Node();
         Progress[sourceModifiedKey] = TFileStat(SourceFilePath).MTime;
         Progress[completedKey] = false;
@@ -723,8 +716,6 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
                 << " files. Continuing from where they were interrupted. If you want to reset import progress, "
                 "remove progress files from " << pathToProgressFiles << std::endl;
         }
-    } else {
-        std::cerr << "(!) No existing import progress found. Starting from scratch." << std::endl;
     }
 
     NThreading::WaitAll(asyncResults).GetValueSync();

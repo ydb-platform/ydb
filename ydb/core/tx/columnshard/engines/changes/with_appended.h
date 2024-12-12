@@ -11,9 +11,9 @@ private:
     using TBase = TColumnEngineChanges;
     THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToRemove;
     THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToMove;
-    std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;
 
 protected:
+    std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;
     std::optional<ui64> TargetCompactionLevel;
     TSaverContext SaverContext;
     bool NoAppendIsCorrect = false;

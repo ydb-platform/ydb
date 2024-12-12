@@ -338,7 +338,7 @@ Arguments:
 
 1. `left` - first structure.
 2. `right` - second structure.
-3. `mergeLambda` - _(optional)_ function to merge fields with the same name (arguments: field name, Optional field value of the first struct, Optional field value of the second struct - arguments are Nothing(T?) in case of absence of the corresponding struct field). By default, if present, the first structure's field value is used, and the second one's in other cases.
+3. `mergeLambda` - _(optional)_ function to merge fields with the same name (arguments: field name, `Optional` field value of the first struct, `Optional` field value of the second struct - arguments are `Nothing<T?>` in case of absence of the corresponding struct field). By default, if present, the first structure's field value is used; otherwise, the second one's value is used.
 
 ### Examples
 

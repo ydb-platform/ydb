@@ -1610,8 +1610,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         return new TFakeTicketParserActor();
     }
 
-    void AddConnectAccess(TClient& client) {
-        client.AddConnectAccess("user_name");
+    void GrantConnect(TClient& client) {
+        client.GrantConnect("user_name");
 
         const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
             { "folder_id", "test_folder_id" },
@@ -1658,7 +1658,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client(settings);
         client.InitRootScheme();
         
-        AddConnectAccess(client);
+        GrantConnect(client);
         
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
@@ -1694,7 +1694,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client(settings);
         client.InitRootScheme();
         
-        AddConnectAccess(client);
+        GrantConnect(client);
         
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
@@ -1731,7 +1731,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
 
-        AddConnectAccess(client);
+        GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
@@ -1793,7 +1793,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         
-        AddConnectAccess(client);
+        GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
@@ -1924,7 +1924,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client(settings);
         client.InitRootScheme();
 
-        AddConnectAccess(client);
+        GrantConnect(client);
 
 
         TTestActorRuntime& runtime = *server.GetRuntime();

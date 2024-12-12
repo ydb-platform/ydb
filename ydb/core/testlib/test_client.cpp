@@ -2134,14 +2134,14 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
     }
 
-    void TClient::AddAccess(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights) {
+    void TClient::Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights) {
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, rights, subject);
         ModifyACL(parent, name, acl.SerializeAsString());
     }
 
-    void TClient::AddConnectAccess(const TString& subject) {
-        AddAccess("/", DomainName, subject, NACLib::EAccessRights::ConnectDatabase);
+    void TClient::GrantConnect(const TString& subject) {
+        Grant("/", DomainName, subject, NACLib::EAccessRights::ConnectDatabase);
     } 
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,

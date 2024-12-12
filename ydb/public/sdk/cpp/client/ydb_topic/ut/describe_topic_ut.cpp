@@ -351,7 +351,7 @@ namespace NYdb::NTopic::NTests {
             Cerr << std::format("=== existingTopic={} allowUpdateRow={} allowDescribeSchema={} authToken={}\n",
                                 existingTopic, allowUpdateRow, allowDescribeSchema, std::string(authToken));
 
-            setup.GetServer().AnnoyingClient->AddConnectAccess(authToken);
+            setup.GetServer().AnnoyingClient->GrantConnect(authToken);
 
             auto driverConfig = setup.MakeDriverConfig().SetAuthToken(authToken);
             auto client = TTopicClient(TDriver(driverConfig));

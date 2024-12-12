@@ -26,6 +26,7 @@ public:
         ui32 ChunkSize = 128 * (1 << 20);
         bool SmallDisk = false;
         bool SuppressCompatibilityCheck = false;
+        TAutoPtr<TLogBackend> LogBackend = nullptr;
     };
 
 private:
@@ -71,7 +72,11 @@ public:
         IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
         appData->IoContextFactory = IoContext.get();
 
-        Runtime->SetLogBackend(IsLowVerbose ? CreateStderrBackend() : CreateNullBackend());
+        if (Settings.LogBackend) {
+            Runtime->SetLogBackend(Settings.LogBackend);
+        } else {
+            Runtime->SetLogBackend(IsLowVerbose ? CreateStderrBackend() : CreateNullBackend());
+        }
         Runtime->Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}});
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_SYSLOG, NLog::PRI_NOTICE);
@@ -130,7 +135,7 @@ public:
         }
         return PDisk;
     }
-    
+
     void GracefulPDiskRestart(bool waitForRestart = true) {
         ui32 pdiskId = GetPDisk()->PDiskId;
 

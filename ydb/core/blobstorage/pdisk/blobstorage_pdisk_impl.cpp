@@ -2129,16 +2129,20 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
         }
 
         TryTrimChunk(false, 0, NWilson::TSpan{});
+        bool readingLog = OwnerData[owner].ReadingLog();
         ui64 lastSeenLsn = 0;
         auto it = LogChunks.begin();
         while (it != LogChunks.end()) {
             if (it->OwnerLsnRange.size() > owner && it->OwnerLsnRange[owner].IsPresent) {
-                Y_ABORT_UNLESS(it->CurrentUserCount > 0);
-                it->CurrentUserCount--;
-                it->OwnerLsnRange[owner].IsPresent = false;
-                it->OwnerLsnRange[owner].FirstLsn = 0;
                 lastSeenLsn = Max(it->OwnerLsnRange[owner].LastLsn, lastSeenLsn);
-                it->OwnerLsnRange[owner].LastLsn = 0;
+
+                if (!readingLog) {
+                    Y_ABORT_UNLESS(it->CurrentUserCount > 0);
+                    it->CurrentUserCount--;
+                    it->OwnerLsnRange[owner].IsPresent = false;
+                    it->OwnerLsnRange[owner].FirstLsn = 0;
+                    it->OwnerLsnRange[owner].LastLsn = 0;
+                }
             }
             ++it;
         }
@@ -2376,21 +2380,49 @@ void TPDisk::ClearQuarantineChunks() {
         *Mon.QuarantineChunks = QuarantineChunks.size();
     }
 
+    bool haveChunksToRelease = false;
+
     {
         const auto it = std::partition(QuarantineOwners.begin(), QuarantineOwners.end(), [&] (TOwner i) {
             return Keeper.GetOwnerUsed(i) || OwnerData[i].HaveRequestsInFlight();
         });
         for (auto delIt = it; delIt != QuarantineOwners.end(); ++delIt) {
-            ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[*delIt].OperationLog, "Remove owner from quarantine, OwnerId# " << *delIt);
-            TOwnerRound ownerRound = OwnerData[*delIt].OwnerRound;
-            OwnerData[*delIt].Reset(false);
-            OwnerData[*delIt].OwnerRound = ownerRound;
-            Keeper.RemoveOwner(*delIt);
+            TOwner owner = *delIt;
+            ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "Remove owner from quarantine, OwnerId# " << owner);
+            TOwnerRound ownerRound = OwnerData[owner].OwnerRound;
+            OwnerData[owner].Reset(false);
+            OwnerData[owner].OwnerRound = ownerRound;
+            Keeper.RemoveOwner(owner);
+
+            ui64 lastSeenLsn = 0;
+            auto it = LogChunks.begin();
+            while (it != LogChunks.end()) {
+                if (it->OwnerLsnRange.size() > owner && it->OwnerLsnRange[owner].IsPresent) {
+                    Y_ABORT_UNLESS(it->CurrentUserCount > 0);
+                    ui32 userCount = --it->CurrentUserCount;
+                    it->OwnerLsnRange[owner].IsPresent = false;
+                    it->OwnerLsnRange[owner].FirstLsn = 0;
+                    lastSeenLsn = Max(it->OwnerLsnRange[owner].LastLsn, lastSeenLsn);
+                    it->OwnerLsnRange[owner].LastLsn = 0;
+
+                    if (userCount == 0) {
+                        haveChunksToRelease = true;
+                    }
+                }
+                ++it;
+            }
             LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                    << " removed ownerId# " << *delIt << " from chunks Keeper through QuarantineOwners");
+                    << " removed ownerId# " << (ui32)owner << " lastSeenLsn#" << lastSeenLsn << " from chunks Keeper through QuarantineOwners" << (haveChunksToRelease ? " along with log chunks" : "");
         }
         QuarantineOwners.erase(it, QuarantineOwners.end());
         *Mon.QuarantineOwners = QuarantineOwners.size();
+    }
+
+    if (haveChunksToRelease) {
+        THolder<TCompletionEventSender> completion(new TCompletionEventSender(this));
+        if (ReleaseUnusedLogChunks(completion.Get())) {
+            WriteSysLogRestorePoint(completion.Release(), TReqId(TReqId::KillOwnerSysLog, 0), {});
+        }
     }
 }
 

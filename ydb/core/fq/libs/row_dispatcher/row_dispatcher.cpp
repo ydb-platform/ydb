@@ -808,15 +808,20 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
         LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvGetNextBatch from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
+    auto& session = it->second;
     LOG_ROW_DISPATCHER_TRACE("Received TEvGetNextBatch from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
-    if (!CheckSession(it->second, ev)) {
+    if (!CheckSession(session, ev)) {
         return;
     }
-    auto& partition = it->second->Partitions[ev->Get()->Record.GetPartitionId()];
-    partition.PendingNewDataArrived = false;
-    partition.PendingGetNextBatch = true;
-    it->second->Counters.GetNextBatch++;
-    Forward(ev, partition.TopicSessionId);
+    auto partitionIt = session->Partitions.find(ev->Get()->Record.GetPartitionId());
+    if (partitionIt == session->Partitions.end()) {
+        LOG_ROW_DISPATCHER_ERROR("Ignore TEvGetNextBatch from " << ev->Sender << ", wrong partition id " << ev->Get()->Record.GetPartitionId());
+        return;
+    }
+    partitionIt->second.PendingNewDataArrived = false;
+    partitionIt->second.PendingGetNextBatch = true;
+    session->Counters.GetNextBatch++;
+    Forward(ev, partitionIt->second.TopicSessionId);
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {

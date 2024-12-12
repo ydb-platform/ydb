@@ -82,7 +82,7 @@ struct TFixture : public TPqIoTestFixture {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         TMap<ui32, ui64> offsets;
-        for (auto p : eventHolder->Get()->Record.GetOffset()) {
+        for (auto p : eventHolder->Get()->Record.GetOffsets()) {
             offsets[p.GetPartitionId()] = p.GetOffset();
         }
         UNIT_ASSERT_EQUAL(offsets, expectedOffsets);
@@ -114,7 +114,7 @@ struct TFixture : public TPqIoTestFixture {
 
             for (const auto& [rowDispatcherId, partitionId] : result) {
                 auto* partitions = event->Record.AddPartitions();
-                partitions->AddPartitionId(partitionId);
+                partitions->AddPartitionIds(partitionId);
                 ActorIdToProto(rowDispatcherId, partitions->MutableActorId());
             }
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, Coordinator1Id, event, 0, cookie));
@@ -124,7 +124,7 @@ struct TFixture : public TPqIoTestFixture {
     void MockAck(NActors::TActorId rowDispatcherId, ui64 generation = 1, ui64 partitionId = PartitionId1) {
         CaSetup->Execute([&](TFakeActor& actor) {
             NFq::NRowDispatcherProto::TEvStartSession proto;
-            proto.AddPartitionId(partitionId);
+            proto.AddPartitionIds(partitionId);
             auto event = new NFq::TEvRowDispatcher::TEvStartSessionAck(proto);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });

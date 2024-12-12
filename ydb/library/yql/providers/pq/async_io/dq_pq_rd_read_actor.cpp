@@ -615,7 +615,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
     }
     auto partitionIt = session->Partitions.find(ev->Get()->Record.GetPartitionId());
     if (partitionIt == session->Partitions.end()) {
-        SRC_LOG_T("Ignore TEvNewDataArrived from " << ev->Sender << ", partition " << ev->Get()->Record.GetPartitionId() << ", no session");
+        SRC_LOG_E("TEvNewDataArrived: wrong partition id " << ev->Get()->Record.GetPartitionId());
+        Stop(NDqProto::StatusIds::INTERNAL_ERROR, {TIssue(TStringBuilder() << LogPrefix << "No partition with id " << ev->Get()->Record.GetPartitionId())});
         return;
     }
     partitionIt->second.HasPendingData = true;
@@ -784,7 +785,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     auto partitionId = ev->Get()->Record.GetPartitionId();
     auto partitionIt = session->Partitions.find(partitionId);
     if (partitionIt == session->Partitions.end()) {
-        Stop(NDqProto::StatusIds::INTERNAL_ERROR, {TIssue(TStringBuilder() << "No partition with id " << partitionId)});
+        SRC_LOG_E("TEvMessageBatch: wrong partition id " << partitionId);
+        Stop(NDqProto::StatusIds::INTERNAL_ERROR, {TIssue(TStringBuilder() << LogPrefix << "No partition with id " << partitionId)});
         return;
     }
     auto& partirtion = partitionIt->second;
@@ -798,7 +800,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     for (const auto& message : ev->Get()->Record.GetMessages()) {
         const auto& offsets = message.GetOffsets();
         if (offsets.empty()) {
-            Stop(NDqProto::StatusIds::INTERNAL_ERROR, {TIssue("Got unexpected empty batch from row dispatcher")});
+            Stop(NDqProto::StatusIds::INTERNAL_ERROR, {TIssue(TStringBuilder() << LogPrefix << "Got unexpected empty batch from row dispatcher")});
             return;
         }
 
@@ -893,7 +895,6 @@ void TDqPqRdReadActor::TrySendGetNextBatch(TSession& sessionInfo) {
     if (ReadyBufferSizeBytes > MaxBufferSize) {
         return;
     }
-    // TODO : random?
     for (auto& [partitionId, partition] : sessionInfo.Partitions) {
         if (!partition.HasPendingData) {
             continue;

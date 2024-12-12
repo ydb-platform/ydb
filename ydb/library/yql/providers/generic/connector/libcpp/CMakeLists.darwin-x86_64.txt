@@ -27,7 +27,6 @@ target_link_libraries(generic-connector-libcpp PUBLIC
   yql-essentials-ast
   dq-actors-protos
   providers-common-proto
-  connector-api-common
   connector-api-service
   api-service-protos
   essentials-public-issue

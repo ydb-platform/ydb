@@ -29,7 +29,7 @@ target_link_libraries(connector-libcpp-ut_helpers PUBLIC
   kqp-ut-common
   providers-common-db_id_async_resolver
   providers-common-structured_token
-  connector-api-common
+  providers-common-proto
   generic-connector-libcpp
 )
 

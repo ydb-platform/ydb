@@ -12,8 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(generic)
 add_subdirectory(s3)
+add_subdirectory(generic)
 add_subdirectory(dq)
 add_subdirectory(pq)
 add_subdirectory(common)

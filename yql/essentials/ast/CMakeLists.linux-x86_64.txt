@@ -17,6 +17,10 @@ add_subdirectory(serialize)
 add_library(yql-essentials-ast)
 
 
+target_compile_options(yql-essentials-ast PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
 target_link_libraries(yql-essentials-ast PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

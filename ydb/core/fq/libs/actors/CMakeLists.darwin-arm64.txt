@@ -77,7 +77,6 @@ target_link_libraries(fq-libs-actors PUBLIC
   providers-dq-provider
   dq-provider-exec
   dq-worker_manager-interface
-  connector-api-common
   generic-connector-libcpp
   providers-generic-provider
   providers-pq-cm_client

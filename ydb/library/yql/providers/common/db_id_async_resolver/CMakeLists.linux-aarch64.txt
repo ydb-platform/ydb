@@ -31,7 +31,7 @@ target_link_libraries(providers-common-db_id_async_resolver PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-threading-future
-  connector-api-common
+  providers-common-proto
   essentials-public-issue
   tools-enum_parser-enum_serialization_runtime
 )

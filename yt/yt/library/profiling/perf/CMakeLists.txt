@@ -29,6 +29,7 @@ target_link_libraries(library-profiling-perf PUBLIC
 )
 
 target_sources(library-profiling-perf PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/perf/counters.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/perf/event_counter_profiler.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/perf/event_counter_linux.cpp
 )
 

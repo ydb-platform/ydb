@@ -33,7 +33,7 @@ target_link_libraries(api-service-protos PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  connector-api-common
+  providers-common-proto
   api-protos
   contrib-libs-protobuf
 )

@@ -537,6 +537,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
+    TMemoryProfileGuard mpg2("NEvents::TDataEvents::TEvWrite::Continue::21");
     auto schema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaOptional(operation.GetTableId().GetSchemaVersion());
     if (!schema) {
         sendError("unknown schema version", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
@@ -552,12 +553,14 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId)->OnWriteEvent();
 
+    TMemoryProfileGuard mpg2("NEvents::TDataEvents::TEvWrite::Continue::0");
     auto arrowData = std::make_shared<TArrowData>(schema);
     if (!arrowData->Parse(operation, NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite>(*ev->Get()))) {
         sendError("parsing data error", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         return;
     }
 
+    TMemoryProfileGuard mpg2("NEvents::TDataEvents::TEvWrite::Continue::1");
     auto overloadStatus = CheckOverloaded(pathId);
     if (overloadStatus != EOverloadStatus::None) {
         std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
@@ -573,6 +576,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         granuleShardingVersionId = record.GetGranuleShardingVersionId();
     }
 
+    TMemoryProfileGuard mpg2("NEvents::TDataEvents::TEvWrite::Continue::2");
     ui64 lockId = 0;
     if (behaviour == EOperationBehaviour::NoTxWrite) {
         lockId = BuildEphemeralTxId();

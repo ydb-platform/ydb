@@ -21,6 +21,8 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.oss.canonical import set_canondata_root
 
+from ydb.retries import RetrySettings
+
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
@@ -80,6 +82,7 @@ def get_lines(suite_path):
 
 
 def get_test_suites(directory):
+    col = directory == 'sqllogiccoltest'
     resources_root = get_source_path(directory)
     directories = [resources_root]
     suites = []
@@ -87,9 +90,11 @@ def get_test_suites(directory):
         current_directory = directories.pop()
         for candidate in map(lambda x: os.path.join(current_directory, x), os.listdir(current_directory)):
             if os.path.isfile(candidate) and candidate.endswith(".test"):
-                suite_relative_path = os.path.relpath(candidate, resources_root)
-                suites.append(('results', suite_relative_path,))
-                suites.append(('plan', suite_relative_path))
+                name = os.path.basename(candidate)
+                if not col or name.startswith('select1-') or name.startswith('insert'):
+                    suite_relative_path = os.path.relpath(candidate, resources_root)
+                    suites.append(('results', suite_relative_path,))
+                    suites.append(('plan', suite_relative_path))
 
             if os.path.isdir(candidate):
                 directories.append(candidate)
@@ -250,6 +255,11 @@ class BaseSuiteRunner(object):
                 disable_iterator_reads=True,
                 disable_iterator_lookups=True,
                 extra_feature_flags=["enable_resource_pools"],
+                column_shard_config={
+                    'disabled_on_scheme_shard': False,
+                    'allow_nullable_columns_in_pk': True,
+                },
+
                 # additional_log_configs={'KQP_YQL': 7}
             )
         )
@@ -466,7 +476,7 @@ class BaseSuiteRunner(object):
 
     def execute_query(self, statement_text):
         yql_text = format_yql_statement(statement_text, self.table_path_prefix)
-        result = self.pool.execute_with_retries(yql_text)
+        result = self.pool.execute_with_retries(yql_text, retry_settings=RetrySettings(max_retries=100))
 
         if len(result) == 1:
             scan_query_result = self.execute_scan_query(yql_text)

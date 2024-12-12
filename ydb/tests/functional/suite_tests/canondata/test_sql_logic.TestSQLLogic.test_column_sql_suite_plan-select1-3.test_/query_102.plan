@@ -1,0 +1,226 @@
+{
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 4,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 2
+                                    }
+                                ],
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort-Filter-TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": ""
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "d < 110 OR d > 150",
+                                                "Pushdown": "True"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "b",
+                                                    "c",
+                                                    "d"
+                                                ],
+                                                "ReadRanges": [
+                                                    "a (-\u221e, +\u221e)",
+                                                    "b (-\u221e, +\u221e)",
+                                                    "c (-\u221e, +\u221e)",
+                                                    "d (-\u221e, +\u221e)",
+                                                    "e (-\u221e, +\u221e)"
+                                                ],
+                                                "Scan": "Parallel",
+                                                "SsaProgram": {
+                                                    "Command": [
+                                                        {
+                                                            "Assign": {
+                                                                "Column": {
+                                                                    "Id": 6
+                                                                },
+                                                                "Constant": {
+                                                                    "Int32": 110
+                                                                }
+                                                            }
+                                                        },
+                                                        {
+                                                            "Assign": {
+                                                                "Column": {
+                                                                    "Id": 7
+                                                                },
+                                                                "Function": {
+                                                                    "Arguments": [
+                                                                        {
+                                                                            "Id": 4
+                                                                        },
+                                                                        {
+                                                                            "Id": 6
+                                                                        }
+                                                                    ],
+                                                                    "FunctionType": 2,
+                                                                    "KernelIdx": 0,
+                                                                    "YqlOperationId": 13
+                                                                }
+                                                            }
+                                                        },
+                                                        {
+                                                            "Assign": {
+                                                                "Column": {
+                                                                    "Id": 8
+                                                                },
+                                                                "Constant": {
+                                                                    "Int32": 150
+                                                                }
+                                                            }
+                                                        },
+                                                        {
+                                                            "Assign": {
+                                                                "Column": {
+                                                                    "Id": 9
+                                                                },
+                                                                "Function": {
+                                                                    "Arguments": [
+                                                                        {
+                                                                            "Id": 4
+                                                                        },
+                                                                        {
+                                                                            "Id": 8
+                                                                        }
+                                                                    ],
+                                                                    "FunctionType": 2,
+                                                                    "KernelIdx": 1,
+                                                                    "YqlOperationId": 15
+                                                                }
+                                                            }
+                                                        },
+                                                        {
+                                                            "Assign": {
+                                                                "Column": {
+                                                                    "Id": 10
+                                                                },
+                                                                "Function": {
+                                                                    "Arguments": [
+                                                                        {
+                                                                            "Id": 7
+                                                                        },
+                                                                        {
+                                                                            "Id": 9
+                                                                        }
+                                                                    ],
+                                                                    "FunctionType": 2,
+                                                                    "KernelIdx": 2,
+                                                                    "YqlOperationId": 1
+                                                                }
+                                                            }
+                                                        },
+                                                        {
+                                                            "Filter": {
+                                                                "Predicate": {
+                                                                    "Id": 10
+                                                                }
+                                                            }
+                                                        },
+                                                        {
+                                                            "Projection": {
+                                                                "Columns": [
+                                                                    {
+                                                                        "Id": 2
+                                                                    },
+                                                                    {
+                                                                        "Id": 3
+                                                                    },
+                                                                    {
+                                                                        "Id": 4
+                                                                    }
+                                                                ]
+                                                            }
+                                                        }
+                                                    ],
+                                                    "Version": 5
+                                                },
+                                                "Table": "sqllogiccoltest_select1-3.test_plan/t1"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "sqllogiccoltest_select1-3.test_plan/t1"
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "col1 (Asc)",
+                                    "col2 (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
+    },
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": [
+        {
+            "name": "/Root/sqllogiccoltest_select1-3.test_plan/t1",
+            "reads": [
+                {
+                    "columns": [
+                        "b",
+                        "c",
+                        "d"
+                    ],
+                    "scan_by": [
+                        "a (-\u221e, +\u221e)",
+                        "b (-\u221e, +\u221e)",
+                        "c (-\u221e, +\u221e)",
+                        "d (-\u221e, +\u221e)",
+                        "e (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+                }
+            ]
+        }
+    ]
+}

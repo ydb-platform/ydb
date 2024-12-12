@@ -174,6 +174,11 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
         auto response = MakeHasDataInfoResponse(GetSizeLag(record.GetOffset()), cookie);
         ctx.Send(sender, response.Release());
     } else if (InitDone && !IsActive()) {
+        auto now = ctx.Now();
+
+        auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
+        userInfo.UpdateReadOffset((i64)EndOffset - 1, now, now, now, true);
+
         auto response = MakeHasDataInfoResponse(0, cookie, true);
         ctx.Send(sender, response.Release());
     } else {

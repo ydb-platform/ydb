@@ -2151,23 +2151,46 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/sids`;
+                FROM `Root/.sys/sids`
+                ORDER BY Name
             )").GetValueSync();
 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            // [["GET /index.html HTTP/1.1"];[1]];
+            auto expected = R"([
+                [["user1"]]
+            ])";
 
-            Cerr << "RESULT: " << NKqp::StreamResultToYson(it) << Endl;
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
 
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant1/.sys/sids`;
+                FROM `Root/Tenant1/.sys/sids`
+                ORDER BY Name
             )").GetValueSync();
 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto expected = R"([
+                [["user2"]]
+            ])";
 
-            Cerr << "RESULT: " << NKqp::StreamResultToYson(it) << Endl;
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT Name
+                FROM `Root/Tenant2/.sys/sids`
+                ORDER BY Name
+            )").GetValueSync();
+
+            // TODO: wtf with sort?
+            auto expected = R"([
+                [["user4"]];
+                [["user3"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
     }
 }

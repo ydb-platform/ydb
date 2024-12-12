@@ -1,6 +1,8 @@
 #include "sids.h"
 
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+#include <ydb/library/login/protos/login.pb.h>
+#include <ydb/core/sys_view/common/schema.h>
 
 namespace NKikimr::NSysView {
 
@@ -74,9 +76,12 @@ private:
             return;
         }
         
-        // const auto& pathDescription = record.GetPathDescription();
+        const auto& securityState = record.GetPathDescription().GetDomainDescription().GetSecurityState();
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+
+        FillBatch(*batch, securityState);
+
         batch->Finished = true;
 
         SendBatch(std::move(batch));
@@ -86,6 +91,28 @@ private:
         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Failed to request domain info");
     }
 
+private:
+    void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, NLoginProto::TSecurityState securityState) {
+        Cerr << securityState.DebugString() << Endl;
+        TVector<TCell> cells(::Reserve(Columns.size()));
+
+        // TODO: apply range
+
+        for (const auto& sid : securityState.GetSids()) {
+            for (auto& column : Columns) {
+                switch (column.Tag) {
+                case Schema::Sids::Name::ColumnId:
+                    cells.push_back(TCell(sid.GetName().data(), sid.GetName().size()));
+                    break;
+                default:
+                    cells.emplace_back();
+                }
+            }
+            TArrayRef<const TCell> ref(cells);
+            batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
+            cells.clear();
+        }
+    }
 private:
     TString From;
     bool FromInclusive = false;

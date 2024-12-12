@@ -83,6 +83,10 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
 
+    if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+        return std::vector<INormalizerTask::TPtr>();
+    }
+
     bool ready = true;
     ready = ready & Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme());

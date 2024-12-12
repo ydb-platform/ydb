@@ -127,7 +127,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     if (!ready) {
         return TConclusionStatus::Fail("Not ready");
     }
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     THashSet<TPortionAddress> readyPortions;
     THashMap<TPortionAddress, TV2BuildTask> buildPortions;
     {
@@ -168,6 +167,11 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     }
 
     std::vector<INormalizerTask::TPtr> tasks;
+    if (buildPortions.empty()) {
+        return tasks;
+    }
+    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
+
     {
         std::vector<TV2BuildTask> package;
         for (auto&& [portionAddress, portionInfos] : buildPortions) {

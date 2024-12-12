@@ -58,7 +58,7 @@ public:
     }
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {
     }
-    bool LoadColumns(const std::optional<ui64> /*reqPathId*/, const std::function<void(TColumnChunkLoadContextV1&&)>&) override {
+    bool LoadColumns(const std::optional<ui64> /*reqPathId*/, const std::function<void(TColumnChunkLoadContextV2&&)>&) override {
         return true;
     }
 

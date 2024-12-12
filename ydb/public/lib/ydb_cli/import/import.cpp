@@ -697,7 +697,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
         if (!progressFile || !progressFile->IsCompleted()) {
             asyncResults.push_back(NThreading::Async(std::move(func), jobPool));
         } else {
-            globalProgress.fetch_add(100); // update progress bar to show single file fully completed
+            globalProgress.fetch_add(100); // Update progress bar to show single file fully completed
         }
     }
 \

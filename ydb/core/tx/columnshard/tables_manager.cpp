@@ -183,7 +183,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, DataAccessorsManager, StoragesManager,
                     version, schemaInitializationData);
-            } else if (info.GetSchema().GetVersion() > PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion()) {
+            } else if (PrimaryIndex->GetVersionedIndex().IsEmpty() ||
+                       info.GetSchema().GetVersion() > PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion()) {
                 PrimaryIndex->RegisterSchemaVersion(version, schemaInitializationData);
             } else {
                 PrimaryIndex->RegisterOldSchemaVersion(version, schemaInitializationData);

@@ -398,7 +398,6 @@ public:
     }
 
     void SetCompleted() {
-        Cerr << "File progress " << ProgressFilePath.GetPath() << " completed" << Endl;
         Progress[completedKey] = true;
         Save();
     }

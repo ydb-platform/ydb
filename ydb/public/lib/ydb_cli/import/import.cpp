@@ -325,6 +325,7 @@ static const TString pathToProgressFiles = "~/.config/ydb/import_progress/";
 static const TString sourceModifiedKey = "source_modified"; // Timestamp of source modification
 static const TString lastImportedLineKey = "last_imported_line"; // Last line that was imported with confirmation
 static const TString completedKey = "completed"; // File was successfully imported
+static const TDuration minSaveInterval = TDuration::Seconds(10);
 
 class TProgressFile {
 public:
@@ -414,7 +415,6 @@ public:
     }
 
     void SetLastImportedLine(ui64 lastImportedLine) {
-        static const TDuration minSaveInterval = TDuration::Seconds(3);
         if (TInstant::Now() - LastSaveTime > minSaveInterval) {
             Progress[lastImportedLineKey] = lastImportedLine;
             Save();

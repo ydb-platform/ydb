@@ -95,9 +95,9 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
         }
         const std::optional<i32> pkFieldIdx = GetIndexInfo().GetPKColumnIndexByIndexVerified(targetIdx);
 
-        const bool isNull = NArrow::HasNulls(incomingBatch->column(incomingIdx));
+        const bool hasNull = NArrow::HasNulls(incomingBatch->column(incomingIdx));
         if (pkFieldIdx) {
-            if (isNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
+            if (hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
                 return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema->field(targetIdx)->name() + "'");
             }
             AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
@@ -106,7 +106,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
             ++pkColumnsCount;
             return TConclusionStatus::Success();
         }
-        if (!isNull) {
+        if (!hasNull) {
             return TConclusionStatus::Success();
         }
         switch (mType) {

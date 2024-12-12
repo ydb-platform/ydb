@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/core/base/nameservice.h>
@@ -135,6 +136,11 @@ void TNodeWarden::StopInvalidGroupProxy() {
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, MakeBlobStorageProxyID(groupId), {}, nullptr, 0));
 }
 
+void TNodeWarden::StartRequestReportingThrottler() {
+    STLOG(PRI_DEBUG, BS_NODE, NW27, "StartRequestReportingThrottler");
+    Register(CreateRequestReportingThrottler(LongRequestReportingDelayMs));
+}
+
 void TNodeWarden::PassAway() {
     STLOG(PRI_DEBUG, BS_NODE, NW25, "PassAway");
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
@@ -210,6 +216,9 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(MaxNumOfSlowDisks, "DSProxyControls.MaxNumOfSlowDisks");
         icb->RegisterSharedControl(MaxNumOfSlowDisksHDD, "DSProxyControls.MaxNumOfSlowDisksHDD");
         icb->RegisterSharedControl(MaxNumOfSlowDisksSSD, "DSProxyControls.MaxNumOfSlowDisksSSD");
+
+        icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
+        icb->RegisterSharedControl(LongRequestReportingDelayMs, "DSProxyControls.LongRequestReportingDelayMs");
     }
 
     // start replication broker
@@ -273,6 +282,8 @@ void TNodeWarden::Bootstrap() {
     StartDistributedConfigKeeper();
 
     HandleGroupPendingQueueTick();
+
+    StartRequestReportingThrottler();
 }
 
 void TNodeWarden::HandleReadCache() {

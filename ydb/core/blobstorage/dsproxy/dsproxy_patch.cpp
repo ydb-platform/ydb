@@ -69,7 +69,6 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
     TStorageStatusFlags StatusFlags = 0;
     float ApproximateFreeSpaceShare = 0;
 
-    TInstant StartTime;
     TInstant StageStart;
     TInstant Deadline;
 
@@ -147,7 +146,6 @@ public:
         , MaskForCookieBruteForcing(params.Common.Event->MaskForCookieBruteForcing)
         , DiffCount(params.Common.Event->DiffCount)
         , Diffs(params.Common.Event->Diffs.Release())
-        , StartTime(params.Common.Now)
         , Deadline(params.Common.Event->Deadline)
         , Orbit(std::move(params.Common.Event->Orbit))
         , UseVPatch(params.UseVPatch)
@@ -162,7 +160,7 @@ public:
                 StatusFlags, Info->GroupID, ApproximateFreeSpaceShare);
         result->ErrorReason = ErrorReason;
         result->Orbit = std::move(Orbit);
-        TDuration duration = TActivationContext::Now() - StartTime;
+        TDuration duration = TActivationContext::Monotonic() - RequestStartTime;
         Mon->CountPatchResponseTime(Info->GetDeviceType(), duration);
         SendResponseAndDie(std::move(result));
     }

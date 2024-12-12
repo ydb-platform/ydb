@@ -24,7 +24,6 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
     const bool IsIndexOnly;
     const ui32 ForceBlockedGeneration;
     const bool Decommission;
-    TInstant StartTime;
 
     TMap<TLogoBlobID, TBlobStatusTracker> BlobStatus;
     TBlobStorageGroupInfo::TGroupVDisks FailedDisks;
@@ -48,7 +47,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         for (const TEvBlobStorage::TEvRangeResult::TResponse& resp : reply->Responses) {
             size += resp.Buffer.size();
         }*/
-        Mon->CountRangeResponseTime(TActivationContext::Now() - StartTime);
+        Mon->CountRangeResponseTime(TActivationContext::Monotonic() - RequestStartTime);
         SendResponseAndDie(std::move(reply));
     }
 
@@ -349,7 +348,6 @@ public:
         , IsIndexOnly(params.Common.Event->IsIndexOnly)
         , ForceBlockedGeneration(params.Common.Event->ForceBlockedGeneration)
         , Decommission(params.Common.Event->Decommission)
-        , StartTime(params.Common.Now)
         , FailedDisks(&Info->GetTopology())
     {}
 

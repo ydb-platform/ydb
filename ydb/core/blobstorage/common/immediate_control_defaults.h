@@ -10,6 +10,7 @@ constexpr bool DefaultEnableVPatch = false;
 
 constexpr float DefaultSlowDiskThreshold = 2;
 constexpr float DefaultPredictedDelayMultiplier = 1;
+constexpr TDuration DefaultLongRequestThreshold = TDuration::Seconds(50);
 constexpr ui32 DefaultMaxNumOfSlowDisks = 2;
 constexpr ui32 DefaultMaxNumOfSlowDisksHDD = 1;
 
@@ -17,4 +18,5 @@ extern TControlWrapper SlowDiskThresholdDefaultControl;
 extern TControlWrapper PredictedDelayMultiplierDefaultControl;
 extern TControlWrapper MaxNumOfSlowDisksDefaultControl;
 extern TControlWrapper MaxNumOfSlowDisksHDDDefaultControl;
+extern TControlWrapper LongRequestThresholdDefaultControl;
 }

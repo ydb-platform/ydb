@@ -185,7 +185,7 @@ public:
         TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
         TActorId Source = TActorId{};
         ui64 Cookie = 0;
-        TInstant Now;
+        TMonotonic Now;
         TIntrusivePtr<TStoragePoolCounters>& StoragePoolCounters;
         ui32 RestartCounter;
         NWilson::TSpan Span;
@@ -214,10 +214,10 @@ public:
         , Span(std::move(params.Common.Span))
         , RestartCounter(params.Common.RestartCounter)
         , CostModel(GroupQueues->CostModel)
+        , RequestStartTime(params.Common.Now)
         , Source(params.Common.Source)
         , Cookie(params.Common.Cookie)
         , LatencyQueueKind(params.Common.LatencyQueueKind)
-        , RequestStartTime(params.Common.Now)
         , RacingDomains(&Info->GetTopology())
         , ExecutionRelay(std::move(params.Common.ExecutionRelay))
     {
@@ -576,7 +576,7 @@ public:
         }
 
         if (LatencyQueueKind) {
-            SendToProxy(std::make_unique<TEvLatencyReport>(*LatencyQueueKind, now - RequestStartTime));
+            SendToProxy(std::make_unique<TEvLatencyReport>(*LatencyQueueKind, TActivationContext::Monotonic() - RequestStartTime));
         }
 
         // KIKIMR-6737
@@ -643,6 +643,7 @@ protected:
     bool Dead = false;
     const ui32 RestartCounter = 0;
     std::shared_ptr<const TCostModel> CostModel;
+    const TMonotonic RequestStartTime;
 
 private:
     const TActorId Source;
@@ -651,7 +652,6 @@ private:
     ui32 RequestsInFlight = 0;
     std::unique_ptr<IEventBase> Response;
     const TMaybe<TGroupStat::EKind> LatencyQueueKind;
-    const TInstant RequestStartTime;
     THPTimer Timer;
     std::deque<std::unique_ptr<IEventHandle>> PostponedQ;
     TBlobStorageGroupInfo::TGroupFailDomains RacingDomains; // a set of domains we've received RACE from
@@ -674,8 +674,7 @@ struct TBlobStorageGroupRangeParameters {
     TBlobStorageGroupRequestActor<TEvBlobStorage::TEvRange>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_RANGE,
         .Name = "DSProxy.Range",
-        .Activity = NKikimrServices::TActivity::BS_GROUP_RANGE
-        ,
+        .Activity = NKikimrServices::TActivity::BS_GROUP_RANGE,
     };
 };
 IActor* CreateBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters params, NWilson::TTraceId traceId);
@@ -691,6 +690,7 @@ struct TBlobStorageGroupPutParameters {
     TDiskResponsivenessTracker::TPerDiskStatsPtr Stats;
     bool EnableRequestMod3x3ForMinLatency;
     TAccelerationParams AccelerationParams;
+    TDuration LongRequestThreshold;
 };
 IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupPutParameters params, NWilson::TTraceId traceId);
 
@@ -709,6 +709,7 @@ struct TBlobStorageGroupMultiPutParameters {
     TEvBlobStorage::TEvPut::ETactic Tactic;
     bool EnableRequestMod3x3ForMinLatency;
     TAccelerationParams AccelerationParams;
+    TDuration LongRequestThreshold;
 
     static ui32 CalculateRestartCounter(TBatchedVec<TEvBlobStorage::TEvPut::TPtr>& events) {
         ui32 maxRestarts = 0;
@@ -729,6 +730,7 @@ struct TBlobStorageGroupGetParameters {
     };
     TNodeLayoutInfoPtr NodeLayout;
     TAccelerationParams AccelerationParams;
+    TDuration LongRequestThreshold;
 };
 IActor* CreateBlobStorageGroupGetRequest(TBlobStorageGroupGetParameters params, NWilson::TTraceId traceId);
 
@@ -833,6 +835,7 @@ IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyN
 struct TBlobStorageProxyControlWrappers {
     TMemorizableControlWrapper EnablePutBatching;
     TMemorizableControlWrapper EnableVPatch;
+    TMemorizableControlWrapper LongRequestThresholdMs = LongRequestThresholdDefaultControl;
 
 #define DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(prefix)              \
     TMemorizableControlWrapper prefix = prefix##DefaultControl;         \

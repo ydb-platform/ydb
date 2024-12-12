@@ -10,7 +10,9 @@ BOOL_XOR(Bool?)->Bool?
 
 Apply the relevant logical operation  (`AND`/`OR`/`XOR`) to all values in a Boolean column or expression.
 
-These functions **don't skip** `NULL` during aggregation, with even one `NULL` turning the result into `NULL`. To skip `NULLs` during aggregation, you can use the functions `MIN`/`MAX` or `BIT_AND`/`BIT_OR`/`BIT_XOR`.
+These functions **don't skip** `NULL` during aggregation and follows the next rule: `true and null == null`, `false or null == null`. For `BOOL_AND` with any `true` values and even one `NULL` the result is `NULL`, but even one `false` changes it to `false` regardless whether `NULL` is present. For `BOOL_OR` with any `false` valse and even one `NULL` the result is `NULL`, but even one `true` changes it to `true` regardless whether `NULL` is present. `BOOL_XOR` results to `NULL` if any `NULL` is found.
+
+To skip `NULLs` during aggregation, you can use the functions `MIN`/`MAX` or `BIT_AND`/`BIT_OR`/`BIT_XOR`.
 
 ### Examples
 

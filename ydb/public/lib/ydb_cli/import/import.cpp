@@ -349,11 +349,11 @@ public:
         try {
             if (ProgressFilePath.Exists()) {
                 Progress = YAML::LoadFile(ProgressFilePath.GetPath());
-                if (static_cast<bool>(Progress[lastImportedLineKey])
+                if (static_cast<bool>(Progress[sourceModifiedKey])
                         && Progress[sourceModifiedKey].as<i64>() == TFileStat(SourceFilePath).MTime) {
                     return true;
                 } else {
-                    if (!static_cast<bool>(Progress[lastImportedLineKey])) {
+                    if (!static_cast<bool>(Progress[sourceModifiedKey])) {
                         Cerr << "(!) Progress file \"" << ProgressFilePath.GetPath()
                             << "\" doesn't have modification time" << Endl;
                     }

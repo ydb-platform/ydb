@@ -862,6 +862,26 @@ void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txSta
     }
 }
 
+void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskStats) {
+    for (auto& table : taskStats.GetTables()) {
+        NYql::NDqProto::TDqTableStats* tableAggr = nullptr;
+        if (auto it = TableStats.find(table.GetTablePath()); it != TableStats.end()) {
+            tableAggr = it->second;
+        } else {
+            tableAggr = Result->AddTables();
+            tableAggr->SetTablePath(table.GetTablePath());
+            TableStats.emplace(table.GetTablePath(), tableAggr);
+        }
+
+        tableAggr->SetReadRows(tableAggr->GetReadRows() + table.GetReadRows());
+        tableAggr->SetReadBytes(tableAggr->GetReadBytes() + table.GetReadBytes());
+        tableAggr->SetWriteRows(tableAggr->GetWriteRows() + table.GetWriteRows());
+        tableAggr->SetWriteBytes(tableAggr->GetWriteBytes() + table.GetWriteBytes());
+        tableAggr->SetEraseRows(tableAggr->GetEraseRows() + table.GetEraseRows());
+        tableAggr->SetAffectedPartitions(table.GetAffectedPartitions());
+    }
+}
+
 void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats) {
     Y_ASSERT(stats.GetTasks().size() == 1);
     const NYql::NDqProto::TDqTaskStats& taskStats = stats.GetTasks(0);

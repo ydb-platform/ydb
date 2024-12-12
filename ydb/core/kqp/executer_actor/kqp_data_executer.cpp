@@ -329,7 +329,12 @@ public:
         }
     }
 
-    void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr&) {
+    void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr& ev) {
+        if (ev->Get()->Stats) {
+            if (Stats) {
+                Stats->AddBufferStats(std::move(*ev->Get()->Stats));
+            }
+        }
         MakeResponseAndPassAway();
     }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -28,6 +29,10 @@ struct TEvFlush : public TEventLocal<TEvFlush, TKqpBufferWriterEvents::EvFlush> 
 };
 
 struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResult> {
+    TEvResult() = default;
+    TEvResult(NYql::NDqProto::TDqTaskStats&& stats) : Stats(std::move(stats)) {}
+
+    std::optional<NYql::NDqProto::TDqTaskStats> Stats;
 };
 
 struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> {

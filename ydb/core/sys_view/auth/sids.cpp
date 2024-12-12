@@ -58,9 +58,9 @@ private:
     void StartScan() {
         auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(TenantName);
 
-        // request->Record.MutableOptions()->SetReturnPartitioningInfo(false);
-        // request->Record.MutableOptions()->SetReturnPartitionConfig(false);
-        // request->Record.MutableOptions()->SetReturnChildren(false);
+        request->Record.MutableOptions()->SetReturnPartitioningInfo(false);
+        request->Record.MutableOptions()->SetReturnPartitionConfig(false);
+        request->Record.MutableOptions()->SetReturnChildren(false);
 
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), SchemeShardId, true),
             IEventHandle::FlagTrackDelivery);

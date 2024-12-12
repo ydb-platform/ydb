@@ -514,7 +514,7 @@ namespace Tests {
         void SetSecurityToken(const TString& token) { SecurityToken = token; }
         void ModifyOwner(const TString& parent, const TString& name, const TString& owner);
         void ModifyACL(const TString& parent, const TString& name, const TString& acl);
-        NKikimrScheme::TEvDescribeSchemeResult Describe(TTestActorRuntime* runtime, const TString& path);
+        NKikimrScheme::TEvDescribeSchemeResult Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId = SchemeRoot);
         TString CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups = 1);
         NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name);
         void RemoveStoragePool(const TString& name);

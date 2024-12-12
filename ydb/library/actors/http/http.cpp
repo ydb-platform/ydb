@@ -72,8 +72,16 @@ TString THttpRequest::GetURL() const {
     return UrlUnescapeRet(URL);
 }
 
+TString THttpRequest::GetURI() const {
+    return UrlUnescapeRet(URL.Before('?'));
+}
+
+TUrlParameters THttpRequest::GetParameters() const {
+    return TUrlParameters(URL);
+}
+
 template <>
-bool THttpParser<THttpRequest, TSocketBuffer>::HaveBody() const {
+bool THttpParser<THttpRequest, TSocketBuffer>::HasBody() const {
     if (!Body.empty()) {
         return true;
     }
@@ -116,7 +124,7 @@ void THttpParser<THttpRequest, TSocketBuffer>::Advance(size_t len) {
             case EParseStage::Header: {
                 if (ProcessData(Header, data, "\r\n", MaxHeaderSize)) {
                     if (Header.empty()) {
-                        if (HaveBody() && (ContentLength.empty() || ContentLength != "0")) {
+                        if (HasBody() && (ContentLength.empty() || ContentLength != "0")) {
                             Stage = EParseStage::Body;
                         } else if (TotalSize.has_value() && !data.empty()) {
                             Stage = EParseStage::Body;
@@ -221,12 +229,16 @@ THttpParser<THttpRequest, TSocketBuffer>::EParseStage THttpParser<THttpRequest, 
 }
 
 template <>
-bool THttpParser<THttpResponse, TSocketBuffer>::HaveBody() const {
+bool THttpParser<THttpResponse, TSocketBuffer>::ExpectedBody() const {
+    return !Status.starts_with("1") && Status != "204" && Status != "304";
+}
+
+template <>
+bool THttpParser<THttpResponse, TSocketBuffer>::HasBody() const {
     if (!Body.empty()) {
         return true;
     }
-    return (!Status.starts_with("1") && Status != "204" && Status != "304")
-        && (!ContentType.empty() || !ContentLength.empty() || !TransferEncoding.empty());
+    return ExpectedBody() && (!ContentType.empty() || !ContentLength.empty() || !TransferEncoding.empty());
 }
 
 template <>
@@ -276,7 +288,7 @@ void THttpParser<THttpResponse, TSocketBuffer>::Advance(size_t len) {
             case EParseStage::Header: {
                 if (ProcessData(Header, data, "\r\n", MaxHeaderSize)) {
                     if (Header.empty()) {
-                        if (HaveBody() && (ContentLength.empty() || ContentLength != "0")) {
+                        if (HasBody() && (ContentLength.empty() || ContentLength != "0")) {
                             Stage = EParseStage::Body;
                         } else if (TotalSize.has_value() && !data.empty()) {
                             Stage = EParseStage::Body;
@@ -407,7 +419,7 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf d
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(this);
     response->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
-    if (parser.HaveBody()) {
+    if (parser.IsDone() && parser.HasBody()) {
         if (parser.ContentType && !Endpoint->CompressContentTypes.empty()) {
             TStringBuf contentType = parser.ContentType.Before(';');
             Trim(contentType, ' ');
@@ -420,11 +432,16 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf d
         headers.Erase("Transfer-Encoding"); // we erase transfer-encoding because we convert body to content-length
         response->Set(headers);
         response->SetBody(parser.Body);
-    } else {
-        headers.Erase("Transfer-Encoding"); // we erase transfer-encoding because we convert body to content-length
+    } else if (parser.HasHeaders()) {
         response->Set(headers);
-        if (!response->ContentLength) {
-            response->Set<&THttpResponse::ContentLength>("0");
+        if (parser.ExpectedBody() && !headers.IsChunkedEncoding() && !response->ContentLength) {
+            response->Set<&THttpResponse::ContentLength>("0"); // workaround for buggy responses
+        }
+        if (parser.HasCompletedHeaders()) {
+            response->FinishHeader(); // for partial responses (data follows later)
+        }
+        if (!headers.IsChunkedEncoding()) {
+            response->FinishBody();
         }
     }
     return response;
@@ -456,6 +473,13 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseServiceUnavailable(
 
 THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseGatewayTimeout(TStringBuf html, TStringBuf contentType) {
     return CreateResponse("504", "Gateway Timeout", contentType, html);
+}
+
+THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseTemporaryRedirect(TStringBuf location) {
+    THttpOutgoingResponsePtr response = CreateIncompleteResponse("307", "Temporary redirect");
+    response->Set("Location", location);
+    FinishResponse(response);
+    return response;
 }
 
 THttpIncomingResponse::THttpIncomingResponse(THttpOutgoingRequestPtr request)
@@ -503,9 +527,14 @@ void THttpIncomingRequest::FinishResponse(THttpOutgoingResponsePtr& response, TS
     if (response->IsNeedBody() || !body.empty()) {
         if (Method == "HEAD") {
             response->Set<&THttpResponse::ContentLength>(ToString(body.size()));
+            response->FinishHeader();
+            response->FinishBody();
         } else {
             response->SetBody(body);
         }
+    } else {
+        response->FinishHeader();
+        response->FinishBody();
     }
 }
 
@@ -536,6 +565,10 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponse(TStringBuf status,
         headers.Set("Last-Modified", lastModified.FormatGmTime("%a, %d %b %Y %H:%M:%S GMT"));
     }
     return CreateResponse(status, message, headers, body);
+}
+
+THttpOutgoingDataChunkPtr THttpOutgoingResponse::CreateDataChunk(TStringBuf data) {
+    return new THttpOutgoingDataChunk(this, data);
 }
 
 THttpIncomingRequestPtr THttpIncomingRequest::Duplicate() {
@@ -600,6 +633,30 @@ THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPt
     return response;
 }
 
+TSocketBuffer* THttpOutgoingResponse::GetActiveBuffer() {
+    if (Size() == 0) {
+        for (auto itChunk = DataChunks.begin(); itChunk != DataChunks.end();) {
+            if ((*itChunk)->Size() > 0) {
+                return itChunk->Get();
+            } else {
+                itChunk = DataChunks.erase(itChunk);
+            }
+        }
+    }
+    return this;
+}
+
+void THttpOutgoingResponse::AddDataChunk(THttpOutgoingDataChunkPtr dataChunk) {
+    DataChunks.emplace_back(std::move(dataChunk));
+    if (DataChunks.back()->IsEndOfData()) {
+        FinishBody();
+    }
+}
+
+THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data)
+    : THttpDataChunk<TSocketBuffer>(data)
+    , Response(std::move(response))
+{}
 
 THttpOutgoingResponsePtr THttpIncomingResponse::Reverse(THttpIncomingRequestPtr request) {
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(request);
@@ -825,6 +882,14 @@ TString THeaders::Render() const {
         headers << "\r\n";
     }
     return headers;
+}
+
+bool THeaders::IsChunkedEncoding() const {
+    auto it = Headers.find("Transfer-Encoding");
+    if (it == Headers.end()) {
+        return false;
+    }
+    return it->second.find("chunked") != TStringBuf::npos;
 }
 
 THeadersBuilder::THeadersBuilder()

@@ -698,24 +698,30 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
             globalProgress.fetch_add(100); // update progress bar to show single file fully completed
         }
     }
-
-    if (FilesPreviouslyCompleted) {
-        std::cerr << "(!) Skipping " << FilesPreviouslyCompleted
-            << " file(s) that was fully imported in a previous (interrupted) import process. "
-            "If you want to fully reset import progress, remove progress files from " << pathToProgressFiles << std::endl;
-
-    }
-    if (FilesPreviouslyStarted) {
-        if (FilesPreviouslyStarted == 1) {
-            std::cerr << "(!) Found existing import progress for file \"" << PreviouslyStartedProgressFile->GetSourcveFilePath()
-                << "\". Continuing from line " << PreviouslyStartedProgressFile->GetLastImportedLine()
-                << " where it was interrupted. If you want to reset import progress, remove progress file \""
-                << PreviouslyStartedProgressFile->GetProgressFilePath() << "\"" << std::endl;
-        } else {
-            std::cerr << "(!) Found existing import progress for " << FilesPreviouslyStarted
-                << " files. Continuing from where they were interrupted. If you want to reset import progress, "
-                "remove progress files from " << pathToProgressFiles << std::endl;
+\
+    if (FilesPreviouslyCompleted || FilesPreviouslyStarted) {
+        TStringBuilder existingProgressMessage;
+        if (FilesPreviouslyCompleted) {
+            existingProgressMessage << "(!) Skipping " << FilesPreviouslyCompleted
+                << " file(s) that was fully imported in a previous (interrupted) import process." << Endl;
         }
+        if (FilesPreviouslyStarted) {
+            if (FilesPreviouslyStarted == 1) {
+                existingProgressMessage << "(!) Found existing import progress for file \"" << PreviouslyStartedProgressFile->GetSourcveFilePath()
+                    << "\". Continuing from line " << PreviouslyStartedProgressFile->GetLastImportedLine()
+                    << " where it was interrupted." << Endl;
+            } else {
+                existingProgressMessage << "(!) Found existing import progress for " << FilesPreviouslyStarted
+                    << " files. Continuing from where they were interrupted." << Endl;
+            }
+        }
+        if (FilesPreviouslyStarted == 1) {
+            existingProgressMessage << "If you want to reset file import progress, remove progress file \""
+                << PreviouslyStartedProgressFile->GetProgressFilePath() << "\"" << Endl;
+        } else {
+            existingProgressMessage << "If you want to fully reset import progress, remove progress files from " << pathToProgressFiles << Endl;
+        }
+        Cerr << existingProgressMessage;
     }
 
     NThreading::WaitAll(asyncResults).GetValueSync();

@@ -623,13 +623,15 @@ public:
             }
 
             auto isKeyAllowed = [&](const TOwnedCellVec& cellVec) {
-                if (Settings.HasAllowNullKeys() && Settings.GetAllowNullKeys()) {
+                auto allowNullKeysPrefixSize = Settings.HasAllowNullKeysPrefixSize() ? Settings.GetAllowNullKeysPrefixSize() : 0;
+                if (allowNullKeysPrefixSize >= cellVec.size()) {
+                    // all lookup key components can contain null
                     return true;
                 }
 
-                // otherwise we can't use nulls as lookup keys
-                for (const auto& cell : cellVec) {
-                    if (cell.IsNull()) {
+                // otherwise we can use nulls only for first allowNullKeysPrefixSize key components
+                for (size_t i = 0; i < cellVec.size(); ++i) {
+                    if (cellVec[i].IsNull() && i >= allowNullKeysPrefixSize) {
                         return false;
                     }
                 }

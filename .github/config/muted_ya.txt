@@ -145,8 +145,6 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_abov
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
-ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
-ydb/tests/olap/scenario test_simple.py.TestSimple.test
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBinaryByteSliceToInt]

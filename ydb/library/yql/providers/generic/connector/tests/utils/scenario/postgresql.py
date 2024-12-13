@@ -1,6 +1,6 @@
 from typing import Sequence
 
-import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
+import yql.essentials.providers.common.proto.gateways_config_pb2 as data_source_pb2
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
 from ydb.library.yql.providers.generic.connector.tests.utils.comparator import assert_data_outs_equal

@@ -67,7 +67,7 @@ TString MakeIncompletePath(const TString& path)
 
 void CollectAndDumpMemoryProfile(const TString& memoryProfilePath, tcmalloc::ProfileType profileType)
 {
-    auto profile = NYTProf::ReadHeapProfile(profileType);
+    auto profile = NYTProf::CaptureHeapProfile(profileType);
     SymbolizeByExternalPProf(&profile, NYTProf::TSymbolizationOptions{
         .RunTool = [] (const std::vector<TString>& args) {
             TShellCommand command{args[0], TList<TString>{args.begin() + 1, args.end()}};
@@ -78,7 +78,7 @@ void CollectAndDumpMemoryProfile(const TString& memoryProfilePath, tcmalloc::Pro
     auto incompletePath = MakeIncompletePath(memoryProfilePath);
 
     TFileOutput output(incompletePath);
-    NYTProf::WriteProfile(&output, profile);
+    NYTProf::WriteCompressedProfile(&output, profile);
     output.Finish();
     NFS::Rename(incompletePath, memoryProfilePath);
 }
@@ -413,10 +413,13 @@ public:
 
     void Configure(const TTCMallocConfigPtr& config)
     {
+        tcmalloc::MallocExtension::SetProfileSamplingRate(config->ProfileSamplingRate);
+        tcmalloc::MallocExtension::SetMaxPerCpuCacheSize(config->MaxPerCpuCacheSize);
+        tcmalloc::MallocExtension::SetMaxTotalThreadCacheBytes(config->MaxTotalThreadCacheBytes);
         tcmalloc::MallocExtension::SetBackgroundReleaseRate(
             tcmalloc::MallocExtension::BytesPerSecond{static_cast<size_t>(config->BackgroundReleaseRate)});
 
-        tcmalloc::MallocExtension::SetMaxPerCpuCacheSize(config->MaxPerCpuCacheSize);
+        tcmalloc::MallocExtension::EnableForkSupport();
 
         if (config->GuardedSamplingRate) {
             tcmalloc::MallocExtension::SetGuardedSamplingRate(*config->GuardedSamplingRate);

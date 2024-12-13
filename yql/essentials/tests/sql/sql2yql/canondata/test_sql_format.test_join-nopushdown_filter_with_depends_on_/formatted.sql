@@ -6,11 +6,13 @@ USE plato;
 -- should not pushdown
 SELECT
     *
-FROM Input1
-    AS a
-LEFT SEMI JOIN Input2
-    AS b
+FROM
+    Input1 AS a
+LEFT SEMI JOIN
+    Input2 AS b
 USING (key)
-WHERE Random(TableRow()) < 0.1
+WHERE
+    Random(TableRow()) < 0.1
 ORDER BY
-    key;
+    key
+;

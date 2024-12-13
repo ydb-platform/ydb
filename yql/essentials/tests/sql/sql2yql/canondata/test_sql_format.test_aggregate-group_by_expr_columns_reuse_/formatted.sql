@@ -6,9 +6,11 @@ USE plato;
 SELECT
     key,
     count(1) AS count
-FROM Input
+FROM
+    Input
 GROUP BY
     CAST(key AS uint32) % 10 AS key
 ORDER BY
     key,
-    count;
+    count
+;

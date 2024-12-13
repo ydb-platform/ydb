@@ -22,6 +22,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    perf
     sensors_owner
     solomon
     unittests

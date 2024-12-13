@@ -7,4 +7,5 @@ SELECT
     pgdouble_precision("0.5"),
     pgcharacter("foo"),
     pgtime_without_time_zone("12:00"),
-    pgcharacter_varying("bar");
+    pgcharacter_varying("bar")
+;

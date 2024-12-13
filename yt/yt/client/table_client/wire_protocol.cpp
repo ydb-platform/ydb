@@ -1175,7 +1175,6 @@ private:
     std::unique_ptr<IWireProtocolReader> WireReader_;
     bool Finished_ = false;
     bool SchemaChecked_ = false;
-
 };
 
 IWireProtocolRowsetReaderPtr CreateWireProtocolRowsetReader(

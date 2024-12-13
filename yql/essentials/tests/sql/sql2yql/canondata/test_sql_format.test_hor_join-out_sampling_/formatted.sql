@@ -6,29 +6,37 @@ USE plato;
 SELECT
     key,
     some(value)
-FROM Input
+FROM
+    Input
 GROUP BY
-    key;
+    key
+;
 
 SELECT
     key,
     sum(CAST(subkey AS Int32))
-FROM Input
+FROM
+    Input
     SAMPLE 0.3
 GROUP BY
-    key;
+    key
+;
 
 SELECT
     key,
     some(subkey)
-FROM Input
+FROM
+    Input
     SAMPLE 0.3
 GROUP BY
-    key;
+    key
+;
 
 SELECT
     key,
     sum(length(value))
-FROM Input
+FROM
+    Input
 GROUP BY
-    key;
+    key
+;

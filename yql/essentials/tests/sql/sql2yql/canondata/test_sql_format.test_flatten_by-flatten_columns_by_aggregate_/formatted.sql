@@ -10,7 +10,8 @@ $input = (
         FROM (
             SELECT
                 TableRow() AS row
-            FROM Input
+            FROM
+                Input
         )
     )
         FLATTEN COLUMNS
@@ -19,4 +20,6 @@ $input = (
 --INSERT INTO Output WITH TRUNCATE
 SELECT
     *
-FROM $input;
+FROM
+    $input
+;

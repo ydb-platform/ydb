@@ -7,7 +7,9 @@ SELECT
     1l AS `Permalink`,
     1l AS `ClusterPermalink`,
     FALSE AS `IsHead`,
-    FALSE AS `WasHead`;
+    FALSE AS `WasHead`
+;
+
 COMMIT;
 
 SELECT
@@ -15,11 +17,13 @@ SELECT
         NOT `WasHead` AND NOT `IsHead`,
         aggregate_list(AsStruct(`Permalink` AS `Permalink`, `Date` AS `Date`, `ClusterPermalink` AS ClusterPermalink)) OVER `w`
     ) AS `Occurence`
-FROM @source
+FROM
+    @source
 WINDOW
     `w` AS (
         PARTITION BY
             `Permalink`
         ORDER BY
             `Date`
-    );
+    )
+;

@@ -4,14 +4,15 @@ SELECT
             RETURN ListExtend(
                 ListMap(
                     AsList(100, 101), ($y) -> {
-                        RETURN $x + $y
+                        RETURN $x + $y;
                     }
                 ),
                 ListMap(
                     AsList(100, 101), ($y) -> {
-                        RETURN $x + $y
+                        RETURN $x + $y;
                     }
                 )
-            )
+            );
         }
-    );
+    )
+;

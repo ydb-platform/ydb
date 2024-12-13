@@ -6,15 +6,18 @@ $a = (
     SELECT
         key,
         subkey
-    FROM Input
+    FROM
+        Input
 );
 
 SELECT
     a.subkey
-FROM $a
-    AS a;
+FROM
+    $a AS a
+;
 
 SELECT
     b.subkey
-FROM $a
-    AS b;
+FROM
+    $a AS b
+;

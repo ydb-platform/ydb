@@ -9,20 +9,27 @@ SELECT
             AsTuple(
                 AsAtom("res"), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN AsTuple($z.a, -$z.a)
+                        RETURN AsTuple($z.a, -$z.a);
                     }
                 )
             )
         )
-    );
+    )
+;
+
 USE plato;
 
 INSERT INTO @a
 SELECT
     AsTuple(a, -a) AS aa
-FROM as_table($t);
+FROM
+    as_table($t)
+;
+
 COMMIT;
 
 SELECT
     AGGREGATE_BY(aa, $f)
-FROM @a;
+FROM
+    @a
+;

@@ -9,4 +9,6 @@ $data = AsList(
 SELECT
     Key,
     Value3
-FROM AS_TABLE($data);
+FROM
+    AS_TABLE($data)
+;

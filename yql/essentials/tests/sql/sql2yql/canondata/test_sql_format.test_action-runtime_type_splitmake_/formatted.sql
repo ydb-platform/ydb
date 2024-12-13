@@ -1,18 +1,20 @@
 /* syntax version 1 */
 /* postgres can not */
 $formatTagged = ($x) -> {
-    RETURN AsStruct(FormatType($x.Base) AS Base, $x.Tag AS Tag)
+    RETURN AsStruct(FormatType($x.Base) AS Base, $x.Tag AS Tag);
 };
+
 $formatArgument = ($x) -> {
-    RETURN AsStruct(FormatType($x.Type) AS Type, $x.Name AS Name, $x.Flags AS Flags)
+    RETURN AsStruct(FormatType($x.Type) AS Type, $x.Name AS Name, $x.Flags AS Flags);
 };
+
 $formatCallable = ($x) -> {
     RETURN AsStruct(
         $x.OptionalArgumentsCount AS OptionalArgumentsCount,
         $x.Payload AS Payload,
         FormatType($x.Result) AS Result,
         ListMap($x.Arguments, $formatArgument) AS Arguments
-    )
+    );
 };
 
 SELECT
@@ -29,14 +31,14 @@ SELECT
     ListMap(
         TupleTypeComponents(ParseTypeHandle("Tuple<Int32,String>")),
         ($x) -> {
-            RETURN FormatType($x)
+            RETURN FormatType($x);
         }
     ),
     FormatType(
         TupleTypeHandle(
             ListMap(
                 AsList("Int32", "String"), ($x) -> {
-                    RETURN ParseTypeHandle($x)
+                    RETURN ParseTypeHandle($x);
                 }
             )
         )
@@ -44,7 +46,7 @@ SELECT
     ListMap(
         StructTypeComponents(ParseTypeHandle("Struct<foo:Int32,bar:String>")),
         ($x) -> {
-            RETURN AsTuple($x.Name, FormatType($x.Type))
+            RETURN AsTuple($x.Name, FormatType($x.Type));
         }
     ),
     FormatType(
@@ -52,7 +54,7 @@ SELECT
             ListMap(
                 AsList(AsTuple("foo", "Int32"), AsTuple("bar", "String")),
                 ($x) -> {
-                    RETURN AsStruct($x.0 AS Name, ParseTypeHandle($x.1) AS Type)
+                    RETURN AsStruct($x.0 AS Name, ParseTypeHandle($x.1) AS Type);
                 }
             )
         )
@@ -60,7 +62,7 @@ SELECT
     StaticMap(
         DictTypeComponents(ParseTypeHandle("Dict<String,Int32>")),
         ($x) -> {
-            RETURN FormatType($x)
+            RETURN FormatType($x);
         }
     ),
     FormatType(DictTypeHandle(ParseTypeHandle("String"), ParseTypeHandle("Int32"))),
@@ -91,4 +93,5 @@ SELECT
             ),
             1, "foo"
         )
-    );
+    )
+;

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.8.6)
+VERSION(0.8.8)
 
 LICENSE(Apache-2.0)
 
@@ -44,6 +44,7 @@ PY_SRCS(
     clickhouse_connect/datatypes/container.py
     clickhouse_connect/datatypes/dynamic.py
     clickhouse_connect/datatypes/format.py
+    clickhouse_connect/datatypes/geometric.py
     clickhouse_connect/datatypes/network.py
     clickhouse_connect/datatypes/numeric.py
     clickhouse_connect/datatypes/postinit.py

@@ -7,8 +7,12 @@ $withStruct =
         subkey,
         value,
         AsStruct(key AS key) AS s
-    FROM Input3;
+    FROM
+        Input3
+;
 
 SELECT
     count(DISTINCT s.key) AS cnt
-FROM $withStruct;
+FROM
+    $withStruct
+;

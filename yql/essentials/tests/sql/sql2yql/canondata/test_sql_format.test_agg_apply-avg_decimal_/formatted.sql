@@ -9,7 +9,6 @@ FROM (
         (Decimal("0.1", 10, 1)),
         (Decimal("0.2", 10, 1)),
         (Decimal("0.3", 10, 1))
-)
-    AS a (
-        key
-    );
+) AS a (
+    key
+);

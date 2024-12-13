@@ -22,4 +22,5 @@ SELECT
     100 IN NULL,
     1 / 1 IN NULL,
     1 / 0 IN NULL,
-    NULL IN NULL;
+    NULL IN NULL
+;

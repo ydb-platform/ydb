@@ -4,18 +4,25 @@ USE plato;
 $input =
     SELECT
         *
-    FROM range("", "Input1", "Input2");
+    FROM
+        range("", "Input1", "Input2")
+;
 
 $key =
     SELECT
         min(key)
-    FROM $input;
+    FROM
+        $input
+;
 
 SELECT
     key,
     subkey,
     value
-FROM $input
-WHERE subkey > '1' AND key > $key
+FROM
+    $input
+WHERE
+    subkey > '1' AND key > $key
 ORDER BY
-    key;
+    key
+;

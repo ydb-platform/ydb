@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/import/import.h>
 #include <ydb/library/backup/util.h>
 
@@ -17,10 +18,6 @@
 #elif defined(_unix_)
 #include <unistd.h>
 #endif
-
-namespace NYdb::NDump {
-    extern const char SCHEME_FILE_NAME[];
-}
 
 namespace NYdb::NConsoleClient {
 
@@ -172,7 +169,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
                 auto listResult = s3Client->ListObjectKeys(item.Source, token);
                 token = listResult.NextToken;
                 for (TStringBuf key : listResult.Keys) {
-                    if (key.ChopSuffix(NDump::SCHEME_FILE_NAME)) {
+                    if (key.ChopSuffix(NDump::NFiles::TableScheme().FileName)) {
                         TString destination = item.Destination + key.substr(item.Source.size());
                         settings.AppendItem({TString(key), std::move(destination)});
                     }

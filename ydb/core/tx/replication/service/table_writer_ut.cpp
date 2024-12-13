@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             },
             .ReplicationConfig = TTestTableDescription::TReplicationConfig{
                 .Mode = TTestTableDescription::TReplicationConfig::MODE_READ_ONLY,
-                .Consistency = TTestTableDescription::TReplicationConfig::CONSISTENCY_STRONG,
+                .ConsistencyLevel = TTestTableDescription::TReplicationConfig::CONSISTENCY_LEVEL_GLOBAL,
             },
         }));
 

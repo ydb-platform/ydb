@@ -4,8 +4,10 @@ USE plato;
 $i = (
     SELECT
         *
-    FROM Input
-    WHERE key == "0"
+    FROM
+        Input
+    WHERE
+        key == "0"
     ORDER BY
         key
     LIMIT 100
@@ -14,13 +16,17 @@ $i = (
 SELECT
     key,
     some(value)
-FROM $i
+FROM
+    $i
 GROUP BY
-    key;
+    key
+;
 
 SELECT
     key,
     some(subkey)
-FROM $i
+FROM
+    $i
 GROUP BY
-    key;
+    key
+;

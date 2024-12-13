@@ -1,9 +1,12 @@
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 UNION
 SELECT
     *
-FROM plato.Input
+FROM
+    plato.Input
 ORDER BY
-    key;
+    key
+;

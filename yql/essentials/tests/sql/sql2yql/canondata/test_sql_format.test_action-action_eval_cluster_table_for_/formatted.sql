@@ -6,10 +6,13 @@ DEFINE ACTION $a($x) AS
     INSERT INTO yt: $foo.Output
     SELECT
         *
-    FROM yt: $foo.Input
-    WHERE key < "100"
+    FROM
+        yt: $foo.Input
+    WHERE
+        key < "100"
     ORDER BY
-        key;
+        key
+    ;
 END DEFINE;
 
 EVALUATE FOR $i IN AsList("PLATO"u) DO

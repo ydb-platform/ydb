@@ -8,7 +8,8 @@ FROM (
     SELECT
         AsList(key) AS key,
         value
-    FROM Input
+    FROM
+        Input
 )
 WINDOW
     w AS (
@@ -18,4 +19,5 @@ WINDOW
             value
     )
 ORDER BY
-    key;
+    key
+;

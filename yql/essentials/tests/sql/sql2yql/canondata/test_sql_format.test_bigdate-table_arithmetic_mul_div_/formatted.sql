@@ -19,14 +19,16 @@ SELECT
     l.i64 / i16,
     l.i64 / i32,
     l.i64 / r.i64
-FROM BigDates
-    AS l
-CROSS JOIN Signed
-    AS r
-WHERE abs(l.row) <= 7 AND abs(r.row) <= 7
+FROM
+    BigDates AS l
+CROSS JOIN
+    Signed AS r
+WHERE
+    abs(l.row) <= 7 AND abs(r.row) <= 7
 ORDER BY
     l.row,
-    r.row;
+    r.row
+;
 
 SELECT
     l.row,
@@ -46,14 +48,16 @@ SELECT
     i64 / ui16,
     i64 / ui32,
     i64 / ui64
-FROM BigDates
-    AS l
-CROSS JOIN Unsigned
-    AS r
-WHERE abs(l.row) <= 7 AND abs(r.row) <= 7
+FROM
+    BigDates AS l
+CROSS JOIN
+    Unsigned AS r
+WHERE
+    abs(l.row) <= 7 AND abs(r.row) <= 7
 ORDER BY
     l.row,
-    r.row;
+    r.row
+;
 
 SELECT
     l.row,
@@ -73,14 +77,16 @@ SELECT
     l.i / i16,
     l.i / i32,
     l.i / r.i64
-FROM NarrowInterval
-    AS l
-CROSS JOIN Signed
-    AS r
-WHERE abs(l.row) <= 7 AND abs(r.row) <= 7
+FROM
+    NarrowInterval AS l
+CROSS JOIN
+    Signed AS r
+WHERE
+    abs(l.row) <= 7 AND abs(r.row) <= 7
 ORDER BY
     l.row,
-    r.row;
+    r.row
+;
 
 SELECT
     l.row,
@@ -100,11 +106,13 @@ SELECT
     i / ui16,
     i / ui32,
     i / ui64
-FROM NarrowInterval
-    AS l
-CROSS JOIN Unsigned
-    AS r
-WHERE abs(l.row) <= 7 AND abs(r.row) <= 7
+FROM
+    NarrowInterval AS l
+CROSS JOIN
+    Unsigned AS r
+WHERE
+    abs(l.row) <= 7 AND abs(r.row) <= 7
 ORDER BY
     l.row,
-    r.row;
+    r.row
+;

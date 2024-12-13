@@ -1,6 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 USE plato;
+
 $myAddSuffix = ($row, $value) -> {
     $type = TypeOf($row);
 
@@ -20,7 +21,7 @@ $myAddSuffix = ($row, $value) -> {
                                     FuncCode("Member", $r, AtomCode($i.Name)),
                                     ReprCode($value)
                                 )
-                            )
+                            );
                         }
                     )
                 );
@@ -32,4 +33,6 @@ $myAddSuffix = ($row, $value) -> {
 
 SELECT
     $myAddSuffix(TableRow(), "*")
-FROM Input;
+FROM
+    Input
+;

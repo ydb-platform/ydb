@@ -2012,10 +2012,6 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         DiskQuotaExceeded = value;
     }
 
-    bool HasSecurityState() const {
-        return SecurityState.PublicKeysSize() > 0;
-    }
-
     const NLoginProto::TSecurityState& GetSecurityState() const {
         return SecurityState;
     }

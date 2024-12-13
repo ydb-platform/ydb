@@ -3,9 +3,9 @@ USE plato;
 $sub = (
     SELECT
         key
-    FROM Input
-        FLATTEN LIST BY
-            key
+    FROM
+        Input
+        FLATTEN LIST BY key
 );
 
 INSERT INTO Output
@@ -15,6 +15,8 @@ SELECT
         [value],
         ($x) -> ($x IN $sub)
     ) AS f
-FROM Input
+FROM
+    Input
 ORDER BY
-    value;
+    value
+;

@@ -1,6 +1,7 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 PRAGMA OrderedColumns;
 
 SELECT
@@ -14,8 +15,9 @@ SELECT
             subkey
     ) AS z,
     a.*
-FROM Input
-    AS a
+FROM
+    Input AS a
 ORDER BY
     key,
-    subkey;
+    subkey
+;

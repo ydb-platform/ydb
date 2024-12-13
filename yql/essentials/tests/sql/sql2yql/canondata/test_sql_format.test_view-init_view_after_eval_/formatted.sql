@@ -4,22 +4,28 @@ USE plato;
 $i =
     SELECT
         *
-    FROM Input;
+    FROM
+        Input
+;
 
 $i =
-    PROCESS $i;
+    PROCESS $i
+;
+
 $members = StructTypeComponents(ListItemType(TypeHandle(TypeOf($i))));
+
 $filteredMembers = ListFilter(
     ListMap(
         $members, ($x) -> {
-            RETURN $x.Name
+            RETURN $x.Name;
         }
     ), ($x) -> {
-        RETURN $x > "k"
+        RETURN $x > "k";
     }
 );
 
 SELECT
     ChooseMembers(TableRow(), $filteredMembers)
-FROM Input
-    VIEW raw;
+FROM
+    Input VIEW raw
+;

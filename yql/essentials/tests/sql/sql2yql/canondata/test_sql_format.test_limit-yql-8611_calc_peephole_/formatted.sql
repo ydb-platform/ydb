@@ -1,17 +1,22 @@
 USE plato;
+
 $tableList = AsList(
     AsStruct(Yson('{"row_count"=9}') AS Attributes, "Input1" AS Path, "table" AS Type),
     AsStruct(Yson('{"row_count"=19}') AS Attributes, "Input2" AS Path, "table" AS Type)
 );
+
 -- $bucket_size = 1000000;
 $buckets = ASLIST(0, 1, 2, 3);
 
 $row_count = (
     SELECT
         Yson::LookupInt64(Attributes, "row_count")
-    FROM AS_TABLE($tableList)
-    WHERE Type == "table"
+    FROM
+        AS_TABLE($tableList)
+    WHERE
+        Type == "table"
 );
+
 $bucket_size = unwrap(CAST($row_count / ListLength($buckets) AS Uint64));
 
 DEFINE ACTION $make_bucket($bucket_number) AS
@@ -22,7 +27,8 @@ DEFINE ACTION $make_bucket($bucket_number) AS
     (
         SELECT
             *
-        FROM Input
+        FROM
+            Input
         ORDER BY
             key
         LIMIT $bucket_size OFFSET $offset

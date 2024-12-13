@@ -16,20 +16,26 @@
 
 namespace fast_float {
 
-#define FASTFLOAT_JSONFMT (1 << 5)
-#define FASTFLOAT_FORTRANFMT (1 << 6)
+enum class chars_format : uint64_t;
 
-enum chars_format {
+namespace detail {
+constexpr chars_format basic_json_fmt = chars_format(1 << 5);
+constexpr chars_format basic_fortran_fmt = chars_format(1 << 6);
+} // namespace detail
+
+enum class chars_format : uint64_t {
   scientific = 1 << 0,
   fixed = 1 << 2,
   hex = 1 << 3,
   no_infnan = 1 << 4,
   // RFC 8259: https://datatracker.ietf.org/doc/html/rfc8259#section-6
-  json = FASTFLOAT_JSONFMT | fixed | scientific | no_infnan,
+  json = uint64_t(detail::basic_json_fmt) | fixed | scientific | no_infnan,
   // Extension of RFC 8259 where, e.g., "inf" and "nan" are allowed.
-  json_or_infnan = FASTFLOAT_JSONFMT | fixed | scientific,
-  fortran = FASTFLOAT_FORTRANFMT | fixed | scientific,
-  general = fixed | scientific
+  json_or_infnan = uint64_t(detail::basic_json_fmt) | fixed | scientific,
+  fortran = uint64_t(detail::basic_fortran_fmt) | fixed | scientific,
+  general = fixed | scientific,
+  allow_leading_plus = 1 << 7,
+  skip_white_space = 1 << 8,
 };
 
 template <typename UC> struct from_chars_result_t {
@@ -40,13 +46,15 @@ using from_chars_result = from_chars_result_t<char>;
 
 template <typename UC> struct parse_options_t {
   constexpr explicit parse_options_t(chars_format fmt = chars_format::general,
-                                     UC dot = UC('.'))
-      : format(fmt), decimal_point(dot) {}
+                                     UC dot = UC('.'), int b = 10)
+      : format(fmt), decimal_point(dot), base(b) {}
 
   /** Which number formats are accepted */
   chars_format format;
   /** The character used as decimal point */
   UC decimal_point;
+  /** The base used for integers */
+  int base;
 };
 using parse_options = parse_options_t<char>;
 
@@ -214,12 +222,15 @@ fastfloat_really_inline constexpr bool is_supported_char_type() {
 // Compares two ASCII strings in a case insensitive manner.
 template <typename UC>
 inline FASTFLOAT_CONSTEXPR14 bool
-fastfloat_strncasecmp(UC const *input1, UC const *input2, size_t length) {
-  char running_diff{0};
+fastfloat_strncasecmp(UC const *actual_mixedcase, UC const *expected_lowercase,
+                      size_t length) {
   for (size_t i = 0; i < length; ++i) {
-    running_diff |= (char(input1[i]) ^ char(input2[i]));
+    UC const actual = actual_mixedcase[i];
+    if ((actual < 256 ? actual | 32 : actual) != expected_lowercase[i]) {
+      return false;
+    }
   }
-  return (running_diff == 0) || (running_diff == 32);
+  return true;
 }
 
 #ifndef FLT_EVAL_METHOD
@@ -670,7 +681,6 @@ to_float(bool negative, adjusted_mantissa am, T &value) {
 #endif
 }
 
-#ifdef FASTFLOAT_SKIP_WHITE_SPACE // disabled by default
 template <typename = void> struct space_lut {
   static constexpr bool value[] = {
       0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -692,8 +702,9 @@ template <typename T> constexpr bool space_lut<T>::value[];
 
 #endif
 
-inline constexpr bool is_space(uint8_t c) { return space_lut<>::value[c]; }
-#endif
+template <typename UC> constexpr bool is_space(UC c) {
+  return c < 256 && space_lut<>::value[uint8_t(c)];
+}
 
 template <typename UC> static constexpr uint64_t int_cmp_zeros() {
   static_assert((sizeof(UC) == 1) || (sizeof(UC) == 2) || (sizeof(UC) == 4),
@@ -796,6 +807,58 @@ fastfloat_really_inline constexpr size_t max_digits_u64(int base) {
 fastfloat_really_inline constexpr uint64_t min_safe_u64(int base) {
   return int_luts<>::min_safe_u64[base - 2];
 }
+
+constexpr chars_format operator~(chars_format rhs) noexcept {
+  using int_type = std::underlying_type<chars_format>::type;
+  return static_cast<chars_format>(~static_cast<int_type>(rhs));
+}
+
+constexpr chars_format operator&(chars_format lhs, chars_format rhs) noexcept {
+  using int_type = std::underlying_type<chars_format>::type;
+  return static_cast<chars_format>(static_cast<int_type>(lhs) &
+                                   static_cast<int_type>(rhs));
+}
+
+constexpr chars_format operator|(chars_format lhs, chars_format rhs) noexcept {
+  using int_type = std::underlying_type<chars_format>::type;
+  return static_cast<chars_format>(static_cast<int_type>(lhs) |
+                                   static_cast<int_type>(rhs));
+}
+
+constexpr chars_format operator^(chars_format lhs, chars_format rhs) noexcept {
+  using int_type = std::underlying_type<chars_format>::type;
+  return static_cast<chars_format>(static_cast<int_type>(lhs) ^
+                                   static_cast<int_type>(rhs));
+}
+
+fastfloat_really_inline FASTFLOAT_CONSTEXPR14 chars_format &
+operator&=(chars_format &lhs, chars_format rhs) noexcept {
+  return lhs = (lhs & rhs);
+}
+
+fastfloat_really_inline FASTFLOAT_CONSTEXPR14 chars_format &
+operator|=(chars_format &lhs, chars_format rhs) noexcept {
+  return lhs = (lhs | rhs);
+}
+
+fastfloat_really_inline FASTFLOAT_CONSTEXPR14 chars_format &
+operator^=(chars_format &lhs, chars_format rhs) noexcept {
+  return lhs = (lhs ^ rhs);
+}
+
+namespace detail {
+// adjust for deprecated feature macros
+constexpr chars_format adjust_for_feature_macros(chars_format fmt) {
+  return fmt
+#ifdef FASTFLOAT_ALLOWS_LEADING_PLUS
+         | chars_format::allow_leading_plus
+#endif
+#ifdef FASTFLOAT_SKIP_WHITE_SPACE
+         | chars_format::skip_white_space
+#endif
+      ;
+}
+} // namespace detail
 
 } // namespace fast_float
 

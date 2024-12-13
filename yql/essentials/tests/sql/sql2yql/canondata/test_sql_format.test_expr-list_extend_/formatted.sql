@@ -10,4 +10,5 @@ SELECT
     ListExtend([1u], [2u], Nothing(List<Int32>?)),
     ListExtendStrict([1u], [2u], Nothing(List<UInt32>?)),
     ListExtendStrict([1u], [2u], [4u, 3u]),
-    ListExtendStrict([1u], Just([2u]), [], [5u, 6u]),;
+    ListExtendStrict([1u], Just([2u]), [], [5u, 6u]),
+;

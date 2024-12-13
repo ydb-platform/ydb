@@ -259,14 +259,14 @@ message TTableReplicationConfig {
         REPLICATION_MODE_READ_ONLY = 1;
     }
 
-    enum EConsistency {
-        CONSISTENCY_UNKNOWN = 0;
-        CONSISTENCY_STRONG = 1;
-        CONSISTENCY_WEAK = 2;
+    enum EConsistencyLevel {
+        CONSISTENCY_LEVEL_UNKNOWN = 0;
+        CONSISTENCY_LEVEL_GLOBAL = 1;
+        CONSISTENCY_LEVEL_ROW = 2;
     }
 
     optional EReplicationMode Mode = 1;
-    optional EConsistency Consistency = 2;
+    optional EConsistencyLevel ConsistencyLevel = 2;
 }
 
 message TTableIncrementalBackupConfig {
@@ -516,9 +516,9 @@ message TMetadataManagerConstructorContainer {
 
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
-    optional bool ExternalGuaranteeExclusivePK = 2 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
+    optional string ScanReaderPolicyName = 5;
 }
 
 message TColumnTableSchema {
@@ -560,9 +560,9 @@ message TColumnTableSchemaDiff {
 
 message TColumnTableRequestedOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
-    optional bool ExternalGuaranteeExclusivePK = 2;
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
+    optional string ScanReaderPolicyName = 5;
 }
 
 message TAlterColumnTableSchema {

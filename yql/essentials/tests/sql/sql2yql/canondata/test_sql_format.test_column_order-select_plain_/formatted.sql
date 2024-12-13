@@ -1,46 +1,54 @@
 /* postgres can not */
 /* syntax version 1 */
 USE plato;
+
 PRAGMA OrderedColumns;
 
 SELECT
     *
-FROM Input
+FROM
+    Input
 ORDER BY
-    subkey;
+    subkey
+;
 
 SELECT
     *
 WITHOUT
     key
-FROM Input
+FROM
+    Input
 ORDER BY
-    subkey;
+    subkey
+;
 
 SELECT
     a.*
-FROM Input
-    AS a
+FROM
+    Input AS a
 ORDER BY
-    a.subkey;
+    a.subkey
+;
 
 SELECT
     a.*
 WITHOUT
     key
-FROM Input
-    AS a
+FROM
+    Input AS a
 ORDER BY
-    a.subkey;
+    a.subkey
+;
 
 SELECT
     1 AS z,
     2 AS x,
     a.*
-FROM Input
-    AS a
+FROM
+    Input AS a
 ORDER BY
-    a.subkey;
+    a.subkey
+;
 
 SELECT
     1 AS z,
@@ -48,12 +56,14 @@ SELECT
     a.*
 WITHOUT
     key
-FROM Input
-    AS a
+FROM
+    Input AS a
 ORDER BY
-    a.subkey;
+    a.subkey
+;
 
 SELECT
     1 AS c,
     2 AS b,
-    3 AS a;
+    3 AS a
+;

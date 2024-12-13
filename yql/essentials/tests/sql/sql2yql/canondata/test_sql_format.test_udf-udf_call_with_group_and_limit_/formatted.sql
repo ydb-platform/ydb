@@ -2,7 +2,8 @@
 SELECT
     SimpleUdf::Echo(key) AS key,
     count(*) AS count
-FROM plato.Input
+FROM
+    plato.Input
 GROUP BY
     key
 ORDER BY

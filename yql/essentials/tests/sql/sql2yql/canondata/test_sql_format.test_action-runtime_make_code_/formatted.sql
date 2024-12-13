@@ -12,23 +12,24 @@ SELECT
             ),
             LambdaCode(
                 () -> {
-                    RETURN AtomCode("7")
+                    RETURN AtomCode("7");
                 }
             ),
             LambdaCode(
                 ($x) -> {
-                    RETURN FuncCode("-", $x)
+                    RETURN FuncCode("-", $x);
                 }
             ),
             LambdaCode(
                 ($x, $y) -> {
-                    RETURN FuncCode("*", $x, $y)
+                    RETURN FuncCode("*", $x, $y);
                 }
             ),
             LambdaCode(
                 2, ($args) -> {
-                    RETURN FuncCode("+", Unwrap($args[0]), Unwrap($args[1]))
+                    RETURN FuncCode("+", Unwrap($args[0]), Unwrap($args[1]));
                 }
             ),
         )
-    );
+    )
+;

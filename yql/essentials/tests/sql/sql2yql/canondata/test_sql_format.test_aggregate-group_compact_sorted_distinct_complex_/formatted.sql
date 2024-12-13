@@ -8,7 +8,7 @@ SELECT
     ListSort(
         ListMap(
             aggregate_list(DISTINCT value), ($x) -> {
-                RETURN DictItems($x)
+                RETURN DictItems($x);
             }
         )
     ) AS lst
@@ -16,9 +16,11 @@ FROM (
     SELECT
         key,
         AsDict(AsTuple(1, value)) AS value
-    FROM Input
+    FROM
+        Input
 )
 GROUP COMPACT BY
     key
 ORDER BY
-    key;
+    key
+;

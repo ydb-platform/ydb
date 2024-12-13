@@ -7,6 +7,7 @@ $t = AsList(
     AsStruct(2 AS key, 256 AS value),
     AsStruct(7 AS key, 111 AS value)
 );
+
 $f = AGGREGATION_FACTORY("bottomby", 3);
 
 SELECT
@@ -16,20 +17,27 @@ SELECT
                 AsAtom("res"),
                 $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN AsTuple($z.value, $z.key)
+                        RETURN AsTuple($z.value, $z.key);
                     }
                 )
             )
         )
-    );
+    )
+;
+
 USE plato;
 
 INSERT INTO @a
 SELECT
     AsTuple(value, key) AS vk
-FROM as_table($t);
+FROM
+    as_table($t)
+;
+
 COMMIT;
 
 SELECT
     AGGREGATE_BY(vk, $f)
-FROM @a;
+FROM
+    @a
+;

@@ -36,7 +36,8 @@ SELECT
     CAST($interval64_minus1 AS int8),
     CAST($interval64_minus1 AS int16),
     CAST($interval64_minus1 AS int32),
-    CAST($interval64_minus1 AS int64);
+    CAST($interval64_minus1 AS int64)
+;
 
 -- to unsigned
 SELECT
@@ -51,7 +52,8 @@ SELECT
     CAST($timestamp64_minus1 AS uint64),
     4,
     CAST($interval64_minus1 AS uint32),
-    CAST($interval64_minus1 AS uint64);
+    CAST($interval64_minus1 AS uint64)
+;
 
 -- min/max values
 SELECT
@@ -78,7 +80,8 @@ SELECT
     CAST($timestamp64_max AS int64),
     8,
     $interval64_max,
-    CAST($interval64_max AS int64);
+    CAST($interval64_max AS int64)
+;
 
 -- out of range
 SELECT
@@ -93,7 +96,8 @@ SELECT
     CAST(4611669811200000000 AS timestamp64),
     4,
     CAST(-9223339708800000000 AS interval64),
-    CAST(9223339708800000000 AS interval64);
+    CAST(9223339708800000000 AS interval64)
+;
 
 -- insufficient int size
 SELECT
@@ -117,4 +121,5 @@ SELECT
     CAST(unwrap(CAST(2147483648 AS interval64)) AS int32),
     7,
     CAST(unwrap(CAST(65536 AS interval64)) AS uint16),
-    CAST(unwrap(CAST(4294967296 AS interval64)) AS uint32);
+    CAST(unwrap(CAST(4294967296 AS interval64)) AS uint32)
+;

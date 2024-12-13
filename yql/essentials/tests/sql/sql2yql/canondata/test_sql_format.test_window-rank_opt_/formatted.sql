@@ -19,8 +19,10 @@ FROM (
         CAST(key AS uint32) AS key,
         subkey,
         value
-    FROM plato.Input
-    WHERE key == '1'
+    FROM
+        plato.Input
+    WHERE
+        key == '1'
 )
 WINDOW
     w1 AS (
@@ -38,4 +40,5 @@ WINDOW
     )
 ORDER BY
     key,
-    subkey;
+    subkey
+;

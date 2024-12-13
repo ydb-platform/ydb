@@ -123,9 +123,11 @@ IClientRequestControlPtr TTestChannel::Send(
     EmplaceOrCrash(RequestToBus_, std::make_pair(Address_, requestId), bus);
 
     try {
+        // Serialization modifies the request header and should be called prior to header copying.
+        auto serializedMessage = request->Serialize();
         service->HandleRequest(
             std::make_unique<NProto::TRequestHeader>(request->Header()),
-            request->Serialize(),
+            std::move(serializedMessage),
             bus);
         bus->GetReadyResponseFuture()
             .Subscribe(BIND(&TTestChannel::HandleRequestResult, MakeStrong(this), Address_, requestId, responseHandler));

@@ -9,6 +9,7 @@
 
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
 
 namespace NKikimr::NColumnShard {
@@ -45,7 +46,7 @@ struct TSelectInfo {
         }
     };
 
-    std::vector<std::shared_ptr<TPortionInfo>> PortionsOrderedPK;
+    std::vector<std::shared_ptr<TPortionInfo>> Portions;
 
     TStats Stats() const;
 
@@ -252,12 +253,12 @@ public:
 class TColumnEngineForLogs;
 class IMetadataAccessorResultProcessor {
 private:
-    virtual void DoApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& engine) = 0;
+    virtual void DoApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& engine) = 0;
 
 public:
     virtual ~IMetadataAccessorResultProcessor() = default;
 
-    void ApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& engine) {
+    void ApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& engine) {
         return DoApplyResult(std::move(result), engine);
     }
 

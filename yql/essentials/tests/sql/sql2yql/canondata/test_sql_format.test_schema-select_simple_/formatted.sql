@@ -5,4 +5,6 @@ SELECT
     d AS dd,
     e AS ee,
     f AS ff
-FROM plato.Input;
+FROM
+    plato.Input
+;

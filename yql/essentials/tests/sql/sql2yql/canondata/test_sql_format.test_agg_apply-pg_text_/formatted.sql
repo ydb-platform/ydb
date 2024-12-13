@@ -13,7 +13,6 @@ FROM (
         ("a"u),
         ("b"u),
         ("c"u)
-)
-    AS a (
-        key
-    );
+) AS a (
+    key
+);

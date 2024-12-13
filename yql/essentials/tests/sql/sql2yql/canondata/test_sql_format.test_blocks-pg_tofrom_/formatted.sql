@@ -8,4 +8,6 @@ SELECT
     ToPg(e),
     FromPg(f),
     ToPg(g)
-FROM Input;
+FROM
+    Input
+;

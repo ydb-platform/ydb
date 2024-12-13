@@ -44,15 +44,15 @@ Processes the possible values of a variant over a structure or tuple using the p
 Visit(Variant<key1: K1, key2: K2, ...>, K1->R AS key1, K2->R AS key2, ...)->R
 Visit(Variant<K1, K2, ...>, K1->R, K2->R, ...)->R
 
-VisitOrDefault(Variant<K1, K2, ...>{Flags:AutoMap}, [K1->R, [K2->R, ...]], R)->R
-VisitOrDefault(Variant<key1: K1, key2: K2, ...>{Flags:AutoMap}, [K1->R AS key1, [K2->R AS key2, ...]], R)->R
+VisitOrDefault(Variant<K1, K2, ...>{Flags:AutoMap}, R, [K1->R, [K2->R, ...]])->R
+VisitOrDefault(Variant<key1: K1, key2: K2, ...>{Flags:AutoMap}, R, [K1->R AS key1, [K2->R AS key2, ...]])->R
 ```
 
 ### Arguments
 
 * For a variant over structure: accepts the variant as the positional argument and named arguments (handlers) corresponding to each field of the variant.
 * For a variant over tuple: accepts the variant and handlers for each element of the variant as positional arguments.
-* `VisitOrDefault` includes an additional positional argument for the default value, enabling the omission of certain handlers.
+* `VisitOrDefault` includes an additional positional argument (on the second place) for the default value, enabling the omission of certain handlers.
 
 ### Example
 

@@ -17,7 +17,8 @@ SELECT
     a.wi / b.i64,
     a.ni / b.u64,
     a.wi / b.u64,
-FROM Dates
-    AS a
-CROSS JOIN Dates
-    AS b;
+FROM
+    Dates AS a
+CROSS JOIN
+    Dates AS b
+;

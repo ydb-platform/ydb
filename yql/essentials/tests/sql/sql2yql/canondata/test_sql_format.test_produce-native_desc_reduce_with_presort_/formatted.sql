@@ -1,6 +1,8 @@
 /* postgres can not */
 USE plato;
+
 PRAGMA yt.UseNativeDescSort;
+
 $udf = YQL::@@(lambda '(key stream) (AsStruct
   '('key key) '('summ (Collect (Condense stream (Nothing (OptionalType (DataType 'String))) (lambda '(item state) (Bool 'False)) (lambda '(item state) (Coalesce state (Just item))))))
 ))@@;
@@ -18,7 +20,8 @@ FROM (
 )
 ORDER BY
     key,
-    summ;
+    summ
+;
 
 SELECT
     *
@@ -33,7 +36,8 @@ FROM (
 )
 ORDER BY
     key,
-    summ;
+    summ
+;
 
 SELECT
     *
@@ -48,7 +52,8 @@ FROM (
 )
 ORDER BY
     key,
-    summ;
+    summ
+;
 
 SELECT
     *
@@ -63,4 +68,5 @@ FROM (
 )
 ORDER BY
     key,
-    summ;
+    summ
+;

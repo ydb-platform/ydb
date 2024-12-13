@@ -48,4 +48,5 @@ SELECT
     25,
     Yql::Timestamp64(AsAtom("0")) >= Yql::Timestamp64(AsAtom("1")),
     26,
-    Yql::Interval64(AsAtom("0")) >= Yql::Interval64(AsAtom("1")),;
+    Yql::Interval64(AsAtom("0")) >= Yql::Interval64(AsAtom("1")),
+;

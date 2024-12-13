@@ -155,13 +155,6 @@ class Tuple(ClickHouseType):
         return col
 
 
-class Point(Tuple):
-
-    def __init__(self, type_def):
-        super().__init__(type_def)
-        self._name_suffix = ''
-
-
 class Map(ClickHouseType):
     _slots = 'key_type', 'value_type'
     python_type = dict

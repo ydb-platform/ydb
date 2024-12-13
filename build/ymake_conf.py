@@ -989,8 +989,7 @@ class ToolchainOptions(object):
             self.c_compiler = self.params['c_compiler']
             self.cxx_compiler = self.params['cxx_compiler']
 
-            # TODO(somov): Требовать номер версии всегда.
-            self.compiler_version = self.params.get('gcc_version') or self.params.get('version') or '0'
+            self.compiler_version = self.params['version']
             self.compiler_version_list = list(map(int, self.compiler_version.split('.')))
 
         # 'match_root' at this point contains real name for references via toolchain
@@ -1004,8 +1003,6 @@ class ToolchainOptions(object):
         self.cxx_std = self.params.get('cxx_std', 'c++20')
 
         self._env = tc_json.get('env', {})
-
-        self.android_ndk_version = self.params.get('android_ndk_version', None)
 
         logger.debug('c_compiler=%s', self.c_compiler)
         logger.debug('cxx_compiler=%s', self.cxx_compiler)

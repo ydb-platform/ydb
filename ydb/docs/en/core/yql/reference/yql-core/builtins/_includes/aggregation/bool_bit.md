@@ -17,11 +17,11 @@ To skip `NULLs` during aggregation, you can use the functions `MIN`/`MAX` or `BI
 ### Examples
 
 ```yql
-$data = AsList(
-    AsStruct(true  AS nonNull, true AS nonFalse, NULL  AS nonTrue, true  AS anyVal),
-    AsStruct(false AS nonNull, NULL AS nonFalse, NULL  AS nonTrue, NULL  AS anyVal),
-    AsStruct(false AS nonNull, NULL AS nonFalse, false AS nonTrue, false AS anyVal),
-);
+$data = [
+    <|nonNull: true, nonFalse: true, nonTrue: NULL, anyVal: true|>,
+    <|nonNull: false, nonFalse: NULL, nonTrue: NULL, anyVal: NULL|>,
+    <|nonNull: false, nonFalse: NULL, nonTrue: false, anyVal: false|>,
+];
 
 SELECT
     BOOL_AND(nonNull) as nonNullAnd,      -- false

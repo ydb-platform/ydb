@@ -107,3 +107,26 @@ SELECT
 ;
 ```
 
+## Way {#way}
+
+Возвращает активное поле (активный индекс) варианта поверх структуры (кортежа)
+
+### Сигнатура
+
+```yql
+VariantItem(Variant<key1: K1, key2: K2, ...>{Flags:AutoMap})->Utf8
+VariantItem(Variant<K1, K2, ...>{Flags:AutoMap})->Uint32
+```
+
+### Пример
+
+```yql
+$vr = Variant(1, "0", Variant<Int32, String>);
+$vrs = Variant(1, "a", Variant<a:Int32, b:String>);
+
+
+SELECT Way($vr);  -- 0
+SELECT Way($vrs); -- "a"
+
+```
+

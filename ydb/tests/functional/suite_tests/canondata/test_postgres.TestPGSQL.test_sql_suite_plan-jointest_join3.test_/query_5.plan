@@ -179,8 +179,23 @@
                                                         "PlanNodeId": 11,
                                                         "Plans": [
                                                             {
+<<<<<<< HEAD
                                                                 "Node Type": "UnionAll",
                                                                 "PlanNodeId": 10,
+=======
+                                                                "Columns": [
+                                                                    "k",
+                                                                    "pd"
+                                                                ],
+                                                                "E-Cost": "0",
+                                                                "E-Rows": "0",
+                                                                "E-Size": "0",
+                                                                "LookupKeyColumns": [
+                                                                    "k"
+                                                                ],
+                                                                "Node Type": "TableLookupJoin",
+                                                                "PlanNodeId": 7,
+>>>>>>> 19346460a80... Eliminate redunant sorting if the inputs are sorted (#11872)
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
@@ -199,7 +214,61 @@
                                                                             {
                                                                                 "Inputs": [
                                                                                     {
+<<<<<<< HEAD
                                                                                         "InternalOperatorId": 2
+=======
+                                                                                        "Node Type": "Collect",
+                                                                                        "PlanNodeId": 4,
+                                                                                        "Plans": [
+                                                                                            {
+                                                                                                "Columns": [
+                                                                                                    "k"
+                                                                                                ],
+                                                                                                "E-Cost": "0",
+                                                                                                "E-Rows": "0",
+                                                                                                "E-Size": "0",
+                                                                                                "LookupKeyColumns": [
+                                                                                                    "k"
+                                                                                                ],
+                                                                                                "Node Type": "TableLookupJoin",
+                                                                                                "PlanNodeId": 3,
+                                                                                                "PlanNodeType": "Connection",
+                                                                                                "Plans": [
+                                                                                                    {
+                                                                                                        "Node Type": "Stage",
+                                                                                                        "PlanNodeId": 2,
+                                                                                                        "Plans": [
+                                                                                                            {
+                                                                                                                "Node Type": "TableRangeScan",
+                                                                                                                "Operators": [
+                                                                                                                    {
+                                                                                                                        "Inputs": [],
+                                                                                                                        "Name": "TableRangeScan",
+                                                                                                                        "ReadColumns": [
+                                                                                                                            "k",
+                                                                                                                            "pd"
+                                                                                                                        ],
+                                                                                                                        "ReadRangesExpectedSize": "1",
+                                                                                                                        "ReadRangesKeys": [
+                                                                                                                            "k"
+                                                                                                                        ],
+                                                                                                                        "ReadRangesPointPrefixLen": "1",
+                                                                                                                        "Scan": "Parallel",
+                                                                                                                        "Table": "postgres_jointest/join3.test_plan/parent"
+                                                                                                                    }
+                                                                                                                ],
+                                                                                                                "PlanNodeId": 1,
+                                                                                                                "Tables": [
+                                                                                                                    "postgres_jointest/join3.test_plan/parent"
+                                                                                                                ]
+                                                                                                            }
+                                                                                                        ]
+                                                                                                    }
+                                                                                                ],
+                                                                                                "Table": "postgres_jointest/join3.test_plan/child"
+                                                                                            }
+                                                                                        ]
+>>>>>>> 19346460a80... Eliminate redunant sorting if the inputs are sorted (#11872)
                                                                                     }
                                                                                 ],
                                                                                 "Name": "TablePointLookup",

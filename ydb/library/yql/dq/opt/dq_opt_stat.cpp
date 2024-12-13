@@ -246,7 +246,6 @@ bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
     return false;
 }
 
-
 /**
  * Compute statistics for map join
  * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function
@@ -411,6 +410,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
             inputStats->ColumnStatistics,
             inputStats->StorageType);
 
+        outputStats.SortColumns = inputStats->SortColumns;
         outputStats.Labels = inputStats->Labels;
         outputStats.Selectivity *= (inputStats->Selectivity * selectivity);
 
@@ -462,7 +462,9 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
         inputStats->Cost, 
         inputStats->KeyColumns,
         inputStats->ColumnStatistics,
-        inputStats->StorageType);
+        inputStats->StorageType
+    );
+    outputStats.SortColumns = inputStats->SortColumns;
 
     outputStats.Selectivity *= (selectivity * inputStats->Selectivity);
     outputStats.Labels = inputStats->Labels;
@@ -490,24 +492,6 @@ void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnota
 }
 
 /**
- * Infer statistics and costs for ExtractlMembers
- * We just return the input statistics.
-*/
-void InferStatisticsForExtractMembers(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
-
-    auto inputNode = TExprBase(input);
-    auto extractMembers = inputNode.Cast<TCoExtractMembers>();
-    auto extractMembersInput = extractMembers.Input();
-
-    auto inputStats = typeCtx->GetStats(extractMembersInput.Raw() );
-    if (!inputStats) {
-        return;
-    }
-
-    typeCtx->SetStats( input.Get(), inputStats );
-}
-
-/**
  * Infer statistics and costs for AggregateCombine
  * We just return the input statistics.
 */
@@ -522,7 +506,7 @@ void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnot
         return;
     }
 
-    typeCtx->SetStats( input.Get(), inputStats );
+    typeCtx->SetStats( input.Get(), RemoveOrdering(inputStats));
 }
 
 /**
@@ -646,5 +630,112 @@ void InferStatisticsForStage(const TExprNode::TPtr& input, TTypeAnnotationContex
         typeCtx->SetStats( stage.Raw(), lambdaStats );
     }
 }
+
+void InferStatisticsForDqMerge(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto merge = inputNode.Cast<TDqCnMerge>();
+
+    auto inputStats = typeCtx->GetStats(merge.Output().Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    auto newStats = RemoveOrdering(inputStats);
+
+    auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
+
+    TVector<TString> sortedPrefixCols;
+    TVector<TString> sortedPrefixAliases;
+
+    for ( auto c : merge.SortColumns() ) {
+        auto column = c.Column().StringValue();
+        auto sortDir = c.SortDirection().StringValue();
+
+        if (sortDir != "Asc") {
+            break;
+        }
+
+        auto alias = ExtractAlias(column);
+        auto columnNoAlias = RemoveAliases(column);
+
+        sortedPrefixCols.push_back(columnNoAlias);
+        sortedPrefixAliases.push_back(alias);
+    }
+
+    if (sortedPrefixCols.size()) {
+        sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
+    }
+
+    newStats->SortColumns = sortedPrefixPtr;
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for Merge: " << newStats->ToString();
+
+    typeCtx->SetStats(merge.Raw(), newStats);
+}
+
+/** 
+ * Just update the sorted order with alias
+ */
+void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto cross = inputNode.Cast<TDqPhyCrossJoin>();
+
+    auto inputStats = typeCtx->GetStats(cross.LeftInput().Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    auto sortedPrefix = inputStats->SortColumns;
+    TString aliasName = "";
+    if (auto leftLabel = cross.LeftLabel().Maybe<TCoAtom>()) {
+        aliasName = leftLabel.Cast().StringValue();
+    }
+    
+    TVector<TString> sortedPrefixCols;
+    TVector<TString> sortedPrefixAliases;
+
+    if (sortedPrefix) {
+        sortedPrefixCols = sortedPrefix->Columns;
+        sortedPrefixAliases = sortedPrefix->Aliases;
+        if (aliasName != "") {
+            for (size_t i=0; i<sortedPrefix->Aliases.size(); i++) {
+                sortedPrefixAliases[i] = aliasName;
+            }
+        }
+    }
+
+    auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
+    if (sortedPrefixCols.size()) {
+        sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
+    }
+
+    auto outputStats = RemoveOrdering(inputStats);
+    outputStats->SortColumns = sortedPrefixPtr;
+    typeCtx->SetStats(cross.Raw(), outputStats);
+}
+
+
+
+std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats) {
+    if (stats->SortColumns) {
+        auto newStats = *stats;
+        newStats.SortColumns = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
+        return std::make_shared<TOptimizerStatistics>(std::move(newStats));
+    } else {
+        return stats;
+    }
+}
+
+std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
+    if (TCoTopBase::Match(input.Get()) ||
+        TCoSortBase::Match(input.Get()) ||
+        TDqCnHashShuffle::Match(input.Get()) ||
+        TDqCnBroadcast::Match(input.Get()) ||
+        TDqCnUnionAll::Match(input.Get())) {
+            return RemoveOrdering(stats);
+        } else {
+            return stats;
+        }
+}
+
 
 } // namespace NYql::NDq {

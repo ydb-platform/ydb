@@ -4,8 +4,13 @@
         "PlanNodeType": "Query",
         "Plans": [
             {
+<<<<<<< HEAD
                 "Node Type": "ResultSet_4",
                 "PlanNodeId": 32,
+=======
+                "Node Type": "ResultSet",
+                "PlanNodeId": 16,
+>>>>>>> 19346460a80... Eliminate redunant sorting if the inputs are sorted (#11872)
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,13 +19,18 @@
                             {
                                 "Inputs": [
                                     {
+<<<<<<< HEAD
                                         "ExternalPlanNodeId": 30
+=======
+                                        "ExternalPlanNodeId": 14
+>>>>>>> 19346460a80... Eliminate redunant sorting if the inputs are sorted (#11872)
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
+<<<<<<< HEAD
                         "PlanNodeId": 31,
                         "Plans": [
                             {
@@ -30,6 +40,17 @@
                                 "Plans": [
                                     {
                                         "Node Type": "Limit-LeftJoin (MapJoin)",
+=======
+                        "PlanNodeId": 15,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 14,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-LeftJoin (MapJoin)-Filter",
+>>>>>>> 19346460a80... Eliminate redunant sorting if the inputs are sorted (#11872)
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -41,6 +62,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
+<<<<<<< HEAD
                                                 "Condition": "zt3.f3 = zt1.f1",
                                                 "Inputs": [
                                                     {
@@ -86,6 +108,43 @@
                                                             {
                                                                 "Node Type": "UnionAll",
                                                                 "PlanNodeId": 24,
+=======
+                                                "Condition": "zt2.f2 = zt3.f3",
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 12
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 9
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.zt3.f3)"
+                                            }
+                                        ],
+                                        "PlanNodeId": 13,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 9,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 8,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 7,
+>>>>>>> 19346460a80... Eliminate redunant sorting if the inputs are sorted (#11872)
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
@@ -95,7 +154,59 @@
                                                                             {
                                                                                 "Inputs": [
                                                                                     {
+<<<<<<< HEAD
                                                                                         "InternalOperatorId": 1
+=======
+                                                                                        "Node Type": "Collect",
+                                                                                        "PlanNodeId": 4,
+                                                                                        "Plans": [
+                                                                                            {
+                                                                                                "Columns": [
+                                                                                                    "f1"
+                                                                                                ],
+                                                                                                "E-Cost": "0",
+                                                                                                "E-Rows": "0",
+                                                                                                "E-Size": "0",
+                                                                                                "LookupKeyColumns": [
+                                                                                                    "f1"
+                                                                                                ],
+                                                                                                "Node Type": "TableLookupJoin",
+                                                                                                "PlanNodeId": 3,
+                                                                                                "PlanNodeType": "Connection",
+                                                                                                "Plans": [
+                                                                                                    {
+                                                                                                        "Node Type": "Stage",
+                                                                                                        "PlanNodeId": 2,
+                                                                                                        "Plans": [
+                                                                                                            {
+                                                                                                                "Node Type": "TableFullScan",
+                                                                                                                "Operators": [
+                                                                                                                    {
+                                                                                                                        "Inputs": [],
+                                                                                                                        "Name": "TableFullScan",
+                                                                                                                        "ReadColumns": [
+                                                                                                                            "f3"
+                                                                                                                        ],
+                                                                                                                        "ReadRanges": [
+                                                                                                                            "f3 (-\u221e, +\u221e)"
+                                                                                                                        ],
+                                                                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                                                                        "Scan": "Parallel",
+                                                                                                                        "Table": "postgres_jointest/join4.test_plan/zt3"
+                                                                                                                    }
+                                                                                                                ],
+                                                                                                                "PlanNodeId": 1,
+                                                                                                                "Tables": [
+                                                                                                                    "postgres_jointest/join4.test_plan/zt3"
+                                                                                                                ]
+                                                                                                            }
+                                                                                                        ]
+                                                                                                    }
+                                                                                                ],
+                                                                                                "Table": "postgres_jointest/join4.test_plan/zt1"
+                                                                                            }
+                                                                                        ]
+>>>>>>> 19346460a80... Eliminate redunant sorting if the inputs are sorted (#11872)
                                                                                     }
                                                                                 ],
                                                                                 "Name": "Filter",
@@ -125,6 +236,43 @@
                                                                         ]
                                                                     }
                                                                 ]
+<<<<<<< HEAD
+=======
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 12,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 11,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "TablePointLookup",
+                                                                "Operators": [
+                                                                    {
+                                                                        "Inputs": [],
+                                                                        "Name": "TablePointLookup",
+                                                                        "ReadColumns": [
+                                                                            "f2"
+                                                                        ],
+                                                                        "ReadRange": [
+                                                                            "f2 (53)"
+                                                                        ],
+                                                                        "Scan": "Parallel",
+                                                                        "Table": "postgres_jointest/join4.test_plan/zt2"
+                                                                    }
+                                                                ],
+                                                                "PlanNodeId": 10,
+                                                                "Tables": [
+                                                                    "postgres_jointest/join4.test_plan/zt2"
+                                                                ]
+>>>>>>> 19346460a80... Eliminate redunant sorting if the inputs are sorted (#11872)
                                                             }
                                                         ]
                                                     }
@@ -381,7 +529,14 @@
                     "columns": [
                         "f3"
                     ],
+<<<<<<< HEAD
                     "type": "Lookup"
+=======
+                    "scan_by": [
+                        "f3 (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+>>>>>>> 19346460a80... Eliminate redunant sorting if the inputs are sorted (#11872)
                 }
             ]
         }

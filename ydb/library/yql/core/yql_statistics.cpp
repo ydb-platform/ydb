@@ -46,12 +46,42 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
     os << "Type: " << ConvertToStatisticsTypeString(s.Type) << ", Nrows: " << s.Nrows
         << ", Ncols: " << s.Ncols << ", ByteSize: " << s.ByteSize << ", Cost: " << s.Cost;
     if (s.KeyColumns) {
-        for (const auto& c : s.KeyColumns->Data) {
-            os << ", " << c;
+        os << ", keys: ";
+
+        std::string tmp;
+        for (const auto& c: s.KeyColumns->Data) {
+            tmp.append(c).append(", ");
         }
+
+        if (!tmp.empty()) {
+            tmp.pop_back();
+            tmp.pop_back();
+        }
+        os << tmp;
     }
     os << ", Sel: " << s.Selectivity;
     os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);
+    if (s.SortColumns) {
+        os << ", sorted: ";
+
+        std::string tmp;
+        for (size_t i = 0; i < s.SortColumns->Columns.size() && i < s.SortColumns->Aliases.size(); i++) {
+            auto c = s.SortColumns->Columns[i];
+            auto a = s.SortColumns->Aliases[i];
+            if (a.empty()) {
+                tmp.append(a).append(".");
+            }
+
+            tmp.append(c).append(", ");
+        }
+
+        if (!tmp.empty()) {
+            tmp.pop_back();
+            tmp.pop_back();
+        }
+
+        os << tmp;
+    }
     return os;
 }
 
@@ -68,7 +98,7 @@ TOptimizerStatistics::TOptimizerStatistics(
     TIntrusivePtr<TKeyColumns> keyColumns,
     TIntrusivePtr<TColumnStatMap> columnMap,
     EStorageType storageType,
-    std::unique_ptr<IProviderStatistics> specific)
+    std::shared_ptr<IProviderStatistics> specific)
     : Type(type)
     , Nrows(nrows)
     , Ncols(ncols)
@@ -90,7 +120,8 @@ TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistic
 }
 
 std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOptimizerStatistics& s, const TStringBuf& tablePath, const std::shared_ptr<NJson::TJsonValue>& stats) {
-    auto res = std::make_shared<TOptimizerStatistics>(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics);
+    auto res = std::make_shared<TOptimizerStatistics>(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics, s.StorageType, s.Specific);
+    res->SortColumns = s.SortColumns;
 
     auto dbStats = stats->GetMapSafe();
 
@@ -141,8 +172,7 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
 
                 TString countMinRaw{};
                 Base64StrictDecode(countMinBase64, countMinRaw);
-                
-                cStat.CountMinSketch.reset(NKikimr::TCountMinSketch::FromString(countMinRaw.Data(), countMinRaw.Size()));
+                cStat.CountMinSketch.reset(NKikimr::TCountMinSketch::FromString(countMinRaw.data(), countMinRaw.size()));
             }
 
             res->ColumnStatistics->Data[columnName] = cStat;

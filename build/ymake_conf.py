@@ -567,9 +567,6 @@ class Build(object):
         if force_ignore_local_files:
             self.ignore_local_files = True
 
-        if self.is_ide_build_type(self.build_type):
-            self.ignore_local_files = True
-
         self.pic = not is_positive('FORCE_NO_PIC')
 
     @property
@@ -667,10 +664,6 @@ class Build(object):
         return self.build_type == 'valgrind' or self.build_type == 'valgrind-release'
 
     @property
-    def is_ide(self):
-        return self.is_ide_build_type(self.build_type)
-
-    @property
     def profiler_type(self):
         if self.build_type == 'profile':
             return Profiler.Generic
@@ -678,10 +671,6 @@ class Build(object):
             return Profiler.GProf
         else:
             return None
-
-    @staticmethod
-    def is_ide_build_type(build_type):
-        return build_type == 'nobuild'
 
     def _configure_runtime_versions(self):
         try:
@@ -2108,8 +2097,6 @@ class MSVCCompiler(MSVC, Compiler):
             emit('CFLAGS_PER_TYPE', '$CFLAGS_RELEASE')
         if self.build.is_debug:
             emit('CFLAGS_PER_TYPE', '$CFLAGS_DEBUG')
-        if self.build.is_ide:
-            emit('CFLAGS_PER_TYPE', '@[debug|$CFLAGS_DEBUG]@[release|$CFLAGS_RELEASE]')
 
         emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
 

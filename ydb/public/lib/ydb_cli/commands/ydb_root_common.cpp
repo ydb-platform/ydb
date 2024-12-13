@@ -582,7 +582,9 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
         throw TMisuseException() << "Missing required option 'endpoint'.";
     }
 
-    if (config.Database.empty()) {
+    if (config.Database.empty() && config.AllowEmptyDatabase) {
+        // just skip the Database check
+    } else if (config.Database.empty()) {
         throw TMisuseException()
             << "Missing required option 'database'.";
     } else if (!config.Database.StartsWith('/')) {

@@ -70,6 +70,7 @@ enum class ERequestType: size_t {
 
     BSCONFIG_REPLACESTORAGECONFIG,
     BSCONFIG_FETCHSTORAGECONFIG,
+    BSCONFIG_BOOTSTRAP,
 
     PING_GRPC,
     PING_PROXY,
@@ -141,6 +142,7 @@ static const THashMap<TStringBuf, ERequestType> NameToRequestType = {
 
     {"BSConfig.ReplaceStorageConfig", ERequestType::BSCONFIG_REPLACESTORAGECONFIG},
     {"BSConfig.FetchStorageConfig", ERequestType::BSCONFIG_FETCHSTORAGECONFIG},
+    {"BSConfig.Bootstrap", ERequestType::BSCONFIG_BOOTSTRAP},
 };
 
 struct TRequestDiscriminator {

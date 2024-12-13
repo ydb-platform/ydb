@@ -1005,6 +1005,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         }
 
         acTo->CopyFrom(acFrom);
+        acTo->ClearInitialConfigYaml();
     } else {
         bsTo->ClearAutoconfigSettings();
     }

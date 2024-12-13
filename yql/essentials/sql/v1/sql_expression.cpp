@@ -159,12 +159,12 @@ bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TSqlEx
             return false;
         }
         settings.VirtualTimestamps = exprNode;
-    } else if (to_lower(id.Name) == "resolved_timestamps") {
+    } else if (to_lower(id.Name) == "barriers_interval" || to_lower(id.Name) == "resolved_timestamps") {
         if (exprNode->GetOpName() != "Interval") {
             ctx.Context().Error() << "Literal of Interval type is expected for " << id.Name;
             return false;
         }
-        settings.ResolvedTimestamps = exprNode;
+        settings.BarriersInterval = exprNode;
     } else if (to_lower(id.Name) == "retention_period") {
         if (exprNode->GetOpName() != "Interval") {
             ctx.Context().Error() << "Literal of Interval type is expected for " << id.Name;

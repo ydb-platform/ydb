@@ -39,14 +39,6 @@ void ExecuteBatch(
 // Cypress
 //
 
-TNodeId Create(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const ENodeType& type,
-    const TCreateOptions& options = TCreateOptions());
-
 TNodeId CopyWithoutRetries(
     const TClientContext& context,
     const TTransactionId& transactionId,

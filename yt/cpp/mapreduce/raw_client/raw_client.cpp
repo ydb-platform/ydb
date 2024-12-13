@@ -81,6 +81,19 @@ void THttpRawClient::MultisetAttributes(
     RequestWithoutRetry(Context_, mutationId, header, body);
 }
 
+TNodeId THttpRawClient::Create(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    const ENodeType& type,
+    const TCreateOptions& options)
+{
+    THttpHeader header("POST", "create");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForCreate(transactionId, Context_.Config->Prefix, path, type, options));
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDetail

@@ -43,6 +43,13 @@ public:
         const TYPath& path,
         const TNode::TMapType& value,
         const TMultisetAttributesOptions& options = {}) = 0;
+
+    virtual TNodeId Create(
+        TMutationId& mutatatonId,
+        const TTransactionId& transactionId,
+        const TYPath& path,
+        const ENodeType& type,
+        const TCreateOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

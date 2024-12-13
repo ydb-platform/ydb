@@ -49,6 +49,13 @@ public:
         const TNode::TMapType& value,
         const TMultisetAttributesOptions& options = {}) override;
 
+    TNodeId Create(
+        TMutationId& mutatatonId,
+        const TTransactionId& transactionId,
+        const TYPath& path,
+        const ENodeType& type,
+        const TCreateOptions& options = {}) override;
+
 private:
     const TClientContext Context_;
 };

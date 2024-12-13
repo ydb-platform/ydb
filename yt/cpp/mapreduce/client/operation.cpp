@@ -973,26 +973,32 @@ template <typename TSpec>
 void CreateDebugOutputTables(const TSpec& spec, const TOperationPreparer& preparer)
 {
     if (spec.StderrTablePath_.Defined()) {
-        NYT::NDetail::Create(
+        RequestWithRetry<void>(
             preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            preparer.GetContext(),
-            TTransactionId(),
-            *spec.StderrTablePath_,
-            NT_TABLE,
-            TCreateOptions()
-                .IgnoreExisting(true)
-                .Recursive(true));
+            [&spec, &preparer] (TMutationId& mutationId) {
+                preparer.GetClient()->GetRawClient()->Create(
+                    mutationId,
+                    TTransactionId(),
+                    *spec.StderrTablePath_,
+                    NT_TABLE,
+                    TCreateOptions()
+                        .IgnoreExisting(true)
+                        .Recursive(true));
+            });
     }
     if (spec.CoreTablePath_.Defined()) {
-        NYT::NDetail::Create(
+        RequestWithRetry<void>(
             preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            preparer.GetContext(),
-            TTransactionId(),
-            *spec.CoreTablePath_,
-            NT_TABLE,
-            TCreateOptions()
-                .IgnoreExisting(true)
-                .Recursive(true));
+            [&spec, &preparer] (TMutationId& mutationId) {
+                preparer.GetClient()->GetRawClient()->Create(
+                    mutationId,
+                    TTransactionId(),
+                    *spec.CoreTablePath_,
+                    NT_TABLE,
+                    TCreateOptions()
+                        .IgnoreExisting(true)
+                        .Recursive(true));
+            });
     }
 }
 
@@ -1003,12 +1009,18 @@ void CreateOutputTable(
     Y_ENSURE(path.Path_, "Output table is not set");
     if (!path.Create_.Defined()) {
         // If `create` attribute is defined
-        Create(
+        RequestWithRetry<void>(
             preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            preparer.GetContext(), preparer.GetTransactionId(), path.Path_, NT_TABLE,
-            TCreateOptions()
-                .IgnoreExisting(true)
-                .Recursive(true));
+            [&preparer, &path] (TMutationId& mutationId) {
+                preparer.GetClient()->GetRawClient()->Create(
+                    mutationId,
+                    preparer.GetTransactionId(),
+                    path.Path_,
+                    NT_TABLE,
+                    TCreateOptions()
+                        .IgnoreExisting(true)
+                        .Recursive(true));
+            });
     }
 }
 

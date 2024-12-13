@@ -112,7 +112,11 @@ TNodeId TClientBase::Create(
     ENodeType type,
     const TCreateOptions& options)
 {
-    return NRawClient::Create(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_, path, type, options);
+    return RequestWithRetry<TNodeId>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &type, &options] (TMutationId& mutationId) {
+            return RawClient_->Create(mutationId, TransactionId_, path, type, options);
+        });
 }
 
 void TClientBase::Remove(
@@ -337,8 +341,11 @@ IFileWriterPtr TClientBase::CreateFileWriter(
             return RawClient_->Exists(mutationId, TransactionId_, realPath.Path_);
         });
     if (!exists) {
-        NRawClient::Create(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_, realPath.Path_, NT_FILE,
-            TCreateOptions().IgnoreExisting(true));
+        RequestWithRetry<void>(
+            ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+            [this, &realPath] (TMutationId& mutationId) {
+                RawClient_->Create(mutationId, TransactionId_, realPath.Path_, NT_FILE, TCreateOptions().IgnoreExisting(true));
+            });
     }
 
     return new TFileWriter(realPath, RawClient_, ClientRetryPolicy_, GetTransactionPinger(), Context_, TransactionId_, options);
@@ -737,8 +744,11 @@ THolder<TClientWriter> TClientBase::CreateClientWriter(
             return RawClient_->Exists(mutationId, TransactionId_, realPath.Path_);
         });
     if (!exists) {
-        NRawClient::Create(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_, realPath.Path_, NT_TABLE,
-            TCreateOptions().IgnoreExisting(true));
+        RequestWithRetry<void>(
+            ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+            [this, &realPath] (TMutationId& mutataionId) {
+                RawClient_->Create(mutataionId, TransactionId_, realPath.Path_, NT_TABLE, TCreateOptions().IgnoreExisting(true));
+            });
     }
 
     return MakeHolder<TClientWriter>(

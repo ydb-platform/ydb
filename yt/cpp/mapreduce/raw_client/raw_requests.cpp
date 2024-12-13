@@ -79,35 +79,6 @@ void ExecuteBatch(
     }
 }
 
-void Set(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TNode& value,
-    const TSetOptions& options)
-{
-    THttpHeader header("PUT", "set");
-    header.AddMutationId();
-    header.MergeParameters(SerializeParamsForSet(transactionId, context.Config->Prefix, path, options));
-    auto body = NodeToYsonString(value);
-    RetryRequestWithPolicy(retryPolicy, context, header, body);
-}
-
-TNodeId Create(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const ENodeType& type,
-    const TCreateOptions& options)
-{
-    THttpHeader header("POST", "create");
-    header.AddMutationId();
-    header.MergeParameters(SerializeParamsForCreate(transactionId, context.Config->Prefix, path, type, options));
-    return ParseGuidFromResponse(RetryRequestWithPolicy(retryPolicy, context, header).Response);
-}
-
 TNodeId CopyWithoutRetries(
     const TClientContext& context,
     const TTransactionId& transactionId,

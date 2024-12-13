@@ -490,15 +490,18 @@ TYPath TJobPreparer::GetCachePath() const
 
 void TJobPreparer::CreateStorage() const
 {
-    Create(
+    RequestWithRetry<void>(
         OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        OperationPreparer_.GetContext(),
-        Options_.FileStorageTransactionId_,
-        GetCachePath(),
-        NT_MAP,
-        TCreateOptions()
-            .IgnoreExisting(true)
-            .Recursive(true));
+        [this] (TMutationId& mutationId) {
+            RawClient_->Create(
+                mutationId,
+                Options_.FileStorageTransactionId_,
+                GetCachePath(),
+                NT_MAP,
+                TCreateOptions()
+                    .IgnoreExisting(true)
+                    .Recursive(true));
+        });
 }
 
 int TJobPreparer::GetFileCacheReplicationFactor() const
@@ -517,17 +520,19 @@ void TJobPreparer::CreateFileInCypress(const TString& path) const
         attributes["expiration_timeout"] = Options_.FileExpirationTimeout_->MilliSeconds();
     }
 
-    Create(
+    RequestWithRetry<void>(
         OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        OperationPreparer_.GetContext(),
-        Options_.FileStorageTransactionId_,
-        path,
-        NT_FILE,
-        TCreateOptions()
-            .IgnoreExisting(true)
-            .Recursive(true)
-            .Attributes(attributes)
-    );
+        [this, &path, &attributes] (TMutationId& mutationId) {
+            RawClient_->Create(
+                mutationId,
+                Options_.FileStorageTransactionId_,
+                path,
+                NT_FILE,
+                TCreateOptions()
+                    .IgnoreExisting(true)
+                    .Recursive(true)
+                    .Attributes(attributes));
+        });
 }
 
 TString TJobPreparer::PutFileToCypressCache(

@@ -430,7 +430,7 @@ public:
         return static_cast<bool>(Progress[lastImportedLineKey]);
     }
 
-    TString GetSourcveFilePath() const {
+    TString GetSourceFilePath() const {
         return SourceFilePath.GetPath();
     }
 
@@ -700,7 +700,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
             globalProgress.fetch_add(100); // Update progress bar to show single file fully completed
         }
     }
-\
+
     if (FilesPreviouslyCompleted || FilesPreviouslyStarted) {
         TStringBuilder existingProgressMessage;
         if (FilesPreviouslyCompleted) {
@@ -709,7 +709,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
         }
         if (FilesPreviouslyStarted) {
             if (FilesPreviouslyStarted == 1) {
-                existingProgressMessage << "(!) Found existing import progress for file \"" << PreviouslyStartedProgressFile->GetSourcveFilePath()
+                existingProgressMessage << "(!) Found existing import progress for file \"" << PreviouslyStartedProgressFile->GetSourceFilePath()
                     << "\". Continuing from line " << PreviouslyStartedProgressFile->GetLastImportedLine()
                     << " where it was interrupted." << Endl;
             } else {

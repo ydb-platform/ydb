@@ -334,6 +334,33 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
+TString MapToYQLFormat(EChangefeedFormat format) {
+    static THashMap<EChangefeedFormat, TString> map = {
+        {EChangefeedFormat::Json, "JSON"},
+        {EChangefeedFormat::DebeziumJson, "DEBEZIUM_JSON"},
+    };
+    return map[format];
+}
+
+TString MapToYQLFormat(EChangefeedMode mode) {
+    static THashMap<EChangefeedMode, TString> map = {
+        {EChangefeedMode::KeysOnly, "KEYS_ONLY"},
+        {EChangefeedMode::Updates, "UPDATES"},
+        {EChangefeedMode::NewImage, "NEW_IMAGE"},
+        {EChangefeedMode::OldImage, "OLD_IMAGE"},
+        {EChangefeedMode::NewAndOldImages, "NEW_AND_OLD_IMAGES"},
+    };
+    return map[mode];
+}
+
+TString MapToYQLFormat(bool flag) {
+    return TStringBuilder() << flag;
+}
+
+TString MapToYQLFormat(TDuration period) {
+    return TStringBuilder() << "Interval(PT" << period.Hours() << "H)";
+}
+
 TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath) {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
@@ -348,22 +375,26 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath) {
     auto changefeedDesc = ChangefeedDescriptionFromProto(changefeedProto);
     auto topicDesc = TopicDescriptionFromProto(std::move(topicProto));
 
-    changefeedDesc = changefeedDesc.WithRetentionPeriod(topicDesc.GetRetentionPeriod());
-    Cout << fsPath.Parent().GetName() << Endl;
-    Cout << changefeedDesc.GetName() << Endl;
-    Cout << fsPath << Endl;
-    auto createResult = TableClient.RetryOperationSync([&fsPath, &changefeedDesc](TSession session) {
+    auto createResult = TableClient.RetryOperationSync([&fsPath, &changefeedDesc, &topicDesc](TSession session) {
         using namespace fmt::literals; 
         return session.ExecuteSchemeQuery(fmt::format(R"(
                         ALTER TABLE `{table_name}`
                         ADD CHANGEFEED `{changefeed_name}`
                         WITH (
-                            FORMAT = 'JSON',
-                            MODE = 'UPDATES'
+                            FORMAT = '{format}',
+                            MODE = '{mode}',
+                            VIRTUAL_TIMESTAMP = '{virtual_timestamp}',
+                            RETENTION_PERIOD = '{retention_period}'
                         );
                     )",
                     "table_name"_a = fsPath.Parent().GetName(),
-                    "changefeed_name"_a = changefeedDesc.GetName())).GetValueSync();
+                    "changefeed_name"_a = changefeedDesc.GetName(),
+                    "format"_a = MapToYQLFormat(changefeedDesc.GetFormat()),
+                    "mode"_a = MapToYQLFormat(changefeedDesc.GetMode()),
+                    "virtual_timestamp"_a = MapToYQLFormat(changefeedDesc.GetVirtualTimestamps()),
+                    "retention_period"_a = MapToYQLFormat(topicDesc.GetRetentionPeriod())
+                    )
+                ).GetValueSync();
     });
     if (createResult.IsSuccess()) {
         LOG_D("Created " << fsPath.GetPath().Quote());

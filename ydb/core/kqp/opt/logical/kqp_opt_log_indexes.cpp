@@ -424,7 +424,6 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
 
     auto streamLookupIndex = node.Maybe<TKqlStreamLookupIndex>().Cast();
     auto settings = TKqpStreamLookupSettings::Parse(streamLookupIndex);
-    settings.AllowNullKeys = true;
 
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, streamLookupIndex.Table().Path());
     const auto& [indexMeta, _] = tableDesc.Metadata->GetIndexMetadata(streamLookupIndex.Index().StringValue());
@@ -435,7 +434,7 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
             .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
             .LookupKeys(streamLookupIndex.LookupKeys())
             .Columns(streamLookupIndex.Columns())
-            .Settings(settings.BuildNode(ctx, node.Pos()))
+            .Settings(streamLookupIndex.Settings())
             .Done();
     }
 
@@ -445,7 +444,7 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
         .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
         .LookupKeys(streamLookupIndex.LookupKeys())
         .Columns(keyColumnsList)
-        .Settings(settings.BuildNode(ctx, node.Pos()))
+        .Settings(streamLookupIndex.Settings())
         .Done();
 
     TMaybeNode<TExprBase> lookupKeys;
@@ -473,6 +472,9 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
         lookupKeys = lookupIndexTable;
     }
 
+    // We should allow lookup by null keys here,
+    // because main table pk can contain nulls and we don't want to lose these rows
+    settings.AllowNullKeysPrefixSize = keyColumnsList.Size();
     return Build<TKqlStreamLookupTable>(ctx, node.Pos())
         .Table(streamLookupIndex.Table())
         .LookupKeys(lookupKeys.Cast())

@@ -111,7 +111,7 @@ class BaseCanonicalTest(object):
         cls.database = '/local'
         cls.cluster = KiKiMR(
             KikimrConfigGenerator(
-                load_udfs=True,
+                udfs_path=yatest.common.build_path("yql/udfs"),
                 domain_name='local',
                 use_in_memory_pdisks=True,
                 disable_iterator_reads=True,

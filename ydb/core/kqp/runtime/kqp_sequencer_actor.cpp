@@ -12,7 +12,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>

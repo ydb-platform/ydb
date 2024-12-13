@@ -14,7 +14,7 @@ namespace io
     {
       USING_FUNCTOR(flush, builtins::file::functor::flush);
     }
-  }
-}
+  } // namespace _io
+} // namespace io
 PYTHONIC_NS_END
 #endif

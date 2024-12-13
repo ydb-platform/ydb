@@ -2,7 +2,10 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/hive.h>
 
 namespace {
 
@@ -266,7 +269,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterTable TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -325,7 +328,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

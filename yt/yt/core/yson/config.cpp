@@ -10,6 +10,8 @@ void TProtobufInteropConfig::Register(TRegistrar registrar)
         .Default(EEnumYsonStorageType::String);
     registrar.Parameter("utf8_check", &TThis::Utf8Check)
         .Default(EUtf8Check::Disable);
+    registrar.Parameter("force_snake_case_names", &TThis::ForceSnakeCaseNames)
+        .Default(false);
 }
 
 TProtobufInteropConfigPtr TProtobufInteropConfig::ApplyDynamic(

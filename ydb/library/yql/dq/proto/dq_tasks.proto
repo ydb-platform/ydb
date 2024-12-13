@@ -161,7 +161,7 @@ message TTaskOutput {
 message TDqTransform {
     string Type = 1;
 
-    // binary YSON(codec ydb/library/yql/providers/common/schema/mkql)
+    // binary YSON(codec yql/essentials/providers/common/schema/mkql)
     bytes InputType = 2;
     bytes OutputType = 3;
 
@@ -209,4 +209,5 @@ message TDqTask {
     repeated bytes ReadRanges = 17;
     map<string, string> RequestContext = 18;
     optional bool EnableSpilling = 19;
+    optional uint32 ArrayBufferMinFillPercentage = 20;
 }

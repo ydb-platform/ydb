@@ -7,7 +7,7 @@ from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.harness.kikimr_http_client import SwaggerClient
+from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.tests.library.common.delayed import wait_tablets_are_active

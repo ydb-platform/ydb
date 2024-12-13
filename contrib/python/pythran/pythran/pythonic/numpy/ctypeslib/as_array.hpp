@@ -25,8 +25,8 @@ namespace numpy
     {
       return as_array(ptr, types::pshape<long>{size});
     }
-  }
-}
+  } // namespace ctypeslib
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

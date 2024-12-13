@@ -1,7 +1,7 @@
 #pragma once
 #include "request_features.h"
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 #include <util/generic/string.h>
 #include <util/generic/typetraits.h>

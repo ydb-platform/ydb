@@ -8,15 +8,15 @@ from devtools.yamaker.project import NixProject
 
 def post_build(self):
     # copying icudt.dat file from original repository
-    icu_dat_path = f"{self.srcdir}/data/in/icudt75l.dat"
-    rodata_path = f"{self.dstdir}/icudt75_dat.rodata"
+    icu_dat_path = f"{self.srcdir}/data/in/icudt76l.dat"
+    rodata_path = f"{self.dstdir}/icudt76_dat.rodata"
     shutil.copy(icu_dat_path, rodata_path)
 
 
 def post_install(self):
     result_target = self.yamakes["."]
 
-    result_target.SRCS.add("icudt75_dat.rodata")
+    result_target.SRCS.add("icudt76_dat.rodata")
 
     result_target.CFLAGS = [
         "-DU_COMMON_IMPLEMENTATION",

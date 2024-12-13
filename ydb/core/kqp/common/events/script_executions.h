@@ -3,7 +3,7 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>

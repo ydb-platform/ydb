@@ -6,8 +6,8 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
@@ -124,6 +124,15 @@ protected:
         return result;
     }
 
+    static NJson::TJsonValue UuidToJson(const TCell& cell) {
+        TStringStream ss;
+        ui16 dw[8];
+        Y_ABORT_UNLESS(cell.Size() == 16);
+        cell.CopyDataInto((char*)dw);
+        NUuid::UuidToString(dw, ss);
+        return NJson::TJsonValue(ss.Str());
+    }
+
     static NJson::TJsonValue ToJson(const TCell& cell, NScheme::TTypeInfo type) {
         if (cell.IsNull()) {
             return NJson::TJsonValue(NJson::JSON_NULL);
@@ -185,7 +194,7 @@ protected:
         case NScheme::NTypeIds::Pg:
             return NJson::TJsonValue(PgToString(cell.AsBuf(), type));
         case NScheme::NTypeIds::Uuid:
-            return NJson::TJsonValue(NUuid::UuidBytesToString(cell.Data()));
+            return UuidToJson(cell);
         default:
             Y_ABORT("Unexpected type");
         }

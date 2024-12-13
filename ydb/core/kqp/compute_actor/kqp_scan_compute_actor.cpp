@@ -97,7 +97,7 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
             // TODO: CpuTime
         }
 
-        if (auto* x = ScanData->ProfileStats.get()) {
+        if (ScanData->ProfileStats) {
             NKqpProto::TKqpTaskExtraStats taskExtraStats;
             //                auto scanTaskExtraStats = taskExtraStats.MutableScanTaskExtraStats();
             //                scanTaskExtraStats->SetRetriesCount(TotalRetries);
@@ -245,7 +245,7 @@ void TKqpScanComputeActor::DoBootstrap() {
 
     auto wakeup = [this] { ContinueExecute(); };
     auto errorCallback = [this](const TString& error){ SendError(error); };
-    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, std::move(wakeup), std::move(errorCallback)));
+    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeup), std::move(errorCallback)));
 
     ComputeCtx.AddTableScan(0, Meta, GetStatsMode());
     ScanData = &ComputeCtx.GetTableScan(0);

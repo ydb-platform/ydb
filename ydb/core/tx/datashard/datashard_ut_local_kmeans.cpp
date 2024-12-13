@@ -5,7 +5,7 @@
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 #include <ydb/core/protos/index_builder.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                 rec.SetUpload(upload);
 
                 rec.SetDoneRounds(0);
-                rec.SetNeedsRounds(3);
+                rec.SetNeedsRounds(300);
 
                 rec.SetParent(parent);
                 rec.SetChild(parent + 1);
@@ -322,8 +322,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (key, embedding, data)
         VALUES )"
                 "(1, \"\x30\x30\3\", \"one\"),"
                 "(2, \"\x31\x31\3\", \"two\"),"
@@ -412,8 +412,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (key, embedding, data)
         VALUES )"
                 "(1, \"\x30\x30\3\", \"one\"),"
                 "(2, \"\x31\x31\3\", \"two\"),"
@@ -502,8 +502,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (__ydb_parent, key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (__ydb_parent, key, embedding, data)
         VALUES )"
                 "(39, 1, \"\x30\x30\3\", \"one\"),"
                 "(40, 1, \"\x30\x30\3\", \"one\"),"
@@ -594,8 +594,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (__ydb_parent, key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (__ydb_parent, key, embedding, data)
         VALUES )"
                 "(39, 1, \"\x30\x30\3\", \"one\"),"
                 "(40, 1, \"\x30\x30\3\", \"one\"),"

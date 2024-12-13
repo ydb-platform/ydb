@@ -5,6 +5,8 @@ import random
 
 from hamcrest import assert_that, equal_to, raises
 
+import yatest
+
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -73,7 +75,7 @@ class TestCreateAndUpsertWithRepetitions(object):
 class TestCRUDOperations(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(load_udfs=True))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(udfs_path=yatest.common.build_path("yql/udfs")))
         cls.cluster.start()
         cls.driver = ydb.Driver(
             ydb.DriverConfig(
@@ -134,7 +136,7 @@ class TestCRUDOperations(object):
 class TestSelect(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(load_udfs=True))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(udfs_path=yatest.common.build_path("yql/udfs")))
         cls.cluster.start()
         cls.driver = ydb.Driver(
             ydb.DriverConfig(

@@ -53,14 +53,6 @@ TNode TryGet(
     const TYPath& path,
     const TGetOptions& options);
 
-void Set(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TNode& value,
-    const TSetOptions& options = TSetOptions());
-
 void MultisetAttributes(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,

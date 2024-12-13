@@ -2,7 +2,7 @@
 // detail/winrt_ssocket_service.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -34,7 +34,7 @@ namespace detail {
 
 template <typename Protocol>
 class winrt_ssocket_service :
-  public execution_context_service_base<winrt_ssocket_service<Protocol> >,
+  public execution_context_service_base<winrt_ssocket_service<Protocol>>,
   public winrt_ssocket_service_base
 {
 public:
@@ -63,7 +63,7 @@ public:
 
   // Constructor.
   winrt_ssocket_service(execution_context& context)
-    : execution_context_service_base<winrt_ssocket_service<Protocol> >(context),
+    : execution_context_service_base<winrt_ssocket_service<Protocol>>(context),
       winrt_ssocket_service_base(context)
   {
   }
@@ -76,7 +76,7 @@ public:
 
   // Move-construct a new socket implementation.
   void move_construct(implementation_type& impl,
-      implementation_type& other_impl) BOOST_ASIO_NOEXCEPT
+      implementation_type& other_impl) noexcept
   {
     this->base_move_construct(impl, other_impl);
 

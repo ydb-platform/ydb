@@ -352,4 +352,12 @@ void TSkiffFormatConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TYamlFormatConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("write_uint_tag", &TThis::WriteUintTag)
+        .Default(false);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NFormats

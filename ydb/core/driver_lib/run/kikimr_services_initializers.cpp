@@ -42,7 +42,6 @@
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
 #include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/cms/console/log_settings_configurator.h>
-#include <ydb/core/cms/console/shared_cache_configurator.h>
 #include <ydb/core/cms/console/validators/core_validators.h>
 #include <ydb/core/cms/http.h>
 
@@ -175,8 +174,8 @@
 
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/services/metadata/ds_table/service.h>
@@ -446,8 +445,8 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
             try {
                 return TFileInput(*path).ReadAll();
             } catch (const std::exception& ex) {
-                Cerr << "failed to read " << name << " file '" << *path << "': " << ex.what() << Endl;
-                exit(1);
+                ythrow yexception()
+                    << "failed to read " << name << " file '" << *path << "': " << ex.what();
             }
         }
         return TString();
@@ -659,6 +658,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     record.MutableScopeId()->SetX1(data.ScopeId.first);
                     record.MutableScopeId()->SetX2(data.ScopeId.second);
                     record.SetBytesWritten(data.BytesWrittenToSocket);
+                    if (data.SessionClosed) {
+                        record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::CLOSED);
+                    } else if (data.SessionPendingConnection) {
+                        record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::PENDING_CONNECTION);
+                    } else if (data.SessionConnected) {
+                        record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::CONNECTED);
+                    }
                     data.ActorSystem->Send(whiteboardId, update.release());
                     if (data.ReportClockSkew) {
                         data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
@@ -736,9 +742,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     auto listener = new TInterconnectListenerTCP(
                         address, node.second.second, icCommon);
                     if (int err = listener->Bind()) {
-                        Cerr << "Failed to set up IC listener on port " << node.second.second
-                            << " errno# " << err << " (" << strerror(err) << ")" << Endl;
-                        exit(1);
+                        ythrow yexception()
+                            << "Failed to set up IC listener on port " << node.second.second
+                            << " errno# " << err << " (" << strerror(err) << ")";
                     }
                     setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(false), TActorSetupCmd(listener,
                         TMailboxType::ReadAsFilled, interconnectPoolId));
@@ -756,9 +762,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 }
                 auto listener = new TInterconnectListenerTCP(address, info.GetPort(), icCommon);
                 if (int err = listener->Bind()) {
-                    Cerr << "Failed to set up IC listener on port " << info.GetPort()
-                        << " errno# " << err << " (" << strerror(err) << ")" << Endl;
-                    exit(1);
+                    ythrow yexception()
+                        << "Failed to set up IC listener on port " << info.GetPort()
+                        << " errno# " << err << " (" << strerror(err) << ")";
                 }
                 setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(true), TActorSetupCmd(listener,
                     TMailboxType::ReadAsFilled, interconnectPoolId));
@@ -772,9 +778,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         icCommon->TechnicalSelfHostName = nodesManagerConfig.GetHost();
                         auto listener = new TInterconnectListenerTCP({}, nodesManagerConfig.GetPort(), icCommon);
                         if (int err = listener->Bind()) {
-                            Cerr << "Failed to set up IC listener on port " << nodesManagerConfig.GetPort()
-                                << " errno# " << err << " (" << strerror(err) << ")" << Endl;
-                            exit(1);
+                            ythrow yexception()
+                                << "Failed to set up IC listener on port " << nodesManagerConfig.GetPort()
+                                << " errno# " << err << " (" << strerror(err) << ")";
                         }
                         setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(true), TActorSetupCmd(listener,
                             TMailboxType::ReadAsFilled, interconnectPoolId));
@@ -1085,38 +1091,17 @@ TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConf
 void TSharedCacheInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
-    auto config = MakeHolder<TSharedPageCacheConfig>();
-
-    NKikimrSharedCache::TSharedCacheConfig cfg;
+    NKikimrSharedCache::TSharedCacheConfig config;
     if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasSharedCacheConfig()) {
-        cfg.MergeFrom(Config.GetBootstrapConfig().GetSharedCacheConfig());
+        config.MergeFrom(Config.GetBootstrapConfig().GetSharedCacheConfig());
     }
     if (Config.HasSharedCacheConfig()) {
-        cfg.MergeFrom(Config.GetSharedCacheConfig());
+        config.MergeFrom(Config.GetSharedCacheConfig());
     }
 
-    if (cfg.HasMemoryLimit() && cfg.GetMemoryLimit() != 0) {
-        // config limit is optional
-        // if preserved apply both memory controller limit and config limit
-        config->LimitBytes = cfg.GetMemoryLimit();
-    } else {
-        config->LimitBytes = {};
-    }
-    config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
-    config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
-    config->ReplacementPolicy = cfg.GetReplacementPolicy();
-    config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
-
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");
-    config->Counters = new TSharedPageCacheCounters(sausageGroup);
-
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0),
-        TActorSetupCmd(CreateSharedPageCache(std::move(config)), TMailboxType::ReadAsFilled, appData->UserPoolId)));
-
-    auto *configurator = NConsole::CreateSharedCacheConfigurator();
-    setup->LocalServices.emplace_back(TActorId(),
-                                      TActorSetupCmd(configurator, TMailboxType::HTSwap, appData->UserPoolId));
+    auto* actor = NSharedCache::CreateSharedPageCache(config, appData->Counters);
+    setup->LocalServices.emplace_back(NSharedCache::MakeSharedPageCacheId(0),
+        TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->UserPoolId));
 }
 
 // TBlobCacheInitializer
@@ -1648,11 +1633,10 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
 
     if (!IsServiceInitialized(setup, NGRpcService::CreateGRpcRequestProxyId(0))) {
         const size_t proxyCount = Config.HasGRpcConfig() ? Config.GetGRpcConfig().GetGRpcProxyCount() : 1UL;
-        NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator(appData->TimeProvider, appData->RandomProvider);
         for (size_t i = 0; i < proxyCount; ++i) {
             auto grpcReqProxy = Config.HasGRpcConfig() && Config.GetGRpcConfig().GetSkipSchemeCheck()
                 ? NGRpcService::CreateGRpcRequestProxySimple(Config)
-                : NGRpcService::CreateGRpcRequestProxy(Config, tracingConfigurator.GetControl());
+                : NGRpcService::CreateGRpcRequestProxy(Config);
             setup->LocalServices.push_back(std::pair<TActorId,
                                            TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(i),
                                                            TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
@@ -1661,7 +1645,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
                 TActorId(),
                 TActorSetupCmd(
-                    NConsole::CreateJaegerTracingConfigurator(std::move(tracingConfigurator), Config.GetTracingConfig()),
+                    NConsole::CreateJaegerTracingConfigurator(appData->TracingConfigurator, Config.GetTracingConfig()),
                     TMailboxType::ReadAsFilled,
                     appData->UserPoolId)));
     }

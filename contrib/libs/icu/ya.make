@@ -3,18 +3,20 @@
 LIBRARY()
 
 LICENSE(
+    BSD-2-Clause AND
     BSD-3-Clause AND
     Custom-punycode AND
     ICU AND
-    Unicode AND
-    Unicode-Icu-58
+    MIT AND
+    Public-Domain AND
+    Unicode
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(75.1)
+VERSION(76.1)
 
-ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-75-1/icu4c-75_1-src.tgz)
+ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.tgz)
 
 ADDINCL(
     GLOBAL contrib/libs/icu/include
@@ -499,7 +501,7 @@ SRCS(
     i18n/zonemeta.cpp
     i18n/zrule.cpp
     i18n/ztrans.cpp
-    icudt75_dat.rodata
+    icudt76_dat.rodata
     io/locbund.cpp
     io/sprintf.cpp
     io/sscanf.cpp

@@ -1,7 +1,7 @@
 services:
   fq-connector-go:
     container_name: fq-tests-oracle-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.11-rc.6@sha256:15d3cf4ca55c11dbee4661c039eca8248e1eff0796630d325d3028a8d7af372a
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.6.0-rc.1@sha256:4f74bd11e696218053f48622d1d065567d103906c187b3a24ea4e56f886c6c60
     ports:
       - 2130
     volumes:

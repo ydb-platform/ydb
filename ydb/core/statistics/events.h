@@ -4,9 +4,9 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/library/minsketch/count_min_sketch.h>
+#include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <ydb/library/actors/core/events.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 
 namespace NKikimr {
@@ -203,7 +203,6 @@ struct TEvStatistics {
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
         bool Success = true;
-        ui64 Cookie = 0;
         std::optional<TString> Data;
     };
 

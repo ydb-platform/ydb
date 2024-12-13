@@ -8,7 +8,6 @@ from concurrent import futures
 
 import ydb
 
-from . import param_constants
 from .kikimr_runner import KiKiMR, KikimrExternalNode
 from .kikimr_cluster_interface import KiKiMRClusterInterface
 import yaml
@@ -31,14 +30,25 @@ def kikimr_cluster_factory(configurator=None, config_path=None):
 
 
 class ExternalKiKiMRCluster(KiKiMRClusterInterface):
-    def __init__(self, config_path, binary_path=None, output_path=None):
+    def __init__(
+            self,
+            config_path,
+            kikimr_configure_binary_path,
+            kikimr_path,
+            kikimr_next_path=None,
+            ssh_username=None,
+            deploy_cluster=False,
+            ):
         self.__config_path = config_path
         with open(config_path, 'r') as r:
             self.__yaml_config = yaml.safe_load(r.read())
+        self.__kikimr_configure_binary_path = kikimr_configure_binary_path
         self.__hosts = [host['name'] for host in self.__yaml_config.get('hosts')]
         self._slots = None
-        self.__binary_path = binary_path if binary_path is not None else param_constants.kikimr_driver_path()
-        self.__output_path = output_path
+        self.__kikimr_path = kikimr_path
+        self.__kikimr_next_path = kikimr_next_path
+        self.__ssh_username = ssh_username
+        self.__deploy_cluster = deploy_cluster
         self.__slot_count = 0
 
         for domain in self.__yaml_config['domains']:
@@ -157,7 +167,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
             )
         )
 
-        if param_constants.deploy_cluster:
+        if self.__deploy_cluster:
             for inst_set in [self.nodes, self.slots]:
                 self._run_on(
                     inst_set,
@@ -180,8 +190,12 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
     def nodes(self):
         return {
             node_id: KikimrExternalNode(
+                kikimr_configure_binary_path=self.__kikimr_configure_binary_path,
+                kikimr_path=self.__kikimr_path,
+                kikimr_next_path=self.__kikimr_next_path,
                 node_id=node_id,
                 host=host,
+                ssh_username=self.__ssh_username,
                 port=DEFAULT_GRPC_PORT,
                 mon_port=DEFAULT_MON_PORT,
                 ic_port=DEFAULT_INTERCONNECT_PORT,
@@ -207,8 +221,12 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                     ic_port = start + 3
 
                     self._slots[slot_idx] = KikimrExternalNode(
+                        kikimr_configure_binary_path=self.__kikimr_configure_binary_path,
+                        kikimr_path=self.__kikimr_path,
+                        kikimr_next_path=self.__kikimr_next_path,
                         node_id=node_id,
                         host=node.host,
+                        ssh_username=self.__ssh_username,
                         port=grpc_port,
                         mon_port=mon_port,
                         ic_port=ic_port,
@@ -222,7 +240,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
 
     def _run_discovery_command(self, tenant_name):
         discovery_cmd = [
-            self.__binary_path, '--server', self.nodes[1].host, 'discovery', 'list', '-d', tenant_name
+            self.__kikimr_path, '--server', self.nodes[1].host, 'discovery', 'list', '-d', tenant_name
         ]
         logger.info('Executing discovery command: %s' % ' '.join(list(discovery_cmd)))
         ds_result = subprocess.check_output(discovery_cmd)

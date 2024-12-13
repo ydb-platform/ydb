@@ -4,8 +4,6 @@ import socket
 from ydb.tests.library.nemesis.nemesis_core import NemesisProcess
 from ydb.tests.library.nemesis.nemesis_network import NetworkNemesis
 
-from ydb.tests.library.harness import param_constants
-
 from ydb.tests.tools.nemesis.library.node import nodes_nemesis_list
 
 from ydb.tests.tools.nemesis.library.tablet import change_tablet_group_nemesis_list
@@ -34,7 +32,7 @@ def is_first_cluster_node(cluster):
 
 
 def basic_kikimr_nemesis_list(
-        cluster, num_of_pq_nemesis=10, network_nemesis=False,
+        cluster, ssh_username, num_of_pq_nemesis=10, network_nemesis=False,
         enable_nemesis_list_filter_by_hostname=False):
     harmful_nemesis_list = []
     harmful_nemesis_list.extend(data_storage_nemesis_list(cluster))
@@ -50,7 +48,7 @@ def basic_kikimr_nemesis_list(
         harmful_nemesis_list.append(
             NetworkNemesis(
                 cluster,
-                ssh_username=param_constants.ssh_username
+                ssh_username=ssh_username
             )
         )
 
@@ -97,5 +95,5 @@ def basic_kikimr_nemesis_list(
     return nemesis_list
 
 
-def nemesis_factory(kikimr_cluster, num_of_pq_nemesis=10, **kwargs):
-    return NemesisProcess(basic_kikimr_nemesis_list(kikimr_cluster, num_of_pq_nemesis, **kwargs))
+def nemesis_factory(kikimr_cluster, ssh_username, num_of_pq_nemesis=10, **kwargs):
+    return NemesisProcess(basic_kikimr_nemesis_list(kikimr_cluster, ssh_username, num_of_pq_nemesis, **kwargs))

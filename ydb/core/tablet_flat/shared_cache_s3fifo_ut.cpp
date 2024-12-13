@@ -2,7 +2,7 @@
 #include <library/cpp/resource/resource.h>
 #include "shared_cache_s3fifo.h"
 
-namespace NKikimr::NCache {
+namespace NKikimr::NSharedCache {
 
 namespace {
 

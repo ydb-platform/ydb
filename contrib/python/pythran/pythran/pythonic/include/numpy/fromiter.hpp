@@ -1,9 +1,9 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_FROMITER_HPP
 #define PYTHONIC_INCLUDE_NUMPY_FROMITER_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/numpy/float64.hpp"
 #include "pythonic/include/types/ndarray.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -16,7 +16,7 @@ namespace numpy
   fromiter(Iterable &&iterable, dtype d = dtype(), long count = -1);
 
   DEFINE_FUNCTOR(pythonic::numpy, fromiter);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

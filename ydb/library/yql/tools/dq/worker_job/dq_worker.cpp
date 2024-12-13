@@ -1,7 +1,7 @@
 #include "dq_worker.h"
 
-#include <ydb/library/yql/utils/signals/signals.h>
-#include <ydb/library/yql/utils/bind_in_range.h>
+#include <yql/essentials/utils/signals/signals.h>
+#include <yql/essentials/utils/network/bind_in_range.h>
 
 #include <ydb/library/yql/providers/dq/stats_collector/pool_stats_collector.h>
 #include <ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.h>
@@ -15,10 +15,10 @@
 
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/log/tls_backend.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/range_walker.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/tls_backend.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/range_walker.h>
 
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/concurrency/action_queue.h>

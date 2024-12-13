@@ -338,8 +338,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(Nodes) {
-        return; // table is currenty switched off
-
         TTestEnv env;
         CreateTenantsAndTables(env, false);
         TTableClient client(env.GetDriver());
@@ -386,11 +384,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ui32 offset = env.GetServer().GetRuntime()->GetNodeId(0);
             auto expected = Sprintf(R"([
                 [["::1"];[%du]];
-                [["::1"];[%du]];
-                [["::1"];[%du]];
-                [["::1"];[%du]];
-                [["::1"];[%du]];
-            ])", offset, offset + 1, offset + 2, offset + 3, offset + 4);
+            ])", offset);
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
@@ -907,6 +901,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     Path,
                     ReadCentric,
                     SharedWithOS,
+                    State,
                     Status,
                     StatusChangeTimestamp,
                     TotalSize,
@@ -930,7 +925,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 16);
+        TYsonFieldChecker check(ysonString, 17);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
@@ -941,6 +936,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.StringContains("pdisk_1.dat"); // Path
         check.Bool(false); // ReadCentric
         check.Bool(false); // SharedWithOS
+        check.String("Initial"); // State
         check.String("ACTIVE"); // Status
         check.Null(); // StatusChangeTimestamp
         check.Uint64(0u); // TotalSize
@@ -962,6 +958,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 SELECT
                     AllocatedSize,
                     AvailableSize,
+                    DiskSpace,
                     FailDomain,
                     FailRealm,
                     GroupGeneration,
@@ -969,6 +966,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     Kind,
                     NodeId,
                     PDiskId,
+                    Replicated,
+                    State,
                     Status,
                     VDisk,
                     VSlotId
@@ -987,10 +986,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 12);
+        TYsonFieldChecker check(ysonString, 15);
 
         check.Uint64(0u, true); // AllocatedSize
         check.Uint64(0u, true); // AvailableSize
+        check.Null(); // DiskSpace
         check.Uint64(0u); // FailDomain
         check.Uint64(0u); // FailRealm
         check.Uint64(1u); // GroupGeneration
@@ -998,6 +998,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.String("Default"); // Kind
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(1u); // PDiskId
+        check.Null(); // Replicated
+        check.Null(); // State
         check.Null(); // Status
         check.Uint64(0u); // VDisk
         check.Uint64(1000u); // VSlotId

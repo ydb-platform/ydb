@@ -3,14 +3,14 @@
 #include <ydb/library/actors/core/actorsystem.h>
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
+#include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 
 namespace NKikimrConfig {
     class TQueryServiceConfig;

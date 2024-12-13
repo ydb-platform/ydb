@@ -61,6 +61,23 @@ enum class ERequestType: size_t {
     DISCOVERY_NODEREGISTRATION,
     DISCOVERY_LISTENDPOINTS,
 
+    RATELIMITER_CREATE_RESOURCE,
+    RATELIMITER_ALTER_RESOURCE,
+    RATELIMITER_DROP_RESOURCE,
+    RATELIMITER_LIST_RESOURCES,
+    RATELIMITER_DESCRIBE_RESOURCE,
+    RATELIMITER_ACQUIRE_RESOURCE,
+
+    BSCONFIG_REPLACESTORAGECONFIG,
+    BSCONFIG_FETCHSTORAGECONFIG,
+    BSCONFIG_BOOTSTRAP,
+
+    PING_GRPC,
+    PING_PROXY,
+    PING_KQP,
+    PING_SCHEME_CACHE,
+    PING_TX_PROXY,
+
     REQUEST_TYPES_CNT, // Add new types above this line
 };
 
@@ -115,6 +132,17 @@ static const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Discovery.WhoAmI", ERequestType::DISCOVERY_WHOAMI},
     {"Discovery.NodeRegistration", ERequestType::DISCOVERY_NODEREGISTRATION},
     {"Discovery.ListEndpoints", ERequestType::DISCOVERY_LISTENDPOINTS},
+
+    {"RateLimiter.CreateResource", ERequestType::RATELIMITER_CREATE_RESOURCE},
+    {"RateLimiter.AlterResource", ERequestType::RATELIMITER_ALTER_RESOURCE},
+    {"RateLimiter.DropResource", ERequestType::RATELIMITER_DROP_RESOURCE},
+    {"RateLimiter.ListResources", ERequestType::RATELIMITER_LIST_RESOURCES},
+    {"RateLimiter.DescribeResource", ERequestType::RATELIMITER_DESCRIBE_RESOURCE},
+    {"RateLimiter.AcquireResource", ERequestType::RATELIMITER_ACQUIRE_RESOURCE},
+
+    {"BSConfig.ReplaceStorageConfig", ERequestType::BSCONFIG_REPLACESTORAGECONFIG},
+    {"BSConfig.FetchStorageConfig", ERequestType::BSCONFIG_FETCHSTORAGECONFIG},
+    {"BSConfig.Bootstrap", ERequestType::BSCONFIG_BOOTSTRAP},
 };
 
 struct TRequestDiscriminator {

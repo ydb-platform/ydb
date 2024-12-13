@@ -6,7 +6,7 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.common.types import Erasure, TabletTypes
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.kikimr_http_client import SwaggerClient
+from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 
 from ydb.tests.library.kv.helpers import get_kv_tablet_ids, create_kv_tablets_and_wait_for_start
 

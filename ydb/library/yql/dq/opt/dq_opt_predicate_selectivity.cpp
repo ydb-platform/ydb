@@ -1,7 +1,7 @@
 #include "dq_opt_stat.h"
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
 
 using namespace NYql;
 using namespace NYql::NNodes;

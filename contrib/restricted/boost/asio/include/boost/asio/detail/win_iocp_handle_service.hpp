@@ -2,7 +2,7 @@
 // detail/win_iocp_handle_service.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 // Copyright (c) 2008 Rep Invariant Systems, Inc. (info@repinvariant.com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -153,7 +153,7 @@ public:
       const ConstBufferSequence& buffers,
       Handler& handler, const IoExecutor& io_ex)
   {
-    typename associated_cancellation_slot<Handler>::type slot
+    associated_cancellation_slot_t<Handler> slot
       = boost::asio::get_associated_cancellation_slot(handler);
 
     // Allocate and construct an operation to wrap the handler.
@@ -183,7 +183,7 @@ public:
       uint64_t offset, const ConstBufferSequence& buffers,
       Handler& handler, const IoExecutor& io_ex)
   {
-    typename associated_cancellation_slot<Handler>::type slot
+    associated_cancellation_slot_t<Handler> slot
       = boost::asio::get_associated_cancellation_slot(handler);
 
     // Allocate and construct an operation to wrap the handler.
@@ -234,7 +234,7 @@ public:
       const MutableBufferSequence& buffers,
       Handler& handler, const IoExecutor& io_ex)
   {
-    typename associated_cancellation_slot<Handler>::type slot
+    associated_cancellation_slot_t<Handler> slot
       = boost::asio::get_associated_cancellation_slot(handler);
 
     // Allocate and construct an operation to wrap the handler.
@@ -266,7 +266,7 @@ public:
       uint64_t offset, const MutableBufferSequence& buffers,
       Handler& handler, const IoExecutor& io_ex)
   {
-    typename associated_cancellation_slot<Handler>::type slot
+    associated_cancellation_slot_t<Handler> slot
       = boost::asio::get_associated_cancellation_slot(handler);
 
     // Allocate and construct an operation to wrap the handler.

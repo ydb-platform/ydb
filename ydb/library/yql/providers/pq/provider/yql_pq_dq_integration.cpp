@@ -2,10 +2,10 @@
 #include "yql_pq_helpers.h"
 #include "yql_pq_mkql_compiler.h"
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
@@ -15,7 +15,7 @@
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/string/builder.h>
 
@@ -59,20 +59,20 @@ public:
         return 0;
     }
 
-    ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
+    ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         if (auto maybePqRead = TMaybeNode<TPqReadTopic>(&node)) {
-            return PartitionTopicRead(maybePqRead.Cast().Topic(), maxPartitions, partitions);
+            return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions);
         }
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
-            auto settings = maybeDqSource.Cast().Settings();
-            if (auto topicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {
-                return PartitionTopicRead(topicSource.Cast().Topic(), maxPartitions, partitions);
+            auto srcSettings = maybeDqSource.Cast().Settings();
+            if (auto topicSource = TMaybeNode<TDqPqTopicSource>(srcSettings.Raw())) {
+                return PartitionTopicRead(topicSource.Cast().Topic(), settings.MaxPartitions, partitions);
             }
         }
         return 0;
     }
 
-    TExprNode::TPtr WrapRead(const TDqSettings& dqSettings, const TExprNode::TPtr& read, TExprContext& ctx) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
         if (const auto& maybePqReadTopic = TMaybeNode<TPqReadTopic>(read)) {
             const auto& pqReadTopic = maybePqReadTopic.Cast();
             YQL_ENSURE(pqReadTopic.Ref().GetTypeAnn(), "No type annotation for node " << pqReadTopic.Ref().Content());
@@ -81,53 +81,12 @@ public:
                 ->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()
                 ->GetItemType()->Cast<TStructExprType>();
             const auto& clusterName = pqReadTopic.DataSource().Cluster().StringValue();
-
-            TVector<TCoNameValueTuple> settings;
-            settings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())
-                .Name().Build("format")
-                .Value(pqReadTopic.Format())
-                .Done());
-
-            auto format = pqReadTopic.Format().Ref().Content();
-
-            TVector<TCoNameValueTuple> innerSettings;
-            if (pqReadTopic.Compression() != "") {
-                innerSettings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())
-                        .Name().Build("compression")
-                        .Value(pqReadTopic.Compression())
-                    .Done());
-            }
-
-            if (!innerSettings.empty()) {
-                settings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())
-                    .Name().Build("settings")
-                    .Value<TCoNameValueTupleList>()
-                        .Add(innerSettings)
-                        .Build()
-                    .Done());
-            }
-
-            TExprNode::TListType metadataFieldsList;
-            for (auto sysColumn : AllowedPqMetaSysColumns()) {
-                metadataFieldsList.push_back(ctx.NewAtom(pqReadTopic.Pos(), sysColumn));
-            }
-
-            settings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())
-                .Name().Build("metadataColumns")
-                .Value(ctx.NewList(pqReadTopic.Pos(), std::move(metadataFieldsList)))
-                .Done());
-
-
-            settings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())
-                .Name().Build("formatSettings")
-                .Value(std::move(pqReadTopic.Settings()))
-                .Done());
-
+            const auto format = pqReadTopic.Format().Ref().Content();
             const auto token = "cluster:default_" + clusterName;
 
             const auto& typeItems = pqReadTopic.Topic().RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
             const auto pos = read->Pos();
- 
+
             TExprNode::TListType colNames;
             colNames.reserve(typeItems.size());
             std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colNames),
@@ -136,30 +95,21 @@ public:
                 });
             auto columnNames = ctx.NewList(pos, std::move(colNames));
 
-            auto row = Build<TCoArgument>(ctx, read->Pos())
-                .Name("row")
-                .Done();
-            auto emptyPredicate = Build<TCoLambda>(ctx, read->Pos())
-                .Args({row})
-                .Body<TCoBool>()
-                    .Literal().Build("true")
-                    .Build()
-                .Done().Ptr();
-
-            return Build<TDqSourceWrap>(ctx, read->Pos())
+            return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columnNames))
-                    .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), format, ctx))
+                    .Settings(BuildTopicReadSettings(clusterName, wrSettings, pos, format, ctx))
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
-                    .FilterPredicate(emptyPredicate)
+                    .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
+                    .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
-                .Settings(Build<TCoNameValueTupleList>(ctx, read->Pos()).Add(settings).Done())
+                .Settings(BuildDqSourceWrapSettings(pqReadTopic, pos, ctx))
                 .Done().Ptr();
         }
         return read;
@@ -214,6 +164,15 @@ public:
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
+                const TStructExprType* fullRowType = topicSource.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                srcDesc.SetRowType(NCommon::WriteTypeToYson(fullRowType, NYT::NYson::EYsonFormat::Text));
+
+                if (const auto& types = State_->Types) {
+                    if (const auto& optLLVM = types->OptLLVM) {
+                        srcDesc.SetEnabledLLVM(!optLLVM->empty() && *optLLVM != "OFF");
+                    }
+                }
+
                 bool sharedReading = false;
                 TString format;
                 size_t const settingsCount = topicSource.Settings().Size();
@@ -228,6 +187,8 @@ public:
                         sharedReading = FromString<bool>(Value(setting));
                     } else if (name == ReconnectPeriod) {
                         srcDesc.SetReconnectPeriod(TString(Value(setting)));
+                    } else if (name == ReadGroup) {
+                        srcDesc.SetReadGroup(TString(Value(setting)));
                     } else if (name == Format) {
                         format = TString(Value(setting));
                     } else if (name == UseSslSetting) {
@@ -244,6 +205,7 @@ public:
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     }
                 }
+                srcDesc.SetFormat(format);
 
                 if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSource.Token().Raw())) {
                     srcDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
@@ -264,20 +226,12 @@ public:
                 }
 
                 NYql::NConnector::NApi::TPredicate predicateProto;
-                if (auto predicate = topicSource.FilterPredicate(); !NYql::IsEmptyFilterPredicate(predicate)) {
-                    TStringBuilder err;
-                    if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
-                        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
-                        predicateProto.Clear();
-                    }
-                }
+                auto serializedProto = topicSource.FilterPredicate().Ref().Content();
+                YQL_ENSURE (predicateProto.ParseFromString(serializedProto));
 
-                sharedReading = sharedReading && (format == "json_each_row" || format == "raw");
                 TString predicateSql = NYql::FormatWhere(predicateProto);
                 if (sharedReading) {
-                    if (format == "json_each_row") {
-                        srcDesc.SetPredicate(predicateSql);
-                    }
+                    srcDesc.SetPredicate(predicateSql);
                     srcDesc.SetSharedReading(true);
                 }
                 protoSettings.PackFrom(srcDesc);
@@ -329,7 +283,7 @@ public:
 
     NNodes::TCoNameValueTupleList BuildTopicReadSettings(
         const TString& cluster,
-        const TDqSettings& dqSettings,
+        const IDqIntegration::TWrapReadSettings& wrSettings,
         TPositionHandle pos,
         std::string_view format,
         TExprContext& ctx) const
@@ -343,17 +297,14 @@ public:
             }
         }
 
-        auto clusterConfiguration = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
-        if (!clusterConfiguration) {
-            ythrow yexception() << "Unknown pq cluster \"" << cluster << "\"";
-        }
+        auto clusterConfiguration = GetClusterConfiguration(cluster);
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
-        Add(props, SharedReading, ToString(clusterConfiguration->SharedReading), pos, ctx);
+        Add(props, SharedReading, ToString(UseSharedReading(clusterConfiguration, format)), pos, ctx);
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
+        Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
 
-        
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);
         }
@@ -362,29 +313,86 @@ public:
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
         }
 
-        if (dqSettings.WatermarksMode.Get().GetOrElse("") == "default") {
+        if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
             Add(props, WatermarksEnableSetting, ToString(true), pos, ctx);
 
-            const auto granularity = TDuration::MilliSeconds(dqSettings
+            const auto granularity = TDuration::MilliSeconds(wrSettings
                 .WatermarksGranularityMs
-                .Get()
                 .GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs));
             Add(props, WatermarksGranularityUsSetting, ToString(granularity.MicroSeconds()), pos, ctx);
 
-            const auto lateArrivalDelay = TDuration::MilliSeconds(dqSettings
+            const auto lateArrivalDelay = TDuration::MilliSeconds(wrSettings
                 .WatermarksLateArrivalDelayMs
-                .Get()
                 .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
             Add(props, WatermarksLateArrivalDelayUsSetting, ToString(lateArrivalDelay.MicroSeconds()), pos, ctx);
         }
 
-        if (dqSettings.WatermarksEnableIdlePartitions.Get().GetOrElse(false)) {
+        if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(false)) {
             Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)
             .Add(props)
             .Done();
+    }
+
+    NNodes::TCoNameValueTupleList BuildDqSourceWrapSettings(const TPqReadTopic& pqReadTopic, TPositionHandle pos, TExprContext& ctx) const {
+        TVector<TCoNameValueTuple> settings;
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build("format")
+            .Value(pqReadTopic.Format())
+            .Done());
+
+        TExprNode::TListType metadataFieldsList;
+        for (const auto& sysColumn : AllowedPqMetaSysColumns()) {
+            metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));
+        }
+
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build("metadataColumns")
+            .Value(ctx.NewList(pos, std::move(metadataFieldsList)))
+            .Done());
+
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build("formatSettings")
+            .Value(std::move(pqReadTopic.Settings()))
+            .Done());
+
+        TVector<TCoNameValueTuple> innerSettings;
+        if (pqReadTopic.Compression() != "") {
+            innerSettings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build("compression")
+                .Value(pqReadTopic.Compression())
+                .Done());
+        }
+
+        const auto clusterConfiguration = GetClusterConfiguration(pqReadTopic.DataSource().Cluster().StringValue());
+        Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, pqReadTopic.Format().Ref().Content())), pos, ctx);
+
+        if (!innerSettings.empty()) {
+            settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build("settings")
+                .Value<TCoNameValueTupleList>()
+                    .Add(innerSettings)
+                    .Build()
+                .Done());
+        }
+
+        return Build<TCoNameValueTupleList>(ctx, pos)
+            .Add(settings)
+            .Done();
+    }
+
+    const TPqClusterConfigurationSettings* GetClusterConfiguration(const TString& cluster) const {
+        const auto clusterConfiguration = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
+        if (!clusterConfiguration) {
+            ythrow yexception() << "Unknown pq cluster \"" << cluster << "\"";
+        }
+        return clusterConfiguration;
+    }
+
+    static bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, std::string_view format) {
+        return clusterConfiguration->SharedReading && (format == "json_each_row" || format == "raw");
     }
 
 private:

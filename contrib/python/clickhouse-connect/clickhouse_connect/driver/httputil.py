@@ -225,10 +225,15 @@ class ResponseSource:
             chunks = deque()
             done = False
             current_size = 0
-            read_gen = response.read_chunked(chunk_size, decompress is None)
+            read_gen = response.stream(chunk_size, decompress is None)
             while True:
                 while not done:
-                    chunk = next(read_gen, None) # Always try to read at least one chunk if there are any left
+                    try:
+                        chunk = next(read_gen, None) # Always try to read at least one chunk if there are any left
+                    except Exception: # pylint: disable=broad-except
+                        # By swallowing an unexpected exception reading the stream, we will let consumers decide how to
+                        # handle the unexpected end of stream
+                        pass
                     if not chunk:
                         done = True
                         break

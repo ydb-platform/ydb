@@ -18,8 +18,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
+    yql/essentials/public/issue
+    yql/essentials/public/issue/protos
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/api/protos/annotations

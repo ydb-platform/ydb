@@ -14,6 +14,7 @@ NO_LTO()
 SRCS(
     actions/cancelation_token.cpp
     actions/cancelable_context.cpp
+    actions/codicil_guarded_invoker.cpp
     actions/current_invoker.cpp
     actions/future.cpp
     actions/invoker_detail.cpp
@@ -63,6 +64,7 @@ SRCS(
     concurrency/fair_throttler.cpp
     concurrency/fiber_scheduler_thread.cpp
     concurrency/fiber.cpp
+    concurrency/fiber_manager.cpp
     concurrency/fls.cpp
     concurrency/invoker_alarm.cpp
     concurrency/invoker_queue.cpp
@@ -118,6 +120,7 @@ SRCS(
     misc/blob_output.cpp
     misc/bloom_filter.cpp
     misc/checksum.cpp
+    misc/codicil.cpp
     misc/config.cpp
     misc/coro_pipe.cpp
     misc/crash_handler.cpp
@@ -227,7 +230,6 @@ SRCS(
     threading/thread.cpp
 
     tracing/allocation_tags.cpp
-    tracing/config.cpp
     tracing/public.cpp
     GLOBAL tracing/trace_context.cpp
 
@@ -388,7 +390,7 @@ RECURSE(
     test_framework
 )
 
-IF (NOT OPENSOURCE)
+IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         benchmarks
         bus/benchmarks

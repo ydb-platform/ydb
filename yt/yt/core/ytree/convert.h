@@ -5,6 +5,7 @@
 
 #include <yt/yt/core/yson/consumer.h>
 
+#include <library/cpp/yt/error/convert_to_cpo.h>
 
 namespace NYT::NYson {
 
@@ -49,14 +50,12 @@ INodePtr ConvertToNode(
 template <class T>
 IAttributeDictionaryPtr ConvertToAttributes(const T& value);
 
-template <class TTo>
-TTo ConvertTo(const INodePtr& node);
-
-template <class TTo, class TFrom>
-TTo ConvertTo(const TFrom& value);
-
 template <class T>
 T ConstructYTreeConvertibleObject();
+
+////////////////////////////////////////////////////////////////////////////////
+
+using NYT::ConvertTo;
 
 ////////////////////////////////////////////////////////////////////////////////
 

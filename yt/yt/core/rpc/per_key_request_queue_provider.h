@@ -47,7 +47,7 @@ private:
 
     NConcurrency::TSyncMap<TKey, TRequestQueuePtr> RequestQueues_;
 
-    TAtomicObject<TRequestQueueThrottlerConfigs> DefaultConfigs_;
+    NThreading::TAtomicObject<TRequestQueueThrottlerConfigs> DefaultConfigs_;
 
     TKeyFromRequestHeaderCallback KeyFromRequestHeader_;
     TReconfigurationCallback ReconfigurationCallback_;
@@ -79,7 +79,6 @@ private:
     static TKeyFromRequestHeaderCallback CreateKeyFromRequestHeaderCallback();
 };
 
-DECLARE_REFCOUNTED_CLASS(TPerUserRequestQueueProvider);
 DEFINE_REFCOUNTED_TYPE(TPerUserRequestQueueProvider);
 
 ////////////////////////////////////////////////////////////////////////////////

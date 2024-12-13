@@ -12,7 +12,7 @@ namespace operator_
   long indexOf(A &&a, B &&b);
 
   DEFINE_FUNCTOR(pythonic::operator_, indexOf);
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

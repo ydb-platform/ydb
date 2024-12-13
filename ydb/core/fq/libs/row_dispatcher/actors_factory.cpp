@@ -9,28 +9,34 @@ struct TActorFactory : public IActorFactory {
     TActorFactory() {}
 
     NActors::TActorId RegisterTopicSession(
+        const TString& readGroup,
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
         const NConfig::TRowDispatcherConfig& config,
         NActors::TActorId rowDispatcherActorId,
+        NActors::TActorId compileServiceActorId,
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        const NYql::IPqGateway::TPtr& pqGateway) const override {
+        const NYql::IPqGateway::TPtr& pqGateway,
+        ui64 maxBufferSize) const override {
 
         auto actorPtr = NFq::NewTopicSession(
+            readGroup,
             topicPath,
             endpoint,
             database,
             config,
             rowDispatcherActorId,
+            compileServiceActorId,
             partitionId,
             std::move(driver),
             credentialsProviderFactory,
             counters,
-            pqGateway
+            pqGateway,
+            maxBufferSize
         );
         return NActors::TlsActivationContext->ExecutorThread.RegisterActor(actorPtr.release(), NActors::TMailboxType::HTSwap, Max<ui32>());
     }

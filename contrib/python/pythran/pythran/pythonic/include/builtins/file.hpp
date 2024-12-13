@@ -17,7 +17,7 @@ namespace builtins
   }
 
   DEFINE_FUNCTOR(pythonic::builtins::anonymous, file);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

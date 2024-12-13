@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <yql/essentials/public/udf/udf_helpers.h>
 
 #include <util/generic/array_ref.h>
 

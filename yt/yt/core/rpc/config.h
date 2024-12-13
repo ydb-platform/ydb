@@ -132,7 +132,7 @@ public:
     std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
     TTimeHistogramConfigPtr TimeHistogram;
-    THashMap<TString, TMethodConfigPtr> Methods;
+    THashMap<std::string, TMethodConfigPtr> Methods;
     std::optional<int> AuthenticationQueueSizeLimit;
     std::optional<TDuration> PendingPayloadsTimeout;
     std::optional<bool> Pooled;
@@ -428,13 +428,13 @@ class TDispatcherConfig
     : public NYTree::TYsonStruct
 {
 public:
-    static constexpr int DefaultHeavyPoolSize = 16;
-    static constexpr int DefaultCompressionPoolSize = 8;
     int HeavyPoolSize;
     int CompressionPoolSize;
     TDuration HeavyPoolPollingPeriod;
 
     bool AlertOnMissingRequestInfo;
+
+    bool SendTracingBaggage;
 
     TDispatcherConfigPtr ApplyDynamic(const TDispatcherDynamicConfigPtr& dynamicConfig) const;
 
@@ -456,6 +456,8 @@ public:
     std::optional<TDuration> HeavyPoolPollingPeriod;
 
     std::optional<bool> AlertOnMissingRequestInfo;
+
+    std::optional<bool> SendTracingBaggage;
 
     REGISTER_YSON_STRUCT(TDispatcherDynamicConfig);
 

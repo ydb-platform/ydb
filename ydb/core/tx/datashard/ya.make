@@ -270,16 +270,16 @@ PEERDIR(
     ydb/core/wrappers
     ydb/core/ydb_convert
     ydb/library/aclib
-    ydb/library/binary_json
-    ydb/library/dynumber
-    ydb/library/minsketch
-    ydb/library/yql/parser/pg_wrapper/interface
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
+    yql/essentials/core/minsketch
+    yql/essentials/parser/pg_wrapper/interface
     ydb/public/api/protos
     ydb/library/yql/dq/actors/compute
-    ydb/library/yql/parser/pg_wrapper/interface
+    yql/essentials/parser/pg_wrapper/interface
     ydb/services/lib/sharding
     ydb/library/chunks_limiter
-    ydb/library/uuid
+    yql/essentials/types/uuid
 )
 
 YQL_LAST_ABI_VERSION()
@@ -308,6 +308,7 @@ RECURSE_FOR_TESTS(
     ut_column_stats
     ut_compaction
     ut_erase_rows
+    ut_external_blobs
     ut_followers
     ut_incremental_backup
     ut_incremental_restore_scan

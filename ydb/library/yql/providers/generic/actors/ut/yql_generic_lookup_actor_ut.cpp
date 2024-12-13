@@ -1,8 +1,8 @@
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 
 #include <ydb/library/yql/providers/generic/actors/yql_generic_lookup_actor.h>
 
@@ -12,8 +12,8 @@
 #include <ydb/library/yql/providers/generic/actors/yql_generic_lookup_actor.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/proto/logger_config.pb.h>
+#include <yql/essentials/utils/log/log.h>
 
 using namespace NYql::NConnector;
 using namespace NYql::NConnector::NTest;
@@ -81,13 +81,13 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         runtime.Initialize();
         auto edge = runtime.AllocateEdgeActor();
 
-        NYql::NConnector::NApi::TDataSourceInstance dsi;
-        dsi.Setkind(NYql::NConnector::NApi::EDataSourceKind::YDB);
+        NYql::TGenericDataSourceInstance dsi;
+        dsi.Setkind(NYql::EGenericDataSourceKind::YDB);
         dsi.mutable_endpoint()->Sethost("some_host");
         dsi.mutable_endpoint()->Setport(2135);
         dsi.Setdatabase("some_db");
         dsi.Setuse_tls(true);
-        dsi.set_protocol(::NYql::NConnector::NApi::EProtocol::NATIVE);
+        dsi.set_protocol(::NYql::EGenericProtocol::NATIVE);
         auto token = dsi.mutable_credentials()->mutable_token();
         token->Settype("IAM");
         token->Setvalue("TEST_TOKEN");

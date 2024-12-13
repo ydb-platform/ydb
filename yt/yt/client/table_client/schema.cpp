@@ -16,6 +16,8 @@
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/yson_struct.h>
 
+#include <yt/yt/core/actions/new_with_offloaded_dtor.h>
+
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/wire_protocol.pb.h>
 
@@ -280,6 +282,26 @@ i64 TColumnSchema::GetMemoryUsage() const
         (Group_ ? Group_->size() : 0);
 }
 
+i64 TColumnSchema::GetMemoryUsage(i64 limit) const
+{
+    YT_ASSERT(limit > 0);
+
+    auto usage = static_cast<i64>(
+        sizeof(TColumnSchema) +
+        StableName_.Underlying().size() +
+        Name_.size() +
+        (Lock_ ? Lock_->size() : 0) +
+        (Expression_ ? Expression_->size() : 0) +
+        (Aggregate_ ? Aggregate_->size() : 0) +
+        (Group_ ? Group_->size() : 0));
+
+    if (usage >= limit) {
+        return usage;
+    }
+
+    return usage + LogicalType_->GetMemoryUsage(limit - usage);
+}
+
 bool TColumnSchema::IsOfV1Type() const
 {
     return IsOfV1Type_;
@@ -355,7 +377,7 @@ void FormatValue(TStringBuilderBase* builder, const TColumnSchema& schema, TStri
     }
 
     if (const auto& materialized = schema.Materialized()) {
-        builder->AppendFormat("; materialized=%Qv", *materialized);
+        builder->AppendFormat("; materialized=%v", *materialized);
     }
 
     if (const auto& aggregate = schema.Aggregate()) {
@@ -463,10 +485,10 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
     } else if (protoSchema.has_simple_logical_type()) {
         schema->SetLogicalType(
             MakeLogicalType(
-                CheckedEnumCast<ESimpleLogicalValueType>(protoSchema.simple_logical_type()),
+                FromProto<ESimpleLogicalValueType>(protoSchema.simple_logical_type()),
                 protoSchema.required()));
     } else {
-        auto physicalType = CheckedEnumCast<EValueType>(protoSchema.type());
+        auto physicalType = FromProto<EValueType>(protoSchema.type());
         schema->SetLogicalType(MakeLogicalType(GetLogicalType(physicalType), protoSchema.required()));
     }
 
@@ -474,7 +496,7 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
     schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
     schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
     schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
-    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, CheckedEnumCast<ESortOrder>));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, FromProto<ESortOrder>));
     schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
     schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
 }
@@ -1430,9 +1452,24 @@ void TTableSchema::Load(TStreamLoadContext& context)
 
 i64 TTableSchema::GetMemoryUsage() const
 {
-    i64 usage = sizeof(TTableSchema);
+    auto usage = static_cast<i64>(sizeof(TTableSchema));
     for (const auto& column : Columns()) {
         usage += column.GetMemoryUsage();
+    }
+    return usage;
+}
+
+i64 TTableSchema::GetMemoryUsage(i64 limit) const
+{
+    YT_ASSERT(limit > 0);
+
+    auto usage = static_cast<i64>(sizeof(TTableSchema));
+    for (const auto& column : Columns()) {
+        if (usage >= limit) {
+            return usage;
+        }
+
+        usage += column.GetMemoryUsage(limit - usage);
     }
     return usage;
 }
@@ -1514,7 +1551,7 @@ void FromProto(TTableSchema* schema, const NProto::TTableSchemaExt& protoSchema)
         FromProto<std::vector<TColumnSchema>>(protoSchema.columns()),
         protoSchema.strict(),
         protoSchema.unique_keys(),
-        CheckedEnumCast<ETableSchemaModification>(protoSchema.schema_modification()),
+        FromProto<ETableSchemaModification>(protoSchema.schema_modification()),
         FromProto<std::vector<TDeletedColumn>>(protoSchema.deleted_columns()));
 }
 
@@ -1570,6 +1607,35 @@ void FromProto(
 void PrintTo(const TTableSchema& tableSchema, std::ostream* os)
 {
     *os << Format("%v", tableSchema);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TTableSchemaTruncatedFormatter::TTableSchemaTruncatedFormatter(
+    const TTableSchemaPtr& schema,
+    i64 memoryLimit)
+    : Schema_(schema.Get())
+    , Limit_(memoryLimit)
+{
+    YT_ASSERT(Limit_ >= 0);
+}
+
+void TTableSchemaTruncatedFormatter::operator()(TStringBuilderBase* builder) const
+{
+    if (!Schema_) {
+        builder->AppendString(ToString(nullptr));
+    } else if (Limit_ > 0 && Schema_->GetMemoryUsage(Limit_) <= Limit_) {
+        builder->AppendFormat("%v", *Schema_);
+    } else {
+        builder->AppendString("<schema memory usage is over the logging threshold>");
+    }
+}
+
+TFormatterWrapper<TTableSchemaTruncatedFormatter> MakeTableSchemaTruncatedFormatter(
+    const TTableSchemaPtr& schema,
+    i64 memoryLimit)
+{
+    return {TTableSchemaTruncatedFormatter(schema, memoryLimit)};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

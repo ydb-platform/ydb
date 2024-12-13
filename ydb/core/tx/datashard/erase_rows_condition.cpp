@@ -1,6 +1,6 @@
 #include "erase_rows_condition.h"
 
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -9,7 +9,7 @@
 #include <util/string/cast.h>
 
 extern "C" {
-#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
 }
 
 namespace NKikimr {

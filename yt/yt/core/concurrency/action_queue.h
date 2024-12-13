@@ -6,8 +6,6 @@
 
 #include <yt/yt/core/logging/public.h>
 
-#include <yt/yt/core/misc/tagged_interface.h>
-
 #include <yt/yt/library/profiling/public.h>
 #include <yt/yt/library/profiling/tag.h>
 
@@ -47,12 +45,12 @@ DEFINE_REFCOUNTED_TYPE(TActionQueue)
 IInvokerPtr CreateSerializedInvoker(
     IInvokerPtr underlyingInvoker,
     const TString& invokerName = "default",
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 IInvokerPtr CreateSerializedInvoker(
     IInvokerPtr underlyingInvoker,
     const NProfiling::TTagSet& tagSet,
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -63,12 +61,12 @@ IInvokerPtr CreateSerializedInvoker(
 IPrioritizedInvokerPtr CreatePrioritizedInvoker(
     IInvokerPtr underlyingInvoker,
     const TString& invokerName = "default",
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 IPrioritizedInvokerPtr CreatePrioritizedInvoker(
     IInvokerPtr underlyingInvoker,
     const NProfiling::TTagSet& tagSet,
-    NProfiling::IRegistryImplPtr registry = nullptr);
+    NProfiling::IRegistryPtr registry = nullptr);
 
 //! Creates a wrapper around IInvoker that implements IPrioritizedInvoker but
 //! does not perform any actual reordering. Priorities passed to #IPrioritizedInvoker::Invoke
@@ -83,36 +81,16 @@ IInvokerPtr CreateFixedPriorityInvoker(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBoundedConcurrencyInvokerTag;
 //! Creates an invoker that executes all callbacks in the
 //! context of #underlyingInvoker allowing up to #maxConcurrentInvocations
 //! outstanding requests to the latter.
-TTaggedInterface<IInvoker, TBoundedConcurrencyInvokerTag> CreateBoundedConcurrencyInvoker(
+IBoundedConcurrencyInvokerPtr CreateBoundedConcurrencyInvoker(
     IInvokerPtr underlyingInvoker,
-    int maxConcurrentInvocations);
-
-//! Updates invoker's max concurrent invocations value.
-//!
-//! Does nothing, if the value stays the same.
-//! If the value increases, pending closures are invoked until #maxConcurrentInvocations is reached.
-//! If the value decreases, value is scheduled to be changed, but only changes once
-//! number of outstanding requests is less or equal to #maxConcurrentInvocations, and
-//! then the value actually changes.
-void SetMaxConcurrentInvocations(
-    TTaggedInterface<IInvoker, TBoundedConcurrencyInvokerTag> invoker,
     int maxConcurrentInvocations);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 ISuspendableInvokerPtr CreateSuspendableInvoker(IInvokerPtr underlyingInvoker);
-
-////////////////////////////////////////////////////////////////////////////////
-
-//! Creates an invoker that creates a codicil guard with a given string before each
-//! callback invocation.
-IInvokerPtr CreateCodicilGuardedInvoker(
-    IInvokerPtr underlyingInvoker,
-    TString codicil);
 
 ////////////////////////////////////////////////////////////////////////////////
 

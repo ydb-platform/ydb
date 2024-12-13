@@ -172,6 +172,7 @@ public:
         {
             auto [error, issue] = CheckConnectRight();
             if (error) {
+                AuditLogConnectDbAccessDenied(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
                 ReplyUnauthorizedAndDie(*issue);
                 return;
             }
@@ -179,7 +180,7 @@ public:
 
         if (AppData(ctx)->FeatureFlags.GetEnableGrpcAudit()) {
             // log info about input connection (remote address, basically)
-            AuditLogConn(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
+            AuditLogConn(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
         }
 
         // Simple rps limitation
@@ -417,11 +418,11 @@ private:
         return DmlAuditEnabled_ && !DmlAuditExpectedSubjects_.contains(userSID);
     };
 
-    void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, const TString& userSID) const {
+    void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, const TString& userSID, const TString& sanitizedToken) const {
         const bool dmlAuditEnabled = requestBaseCtx->IsAuditable() && IsAuditEnabledFor(userSID);
 
         if (dmlAuditEnabled) {
-            AuditContextStart(requestBaseCtx, databaseName, userSID, Attributes_);
+            AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
             requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
                 AuditContextEnd(requestBaseCtx);
                 AuditLog(status, parts);
@@ -475,7 +476,7 @@ private:
     void HandleAndDie(TAutoPtr<TEventHandle<TEvProxyRuntimeEvent>>& event) {
         // Request audit happen after successful authentication
         // and authorization check against the database
-        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
+        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
 
         GrpcRequestBaseCtx_->FinishSpan();
         event->Release().Release()->Pass(*this);
@@ -554,21 +555,21 @@ private:
             return {false, std::nullopt};
         }
 
-        const TString error = TStringBuilder()
-            << "User has no permission to perform query on this database"
-            << ", database: " << CheckedDatabaseName_
-            << ", user: " << TBase::GetUserSID()
-            << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName();
-        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "%s", error.c_str());
-
         Counters_->IncDatabaseAccessDenyCounter();
 
         if (!AppData()->FeatureFlags.GetCheckDatabaseAccessPermission()) {
             return {false, std::nullopt};
         }
 
-        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", error.c_str());
-        return {true, MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error)};
+        const TString error = "No permission to connect to the database";
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER, 
+            error
+            << ": " << CheckedDatabaseName_
+            << ", user: " << TBase::GetUserSID()
+            << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName()
+        );
+
+        return {true, MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error)};;
     }
 
     const TActorId Owner_;

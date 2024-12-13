@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/utils/actors/http_sender.h>
 
-#include <ydb/library/yql/public/udf/udf_value.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
 #include <library/cpp/monlib/encode/json/json.h>
 

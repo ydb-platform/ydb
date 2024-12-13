@@ -27,6 +27,7 @@ namespace NKikimr {
                         1,      // HullSstSizeInChunksLevel
                         2.0,
                         10,     // FreshCompMaxInFlightWrites
+                        10,     // FreshCompMaxInFlightReads
                         10,     // HullCompMaxInFlightWrites
                         20,     // HullCompMaxInFlightReads
                         0.5,

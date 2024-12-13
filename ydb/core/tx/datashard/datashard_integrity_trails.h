@@ -56,6 +56,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY)) {
         if (keys.HasWrites()) {
             const int batchSize = 10;
+            bool first = true;
             for (size_t offset = 0; offset < keys.Keys.size(); offset += batchSize) {
                 TStringStream ss;
 
@@ -69,6 +70,11 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
 
                     if (TSysTables::IsSystemTable(keyDef->TableId)) {
                         continue;
+                    }
+
+                    if (first) {
+                        LogKeyValue("TableId", ToString(keyDef->TableId), ss);
+                        first = false;
                     }
 
                     auto& range = keyDef->Range;

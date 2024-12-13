@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/ndarray.hpp"
 
+#include "pythonic/types/ndarray.hpp"
 #include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/nested_container.hpp"
-#include "pythonic/types/ndarray.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -32,7 +32,7 @@ namespace numpy
   {
     return ndarray(types::pshape<std::integral_constant<long, N>>({}), d);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

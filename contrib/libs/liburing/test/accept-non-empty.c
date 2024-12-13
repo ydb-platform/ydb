@@ -60,6 +60,46 @@ static int start_accept_listen(int port_off, int extra_flags)
 	return fd;
 }
 
+static void *connect_fn(void *data)
+{
+	struct sockaddr_in addr = { };
+	struct data *d = data;
+	int i;
+
+	pthread_barrier_wait(&d->barrier);
+
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(0x1235);
+	addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+	for (i = 0; i < d->connects; i++) {
+		int s;
+
+		s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (s < 0) {
+			perror("socket");
+			break;
+		}
+		if (connect(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+			perror("connect");
+			break;
+		}
+	}
+
+	if (i)
+		pthread_barrier_wait(&d->conn_barrier);
+
+	return NULL;
+}
+
+static void setup_thread(struct data *d, int nconns)
+{
+	d->connects = nconns;
+	pthread_barrier_init(&d->barrier, NULL, 2);
+	pthread_barrier_init(&d->conn_barrier, NULL, 2);
+	pthread_create(&d->thread, NULL, connect_fn, d);
+}
+
 static int test_maccept(struct data *d, int flags, int fixed)
 {
 	struct io_uring_params p = { };
@@ -81,6 +121,8 @@ static int test_maccept(struct data *d, int flags, int fixed)
 		no_more_accept = 1;
 		return 0;
 	}
+
+	setup_thread(d, MAX_ACCEPTS);
 
 	fds = malloc(MAX_ACCEPTS * sizeof(int));
 	memset(fds, -1, MAX_ACCEPTS * sizeof(int));
@@ -152,53 +194,12 @@ static int test_maccept(struct data *d, int flags, int fixed)
 	return err;
 }
 
-static void *connect_fn(void *data)
-{
-	struct sockaddr_in addr = { };
-	struct data *d = data;
-	int i;
-
-	pthread_barrier_wait(&d->barrier);
-
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(0x1235);
-	addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-	for (i = 0; i < d->connects; i++) {
-		int s;
-
-		s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-		if (s < 0) {
-			perror("socket");
-			break;
-		}
-		if (connect(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-			perror("connect");
-			break;
-		}
-	}
-
-	if (d->connects > 1)
-		pthread_barrier_wait(&d->conn_barrier);
-
-	return NULL;
-}
-
-static void setup_thread(struct data *d, int nconns)
-{
-	d->connects = nconns;
-	pthread_barrier_init(&d->barrier, NULL, 2);
-	pthread_barrier_init(&d->conn_barrier, NULL, 2);
-	pthread_create(&d->thread, NULL, connect_fn, d);
-}
-
 static int test(int flags, int fixed)
 {
 	struct data d;
 	void *tret;
 	int ret;
 
-	setup_thread(&d, 1);
 	ret = test_maccept(&d, flags, fixed);
 	if (ret) {
 		fprintf(stderr, "test conns=1 failed\n");
@@ -209,7 +210,6 @@ static int test(int flags, int fixed)
 
 	pthread_join(d.thread, &tret);
 
-	setup_thread(&d, MAX_ACCEPTS);
 	ret = test_maccept(&d, flags, fixed);
 	if (ret) {
 		fprintf(stderr, "test conns=MAX failed\n");

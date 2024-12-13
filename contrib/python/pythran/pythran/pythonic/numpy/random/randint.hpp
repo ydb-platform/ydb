@@ -37,16 +37,16 @@ namespace numpy
     }
 
     template <class pS>
-    auto randint(long max, types::none_type, pS const &shape)
-        -> decltype(randint(0, max, shape))
+    auto randint(long max, types::none_type,
+                 pS const &shape) -> decltype(randint(0, max, shape))
     {
       return randint(0, max, shape);
     }
 
     inline auto randint(long min, long max, long size)
-        -> decltype(randint(min, max, types::array<long, 1>{{size}}))
+        -> decltype(randint(min, max, types::array_tuple<long, 1>{{size}}))
     {
-      return randint(min, max, types::array<long, 1>{{size}});
+      return randint(min, max, types::array_tuple<long, 1>{{size}});
     }
 
     inline long randint(long max, types::none_type)

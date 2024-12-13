@@ -16,15 +16,18 @@
 namespace NFq {
 
 std::unique_ptr<NActors::IActor> NewTopicSession(
+    const TString& readGroup,
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
     const NConfig::TRowDispatcherConfig& config,
     NActors::TActorId rowDispatcherActorId,
+    NActors::TActorId compileServiceActorId,
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway);
+    const NYql::IPqGateway::TPtr& pqGateway,
+    ui64 maxBufferSize);
 
 } // namespace NFq

@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -155,11 +155,13 @@ TExprBase KqpRewriteLookupTable(const TExprBase& node, TExprContext& ctx, const 
         return node;
     }
 
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
     return Build<TKqlStreamLookupTable>(ctx, lookup.Pos())
         .Table(lookup.Table())
         .LookupKeys(lookup.LookupKeys())
         .Columns(lookup.Columns())
-        .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+        .Settings(settings.BuildNode(ctx, lookup.Pos()))
         .Done();
 }
 

@@ -7,7 +7,7 @@ from ydb.tests.library.common.delayed import wait_tablets_are_active
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.kikimr_client import kikimr_client_factory
+from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
 from ydb.tests.library.kv.helpers import create_tablets_and_wait_for_start
 
 TIMEOUT_SECONDS = 480

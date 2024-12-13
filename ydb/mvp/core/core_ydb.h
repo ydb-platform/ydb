@@ -1,12 +1,15 @@
 #pragma once
 
 #include <ydb/mvp/security/simple/security.h>
+#include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/library/actors/http/http.h>
@@ -139,7 +142,7 @@ struct TYdbUnitResources {
     }
 };
 
-extern TMap<std::pair<TStringBuf, TStringBuf>, TYdbUnitResources> DefaultUnitResources;
+extern TMap<std::pair<TString, TString>, TYdbUnitResources> DefaultUnitResources;
 
 TString GetAuthHeaderValue(const TString& tokenName);
 void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config);
@@ -149,8 +152,8 @@ struct TYdbLocation {
     TString Environment;
     TVector<std::pair<TString, TString>> Endpoints;
     TString RootDomain;
-    TVector<TStringBuf> DataCenters;
-    const TMap<std::pair<TStringBuf, TStringBuf>, TYdbUnitResources>& UnitResources;
+    TVector<TString> DataCenters;
+    TMap<std::pair<TString, TString>, TYdbUnitResources> UnitResources;
     ui32 NotificationsEnvironmentId;
     bool Disabled = false;
     TAtomicSingleton<NYdb::TDriver> Driver;
@@ -176,8 +179,8 @@ struct TYdbLocation {
                  const TString& environment,
                  const TVector<std::pair<TString, TString>>& endpoints,
                  const TString& rootDomain,
-                 const TVector<TStringBuf>& dataCenters,
-                 const TMap<std::pair<TStringBuf, TStringBuf>, TYdbUnitResources>& unitResources,
+                 const TVector<TString>& dataCenters,
+                 const TMap<std::pair<TString, TString>, TYdbUnitResources>& unitResources,
                  ui32 notificationsEnvironmentId = 0)
         : Name(name)
         , Environment(environment)
@@ -225,7 +228,7 @@ struct TYdbLocation {
         }
     }
 
-    const TYdbUnitResources& GetUnitResources(TStringBuf type, TStringBuf kind) const {
+    const TYdbUnitResources& GetUnitResources(const TString& type, const TString& kind) const {
         auto it = UnitResources.find({type, kind});
         if (it != UnitResources.end()) {
             return it->second;
@@ -306,13 +309,16 @@ struct TYdbLocation {
     std::unique_ptr<NYdb::NTable::TTableClient> GetTableClientPtr(TStringBuf endpoint, const NYdb::NTable::TClientSettings& settings = NYdb::NTable::TClientSettings()) const;
     std::unique_ptr<NYdb::NTable::TTableClient> GetTableClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::NTable::TClientSettings& settings = NYdb::NTable::TClientSettings()) const;
     std::unique_ptr<NYdb::NTopic::TTopicClient> GetTopicClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::NTopic::TTopicClientSettings& settings = NYdb::NTopic::TTopicClientSettings()) const;
+    std::unique_ptr<NYdb::NReplication::TReplicationClient> GetReplicationClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::TCommonClientSettings& settings = NYdb::TCommonClientSettings()) const;
 
     std::unique_ptr<NYdb::NDataStreams::V1::TDataStreamsClient> GetDataStreamsClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::TCommonClientSettings& settings = NYdb::TCommonClientSettings()) const;
 
+    NYdb::NTable::TTableClient GetTableClient(const TRequest& request, const NYdb::NTable::TClientSettings& defaultClientSettings = {}) const;
     NYdb::NTable::TTableClient GetTableClient(const NYdb::NTable::TClientSettings& clientSettings = {}) const;
 
     NYdb::NScripting::TScriptingClient GetScriptingClient(const TRequest& request) const;
     std::unique_ptr<NYdb::NScripting::TScriptingClient> GetScriptingClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::TCommonClientSettings& settings = NYdb::TCommonClientSettings()) const;
+    std::unique_ptr<NYdb::NQuery::TQueryClient> GetQueryClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::NQuery::TClientSettings& settings = NYdb::NQuery::TClientSettings()) const;
 
     TString GetPath(const TRequest& request) const {
         TString path = request.Parameters["path"];
@@ -354,3 +360,6 @@ private:
         return GRpcClientLow.GetRef();
     }
 };
+
+TString GetAuthHeaderValue(const TString& tokenName);
+void TryGetLocationFromConfig(TYdbLocation& location, const YAML::Node& config);

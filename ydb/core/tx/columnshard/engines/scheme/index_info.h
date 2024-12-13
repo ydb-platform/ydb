@@ -15,6 +15,7 @@
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
 
 #include <ydb/library/formats/arrow/transformer/abstract.h>
 
@@ -102,7 +103,8 @@ private:
 
     bool SchemeNeedActualization = false;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
-    bool ExternalGuaranteeExclusivePK = false;
+    std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
+    std::optional<TString> ScanReaderPolicyName;
 
     ui64 Version = 0;
     std::vector<ui32> SchemaColumnIds;
@@ -195,7 +197,11 @@ public:
     static std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(
         const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
-    std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
+    const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& GetCompactionPlannerConstructor() const;
+    const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& GetMetadataManagerConstructor() const {
+        AFL_VERIFY(MetadataManagerConstructor);
+        return MetadataManagerConstructor;
+    }
     bool IsNullableVerifiedByIndex(const ui32 colIndex) const {
         AFL_VERIFY(colIndex < ColumnFeatures.size());
         return ColumnFeatures[colIndex]->GetIsNullable();
@@ -209,8 +215,8 @@ public:
     std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueVerified(const ui32 colId) const;
     std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueByIndexVerified(const ui32 colIndex) const;
 
-    bool GetExternalGuaranteeExclusivePK() const {
-        return ExternalGuaranteeExclusivePK;
+    const std::optional<TString>& GetScanReaderPolicyName() const {
+        return ScanReaderPolicyName;
     }
 
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
@@ -286,6 +292,15 @@ public:
 
     bool HasIndexId(const ui32 indexId) const {
         return Indexes.contains(indexId);
+    }
+
+    bool HasIndexes(const std::set<ui32>& indexIds) const {
+        for (auto&& i : indexIds) {
+            if (!Indexes.contains(i)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     std::optional<ui32> GetColumnIndexOptional(const ui32 id) const;

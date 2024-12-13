@@ -230,6 +230,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         }
         pathBatches.AddChunkInfo(inserted, context);
     }
+    NoAppendIsCorrect = pathBatches.GetData().empty();
 
     pathBatches.FinishChunksInfo();
 
@@ -281,7 +282,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         merger.SetOptimizationWritingPackMode(true);
         auto localAppended = merger.Execute(stats, itGranule->second, filteredSnapshot, pathId, shardingVersion);
         for (auto&& i : localAppended) {
-            i.GetPortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::INSERTED);
+            i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::INSERTED);
             AppendedPortions.emplace_back(std::move(i));
         }
     }

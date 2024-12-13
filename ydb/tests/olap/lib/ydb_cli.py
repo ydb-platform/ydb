@@ -7,7 +7,6 @@ import re
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import StrEnum
-from time import time
 from types import TracebackType
 
 
@@ -20,14 +19,18 @@ class WorkloadType(StrEnum):
 class YdbCliHelper:
     @staticmethod
     def get_cli_command() -> list[str]:
-        cli = get_external_param('ydb-cli', 'git')
+        args = [
+            '-e', YdbCluster.ydb_endpoint,
+            '-d', f'/{YdbCluster.ydb_database}'
+        ]
+        cli = get_external_param('ydb-cli', 'main')
         if cli == 'git':
-            return [yatest.common.work_path('ydb')]
+            return [yatest.common.work_path('ydb')] + args
         elif cli == 'main':
             path = os.path.join(yatest.common.context.project_path, '../../../apps/ydb/ydb')
-            return [yatest.common.binary_path(path)]
+            return [yatest.common.binary_path(path)] + args
         else:
-            return [cli]
+            return [cli] + args
 
     class QueryPlan:
         def __init__(self, plan: dict | None = None, table: str | None = None, ast: str | None = None, svg: str | None = None) -> None:
@@ -152,13 +155,12 @@ class YdbCliHelper:
                     self.result.query_out = r.read()
 
         @staticmethod
-        def _get_nodes_info() -> dict[str, dict[str, int]]:
-            nodes, _ = YdbCluster.get_cluster_nodes()
+        def _get_nodes_info() -> dict[str, dict[str, Any]]:
             return {
-                n['SystemState']['Host']: {
-                    'start_time': int(int(n['SystemState'].get('StartTime', time() * 1000)) / 1000)
+                n.host: {
+                    'start_time': n.start_time
                 }
-                for n in nodes
+                for n in YdbCluster.get_cluster_nodes(db_only=True)
             }
 
         def _check_nodes(self):
@@ -181,8 +183,6 @@ class YdbCliHelper:
 
         def _get_cmd(self) -> list[str]:
             cmd = YdbCliHelper.get_cli_command() + [
-                '-e', YdbCluster.ydb_endpoint,
-                '-d', f'/{YdbCluster.ydb_database}',
                 'workload', str(self.workload_type), '--path', self.db_path, 'run',
                 '--json', self._json_path,
                 '--output', self._query_output_path,
@@ -213,7 +213,7 @@ class YdbCliHelper:
 
         def process(self) -> YdbCliHelper.WorkloadRunResult:
             try:
-                wait_error = YdbCluster.wait_ydb_alive(300, self.db_path)
+                wait_error = YdbCluster.wait_ydb_alive(20 * 60, self.db_path)
                 if wait_error is not None:
                     self.result.error_message = wait_error
                 else:

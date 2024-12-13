@@ -1,7 +1,7 @@
 {% include 'header.sql.jinja' %}
 
 -- start query 1 in stream 0 using template query7.tpl and seed 1930872976
-select  item.i_item_id,
+select  item.i_item_id as i_item_id,
         avg(ss_quantity) agg1,
         avg(ss_list_price) agg2,
         avg(ss_coupon_amt) agg3,

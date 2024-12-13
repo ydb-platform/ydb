@@ -1,4 +1,4 @@
-#include <ydb/library/yql/udfs/common/datetime2/datetime_udf.cpp>
+#include <yql/essentials/udfs/common/datetime2/datetime_udf.cpp>
 
 namespace NKikimr::NKqp {
 

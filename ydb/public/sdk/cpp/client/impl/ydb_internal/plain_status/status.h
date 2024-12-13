@@ -6,7 +6,7 @@
 
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/library/grpc/client/grpc_client_low.h>
 

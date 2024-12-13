@@ -1,21 +1,24 @@
 #include "yql_pq_provider_impl.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
 #include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
+
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 
 namespace NYql {
 
@@ -27,7 +30,17 @@ namespace {
             : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
         {
             using EFlag = NPushdown::TSettings::EFeatureFlag;
-            Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes);
+            Enable(
+                // Operator features
+                EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
+                EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
+                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | DivisionExpressions | EFlag::CastExpression |
+                EFlag::ToBytesFromStringExpressions | EFlag::FlatMapOverOptionals |
+
+                // Split features
+                EFlag::SplitOrOperator
+            );
+            EnableFunction("Re2.Grep");  // For REGEXP pushdown
         }
     };
 
@@ -203,6 +216,7 @@ public:
                 .RowSpec(DropUnusedRowItems(pqTopic.RowSpec().Pos(), inputRowType, usedColumnNames, ctx))
                 .Build()
             .Columns(DropUnusedColumns(dqPqTopicSource.Columns(), usedColumnNames, ctx))
+            .RowType(DropUnusedRowItems(dqPqTopicSource.RowType().Pos(), oldRowType, usedColumnNames, ctx))
             .Done()
             .Ptr();
 
@@ -250,15 +264,25 @@ public:
             return node;
         }
         TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
-        if (!IsEmptyFilterPredicate(dqPqTopicSource.FilterPredicate())) {
+        if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
             YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
         }
-        
-        auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
-        if (!newFilterLambda) {
+
+        NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
+        if (predicate.IsEmpty()) {
             return node;
         }
+
+        TStringBuilder err;
+        NYql::NConnector::NApi::TPredicate predicateProto;
+        if (!NYql::SerializeFilterPredicate(predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+            return node;
+        }
+        
+        TString serializedProto;
+        YQL_ENSURE(predicateProto.SerializeToString(&serializedProto));       
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
 
         if (maybeExtractMembers) {
@@ -270,7 +294,7 @@ public:
                         .InitFrom(dqSourceWrap)
                         .Input<TDqPqTopicSource>()
                             .InitFrom(dqPqTopicSource)
-                            .FilterPredicate(newFilterLambda.Cast())
+                            .FilterPredicate().Value(serializedProto).Build()
                             .Build()
                         .Build()
                     .Build()
@@ -282,7 +306,7 @@ public:
                 .InitFrom(dqSourceWrap)
                 .Input<TDqPqTopicSource>()
                     .InitFrom(dqPqTopicSource)
-                    .FilterPredicate(newFilterLambda.Cast())
+                    .FilterPredicate().Value(serializedProto).Build()
                     .Build()
                 .Build()
             .Done();

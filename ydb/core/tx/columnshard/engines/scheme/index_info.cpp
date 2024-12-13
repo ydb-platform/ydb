@@ -181,13 +181,22 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
 void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {
     TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Options");
     SchemeNeedActualization = optionsProto.GetSchemeNeedActualization();
-    ExternalGuaranteeExclusivePK = optionsProto.GetExternalGuaranteeExclusivePK();
+    if (optionsProto.HasScanReaderPolicyName()) {
+        ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
+    }
     if (optionsProto.HasCompactionPlannerConstructor()) {
         auto container =
             NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(optionsProto.GetCompactionPlannerConstructor());
         CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
     } else {
         CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+    }
+    if (optionsProto.HasMetadataManagerConstructor()) {
+        auto container =
+            NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(optionsProto.GetMetadataManagerConstructor());
+        MetadataManagerConstructor = container.DetachResult().GetObjectPtrVerified();
+    } else {
+        MetadataManagerConstructor = NDataAccessorControl::IManagerConstructor::BuildDefault();
     }
 }
 
@@ -388,7 +397,7 @@ NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& s
     return groups;
 }
 
-std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> TIndexInfo::GetCompactionPlannerConstructor() const {
+const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& TIndexInfo::GetCompactionPlannerConstructor() const {
     AFL_VERIFY(!!CompactionPlannerConstructor);
     return CompactionPlannerConstructor;
 }
@@ -598,6 +607,7 @@ void TIndexInfo::Validate() const {
 TIndexInfo TIndexInfo::BuildDefault() {
     TIndexInfo result;
     result.CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+    result.MetadataManagerConstructor = NDataAccessorControl::IManagerConstructor::BuildDefault();
     return result;
 }
 

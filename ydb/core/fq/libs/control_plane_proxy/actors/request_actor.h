@@ -10,7 +10,7 @@
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NFq::NPrivate {
 

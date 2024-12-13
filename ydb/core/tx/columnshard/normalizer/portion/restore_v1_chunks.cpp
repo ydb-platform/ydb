@@ -61,9 +61,15 @@ public:
         using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
         for (auto&& i : Patches) {
             auto metaProto = i.GetPortionInfo().GetMetaProto();
+            metaProto.ClearBlobIds();
             AFL_VERIFY(!metaProto.GetBlobIds().size());
             for (auto&& b : i.GetBlobIds()) {
-                *metaProto.AddBlobIds() = b.SerializeBinary();
+                *metaProto.AddBlobIds() = b.GetLogoBlobId().AsBinaryString();
+            }
+            ui32 idx = 0;
+            for (auto&& b : metaProto.GetBlobIds()) {
+                auto logo = TLogoBlobID::FromBinary(b);
+                AFL_VERIFY(i.GetBlobIds()[idx++].GetLogoBlobId() == logo);
             }
             db.Table<IndexPortions>()
                 .Key(i.GetPortionInfo().GetPathId(), i.GetPortionInfo().GetPortionId())
@@ -139,7 +145,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     if (!ready) {
         return TConclusionStatus::Fail("Not ready");
     }
-
     THashMap<ui64, TPortionLoadContext> portions0;
     THashSet<ui64> existPortions0;
     THashMap<ui64, std::map<TFullChunkAddress, TColumnChunkLoadContext>> columns0;
@@ -154,7 +159,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         while (!rowset.EndOfSet()) {
             TPortionLoadContext portion(rowset);
             existPortions0.emplace(portion.GetPortionId());
-            if (!portion.GetMetaProto().GetBlobIds().size()) {
+            if (!portion.GetMetaProto().BlobIdsSize()) {
                 AFL_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
             }
 
@@ -190,7 +195,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
 
         while (!rowset.EndOfSet()) {
             TColumnChunkLoadContextV1 chunk(rowset);
-            AFL_VERIFY(!portions0.contains(chunk.GetPortionId()));
+            //AFL_VERIFY(!portions0.contains(chunk.GetPortionId()));
             if (!existPortions0.contains(chunk.GetPortionId())) {
                 AFL_VERIFY(columns1Remove.emplace(chunk.GetFullChunkAddress(), chunk).second);
             }
@@ -204,6 +209,24 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     std::vector<INormalizerTask::TPtr> tasks;
     if (columns1Remove.empty() && portions0.empty()) {
         return tasks;
+    }
+
+    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage());
+    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
+    {
+        std::vector<TPatchItemRemoveV1> package;
+        for (auto&& [portionId, chunkInfo] : columns1Remove) {
+            package.emplace_back(chunkInfo);
+            if (package.size() == 100) {
+                std::vector<TPatchItemRemoveV1> local;
+                local.swap(package);
+                tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TChangesRemoveV1>(std::move(local))));
+            }
+        }
+
+        if (package.size() > 0) {
+            tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TChangesRemoveV1>(std::move(package))));
+        }
     }
 
     {
@@ -225,23 +248,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         }
     }
 
-    {
-        std::vector<TPatchItemRemoveV1> package;
-        for (auto&& [portionId, chunkInfo] : columns1Remove) {
-            package.emplace_back(chunkInfo);
-            if (package.size() == 100) {
-                std::vector<TPatchItemRemoveV1> local;
-                local.swap(package);
-                tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TChangesRemoveV1>(std::move(local))));
-            }
-        }
-
-        if (package.size() > 0) {
-            tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TChangesRemoveV1>(std::move(package))));
-        }
-    }
-
     return tasks;
 }
 
-}   // namespace NKikimr::NOlap::NRestorePortionsFromChunks
+}   // namespace NKikimr::NOlap::NRestoreV1Chunks

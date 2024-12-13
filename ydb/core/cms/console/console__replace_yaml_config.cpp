@@ -3,9 +3,10 @@
 #include "console_audit.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 namespace NKikimr::NConsole {
 
@@ -20,7 +21,7 @@ class TConfigsManager::TTxReplaceYamlConfig : public TTransactionBase<TConfigsMa
         , Config(ev->Get()->Record.GetRequest().config())
         , Peer(ev->Get()->Record.GetPeerName())
         , Sender(ev->Sender)
-        , UserSID(NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID())
+        , UserToken(ev->Get()->Record.GetUserToken())
         , Force(force)
         , AllowUnknownFields(ev->Get()->Record.GetRequest().allow_unknown_fields())
         , DryRun(ev->Get()->Record.GetRequest().dry_run())
@@ -57,7 +58,7 @@ public:
             oldVolatileConfig.SetConfig(config);
         }
 
-        Self->Logger.DbLogData(UserSID, logData, txc, ctx);
+        Self->Logger.DbLogData(UserToken.GetUserSID(), logData, txc, ctx);
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
@@ -100,12 +101,17 @@ public:
 
                 UnknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
 
+                std::vector<TString> errors;
                 for (auto& [_, config] : resolved.Configs) {
                     auto cfg = NYamlConfig::YamlToProto(
                         config.second,
                         true,
                         true,
                         UnknownFieldsCollector);
+                    NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
+                    if (result == NKikimr::NConfig::EValidationResult::Error) {
+                        ythrow yexception() << errors.front();
+                    }
                 }
 
                 const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
@@ -190,7 +196,8 @@ public:
         if (!Error && Modify && !DryRun) {
             AuditLogReplaceConfigTransaction(
                 /* peer = */ Peer,
-                /* userSID = */ UserSID,
+                /* userSID = */ UserToken.GetUserSID(),
+                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
                 /* oldConfig = */ Self->YamlConfig,
                 /* newConfig = */ Config,
                 /* reason = */ {},
@@ -207,7 +214,8 @@ public:
         } else if (Error && !DryRun) {
             AuditLogReplaceConfigTransaction(
                 /* peer = */ Peer,
-                /* userSID = */ UserSID,
+                /* userSID = */ UserToken.GetUserSID(),
+                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
                 /* oldConfig = */ Self->YamlConfig,
                 /* newConfig = */ Config,
                 /* reason = */ ErrorReason,
@@ -221,7 +229,7 @@ private:
     const TString Config;
     const TString Peer;
     const TActorId Sender;
-    const TString UserSID;
+    const NACLib::TUserToken UserToken;
     const bool Force = false;
     const bool AllowUnknownFields = false;
     const bool DryRun = false;

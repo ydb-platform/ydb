@@ -22,7 +22,7 @@ namespace builtins
       return (end - start) >= prefix.size() &&
              s.compare(start, prefix.size(), prefix) == 0;
     }
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

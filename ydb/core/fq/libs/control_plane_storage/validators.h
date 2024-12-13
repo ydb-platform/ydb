@@ -15,7 +15,7 @@
 
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
-#include <ydb/library/yql/utils/exceptions.h>
+#include <yql/essentials/utils/exceptions.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 
 namespace NFq {

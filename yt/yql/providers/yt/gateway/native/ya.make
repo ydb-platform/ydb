@@ -1,0 +1,69 @@
+LIBRARY()
+
+SRCS(
+    yql_yt_exec_ctx.cpp
+    yql_yt_lambda_builder.cpp
+    yql_yt_native.cpp
+    yql_yt_native_folders.cpp
+    yql_yt_op_tracker.cpp
+    yql_yt_qb2.cpp
+    yql_yt_session.cpp
+    yql_yt_spec.cpp
+    yql_yt_transform.cpp
+)
+
+PEERDIR(
+    library/cpp/containers/sorted_vector
+    library/cpp/digest/md5
+    library/cpp/random_provider
+    library/cpp/streams/brotli
+    library/cpp/threading/future
+    library/cpp/time_provider
+    library/cpp/yson
+    library/cpp/yson/node
+    yt/cpp/mapreduce/common
+    yt/cpp/mapreduce/interface
+    yql/essentials/ast
+    yql/essentials/core/file_storage
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/utils
+    yql/essentials/utils/log
+    yql/essentials/utils/threading
+    yql/essentials/core
+    yql/essentials/core/expr_nodes
+    yql/essentials/core/issue
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/comp_nodes
+    yql/essentials/providers/common/metrics
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/result/expr_nodes
+    yt/yql/providers/yt/codec
+    yt/yql/providers/yt/common
+    yt/yql/providers/yt/expr_nodes
+    yt/yql/providers/yt/gateway/lib
+    yt/yql/providers/yt/job
+    yt/yql/providers/yt/lib/expr_traits
+    yt/yql/providers/yt/lib/infer_schema
+    yt/yql/providers/yt/lib/lambda_builder
+    yt/yql/providers/yt/lib/log
+    yt/yql/providers/yt/lib/mkql_helpers
+    yt/yql/providers/yt/lib/res_pull
+    yt/yql/providers/yt/lib/schema
+    yt/yql/providers/yt/lib/skiff
+    yt/yql/providers/yt/lib/url_mapper
+    yt/yql/providers/yt/lib/yson_helpers
+    yt/yql/providers/yt/lib/init_yt_api
+    yt/yql/providers/yt/lib/config_clusters
+    yt/yql/providers/yt/provider
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

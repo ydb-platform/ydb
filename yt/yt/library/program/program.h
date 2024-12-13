@@ -16,7 +16,6 @@ class TProgram
 {
 public:
     TProgram();
-    ~TProgram();
 
     TProgram(const TProgram&) = delete;
     TProgram(TProgram&&) = delete;
@@ -36,6 +35,12 @@ public:
      */
     [[noreturn]]
     static void Abort(int code) noexcept;
+
+    //! A typed version of #Abort.
+    template <class E>
+        requires std::is_enum_v<E>
+    [[noreturn]]
+    static void Abort(E exitCode) noexcept;
 
 protected:
     NLastGetopt::TOpts Opts_;
@@ -69,6 +74,12 @@ protected:
 
     [[noreturn]]
     void Exit(int code) noexcept;
+
+    //! A typed version of #Exit.
+    template <class E>
+        requires std::is_enum_v<E>
+    [[noreturn]]
+    void Exit(E exitCode) noexcept;
 
 private:
     bool CrashOnError_ = false;
@@ -122,11 +133,6 @@ void ConfigureExitZeroOnSigterm();
 
 struct TAllocatorOptions
 {
-    bool YTAllocEagerMemoryRelease = false;
-
-    bool TCMallocOptimizeSize = false;
-    std::optional<i64> TCMallocGuardedSamplingRate = 128_MB;
-
     std::optional<TDuration> SnapshotUpdatePeriod;
 };
 
@@ -135,3 +141,7 @@ void ConfigureAllocator(const TAllocatorOptions& options = {});
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
+
+#define PROGRAM_INL_H_
+#include "program-inl.h"
+#undef PROGRAM_INL_H_

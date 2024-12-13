@@ -12,8 +12,7 @@
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 #include "oidc_settings.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 const TString& GetEServiceName(NActors::NLog::EComponent component);
 
@@ -72,5 +71,4 @@ public:
     int Shutdown();
 };
 
-} // namespace NOIDC
-} // namespace NMVP
+} // NMVP::NOIDC

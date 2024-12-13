@@ -2,16 +2,17 @@
 
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_task_runner_exec_ctx.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h>
 #include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
 
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -424,8 +425,8 @@ private:
                 TDqSerializedBatch& batch = ev->Get()->Data.front();
                 response.MutableData()->Swap(&batch.Proto);
                 response.MutableData()->ClearPayloadId();
-                if (!batch.Payload.IsEmpty()) {
-                    response.MutableData()->SetPayloadId(responseMsg->AddPayload(std::move(batch.Payload)));
+                if (!batch.Payload.Empty()) {
+                    response.MutableData()->SetPayloadId(responseMsg->AddPayload(MakeReadOnlyRope(std::move(batch.Payload))));
                 }
             }
 
@@ -470,7 +471,7 @@ private:
         } else {
             TDqSerializedBatch data;
             if (response.GetData().HasPayloadId()) {
-                data.Payload = ev->Get()->GetPayload(response.GetData().GetPayloadId());
+                data.Payload = MakeChunkedBuffer(ev->Get()->GetPayload(response.GetData().GetPayloadId()));
             }
             data.Proto = std::move(*response.MutableData());
             data.Proto.ClearPayloadId();

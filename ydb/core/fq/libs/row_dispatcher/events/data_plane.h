@@ -8,9 +8,27 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/purecalc/common/fwd.h>
+
 namespace NFq {
 
 NActors::TActorId RowDispatcherServiceActorId();
+
+struct TPurecalcCompileSettings {
+    bool EnabledLLVM = false;
+
+    std::strong_ordering operator<=>(const TPurecalcCompileSettings& other) const = default;
+};
+
+class IProgramHolder : public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<IProgramHolder>;
+
+public:
+    // Perform program creation and saving
+    virtual void CreateProgram(NYql::NPureCalc::IProgramFactoryPtr programFactory) = 0;
+};
 
 struct TEvRowDispatcher {
     // Event ids.
@@ -21,21 +39,28 @@ struct TEvRowDispatcher {
         EvNewDataArrived,
         EvGetNextBatch,
         EvMessageBatch,
-        EvStatus,
+        EvStatistics,
         EvStopSession,
         EvSessionError,
         EvCoordinatorChangesSubscribe,
         EvCoordinatorRequest,
         EvCoordinatorResult,
         EvSessionStatistic,
+        EvHeartbeat,
+        EvGetInternalStateRequest,
+        EvGetInternalStateResponse,
+        EvPurecalcCompileRequest,
+        EvPurecalcCompileResponse,
         EvEnd,
     };
 
     struct TEvCoordinatorChanged : NActors::TEventLocal<TEvCoordinatorChanged, EEv::EvCoordinatorChanged> {
-        TEvCoordinatorChanged(NActors::TActorId coordinatorActorId)
-            : CoordinatorActorId(coordinatorActorId) {
+        TEvCoordinatorChanged(NActors::TActorId coordinatorActorId, ui64 generation)
+            : CoordinatorActorId(coordinatorActorId)
+            , Generation(generation) {
         }
         NActors::TActorId CoordinatorActorId;
+        ui64 Generation = 0;
     };
 
     struct TEvCoordinatorChangesSubscribe : public NActors::TEventLocal<TEvCoordinatorChangesSubscribe, EEv::EvCoordinatorChangesSubscribe> {};
@@ -111,9 +136,9 @@ struct TEvRowDispatcher {
         NActors::TActorId ReadActorId;
     };
 
-    struct TEvStatus : public NActors::TEventPB<TEvStatus,
-        NFq::NRowDispatcherProto::TEvStatus, EEv::EvStatus> {
-        TEvStatus() = default;
+    struct TEvStatistics : public NActors::TEventPB<TEvStatistics,
+        NFq::NRowDispatcherProto::TEvStatistics, EEv::EvStatistics> {
+        TEvStatistics() = default;
         NActors::TActorId ReadActorId;
     };
 
@@ -124,9 +149,53 @@ struct TEvRowDispatcher {
     };
 
     struct TEvSessionStatistic : public NActors::TEventLocal<TEvSessionStatistic, EEv::EvSessionStatistic> {
-        TEvSessionStatistic(const TopicSessionStatistic& stat)
+        TEvSessionStatistic(const TTopicSessionStatistic& stat)
         : Stat(stat) {}
-        TopicSessionStatistic Stat;
+        TTopicSessionStatistic Stat;
+    };
+
+    struct TEvHeartbeat : public NActors::TEventPB<TEvHeartbeat, NFq::NRowDispatcherProto::TEvHeartbeat, EEv::EvHeartbeat> {
+        TEvHeartbeat() = default;
+        TEvHeartbeat(ui32 partitionId) {
+            Record.SetPartitionId(partitionId);
+        }
+    };
+
+    struct TEvGetInternalStateRequest : public NActors::TEventPB<TEvGetInternalStateRequest,
+        NFq::NRowDispatcherProto::TEvGetInternalStateRequest, EEv::EvGetInternalStateRequest> {
+        TEvGetInternalStateRequest() = default;
+    };
+
+    struct TEvGetInternalStateResponse : public NActors::TEventPB<TEvGetInternalStateResponse,
+        NFq::NRowDispatcherProto::TEvGetInternalStateResponse, EEv::EvGetInternalStateResponse> {
+        TEvGetInternalStateResponse() = default;
+    };
+
+    // Compilation events
+    struct TEvPurecalcCompileRequest : public NActors::TEventLocal<TEvPurecalcCompileRequest, EEv::EvPurecalcCompileRequest> {
+        TEvPurecalcCompileRequest(IProgramHolder::TPtr programHolder, const TPurecalcCompileSettings& settings)
+            : ProgramHolder(std::move(programHolder))
+            , Settings(settings)
+        {}
+
+        IProgramHolder::TPtr ProgramHolder;
+        TPurecalcCompileSettings Settings;
+    };
+
+    struct TEvPurecalcCompileResponse : public NActors::TEventLocal<TEvPurecalcCompileResponse, EEv::EvPurecalcCompileResponse> {
+        TEvPurecalcCompileResponse(NYql::NDqProto::StatusIds::StatusCode status, NYql::TIssues issues)
+            : Status(status)
+            , Issues(std::move(issues))
+        {}
+
+        explicit TEvPurecalcCompileResponse(IProgramHolder::TPtr programHolder)
+            : ProgramHolder(std::move(programHolder))
+            , Status(NYql::NDqProto::StatusIds::SUCCESS)
+        {}
+
+        IProgramHolder::TPtr ProgramHolder;  // Same holder that passed into TEvPurecalcCompileRequest
+        NYql::NDqProto::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
     };
 };
 

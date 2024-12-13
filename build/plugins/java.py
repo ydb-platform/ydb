@@ -68,13 +68,10 @@ def onjava_module(unit, *args):
         'MANAGED_PEERS': '${MANAGED_PEERS}',
         'MANAGED_PEERS_CLOSURE': '${MANAGED_PEERS_CLOSURE}',
         'NON_NAMAGEABLE_PEERS': '${NON_NAMAGEABLE_PEERS}',
-        'TEST_CLASSPATH_MANAGED': '',
         'EXCLUDE': extract_macro_calls(unit, 'EXCLUDE_VALUE', args_delim),
         'JAVA_SRCS': extract_macro_calls(unit, 'JAVA_SRCS_VALUE', args_delim),
         'JAVAC_FLAGS': extract_macro_calls(unit, 'JAVAC_FLAGS_VALUE', args_delim),
         'ANNOTATION_PROCESSOR': extract_macro_calls(unit, 'ANNOTATION_PROCESSOR_VALUE', args_delim),
-        'EXTERNAL_JAR': extract_macro_calls(unit, 'EXTERNAL_JAR_VALUE', args_delim),
-        'MAVEN_GROUP_ID': extract_macro_calls(unit, 'MAVEN_GROUP_ID_VALUE', args_delim),
         'JAR_INCLUDE_FILTER': extract_macro_calls(unit, 'JAR_INCLUDE_FILTER_VALUE', args_delim),
         'JAR_EXCLUDE_FILTER': extract_macro_calls(unit, 'JAR_EXCLUDE_FILTER_VALUE', args_delim),
         # TODO remove when java test dart is in prod
@@ -171,15 +168,14 @@ def onjava_module(unit, *args):
             )
         data['WITH_JDK'] = extract_macro_calls(unit, 'WITH_JDK_VALUE', args_delim)
 
-    if not data['EXTERNAL_JAR']:
-        # IMPORTANT before switching vcs_info.py to python3 the value was always evaluated to $YMAKE_PYTHON but no
-        # code in java dart parser extracts its value only checks this key for existance.
-        data['EMBED_VCS'] = [['yes']]
-        # FORCE_VCS_INFO_UPDATE is responsible for setting special value of VCS_INFO_DISABLE_CACHE__NO_UID__
-        macro_val = extract_macro_calls(unit, 'FORCE_VCS_INFO_UPDATE', args_delim)
-        macro_str = macro_val[0][0] if macro_val and macro_val[0] and macro_val[0][0] else ''
-        if macro_str and macro_str == 'yes':
-            data['VCS_INFO_DISABLE_CACHE__NO_UID__'] = macro_val
+    # IMPORTANT before switching vcs_info.py to python3 the value was always evaluated to $YMAKE_PYTHON but no
+    # code in java dart parser extracts its value only checks this key for existance.
+    data['EMBED_VCS'] = [['yes']]
+    # FORCE_VCS_INFO_UPDATE is responsible for setting special value of VCS_INFO_DISABLE_CACHE__NO_UID__
+    macro_val = extract_macro_calls(unit, 'FORCE_VCS_INFO_UPDATE', args_delim)
+    macro_str = macro_val[0][0] if macro_val and macro_val[0] and macro_val[0][0] else ''
+    if macro_str and macro_str == 'yes':
+        data['VCS_INFO_DISABLE_CACHE__NO_UID__'] = macro_val
 
     for java_srcs_args in data['JAVA_SRCS']:
         external = None
@@ -237,18 +233,7 @@ def on_add_detekt_report_check(unit, *args):
         unit.onadd_check(['detekt.report'] + list(args))
 
 
-# Ymake java modules related macroses
-
-
-def onexternal_jar(unit, *args):
-    args = list(args)
-    flat, kv = common.sort_by_keywords({'SOURCES': 1}, args)
-    if not flat:
-        ymake.report_configure_error('EXTERNAL_JAR requires exactly one resource URL of compiled jar library')
-    res = flat[0]
-    resid = res[4:] if res.startswith('sbr:') else res
-    unit.set(['JAR_LIB_RESOURCE', resid])
-    unit.set(['JAR_LIB_RESOURCE_URL', res])
+# Ymake java modules related macros
 
 
 def on_check_java_srcdir(unit, *args):
@@ -406,16 +391,19 @@ def _maven_coords_for_project(unit, project_dir):
     if os.path.exists(pom_path):
         import xml.etree.ElementTree as et
 
-        with open(pom_path, 'rb') as f:
-            root = et.fromstring(f.read())
-        for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
-            artifact = root.find(xpath)
-            if artifact is not None:
-                artifact = artifact.text
-                if a != artifact and a.startswith(artifact):
-                    c = a[len(artifact) :].lstrip('-_')
-                    a = artifact
-                break
+        try:
+            with open(pom_path, 'rb') as f:
+                root = et.fromstring(f.read())
+            for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
+                artifact = root.find(xpath)
+                if artifact is not None:
+                    artifact = artifact.text
+                    if a != artifact and a.startswith(artifact):
+                        c = a[len(artifact) :].lstrip('-_')
+                        a = artifact
+                    break
+        except Exception as e:
+            raise Exception(f"Can't parse {pom_path}: {str(e)}") from None
 
     return '{}:{}:{}:{}'.format(g, a, v, c)
 

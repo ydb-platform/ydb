@@ -244,7 +244,7 @@ private:
     size_t AvailableBytes_ = 0;
     size_t RemainingBytes_;
 
-    virtual size_t DoRead(void* buf, size_t len) override;
+    size_t DoRead(void* buf, size_t len) override;
 
     bool ReadNextSlice();
 };

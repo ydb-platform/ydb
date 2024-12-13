@@ -14,6 +14,28 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapWrite) {
+    Y_UNIT_TEST(WriteFails) {
+        auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NOlap::TWaitCompactionController>();
+        csController->SetSmallSizeDetector(1000000);
+        csController->SetIndexWriteControllerEnabled(false);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideBlobPutResultOnWriteValue(NKikimrProto::EReplyStatus::BLOCKED);
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableWritePortionsOnInsert(true);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        Tests::NCommon::TLoggerInit(kikimr)
+            .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
+            .SetPriority(NActors::NLog::PRI_DEBUG)
+            .Initialize();
+        {
+            auto batch = TLocalHelper(kikimr).TestArrowBatch(30000, 1000000, 11000);
+            TLocalHelper(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", batch, Ydb::StatusIds::INTERNAL_ERROR);
+        }
+    }
+
     Y_UNIT_TEST(TierDraftsGC) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NOlap::TWaitCompactionController>();
         csController->SetSmallSizeDetector(1000000);
@@ -228,7 +250,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                           .ExtractValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
-        csController->SetOverrideReadTimeoutClean(TDuration::Zero());
+        csController->SetOverrideMaxReadStaleness(TDuration::Zero());
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         {
             const TInstant start = TInstant::Now();

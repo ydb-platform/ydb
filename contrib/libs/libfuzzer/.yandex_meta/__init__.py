@@ -46,13 +46,15 @@ def post_install(self):
 
 
 llvm_libfuzzer = CMakeNinjaNixProject(
-    owners=["g:cpp-contrib"],
     nixattr=f"llvmPackages_{LLVM_VERSION}.compiler-rt",
     arcdir="contrib/libs/libfuzzer",
-    build_targets=["clang_rt.fuzzer-x86_64", "libfuzzer-afl.so"],
     copy_sources=[
         "include/fuzzer/FuzzedDataProvider.h",
         "lib/fuzzer/standalone/StandaloneFuzzTargetMain.c",
+    ],
+    install_targets=[
+        "clang_rt.fuzzer-x86_64",
+        "fuzzer-afl",
     ],
     put={
         "clang_rt.fuzzer-x86_64": ".",

@@ -3,7 +3,7 @@
 
 #include <format>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -382,12 +382,12 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvWrite::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[Write] from: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+        LOG_D("[Write] from: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
         auto it = Files_.find(ev->Sender);
         if (it == Files_.end()) {
             LOG_E("[Write] File not found. "
-                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
             return;
@@ -397,17 +397,17 @@ private:
 
         if (fd.CloseAt) {
             LOG_E("[Write] File already closed. "
-                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("File already closed"));
             return;
         }
 
-        if (Config_.MaxFileSize && fd.TotalSize + msg.Blob.size() > Config_.MaxFileSize) {
+        if (Config_.MaxFileSize && fd.TotalSize + msg.Blob.Size() > Config_.MaxFileSize) {
             LOG_E("[Write] File size limit exceeded. "
-                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
-            const auto usedMb = (fd.TotalSize + msg.Blob.size()) / 1024 / 1024;
+            const auto usedMb = (fd.TotalSize + msg.Blob.Size()) / 1024 / 1024;
             const auto limitMb = Config_.MaxFileSize / 1024 / 1024;
 
             Send(ev->Sender, new TEvDqSpilling::TEvError(std::format("File size limit exceeded: {}/{}Mb", usedMb, limitMb)));
@@ -416,11 +416,11 @@ private:
             return;
         }
 
-        if (Config_.MaxTotalSize && TotalSize_ + msg.Blob.size() > Config_.MaxTotalSize) {
+        if (Config_.MaxTotalSize && TotalSize_ + msg.Blob.Size() > Config_.MaxTotalSize) {
             LOG_E("[Write] Total size limit exceeded. "
-                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
+                << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
-            const auto usedMb = (TotalSize_ + msg.Blob.size()) / 1024 / 1024;
+            const auto usedMb = (TotalSize_ + msg.Blob.Size()) / 1024 / 1024;
             const auto limitMb = Config_.MaxTotalSize / 1024 / 1024;
             Send(ev->Sender, new TEvDqSpilling::TEvError(std::format("Total size limit exceeded: {}/{}Mb", usedMb, limitMb)));
 
@@ -428,13 +428,13 @@ private:
             return;
         }
 
-        fd.TotalSize += msg.Blob.size();
-        TotalSize_ += msg.Blob.size();
+        fd.TotalSize += msg.Blob.Size();
+        TotalSize_ += msg.Blob.Size();
 
         TFileDesc::TFilePart* fp = fd.PartsList.empty() ? nullptr : &fd.PartsList.back();
 
         bool newFile = false;
-        if (!fp || (fd.RemoveBlobsAfterRead && (Config_.MaxFilePartSize && fp->Size + msg.Blob.size() > Config_.MaxFilePartSize))) {
+        if (!fp || (fd.RemoveBlobsAfterRead && (Config_.MaxFilePartSize && fp->Size + msg.Blob.Size() > Config_.MaxFilePartSize))) {
             if (!fd.PartsList.empty()) {
                 fd.PartsList.back().Last = false;
             }
@@ -453,7 +453,7 @@ private:
         }
 
         auto& blobDesc = fp->Blobs[msg.BlobId];
-        blobDesc.Size = msg.Blob.size();
+        blobDesc.Size = msg.Blob.Size();
         blobDesc.Offset = fp->Size;
 
         fp->Size += blobDesc.Size;
@@ -855,12 +855,12 @@ private:
         TString FileName;
         bool CreateFile = false;
         ui64 BlobId = 0;
-        TRope Blob;
+        TChunkedBuffer Blob;
         TInstant Ts = TInstant::Now();
 
         void Process(void*) override {
             auto now = TInstant::Now();
-            A_LOG_D("[Write async] file: " << FileName << ", blobId: " << BlobId << ", bytes: " << Blob.size()
+            A_LOG_D("[Write async] file: " << FileName << ", blobId: " << BlobId << ", bytes: " << Blob.Size()
                 << ", offset: " << (CreateFile ? 0 : GetFileLength(FileName)));
 
             auto resp = MakeHolder<TEvPrivate::TEvWriteFileResponse>();
@@ -876,9 +876,8 @@ private:
                 } else {
                     file = TFile::ForAppend(FileName);
                 }
-                for (auto it = Blob.Begin(); it.Valid(); ++it) {
-                    file.Write(it.ContiguousData(), it.ContiguousSize());
-                }
+                TUnbufferedFileOutput fout(file);
+                Blob.CopyTo(fout);
             } catch (const yexception& e) {
                 A_LOG_E("[Write async] file: " << FileName << ", io error: " << e.what());
                 resp->Error = e.what();

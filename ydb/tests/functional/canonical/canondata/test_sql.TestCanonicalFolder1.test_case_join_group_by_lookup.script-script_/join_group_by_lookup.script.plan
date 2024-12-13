@@ -35,21 +35,8 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort-TopSort",
+                                                "Node Type": "TopSort",
                                                 "Operators": [
-                                                    {
-                                                        "Inputs": [
-                                                            {
-                                                                "InternalOperatorId": 1
-                                                            },
-                                                            {
-                                                                "ExternalPlanNodeId": 7
-                                                            }
-                                                        ],
-                                                        "Limit": "1001",
-                                                        "Name": "TopSort",
-                                                        "TopSortBy": ""
-                                                    },
                                                     {
                                                         "Inputs": [
                                                             {
@@ -77,9 +64,9 @@
                                                                             "Group",
                                                                             "Value"
                                                                         ],
-                                                                        "E-Cost": "No estimate",
-                                                                        "E-Rows": "No estimate",
-                                                                        "E-Size": "No estimate",
+                                                                        "E-Cost": "0",
+                                                                        "E-Rows": "0",
+                                                                        "E-Size": "0",
                                                                         "LookupKeyColumns": [
                                                                             "Group"
                                                                         ],

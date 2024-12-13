@@ -4,7 +4,7 @@
 from hamcrest import assert_that
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_http_client import HiveClient, SwaggerClient
+from ydb.tests.library.clients.kikimr_http_client import HiveClient, SwaggerClient
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 

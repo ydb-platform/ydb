@@ -21,7 +21,8 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
             portionCopy.SetRemoveSnapshot(context.Snapshot);
         };
         context.EngineLogs.GetGranuleVerified(i->GetPathId())
-            .ModifyPortionOnExecute(context.DBWrapper, i, pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
+            .ModifyPortionOnExecute(
+                context.DBWrapper, GetPortionDataAccessor(i->GetPortionId()), pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
     }
 
     const auto predRemoveDroppedTable = [self](const TWritePortionInfoWithBlobsResult& item) {
@@ -45,7 +46,8 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
             portionCopy.MutableMeta().ResetCompactionLevel(TargetCompactionLevel.value_or(0));
         };
         context.EngineLogs.GetGranuleVerified(i->GetPathId())
-            .ModifyPortionOnExecute(context.DBWrapper, i, pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
+            .ModifyPortionOnExecute(
+                context.DBWrapper, GetPortionDataAccessor(i->GetPortionId()), pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
     }
 }
 
@@ -75,7 +77,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
                     break;
             }
         }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("portions", sb)("task_id", GetTaskIdentifier());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portions", sb)("task_id", GetTaskIdentifier());
         self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, PortionsToRemove.size());
 
         for (auto& [_, portionInfo] : PortionsToRemove) {
@@ -111,23 +113,23 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
             context.EngineLogs.AddCleanupPortion(i);
         }
         for (auto& portionBuilder : AppendedPortions) {
-            context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult().MutablePortionInfoPtr());
+            context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult());
         }
     }
 }
 
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
-    AFL_VERIFY(PortionsToRemove.size() + PortionsToMove.size() + AppendedPortions.size());
+    AFL_VERIFY(PortionsToRemove.size() + PortionsToMove.size() + AppendedPortions.size() || NoAppendIsCorrect);
     for (auto&& i : AppendedPortions) {
-        i.GetPortionConstructor().SetPortionId(context.NextPortionId());
-        i.GetPortionConstructor().MutableMeta().SetCompactionLevel(TargetCompactionLevel.value_or(0));
+        i.GetPortionConstructor().MutablePortionConstructor().SetPortionId(context.NextPortionId());
+        i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(TargetCompactionLevel.value_or(0));
     }
 }
 
 void TChangesWithAppend::DoOnAfterCompile() {
     if (AppendedPortions.size()) {
         for (auto&& i : AppendedPortions) {
-            i.GetPortionConstructor().MutableMeta().SetCompactionLevel(TargetCompactionLevel.value_or(0));
+            i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(TargetCompactionLevel.value_or(0));
             i.FinalizePortionConstructor();
         }
     }

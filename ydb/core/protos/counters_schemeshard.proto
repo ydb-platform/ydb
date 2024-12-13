@@ -222,10 +222,20 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxAlterResourcePool = 176          [(CounterOpts) = {Name: "InFlightOps/AlterResourcePool"}];
 
     COUNTER_IN_FLIGHT_OPS_TxRestoreIncrementalBackupAtTable = 177   [(CounterOpts) = {Name: "InFlightOps/RestoreIncrementalBackupAtTable"}];
+
     COUNTER_BACKUP_COLLECTION_COUNT = 178 [(CounterOpts) = {Name: "BackupCollectionCount"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateBackupCollection = 179       [(CounterOpts) = {Name: "InFlightOps/CreateBackupCollection"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterBackupCollection = 180        [(CounterOpts) = {Name: "InFlightOps/AlterBackupCollection"}];
     COUNTER_IN_FLIGHT_OPS_TxDropBackupCollection = 181         [(CounterOpts) = {Name: "InFlightOps/DropBackupCollection"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxMoveSequence = 182           [(CounterOpts) = {Name: "InFlightOps/MoveSequence"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateTransfer = 183       [(CounterOpts) = {Name: "InFlightOps/CreateTransfer"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterTransfer = 184        [(CounterOpts) = {Name: "InFlightOps/AlterTransfer"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropTransfer = 185         [(CounterOpts) = {Name: "InFlightOps/DropTransfer"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropTransferCascade = 186  [(CounterOpts) = {Name: "InFlightOps/DropTransferCascade"}];
+
+    COUNTER_TRANSFER_COUNT = 187                       [(CounterOpts) = {Name: "Transfers"}];
 }
 
 enum ECumulativeCounters {
@@ -363,6 +373,13 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateBackupCollection = 107         [(CounterOpts) = {Name: "FinishedOps/CreateBackupCollection"}];
     COUNTER_FINISHED_OPS_TxAlterBackupCollection = 108          [(CounterOpts) = {Name: "FinishedOps/AlterBackupCollection"}];
     COUNTER_FINISHED_OPS_TxDropBackupCollection = 109           [(CounterOpts) = {Name: "FinishedOps/DropBackupCollection"}];
+
+    COUNTER_FINISHED_OPS_TxMoveSequence = 110        [(CounterOpts) = {Name: "FinishedOps/TxMoveSequence"}];
+
+    COUNTER_FINISHED_OPS_TxCreateTransfer = 111         [(CounterOpts) = {Name: "FinishedOps/CreateTransfer"}];
+    COUNTER_FINISHED_OPS_TxAlterTransfer = 112          [(CounterOpts) = {Name: "FinishedOps/AlterTransfer"}];
+    COUNTER_FINISHED_OPS_TxDropTransfer = 113           [(CounterOpts) = {Name: "FinishedOps/DropTransfer"}];
+    COUNTER_FINISHED_OPS_TxDropTransferCascade = 114    [(CounterOpts) = {Name: "FinishedOps/DropTransferCascade"}];
 }
 
 enum EPercentileCounters {

@@ -4,12 +4,12 @@
 
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
@@ -165,6 +165,8 @@ private:
             case TKikimrKey::Type::Replication:
                 return TStatus::Ok;
             case TKikimrKey::Type::BackupCollection:
+                return TStatus::Ok;
+            case TKikimrKey::Type::Sequence:
                 return TStatus::Ok;
         }
 

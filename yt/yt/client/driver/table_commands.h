@@ -400,7 +400,7 @@ public:
 private:
     NYPath::TRichYPath Path;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
     bool HasResponseParameters() const override;
 };
 
@@ -585,7 +585,7 @@ public:
 private:
     NApi::TBackupManifestPtr Manifest;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -601,7 +601,26 @@ public:
 private:
     NApi::TBackupManifestPtr Manifest;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TGetTableMountInfoCommandOptions
+{ };
+
+class TGetTableMountInfoCommand
+    : public TTypedCommand<TGetTableMountInfoCommandOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetTableMountInfoCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYTree::TYPath Path_;
+
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

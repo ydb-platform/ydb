@@ -331,7 +331,12 @@ TYdbCounterBlock::TYdbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& coun
         InflyCounter = subgroup->GetCounter("infly", false);
 
         auto h = NMonitoring::ExplicitHistogram(
-            NMonitoring::TBucketBounds{5, 10, 50, 100, 500, 1000, 5000, 10000, 20000, 60000});
+            NMonitoring::TBucketBounds{
+                0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                16, 20, 24, 28, 32, 36,
+                40, 50, 60, 70, 80, 90,
+                100, 200, 300, 400, 500,
+                1000, 5000, 10000, 20000, 60000});
         Histo = subgroup->GetHistogram("LatencyMs", std::move(h));
     };
 }

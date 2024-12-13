@@ -64,9 +64,9 @@ PEERDIR(
     ydb/core/testlib
     ydb/core/testlib/actors
     ydb/core/testlib/basics
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/minikql/comp_nodes/llvm14
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/sql/pg_dummy
 )
 
 DEPENDS(

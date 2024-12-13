@@ -1,8 +1,8 @@
 //
 // detail/io_uring_socket_recvfrom_op.hpp
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -61,6 +61,7 @@ public:
 
   static void do_prepare(io_uring_operation* base, ::io_uring_sqe* sqe)
   {
+    BOOST_ASIO_ASSUME(base != 0);
     io_uring_socket_recvfrom_op_base* o(
         static_cast<io_uring_socket_recvfrom_op_base*>(base));
 
@@ -77,6 +78,7 @@ public:
 
   static bool do_perform(io_uring_operation* base, bool after_completion)
   {
+    BOOST_ASIO_ASSUME(base != 0);
     io_uring_socket_recvfrom_op_base* o(
         static_cast<io_uring_socket_recvfrom_op_base*>(base));
 
@@ -145,7 +147,7 @@ public:
     : io_uring_socket_recvfrom_op_base<MutableBufferSequence, Endpoint>(
         success_ec, socket, state, buffers, endpoint, flags,
         &io_uring_socket_recvfrom_op::do_complete),
-      handler_(BOOST_ASIO_MOVE_CAST(Handler)(handler)),
+      handler_(static_cast<Handler&&>(handler)),
       work_(handler_, io_ex)
   {
   }
@@ -155,6 +157,7 @@ public:
       std::size_t /*bytes_transferred*/)
   {
     // Take ownership of the handler object.
+    BOOST_ASIO_ASSUME(base != 0);
     io_uring_socket_recvfrom_op* o
       (static_cast<io_uring_socket_recvfrom_op*>(base));
     ptr p = { boost::asio::detail::addressof(o->handler_), o, o };
@@ -163,7 +166,7 @@ public:
 
     // Take ownership of the operation's outstanding work.
     handler_work<Handler, IoExecutor> w(
-        BOOST_ASIO_MOVE_CAST2(handler_work<Handler, IoExecutor>)(
+        static_cast<handler_work<Handler, IoExecutor>&&>(
           o->work_));
 
     BOOST_ASIO_ERROR_LOCATION(o->ec_);

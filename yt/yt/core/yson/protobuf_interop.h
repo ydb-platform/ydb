@@ -14,17 +14,6 @@ namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! An opaque reflected counterpart of ::google::protobuf::Descriptor.
-/*!
- *  Reflecting a descriptor takes the following options into account:
- *  NYT.NProto.NYson.field_name:      overrides the default name of field
- *  NYT.NProto.NYson.enum_value_name: overrides the default name of enum value
- */
-class TProtobufMessageType;
-
-//! An opaque reflected counterpart of ::google::protobuf::EnumDescriptor.
-class TProtobufEnumType;
-
 //! Reflects ::google::protobuf::Descriptor.
 /*!
  *  The call caches its result in a static variable and is thus efficient.
@@ -198,7 +187,7 @@ void AddProtobufConverterRegisterAction(std::function<void()> action);
 
 struct TProtobufMessageConverter
 {
-    std::function<void(IYsonConsumer* consumer, const google::protobuf::Message* message)> Serializer;
+    std::function<void(IYsonConsumer* consumer, const google::protobuf::Message* message, const TProtobufParserOptions& parserOptions)> Serializer;
     std::function<void(google::protobuf::Message* message, const NYTree::INodePtr& node)> Deserializer;
 };
 
@@ -207,29 +196,13 @@ void RegisterCustomProtobufConverter(
     const google::protobuf::Descriptor* descriptor,
     const TProtobufMessageConverter& converter);
 
-#define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(ProtoType, Type)                                             \
-    YT_ATTRIBUTE_USED static const void* PP_ANONYMOUS_VARIABLE(RegisterIntermediateProtoInteropRepresentation) = [] {   \
-        NYT::NYson::AddProtobufConverterRegisterAction([] {                                                             \
-            auto* descriptor = ProtoType::default_instance().GetDescriptor();                                           \
-            NYT::NYson::TProtobufMessageConverter converter;                                                            \
-            converter.Serializer = [] (NYT::NYson::IYsonConsumer* consumer, const google::protobuf::Message* message) { \
-                const auto* typedMessage = dynamic_cast<const ProtoType*>(message);                                     \
-                YT_VERIFY(typedMessage);                                                                                \
-                Type value;                                                                                             \
-                FromProto(&value, *typedMessage);                                                                       \
-                Serialize(value, consumer);                                                                             \
-            };                                                                                                          \
-            converter.Deserializer = [] (google::protobuf::Message* message, const NYT::NYTree::INodePtr& node) {       \
-                auto* typedMessage = dynamic_cast<ProtoType*>(message);                                                 \
-                YT_VERIFY(typedMessage);                                                                                \
-                Type value;                                                                                             \
-                Deserialize(value, node);                                                                               \
-                ToProto(typedMessage, value);                                                                           \
-            };                                                                                                          \
-            NYT::NYson::RegisterCustomProtobufConverter(descriptor, converter);                                         \
-        });                                                                                                             \
-        return nullptr;                                                                                                 \
-    } ();
+#define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(ProtoType, Type)                        \
+    YT_ATTRIBUTE_USED static const void* PP_ANONYMOUS_VARIABLE(RegisterIntermediateProtoInteropRepresentation) = \
+        NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, false>();
+
+#define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(ProtoType, Type)            \
+    YT_ATTRIBUTE_USED static const void* PP_ANONYMOUS_VARIABLE(RegisterIntermediateProtoInteropRepresentationWithOptions) =  \
+        NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, true>();
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -279,6 +252,7 @@ TString YsonStringToProto(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TProtobufInteropConfigPtr GetProtobufInteropConfig();
 void SetProtobufInteropConfig(TProtobufInteropConfigPtr config);
 
 ////////////////////////////////////////////////////////////////////////////////

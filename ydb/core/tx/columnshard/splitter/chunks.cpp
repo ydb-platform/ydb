@@ -1,11 +1,14 @@
 #include "chunks.h"
+
 #include <ydb/core/tx/columnshard/engines/portions/column_record.h>
+#include <ydb/core/tx/columnshard/engines/portions/constructor_accessor.h>
+#include <ydb/core/tx/columnshard/engines/portions/constructor_portion.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 
 namespace NKikimr::NOlap {
 
-std::vector<std::shared_ptr<IPortionDataChunk>> IPortionColumnChunk::DoInternalSplit(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const {
+std::vector<std::shared_ptr<IPortionDataChunk>> IPortionColumnChunk::DoInternalSplit(
+    const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const {
     ui64 sumSize = 0;
     for (auto&& i : splitSizes) {
         sumSize += i;
@@ -25,10 +28,10 @@ std::vector<std::shared_ptr<IPortionDataChunk>> IPortionColumnChunk::DoInternalS
     return result;
 }
 
-void IPortionColumnChunk::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo) const {
+void IPortionColumnChunk::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const {
     AFL_VERIFY(!bRange.IsValid());
     TColumnRecord rec(GetChunkAddressVerified(), bRange, BuildSimpleChunkMeta());
     portionInfo.AppendOneChunkColumn(std::move(rec));
 }
 
-}
+}   // namespace NKikimr::NOlap

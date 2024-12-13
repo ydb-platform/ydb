@@ -78,6 +78,7 @@ namespace NKikimr {
             , Barriers(FullSnap.BarriersSnap.CreateEssence(FullSnap.HullCtx))
             , AllowKeepFlags(FullSnap.HullCtx->AllowKeepFlags)
             , Iter(FullSnap.HullCtx, &FullSnap.LogoBlobsSnap)
+            , Merger(GType, false /* addHeader doesn't really matter here */)
         {
             Iter.SeekToFirst();
         }
@@ -115,26 +116,22 @@ namespace NKikimr {
         }
 
         void Finish() {
+            TBlobType::EType type;
+            ui32 inplacedDataSize;
+            Merger.Finish(true, Key.LogoBlobID(), &type, &inplacedDataSize);
             if (!Merger.Empty()) {
-                Y_ABORT_UNLESS(!Merger.HasSmallBlobs());
                 NGc::TKeepStatus status = Barriers->Keep(Key, MemRec, {}, AllowKeepFlags, true /*allowGarbageCollection*/);
-                const auto& hugeMerger = Merger.GetHugeBlobMerger();
-                const auto& local = MemRec.GetIngress().LocalParts(GType);
-                ui8 partIdx = local.FirstPosition();
-                for (const TDiskPart& part : hugeMerger.SavedData()) {
-                    Y_ABORT_UNLESS(partIdx != local.GetSize());
-                    if (part.ChunkIdx) {
+                for (const TDiskPart& part : Merger.GetSavedHugeBlobs()) {
+                    if (!part.Empty()) {
                         static_cast<TDerived&>(*this).Add(part, Key.LogoBlobID(), status.KeepData);
                     }
-                    partIdx = local.NextPosition(partIdx);
                 }
-                for (const TDiskPart& part : hugeMerger.DeletedData()) {
-                    if (part.ChunkIdx) {
-                        static_cast<TDerived&>(*this).Add(part, Key.LogoBlobID(), false);
-                    }
+                for (const TDiskPart& part : Merger.GetDeletedHugeBlobs()) {
+                    Y_ABORT_UNLESS(!part.Empty());
+                    static_cast<TDerived&>(*this).Add(part, Key.LogoBlobID(), false);
                 }
-                Merger.Clear();
             }
+            Merger.Clear();
         }
 
         void Update(const TMemRecLogoBlob &memRec, const TDiskPart *outbound, ui64 lsn) {

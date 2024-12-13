@@ -593,7 +593,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (JoinDict)");
+        Cout << plan.GetStringRobust() << Endl;
+        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (Grace)");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -741,19 +742,19 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         TVector<std::pair<TString, TString>> testData = {
             {
                 "SELECT * FROM `/Root/TwoKeys` WHERE Value > 5 And Value <= 10",
-                "item.Value > 5 And item.Value <= 10"
+                "item.Value > 5 AND item.Value <= 10"
             },
             {
                 "SELECT * FROM `/Root/TwoKeys` WHERE Key2 < 100 Or Value == 5",
-                "item.Key2 < 100 Or item.Value == 5"
+                "item.Key2 < 100 OR item.Value == 5"
             },
             {
                 "SELECT * FROM `/Root/TwoKeys` WHERE Key2 < 100 And Key2 >= 10 And Value != 5",
-                "item.Key2 < 100 And item.Key2 >= 10 And item.Value != 5"
+                "item.Key2 < 100 AND item.Key2 >= 10 AND item.Value != 5"
             },
             {
                 "SELECT * FROM `/Root/TwoKeys` WHERE Key2 < 10 Or Cast(Key2 As Int64) < Value",
-                "item.Key2 < 10 Or item.Key2 < item.Value"
+                "item.Key2 < 10 OR item.Key2 < item.Value"
             }
         };
 

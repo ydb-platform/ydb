@@ -46,3 +46,64 @@ SELECT
    AsVariant(6, "foo") as VariantValue
 ```
 
+## Visit, VisitOrDefault {#visit}
+
+Обрабатывает возможные значения варианта, представленного структурой или кортежем, с использованием предоставленных функций-обработчиков для каждого из его полей/элементов.
+
+### Сигнатура
+
+```yql
+Visit(Variant<key1: K1, key2: K2, ...>, K1->R AS key1, K2->R AS key2, ...)->R
+Visit(Variant<K1, K2, ...>, K1->R, K2->R, ...)->R
+
+VisitOrDefault(Variant<K1, K2, ...>{Flags:AutoMap}, R, [K1->R, [K2->R, ...]])->R
+VisitOrDefault(Variant<key1: K1, key2: K2, ...>{Flags:AutoMap}, R, [K1->R AS key1, [K2->R AS key2, ...]])->R
+```
+
+### Аргументы
+
+* Для варианта над структурой функция принимает сам вариант в качестве позиционного аргумента и по одному именованному аргументу-обработчику для каждого поля этой структуры.
+* Для варианта над кортежем функция принимает сам вариант и по одному обработчику на каждый элемент кортежа в качестве позиционных аргументов.
+* Модификация `VisitOrDefault` принимает дополнительный позиционный аргумент (на втором месте), представляющий значение по умолчанию, и позволяет не указывать некоторые обработчики.
+
+### Пример
+
+```yql
+$vartype = Variant<num: Int32, flag: Bool, str: String>;
+$handle_num = ($x) -> { return 2 * $x; };
+$handle_flag = ($x) -> { return If($x, 200, 10); };
+$handle_str = ($x) -> { return Unwrap(CAST(LENGTH($x) AS Int32)); };
+
+$visitor = ($var) -> { return Visit($var, $handle_num AS num, $handle_flag AS flag, $handle_str AS str); };
+SELECT
+    $visitor(Variant(5, "num", $vartype)),                -- 10
+    $visitor(Just(Variant(True, "flag", $vartype))),      -- Just(200)
+    $visitor(Just(Variant("somestr", "str", $vartype))),  -- Just(7)
+    $visitor(Nothing(OptionalType($vartype))),            -- Nothing(Optional<Int32>)
+    $visitor(NULL)                                        -- NULL
+;
+```
+
+## VariantItem {#variantitem}
+
+Возвращает значение гомогенного варианта (т.е. содержащего поля/элементы одного типа).
+
+### Сигнатура
+
+```yql
+VariantItem(Variant<key1: K, key2: K, ...>{Flags:AutoMap})->K
+VariantItem(Variant<K, K, ...>{Flags:AutoMap})->K
+```
+
+### Пример
+
+```yql
+$vartype1 = Variant<num1: Int32, num2: Int32, num3: Int32>;
+SELECT
+    VariantItem(Variant(7, "num2", $vartype1)),          -- 7
+    VariantItem(Just(Variant(5, "num1", $vartype1))),    -- Just(5)
+    VariantItem(Nothing(OptionalType($vartype1))),       -- Nothing(Optional<Int32>)
+    VariantItem(NULL)                                    -- NULL
+;
+```
+

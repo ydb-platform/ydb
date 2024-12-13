@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 /*
  * This file contains declaration of all rule functions for physical optimizer
@@ -29,10 +29,17 @@ NYql::NNodes::TExprBase KqpBuildSequencerStages(NYql::NNodes::TExprBase node, NY
 
 NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx);
 
+NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    NYql::TTypeAnnotationContext& typeCtx, bool ruleEnabled);
+
 NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx);
 
 NYql::NNodes::TExprBase KqpRemoveRedundantSortByPk(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
+
+NYql::NNodes::TExprBase KqpBuildTopStageRemoveSort(NYql::NNodes::TExprBase node,  NYql::TExprContext& ctx, 
+    NYql::IOptimizationContext& optCtx, NYql::TTypeAnnotationContext& typeCtx, const NYql::TParentsMap& parentsMap, 
+    bool allowStageMultiUsage, bool ruleEnabled);
 
 NYql::NNodes::TExprBase KqpApplyLimitToReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);

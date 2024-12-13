@@ -1,12 +1,12 @@
 #include "dq_opt_join.h"
 #include "dq_opt_phy.h"
 
-#include <ydb/library/yql/core/yql_join.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/core/yql_type_helpers.h>
 
 namespace NYql::NDq {
 

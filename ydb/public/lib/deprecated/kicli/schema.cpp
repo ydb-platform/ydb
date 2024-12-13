@@ -1,4 +1,7 @@
 #include "kicli.h"
+
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 
 namespace NKikimr {
@@ -119,6 +122,9 @@ void TSchemaObject::Drop() {
     case EPathType::Replication:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication);
         break;
+    case EPathType::Transfer:
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer);
+        break;
     case EPathType::BlobDepot:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBlobDepot);
         break;
@@ -221,6 +227,8 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
         return TSchemaObject::EPathType::Sequence;
     case NKikimrSchemeOp::EPathTypeReplication:
         return TSchemaObject::EPathType::Replication;
+    case NKikimrSchemeOp::EPathTypeTransfer:
+        return TSchemaObject::EPathType::Transfer;
     case NKikimrSchemeOp::EPathTypeBlobDepot:
         return TSchemaObject::EPathType::BlobDepot;
     case NKikimrSchemeOp::EPathTypeExternalTable:

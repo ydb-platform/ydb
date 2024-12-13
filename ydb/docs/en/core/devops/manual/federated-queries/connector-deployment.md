@@ -13,7 +13,11 @@ This functionality is in "Experimental" mode.
 The `fq-connector-go` connector is implemented in Go; its source code is hosted on [GitHub](https://github.com/ydb-platform/fq-connector-go). It provides access to the following data sources:
 
 * [ClickHouse](https://clickhouse.com/)
+* [Greenplum](https://greenplum.org/)
+* [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server)
+* [MySQL](https://www.mysql.com/)
 * [PostgreSQL](https://www.postgresql.org/)
+* [{{ ydb-short-name }}](https://ydb.tech/)
 
 The connector can be installed using a binary distribution or a Docker image.
 

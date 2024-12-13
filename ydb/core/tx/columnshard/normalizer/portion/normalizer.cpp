@@ -1,8 +1,9 @@
 #include "normalizer.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
+#include <ydb/core/tx/columnshard/engines/portions/constructor_accessor.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
 namespace NKikimr::NOlap {
@@ -24,7 +25,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), 0);
+    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr), 0);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
@@ -35,7 +36,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
         return tasks;
     }
 
-    THashMap<ui64, TPortionInfoConstructor> portions;
+    THashMap<ui64, TPortionAccessorConstructor> portions;
     auto schemas = std::make_shared<THashMap<ui64, ISnapshotSchema::TPtr>>();
     {
         auto conclusion = InitPortions(tablesManager, db, portions);
@@ -57,7 +58,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
     }
     TPortionInfo::TSchemaCursor schema(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex());
     for (auto&& [_, p] : portions) {
-        (*schemas)[p.GetPortionIdVerified()] = schema.GetSchema(p);
+        (*schemas)[p.GetPortionConstructor().GetPortionIdVerified()] = schema.GetSchema(p.GetPortionConstructor());
     }
 
     std::vector<TPortionDataAccessor> package;
@@ -91,14 +92,14 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
 }
 
 TConclusionStatus TPortionsNormalizerBase::InitPortions(
-    const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& constructors) {
+    const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& constructors) {
     TDbWrapper wrapper(db.GetDatabase(), nullptr);
-    if (!wrapper.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+    if (!wrapper.LoadPortions({}, [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             const TIndexInfo& indexInfo =
                 portion.GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
             const ui64 portionId = portion.GetPortionIdVerified();
-            AFL_VERIFY(constructors.emplace(portionId, std::move(portion)).second);
+            AFL_VERIFY(constructors.emplace(portionId, TPortionAccessorConstructor(std::move(portion))).second);
         })) {
         return TConclusionStatus::Fail("repeated read db");
     }
@@ -106,27 +107,29 @@ TConclusionStatus TPortionsNormalizerBase::InitPortions(
 }
 
 TConclusionStatus TPortionsNormalizerBase::InitColumns(
-    const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions) {
+    const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& portions) {
     using namespace NColumnShard;
     auto columnsFilter = GetColumnsFilter(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema());
-    auto rowset = db.Table<Schema::IndexColumnsV1>().Select();
+    auto rowset = db.Table<Schema::IndexColumnsV2>().Select();
     if (!rowset.IsReady()) {
         return TConclusionStatus::Fail("Not ready");
     }
 
     TPortionInfo::TSchemaCursor schema(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex());
-    auto initPortion = [&](const TColumnChunkLoadContextV1& loadContext) {
+    auto initPortion = [&](TColumnChunkLoadContextV1&& loadContext) {
         if (!columnsFilter.empty() && !columnsFilter.contains(loadContext.GetAddress().GetColumnId())) {
             return;
         }
         auto it = portions.find(loadContext.GetPortionId());
         AFL_VERIFY(it != portions.end());
-        it->second.LoadRecord(loadContext);
+        it->second.LoadRecord(std::move(loadContext));
     };
 
     while (!rowset.EndOfSet()) {
-        NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset);
-        initPortion(chunkLoadContext);
+        NOlap::TColumnChunkLoadContextV2 chunkLoadContext(rowset);
+        for (auto&& i : chunkLoadContext.BuildRecordsV1()) {
+            initPortion(std::move(i));
+        }
 
         if (!rowset.Next()) {
             return TConclusionStatus::Fail("Not ready");
@@ -135,7 +138,7 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TPortionsNormalizerBase::InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions) {
+TConclusionStatus TPortionsNormalizerBase::InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& portions) {
     using IndexIndexes = NColumnShard::Schema::IndexIndexes;
     auto rowset = db.Table<IndexIndexes>().Select();
     if (!rowset.IsReady()) {
@@ -147,7 +150,7 @@ TConclusionStatus TPortionsNormalizerBase::InitIndexes(NIceDb::TNiceDb& db, THas
 
         auto it = portions.find(rowset.GetValue<IndexIndexes::PortionId>());
         AFL_VERIFY(it != portions.end());
-        it->second.LoadIndex(chunkLoadContext);
+        it->second.LoadIndex(std::move(chunkLoadContext));
 
         if (!rowset.Next()) {
             return TConclusionStatus::Fail("Not ready");

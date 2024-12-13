@@ -304,7 +304,9 @@ protected:
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
     ITransaction* CreateUpdateDomain(TSubDomainKey subdomainKey, TEvHive::TEvUpdateDomain::TPtr event = {});
     ITransaction* CreateUpdateDcFollowers(const TDataCenterId& dc);
+    ITransaction* CreateGenerateTestData(uint64_t seed);
     ITransaction* CreateDeleteNode(TNodeId nodeId);
+    ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
 
 public:
     TDomainsView DomainsView;
@@ -580,7 +582,9 @@ protected:
     void Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev);
     void Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev);
+    void Handle(TEvPrivate::TEvGenerateTestData::TPtr& ev);
     void Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr& ev);
+    void Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);

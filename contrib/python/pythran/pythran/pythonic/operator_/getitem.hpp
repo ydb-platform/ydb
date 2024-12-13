@@ -14,7 +14,7 @@ namespace operator_
   {
     return std::forward<A>(a)[std::forward<B>(b)];
   }
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

@@ -27,4 +27,4 @@ TClientsCacheAuthentificationOptionsPtr TClientsCacheAuthentificationOptions::Ge
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NClient::NHedging::NRpc
+} // namespace NYT::NClient::NCache

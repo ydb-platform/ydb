@@ -14,7 +14,7 @@ namespace numpy
                                                              endpoint)));
 
   DEFINE_FUNCTOR(pythonic::numpy, logspace);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

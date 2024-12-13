@@ -9,8 +9,6 @@
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/shutdown.h>
 
-#include <yt/yt/core/ytalloc/bindings.h>
-
 #include <yt/yt/core/yson/writer.h>
 #include <yt/yt/core/yson/null_consumer.h>
 
@@ -20,12 +18,11 @@
 
 #include <yt/yt/library/profiling/tcmalloc/profiler.h>
 
-#include <library/cpp/ytalloc/api/ytalloc.h>
-
-#include <library/cpp/yt/mlock/mlock.h>
 #include <library/cpp/yt/stockpile/stockpile.h>
 
 #include <library/cpp/yt/system/exit.h>
+
+#include <library/cpp/yt/backtrace/absl_unwinder/absl_unwinder.h>
 
 #include <tcmalloc/malloc_extension.h>
 
@@ -108,8 +105,6 @@ void TProgram::SetCrashOnError()
     CrashOnError_ = true;
 }
 
-TProgram::~TProgram() = default;
-
 void TProgram::HandleVersionAndBuild()
 {
     if (PrintVersion_) {
@@ -156,7 +151,7 @@ int TProgram::Run(int argc, const char** argv)
 void TProgram::Abort(int code) noexcept
 {
     NLogging::TLogManager::Get()->Shutdown();
-    AbortProcess(code);
+    AbortProcessSilently(code);
 }
 
 void TProgram::Exit(int code) noexcept
@@ -169,7 +164,7 @@ void TProgram::Exit(int code) noexcept
     // cf. the comment section for NYT::Shutdown.
     Shutdown({
         .AbortOnHang = ShouldAbortOnHungShutdown(),
-        .HungExitCode = code
+        .HungExitCode = code,
     });
 
     ::exit(code);
@@ -320,7 +315,7 @@ void ExitZero(int /*unused*/)
     // TODO(babenko): replace with pure "exit" some day.
     // Currently this causes some RPC requests to master to be replied with "Promise abandoned" error,
     // which is not retriable.
-    AbortProcess(ToUnderlying(EProcessExitCode::OK));
+    AbortProcessSilently(EProcessExitCode::OK);
 }
 
 } // namespace
@@ -334,38 +329,12 @@ void ConfigureExitZeroOnSigterm()
 
 void ConfigureAllocator(const TAllocatorOptions& options)
 {
-    NYT::MlockFileMappings();
-
 #ifdef _linux_
-    NYTAlloc::EnableYTLogging();
-    NYTAlloc::EnableYTProfiling();
-    NYTAlloc::InitializeLibunwindInterop();
-    NYTAlloc::SetEnableEagerMemoryRelease(options.YTAllocEagerMemoryRelease);
-
-    if (tcmalloc::MallocExtension::NeedsProcessBackgroundActions()) {
-        std::thread backgroundThread([] {
-            TThread::SetCurrentThreadName("TCAllocBack");
-            tcmalloc::MallocExtension::ProcessBackgroundActions();
-            YT_ABORT();
-        });
-        backgroundThread.detach();
-    }
-
     NProfiling::EnableTCMallocProfiler();
 
     NYTProf::EnableMemoryProfilingTags(options.SnapshotUpdatePeriod);
 
-    absl::SetStackUnwinder(NYTProf::AbslStackUnwinder);
-    // TODO(prime@): tune parameters.
-    tcmalloc::MallocExtension::SetProfileSamplingRate(2_MB);
-    if (options.TCMallocGuardedSamplingRate) {
-        tcmalloc::MallocExtension::SetGuardedSamplingRate(*options.TCMallocGuardedSamplingRate);
-        tcmalloc::MallocExtension::ActivateGuardedSampling();
-    }
-    tcmalloc::MallocExtension::SetMaxPerCpuCacheSize(3_MB);
-    tcmalloc::MallocExtension::SetMaxTotalThreadCacheBytes(24_MB);
-    tcmalloc::MallocExtension::SetBackgroundReleaseRate(tcmalloc::MallocExtension::BytesPerSecond{32_MB});
-    tcmalloc::MallocExtension::EnableForkSupport();
+    NBacktrace::SetAbslStackUnwinder();
 #else
     Y_UNUSED(options);
 #endif

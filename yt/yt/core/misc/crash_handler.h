@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h>
+#include <util/generic/strbuf.h>
 
 #ifdef _unix_
 #include <signal.h>
@@ -26,41 +26,6 @@ void CrashSignalHandler(int signal);
 
 template <class TCallback>
 void DumpStackTrace(TCallback flushCallback, void* startPC = nullptr);
-
-////////////////////////////////////////////////////////////////////////////////
-
-// "Codicils" are short human- and machine-readable strings organized into a per-fiber stack.
-// When the crash handler is invoked, it dumps (alongside with the other
-// useful stuff like backtrace) the content of the latter stack.
-
-//! Installs a new codicil into the stack.
-void PushCodicil(const TString& data);
-
-//! Removes the top codicils from the stack.
-void PopCodicil();
-
-//! Returns the list of the currently installed codicils.
-std::vector<TString> GetCodicils();
-
-//! Invokes #PushCodicil in ctor and #PopCodicil in dtor.
-class TCodicilGuard
-{
-public:
-    TCodicilGuard();
-    explicit TCodicilGuard(const TString& data);
-    ~TCodicilGuard();
-
-    TCodicilGuard(const TCodicilGuard& other) = delete;
-    TCodicilGuard(TCodicilGuard&& other);
-
-    TCodicilGuard& operator=(const TCodicilGuard& other) = delete;
-    TCodicilGuard& operator=(TCodicilGuard&& other);
-
-private:
-    bool Active_;
-
-    void Release();
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -36,6 +36,10 @@ void TSchemeShard::Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, co
     Execute(CreateTxReply(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxReply(ev), ctx);
+}
+
 void TSchemeShard::Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxReply(ev), ctx);
 }
@@ -199,11 +203,22 @@ void TSchemeShard::PersistBuildIndexUnlockTxId(NIceDb::TNiceDb& db, const TIndex
         NIceDb::TUpdate<Schema::IndexBuild::UnlockTxId>(indexInfo.UnlockTxId));
 }
 
-void TSchemeShard::PersistBuildIndexBilling(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+void TSchemeShard::PersistBuildIndexProcessed(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::RowsBilled>(indexInfo.Billed.GetRows()),
-        NIceDb::TUpdate<Schema::IndexBuild::BytesBilled>(indexInfo.Billed.GetBytes())
-        );
+        NIceDb::TUpdate<Schema::IndexBuild::UploadRowsProcessed>(indexInfo.Processed.GetUploadRows()),
+        NIceDb::TUpdate<Schema::IndexBuild::UploadBytesProcessed>(indexInfo.Processed.GetUploadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuild::ReadRowsProcessed>(indexInfo.Processed.GetReadRows()),
+        NIceDb::TUpdate<Schema::IndexBuild::ReadBytesProcessed>(indexInfo.Processed.GetReadBytes())
+    );
+}
+
+void TSchemeShard::PersistBuildIndexBilled(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::RowsBilled>(indexInfo.Billed.GetUploadRows()),
+        NIceDb::TUpdate<Schema::IndexBuild::BytesBilled>(indexInfo.Billed.GetUploadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuild::ReadRowsBilled>(indexInfo.Billed.GetReadRows()),
+        NIceDb::TUpdate<Schema::IndexBuild::ReadBytesBilled>(indexInfo.Billed.GetReadBytes())
+    );
 }
 
 void TSchemeShard::PersistBuildIndexUploadProgress(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus) {
@@ -212,8 +227,10 @@ void TSchemeShard::PersistBuildIndexUploadProgress(NIceDb::TNiceDb& db, TIndexBu
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::Status>(shardStatus.Status),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::Message>(shardStatus.DebugMessage),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadStatus>(shardStatus.UploadStatus),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::RowsProcessed>(shardStatus.Processed.GetRows()),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::BytesProcessed>(shardStatus.Processed.GetBytes())
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::RowsProcessed>(shardStatus.Processed.GetUploadRows()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::BytesProcessed>(shardStatus.Processed.GetUploadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadRowsProcessed>(shardStatus.Processed.GetReadRows()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadBytesProcessed>(shardStatus.Processed.GetReadBytes())
     );
 }
 
@@ -230,8 +247,13 @@ void TSchemeShard::PersistBuildIndexUploadInitiate(NIceDb::TNiceDb& db, TIndexBu
 
 void TSchemeShard::PersistBuildIndexUploadReset(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, TIndexBuildInfo::TShardStatus& shardStatus) {
     shardStatus.Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
+    shardStatus.Processed = {};
     db.Table<Schema::IndexBuildShardStatus>().Key(buildId, shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update(
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::Status>(shardStatus.Status)
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::Status>(shardStatus.Status),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::RowsProcessed>(shardStatus.Processed.GetUploadRows()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::BytesProcessed>(shardStatus.Processed.GetUploadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadRowsProcessed>(shardStatus.Processed.GetReadRows()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadBytesProcessed>(shardStatus.Processed.GetReadBytes())
     );
 }
 

@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/huge)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -16,7 +14,6 @@ PEERDIR(
 )
 
 SRCS(
-    blobstorage_hullhugedefs_ut.cpp
     blobstorage_hullhugeheap_ctx_ut.cpp
     blobstorage_hullhugeheap_ut.cpp
     blobstorage_hullhuge_ut.cpp

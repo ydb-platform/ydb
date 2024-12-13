@@ -1,9 +1,9 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_MEAN_HPP
 #define PYTHONIC_INCLUDE_NUMPY_MEAN_HPP
 
-#include "pythonic/include/numpy/sum.hpp"
-#include "pythonic/include/numpy/expand_dims.hpp"
 #include "pythonic/include/builtins/None.hpp"
+#include "pythonic/include/numpy/expand_dims.hpp"
+#include "pythonic/include/numpy/sum.hpp"
 #include "pythonic/include/types/immediate.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -33,7 +33,7 @@ namespace numpy
     };
     template <class dtype>
     using dtype_or_double = typename dtype_or_double_helper<dtype>::type;
-  }
+  } // namespace details
 
   template <class E, class dtype = types::none_type>
   auto mean(E const &expr, types::none_type axis = {}, dtype d = {},
@@ -43,8 +43,8 @@ namespace numpy
 
   template <class E, class dtype = types::none_type>
   auto mean(E const &expr, long axis, dtype d = {}, types::none_type out = {},
-            types::false_immediate keep_dims = {})
-      -> decltype(sum(expr, axis, d));
+            types::false_immediate keep_dims = {}) -> decltype(sum(expr, axis,
+                                                                   d));
 
   template <class E, class dtype>
   types::ndarray<details::dtype_or_double<dtype>,
@@ -58,7 +58,7 @@ namespace numpy
       -> decltype(expand_dims(mean(expr, axis, d), axis));
 
   DEFINE_FUNCTOR(pythonic::numpy, mean);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

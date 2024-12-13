@@ -303,7 +303,7 @@ namespace NActors {
         TActorId Register(IActor* actor, ui32 nodeIndex = 0, ui32 poolId = 0,
             TMailboxType::EType mailboxType = TMailboxType::Simple, ui64 revolvingCounter = 0,
             const TActorId& parentid = TActorId());
-        TActorId Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailboxHeader *mailbox, ui32 hint,
+        TActorId Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailbox *mailbox,
             const TActorId& parentid = TActorId());
         TActorId RegisterService(const TActorId& serviceId, const TActorId& actorId, ui32 nodeIndex = 0);
         TActorId AllocateEdgeActor(ui32 nodeIndex = 0);

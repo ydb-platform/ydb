@@ -21,15 +21,12 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/library/db_pool/protos
     ydb/library/grpc/actor_client
-    ydb/library/yql/public/issue
-    ydb/library/yql/utils
     ydb/library/yql/utils/actors
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/lib/operation_id/protos
-    ydb/public/sdk/cpp/client/resources
-    ydb/public/sdk/cpp/client/ydb_operation
-    ydb/public/sdk/cpp/client/ydb_query
+    yql/essentials/public/issue
+    yql/essentials/utils
 )
 
 YQL_LAST_ABI_VERSION()

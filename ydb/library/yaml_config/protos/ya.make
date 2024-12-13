@@ -2,6 +2,7 @@ PROTO_LIBRARY(yaml-config-protos)
 
 SRCS(
     config.proto
+    blobstorage_config.proto
 )
 
 PEERDIR(

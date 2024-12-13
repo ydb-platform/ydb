@@ -46,7 +46,7 @@ public:
             ui64 indexRawBytes = 0;
             ui32 columnBlobBytes = 0;
             ui32 indexBlobBytes = 0;
-            
+
             for (auto&& c : i.GetRecords()) {
                 columnRawBytes += c.GetMetaProto().GetRawBytes();
                 columnBlobBytes += c.GetBlobRange().GetSize();
@@ -82,6 +82,10 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
+
+    if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+        return std::vector<INormalizerTask::TPtr>();
+    }
 
     bool ready = true;
     ready = ready & Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme());

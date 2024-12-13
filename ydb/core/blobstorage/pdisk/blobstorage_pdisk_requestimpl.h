@@ -95,6 +95,10 @@ public:
         return HPMilliSecondsFloat(now - CreationTime);
     }
 
+    double GetCostMs() const {
+        return Cost / 1.0e6; // since cost is in nanoseconds
+    }
+
     ui64 GetCost() const {
         return Cost;
     }
@@ -295,6 +299,8 @@ public:
     THolder<NPDisk::TEvLogResult> Result;
     std::function<void()> OnDestroy;
 
+    bool Replied = false;
+
     TLogWrite(NPDisk::TEvLog &ev, const TActorId &sender, ui32 estimatedChunkIdx, TReqId reqId, NWilson::TSpan span)
         : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, NPriInternal::LogWrite, std::move(span))
         , Signature(ev.Signature)
@@ -311,10 +317,10 @@ public:
     }
 
     virtual ~TLogWrite() {
+        Y_DEBUG_ABORT_UNLESS(Replied);
         if (OnDestroy) {
             OnDestroy();
         }
-        delete NextInBatch;
     }
 
     ERequestType GetType() const override {
@@ -344,7 +350,10 @@ public:
     }
 
     void Abort(TActorSystem* actorSystem) override {
-        actorSystem->Send(Sender, new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, "TLogWrite is being aborted"));
+        auto *result = new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, "TLogWrite is being aborted");
+        result->Results.emplace_back(Lsn, Cookie);
+        actorSystem->Send(Sender, result);
+        Replied = true;
     }
 
     TString ToString() const {

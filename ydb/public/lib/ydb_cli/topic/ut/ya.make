@@ -3,12 +3,10 @@ UNITTEST_FOR(ydb/public/lib/ydb_cli/topic)
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(ram:32)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

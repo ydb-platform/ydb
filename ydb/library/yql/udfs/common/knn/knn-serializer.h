@@ -3,7 +3,7 @@
 #include "knn-defines.h"
 #include "knn-enumerator.h"
 
-#include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <yql/essentials/public/udf/udf_helpers.h>
 
 #include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>

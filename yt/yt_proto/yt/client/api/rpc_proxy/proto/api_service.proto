@@ -197,6 +197,7 @@ enum EJobSortField
     JSF_DURATION = 6;
     JSF_PROGRESS = 7;
     JSF_ID = 8;
+    JSF_TASK_NAME = 9;
 }
 
 enum EJobSortDirection
@@ -1464,6 +1465,7 @@ message TRspGetTableMountInfo
     repeated TReplicaInfo replicas = 6;
     optional string physical_path = 7;
     repeated TIndexInfo indices = 8;
+    optional int32 tablet_count = 9;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1699,6 +1701,7 @@ message TReqMoveNode
     optional bool preserve_expiration_time = 6 [default = false];
     optional bool preserve_expiration_timeout = 12 [default = false];
     optional bool preserve_owner = 11 [default = false];
+    optional bool preserve_acl = 14 [default = false];
     optional bool pessimistic_quota_check = 7 [default = true];
     optional bool enable_cross_cell_copying = 13 [default = true];
 
@@ -2406,6 +2409,11 @@ message TReqListJobs
     optional string task_name = 19;
 
     optional bool with_monitoring_descriptor = 21;
+
+    optional uint64 from_time = 22; // TInstant
+    optional uint64 to_time = 23; // TInstant
+
+    optional string continuation_token = 24;
 
     optional TMasterReadOptions master_read_options = 102;
 }
@@ -3177,6 +3185,8 @@ message TListJobsResult
 
     required TListJobsStatistics statistics = 5;
     repeated NYT.NProto.TError errors = 6;
+
+    optional string continuation_token = 7;
 }
 
 message TJobTraceEvent
@@ -3416,7 +3426,7 @@ message TRspGetQueryTrackerInfo
 message TReqStartDistributedWriteSession
 {
     required string path = 1;
-    
+
     optional TTransactionalOptions transactional_options = 100;
 }
 
@@ -3455,28 +3465,20 @@ message TRspWriteTableFragment
 // Shuffle Service
 ////////////////////////////////////////////////////////////////////////////////
 
-// Following requests can be handled only by proxies with shuffle manager enabled.
+// Following request can be handled only by proxies with shuffle manager enabled.
 
 message TReqStartShuffle
 {
     required string account = 1;
     required int32 partition_count = 2;
+    required NYT.NProto.TGuid parent_transaction_id = 3;
+    optional string medium_name = 4;
+    optional int32 replication_factor = 5;
 }
 
 message TRspStartShuffle
 {
     required bytes shuffle_handle = 1; // YSON-serialized TShuffleHandle
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-message TReqFinishShuffle
-{
-    required bytes shuffle_handle = 1; // YSON-serialized TShuffleHandle
-}
-
-message TRspFinishShuffle
-{
 }
 
 ////////////////////////////////////////////////////////////////////////////////

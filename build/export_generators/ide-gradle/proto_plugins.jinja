@@ -1,0 +1,9 @@
+{#- empty string #}
+plugins {
+    id("java-library")
+    id("com.google.protobuf") version "0.8.19"
+{%- if publish %}
+    `maven-publish`
+    `signing`
+{%- endif %}
+}

@@ -759,7 +759,7 @@ def onadd_check(unit, *args):
         check_resource(unit, *args)
     elif check_type == "ktlint":
         ktlint(unit, *args)
-    elif check_type == "JAVA_STYLE" and (unit.get('YMAKE_JAVA_TEST') != 'yes' or unit.get('ALL_SRCDIRS')):
+    elif check_type == "JAVA_STYLE" and unit.get('ALL_SRCDIRS'):
         java_style(unit, *args)
     elif check_type == "gofmt":
         gofmt(unit, *args)
@@ -1014,6 +1014,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
         "GLOBAL_RESOURCES": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
+        "CONFIG_TYPE": 1,
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)
 
@@ -1060,6 +1061,7 @@ def on_add_py_linter_check(fields, unit, *args):
         "PROJECT_TO_CONFIG_MAP": 1,
         "FLAKE_MIGRATIONS_CONFIG": 1,
         "CUSTOM_CONFIG": 1,
+        "CONFIG_TYPE": 1,
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)
 

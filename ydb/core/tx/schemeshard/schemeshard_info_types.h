@@ -1,6 +1,5 @@
 #pragma once
 
-#include "schemeshard.h"
 #include "schemeshard_types.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_path_element.h"
@@ -278,6 +277,8 @@ struct TPartitionStats {
     // True when lent parts to other tablets
     bool HasLoanedData = false;
 
+    bool HasSchemaChanges = false;
+
     // Tablet actor started at
     TInstant StartTime;
 
@@ -327,6 +328,12 @@ struct TTableAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
     size_t PartitionStatsUpdated = 0;
+
+    THashSet<TShardIdx> UpdatedStats;
+
+    bool AreStatsFull() const {
+        return Aggregated.PartCount && UpdatedStats.size() == Aggregated.PartCount;
+    }
 
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
 };
@@ -2005,10 +2012,6 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         DiskQuotaExceeded = value;
     }
 
-    bool HasSecurityState() const {
-        return SecurityState.PublicKeysSize() > 0;
-    }
-
     const NLoginProto::TSecurityState& GetSecurityState() const {
         return SecurityState;
     }
@@ -2364,11 +2367,16 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
     using EType = NKikimrSchemeOp::EIndexType;
     using EState = NKikimrSchemeOp::EIndexState;
 
-    TTableIndexInfo(ui64 version, EType type, EState state)
+    TTableIndexInfo(ui64 version, EType type, EState state, std::string_view description)
         : AlterVersion(version)
         , Type(type)
         , State(state)
-    {}
+    {
+        if (type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+            Y_ABORT_UNLESS(SpecializedIndexDescription.emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>()
+                               .ParseFromString(description));
+        }
+    }
 
     TTableIndexInfo(const TTableIndexInfo&) = default;
 
@@ -2384,8 +2392,20 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         return result;
     }
 
+    TString SerializeDescription() const {
+        return std::visit([]<typename T>(const T& v) {
+            if constexpr (std::is_same_v<std::monostate, T>) {
+                return TString{};
+            } else {
+                TString str{v.SerializeAsString()};
+                Y_ABORT_UNLESS(!str.empty());
+                return str;
+            }
+        }, SpecializedIndexDescription);
+    }
+
     static TPtr NotExistedYet(EType type) {
-        return new TTableIndexInfo(0, type, EState::EIndexStateInvalid);
+        return new TTableIndexInfo(0, type, EState::EIndexStateInvalid, {});
     }
 
     static TPtr Create(const NKikimrSchemeOp::TIndexCreationConfig& config, TString& errMsg) {
@@ -2398,7 +2418,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
         TPtr alterData = result->CreateNextVersion();
         alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
-        Y_ABORT_UNLESS(alterData->IndexKeys.size());
+        Y_ABORT_UNLESS(!alterData->IndexKeys.empty());
         alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
 
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
@@ -2865,31 +2885,48 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 class TBillingStats {
 public:
     TBillingStats() = default;
-    TBillingStats(ui64 rows, ui64 bytes);
-    TBillingStats(const TBillingStats& other);
+    TBillingStats(const TBillingStats& other) = default;
+    TBillingStats& operator = (const TBillingStats& other) = default;
 
-    TBillingStats& operator = (const TBillingStats& other);
+    TBillingStats(ui64 uploadRows, ui64 uploadBytes, ui64 readRows, ui64 readBytes);
 
     TBillingStats operator - (const TBillingStats& other) const;
-    TBillingStats& operator -= (const TBillingStats& other);
+    TBillingStats& operator -= (const TBillingStats& other) {
+        return *this = *this - other;
+    }
 
     TBillingStats operator + (const TBillingStats& other) const;
-    TBillingStats& operator += (const TBillingStats& other);
+    TBillingStats& operator += (const TBillingStats& other) {
+        return *this = *this + other;
+    }
 
-    bool operator < (const TBillingStats& other) const;
-    bool operator <= (const TBillingStats& other) const;
-    bool operator == (const TBillingStats& other) const;
+    bool operator == (const TBillingStats& other) const = default;
 
-    operator bool () const;
+    explicit operator bool () const {
+        return *this != TBillingStats{};
+    }
 
     TString ToString() const;
 
-    ui64 GetRows() const;
-    ui64 GetBytes() const;
+    ui64 GetUploadRows() const {
+        return UploadRows;
+    }
+    ui64 GetUploadBytes() const {
+        return UploadBytes;
+    }
+
+    ui64 GetReadRows() const {
+        return ReadRows;
+    }
+    ui64 GetReadBytes() const {
+        return ReadBytes;
+    }
 
 private:
-    ui64 Rows = 0;
-    ui64 Bytes = 0;
+    ui64 UploadRows = 0;
+    ui64 UploadBytes = 0;
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
 };
 
 // TODO(mbkkt) separate it to 3 classes: TBuildColumnsInfo TBuildSecondaryInfo TBuildVectorInfo with single base TBuildInfo
@@ -2998,9 +3035,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Sample = 0,
             // Recompute,
             Reshuffle,
-            // Local,
+            Local,
         };
-        ui32 Level = 0;
+        ui32 Level = 1;
 
         ui32 Parent = 0;
         ui32 ParentEnd = 0;  // included
@@ -3008,6 +3045,14 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         EState State = Sample;
 
         ui32 ChildBegin = 1;  // included
+
+        TString ToStr() const {
+            return TStringBuilder()
+                << "{ K = " << K
+                << ", Level = " << Level << " / " << Levels
+                << ", Parent = " << Parent << " / " << ParentEnd
+                << ", State = " << State << " }";
+        }
 
         static ui32 BinPow(ui32 k, ui32 l) {
             ui32 r = 1;
@@ -3062,7 +3107,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         }
 
         NKikimrTxDataShard::TEvLocalKMeansRequest::EState GetUpload() const {
-            if (Level == 0) {
+            if (Parent == 0) {
                 if (NeedsAnotherLevel()) {
                     return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD;
                 } else {
@@ -3081,15 +3126,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
             if (needsBuildTable || NeedsAnotherLevel()) {
-                name += Level % 2 == 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
+                name += Level % 2 != 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
             }
             return name;
         }
         TString ReadFrom() const {
-            Y_ASSERT(Level != 0);
+            Y_ASSERT(Parent != 0);
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
-            name += Level % 2 == 0 ? BuildPostingTableSuffix1 : BuildPostingTableSuffix0;
+            name += Level % 2 != 0 ? BuildPostingTableSuffix1 : BuildPostingTableSuffix0;
             return name;
         }
     };
@@ -3171,7 +3216,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TBillingStats Processed;
     TBillingStats Billed;
 
-    struct TSampleK {
+    struct TSample {
         struct TRow {
             ui64 P = 0;
             TString Row;
@@ -3235,8 +3280,26 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             MaxProbability = kth->P;
         }
     };
+    TSample Sample;
 
-    TSampleK Sample;
+    TString KMeansTreeToDebugStr() const {
+        return TStringBuilder()
+            << KMeans.ToStr() << ", "
+            << "{ Rows = " << Sample.Rows.size()
+            << ", Sent = " << Sample.Sent << " }, "
+            << "{ Done = " << DoneShards.size()
+            << ", ToUpload = " << ToUploadShards.size()
+            << ", InProgress = " << InProgressShards.size() << " }";
+    }
+
+    struct TClusterShards {
+        ui32 From = std::numeric_limits<ui32>::max();
+        TShardIdx Local = InvalidShardIdx;
+        std::vector<TShardIdx> Global;
+    };
+    TMap<ui32, TClusterShards> Cluster2Shards;
+
+    void AddParent(const TSerializedTableRange& range, TShardIdx shard);
 
     TIndexBuildInfo(TIndexBuildId id, TString uid)
         : Id(id)
@@ -3394,9 +3457,24 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxDone>(
                 indexInfo->AlterMainTableTxDone);
 
-        indexInfo->Billed = TBillingStats(
+        auto& billed = indexInfo->Billed;
+        billed = {
             row.template GetValueOrDefault<Schema::IndexBuild::RowsBilled>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::BytesBilled>(0));
+            row.template GetValueOrDefault<Schema::IndexBuild::BytesBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0),
+        };
+        if (billed.GetUploadRows() != 0 && billed.GetReadRows() == 0 && indexInfo->IsFillBuildIndex()) {
+            // old format: assign upload to read
+            billed += {0, 0, billed.GetUploadRows(), billed.GetUploadBytes()};
+        }
+
+        indexInfo->Processed = {
+            row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesProcessed>(0),
+        };
 
         return indexInfo;
     }
@@ -3414,9 +3492,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         TString lastKeyAck =
             row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
+        TSerializedTableRange bound{range};
+        AddParent(bound, shardIdx);
         Shards.emplace(
-            shardIdx, TIndexBuildInfo::TShardStatus(
-                          TSerializedTableRange(range), std::move(lastKeyAck)));
+            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck)));
         TIndexBuildInfo::TShardStatus &shardStatus = Shards.at(shardIdx);
 
         shardStatus.Status =
@@ -3428,17 +3507,26 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Schema::IndexBuildShardStatus::UploadStatus>(
             Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
 
-        shardStatus.Processed = TBillingStats(
-            row.template GetValueOrDefault<
-                Schema::IndexBuildShardStatus::RowsProcessed>(0),
-            row.template GetValueOrDefault<
-                Schema::IndexBuildShardStatus::BytesProcessed>(0));
-
-        Processed += shardStatus.Processed;
+        auto& processed = shardStatus.Processed;
+        processed = {
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::RowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::BytesProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0),
+        };
+        if (processed.GetUploadRows() != 0 && processed.GetReadRows() == 0 && IsFillBuildIndex()) {
+            // old format: assign upload to read
+            processed += {0, 0, processed.GetUploadRows(), processed.GetUploadBytes()};
+        }
+        Processed += processed;
     }
 
     bool IsCancellationRequested() const {
         return CancelRequested;
+    }
+
+    bool IsFillBuildIndex() const {
+        return IsBuildSecondaryIndex() || IsBuildColumns();
     }
 
     bool IsBuildSecondaryIndex() const {
@@ -3476,11 +3564,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     float CalcProgressPercent() const {
         if (IsBuildVectorIndex()) {
+            Y_ASSERT(KMeans.Level != 0);
             // TODO(mbkkt) better calculation for vector index
-            if (KMeans.Level == 0) {
-                return 0.0;
-            }
-            return KMeans.Levels * 100. / KMeans.Level;
+            return KMeans.Level * 100.0 / KMeans.Levels;
         }
         if (Shards) {
             float totalShards = Shards.size();
@@ -3557,6 +3643,8 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr);
+
+TConclusion<TDuration> GetExpireAfter(const NKikimrSchemeOp::TTTLSettings::TEnabled& settings, const bool allowNonDeleteTiers);
 
 std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
     const NKikimr::NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr);

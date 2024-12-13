@@ -13,24 +13,26 @@ TTpcDSGeneratorTimeDim::TTpcDSGeneratorTimeDim(const TTpcdsWorkloadDataInitializ
 {}
 
 void TTpcDSGeneratorTimeDim::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
+    TTpcdsCsvItemWriter<W_TIME_TBL> writer(ctxs.front().GetCsv().Out, ctxs.front().GetCount());
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, t_time_sk, T_TIME_SK);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, t_time_id, T_TIME_ID);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, t_time, T_TIME);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, t_hour, T_HOUR);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, t_minute, T_MINUTE);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, t_second, T_SECOND);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, t_am_pm, T_AM_PM);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, t_shift, T_SHIFT);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, t_sub_shift, T_SUB_SHIFT);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, t_meal_time, T_MEAL_TIME);
+
     TVector<W_TIME_TBL> timeList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_time(&timeList[i], ctxs.front().GetStart() + i);
+        writer.RegisterRow();
         tpcds_row_stop(TableNum);
     }
     g.Release();
 
-    TCsvItemWriter<W_TIME_TBL> writer(ctxs.front().GetCsv().Out);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, t_time_sk);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, t_time_id);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, t_time);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, t_hour);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, t_minute);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, t_second);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, t_am_pm);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, t_shift);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, t_sub_shift);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, t_meal_time);
     writer.Write(timeList);
 };
 

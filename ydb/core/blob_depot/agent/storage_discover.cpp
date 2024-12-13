@@ -29,7 +29,7 @@ namespace NKikimr::NBlobDepot {
                 IssueResolve();
 
                 if (Request.DiscoverBlockedGeneration) {
-                    const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, Max<ui32>(), this, &BlockedGeneration);
+                    const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, std::nullopt, this, &BlockedGeneration);
                     if (status == NKikimrProto::OK) {
                         DoneWithBlockedGeneration = true;
                     } else if (status != NKikimrProto::UNKNOWN) {
@@ -86,7 +86,7 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "OnUpdateBlock", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()));
 
-                const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, Max<ui32>(), this, &BlockedGeneration);
+                const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, std::nullopt, this, &BlockedGeneration);
                 if (status == NKikimrProto::OK) {
                     DoneWithBlockedGeneration = true;
                     CheckIfDone();

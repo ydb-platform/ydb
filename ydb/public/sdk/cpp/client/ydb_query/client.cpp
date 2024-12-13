@@ -484,15 +484,11 @@ public:
             return false;
         };
 
-        // No need to keep-alive
-        auto keepAliveCmd = [](TKqpSessionCommon*) {
-        };
-
         std::weak_ptr<TQueryClient::TImpl> weak = shared_from_this();
         Connections_->AddPeriodicTask(
             SessionPool_.CreatePeriodicTask(
                 weak,
-                std::move(keepAliveCmd),
+                NSessionPool::TSessionPool::TKeepAliveCmd(), // no keep-alive cmd for query service
                 std::move(deletePredicate)
             ), NSessionPool::PERIODIC_ACTION_INTERVAL);
     }

@@ -29,7 +29,6 @@ IF (PY2)
         python_yndexer.py
         run_ios_simulator.py
         run_msvc_wine.py
-        run_sonar.py
         symlink.py
         touch.py
         unpacking_jtest_runner.py
@@ -134,7 +133,6 @@ ELSEIF (PY3)
         with_coverage.py
         with_kapt_args.py
         with_pathsep_resolve.py
-        wrap_groovyc.py
         wrapcc.py
         wrapper.py
         write_file_size.py

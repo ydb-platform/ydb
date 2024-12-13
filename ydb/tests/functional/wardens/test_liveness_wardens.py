@@ -6,7 +6,7 @@ from hamcrest import is_, empty, has_length, greater_than_or_equal_to
 
 from ydb.tests.library.wardens.factories import hive_liveness_warden_factory, transactions_processing_liveness_warden
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_http_client import HiveClient
+from ydb.tests.library.clients.kikimr_http_client import HiveClient
 from ydb.tests.library.common.wait_for import wait_for_and_assert
 
 

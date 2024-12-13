@@ -12,7 +12,7 @@ void TCleanupPortionsColumnEngineChanges::DoDebugString(TStringOutput& out) cons
     if (ui32 dropped = PortionsToDrop.size()) {
         out << "drop " << dropped << " portions";
         for (auto& portionInfo : PortionsToDrop) {
-            out << portionInfo.GetPortionInfo().DebugString();
+            out << portionInfo->DebugString();
         }
     }
 }
@@ -23,7 +23,7 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
         return;
     }
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
-    for (auto&& p : PortionsToDrop) {
+    for (auto&& [_, p] : FetchedDataAccessors->GetPortions()) {
         p.RemoveFromDatabase(context.DBWrapper);
         p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
         pathIds.emplace(p.GetPortionInfo().GetPathId());
@@ -38,15 +38,14 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     for (auto& portionInfo : PortionsToDrop) {
-        if (!context.EngineLogs.ErasePortion(portionInfo.GetPortionInfo())) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo.GetPortionInfo().DebugString());
+        if (!context.EngineLogs.ErasePortion(*portionInfo)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo->DebugString());
         }
     }
     if (self) {
         self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
         for (auto&& p : PortionsToDrop) {
-            self->Counters.GetTabletCounters()->OnDropPortionEvent(
-                p.GetPortionInfo().GetTotalRawBytes(), p.GetPortionInfo().GetTotalBlobBytes(), p.GetPortionInfo().GetRecordsCount());
+            self->Counters.GetTabletCounters()->OnDropPortionEvent(p->GetTotalRawBytes(), p->GetTotalBlobBytes(), p->GetRecordsCount());
         }
     }
 }

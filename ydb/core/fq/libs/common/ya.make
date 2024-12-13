@@ -18,8 +18,8 @@ PEERDIR(
     library/cpp/blockcodecs
     ydb/core/fq/libs/control_plane_storage/events
     ydb/core/fq/libs/events
-    ydb/library/yql/providers/common/structured_token
-    ydb/library/yql/public/issue
+    yql/essentials/providers/common/structured_token
+    yql/essentials/public/issue
     ydb/public/api/protos
 )
 

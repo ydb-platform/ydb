@@ -3,8 +3,6 @@
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 #include <yt/yt/core/concurrency/poller.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 namespace NYT::NPipes {
 
 using namespace NConcurrency;
@@ -32,7 +30,7 @@ TIODispatcher* TIODispatcher::Get()
 
 void TIODispatcher::Configure(const TIODispatcherConfigPtr& config)
 {
-    Poller_->Reconfigure(config->ThreadPoolPollingPeriod);
+    Poller_->SetPollingPeriod(config->ThreadPoolPollingPeriod);
 }
 
 IInvokerPtr TIODispatcher::GetInvoker()

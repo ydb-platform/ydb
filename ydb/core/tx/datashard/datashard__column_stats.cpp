@@ -1,7 +1,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
-#include <ydb/library/minsketch/count_min_sketch.h>
+#include <yql/essentials/core/minsketch/count_min_sketch.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 

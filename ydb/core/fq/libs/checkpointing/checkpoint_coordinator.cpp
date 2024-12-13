@@ -73,7 +73,10 @@ void TCheckpointCoordinator::Handle(NYql::NDqs::TEvReadyState::TPtr& ev) {
 
     int tasksSize = GetTasksSize();
     const auto& actorIds = ev->Get()->Record.GetActorId();
-    Y_ABORT_UNLESS(tasksSize == actorIds.size(), "tasksSize %d, actorIds size %d, graph id %s", tasksSize, int(actorIds.size()), CoordinatorId.GraphId.c_str());
+    if (tasksSize != actorIds.size()) {
+        OnInternalError(TStringBuilder() << "tasksSize != actorIds.size(),  tasksSize " << tasksSize << ", actorIds size " << actorIds.size() <<  ", graph id " << CoordinatorId.GraphId);
+        return;
+    }
 
     for (int i = 0; i < tasksSize; ++i) {
         const auto& task = GetTask(i);
@@ -457,18 +460,23 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskSt
     if (status == NYql::NDqProto::TEvSaveTaskStateResult::OK) {
         checkpoint.Acknowledge(ev->Sender, proto.GetStateSizeBytes());
         CC_LOG_D("[" << checkpointId << "] Task state saved, need " << checkpoint.NotYetAcknowledgedCount() << " more acks");
-        if (checkpoint.GotAllAcknowledges()) {
+    } else {
+        checkpoint.Abort(ev->Sender);
+        CC_LOG_E("[" << checkpointId << "] StorageError: can't save node state, aborting checkpoint");
+        ++*Metrics.StorageError;
+    }
+    if (checkpoint.GotAllAcknowledges()) {
+        if (checkpoint.GetStats().Aborted) {
+            CC_LOG_E("[" << checkpointId << "] Got all acks for aborted checkpoint, aborting in storage");
+            CheckpointingSnapshotRotationIndex = CheckpointingSnapshotRotationPeriod;  // Next checkpoint is snapshot.
+            Send(StorageProxy, new TEvCheckpointStorage::TEvAbortCheckpointRequest(CoordinatorId, checkpointId, "Can't save node state"), IEventHandle::FlagTrackDelivery);
+        } else {
             CC_LOG_I("[" << checkpointId << "] Got all acks, changing checkpoint status to 'PendingCommit'");
             Send(StorageProxy, new TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest(CoordinatorId, checkpointId, checkpoint.GetStats().StateSize), IEventHandle::FlagTrackDelivery);
             if (InitingZeroCheckpoint) {
                 Send(RunActorId, new TEvCheckpointCoordinator::TEvZeroCheckpointDone());
             }
         }
-    } else {
-        CC_LOG_E("[" << checkpointId << "] StorageError: can't save node state, aborting checkpoint");
-        ++*Metrics.StorageError;
-        CheckpointingSnapshotRotationIndex = CheckpointingSnapshotRotationPeriod;  // Next checkpoint is snapshot.
-        Send(StorageProxy, new TEvCheckpointStorage::TEvAbortCheckpointRequest(CoordinatorId, checkpointId, "Can't save node state"), IEventHandle::FlagTrackDelivery);
     }
 }
 

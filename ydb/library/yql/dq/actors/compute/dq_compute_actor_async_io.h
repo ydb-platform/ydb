@@ -5,8 +5,8 @@
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_output.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/ptr.h>
 
@@ -197,6 +197,8 @@ struct IDqComputeActorAsyncOutput {
     virtual void LoadState(const TSinkState& state) = 0;
 
     virtual TMaybe<google::protobuf::Any> ExtraData() { return {}; }
+
+    virtual void FillExtraStats(NDqProto::TDqTaskStats* /* stats */, bool /* finalized stats */, const NYql::NDq::TDqMeteringStats*) { }
 
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 

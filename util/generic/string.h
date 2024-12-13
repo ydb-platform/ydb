@@ -463,8 +463,7 @@ public:
         : TBasicString(pc, TBase::StrLen(pc))
     {
     }
-    // TODO thegeorg@: uncomment and fix clients
-    // TBasicString(std::nullptr_t) = delete;
+    TBasicString(std::nullptr_t) = delete;
 
     TBasicString(const TCharType* pc, size_t n)
 #ifdef TSTRING_IS_STD_STRING
@@ -1196,6 +1195,10 @@ public:
     bool to_lower(size_t pos = 0, size_t n = TBase::npos);
     bool to_upper(size_t pos = 0, size_t n = TBase::npos);
     bool to_title(size_t pos = 0, size_t n = TBase::npos);
+
+    constexpr const TCharType* Data() const noexcept = delete;
+    constexpr size_t Size() noexcept = delete;
+    Y_PURE_FUNCTION constexpr bool Empty() const noexcept = delete;
 
 public:
     /**

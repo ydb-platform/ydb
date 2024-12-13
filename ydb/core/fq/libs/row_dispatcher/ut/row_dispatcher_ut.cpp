@@ -94,6 +94,7 @@ public:
             "Tenant",
             TestActorFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(pqServices)
             ).release());
 

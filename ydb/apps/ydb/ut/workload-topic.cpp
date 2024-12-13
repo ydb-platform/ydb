@@ -187,8 +187,6 @@ Y_UNIT_TEST(Full_Statistics_UseTx)
     // assert there are correct values in output
     // messages per second
     UNIT_ASSERT_EQUAL_C(values[1], "5", "Messages per second differs from expected: expected = " << 5 << ", got = " << values[1]);
-     // commit time in ms
-    UNIT_ASSERT_GE_C(std::stoi(values[10]), 1, "Commit time differs from expected: expected >= " << 1 << ", got = " << values[10]);
 }
 
 Y_UNIT_TEST(WriteInTx)

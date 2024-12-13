@@ -49,7 +49,6 @@ namespace NTests {
             TFixture() : 
                 WriteSession(std::make_shared<MockWriteSession>()),
                 Clock(CreateClock()),
-                LoggedData(),
                 Log(CreateLogger()),
                 GeneratedMessages(TTopicWorkloadWriterWorker::GenerateMessages(100'000))
             {}

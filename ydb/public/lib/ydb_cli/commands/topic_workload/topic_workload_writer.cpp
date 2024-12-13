@@ -163,14 +163,14 @@ std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::Create
     }
     auto producerId = TGUID::CreateTimebased().AsGuidString();
 
-    auto producer = std::make_shared<TTopicWorkloadWriterProducer>(TTopicWorkloadWriterProducer(
+    auto producer = std::make_shared<TTopicWorkloadWriterProducer>(
             Params,
             StatsCollector,
             producerId,
             partitionId,
             std::move(clock)
-    ));
-
+    );
+ 
     NYdb::NTopic::TWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec) Params.Codec);
     settings.Path(Params.TopicName);

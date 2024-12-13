@@ -12,7 +12,7 @@ Apply the relevant logical operation  (`AND`/`OR`/`XOR`) to all values in a Bool
 
 These functions **don't skip** `NULL` during aggregation and follows the next rule: `true and null == null`, `false or null == null`. For `BOOL_AND` with any `true` values and even one `NULL` the result is `NULL`, but even one `false` changes it to `false` regardless whether `NULL` is present. For `BOOL_OR` with any `false` valse and even one `NULL` the result is `NULL`, but even one `true` changes it to `true` regardless whether `NULL` is present. `BOOL_XOR` results to `NULL` if any `NULL` is found. One can find more examples of such behaviour below.
 
-To skip `NULLs` during aggregation, you can use the functions `MIN`/`MAX` or `BIT_AND`/`BIT_OR`/`BIT_XOR`.
+To skip `NULL` values during aggregation, you can use the functions `MIN`/`MAX` or `BIT_AND`/`BIT_OR`/`BIT_XOR`.
 
 ### Examples
 

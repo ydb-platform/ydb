@@ -32,10 +32,6 @@
       {
           "name": "CFLAGS",
           "value": "-fno-omit-frame-pointer"
-      },
-      {
-          "name": "DEBUGINFO_LINES_ONLY",
-          "value": "yes"
       }
     ],
     "target-platforms": [

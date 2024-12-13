@@ -133,10 +133,11 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
 
         ui64 level = samplingRule.GetLevel();
         double fraction = samplingRule.GetFraction();
-        if (level > 15) {
+        if (level > TComponentTracingLevels::MostVerbose) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "sampling level exceeds maximum allowed value (" << level
-                       << " provided, maximum is 15). Lowering the level");
-            level = 15;
+                       << " provided, maximum is " << static_cast<ui32>(TComponentTracingLevels::MostVerbose)
+                       << "). Lowering the level");
+            level = TComponentTracingLevels::MostVerbose;
         }
         if (fraction < 0 || fraction > 1) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "provided fraction " << fraction
@@ -178,10 +179,11 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         }
 
         ui64 level = throttlingRule.HasLevel() ? throttlingRule.GetLevel() : TComponentTracingLevels::ProductionVerbose;
-        if (level > 15) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "external tracing level exceeds maximum allowed value (" << level
-                       << " provided, maximum is 15). Lowering the level");
-            level = 15;
+        if (level > TComponentTracingLevels::MostVerbose) {
+            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "sampling level exceeds maximum allowed value (" << level
+                       << " provided, maximum is " << static_cast<ui32>(TComponentTracingLevels::MostVerbose)
+                       << "). Lowering the level");
+            level = TComponentTracingLevels::MostVerbose;
         }
 
         if (!throttlingRule.HasMaxTracesPerMinute()) {

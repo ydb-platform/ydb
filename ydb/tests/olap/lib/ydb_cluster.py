@@ -16,6 +16,32 @@ from enum import Enum
 LOGGER = logging.getLogger()
 
 
+class YdbClusterInstance:
+    _temp_ydb_cluster = None
+    _endpoint = None
+    _database = None
+
+    def __init__(self, endpoint, database):
+        if endpoint is not None:
+            self._endpoint = endpoint
+            self._database = database
+        else:
+            config = KikimrConfigGenerator(extra_feature_flags=[])
+            cluster = KiKiMR(configurator=config)
+            cluster.start()
+            node = cluster.nodes[1]
+            self._endpoint = "%s:%d" % (node.host, node.port)
+            self._database = config.domain_name
+            self._temp_ydb_cluster = cluster
+        LOGGER.info(f'Using YDB, endpoint:{self._endpoint}, database:{self._database}')
+
+    def endpoint(self):
+        return self._endpoint
+
+    def database(self):
+        return self._database
+
+
 class YdbCluster:
     class MonitoringUrl:
         def __init__(self, url: str, caption: str = 'link') -> None:
@@ -51,7 +77,7 @@ class YdbCluster:
                 self.role = YdbCluster.Node.Role.UNKNOWN
             self.tablets = [YdbCluster.Node.Tablet(t) for t in desc.get('Tablets', [])]
 
-    _ydb_cluster = None
+    _ydb_cluster_instance = None
     _ydb_driver = None
     _results_driver = None
     _cluster_info = None
@@ -132,13 +158,6 @@ class YdbCluster:
         return deepcopy(cls._cluster_info)
 
     @staticmethod
-    def _start_ydb_cluster():
-        config = KikimrConfigGenerator(extra_feature_flags=[])
-        cluster = KiKiMR(configurator=config)
-        cluster.start()
-        return cluster
-
-    @staticmethod
     def _create_ydb_driver(endpoint, database, oauth=None, iam_file=None):
         credentials = None
         LOGGER.info(f"Connecting to {endpoint} to {database} ydb_access_token is set {oauth is not None}")
@@ -168,13 +187,12 @@ class YdbCluster:
     @classmethod
     def get_ydb_driver(cls):
         if cls._ydb_driver is None:
-            if cls.ydb_endpoint is None:
-                if cls._ydb_cluster is not None:
-                    raise 'Double temporary cluster initialization attempt'
-                cls._ydb_cluster = cls._start_ydb_cluster()
-                node = cls._ydb_cluster.nodes[1]
-                cls.ydb_endpoint = "%s:%d" % (node.host, node.port)
-                cls.ydb_database = cls._ydb_cluster.config.domain_name
+            if cls._ydb_cluster_instance is not None:
+                raise 'Double cluster initialization attempt'
+            cluster = YdbClusterInstance(cls.ydb_endpoint, cls.ydb_database)
+            cls.ydb_endpoint = cluster.endpoint()
+            cls.ydb_database = cluster.database()
+            cls._ydb_cluster_instance = cluster
             cls._ydb_driver = cls._create_ydb_driver(
                 cls.ydb_endpoint, cls.ydb_database, oauth=os.getenv('OLAP_YDB_OAUTH', None)
             )

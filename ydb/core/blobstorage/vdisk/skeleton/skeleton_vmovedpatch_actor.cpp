@@ -57,9 +57,8 @@ namespace NKikimr {
                 OriginalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
                 Y_VERIFY_S(record.HasPatchedBlobId(), VCtx->VDiskLogPrefix);
                 PatchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
-                Deadline = TInstant::Seconds(record.GetMsgQoS().HasDeadlineSeconds());
                 if (record.HasMsgQoS() && record.GetMsgQoS().HasDeadlineSeconds()) {
-                    Deadline = TInstant::Seconds(record.GetMsgQoS().HasDeadlineSeconds());
+                    Deadline = TInstant::Seconds(record.GetMsgQoS().GetDeadlineSeconds());
                 }
 
                 DiffCount = record.DiffsSize();

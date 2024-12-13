@@ -56,7 +56,6 @@ namespace NKikimr::NPersQueueTests {
             annoyingClient.CreateTopicNoLegacy(DEFAULT_TOPIC_PATH, 5, false);
             annoyingClient.CreateTopicNoLegacy("/Root/PQ/account1/topic1", 5, false);
             annoyingClient.CreateTopicNoLegacy("/Root/account2/topic2", 5);
-  
         }
 
         Y_UNIT_TEST(CheckGrpcWriteNoDC) {
@@ -634,6 +633,7 @@ namespace NKikimr::NPersQueueTests {
                     };
 
                 {
+                    server.AnnoyingClient->GrantConnect("user@builtin");
                     NYdb::NScheme::TSchemeClient schemeClient(*ydbDriver);
                     NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.generic.read", "ydb.generic.write"});
 

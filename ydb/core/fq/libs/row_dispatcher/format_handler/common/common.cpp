@@ -12,9 +12,9 @@ TString TSchemaColumn::ToString() const {
 
 //// TCountersDesc
 
-TCountersDesc TCountersDesc::SetPath(const TString& countersPath) const {
+TCountersDesc TCountersDesc::CopyWithNewMkqlCountersName(const TString& mkqlCountersName) const {
     TCountersDesc result(*this);
-    result.CountersPath = countersPath;
+    result.MkqlCountersName = mkqlCountersName;
     return result;
 }
 

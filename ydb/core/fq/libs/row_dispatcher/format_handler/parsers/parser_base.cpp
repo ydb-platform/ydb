@@ -11,7 +11,7 @@ namespace NFq::NRowDispatcher {
 //// TTypeParser
 
 TTypeParser::TTypeParser(const TSourceLocation& location, const TCountersDesc& counters)
-    : Alloc(location, NKikimr::TAlignedPagePoolCounters(counters.CountersRoot, counters.CountersPath), true, false)
+    : Alloc(location, NKikimr::TAlignedPagePoolCounters(counters.CountersRoot, counters.MkqlCountersName), true, false)
     , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {}))
     , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
     , ProgramBuilder(std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(*TypeEnv, *FunctionRegistry))

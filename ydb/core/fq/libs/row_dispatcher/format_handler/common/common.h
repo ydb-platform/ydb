@@ -27,9 +27,9 @@ struct TSchemaColumn {
 struct TCountersDesc {
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     NMonitoring::TDynamicCounterPtr CountersSubgroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
-    TString CountersPath;  // Used for counters created from CountersRoot
+    TString MkqlCountersName;  // Used for TAlignedPagePoolCounters created from CountersRoot
 
-    [[nodiscard]] TCountersDesc SetPath(const TString& countersPath) const;
+    [[nodiscard]] TCountersDesc CopyWithNewMkqlCountersName(const TString& mkqlCountersName) const;
 };
 
 }  // namespace NFq::NRowDispatcher

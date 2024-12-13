@@ -18,24 +18,24 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
     using TBase = NActors::TActor<TTopicFormatHandler>;
 
     struct TCounters {
-        TCountersDesc Counters;
+        TCountersDesc Desc;
 
         NMonitoring::TDynamicCounters::TCounterPtr ActiveFormatHandlers;
         NMonitoring::TDynamicCounters::TCounterPtr ActiveClients;
 
         TCounters(const TCountersDesc& counters, const TSettings& settings)
-            : Counters(counters)
+            : Desc(counters)
         {
-            Counters.CountersSubgroup = Counters.CountersSubgroup->GetSubgroup("format", settings.ParsingFormat);
+            Desc.CountersSubgroup = Desc.CountersSubgroup->GetSubgroup("format", settings.ParsingFormat);
 
             Register();
         }
 
     private:
         void Register() {
-            ActiveFormatHandlers = Counters.CountersRoot->GetCounter("ActiveFormatHandlers", false);
+            ActiveFormatHandlers = Desc.CountersRoot->GetCounter("ActiveFormatHandlers", false);
 
-            ActiveClients = Counters.CountersSubgroup->GetCounter("ActiveClients", false);
+            ActiveClients = Desc.CountersSubgroup->GetCounter("ActiveClients", false);
         }
     };
 
@@ -284,7 +284,7 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
 public:
     TTopicFormatHandler(const TFormatHandlerConfig& config, const TSettings& settings, const TCountersDesc& counters)
         : TBase(&TTopicFormatHandler::StateFunc)
-        , TTypeParser(__LOCATION__, counters.SetPath("row_dispatcher"))
+        , TTypeParser(__LOCATION__, counters.CopyWithNewMkqlCountersName("row_dispatcher"))
         , Config(config)
         , Settings(settings)
         , LogPrefix(TStringBuilder() << "TTopicFormatHandler [" << Settings.ParsingFormat << "]: ")
@@ -487,7 +487,7 @@ private:
     }
 
     TValueStatus<ITopicParser::TPtr> CreateParserForFormat() const {
-        const auto& counters = Counters.Counters.SetPath("row_dispatcher_parser");
+        const auto& counters = Counters.Desc.CopyWithNewMkqlCountersName("row_dispatcher_parser");
         if (Settings.ParsingFormat == "raw") {
             return CreateRawParser(ParserHandler, counters);
         }
@@ -499,7 +499,7 @@ private:
 
     void CreateFilters() {
         if (!Filters) {
-            Filters = CreateTopicFilters(SelfId(), Config.FiltersConfig, Counters.Counters.CountersSubgroup);
+            Filters = CreateTopicFilters(SelfId(), Config.FiltersConfig, Counters.Desc.CountersSubgroup);
         }
     }
 

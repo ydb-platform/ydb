@@ -145,6 +145,7 @@ PEERDIR(
     ydb/library/folder_service/proto
     ydb/library/pdisk_io
     ydb/library/security
+    ydb/library/signal_backtrace
     yql/essentials/minikql/comp_nodes/llvm14
     yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/llvm14

@@ -22,6 +22,7 @@ target_compile_options(row_dispatcher-format_handler-common PRIVATE
 target_link_libraries(row_dispatcher-format_handler-common PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-monlib-dynamic_counters
   ydb-library-conclusion
   dq-actors-protos
   essentials-public-issue

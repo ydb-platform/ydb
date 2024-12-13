@@ -516,6 +516,7 @@ void InitFq(const NFq::NConfig::TConfig& fqConfig, IPqGateway::TPtr pqGateway, T
             credentialsFactory,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             pqGateway);
 
         additionalLocalServices.emplace_back(

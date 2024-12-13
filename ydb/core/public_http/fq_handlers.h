@@ -2,7 +2,6 @@
 
 #include "grpc_request_context_wrapper.h"
 
-#include <thread>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
@@ -282,10 +281,10 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        Bootstrap_wrapper(ctx);
+        BootstrapWrapper(ctx);
     }
 
-    virtual void Bootstrap_wrapper(const TActorContext& ctx) {
+    virtual void BootstrapWrapper(const TActorContext& ctx) {
         auto grpcRequest = std::make_unique<TGrpcProtoRequestType>();
         if (Parse(*grpcRequest)) {
             TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = new TGrpcRequestContextWrapper(RequestContext, std::move(grpcRequest), &SendReply);
@@ -357,7 +356,7 @@ public:
         Y_ABORT_UNLESS(resp->GetArena());
         Y_UNUSED(status);
         auto* typedResponse = static_cast<TGrpcProtoResponseType*>(resp);
-        if (!typedResponse->operation().result().template Is<TGrpcProtoResultType>()) {                                   
+        if (!typedResponse->operation().result().template Is<TGrpcProtoResultType>()) {
             TStringStream json;                                                                             
             auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());     
             FqConvert(typedResponse->operation(), *httpResult);                                             
@@ -411,7 +410,7 @@ public:
     : TGrpcCallWrapperBase(ctx, &NGRpcService::CreateFederatedQueryDescribeQueryRequestOperationCall)
     {}
 
-    void Bootstrap_wrapper(const TActorContext& ctx) override {
+    void BootstrapWrapper(const TActorContext& ctx) override {
 
         auto describeRequest = std::make_unique<FederatedQuery::DescribeQueryRequest>();
         if (!Parse(*describeRequest)) {
@@ -419,12 +418,11 @@ public:
             return;
         }
 
-        TProtoStringType qid =  describeRequest->Getquery_id();
-
-        TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = new TGrpcRequestContextWrapper(
+        TProtoStringType query_id =  describeRequest->Getquery_id();
+        TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = MakeIntrusive<TGrpcRequestContextWrapper>(
             RequestContext,
             std::move(describeRequest),
-            [query_id = std::move(qid), actorSystem = TActivationContext::ActorSystem()](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
+            [query_id = std::move(query_id), actorSystem = TActivationContext::ActorSystem()](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
 
             Y_ABORT_UNLESS(resp);
             Y_ABORT_UNLESS(resp->GetArena());
@@ -449,15 +447,14 @@ public:
             auto modifyRequest = std::unique_ptr<FederatedQuery::ModifyQueryRequest>(new FederatedQuery::ModifyQueryRequest());
 
             modifyRequest->set_query_id(query_id);
-            modifyRequest->Mutablecontent()->CopyFrom(describeResult->Getquery().content());
+            *modifyRequest->mutable_content() = describeResult->query().content();
             modifyRequest->set_execute_mode(::FederatedQuery::ExecuteMode::RUN);
-            modifyRequest->set_allocated_disposition(nullptr);
             modifyRequest->set_state_load_mode(::FederatedQuery::StateLoadMode::STATE_LOAD_MODE_UNSPECIFIED);
-            modifyRequest->set_previous_revision(describeResult->Getquery().meta().Getlast_job_query_revision());
+            modifyRequest->set_previous_revision(describeResult->query().meta().Getlast_job_query_revision());
             modifyRequest->set_idempotency_key(requestContext.GetIdempotencyKey());
 
             TIntrusivePtr<TGrpcRequestContextWrapper> requestContextModify = new TGrpcRequestContextWrapper(
-                requestContext, // new request context?
+                requestContext,
                 std::move(modifyRequest),
                 TGrpcCallWrapper<FederatedQuery::ModifyQueryRequest, int, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>::SendReply
             );

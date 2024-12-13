@@ -153,12 +153,13 @@ class YQHttpClient(object):
     def start_query(
         self,
         query_id: str,
+        request_id=None,
         idempotency_key: str | None = None,
         expected_code: int = 204,
     ):
         response = self.session.post(
             self._compose_api_url(f"/api/fq/v1/queries/{query_id}/start"),
-            headers=self._build_headers(idempotency_key=idempotency_key),
+            headers=self._build_headers(idempotency_key=idempotency_key, request_id=request_id),
             params=self._build_params(),
         )
 

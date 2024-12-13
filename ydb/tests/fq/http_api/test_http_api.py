@@ -9,7 +9,6 @@ import re
 import yaml
 from yaml.loader import SafeLoader
 
-# import time
 import library.python.retry as retry
 
 from test_base import TestBase
@@ -78,8 +77,6 @@ class TestHttpApi(TestBase):
 
             status = client.get_query_status(query_id)
             assert status in ["FAILED", "STARTING", "RUNNING", "COMPLETED"]
-            print("Starting")
-            # time.sleep(200)
 
             wait_for_query_status(client, query_id, ["COMPLETED"])
             query_json = client.get_query(query_id)
@@ -252,9 +249,6 @@ class TestHttpApi(TestBase):
 
             response2 = client.start_query(query_id, idempotency_key="Z")
             assert response2.status_code == 204
-
-            # response2 = client.start_query(query_id)
-            # assert response2.status_code == 400
 
             response1 = client.stop_query(query_id, idempotency_key="Z")
             assert response1.status_code == 204

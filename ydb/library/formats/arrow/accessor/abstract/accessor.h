@@ -253,7 +253,7 @@ protected:
                 if (position < chunkCurrent->GetFinishPosition()) {
                     return accessor.OnArray(
                         chunkCurrent->GetChunkIndex(), chunkCurrent->GetStartPosition());
-                } else if (position == chunkCurrent->GetFinishPosition() + 1 && chunkCurrent->GetChunkIndex() + 1 < accessor.GetChunksCount()) {
+                } else if (position == chunkCurrent->GetFinishPosition() && chunkCurrent->GetChunkIndex() + 1 < accessor.GetChunksCount()) {
                     return accessor.OnArray(chunkCurrent->GetChunkIndex() + 1, position);
                 }
                 AFL_VERIFY(chunkCurrent->GetChunkIndex() < accessor.GetChunksCount());

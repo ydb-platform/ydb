@@ -109,7 +109,8 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
 }
 
 void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
-{    TClientCommand::Parse(config);
+{   
+    TClientCommand::Parse(config);
 
     Scenario.EnsurePercentileIsValid();
     Scenario.EnsureWarmupSecIsValid();

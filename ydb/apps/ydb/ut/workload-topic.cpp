@@ -236,13 +236,9 @@ Y_UNIT_TEST(WriteProducesToAllPartitionsEvenly)
                           "--tx-commit-interval-ms", "1000",
                           "--seconds", "6"});
 
-    ui32 numMessagesPart0 = CountMessagesInPartition(0);
-    ui32 numMessagesPart1 = CountMessagesInPartition(1);
-    ui32 numMessagesPart2 = CountMessagesInPartition(2);
-
-    UNIT_ASSERT_GE(numMessagesPart0, 4);
-    UNIT_ASSERT_GE(numMessagesPart1, 4);
-    UNIT_ASSERT_GE(numMessagesPart2, 4);
+    UNIT_ASSERT_GE(CountMessagesInPartition(0), 4);
+    UNIT_ASSERT_GE(CountMessagesInPartition(1), 4);
+    UNIT_ASSERT_GE(CountMessagesInPartition(2), 4);
 }
 
 }

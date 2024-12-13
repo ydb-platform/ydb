@@ -28,6 +28,8 @@ struct TCountersDesc {
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     NMonitoring::TDynamicCounterPtr CountersSubgroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
     TString CountersPath;  // Used for counters created from CountersRoot
+
+    [[nodiscard]] TCountersDesc SetPath(const TString& countersPath) const;
 };
 
 }  // namespace NFq::NRowDispatcher

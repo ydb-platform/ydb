@@ -284,7 +284,7 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
 public:
     TTopicFormatHandler(const TFormatHandlerConfig& config, const TSettings& settings, const TCountersDesc& counters)
         : TBase(&TTopicFormatHandler::StateFunc)
-        , TTypeParser(__LOCATION__, counters)
+        , TTypeParser(__LOCATION__, counters.SetPath("row_dispatcher"))
         , Config(config)
         , Settings(settings)
         , LogPrefix(TStringBuilder() << "TTopicFormatHandler [" << Settings.ParsingFormat << "]: ")
@@ -487,11 +487,12 @@ private:
     }
 
     TValueStatus<ITopicParser::TPtr> CreateParserForFormat() const {
+        const auto& counters = Counters.Counters.SetPath("row_dispatcher_parser");
         if (Settings.ParsingFormat == "raw") {
-            return CreateRawParser(ParserHandler, Counters.Counters);
+            return CreateRawParser(ParserHandler, counters);
         }
         if (Settings.ParsingFormat == "json_each_row") {
-            return CreateJsonParser(ParserHandler, Config.JsonParserConfig, Counters.Counters);
+            return CreateJsonParser(ParserHandler, Config.JsonParserConfig, counters);
         }
         return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Unsupported parsing format: " << Settings.ParsingFormat);
     }

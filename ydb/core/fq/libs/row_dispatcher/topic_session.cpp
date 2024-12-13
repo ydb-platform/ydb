@@ -726,7 +726,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             ActorContext(),
             FormatHandlerConfig,
             handlerSettings,
-            {.CountersRoot = CountersRoot, .CountersSubgroup = Metrics.PartitionGroup, .CountersPath = "topic_session"}
+            {.CountersRoot = CountersRoot, .CountersSubgroup = Metrics.PartitionGroup}
         )}).first;
     }
 

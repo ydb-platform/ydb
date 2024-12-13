@@ -32,6 +32,7 @@ target_link_libraries(cpp-mapreduce-raw_client PUBLIC
 
 target_sources(cpp-mapreduce-raw_client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/raw_client/raw_batch_request.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/raw_client/raw_client.cpp
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/raw_client/raw_requests.cpp
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/raw_client/rpc_parameters_serialization.cpp
 )

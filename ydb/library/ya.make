@@ -27,6 +27,7 @@ RECURSE(
     query_actor
     schlab
     security
+    signal_backtrace
     table_creator
     testlib
     time_series_vec

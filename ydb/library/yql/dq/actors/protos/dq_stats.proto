@@ -409,6 +409,8 @@ message TDqStageStats {
     map<uint32, TDqAsyncBufferStatsAggr> Input = 22;   // input from other stage, per stage
     map<uint32, TDqAsyncBufferStatsAggr> Output = 23;  // output to other stage, per stage
 
+    // all operators share single default id "0" do put them into diferent maps
+    // will be joined into common map after unique id are implemented
     map<string, TDqOperatorStatsAggr> OperatorJoin = 43;
     map<string, TDqOperatorStatsAggr> OperatorFilter = 44;
     map<string, TDqOperatorStatsAggr> OperatorAggregation = 45;

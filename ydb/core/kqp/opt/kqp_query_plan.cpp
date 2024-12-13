@@ -2953,7 +2953,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     for (auto& [id, op] : (*stat)->GetOperatorJoin()) {
                         auto& operatorInfo = operatorStats.AppendValue(NJson::JSON_MAP);
                         operatorInfo["Type"] = "Join";
-                        operatorInfo["Id"] = op.GetOperatorId();
+                        operatorInfo["Id"] = id;
                         if (op.HasBytes()) {
                             FillAggrStat(operatorInfo, op.GetBytes(), "Bytes");
                         }
@@ -2964,7 +2964,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     for (auto& [id, op] : (*stat)->GetOperatorFilter()) {
                         auto& operatorInfo = operatorStats.AppendValue(NJson::JSON_MAP);
                         operatorInfo["Type"] = "Filter";
-                        operatorInfo["Id"] = op.GetOperatorId();
+                        operatorInfo["Id"] = id;
                         if (op.HasBytes()) {
                             FillAggrStat(operatorInfo, op.GetBytes(), "Bytes");
                         }
@@ -2975,7 +2975,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     for (auto& [id, op] : (*stat)->GetOperatorAggregation()) {
                         auto& operatorInfo = operatorStats.AppendValue(NJson::JSON_MAP);
                         operatorInfo["Type"] = "Aggregation";
-                        operatorInfo["Id"] = op.GetOperatorId();
+                        operatorInfo["Id"] = id;
                         if (op.HasBytes()) {
                             FillAggrStat(operatorInfo, op.GetBytes(), "Bytes");
                         }

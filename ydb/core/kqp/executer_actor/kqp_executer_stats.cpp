@@ -671,18 +671,21 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
         switch (operatorStat.GetTypeCase()) {
             case NYql::NDqProto::TDqOperatorStats::kJoin: {
                 auto& joinStats = (*stageStats->MutableOperatorJoin())[operatorStat.GetOperatorId()];
+                joinStats.SetOperatorId(operatorStat.GetOperatorId());
                 UpdateAggr(joinStats.MutableBytes(), operatorStat.GetBytes());
                 UpdateAggr(joinStats.MutableRows(), operatorStat.GetRows());
                 break;
             }
             case NYql::NDqProto::TDqOperatorStats::kFilter: {
                 auto& filterStats = (*stageStats->MutableOperatorFilter())[operatorStat.GetOperatorId()];
+                filterStats.SetOperatorId(operatorStat.GetOperatorId());
                 UpdateAggr(filterStats.MutableBytes(), operatorStat.GetBytes());
                 UpdateAggr(filterStats.MutableRows(), operatorStat.GetRows());
                 break;
             }
             case NYql::NDqProto::TDqOperatorStats::kAggregation: {
                 auto& aggrStats = (*stageStats->MutableOperatorAggregation())[operatorStat.GetOperatorId()];
+                aggrStats.SetOperatorId(operatorStat.GetOperatorId());
                 UpdateAggr(aggrStats.MutableBytes(), operatorStat.GetBytes());
                 UpdateAggr(aggrStats.MutableRows(), operatorStat.GetRows());
                 break;
@@ -1060,77 +1063,80 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
     }
 
-    for (auto& p : StageStats) {
-        auto& stageStats = *protoStages[p.second.StageId.StageId];
-        stageStats.SetTotalTasksCount(p.second.Task2Index.size());
+    for (auto& [stageId, stageStat] : StageStats) {
+        auto& stageStats = *protoStages[stageStat.StageId.StageId];
+        stageStats.SetTotalTasksCount(stageStat.Task2Index.size());
 
         stageStats.SetBaseTimeMs(BaseTimeMs);
-        p.second.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
-        ExportAggStats(p.second.SourceCpuTimeUs, *stageStats.MutableSourceCpuTimeUs());
-        p.second.MaxMemoryUsage.ExportAggStats(BaseTimeMs, *stageStats.MutableMaxMemoryUsage());
+        stageStat.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
+        ExportAggStats(stageStat.SourceCpuTimeUs, *stageStats.MutableSourceCpuTimeUs());
+        stageStat.MaxMemoryUsage.ExportAggStats(BaseTimeMs, *stageStats.MutableMaxMemoryUsage());
 
-        ExportAggStats(p.second.InputRows, *stageStats.MutableInputRows());
-        ExportAggStats(p.second.InputBytes, *stageStats.MutableInputBytes());
-        ExportAggStats(p.second.OutputRows, *stageStats.MutableOutputRows());
-        ExportAggStats(p.second.OutputBytes, *stageStats.MutableOutputBytes());
-        ExportAggStats(p.second.ResultRows, *stageStats.MutableResultRows());
-        ExportAggStats(p.second.ResultBytes, *stageStats.MutableResultBytes());
-        ExportAggStats(p.second.IngressRows, *stageStats.MutableIngressRows());
-        ExportAggStats(p.second.IngressBytes, *stageStats.MutableIngressBytes());
-        ExportAggStats(p.second.IngressDecompressedBytes, *stageStats.MutableIngressDecompressedBytes());
-        ExportAggStats(p.second.EgressRows, *stageStats.MutableEgressRows());
-        ExportAggStats(p.second.EgressBytes, *stageStats.MutableEgressBytes());
+        ExportAggStats(stageStat.InputRows, *stageStats.MutableInputRows());
+        ExportAggStats(stageStat.InputBytes, *stageStats.MutableInputBytes());
+        ExportAggStats(stageStat.OutputRows, *stageStats.MutableOutputRows());
+        ExportAggStats(stageStat.OutputBytes, *stageStats.MutableOutputBytes());
+        ExportAggStats(stageStat.ResultRows, *stageStats.MutableResultRows());
+        ExportAggStats(stageStat.ResultBytes, *stageStats.MutableResultBytes());
+        ExportAggStats(stageStat.IngressRows, *stageStats.MutableIngressRows());
+        ExportAggStats(stageStat.IngressBytes, *stageStats.MutableIngressBytes());
+        ExportAggStats(stageStat.IngressDecompressedBytes, *stageStats.MutableIngressDecompressedBytes());
+        ExportAggStats(stageStat.EgressRows, *stageStats.MutableEgressRows());
+        ExportAggStats(stageStat.EgressBytes, *stageStats.MutableEgressBytes());
 
-        ExportOffsetAggStats(p.second.StartTimeMs, *stageStats.MutableStartTimeMs(), BaseTimeMs);
-        ExportOffsetAggStats(p.second.FinishTimeMs, *stageStats.MutableFinishTimeMs(), BaseTimeMs);
-        ExportAggStats(p.second.DurationUs, *stageStats.MutableDurationUs());
-        ExportAggStats(p.second.WaitInputTimeUs, *stageStats.MutableWaitInputTimeUs());
-        ExportAggStats(p.second.WaitOutputTimeUs, *stageStats.MutableWaitOutputTimeUs());
+        ExportOffsetAggStats(stageStat.StartTimeMs, *stageStats.MutableStartTimeMs(), BaseTimeMs);
+        ExportOffsetAggStats(stageStat.FinishTimeMs, *stageStats.MutableFinishTimeMs(), BaseTimeMs);
+        ExportAggStats(stageStat.DurationUs, *stageStats.MutableDurationUs());
+        ExportAggStats(stageStat.WaitInputTimeUs, *stageStats.MutableWaitInputTimeUs());
+        ExportAggStats(stageStat.WaitOutputTimeUs, *stageStats.MutableWaitOutputTimeUs());
 
-        p.second.SpillingComputeBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeBytes());
-        p.second.SpillingChannelBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelBytes());
-        p.second.SpillingComputeTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeTimeUs());
-        p.second.SpillingChannelTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelTimeUs());
+        stageStat.SpillingComputeBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeBytes());
+        stageStat.SpillingChannelBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelBytes());
+        stageStat.SpillingComputeTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeTimeUs());
+        stageStat.SpillingChannelTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelTimeUs());
 
         FillStageDurationUs(stageStats);
 
-        for (auto& p2 : p.second.Tables) {
+        for (auto& [path, t] : stageStat.Tables) {
             auto& table = *stageStats.AddTables();
-            table.SetTablePath(p2.first);
-            ExportAggStats(p2.second.ReadRows, *table.MutableReadRows());
-            ExportAggStats(p2.second.ReadBytes, *table.MutableReadBytes());
-            ExportAggStats(p2.second.WriteRows, *table.MutableWriteRows());
-            ExportAggStats(p2.second.WriteBytes, *table.MutableWriteBytes());
-            ExportAggStats(p2.second.EraseRows, *table.MutableEraseRows());
-            ExportAggStats(p2.second.EraseBytes, *table.MutableEraseBytes());
-            table.SetAffectedPartitions(ExportAggStats(p2.second.AffectedPartitions));
+            table.SetTablePath(path);
+            ExportAggStats(t.ReadRows, *table.MutableReadRows());
+            ExportAggStats(t.ReadBytes, *table.MutableReadBytes());
+            ExportAggStats(t.WriteRows, *table.MutableWriteRows());
+            ExportAggStats(t.WriteBytes, *table.MutableWriteBytes());
+            ExportAggStats(t.EraseRows, *table.MutableEraseRows());
+            ExportAggStats(t.EraseBytes, *table.MutableEraseBytes());
+            table.SetAffectedPartitions(ExportAggStats(t.AffectedPartitions));
         }
-        for (auto& p2 : p.second.Ingress) {
-            ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableIngress())[p2.first]);
+        for (auto& [id, i] : stageStat.Ingress) {
+            ExportAggAsyncBufferStats(i, (*stageStats.MutableIngress())[id]);
         }
-        for (auto& p2 : p.second.Input) {
-            ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableInput())[p2.first]);
+        for (auto& [id, i] : stageStat.Input) {
+            ExportAggAsyncBufferStats(i, (*stageStats.MutableInput())[id]);
         }
-        for (auto& p2 : p.second.Output) {
-            ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableOutput())[p2.first]);
+        for (auto& [id, o] : stageStat.Output) {
+            ExportAggAsyncBufferStats(o, (*stageStats.MutableOutput())[id]);
         }
-        for (auto& p2 : p.second.Egress) {
-            ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableEgress())[p2.first]);
+        for (auto& [id, e] : stageStat.Egress) {
+            ExportAggAsyncBufferStats(e, (*stageStats.MutableEgress())[id]);
         }
-        for (auto& j : p.second.Joins) {
-            auto& joinStat = (*stageStats.MutableOperatorJoin())[j.first];
-            ExportAggStats(j.second.Bytes, *joinStat.MutableBytes());
-            ExportAggStats(j.second.Rows, *joinStat.MutableRows());
+        for (auto& [id, j] : stageStat.Joins) {
+            auto& joinStat = (*stageStats.MutableOperatorJoin())[id];
+            joinStat.SetOperatorId(id);
+            ExportAggStats(j.Bytes, *joinStat.MutableBytes());
+            ExportAggStats(j.Rows, *joinStat.MutableRows());
         }
-        for (auto& f : p.second.Filters) {
-            auto& filterStat = (*stageStats.MutableOperatorFilter())[f.first];
-            ExportAggStats(f.second.Bytes, *filterStat.MutableBytes());
-            ExportAggStats(f.second.Rows, *filterStat.MutableRows());
+        for (auto& [id, f] : stageStat.Filters) {
+            auto& filterStat = (*stageStats.MutableOperatorFilter())[id];
+            filterStat.SetOperatorId(id);
+            ExportAggStats(f.Bytes, *filterStat.MutableBytes());
+            ExportAggStats(f.Rows, *filterStat.MutableRows());
         }
-        for (auto& a : p.second.Aggregations) {
-            auto& aggrStat = (*stageStats.MutableOperatorAggregation())[a.first];
-            ExportAggStats(a.second.Bytes, *aggrStat.MutableBytes());
-            ExportAggStats(a.second.Rows, *aggrStat.MutableRows());
+        for (auto& [id, a] : stageStat.Aggregations) {
+            auto& aggrStat = (*stageStats.MutableOperatorAggregation())[id];
+            aggrStat.SetOperatorId(id);
+            ExportAggStats(a.Bytes, *aggrStat.MutableBytes());
+            ExportAggStats(a.Rows, *aggrStat.MutableRows());
         }
     }
 }

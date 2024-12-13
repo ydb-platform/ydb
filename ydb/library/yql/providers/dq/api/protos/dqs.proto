@@ -184,6 +184,7 @@ message TQueryResponse {
     uint64 RowsCount = 8;
     NYql.NDqProto.StatusIds.StatusCode StatusCode = 9;
     repeated NDqProto.TData Sample = 10;
+    bool Timeout = 11;
 }
 
 message TDqFailure {

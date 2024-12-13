@@ -315,6 +315,7 @@ private:
             .MayRunTasksLocally = false,
             .ResourceManager_ = Request.ResourceManager_,
             .CaFactory_ = Request.CaFactory_
+            // TODO: BlockTrackingMode is not set!
         });
 
         LOG_D("Execute scan tx, PendingComputeTasks: " << TasksGraph.GetTasks().size());

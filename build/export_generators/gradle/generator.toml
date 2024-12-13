@@ -27,6 +27,7 @@ junit5_test="flag"
 app_main_class="str"
 enable_preview="flag"
 use_annotation_processor="list"
+use_errorprone="flag"
 
 publish="flag"
 publish_group="str"

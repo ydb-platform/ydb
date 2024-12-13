@@ -517,7 +517,7 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
             return;
         }
         for (auto partitionId : record.GetChildPartitionsIds()) {
-            auto ev = MakeTEvRunWorker(replication, *target, partitionId);
+            auto ev = MakeRunWorkerEv(replication, *target, partitionId);
             Send(SelfId(), std::move(ev));
         }
     }
@@ -756,18 +756,22 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
         return;
     }
 
-    if (Replications.size() != 1) {
+    auto replication = GetSingle();
+    if (!replication) {
         CLOG_E(ctx, "Cannot assign tx id: ambiguous replication instance");
         return;
     }
 
-    const auto& config = Replications.begin()->second->GetConfig();
-    if (!config.HasStrongConsistency()) {
-        CLOG_E(ctx, "Cannot assign tx id: not in strong consistency mode");
+    const auto& config = replication->GetConfig().GetConsistencySettings();
+    switch (config.GetLevelCase()) {
+    case NKikimrReplication::TConsistencySettings::kGlobal:
+        break;
+    default:
+        CLOG_E(ctx, "Cannot assign tx id: consistency level is not global");
         return;
     }
 
-    const auto intervalMs = config.GetStrongConsistency().GetCommitIntervalMilliSeconds();
+    const auto intervalMs = config.GetGlobal().GetCommitIntervalMilliSeconds();
     for (const auto& version : ev->Get()->Record.GetVersions()) {
         const ui64 intervalNo = version.GetStep() / intervalMs;
         const auto adjustedVersion = TRowVersion(intervalMs * (intervalNo + 1), 0);
@@ -820,6 +824,14 @@ TReplication::TPtr TController::Find(const TPathId& pathId) const {
     }
 
     return it->second;
+}
+
+TReplication::TPtr TController::GetSingle() const {
+    if (Replications.size() != 1) {
+        return nullptr;
+    }
+
+    return Replications.begin()->second;
 }
 
 void TController::Remove(ui64 id) {

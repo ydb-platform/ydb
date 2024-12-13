@@ -1,6 +1,7 @@
 #include <util/string/join.h>
 
 #include <ydb/library/login/login.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/testlib/service_mocks/ldap_mock/ldap_simple_server.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -14,26 +15,74 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
+namespace NSchemeShardUT_Private {
+
+void SetPasswordCheckerParameters(TTestActorRuntime &runtime, ui64 schemeShard, const NLogin::TPasswordComplexity::TInitializer& initializer) {
+    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+
+    ::NKikimrProto::TPasswordComplexity passwordComplexity;
+    passwordComplexity.SetMinLength(initializer.MinLength);
+    passwordComplexity.SetMinLowerCaseCount(initializer.MinLowerCaseCount);
+    passwordComplexity.SetMinUpperCaseCount(initializer.MinUpperCaseCount);
+    passwordComplexity.SetMinNumbersCount(initializer.MinNumbersCount);
+    passwordComplexity.SetMinSpecialCharsCount(initializer.MinSpecialCharsCount);
+    passwordComplexity.SetSpecialChars(initializer.SpecialChars);
+    passwordComplexity.SetCanContainUsername(initializer.CanContainUsername);
+    *request->Record.MutableConfig()->MutableAuthConfig()->MutablePasswordComplexity() = passwordComplexity;
+    SetConfig(runtime, schemeShard, std::move(request));
+}
+
+}  // namespace NSchemeShardUT_Private
+
 Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
     Y_UNIT_TEST(BasicLogin) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            Cerr << describe.DebugString() << Endl;
+            UNIT_ASSERT(describe.HasPathDescription());
+            UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
+            UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetDomainDescription().GetSecurityState().SidsSize(), 0);
+        }
+
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            UNIT_ASSERT(describe.HasPathDescription());
+            UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
+            UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetDomainDescription().GetSecurityState().SidsSize(), 1);
+        }
+
+        // public keys are filled after the first login
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        UNIT_ASSERT(describe.HasPathDescription());
-        UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
-        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
-        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0);
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            UNIT_ASSERT(describe.HasPathDescription());
+            UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
+            UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetDomainDescription().GetSecurityState().SidsSize(), 1);
+        }
 
         // check token
-        NLogin::TLoginProvider login;
-        login.UpdateSecurityState(describe.GetPathDescription().GetDomainDescription().GetSecurityState());
-        auto resultValidate = login.ValidateToken({.Token = resultLogin.token()});
-        UNIT_ASSERT_VALUES_EQUAL(resultValidate.User, "user1");
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            NLogin::TLoginProvider login;
+            login.UpdateSecurityState(describe.GetPathDescription().GetDomainDescription().GetSecurityState());
+            auto resultValidate = login.ValidateToken({.Token = resultLogin.token()});
+            UNIT_ASSERT_VALUES_EQUAL(resultValidate.User, "user1");
+        }
     }
 
     Y_UNIT_TEST(DisableBuiltinAuthMechanism) {
@@ -50,6 +99,112 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
         UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
         UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0);
+    }
+
+    Y_UNIT_TEST(ChangeAcceptablePasswordParameters) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        // Password parameters:
+        //  min length 0
+        //  optional: lower case, upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
+        // required: cannot contain username
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+        UNIT_ASSERT(describe.HasPathDescription());
+        UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
+        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
+        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0);
+
+        // Accept password without lower case symbols
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "PASSWORDU2");
+         resultLogin = Login(runtime, "user2", "PASSWORDU2");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        // Password parameters:
+        //  min length 0
+        //  optional: upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
+        //  required: lower case = 3, cannot contain username
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLowerCaseCount = 3});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user3", "PASSWORDU3", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 lower case character"}});
+        // Add lower case symbols to password
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user3", "PASswORDu3");
+        resultLogin = Login(runtime, "user3", "PASswORDu3");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+
+        // Accept password without upper case symbols
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user4", "passwordu4");
+        resultLogin = Login(runtime, "user4", "passwordu4");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        // Password parameters:
+        //  min length 0
+        //  optional: lower case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
+        //  required: upper case = 3, cannot contain username
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLowerCaseCount = 0, .MinUpperCaseCount = 3});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user5", "passwordu5", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 upper case character"}});
+        // Add 3 upper case symbols to password
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user5", "PASswORDu5");
+        resultLogin = Login(runtime, "user5", "PASswORDu5");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+
+        // Accept short password
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinUpperCaseCount = 0});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user6", "passwu6");
+        resultLogin = Login(runtime, "user6", "passwu6");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        // Password parameters:
+        //  min length 8
+        //  optional: lower case, upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
+        //  required: cannot contain username
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLength = 8});
+        // Too short password
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user7", "passwu7", {{NKikimrScheme::StatusPreconditionFailed, "Password is too short"}});
+        // Password has correct length
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user7", "passwordu7");
+        resultLogin = Login(runtime, "user7", "passwordu7");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+
+        // Accept password without numbers
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLength = 0});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user8", "passWorDueitgh");
+        resultLogin = Login(runtime, "user8", "passWorDueitgh");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        // Password parameters:
+        //  min length 0
+        //  optional: lower case, upper case,special symbols from list !@#$%^&*()_+{}|<>?=
+        //  required: numbers = 3, cannot contain username
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinNumbersCount = 3});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user9", "passwordunine", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 number"}});
+        // Password with numbers
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user9", "pas1swo5rdu9");
+        resultLogin = Login(runtime, "user9", "pas1swo5rdu9");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+
+        // Accept password without special symbols
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinNumbersCount = 0});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user10", "passWorDu10");
+        resultLogin = Login(runtime, "user10", "passWorDu10");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        // Password parameters:
+        //  min length 0
+        //  optional: lower case, upper case, numbers
+        //  required: special symbols from list !@#$%^&*()_+{}|<>?= , cannot contain username
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinSpecialCharsCount = 3});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user11", "passwordu11", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 special character"}});
+        // Password with special symbols
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user11", "passwordu11*&%#");
+        resultLogin = Login(runtime, "user11", "passwordu11*&%#");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        // Password parameters:
+        //  min length 0
+        //  optional: lower case, upper case, numbers
+        //  required: special symbols from list *# , cannot contain username
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.SpecialChars = "*#"}); // Only 2 special symbols are valid
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user12", "passwordu12*&%#", {{NKikimrScheme::StatusPreconditionFailed, "Password contains unacceptable characters"}});
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user12", "passwordu12*#");
+        resultLogin = Login(runtime, "user12", "passwordu12*#");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
     }
 }
 

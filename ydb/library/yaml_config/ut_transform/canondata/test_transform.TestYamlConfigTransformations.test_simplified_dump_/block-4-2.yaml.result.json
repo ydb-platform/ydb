@@ -1508,5 +1508,9 @@
         [
           "legacy"
         ]
+    },
+  "AuthConfig":
+    {
+      "PathToRootCA":"/opt/ydb/certs/ca.crt"
     }
 }

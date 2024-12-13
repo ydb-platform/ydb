@@ -593,6 +593,9 @@ Y_UNIT_TEST(If) {
         {"evaluate if 1=1 do begin select 1; end do else do begin select 2; end do",
             "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1\n\t;\nEND DO "
             "ELSE DO BEGIN\n\tSELECT\n\t\t2\n\t;\nEND DO;\n"},
+        {"evaluate if 1=1 do begin; select 1 end do else do begin select 2;; select 3 end do",
+            "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1\n\t;\nEND DO ELSE DO BEGIN\n\t"
+            "SELECT\n\t\t2\n\t;\n\n\tSELECT\n\t\t3\n\t;\nEND DO;\n"}
     };
 
     TSetup setup;
@@ -611,6 +614,8 @@ Y_UNIT_TEST(For) {
             "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x\n\t;\nEND DO ELSE DO BEGIN\n\tSELECT\n\t\t2\n\t;\nEND DO;\n"},
         {"evaluate parallel for $x in [] do $a($x)",
             "EVALUATE PARALLEL FOR $x IN [] DO\n\t$a($x)\n;\n"},
+        {"evaluate for $x in [] do begin; select $x;; select $y end do",
+            "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x\n\t;\n\n\tSELECT\n\t\t$y\n\t;\nEND DO;\n"},
     };
 
     TSetup setup;
@@ -867,8 +872,10 @@ Y_UNIT_TEST(Select) {
             "SELECT\n\t1\nLIMIT 10;\n"},
         {"select 1 limit 10 offset 5",
             "SELECT\n\t1\nLIMIT 10 OFFSET 5;\n"},
-        { "select 1 union all select 2",
+        {"select 1 union all select 2",
             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\n;\n" },
+        {"select * from $user where key == 1 -- comment",
+            "SELECT\n\t*\nFROM\n\t$user\nWHERE\n\tkey == 1 -- comment\n;\n"},
     };
 
     TSetup setup;

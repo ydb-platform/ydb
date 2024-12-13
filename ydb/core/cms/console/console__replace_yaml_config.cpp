@@ -3,6 +3,7 @@
 #include "console_audit.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
@@ -100,12 +101,17 @@ public:
 
                 UnknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
 
+                std::vector<TString> errors;
                 for (auto& [_, config] : resolved.Configs) {
                     auto cfg = NYamlConfig::YamlToProto(
                         config.second,
                         true,
                         true,
                         UnknownFieldsCollector);
+                    NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
+                    if (result == NKikimr::NConfig::EValidationResult::Error) {
+                        ythrow yexception() << errors.front();
+                    }
                 }
 
                 const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();

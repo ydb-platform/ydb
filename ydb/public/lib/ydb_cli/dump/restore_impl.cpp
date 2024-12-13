@@ -7,6 +7,7 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/log.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
@@ -275,16 +276,16 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
             TStringBuilder() << "Specified folder is not a directory: " << fsPath.GetPath());
     }
 
-    if (IsFileExists(fsPath.Child(INCOMPLETE_FILE_NAME))) {
+    if (IsFileExists(fsPath.Child(NFiles::Incomplete().FileName))) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
     }
 
-    if (IsFileExists(fsPath.Child(SCHEME_FILE_NAME))) {
+    if (IsFileExists(fsPath.Child(NFiles::TableScheme().FileName))) {
         return RestoreTable(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
     }
 
-    if (IsFileExists(fsPath.Child(EMPTY_FILE_NAME))) {
+    if (IsFileExists(fsPath.Child(NFiles::Empty().FileName))) {
         return RestoreEmptyDir(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
     }
 
@@ -293,9 +294,9 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     TVector<TFsPath> children;
     fsPath.List(children);
     for (const auto& child : children) {
-        if (IsFileExists(child.Child(SCHEME_FILE_NAME))) {
+        if (IsFileExists(child.Child(NFiles::TableScheme().FileName))) {
             result = RestoreTable(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
-        } else if (IsFileExists(child.Child(EMPTY_FILE_NAME))) {
+        } else if (IsFileExists(child.Child(NFiles::Empty().FileName))) {
             result = RestoreEmptyDir(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
         } else if (child.IsDirectory()) {
             result = RestoreFolder(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
@@ -314,12 +315,12 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
-    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
     }
 
-    auto scheme = ReadTableScheme(fsPath.Child(SCHEME_FILE_NAME), Log.get());
+    auto scheme = ReadTableScheme(fsPath.Child(NFiles::TableScheme().FileName), Log.get());
     auto dumpedDesc = TableDescriptionFromProto(scheme);
 
     if (dumpedDesc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
@@ -629,7 +630,7 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
 TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const TString& dbPath,
     const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
 {   
-    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
     }
@@ -642,13 +643,13 @@ TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const T
         return Result<TRestoreResult>();
     }
 
-    if (!fsPath.Child(PERMISSIONS_FILE_NAME).Exists()) {
+    if (!fsPath.Child(NFiles::Permissions().FileName).Exists()) {
         return Result<TRestoreResult>();
     }
 
     LOG_D("Restore ACL " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
-    auto permissions = ReadPermissions(fsPath.Child(PERMISSIONS_FILE_NAME), Log.get());
+    auto permissions = ReadPermissions(fsPath.Child(NFiles::Permissions().FileName), Log.get());
     return ModifyPermissions(SchemeClient, dbPath, TModifyPermissionsSettings(permissions));
 }
 
@@ -657,7 +658,7 @@ TRestoreResult TRestoreClient::RestoreEmptyDir(const TFsPath& fsPath, const TStr
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
-    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
     }

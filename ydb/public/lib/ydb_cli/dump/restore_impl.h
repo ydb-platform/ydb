@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <util/folder/path.h>
 #include <util/generic/hash_set.h>
@@ -148,6 +149,7 @@ private:
     NOperation::TOperationClient OperationClient;
     NScheme::TSchemeClient SchemeClient;
     NTable::TTableClient TableClient;
+    NTopic::TTopicClient TopicClient;
     std::shared_ptr<TLog> Log;
 
 }; // TRestoreClient

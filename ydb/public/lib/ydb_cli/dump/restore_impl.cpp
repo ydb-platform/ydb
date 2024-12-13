@@ -187,6 +187,7 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
     , OperationClient(driver)
     , SchemeClient(driver)
     , TableClient(driver)
+    , TopicClient(driver)
     , Log(log)
 {
 }
@@ -334,33 +335,6 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
-TString MapToYQLFormat(EChangefeedFormat format) {
-    static THashMap<EChangefeedFormat, TString> map = {
-        {EChangefeedFormat::Json, "JSON"},
-        {EChangefeedFormat::DebeziumJson, "DEBEZIUM_JSON"},
-    };
-    return map[format];
-}
-
-TString MapToYQLFormat(EChangefeedMode mode) {
-    static THashMap<EChangefeedMode, TString> map = {
-        {EChangefeedMode::KeysOnly, "KEYS_ONLY"},
-        {EChangefeedMode::Updates, "UPDATES"},
-        {EChangefeedMode::NewImage, "NEW_IMAGE"},
-        {EChangefeedMode::OldImage, "OLD_IMAGE"},
-        {EChangefeedMode::NewAndOldImages, "NEW_AND_OLD_IMAGES"},
-    };
-    return map[mode];
-}
-
-TString MapToYQLFormat(bool flag) {
-    return (flag ? "TRUE" : "FALSE");
-}
-
-TString MapToYQLFormat(TDuration period) {
-    return TStringBuilder() << "Interval('PT" << period.Hours() << "H')";
-}
-
 TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const TString& dbPath) {
     LOG_D("Process " << fsPath.GetPath().Quote());
     if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
@@ -376,33 +350,29 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
 
     changefeedDesc = changefeedDesc.WithRetentionPeriod(topicDesc.GetRetentionPeriod());
 
-    auto createResult = TableClient.RetryOperationSync([&changefeedDesc, &topicDesc, &dbPath](TSession session) {
-        using namespace fmt::literals; 
-
-        return session.ExecuteSchemeQuery(fmt::format(R"(
-                        ALTER TABLE `{table_name}`
-                        ADD CHANGEFEED `{changefeed_name}`
-                        WITH (
-                            FORMAT = '{format}',
-                            MODE = '{mode}',
-                            VIRTUAL_TIMESTAMPS = {virtual_timestamp},
-                            RETENTION_PERIOD = {retention_period}
-                        );
-                    )",
-                    "table_name"_a = dbPath,
-                    "changefeed_name"_a = changefeedDesc.GetName(),
-                    "format"_a = MapToYQLFormat(changefeedDesc.GetFormat()),
-                    "mode"_a = MapToYQLFormat(changefeedDesc.GetMode()),
-                    "virtual_timestamp"_a = MapToYQLFormat(changefeedDesc.GetVirtualTimestamps()),
-                    "retention_period"_a = MapToYQLFormat(topicDesc.GetRetentionPeriod())
-                    )
-                ).GetValueSync();
+    auto createResult = TableClient.RetryOperationSync([&changefeedDesc, &dbPath](TSession session) {
+        return session.AlterTable(dbPath, TAlterTableSettings().AppendAddChangefeeds(changefeedDesc)).GetValueSync();
     });
     if (createResult.IsSuccess()) {
         LOG_D("Created " << fsPath.GetPath().Quote());
     } else {
         LOG_E("Failed to create " << fsPath.GetPath().Quote());
         return Result<TRestoreResult>(fsPath.GetPath(), std::move(createResult));
+    }
+
+    for (auto& consumer : topicDesc.GetConsumers()) {
+        auto createResult = TopicClient.AlterTopic(Join("/", dbPath, fsPath.GetName()),
+            NTopic::TAlterTopicSettings()
+                                .BeginAddConsumer()
+                                .ConsumerName(consumer.GetConsumerName())
+                                .EndAddConsumer()
+        ).GetValueSync();
+        if (createResult.IsSuccess()) {
+            LOG_D("Created consumer " << consumer.GetConsumerName() << " for " << fsPath.GetPath().Quote());
+        } else {
+            LOG_E("Failed to create " << consumer.GetConsumerName() << " for " << fsPath.GetPath().Quote());
+            return Result<TRestoreResult>(fsPath.GetPath(), std::move(createResult));
+        }
     }
 
     return Result<TRestoreResult>();

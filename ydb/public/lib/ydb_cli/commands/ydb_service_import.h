@@ -64,8 +64,6 @@ protected:
     ui64 MaxInFlightRequests = 1;
     ui64 Threads = 0;
     TDuration OperationTimeout;
-    bool SuggestCreateTable = false;
-    TString RelativeTablePath;
 };
 
 class TCommandImportFromCsv : public TCommandImportFileBase {
@@ -84,7 +82,6 @@ protected:
     TString Delimiter;
     std::optional<TString> NullValue;
     ui32 SkipRows = 0;
-    std::optional<ui32> RowsToAnalyze = std::nullopt;
     bool Header = false;
     bool NewlineDelimited = true;
 };

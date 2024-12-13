@@ -72,7 +72,6 @@ public:
     //   dbPath: full path to the database table, including the database path
     //   settings: input data format and operational settings
     TStatus Import(const TVector<TString>& filePaths, const TString& dbPath);
-    TStatus SuggestCreateTableRequest(const TVector<TString>& filePaths, const TString& relativeTablePath);
 
 private:
     class TImpl;

@@ -52,6 +52,8 @@ namespace NYdb {
 namespace NConsoleClient {
 namespace {
 
+static const ui64 rowsToAnalyze = 100000;
+
 inline
 TStatus MakeStatus(EStatus code = EStatus::SUCCESS, const TString& error = {}) {
     NYql::TIssues issues;
@@ -484,7 +486,6 @@ public:
     explicit TImpl(const TDriver& driver, const TClientCommand::TConfig& rootConfig,
                                      const TImportFileSettings& settings);
     TStatus Import(const TVector<TString>& filePaths, const TString& dbPath);
-    TStatus SuggestCreateTableRequest(const TVector<TString>& filePaths, const TString& relativeTablePath);
 
 private:
     using ProgressCallbackFunc = std::function<void (ui64, ui64)>;
@@ -513,9 +514,10 @@ private:
     TStatus GenerateCreateTableFromCsv(IInputStream& input,
                     const TString& relativeTablePath,
                     const TString& filePath,
-                    std::optional<ui64> inputSizeHint,
-                    ProgressCallbackFunc & progressCallback,
-                    std::shared_ptr<TJobInFlightManager> jobInflightManager);
+                    std::shared_ptr<TJobInFlightManager> jobInflightManager,
+                    TStringBuilder& output);
+    TStatus SuggestCreateTableRequest(const TVector<TString>& filePaths, const TString& relativeTablePath,
+                                      TString& suggestion);
 
     const TDriver& Driver;
     std::shared_ptr<NTable::TTableClient> TableClient;
@@ -551,11 +553,6 @@ TImportFileClient::TImportFileClient(const TDriver& driver, const TClientCommand
 
 TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TString& dbPath) {
     return Impl_->Import(filePaths, dbPath);
-}
-
-
-TStatus TImportFileClient::SuggestCreateTableRequest(const TVector<TString>& filePaths, const TString& relativeTablePath) {
-    return Impl_->SuggestCreateTableRequest(filePaths, relativeTablePath);
 }
 
 TImportFileClient::TImpl::TImpl(const TDriver& driver, const TClientCommand::TConfig& rootConfig,
@@ -599,8 +596,16 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
         if (describeStatus.GetStatus() == EStatus::SCHEME_ERROR) {
             auto describePathResult = NDump::DescribePath(*SchemeClient, dbPath);
             if (describePathResult.GetStatus() != EStatus::SUCCESS) {
-                return MakeStatus(EStatus::SCHEME_ERROR,
-                    TStringBuilder() << describePathResult.GetIssues().ToString() << dbPath);
+                TStringBuilder errorMessage;
+                errorMessage << describePathResult.GetIssues().ToString() << dbPath << Endl;
+                TString suggestMessage;
+                auto suggestStatus = SuggestCreateTableRequest(filePaths, dbPath, suggestMessage);
+                if (suggestStatus.IsSuccess()) {
+                    errorMessage << suggestMessage << Endl;
+                } else {
+                    errorMessage << "Error while trying to generate CREATE TABLE request suggestion: " << suggestStatus << Endl;
+                }
+                return MakeStatus(EStatus::SCHEME_ERROR, errorMessage);
             }
         }
         return describeStatus;
@@ -801,8 +806,30 @@ std::shared_ptr<TProgressFile> TImportFileClient::TImpl::LoadOrStartImportProgre
     return progressFile;
 }
 
-TStatus TImportFileClient::TImpl::SuggestCreateTableRequest(const TVector<TString>& filePaths, const TString& relativeTablePath) {
-    CurrentFileCount = filePaths.size();
+std::shared_ptr<TProgressFile> TImportFileClient::TImpl::LoadOrStartImportProgress(const TString& filePath) {
+    std::shared_ptr<TProgressFile> progressFile;
+    if (Settings.Format_ == EDataFormat::Csv || Settings.Format_ == EDataFormat::Tsv) {
+        progressFile = std::make_shared<TProgressFile>(filePath);
+        if (progressFile->Load()) {
+            if (progressFile->IsCompleted()) { // File was already fully imported in an interrupted import
+                ++FilesPreviouslyCompleted;
+                --CurrentFileCount;
+            } else if (progressFile->HasLastImportedLine()) { // File hase saved progress from previous import
+                ++FilesPreviouslyStarted;
+                if (!PreviouslyStartedProgressFile) {
+                    PreviouslyStartedProgressFile = progressFile;
+                }
+            }
+        }
+        ProgressFiles.push_back(progressFile);
+    }
+    return progressFile;
+}
+
+TStatus TImportFileClient::TImpl::SuggestCreateTableRequest(const TVector<TString>& filePaths,
+        const TString& relativeTablePath, TString& suggestion) {
+    // All files should have the same scheme so probably no need to analyze more than one file
+    CurrentFileCount = 1;
     if (Settings.Format_ == EDataFormat::Tsv && Settings.Delimiter_ != "\t") {
         return MakeStatus(EStatus::BAD_REQUEST,
             TStringBuilder() << "Illegal delimiter for TSV format, only tab is allowed");
@@ -813,19 +840,7 @@ TStatus TImportFileClient::TImpl::SuggestCreateTableRequest(const TVector<TStrin
         .ClientTimeout(Settings.ClientTimeout_);
 
     bool isStdoutInteractive = IsStdoutInteractive();
-    size_t filePathsSize = filePaths.size();
-    std::mutex progressWriteLock;
-    std::atomic<ui64> globalProgress{0};
-
-    TProgressBar progressBar(100);
-
-    auto writeProgress = [&]() {
-        ui64 globalProgressValue = globalProgress.load();
-        std::lock_guard<std::mutex> lock(progressWriteLock);
-        progressBar.SetProcess(globalProgressValue / filePathsSize);
-    };
-
-    auto start = TInstant::Now();
+    size_t filePathsSize = 1;
 
     auto pool = CreateThreadPool(filePathsSize);
     TVector<NThreading::TFuture<TStatus>> asyncResults;
@@ -842,6 +857,8 @@ TStatus TImportFileClient::TImpl::SuggestCreateTableRequest(const TVector<TStrin
             inflightManagers.push_back(std::make_shared<TJobInFlightManager>(i, filePathsSize, maxJobInflight));
         }
     }
+
+    TStringBuilder result;
 
     for (size_t fileOrderNumber = 0; fileOrderNumber < filePathsSize; ++fileOrderNumber) {
         const auto& filePath = filePaths[fileOrderNumber];
@@ -871,19 +888,6 @@ TStatus TImportFileClient::TImpl::SuggestCreateTableRequest(const TVector<TStrin
                 fileInput = std::make_unique<TFileInput>(file, Settings.FileBufferSize_);
             }
 
-            ProgressCallbackFunc progressCallback;
-
-            if (isStdoutInteractive) {
-                ui64 oldProgress = 0;
-                progressCallback = [&, oldProgress](ui64 current, ui64 total) mutable {
-                    ui64 progress = static_cast<ui64>((static_cast<double>(current) / total) * 100.0);
-                    ui64 progressDiff = progress - oldProgress;
-                    globalProgress.fetch_add(progressDiff);
-                    oldProgress = progress;
-                    writeProgress();
-                };
-            }
-
             IInputStream& input = fileInput ? *fileInput : Cin;
 
             try {
@@ -892,8 +896,8 @@ TStatus TImportFileClient::TImpl::SuggestCreateTableRequest(const TVector<TStrin
                     case EDataFormat::Csv:
                     case EDataFormat::Tsv:
                     {
-                        auto status = GenerateCreateTableFromCsv(input, relativeTablePath, filePath, fileSizeHint, progressCallback,
-                            inflightManagers.at(fileOrderNumber));
+                        auto status = GenerateCreateTableFromCsv(input, relativeTablePath, filePath,
+                            inflightManagers.at(fileOrderNumber), result);
                         std::lock_guard<std::mutex> lock(inflightManagersLock);
                         inflightManagers[fileOrderNumber]->Finish();
                         size_t informedManagers = 0;
@@ -929,15 +933,7 @@ TStatus TImportFileClient::TImpl::SuggestCreateTableRequest(const TVector<TStrin
             return result;
         }
     }
-
-    auto finish = TInstant::Now();
-    auto duration = finish - start;
-    progressBar.SetProcess(100);
-    if (duration.SecondsFloat() > 0) {
-        std::cerr << "Elapsed: " << std::setprecision(3) << duration.SecondsFloat() << " sec. Total read size: "
-            << PrettifyBytes(TotalBytesRead) << ". Average processing speed: "
-            << PrettifyBytes((double)TotalBytesRead / duration.SecondsFloat())  << "/s." << std::endl;
-    }
+    suggestion = result;
 
     return MakeStatus(EStatus::SUCCESS);
 }
@@ -1316,13 +1312,10 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
 TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input,
                     const TString& relativeTablePath,
                     const TString& filePath,
-                    std::optional<ui64> inputSizeHint,
-                    ProgressCallbackFunc & progressCallback,
-                    std::shared_ptr<TJobInFlightManager> jobInflightManager) {
+                    std::shared_ptr<TJobInFlightManager> jobInflightManager,
+                    TStringBuilder& output) {
     TCountingInput countInput(&input);
     NCsvFormat::TLinesSplitter splitter(countInput);
-
-    TInstant fileStartTime = TInstant::Now();
 
     TCsvParser parser;
     bool removeLastDelimiter = false;
@@ -1356,9 +1349,7 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
     }
 
     ui64 row = Settings.SkipRows_ + Settings.Header_;
-    ui64 nextBorder = VerboseModeStepSize;
     ui64 batchBytes = 0;
-    ui64 readBytes = 0;
 
     TString line;
     std::vector<TAsyncStatus> inFlightRequests;
@@ -1383,13 +1374,12 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
 
     while (TString line = splitter.ConsumeLine()) {
         ++row;
-        if (Settings.RowsToAnalyze_ && row > Settings.RowsToAnalyze_) {
+        if (row > rowsToAnalyze) {
             break;
         }
         if (line.empty()) {
             continue;
         }
-        readBytes += line.size();
         batchBytes += line.size();
 
         if (removeLastDelimiter) {
@@ -1402,17 +1392,8 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
 
         buffer.push_back(line);
 
-        if (readBytes >= nextBorder && Settings.Verbose_) {
-            nextBorder += VerboseModeStepSize;
-            Cerr << (TStringBuilder() << "Processed " << PrettifyBytes(readBytes) << " and " << row << " records" << Endl);
-        }
-
         if (batchBytes < Settings.BytesPerRequest_) {
             continue;
-        }
-
-        if (inputSizeHint && progressCallback) {
-            progressCallback(readBytes, *inputSizeHint);
         }
 
         auto workerFunc = [&checkCsvFunc, row, buffer = std::move(buffer)]() mutable {
@@ -1441,13 +1422,12 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
     jobInflightManager->WaitForAllJobs();
 
     TStringBuilder res;
+    res << "-- Example CreateTable request text generated based on data in file " << filePath << ":" << Endl;
     res << "CREATE TABLE " << (relativeTablePath.empty() ? "`new_table`" : "`" + relativeTablePath + "`")<< " (" << Endl;
     auto& possibleTypes = columnTypes.GetColumnPossibleTypes();
     for (size_t i = 0; i < header.size(); ++i) {
         auto& possibleType = possibleTypes[i];
         auto& possibleTypeIt = possibleType.GetIterator();
-        //std::string columnName = header[i];
-        //std::replace(columnName.begin(), columnName.end(), ' ', '_');
         TString typeText = possibleTypeIt != possibleType.GetAvailableTypesEnd()
             && possibleType.GetHasNonNulls() ? possibleTypeIt->ToString() : "Text";
         res << "    `" << header[i] << "` " << typeText;
@@ -1464,39 +1444,16 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
     res <<
 R"()
 WITH (
-    STORE = COLUMN -- or ROW
+    STORE = ROW -- or COLUMN
+    -- Other useful table options:
     --, AUTO_PARTITIONING_BY_SIZE = ENABLED,
     --, AUTO_PARTITIONING_BY_LOAD = ENABLED,
     --, UNIFORM_PARTITIONS = 100,
-    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
+    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100,
+    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000
 );
 )";
-    TString createQueryRequest = res;
-    Cout << (TStringBuilder() << Endl << "Example CreateTable request text for file " << filePath << ":" << Endl << createQueryRequest);
-
-    if (CurrentFileCount == 1) {
-        //Cerr << "Do you want to execute this CREATE QUERY request? (y/n): ";
-        if (true/*AskYesOrNo()*/) {
-            NQuery::TQueryClient queryClient(Driver);
-            ThrowOnError(queryClient.RetryQuerySync([&createQueryRequest](NQuery::TSession session) {
-                return session.ExecuteQuery(createQueryRequest, NQuery::TTxControl::NoTx()).GetValueSync();
-            }));
-            Cerr << "CREATE QUERY request executed successfully" << Endl;
-        }
-    }
-
-    TotalBytesRead += readBytes;
-
-    if (Settings.Verbose_) {
-        std::stringstream str;
-        double fileProcessingTimeSeconds = (TInstant::Now() - fileStartTime).SecondsFloat();
-        str << std::endl << "File " << filePath << " of " << PrettifyBytes(readBytes)
-            << (Failed ? " failed in " : " processed in ") << std::setprecision(3) << fileProcessingTimeSeconds << " sec";
-        if (fileProcessingTimeSeconds > 0) {
-            str << ", " << PrettifyBytes((double)readBytes / fileProcessingTimeSeconds)  << "/s" << std::endl;
-        }
-        std::cerr << str.str();
-    }
+    output << res;
     if (Failed) {
         return *ErrorStatus;
     } else {

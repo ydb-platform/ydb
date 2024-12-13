@@ -519,7 +519,6 @@ private:
     TStatus SuggestCreateTableRequest(const TVector<TString>& filePaths, const TString& relativeTablePath,
                                       TString& suggestion);
 
-    const TDriver& Driver;
     std::shared_ptr<NTable::TTableClient> TableClient;
     std::shared_ptr<NScheme::TSchemeClient> SchemeClient;
     const TImportFileSettings& Settings;
@@ -557,8 +556,7 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
 
 TImportFileClient::TImpl::TImpl(const TDriver& driver, const TClientCommand::TConfig& rootConfig,
                                     const TImportFileSettings& settings)
-    : Driver(driver)
-    , TableClient(std::make_shared<NTable::TTableClient>(driver))
+    : TableClient(std::make_shared<NTable::TTableClient>(driver))
     , SchemeClient(std::make_shared<NScheme::TSchemeClient>(driver))
     , Settings(settings)
 {
@@ -839,7 +837,6 @@ TStatus TImportFileClient::TImpl::SuggestCreateTableRequest(const TVector<TStrin
         .OperationTimeout(Settings.OperationTimeout_)
         .ClientTimeout(Settings.ClientTimeout_);
 
-    bool isStdoutInteractive = IsStdoutInteractive();
     size_t filePathsSize = 1;
 
     auto pool = CreateThreadPool(filePathsSize);

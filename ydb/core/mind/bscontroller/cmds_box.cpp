@@ -280,4 +280,29 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TStopPDisk& cmd, TStatus& /*status*/) {
+        auto targetPDiskId = cmd.GetTargetPDiskId();
+
+        TPDiskId pdiskId(targetPDiskId.GetNodeId(), targetPDiskId.GetPDiskId());
+
+        TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
+
+        if (!pdisk) {
+            throw TExPDiskNotFound(pdiskId.NodeId, pdiskId.PDiskId);
+        }
+
+        pdisk->Mood = TPDiskMood::Stop;
+
+        for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) {
+            if (slot->Group) {
+                auto *m = VSlots.FindForUpdate(slot->VSlotId);
+                m->VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                m->IsReady = false;
+                TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
+                GroupFailureModelChanged.insert(slot->Group->ID);
+                group->CalculateGroupStatus();
+            }
+        }
+    }
+
 } // namespace NKikimr::NBsController

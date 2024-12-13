@@ -34,7 +34,8 @@ struct TPDiskMood {
     enum EValue : ui8 {
         Normal = 0,
         Restarting = 1,
-        ReadOnly = 2
+        ReadOnly = 2,
+        Stop = 3
     };
 
     static TString Name(const EValue value) {
@@ -45,6 +46,8 @@ struct TPDiskMood {
                 return "Restarting";
             case ReadOnly:
                 return "ReadOnly";
+            case Stop:
+                return "Stop";
         }
         return Sprintf("Unknown%" PRIu64, (ui64)value);
     }

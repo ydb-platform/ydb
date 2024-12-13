@@ -79,38 +79,6 @@ void ExecuteBatch(
     }
 }
 
-TNodeId CopyWithoutRetries(
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& sourcePath,
-    const TYPath& destinationPath,
-    const TCopyOptions& options)
-{
-    THttpHeader header("POST", "copy");
-    TMutationId mutationId;
-    header.AddMutationId();
-    header.MergeParameters(SerializeParamsForCopy(transactionId, context.Config->Prefix, sourcePath, destinationPath, options));
-    return ParseGuidFromResponse(RequestWithoutRetry(context, mutationId, header).Response);
-}
-
-TNodeId CopyInsideMasterCell(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& sourcePath,
-    const TYPath& destinationPath,
-    const TCopyOptions& options)
-{
-    THttpHeader header("POST", "copy");
-    header.AddMutationId();
-    auto params = SerializeParamsForCopy(transactionId, context.Config->Prefix, sourcePath, destinationPath, options);
-
-    // Make cross cell copying disable.
-    params["enable_cross_cell_copying"] = false;
-    header.MergeParameters(params);
-    return ParseGuidFromResponse(RetryRequestWithPolicy(retryPolicy, context, header).Response);
-}
-
 TNodeId MoveWithoutRetries(
     const TClientContext& context,
     const TTransactionId& transactionId,

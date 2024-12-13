@@ -39,21 +39,6 @@ void ExecuteBatch(
 // Cypress
 //
 
-TNodeId CopyWithoutRetries(
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& sourcePath,
-    const TYPath& destinationPath,
-    const TCopyOptions& options = TCopyOptions());
-
-TNodeId CopyInsideMasterCell(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& sourcePath,
-    const TYPath& destinationPath,
-    const TCopyOptions& options = TCopyOptions());
-
 TNodeId MoveWithoutRetries(
     const TClientContext& context,
     const TTransactionId& transactionId,

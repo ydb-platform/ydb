@@ -50,6 +50,20 @@ public:
         const TYPath& path,
         const ENodeType& type,
         const TCreateOptions& options = {}) = 0;
+
+    virtual TNodeId CopyWithoutRetries(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TYPath& sourcePath,
+        const TYPath& destinationPath,
+        const TCopyOptions& options = {}) = 0;
+
+    virtual TNodeId CopyInsideMasterCell(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TYPath& sourcePath,
+        const TYPath& destinationPath,
+        const TCopyOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

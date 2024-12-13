@@ -94,6 +94,37 @@ TNodeId THttpRawClient::Create(
     return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
 }
 
+
+TNodeId THttpRawClient::CopyWithoutRetries(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    const TYPath& sourcePath,
+    const TYPath& destinationPath,
+    const TCopyOptions& options)
+{
+    THttpHeader header("POST", "copy");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForCopy(transactionId, Context_.Config->Prefix, sourcePath, destinationPath, options));
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+}
+
+TNodeId THttpRawClient::CopyInsideMasterCell(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    const TYPath& sourcePath,
+    const TYPath& destinationPath,
+    const TCopyOptions& options)
+{
+    THttpHeader header("POST", "copy");
+    header.AddMutationId();
+    auto params = NRawClient::SerializeParamsForCopy(transactionId, Context_.Config->Prefix, sourcePath, destinationPath, options);
+
+    // Make cross cell copying disable.
+    params["enable_cross_cell_copying"] = false;
+    header.MergeParameters(params);
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDetail

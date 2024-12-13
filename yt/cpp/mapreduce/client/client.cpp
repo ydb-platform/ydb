@@ -185,13 +185,18 @@ TNodeId TClientBase::Copy(
     const TCopyOptions& options)
 {
     try {
-        return NRawClient::CopyInsideMasterCell(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_, sourcePath, destinationPath, options);
+        return RequestWithRetry<TNodeId>(
+            ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+            [this, &sourcePath, &destinationPath, &options] (TMutationId& mutationId) {
+                return RawClient_->CopyInsideMasterCell(mutationId, TransactionId_, sourcePath, destinationPath, options);
+            });
     } catch (const TErrorResponse& e) {
         if (e.GetError().ContainsErrorCode(NClusterErrorCodes::NObjectClient::CrossCellAdditionalPath)) {
             // Do transaction for cross cell copying.
 
             std::function<TNodeId(ITransactionPtr)> lambda = [this, &sourcePath, &destinationPath, &options](ITransactionPtr transaction) {
-                return NRawClient::CopyWithoutRetries(Context_, transaction->GetId(), sourcePath, destinationPath, options);
+                TMutationId mutationId;
+                return RawClient_->CopyWithoutRetries(mutationId, transaction->GetId(), sourcePath, destinationPath, options);
             };
             return RetryTransactionWithPolicy<TNodeId>(
                 this,

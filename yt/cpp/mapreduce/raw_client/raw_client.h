@@ -56,6 +56,20 @@ public:
         const ENodeType& type,
         const TCreateOptions& options = {}) override;
 
+    TNodeId CopyWithoutRetries(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TYPath& sourcePath,
+        const TYPath& destinationPath,
+        const TCopyOptions& options = {}) override;
+
+    TNodeId CopyInsideMasterCell(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TYPath& sourcePath,
+        const TYPath& destinationPath,
+        const TCopyOptions& options = {}) override;
+
 private:
     const TClientContext Context_;
 };

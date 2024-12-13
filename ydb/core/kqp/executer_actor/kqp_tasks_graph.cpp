@@ -420,7 +420,7 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 
     settings->SetLookupStrategy(streamLookup.GetLookupStrategy());
     settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
-    settings->SetAllowNullKeys(streamLookup.GetAllowNullKeys());
+    settings->SetAllowNullKeysPrefixSize(streamLookup.GetAllowNullKeysPrefixSize());
 
     TTransform streamLookupTransform;
     streamLookupTransform.Type = "StreamLookupInputTransformer";

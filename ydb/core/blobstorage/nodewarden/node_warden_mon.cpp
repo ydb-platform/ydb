@@ -164,7 +164,11 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
         }
         if (!PDiskRestartInFlight.empty()) {
             DIV() {
-                out << "PDiskRestartInFlight# " << FormatList(PDiskRestartInFlight);
+                out << "PDiskRestartInFlight# [";
+                for (const auto& item : PDiskRestartInFlight) {
+                    out << "pdiskId:" << item.first << " -> needsAnotherRestart: " << item.second << ", ";
+                }
+                out << "]";
             }
         }
         if (!PDisksWaitingToStart.empty()) {

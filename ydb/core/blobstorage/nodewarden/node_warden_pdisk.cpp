@@ -285,12 +285,24 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status) {
-        if (PDiskRestartInFlight.erase(pdiskId) == 0) {
+        auto it = PDiskRestartInFlight.find(pdiskId);
+        if (it == PDiskRestartInFlight.end()) {
             // There was no restart in progress.
             return;
         }
 
+        bool requiresAnotherRestart = it->second;
+
+        PDiskRestartInFlight.erase(it);
+
         const TPDiskKey pdiskKey(LocalNodeId, pdiskId);
+
+        if (requiresAnotherRestart) {
+            auto it = LocalPDisks.find(pdiskKey);
+            auto pdisk = it->second.Record;
+            DoRestartLocalPDisk(pdisk);
+            return;
+        }
 
         const TVSlotId from(pdiskKey.NodeId, pdiskKey.PDiskId, 0);
         const TVSlotId to(pdiskKey.NodeId, pdiskKey.PDiskId, Max<ui32>());
@@ -334,11 +346,12 @@ namespace NKikimr::NStorage {
 
         STLOG(PRI_NOTICE, BS_NODE, NW75, "DoRestartLocalPDisk", (PDiskId, pdiskId));
 
-        const auto [_, inserted] = PDiskRestartInFlight.emplace(pdiskId);
+        const auto [restartIt, inserted] = PDiskRestartInFlight.try_emplace(pdiskId, false);
 
         if (!inserted) {
             STLOG(PRI_NOTICE, BS_NODE, NW76, "Restart already in progress", (PDiskId, pdiskId));
-            // Restart is already in progress.
+            // Restart is already in progress, but we will need to make a new restart, as the configuration changed.
+            restartIt->second = true;
             return;
         }
 

@@ -74,6 +74,92 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         env.Runtime->SendToPipe(env.TabletId, actorId, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
     }
 
+    Y_UNIT_TEST(RestartAndReadOnlyConsecutive) {
+        // This test ensures that restart that sets disk to read-only is not lost when regular restart is in progress.
+        TEnvironmentSetup env({
+            .NodeCount = 10,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+        });
+
+        std::unordered_map<TPDiskId, ui64> diskGuids;
+
+        {
+            env.CreateBoxAndPool(1, 10);
+
+            env.Sim(TDuration::Seconds(30));
+
+            auto config = env.FetchBaseConfig();
+
+            for (const NKikimrBlobStorage::TBaseConfig::TPDisk& pdisk : config.GetPDisk()) {
+                TPDiskId diskId(pdisk.GetNodeId(), pdisk.GetPDiskId());
+
+                diskGuids[diskId] = pdisk.GetGuid();
+            }
+
+            env.Sim(TDuration::Seconds(30));
+        }
+
+        auto& diskId = diskGuids.begin()->first;
+
+        {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreDegradedGroupsChecks(true);
+
+            NKikimrBlobStorage::TRestartPDisk* cmd = request.AddCommand()->MutableRestartPDisk();
+            auto pdiskId = cmd->MutableTargetPDiskId();
+            pdiskId->SetNodeId(diskId.NodeId);
+            pdiskId->SetPDiskId(diskId.PDiskId);
+
+            Invoke(env, request);
+        }
+
+        {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreDegradedGroupsChecks(true);
+
+            NKikimrBlobStorage::TSetPDiskReadOnly* cmd = request.AddCommand()->MutableSetPDiskReadOnly();
+            auto pdiskId = cmd->MutableTargetPDiskId();
+            cmd->SetValue(true);
+            pdiskId->SetNodeId(diskId.NodeId);
+            pdiskId->SetPDiskId(diskId.PDiskId);
+
+            auto response = env.Invoke(request);
+
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        }
+
+        TInstant barrier = env.Runtime->GetClock() + TDuration::Minutes(5);
+
+        bool gotReport = false;
+
+        env.Runtime->Sim([&] { return env.Runtime->GetClock() <= barrier && !gotReport; }, [&](IEventHandle &witnessedEvent) {
+            switch (witnessedEvent.GetTypeRewrite()) {
+                case TEvBlobStorage::TEvControllerNodeReport::EventType: {
+                    auto *report = witnessedEvent.Get<TEvBlobStorage::TEvControllerNodeReport>();
+                    if (report) {
+                        auto& reports = report->Record.GetPDiskReports();
+                        UNIT_ASSERT_VALUES_EQUAL(1, reports.size());
+                        auto& report = reports[0];
+                        auto pdiskId = report.GetPDiskId();
+                        auto phase = report.GetPhase();
+                        UNIT_ASSERT_VALUES_EQUAL(diskId.PDiskId, pdiskId);
+                        UNIT_ASSERT_EQUAL(NKikimrBlobStorage::TEvControllerNodeReport::PD_RESTARTED, phase);
+                        gotReport = true;
+                    }
+                    break;
+                }
+            }
+        });
+
+        UNIT_ASSERT(gotReport);
+
+        auto stateIt = env.PDiskMockStates.find(std::pair(diskId.NodeId, diskId.PDiskId));
+
+        UNIT_ASSERT(stateIt != env.PDiskMockStates.end());
+
+        UNIT_ASSERT(stateIt->second->IsDiskReadOnly());
+    }
+
     Y_UNIT_TEST(ReadOnlyOneByOne) {
         TEnvironmentSetup env({
             .NodeCount = 10,

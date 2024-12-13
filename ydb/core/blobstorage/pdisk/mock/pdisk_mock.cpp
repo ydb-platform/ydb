@@ -38,6 +38,7 @@ struct TPDiskMockState::TImpl {
     const ui32 ChunkSize;
     const ui32 TotalChunks;
     const ui32 AppendBlockSize;
+    bool IsDiskReadOnly;
     std::map<ui8, TOwner> Owners;
     std::set<ui32> FreeChunks;
     ui32 NextFreeChunk = 1;
@@ -49,7 +50,7 @@ struct TPDiskMockState::TImpl {
     NPDisk::EDeviceType DeviceType;
     std::optional<TRcBuf> Metadata;
 
-    TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize, NPDisk::EDeviceType deviceType)
+    TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize, bool isDiskReadOnly, NPDisk::EDeviceType deviceType)
         : NodeId(nodeId)
         , PDiskId(pdiskId)
         , PDiskGuid(pdiskGuid)
@@ -57,6 +58,7 @@ struct TPDiskMockState::TImpl {
         , ChunkSize(chunkSize)
         , TotalChunks(Size / ChunkSize)
         , AppendBlockSize(4096)
+        , IsDiskReadOnly(isDiskReadOnly)
         , NextFreeChunk(1)
         , StatusFlags(NPDisk::TStatusFlags{})
         , DeviceType(deviceType)
@@ -283,9 +285,9 @@ struct TPDiskMockState::TImpl {
     }
 };
 
-TPDiskMockState::TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize,
+TPDiskMockState::TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize, bool isDiskReadOnly,
         NPDisk::EDeviceType deviceType)
-    : TPDiskMockState(std::make_unique<TImpl>(nodeId, pdiskId, pdiskGuid, size, chunkSize, deviceType))
+    : TPDiskMockState(std::make_unique<TImpl>(nodeId, pdiskId, pdiskGuid, size, chunkSize, isDiskReadOnly, deviceType))
 {}
 
 TPDiskMockState::TPDiskMockState(std::unique_ptr<TImpl>&& impl)
@@ -329,6 +331,10 @@ void TPDiskMockState::SetStatusFlags(NPDisk::TStatusFlags flags) {
 
 void TPDiskMockState::SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly) {
     Impl->SetReadOnly(vDiskId, isReadOnly);
+}
+
+bool TPDiskMockState::IsDiskReadOnly() const {
+    return Impl->IsDiskReadOnly;
 }
 
 TString& TPDiskMockState::GetStateErrorReason() {
@@ -842,6 +848,7 @@ public:
         bool restartAllowed = ev->Get()->RestartAllowed;
 
         if (restartAllowed) {
+            Impl.IsDiskReadOnly = ev->Get()->Config->ReadOnly;
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(Impl.PDiskId));
         }
     }

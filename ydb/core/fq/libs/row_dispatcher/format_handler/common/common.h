@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <ydb/library/conclusion/generic/result.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
@@ -20,6 +22,12 @@ struct TSchemaColumn {
     bool operator==(const TSchemaColumn& other) const = default;
 
     TString ToString() const;
+};
+
+struct TCountersDesc {
+    NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    NMonitoring::TDynamicCounterPtr CountersSubgroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    TString CountersPath;  // Used for counters created from CountersRoot
 };
 
 }  // namespace NFq::NRowDispatcher

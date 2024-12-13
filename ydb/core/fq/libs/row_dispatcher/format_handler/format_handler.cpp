@@ -18,24 +18,24 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
     using TBase = NActors::TActor<TTopicFormatHandler>;
 
     struct TCounters {
-        const NMonitoring::TDynamicCounterPtr CountersRoot;
-        const NMonitoring::TDynamicCounterPtr CountersSubgroup;
+        TCountersDesc Counters;
 
         NMonitoring::TDynamicCounters::TCounterPtr ActiveFormatHandlers;
         NMonitoring::TDynamicCounters::TCounterPtr ActiveClients;
 
-        TCounters(NMonitoring::TDynamicCounterPtr counters, const TSettings& settings)
-            : CountersRoot(counters)
-            , CountersSubgroup(counters->GetSubgroup("format", settings.ParsingFormat))
+        TCounters(const TCountersDesc& counters, const TSettings& settings)
+            : Counters(counters)
         {
+            Counters.CountersSubgroup = Counters.CountersSubgroup->GetSubgroup("format", settings.ParsingFormat);
+
             Register();
         }
 
     private:
         void Register() {
-            ActiveFormatHandlers = CountersRoot->GetCounter("ActiveFormatHandlers", false);
+            ActiveFormatHandlers = Counters.CountersRoot->GetCounter("ActiveFormatHandlers", false);
 
-            ActiveClients = CountersSubgroup->GetCounter("ActiveClients", false);
+            ActiveClients = Counters.CountersSubgroup->GetCounter("ActiveClients", false);
         }
     };
 
@@ -282,9 +282,9 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
     };
 
 public:
-    TTopicFormatHandler(const TFormatHandlerConfig& config, const TSettings& settings, NMonitoring::TDynamicCounterPtr counters)
+    TTopicFormatHandler(const TFormatHandlerConfig& config, const TSettings& settings, const TCountersDesc& counters)
         : TBase(&TTopicFormatHandler::StateFunc)
-        , TTypeParser(__LOCATION__)
+        , TTypeParser(__LOCATION__, counters)
         , Config(config)
         , Settings(settings)
         , LogPrefix(TStringBuilder() << "TTopicFormatHandler [" << Settings.ParsingFormat << "]: ")
@@ -488,17 +488,17 @@ private:
 
     TValueStatus<ITopicParser::TPtr> CreateParserForFormat() const {
         if (Settings.ParsingFormat == "raw") {
-            return CreateRawParser(ParserHandler);
+            return CreateRawParser(ParserHandler, Counters.Counters);
         }
         if (Settings.ParsingFormat == "json_each_row") {
-            return CreateJsonParser(ParserHandler, Config.JsonParserConfig);
+            return CreateJsonParser(ParserHandler, Config.JsonParserConfig, Counters.Counters);
         }
         return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Unsupported parsing format: " << Settings.ParsingFormat);
     }
 
     void CreateFilters() {
         if (!Filters) {
-            Filters = CreateTopicFilters(SelfId(), Config.FiltersConfig, Counters.CountersSubgroup);
+            Filters = CreateTopicFilters(SelfId(), Config.FiltersConfig, Counters.Counters.CountersSubgroup);
         }
     }
 
@@ -567,7 +567,7 @@ void ITopicFormatHandler::TDestroy::Destroy(ITopicFormatHandler* handler) {
     }
 }
 
-ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, NMonitoring::TDynamicCounterPtr counters) {
+ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters) {
     const auto handler = new TTopicFormatHandler(config, settings, counters);
     owner.RegisterWithSameMailbox(handler);
     return ITopicFormatHandler::TPtr(handler);
@@ -585,7 +585,7 @@ TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConf
 namespace NTests {
 
 ITopicFormatHandler::TPtr CreateTestFormatHandler(const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings) {
-    const auto handler = new TTopicFormatHandler(config, settings, MakeIntrusive<NMonitoring::TDynamicCounters>());
+    const auto handler = new TTopicFormatHandler(config, settings, {});
     NActors::TActivationContext::ActorSystem()->Register(handler);
     return ITopicFormatHandler::TPtr(handler);
 }

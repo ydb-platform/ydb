@@ -252,6 +252,7 @@ private:
     TStats ClientsStats;
     TTopicSessionMetrics Metrics;
     const ::NMonitoring::TDynamicCounterPtr Counters;
+    const ::NMonitoring::TDynamicCounterPtr CountersRoot;
 
 public:
     explicit TTopicSession(
@@ -266,6 +267,7 @@ public:
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
+        const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
         ui64 maxBufferSize);
 
@@ -345,6 +347,7 @@ TTopicSession::TTopicSession(
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize)
     : ReadGroup(readGroup)
@@ -362,6 +365,7 @@ TTopicSession::TTopicSession(
     , BufferSize(maxBufferSize)
     , LogPrefix("TopicSession")
     , Counters(counters)
+    , CountersRoot(countersRoot)
 {}
 
 void TTopicSession::Bootstrap() {
@@ -718,7 +722,12 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto clientInfo = Clients.insert({ev->Sender, MakeIntrusive<TClientsInfo>(*this, LogPrefix, handlerSettings, ev, Counters, ReadGroup)}).first->second;
     auto formatIt = FormatHandlers.find(handlerSettings);
     if (formatIt == FormatHandlers.end()) {
-        formatIt = FormatHandlers.insert({handlerSettings, CreateTopicFormatHandler(ActorContext(), FormatHandlerConfig, handlerSettings, Metrics.PartitionGroup)}).first;
+        formatIt = FormatHandlers.insert({handlerSettings, CreateTopicFormatHandler(
+            ActorContext(),
+            FormatHandlerConfig,
+            handlerSettings,
+            {.CountersRoot = CountersRoot, .CountersSubgroup = Metrics.PartitionGroup, .CountersPath = "topic_session"}
+        )}).first;
     }
 
     if (auto status = formatIt->second->AddClient(clientInfo); status.IsFail()) {
@@ -881,9 +890,10 @@ std::unique_ptr<IActor> NewTopicSession(
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize) {
-    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, pqGateway, maxBufferSize));
+    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
 }
 
 }  // namespace NFq

@@ -6693,9 +6693,9 @@
     ],
     "test_sql2yql.test[expr-static_fold]": [
         {
-            "checksum": "90e676aca21d7b7a84997aa261cba619",
-            "size": 3647,
-            "uri": "https://{canondata_backend}/1936273/4a1b39013e1bae40e722cff8ccef8829784964e2/resource.tar.gz#test_sql2yql.test_expr-static_fold_/sql.yql"
+            "checksum": "397ed54ebb027b5d4ea51a7c577bfad0",
+            "size": 4863,
+            "uri": "https://{canondata_backend}/1900335/87071896eae3051f9f7c20c1c894d1187145cde1/resource.tar.gz#test_sql2yql.test_expr-static_fold_/sql.yql"
         }
     ],
     "test_sql2yql.test[expr-static_zip]": [

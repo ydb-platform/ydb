@@ -315,7 +315,7 @@ namespace NYql::NDq {
             return result;
         }
 
-        NYql::NConnector::NApi::TDataSourceInstance GetDataSourceInstanceWithToken() const {
+        NYql::TGenericDataSourceInstance GetDataSourceInstanceWithToken() const {
             auto dsi = LookupSource.data_source_instance();
             //Note: returned token may be stale and we have no way to check or recover here
             //Consider to redesign ICredentialsProvider

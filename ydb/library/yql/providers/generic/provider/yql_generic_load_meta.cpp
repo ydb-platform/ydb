@@ -335,7 +335,7 @@ namespace NYql {
             }
         }
 
-        void SetLoggingFolderId(NYql::NConnector::NApi::TLoggingDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
+        void SetLoggingFolderId(NYql::TLoggingDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
             const auto it = clusterConfig.GetDataSourceOptions().find("folder_id");
             if (it != clusterConfig.GetDataSourceOptions().end()) {
                 options.set_folder_id(it->second);

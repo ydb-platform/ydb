@@ -3,106 +3,103 @@
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
-#include <ydb/core/memory_controller/memory_controller.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/event_local.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/library/actors/core/mon_stats.h>
-#include <ydb/library/actors/core/monotonic_provider.h>
-#include <ydb/library/actors/core/process_stats.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/core/log_settings.h>
-
-#include <ydb/library/actors/core/executor_pool_basic.h>
-#include <ydb/library/actors/core/executor_pool_io.h>
-#include <ydb/library/actors/core/scheduler_basic.h>
-
-#include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
-#include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
-#include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
-#include <ydb/library/actors/interconnect/interconnect_mon.h>
-#include <ydb/core/config/init/dummy.h>
-
-#include <ydb/core/control/immediate_control_board_actor.h>
-
-#include <ydb/library/actors/protos/services_common.pb.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/domain.h>
+#include <ydb/core/base/event_filter.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/hive.h>
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/resource_profile.h>
+#include <ydb/core/base/statestorage_impl.h>
+#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/base/tablet_types.h>
+#include <ydb/core/base/tabletid.h>
+#include <ydb/core/blobstorage/other/mon_blob_range_page.h>
+#include <ydb/core/blobstorage/other/mon_get_blob_page.h>
+#include <ydb/core/blobstorage/other/mon_vdisk_stream.h>
+#include <ydb/core/client/minikql_compile/mkql_compile_service.h>
+#include <ydb/core/client/server/http_ping.h>
+#include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/cms/console/grpc_library_helper.h>
-#include <ydb/core/keyvalue/keyvalue.h>
+#include <ydb/core/config/init/dummy.h>
+#include <ydb/core/control/immediate_control_board_actor.h>
 #include <ydb/core/formats/clickhouse_block.h>
-#include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/grpc_services/grpc_mon.h>
+#include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/log_backend/log_backend.h>
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/core/mind/bscontroller/bsc.h>
+#include <ydb/core/mind/local.h>
+#include <ydb/core/mind/node_broker.h>
+#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mon_alloc/profiler.h>
 #include <ydb/core/mon/async_http_mon.h>
 #include <ydb/core/mon/crossref.h>
-#include <ydb/core/mon_alloc/profiler.h>
-
-#include <ydb/library/actors/util/affinity.h>
-
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/counters.h>
-#include <ydb/core/base/tabletid.h>
-#include <ydb/core/base/channel_profiles.h>
-#include <ydb/core/base/domain.h>
-#include <ydb/core/base/feature_flags.h>
-#include <ydb/core/base/nameservice.h>
-#include <ydb/core/base/tablet_types.h>
-#include <ydb/core/base/resource_profile.h>
-#include <ydb/core/base/event_filter.h>
-#include <ydb/core/base/statestorage_impl.h>
-#include <ydb/library/services/services.pb.h>
+#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/alloc.pb.h>
-#include <ydb/core/protos/http_config.pb.h>
-#include <ydb/core/protos/datashard_config.pb.h>
-#include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
-#include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/replication.pb.h>
-
-#include <ydb/core/mind/local.h>
-#include <ydb/core/mind/tenant_pool.h>
-#include <ydb/core/mind/node_broker.h>
-#include <ydb/core/base/hive.h>
-
-#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/security/login_page.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/bootstrapper.h>
-#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
+#include <ydb/core/tablet/node_tablet_monitor.h>
+#include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_list_renderer.h>
 #include <ydb/core/tablet/tablet_monitoring_proxy.h>
-#include <ydb/core/tablet/tablet_counters_aggregator.h>
-
-#include <ydb/core/tx/tx.h>
+#include <ydb/core/tracing/tablet_info.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
-
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
-
-#include <ydb/core/mind/bscontroller/bsc.h>
-
-#include <ydb/core/blobstorage/other/mon_get_blob_page.h>
-#include <ydb/core/blobstorage/other/mon_blob_range_page.h>
-#include <ydb/core/blobstorage/other/mon_vdisk_stream.h>
-
-#include <ydb/public/lib/deprecated/client/msgbus_client.h>
-#include <ydb/core/client/minikql_compile/mkql_compile_service.h>
-#include <ydb/core/client/server/msgbus_server_pq_metacache.h>
-#include <ydb/core/client/server/http_ping.h>
-
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx.h>
+#include <ydb/core/util/sig.h>
+#include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/executor_pool_io.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log_settings.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/mon_stats.h>
+#include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/core/process_stats.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/interconnect/interconnect_mon.h>
+#include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
+#include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/prof/tag.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
+#include <ydb/library/actors/util/affinity.h>
+#include <ydb/library/actors/util/memory_track.h>
 #include <ydb/library/grpc/server/actors/logger.h>
-
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/signal_backtrace/signal_backtrace.h>
+#include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/services/auth/grpc_service.h>
-#include <ydb/services/cms/grpc_service.h>
+#include <ydb/services/backup/grpc_service.h>
 #include <ydb/services/bsconfig/grpc_service.h>
-#include <ydb/services/dynamic_config/grpc_service.h>
+#include <ydb/services/cms/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
+#include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/services/discovery/grpc_service.h>
+#include <ydb/services/dynamic_config/grpc_service.h>
 #include <ydb/services/fq/grpc_service.h>
 #include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/fq/ydb_over_fq.h>
@@ -112,52 +109,37 @@
 #include <ydb/services/maintenance/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
 #include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
-#include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/replication/grpc_service.h>
+#include <ydb/services/tablet/ydb_tablet.h>
+#include <ydb/services/view/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
+#include <ydb/services/ydb/ydb_debug.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
-#include <ydb/services/backup/grpc_service.h>
 #include <ydb/services/ydb/ydb_logstore.h>
+#include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/ydb/ydb_operation.h>
-#include <ydb/services/ydb/ydb_debug.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
-#include <ydb/services/ydb/ydb_object_storage.h>
-#include <ydb/services/tablet/ydb_tablet.h>
-#include <ydb/services/view/grpc_service.h>
 
-#include <ydb/core/fq/libs/init/init.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <library/cpp/logger/global/global.h>
+#include <library/cpp/malloc/api/malloc.h>
 #include <library/cpp/sighandler/async_signals_handler.h>
 #include <library/cpp/svnversion/svnversion.h>
-#include <library/cpp/malloc/api/malloc.h>
-
-#include <ydb/core/util/sig.h>
-#include <ydb/core/util/stlog.h>
-
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/tablet/node_tablet_monitor.h>
-
-#include <ydb/library/actors/util/memory_track.h>
-#include <ydb/library/actors/prof/tag.h>
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/charset/wide.h>
 #include <util/folder/dirut.h>
 #include <util/system/file.h>
 #include <util/system/getpid.h>
 #include <util/system/hostname.h>
-
-#include <ydb/core/tracing/tablet_info.h>
 
 namespace NKikimr {
 
@@ -1783,10 +1765,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     if (enableReleaseNodeNameOnGracefulShutdown) {
         using namespace NKikimr::NNodeBroker;
         using TEvent = TEvNodeBroker::TEvGracefulShutdownRequest;
-        
+
         const ui32 nodeId = ActorSystem->NodeId;
         bool isDynamicNode = AppData->DynamicNameserviceConfig->MinDynamicNodeId <= nodeId;
-        
+
         if (isDynamicNode) {
             NTabletPipe::TClientConfig pipeConfig;
             pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
@@ -1924,6 +1906,8 @@ void TKikimrRunner::SetSignalHandlers() {
 #endif
     signal(SIGINT, &TKikimrRunner::OnTerminate);
     signal(SIGTERM, &TKikimrRunner::OnTerminate);
+
+    Singleton<TTraceCollector>(TTraceCollector::DEFAULT_SIGNALS);
 
 #if !defined(_win_)
     SetAsyncSignalHandler(SIGHUP, [](int) {

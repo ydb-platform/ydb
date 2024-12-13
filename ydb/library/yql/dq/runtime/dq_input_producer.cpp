@@ -702,6 +702,7 @@ void ValidateInputTypes(const NKikimr::NMiniKQL::TType* type, const TVector<IDqI
 } // namespace
 
 void TDqMeteringStats::TInputStatsMeter::Add(const NKikimr::NUdf::TUnboxedValue& val) {
+    return;
     Stats->RowsConsumed += 1;
     if (InputType) {
         NYql::NDq::TDqDataSerializer::TEstimateSizeSettings settings;
@@ -713,6 +714,7 @@ void TDqMeteringStats::TInputStatsMeter::Add(const NKikimr::NUdf::TUnboxedValue&
 }
 
 void TDqMeteringStats::TInputStatsMeter::Add(const NKikimr::NUdf::TUnboxedValue* row, ui32 width) {
+    return;
     if (InputType) {
         YQL_ENSURE(InputType->IsMulti());
         auto multiType = static_cast<const TMultiType*>(InputType);

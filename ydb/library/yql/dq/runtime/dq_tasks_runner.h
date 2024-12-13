@@ -303,6 +303,10 @@ public:
         }
     }
 
+    bool EnableMetering() const {
+        return Task_->GetEnableMetering();
+    }
+
     ui64 GetStageId() const {
         return Task_->GetStageId();
     }

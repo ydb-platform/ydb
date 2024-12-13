@@ -234,7 +234,7 @@ private:
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
         appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
-        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(false); // let BUILTIN_SYSTEM_DOMAIN connect to database
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
 
         return appConfig;
     }
@@ -313,7 +313,7 @@ private:
             .SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
             .SetDatabase(TStringBuilder() << "/" << Settings_.DomainName_));
 
-        TableClient_ = std::make_unique<NYdb::NTable::TTableClient>(*YdbDriver_, NYdb::NTable::TClientSettings().AuthToken("user@" BUILTIN_SYSTEM_DOMAIN));
+        TableClient_ = std::make_unique<NYdb::NTable::TTableClient>(*YdbDriver_);
         TableClientSession_ = std::make_unique<NYdb::NTable::TSession>(TableClient_->CreateSession().GetValueSync().GetSession());
 
         Tenants_ = std::make_unique<TTenants>(Server_);

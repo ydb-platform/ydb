@@ -150,7 +150,7 @@ TBaseFixture::TBatch& TBaseFixture::TBatch::AddRow(TRow row) {
 //// TBaseFixture
 
 TBaseFixture::TBaseFixture()
-    : TTypeParser(__LOCATION__)
+    : TTypeParser(__LOCATION__, {})
     , MemoryInfo("TBaseFixture alloc")
     , HolderFactory(std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemoryInfo))
     , Runtime(1)

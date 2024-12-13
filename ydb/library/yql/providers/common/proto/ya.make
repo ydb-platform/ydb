@@ -6,11 +6,11 @@ SRCS(
 )
 
 PEERDIR(
-    yql/essentials/protos
+    ydb/library/yql/protos
 )
 
 IF (NOT PY_PROTOS_FOR)
-    EXCLUDE_TAGS(GO_PROTO)
+    EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
 ENDIF()
 
 END()

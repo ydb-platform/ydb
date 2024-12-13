@@ -62,7 +62,7 @@ TEST_SRCS(
 
 PEERDIR(
     contrib/python/pytest
-    yql/essentials/providers/common/proto
+    ydb/library/yql/providers/common/proto
     ydb/library/yql/providers/generic/connector/api/service/protos
     ydb/library/yql/providers/generic/connector/tests/common_test_cases
     ydb/library/yql/providers/generic/connector/tests/utils

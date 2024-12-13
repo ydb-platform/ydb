@@ -328,9 +328,11 @@ namespace NYql {
             request.set_schema(schema);
         }
 
-        void SetOracleServiceName(NYql::NConnector::NApi::TOracleDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
+        void SetOracleServiceName(NYql::TOracleDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
             const auto it = clusterConfig.GetDataSourceOptions().find("service_name");
             if (it != clusterConfig.GetDataSourceOptions().end()) {
+                options.set_service_name(it->second);
+            }
         }
 
         void SetLoggingFolderId(NYql::NConnector::NApi::TLoggingDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {

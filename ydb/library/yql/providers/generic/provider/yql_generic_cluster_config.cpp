@@ -6,7 +6,7 @@
 #include <util/string/cast.h>
 #include <util/generic/yexception.h>
 
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 #include "yql_generic_cluster_config.h"

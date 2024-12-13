@@ -1,5 +1,5 @@
 #pragma once
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 
 #include <util/generic/string.h>
 #include <util/string/builder.h>

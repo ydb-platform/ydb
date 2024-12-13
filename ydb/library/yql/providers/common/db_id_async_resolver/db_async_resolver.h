@@ -3,8 +3,8 @@
 #include <library/cpp/threading/future/future.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.proto>
-#include <yql/essentials/public/issue/yql_issue.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 namespace NYql {
 

@@ -167,15 +167,7 @@ namespace NYql {
                     // Managed YDB (including YDB underlying Logging) supports access via IAM token.
                     // If exist, copy service account creds to obtain tokens during request execution phase.
                     // If exists, copy previously created token.
-<<<<<<< HEAD
-                    if (IsIn({NConnector::NApi::EDataSourceKind::YDB, NConnector::NApi::EDataSourceKind::LOGGING}, clusterConfig.kind())) {
-=======
-<<<<<<< HEAD
-                    if (clusterConfig.kind() == NConnector::NApi::EDataSourceKind::YDB) {
-=======
                     if (IsIn({NYql::EGenericDataSourceKind::YDB, NYql::EGenericDataSourceKind::LOGGING}, clusterConfig.kind())) {
->>>>>>> fe16216e477... YDB FQ: turning gateways_config.proto into a file without external dependencies
->>>>>>> c32e5fba75 (YDB FQ: turning gateways_config.proto into a file without external dependencies)
                         source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                         source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
                         source.SetToken(State_->Types->Credentials->FindCredentialContent(

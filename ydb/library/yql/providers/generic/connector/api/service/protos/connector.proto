@@ -5,7 +5,7 @@ package NYql.NConnector.NApi;
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
-import "yql/essentials/providers/common/proto/gateways_config.proto";
+import "ydb/library/yql/providers/common/proto/gateways_config.proto";
 
 option go_package = "a.yandex-team.ru/contrib/ydb/library/yql/providers/generic/connector/libgo/service/protos";
 

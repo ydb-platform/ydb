@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "onek.stringu1,onek.unique1 = v.i,v.j",
+                                                "Condition": "onek.stringu1,onek.unique1 = v.j,v.i",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2

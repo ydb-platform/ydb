@@ -195,6 +195,9 @@ def prepared_test_env(ydb_cluster, _database, _client_session_pool_no_auth):
     table_path = os.path.join(database_path, 'test-table')
     pool = _client_session_pool_no_auth
 
+    give_connect_permission_to_user(pool, database_path, 'other-user@builtin')
+    give_connect_permission_to_user(pool, database_path, '__bad__@builtin')
+
     create_table(pool, table_path)
     fill_table(pool, table_path)
 
@@ -332,6 +335,12 @@ def give_use_permission_to_user(pool, database_path, user):
         ''')
     pool.retry_operation_sync(f, database_path=database_path, retry_settings=None)
 
+def give_connect_permission_to_user(pool, database_path, user):
+    def f(s, database_path):
+        s.execute_scheme(fr'''
+            grant 'ydb.database.connect' on `{database_path}` to `{user}`
+        ''')
+    pool.retry_operation_sync(f, database_path=database_path, retry_settings=None)
 
 def test_dml_requests_logged_when_sid_is_unexpected(ydb_cluster, _database, prepared_test_env, _client_session_pool_no_auth, _client_session_pool_with_auth_other):
     database_path = _database

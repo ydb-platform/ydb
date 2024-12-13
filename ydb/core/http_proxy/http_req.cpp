@@ -62,6 +62,7 @@
 #include <ydb/library/folder_service/events.h>
 
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
+#include <ydb/core/ymq/actor/serviceid.h>
 
 #include <ydb/library/http_proxy/error/error.h>
 
@@ -473,7 +474,8 @@ namespace NKikimr::NHttpProxy {
                             return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Invalid queue url");
                         }
                         CloudId = cloudIdAndResourceId.first;
-                        ResourceId = cloudIdAndResourceId.second;
+                        HttpContext.ResourceId = ResourceId = cloudIdAndResourceId.second;
+                        HttpContext.ResponseData.YmqIsFifo = queueUrl.EndsWith(".fifo");
                     }
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
@@ -508,6 +510,7 @@ namespace NKikimr::NHttpProxy {
                     SendGrpcRequestNoDriver(ctx);
                 } else {
                     auto requestHolder = MakeHolder<NKikimrClient::TSqsRequest>();
+                    // TODO? action = NSQS::ActionFromString(Method);
                     NSQS::EAction action = NSQS::EAction::Unknown;
                     if (Method == "CreateQueue") {
                         action = NSQS::EAction::CreateQueue;
@@ -1247,6 +1250,39 @@ namespace NKikimr::NHttpProxy {
             strByMimeAws(ContentType),
             ResponseData.DumpBody(ContentType)
         );
+
+        bool isPrivateRequest = false;  // TODO Are there private requests in JSON API?
+        if (ResponseData.IsYmq && ServiceConfig.GetHttpConfig().GetYandexCloudMode() && !isPrivateRequest) {
+            // Send request attributes to the metering actor
+            auto reportRequestAttributes = MakeHolder<NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
+
+            auto& requestAttributes = reportRequestAttributes->Data;
+
+            requestAttributes.HttpStatusCode = httpCode;
+            requestAttributes.IsFifo = ResponseData.YmqIsFifo;
+            requestAttributes.FolderId = FolderId;
+            requestAttributes.RequestSizeInBytes = Request->Size();
+            requestAttributes.ResponseSizeInBytes = response->Size();
+            requestAttributes.SourceAddress = SourceAddress;
+            requestAttributes.ResourceId = ResourceId;
+            requestAttributes.Action = NSQS::ActionFromString(MethodName);
+
+            LOG_SP_DEBUG_S(
+                ctx,
+                NKikimrServices::HTTP_PROXY,
+                TStringBuilder() << "Send metering event."
+                << " HttpStatusCode: " << requestAttributes.HttpStatusCode
+                << " IsFifo: " << requestAttributes.IsFifo
+                << " FolderId: " << requestAttributes.FolderId
+                << " RequestSizeInBytes: " << requestAttributes.RequestSizeInBytes
+                << " ResponseSizeInBytes: " << requestAttributes.ResponseSizeInBytes
+                << " SourceAddress: " << requestAttributes.SourceAddress
+                << " ResourceId: " << requestAttributes.ResourceId
+                << " Action: " << requestAttributes.Action
+            );
+
+            ctx.Send(NSQS::MakeSqsMeteringServiceID(), reportRequestAttributes.Release());
+        }
 
         ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }

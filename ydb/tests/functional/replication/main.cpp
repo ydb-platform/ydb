@@ -70,11 +70,17 @@ Y_UNIT_TEST_SUITE(Replication)
             }
 
             {
+                const TString query = "GRANT ALL ON `/local` TO `user@builtin`";
+                auto res = s.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+
+            {
                 const TString query = Sprintf("CREATE ASYNC REPLICATION `replication` FOR"
                     "`ProducerUuidValue` AS `ConsumerUuidValue`"
                     "WITH ("
                         "CONNECTION_STRING = 'grpc://%s',"
-                        "TOKEN = 'root@builtin'"
+                        "TOKEN = 'user@builtin'"
                     ");", connectionString.data());
                 auto res = s.ExecuteSchemeQuery(query).GetValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());

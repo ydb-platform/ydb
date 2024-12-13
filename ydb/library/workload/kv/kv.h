@@ -30,6 +30,12 @@ enum KvWorkloadConstants : ui64 {
 
 class TKvWorkloadParams : public TWorkloadParams {
 public:
+    enum class EStoreType {
+        Row     /* "row"    */,
+        Column  /* "column" */,
+    };
+
+public:
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
@@ -48,7 +54,7 @@ public:
     ui64 MixedChangePartitionsSize = KvWorkloadConstants::MIXED_CHANGE_PARTITIONS_SIZE;
     ui64 MixedDoReadRows = KvWorkloadConstants::MIXED_DO_READ_ROWS;
     ui64 MixedDoSelect = KvWorkloadConstants::MIXED_DO_SELECT;
-    bool CreateColumnTables = false;
+    EStoreType StoreType = EStoreType::Row;
 
     const std::string TableName = "kv_test";
 

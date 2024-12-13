@@ -46,7 +46,7 @@ class TestYdbKvWorkload(object):
         ]
 
         if useColumns:
-            args += ["--column-tables", "1"]
+            args += ["--store", "column"]
 
         yatest.common.execute(
             args,

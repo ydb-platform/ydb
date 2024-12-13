@@ -185,6 +185,7 @@ EOperationBriefState CheckOperation(
 
 void WaitForOperation(
     const IClientRetryPolicyPtr& clientRetryPolicy,
+    const IRawClientPtr& rawClient,
     const TClientContext& context,
     const TOperationId& operationId);
 

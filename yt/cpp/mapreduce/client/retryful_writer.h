@@ -8,6 +8,7 @@
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/cpp/mapreduce/io/helpers.h>
+
 #include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
 #include <library/cpp/threading/blocking_queue/blocking_queue.h>
@@ -28,6 +29,7 @@ class TRetryfulWriter
 public:
     template <class TWriterOptions>
     TRetryfulWriter(
+        const IRawClientPtr& rawClient,
         IClientRetryPolicyPtr clientRetryPolicy,
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,
@@ -36,7 +38,8 @@ public:
         const TMaybe<TFormat>& format,
         const TRichYPath& path,
         const TWriterOptions& options)
-        : ClientRetryPolicy_(std::move(clientRetryPolicy))
+        : RawClient_(rawClient)
+        , ClientRetryPolicy_(std::move(clientRetryPolicy))
         , TransactionPinger_(std::move(transactionPinger))
         , Context_(context)
         , AutoFinish_(options.AutoFinish_)
@@ -61,7 +64,7 @@ public:
         SecondaryParameters_ = FormIORequestParameters(secondaryPath, options);
 
         if (options.CreateTransaction_) {
-            WriteTransaction_.ConstructInPlace(ClientRetryPolicy_, context, parentId, TransactionPinger_->GetChildTxPinger(), TStartTransactionOptions());
+            WriteTransaction_.ConstructInPlace(rawClient, ClientRetryPolicy_, context, parentId, TransactionPinger_->GetChildTxPinger(), TStartTransactionOptions());
             auto append = path.Append_.GetOrElse(false);
             auto lockMode = (append  ? LM_SHARED : LM_EXCLUSIVE);
             NDetail::NRawClient::Lock(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, WriteTransaction_->GetId(), path.Path_, lockMode);
@@ -89,12 +92,15 @@ private:
     static size_t GetBufferSize(const TMaybe<TWriterOptions>& writerOptions);
 
 private:
+    const IRawClientPtr RawClient_;
     const IClientRetryPolicyPtr ClientRetryPolicy_;
     const ITransactionPingerPtr TransactionPinger_;
     const TClientContext Context_;
     const bool AutoFinish_;
+
     TString Command_;
     TMaybe<TFormat> Format_;
+
     const size_t BufferSize_;
 
     TNode Parameters_;

@@ -2,6 +2,9 @@
 
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 
+#include <yt/cpp/mapreduce/http/retry_request.h>
+
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
 
 #include <yt/cpp/mapreduce/raw_client/raw_requests.h>
@@ -16,10 +19,12 @@ namespace NYT::NDetail {
 TOperationPreparationContext::TOperationPreparationContext(
     const TStructuredJobTableList& structuredInputs,
     const TStructuredJobTableList& structuredOutputs,
+    const IRawClientPtr& rawClient,
     const TClientContext& context,
     const IClientRetryPolicyPtr& retryPolicy,
     TTransactionId transactionId)
-    : Context_(context)
+    : RawClient_(rawClient)
+    , Context_(context)
     , RetryPolicy_(retryPolicy)
     , TransactionId_(transactionId)
     , InputSchemas_(structuredInputs.size())
@@ -38,10 +43,12 @@ TOperationPreparationContext::TOperationPreparationContext(
 TOperationPreparationContext::TOperationPreparationContext(
     TVector<TRichYPath> inputs,
     TVector<TRichYPath> outputs,
+    const IRawClientPtr& rawClient,
     const TClientContext& context,
     const IClientRetryPolicyPtr& retryPolicy,
     TTransactionId transactionId)
-    : Context_(context)
+    : RawClient_(rawClient)
+    , Context_(context)
     , RetryPolicy_(retryPolicy)
     , TransactionId_(transactionId)
     , InputSchemas_(inputs.size())
@@ -99,11 +106,11 @@ const TTableSchema& TOperationPreparationContext::GetInputSchema(int index) cons
     auto& schema = InputSchemas_[index];
     if (!InputSchemasLoaded_[index]) {
         Y_ABORT_UNLESS(Inputs_[index]);
-        auto schemaNode = NRawClient::Get(
+        auto schemaNode = RequestWithRetry<TNode>(
             RetryPolicy_->CreatePolicyForGenericRequest(),
-            Context_,
-            TransactionId_,
-            Inputs_[index]->Path_ + "/@schema");
+            [this, &index] (TMutationId& mutationId) {
+                return RawClient_->Get(mutationId, TransactionId_, Inputs_[index]->Path_ + "/@schema");
+            });
         Deserialize(schema, schemaNode);
     }
     return schema;

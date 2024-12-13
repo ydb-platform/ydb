@@ -291,6 +291,7 @@ struct TRetryfulWriterV2::TSendTask
 ////////////////////////////////////////////////////////////////////////////////
 
 TRetryfulWriterV2::TRetryfulWriterV2(
+    const IRawClientPtr& rawClient,
     IClientRetryPolicyPtr clientRetryPolicy,
     ITransactionPingerPtr transactionPinger,
     const TClientContext& context,
@@ -311,6 +312,7 @@ TRetryfulWriterV2::TRetryfulWriterV2(
 
     if (createTransaction) {
         WriteTransaction_ = MakeHolder<TPingableTransaction>(
+            rawClient,
             clientRetryPolicy,
             context,
             parentId,
@@ -329,6 +331,7 @@ TRetryfulWriterV2::TRetryfulWriterV2(
     }
 
     THeavyRequestRetrier::TParameters parameters = {
+        .RawClientPtr = rawClient,
         .ClientRetryPolicy = clientRetryPolicy,
         .TransactionPinger = transactionPinger,
         .Context = context,

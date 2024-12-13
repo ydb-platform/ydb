@@ -292,7 +292,7 @@ public:
     //
     // Start a new transaction.
     TTransaction(
-        IRawClientPtr rawClient,
+        const IRawClientPtr& rawClient,
         TClientPtr parentClient,
         const TClientContext& context,
         const TTransactionId& parentTransactionId,
@@ -301,7 +301,7 @@ public:
     //
     // Attach an existing transaction.
     TTransaction(
-        IRawClientPtr rawClient,
+        const IRawClientPtr& rawClient,
         TClientPtr parentClient,
         const TClientContext& context,
         const TTransactionId& transactionId,

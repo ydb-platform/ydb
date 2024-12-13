@@ -39,35 +39,6 @@ void ExecuteBatch(
 // Cypress
 //
 
-TNode Get(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TGetOptions& options = TGetOptions());
-
-TNode TryGet(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TGetOptions& options);
-
-void MultisetAttributes(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TNode::TMapType& value,
-    const TMultisetAttributesOptions& options = TMultisetAttributesOptions());
-
-bool Exists(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TExistsOptions& options = TExistsOptions());
-
 TNodeId Create(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,

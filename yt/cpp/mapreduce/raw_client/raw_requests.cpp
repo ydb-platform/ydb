@@ -79,35 +79,6 @@ void ExecuteBatch(
     }
 }
 
-TNode Get(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TGetOptions& options)
-{
-    THttpHeader header("GET", "get");
-    header.MergeParameters(SerializeParamsForGet(transactionId, context.Config->Prefix, path, options));
-    return NodeFromYsonString(RetryRequestWithPolicy(retryPolicy, context, header).Response);
-}
-
-TNode TryGet(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TGetOptions& options)
-{
-    try {
-        return Get(retryPolicy, context, transactionId, path, options);
-    } catch (const TErrorResponse& error) {
-        if (!error.IsResolveError()) {
-            throw;
-        }
-        return TNode();
-    }
-}
-
 void Set(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
@@ -121,34 +92,6 @@ void Set(
     header.MergeParameters(SerializeParamsForSet(transactionId, context.Config->Prefix, path, options));
     auto body = NodeToYsonString(value);
     RetryRequestWithPolicy(retryPolicy, context, header, body);
-}
-
-void MultisetAttributes(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TNode::TMapType& value,
-    const TMultisetAttributesOptions& options)
-{
-    THttpHeader header("PUT", "api/v4/multiset_attributes", false);
-    header.AddMutationId();
-    header.MergeParameters(SerializeParamsForMultisetAttributes(transactionId, context.Config->Prefix, path, options));
-
-    auto body = NodeToYsonString(value);
-    RetryRequestWithPolicy(retryPolicy, context, header, body);
-}
-
-bool Exists(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TExistsOptions& options)
-{
-    THttpHeader header("GET", "exists");
-    header.MergeParameters(SerializeParamsForExists(transactionId, context.Config->Prefix, path, options));
-    return ParseBoolFromResponse(RetryRequestWithPolicy(retryPolicy, context, header).Response);
 }
 
 TNodeId Create(

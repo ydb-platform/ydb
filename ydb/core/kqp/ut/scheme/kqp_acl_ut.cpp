@@ -50,7 +50,6 @@ void AddConnectPermission(const TKikimrRunner& kikimr, const TString& subject) {
 Y_UNIT_TEST_SUITE(KqpAcl) {
     Y_UNIT_TEST(FailNavigate) {
         TKikimrRunner kikimr(UserName);
-        AddConnectPermission(kikimr, UserName);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

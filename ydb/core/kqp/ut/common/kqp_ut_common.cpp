@@ -534,6 +534,10 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
         return true;
     });
 
+    if (settings.AuthToken) {
+        this->Client->GrantConnect(settings.AuthToken);
+    }
+
     if (settings.WithSampleTables) {
         RunCall([this] {
             this->CreateSampleTables();

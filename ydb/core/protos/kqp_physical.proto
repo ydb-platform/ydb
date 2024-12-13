@@ -275,6 +275,7 @@ message TKqpPhyCnStreamLookup {
     EStreamLookupStrategy LookupStrategy = 6;
     bool KeepRowsOrder = 7;
     bool AllowNullKeys = 8;
+    uint32 AllowNullKeysPrefixSize = 9;
 }
 
 message TKqpPhyCnSequencer {

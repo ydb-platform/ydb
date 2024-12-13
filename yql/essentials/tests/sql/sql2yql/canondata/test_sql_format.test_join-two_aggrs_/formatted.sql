@@ -3,7 +3,7 @@ USE plato;
 PRAGMA yt.JoinMergeForce = '1';
 PRAGMA yt.JoinMergeTablesLimit = '10';
 
-$join =
+$join = (
     SELECT
         a.key AS key1,
         a.subkey AS subkey1
@@ -25,7 +25,7 @@ $join =
     ) AS b
     ON
         a.key == b.key AND a.subkey == b.subkey
-;
+);
 
 SELECT
     key1,

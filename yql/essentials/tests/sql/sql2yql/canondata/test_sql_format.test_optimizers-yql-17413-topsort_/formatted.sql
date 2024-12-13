@@ -1,14 +1,14 @@
 -- ignore runonopt plan diff
 USE plato;
 
-$filtered =
+$filtered = (
     SELECT
         *
     FROM
         Input
     WHERE
         value != 'xxx'
-;
+);
 
 SELECT DISTINCT
     (subkey) AS subkey

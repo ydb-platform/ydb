@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-$src =
+$src = (
     SELECT
         Just(key) AS key,
         'ZZZ' || subkey AS subkey,
@@ -13,7 +13,7 @@ $src =
         key,
         subkey,
         value
-;
+);
 
 SELECT
     *

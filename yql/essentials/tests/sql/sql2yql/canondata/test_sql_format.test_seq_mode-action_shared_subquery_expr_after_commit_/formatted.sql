@@ -9,12 +9,12 @@ DEFINE ACTION $a() AS
     ;
     COMMIT;
 
-    $r =
+    $r = (
         SELECT
             *
         FROM
             @tmp
-    ;
+    );
 
     SELECT
         *

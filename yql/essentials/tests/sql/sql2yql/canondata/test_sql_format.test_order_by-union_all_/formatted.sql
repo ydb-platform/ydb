@@ -17,9 +17,9 @@ END DEFINE;
 $list = ['a', 'b'];
 $s = SubqueryUnionAllFor($list, $sample);
 
-$concated =
+$concated = (
     PROCESS $s()
-;
+);
 
 INSERT INTO Output
 SELECT

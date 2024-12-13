@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-$src =
+$src = (
     SELECT
         key,
         'ZZZ' || key AS subkey,
@@ -11,7 +11,7 @@ $src =
         Input AS u
     ASSUME ORDER BY
         key
-;
+);
 
 SELECT
     *

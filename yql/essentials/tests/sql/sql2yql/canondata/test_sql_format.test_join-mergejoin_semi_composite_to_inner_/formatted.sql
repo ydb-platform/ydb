@@ -5,7 +5,7 @@ PRAGMA yt.JoinMergeTablesLimit = '10';
 PRAGMA yt.JoinMergeUnsortedFactor = '3';
 PRAGMA yt.JoinAllowColumnRenames = 'true';
 
-$semi =
+$semi = (
     SELECT
         *
     FROM
@@ -14,7 +14,7 @@ $semi =
         Input4 AS d
     ON
         c.k3 == d.k4
-;
+);
 
 FROM
     $semi AS semi

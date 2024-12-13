@@ -1,6 +1,6 @@
 PRAGMA warning('disable', '4520');
 
-$my_table =
+$my_table = (
     SELECT
         1 AS id,
         1 AS ts,
@@ -30,7 +30,7 @@ $my_table =
         3 AS id,
         10 AS ts,
         40 AS value1
-;
+);
 
 $cnt_create = ($_item, $_parent) -> {
     RETURN 1ul;

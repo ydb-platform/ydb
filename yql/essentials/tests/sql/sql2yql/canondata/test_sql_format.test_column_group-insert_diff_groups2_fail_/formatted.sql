@@ -3,23 +3,23 @@ USE plato;
 
 PRAGMA yt.ColumnGroupMode = 'perusage';
 
-$s1 =
+$s1 = (
     SELECT
         *
     FROM
         Input
     WHERE
         a != ''
-;
+);
 
-$s2 =
+$s2 = (
     SELECT
         *
     FROM
         Input
     WHERE
         a > 'a1'
-;
+);
 
 INSERT INTO Output
 SELECT

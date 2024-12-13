@@ -9,15 +9,15 @@ $reduce = ($_, $TableRows) -> {
     );
 };
 
-$stream =
+$stream = (
     SELECT
         *
     FROM
         Input
-;
+);
 
 --
-$stream1 =
+$stream1 = (
     REDUCE $stream
     PRESORT
         value1
@@ -29,9 +29,9 @@ $stream1 =
         key,
         subkey,
         value1
-;
+);
 
-$stream1 =
+$stream1 = (
     REDUCE $stream1
     PRESORT
         value1
@@ -43,10 +43,10 @@ $stream1 =
         key,
         subkey,
         value1
-;
+);
 
 --
-$stream2 =
+$stream2 = (
     REDUCE $stream
     PRESORT
         value1,
@@ -60,9 +60,9 @@ $stream2 =
         subkey,
         value1,
         value2
-;
+);
 
-$stream2 =
+$stream2 = (
     REDUCE $stream2
     PRESORT
         value1
@@ -74,10 +74,10 @@ $stream2 =
         key,
         subkey,
         value1
-;
+);
 
 --
-$stream3 =
+$stream3 = (
     REDUCE $stream
     PRESORT
         value1,
@@ -93,9 +93,9 @@ $stream3 =
         value1,
         value2,
         value3
-;
+);
 
-$stream3 =
+$stream3 = (
     REDUCE $stream3
     ON
         key,
@@ -104,7 +104,7 @@ $stream3 =
     ASSUME ORDER BY
         key,
         subkey
-;
+);
 
 SELECT
     *

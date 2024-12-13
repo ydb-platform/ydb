@@ -1,21 +1,21 @@
 /* postgres can not */
 USE plato;
 
-$max =
+$max = (
     SELECT
         max(key)
     FROM
         Input
-;
+);
 
-$list =
+$list = (
     SELECT
         key
     FROM
         Input
     WHERE
         subkey > '1'
-;
+);
 
 SELECT
     *

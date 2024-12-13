@@ -6,7 +6,7 @@ USE plato;
 
 $data = [<||>];
 
-$BadPredicate =
+$BadPredicate = (
     SELECT
         TableRow()
     FROM (
@@ -21,7 +21,7 @@ $BadPredicate =
                     A AS 123 -- must fail, Bool expected
             )
     )
-;
+);
 
 SELECT
     FormatType(TypeOf($BadPredicate))

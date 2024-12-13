@@ -6,14 +6,14 @@ USE plato;
 
 PRAGMA DisableSimpleColumns;
 
-$a =
+$a = (
     SELECT
         *
     FROM
         Input
     WHERE
         key > '199' AND value != 'bbb'
-;
+);
 
 SELECT
     *

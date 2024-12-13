@@ -201,7 +201,7 @@ Y_UNIT_TEST(NamedNode) {
     TCases cases = {
         {"$x=1","$x = 1;\n"},
         {"$x,$y=(2,3)","$x, $y = (2, 3);\n"},
-        {"$a = select 1 union all select 2","$a =\n\tSELECT\n\t\t1\n\tUNION ALL\n\tSELECT\n\t\t2\n;\n"},
+        {"$a = select 1 union all select 2","$a = (\n\tSELECT\n\t\t1\n\tUNION ALL\n\tSELECT\n\t\t2\n);\n"},
     };
 
     TSetup setup;
@@ -576,6 +576,14 @@ Y_UNIT_TEST(DefineActionOrSubquery) {
             "UNION ALL\n\t"
             "SELECT\n\t\t*\n\tFROM\n\t\t$t2\n\t;\n"
             "END DEFINE;\n"},
+        {"define subquery $s() as $t = select * from $a end define",
+            "DEFINE SUBQUERY $s() AS\n\t"
+            "$t = (\n\t\tSELECT\n\t\t\t*\n\t\tFROM\n\t\t\t$a\n\t);\n"
+            "END DEFINE;\n"},
+        {"define subquery $s() as; $t = select * from $a; end define",
+            "DEFINE SUBQUERY $s() AS\n\t"
+            "$t = (\n\t\tSELECT\n\t\t\t*\n\t\tFROM\n\t\t\t$a\n\t);\n"
+            "END DEFINE;\n"},
     };
 
     TSetup setup;
@@ -595,7 +603,9 @@ Y_UNIT_TEST(If) {
             "ELSE DO BEGIN\n\tSELECT\n\t\t2\n\t;\nEND DO;\n"},
         {"evaluate if 1=1 do begin; select 1 end do else do begin select 2;; select 3 end do",
             "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1\n\t;\nEND DO ELSE DO BEGIN\n\t"
-            "SELECT\n\t\t2\n\t;\n\n\tSELECT\n\t\t3\n\t;\nEND DO;\n"}
+            "SELECT\n\t\t2\n\t;\n\n\tSELECT\n\t\t3\n\t;\nEND DO;\n"},
+        {"evaluate if 1=1 do begin (select 1) end do",
+            "EVALUATE IF 1 == 1 DO BEGIN\n\t(\n\t\tSELECT\n\t\t\t1\n\t);\nEND DO;\n"},
     };
 
     TSetup setup;
@@ -616,6 +626,8 @@ Y_UNIT_TEST(For) {
             "EVALUATE PARALLEL FOR $x IN [] DO\n\t$a($x)\n;\n"},
         {"evaluate for $x in [] do begin; select $x;; select $y end do",
             "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x\n\t;\n\n\tSELECT\n\t\t$y\n\t;\nEND DO;\n"},
+        {"evaluate for $x in [] do begin (select 1) end do",
+            "EVALUATE FOR $x IN [] DO BEGIN\n\t(\n\t\tSELECT\n\t\t\t1\n\t);\nEND DO;\n"},
     };
 
     TSetup setup;
@@ -912,9 +924,11 @@ Y_UNIT_TEST(Lambda) {
 Y_UNIT_TEST(NestedSelect) {
     TCases cases = {
         {"$x=select 1",
-            "$x =\n\tSELECT\n\t\t1\n;\n"},
+            "$x = (\n\tSELECT\n\t\t1\n);\n"},
         {"$x=(select 1)",
             "$x = (\n\tSELECT\n\t\t1\n);\n"},
+        {"$x=((select 1))",
+            "$x = (\n\t(\n\t\tSELECT\n\t\t\t1\n\t)\n);\n"},
         {"select 1 in (select 1)",
             "SELECT\n\t1 IN (\n\t\tSELECT\n\t\t\t1\n\t)\n;\n"},
         {"select 1 in ((select 1))",
@@ -1443,7 +1457,9 @@ Y_UNIT_TEST(Union) {
     TCases cases = {
         {"select 1 union all select 2 union select 3 union all select 4 union select 5",
             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION ALL\nSELECT\n\t4\nUNION\nSELECT\n\t5\n;\n"},
-            };
+        {"select 1 union all (select 2)",
+            "SELECT\n\t1\nUNION ALL\n(\n\tSELECT\n\t\t2\n);\n"},
+    };
 
     TSetup setup;
     setup.Run(cases);

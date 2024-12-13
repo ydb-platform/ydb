@@ -12,9 +12,9 @@ FROM
 
 COMMIT;
 
-$input =
+$input = (
     PROCESS Output
-;
+);
 
 $c = EvaluateCode(ReprCode(FormatType(TypeOf($input))));
 
@@ -31,9 +31,9 @@ FROM
 
 COMMIT;
 
-$input =
+$input = (
     PROCESS Output
-;
+);
 
 $c = EvaluateCode(ReprCode(FormatType(TypeOf($input))));
 

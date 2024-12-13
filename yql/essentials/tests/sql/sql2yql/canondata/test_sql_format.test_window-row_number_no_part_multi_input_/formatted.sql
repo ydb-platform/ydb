@@ -29,7 +29,7 @@ $input = (
         Input
 );
 
-$output =
+$output = (
     SELECT
         key,
         ROW_NUMBER() OVER w AS row_num
@@ -37,7 +37,7 @@ $output =
         $input
     WINDOW
         w AS ()
-;
+);
 
 SELECT
     min(key) AS min_key,

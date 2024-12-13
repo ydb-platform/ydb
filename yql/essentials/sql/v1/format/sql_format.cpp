@@ -54,26 +54,47 @@ void SkipForValidate(
     TTokenIterator& in,
     TTokenIterator& out,
     const TParsedTokenList& query,
-    const TParsedTokenList& formattedQuery
+    const TParsedTokenList& formattedQuery,
+    i32& parenthesesBalance
 ) {
     in = SkipWS(in, query.end());
     out = SkipWS(out, formattedQuery.end());
 
-    while (
-        in != query.end() && in->Name == "SEMICOLON" &&
-        (out == formattedQuery.end() || out->Name != "SEMICOLON") &&
-        in != query.begin() && IsIn({"SEMICOLON", "LBRACE_CURLY", "AS", "BEGIN"}, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
-    ) {
-        in = SkipWS(++in, query.end());
-    }
+    auto skipDeletedToken = [&](const TString& deletedToken, const TVector<TString>& afterTokens) {
+        if (
+            in != query.end() && in->Name == deletedToken &&
+            (out == formattedQuery.end() || out->Name != deletedToken) &&
+            in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
+        ) {
+            in = SkipWS(++in, query.end());
+            return true;
+        }
+        return false;
+    };
+
+    while (skipDeletedToken("SEMICOLON", {"AS", "BEGIN", "LBRACE_CURLY", "SEMICOLON"})) {}
 
     auto inSkippedComments = SkipWSOrComment(in, query.end());
-    if (
-        out != formattedQuery.end() && out->Name == "SEMICOLON" &&
-        inSkippedComments != query.end() && IsIn({"RBRACE_CURLY", "END"}, inSkippedComments->Name)
-    ) {
-        out = SkipWS(++out, formattedQuery.end());
-    }
+
+    auto skipAddedToken = [&](const TString& addedToken, const TVector<TString>& beforeTokens, const TVector<TString>& afterTokens) {
+        if (
+            out != formattedQuery.end() && out->Name == addedToken &&
+            (in == query.end() || in->Name != addedToken) &&
+            (beforeTokens.empty() || (inSkippedComments != query.end() && IsIn(beforeTokens, inSkippedComments->Name))) &&
+            (afterTokens.empty() || (in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)))
+        ) {
+            out = SkipWS(++out, formattedQuery.end());
+            if (addedToken == "LPAREN") {
+                ++parenthesesBalance;
+            } else if (addedToken == "RPAREN") {
+                --parenthesesBalance;
+            }
+        }
+    };
+
+    skipAddedToken("LPAREN", {}, {"EQUALS"});
+    skipAddedToken("RPAREN", {"END", "EOF", "SEMICOLON"}, {});
+    skipAddedToken("SEMICOLON", {"END", "RBRACE_CURLY"}, {});
 }
 
 TParsedToken TransformTokenForValidate(TParsedToken token) {
@@ -102,8 +123,10 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
     auto inEnd = query.end();
     auto outEnd = formattedQuery.end();
 
+    i32 parenthesesBalance = 0;
+
     while (in != inEnd && out != outEnd) {
-        SkipForValidate(in, out, query, formattedQuery);
+        SkipForValidate(in, out, query, formattedQuery, parenthesesBalance);
         if (in != inEnd && out != outEnd) {
             auto inToken = TransformTokenForValidate(*in);
             auto outToken = TransformTokenForValidate(*out);
@@ -127,8 +150,9 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
             ++out;
         }
     }
-    SkipForValidate(in, out, query, formattedQuery);
-    return in == inEnd && out == outEnd;
+    SkipForValidate(in, out, query, formattedQuery, parenthesesBalance);
+
+    return in == inEnd && out == outEnd && parenthesesBalance == 0;
 }
 
 enum EParenType {
@@ -932,11 +956,13 @@ private:
 
             case TRule_subselect_stmt::TBlock1::kAlt2: {
                 const auto& alt = subselect.GetBlock1().GetAlt2();
+                Out(" (");
                 NewLine();
                 PushCurrentIndent();
                 Visit(alt);
                 PopCurrentIndent();
                 NewLine();
+                Out(')');
                 break;
             }
 

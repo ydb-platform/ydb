@@ -5,7 +5,7 @@
 /* yt can not */
 PRAGMA FlexibleTypes;
 
-$groupsrc =
+$groupsrc = (
     SELECT
         '1' AS key,
         '2' AS String
@@ -13,7 +13,7 @@ $groupsrc =
     SELECT
         '1' AS key,
         '3' AS String
-;
+);
 
 $foo = ($k, $t) -> (FormatType($t) || '_' || $k);
 

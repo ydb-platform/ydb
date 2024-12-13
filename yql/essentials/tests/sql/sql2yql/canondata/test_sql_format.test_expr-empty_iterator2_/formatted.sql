@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-$train =
+$train = (
     SELECT
         key,
         value
@@ -13,7 +13,7 @@ $train =
         value
     HAVING
         key > '900'
-;
+);
 
 $method = ($stream) -> {
     $func = CALLABLE (
@@ -25,10 +25,10 @@ $method = ($stream) -> {
     RETURN $func($stream);
 };
 
-$prediction =
+$prediction = (
     PROCESS $train
     USING $method(TableRows())
-;
+);
 
 SELECT
     *

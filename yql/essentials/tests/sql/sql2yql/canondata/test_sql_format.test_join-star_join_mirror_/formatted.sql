@@ -3,7 +3,7 @@ USE plato;
 
 PRAGMA yt.JoinEnableStarJoin = 'true';
 
-$leftSemi =
+$leftSemi = (
     SELECT
         *
     FROM
@@ -12,9 +12,9 @@ $leftSemi =
         Input2 AS b
     ON
         b.k2 == a.k1 AND a.v1 == b.v2
-;
+);
 
-$rightOnly =
+$rightOnly = (
     SELECT
         *
     FROM
@@ -23,9 +23,9 @@ $rightOnly =
         $leftSemi AS ls
     ON
         ls.k1 == c.k3 AND ls.v1 == c.v3
-;
+);
 
-$left =
+$left = (
     SELECT
         *
     FROM
@@ -34,9 +34,9 @@ $left =
         Input4 AS d
     ON
         ro.v1 == d.v4 AND d.k4 == ro.k1
-;
+);
 
-$inner =
+$inner = (
     SELECT
         *
     FROM ANY
@@ -45,7 +45,7 @@ $inner =
         $left AS l
     ON
         e.k5 == l.k1 AND l.v1 == e.v5
-;
+);
 
 SELECT
     *

@@ -1,6 +1,6 @@
 USE plato;
 
-$input =
+$input = (
     SELECT
         key,
         some(subkey) AS subkey,
@@ -9,7 +9,7 @@ $input =
         Input
     GROUP BY
         key
-;
+);
 
 SELECT
     key

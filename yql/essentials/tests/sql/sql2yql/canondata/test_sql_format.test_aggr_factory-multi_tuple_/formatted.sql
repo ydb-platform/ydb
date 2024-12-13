@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-$input =
+$input = (
     SELECT
         AsTuple(
             1,
@@ -14,7 +14,7 @@ $input =
             Just(5),
             Just(6)
         ) AS nums
-;
+);
 
 SELECT
     MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY('count')) AS count,

@@ -1,7 +1,7 @@
 USE plato;
 
 PRAGMA yt.JobBlockOutput = 'force';
-PRAGMA yt.JobBlockOutputSupportedDataTypes = "Bool,Double,String,Int64,Utf8,Yson";
+PRAGMA yt.JobBlockOutputSupportedDataTypes = 'Bool,Double,String,Int64,Utf8,Yson';
 
 SELECT
     `bool`,

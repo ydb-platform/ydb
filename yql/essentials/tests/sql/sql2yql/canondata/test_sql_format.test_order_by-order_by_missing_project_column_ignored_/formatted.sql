@@ -7,14 +7,14 @@ PRAGMA warning('disable', '4504');
 
 $t = [<|k: 1, v: 2|>];
 
-$src =
+$src = (
     SELECT
         k
     FROM
         as_table($t)
     ORDER BY
         x
-;
+);
 
 SELECT
     *
@@ -22,7 +22,7 @@ FROM
     $src
 ;
 
-$src =
+$src = (
     SELECT
         a.k AS key
     FROM
@@ -33,7 +33,7 @@ $src =
         a.k == b.k
     ORDER BY
         b.u
-;
+);
 
 SELECT
     *
@@ -41,7 +41,7 @@ FROM
     $src
 ;
 
-$src =
+$src = (
     SELECT
         a.k AS key
     FROM
@@ -52,7 +52,7 @@ $src =
         a.k == b.k
     ORDER BY
         v
-;
+);
 
 SELECT
     *
@@ -60,7 +60,7 @@ FROM
     $src
 ;
 
-$src =
+$src = (
     SELECT
         a.k AS key
     FROM
@@ -71,7 +71,7 @@ $src =
         a.k == b.k
     ORDER BY
         z
-;
+);
 
 SELECT
     *

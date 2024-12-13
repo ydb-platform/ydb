@@ -8,7 +8,7 @@ $round_period = ($day, $period) -> {
     END;
 };
 
-$data =
+$data = (
     SELECT
         $round_period(day, 'd') AS day,
         $round_period(day, 'w') AS week,
@@ -35,7 +35,7 @@ $data =
             1111 AS user_id,
             0 AS is_proven_owner,
     )
-;
+);
 
 SELECT
     day,

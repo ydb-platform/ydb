@@ -3,14 +3,14 @@ PRAGMA yt.PruneKeyFilterLambda = 'true';
 
 USE plato;
 
-$src =
+$src = (
     SELECT
         *
     FROM
         Input
     WHERE
         key == '1' || '5' || '0'
-;
+);
 
 SELECT
     key,

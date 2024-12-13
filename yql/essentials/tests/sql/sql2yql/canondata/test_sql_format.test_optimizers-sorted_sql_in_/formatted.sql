@@ -1,20 +1,20 @@
 USE plato;
 
-$ou =
+$ou = (
     SELECT
         *
     FROM
         Input
-;
+);
 
-$a =
+$a = (
     SELECT
         *
     FROM
         $ou
     WHERE
         key > '0'
-;
+);
 
 INSERT INTO @a
 SELECT

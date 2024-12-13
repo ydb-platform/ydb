@@ -1,9 +1,9 @@
 PRAGMA CompactNamedExprs;
 
-$src =
+$src = (
     SELECT
         1
-;
+);
 
 DEFINE SUBQUERY $sub1() AS
     SELECT

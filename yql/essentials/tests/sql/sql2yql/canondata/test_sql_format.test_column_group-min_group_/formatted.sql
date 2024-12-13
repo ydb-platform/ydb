@@ -3,14 +3,14 @@ USE plato;
 PRAGMA yt.MinColumnGroupSize = '3';
 PRAGMA yt.ColumnGroupMode = 'perusage';
 
-$i =
+$i = (
     SELECT
         *
     FROM
         Input
     WHERE
         a > 'a'
-;
+);
 
 SELECT
     a,

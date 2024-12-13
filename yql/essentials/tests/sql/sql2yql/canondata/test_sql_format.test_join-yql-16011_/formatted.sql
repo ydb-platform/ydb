@@ -23,7 +23,7 @@ ORDER BY
 
 COMMIT;
 
-$lost_ids =
+$lost_ids = (
     SELECT
         ID
     FROM
@@ -35,16 +35,16 @@ $lost_ids =
             FROM
                 @T1
         )
-;
+);
 
-$lost_samples_after_align =
+$lost_samples_after_align = (
     SELECT
         *
     FROM
         @T2
     WHERE
         ID IN $lost_ids
-;
+);
 
 SELECT
     *

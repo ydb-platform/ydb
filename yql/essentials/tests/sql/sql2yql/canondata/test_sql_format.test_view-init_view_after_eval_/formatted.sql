@@ -1,16 +1,16 @@
 /* postgres can not */
 USE plato;
 
-$i =
+$i = (
     SELECT
         *
     FROM
         Input
-;
+);
 
-$i =
+$i = (
     PROCESS $i
-;
+);
 
 $members = StructTypeComponents(ListItemType(TypeHandle(TypeOf($i))));
 

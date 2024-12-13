@@ -1,18 +1,18 @@
 USE plato;
 
-$one =
+$one = (
     SELECT
         min(AssumeNonStrict(value))
     FROM
         Input
-;
+);
 
-$two =
+$two = (
     SELECT
         AssumeNonStrict(min(value))
     FROM
         Input
-;
+);
 
 -- fully converted to blocks - scalar context is assumed strict
 SELECT

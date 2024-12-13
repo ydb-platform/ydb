@@ -17,7 +17,7 @@ ORDER BY
 
 COMMIT;
 
-$small =
+$small = (
     SELECT
         substring(key, 0, 2) AS key,
         subkey || '000' AS subkey
@@ -26,7 +26,7 @@ $small =
     ORDER BY
         key
     LIMIT 5 OFFSET 8
-;
+);
 
 SELECT
     *

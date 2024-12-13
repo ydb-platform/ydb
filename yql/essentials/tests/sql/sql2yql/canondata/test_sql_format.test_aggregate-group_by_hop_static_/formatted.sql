@@ -2,7 +2,7 @@
 /* postgres can not */
 /* ytfile can not */
 /* yt can not */
-$input =
+$input = (
     SELECT
         *
     FROM
@@ -20,7 +20,7 @@ $input =
             <|'time': '2024-01-01T00:00:02Z', 'user': 3|>,
             <|'time': '2024-01-01T00:00:03Z', 'user': 3|>
         ])
-;
+);
 
 SELECT
     user,

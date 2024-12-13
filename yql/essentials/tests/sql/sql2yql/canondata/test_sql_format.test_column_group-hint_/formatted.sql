@@ -1,43 +1,43 @@
 USE plato;
 
-$i1 =
+$i1 = (
     SELECT
         *
     FROM
         Input
     WHERE
         a > 'a'
-;
+);
 
 -- several publish consumers with same groups
-$i2 =
+$i2 = (
     SELECT
         *
     FROM
         Input
     WHERE
         a > 'a1'
-;
+);
 
 -- several publish consumers with different groups
-$i3 =
+$i3 = (
     SELECT
         *
     FROM
         Input
     WHERE
         a < 'a2'
-;
+);
 
 -- several consumers including publish
-$i4 =
+$i4 = (
     SELECT
         *
     FROM
         Input
     WHERE
         a != 'a'
-;
+);
 
 -- several publish consumers with and without groups
 -- test column group spec normalization

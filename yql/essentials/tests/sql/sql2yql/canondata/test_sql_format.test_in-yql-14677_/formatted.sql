@@ -3,12 +3,12 @@ USE plato;
 
 PRAGMA yt.MapJoinLimit = '1m';
 
-$l1 =
+$l1 = (
     SELECT
         key
     FROM
         `Input`
-;
+);
 
 SELECT
     *

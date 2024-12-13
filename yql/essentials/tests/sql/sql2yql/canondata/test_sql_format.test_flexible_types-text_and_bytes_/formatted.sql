@@ -5,11 +5,11 @@
 /* yt can not */
 PRAGMA FlexibleTypes;
 
-$src =
+$src = (
     SELECT
         Text('test_text, привет') AS text,
         Bytes('binary\x00\xff') AS bytes
-;
+);
 
 SELECT
     text,

@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-$input =
+$input = (
     SELECT
         AsList(
             1,
@@ -20,7 +20,7 @@ $input =
             2,
             3
         ) AS nums
-;
+);
 
 SELECT
     MULTI_AGGREGATE_BY(DISTINCT ListExtend(nums, AsList(1, 5)), AGGREGATION_FACTORY('count')) AS count,

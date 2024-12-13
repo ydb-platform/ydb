@@ -13,12 +13,12 @@ SELECT
 
 COMMIT;
 
-$whitelist =
+$whitelist = (
     SELECT
         aggregate_list(field)
     FROM
         Output
-;
+);
 
 SELECT
     ForceSpreadMembers([('key', key)], Unwrap($whitelist))

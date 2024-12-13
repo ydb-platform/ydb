@@ -39,7 +39,7 @@ const ui64 UnconfiguredBufferSizeLimit = 32 << 20;
 
 const TDuration ProxyEstablishSessionsTimeout = TDuration::Seconds(100);
 
-const ui64 DsPutWakeupMs = 60000;
+const TDuration DsMinimumDelayBetweenPutWakeups = TDuration::MilliSeconds(1);
 
 const ui64 BufferSizeThreshold = 1 << 20;
 
@@ -143,6 +143,7 @@ NActors::NLog::EPriority PriorityForStatusInbound(NKikimrProto::EReplyStatus sta
     XX(TEvBlobStorage::TEvPut) \
     XX(TEvBlobStorage::TEvGet) \
     XX(TEvBlobStorage::TEvBlock) \
+    XX(TEvBlobStorage::TEvGetBlock) \
     XX(TEvBlobStorage::TEvDiscover) \
     XX(TEvBlobStorage::TEvRange) \
     XX(TEvBlobStorage::TEvCollectGarbage) \
@@ -485,6 +486,16 @@ struct TBlobStorageGroupBlockParameters {
     };
 };
 IActor* CreateBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters params);
+
+struct TBlobStorageGroupGetBlockParameters {
+    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvGetBlock> Common;
+    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+        .LogComponent = NKikimrServices::BS_PROXY_GETBLOCK,
+        .Name = "DSProxy.GetBlock",
+        .Activity = NKikimrServices::TActivity::BS_GROUP_GETBLOCK,
+    };
+};
+IActor* CreateBlobStorageGroupGetBlockRequest(TBlobStorageGroupGetBlockParameters params);
 
 struct TBlobStorageGroupStatusParameters {
     TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvStatus> Common;

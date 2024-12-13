@@ -250,11 +250,11 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     }
 
     Y_UNIT_TEST(KillOwnerWhileDecommittingWithInflight) {
-        TestKillOwnerWhileDecommitting(false, 20, 0, 10, 100);
+        TestKillOwnerWhileDecommitting(false, 20, 50, 10, 100);
     }
 
     Y_UNIT_TEST(KillOwnerWhileDecommittingWithInflightMock) {
-        TestKillOwnerWhileDecommitting(true, 20, 0, 10, 100);
+        TestKillOwnerWhileDecommitting(true, 20, 50, 10, 100);
     }
 
     void OwnerRecreationRaces(bool usePDiskMock, ui32 timeLimit, ui32 vdisksNum) {
@@ -320,6 +320,173 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
 
     Y_UNIT_TEST(OwnerRecreationRaces) {
         OwnerRecreationRaces(false, 20, 1);
+    }
+
+    void TestKillOwnerWhileReadingLog(ui32 timeLimit) {
+        // This test is not deterministic, so we run it multiple times to increase the chance of catching the bug.
+        // We expect to see quarantined log chunks in the log at least once (however locally it was seen every time).
+        // The original bug was crashing the server, so this test also tests this and that's why it doesn't break the cycle
+        // upon encountering quarantined log chunks.
+        bool capturedQuarantinedLogChunks = false;
+        THPTimer timer;
+        while (timer.Passed() < timeLimit) {
+            TStringStream ss;
+
+            TActorTestContext testCtx({ 
+                .IsBad = false,
+                .UsePDiskMock = false,
+                .LogBackend = new TStreamLogBackend(&ss),
+            });
+            const TString data = PrepareData(10_MB);
+
+            auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
+                TString dataCopy = data;
+                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(dataCopy),
+                        mock.GetLsnSeg(), nullptr);
+                evLog->Signature.SetCommitRecord();
+                evLog->CommitRecord = std::move(rec);
+                testCtx.Send(evLog.Release());
+            };
+
+            TVDiskMock mock(&testCtx);
+            mock.Init();
+
+            for (ui32 i = 0; i < 20; ++i) {
+                NPDisk::TCommitRecord rec;
+                logNoTest(mock, rec);
+                testCtx.Recv<NPDisk::TEvLogResult>();
+            }
+
+            testCtx.RestartPDiskSync();
+
+            mock.Init();
+
+            NPDisk::TLogPosition position{0, 0};
+
+            bool readCallbackCalled = false;
+
+            testCtx.TestCtx.SectorMap->SetReadCallback([&]() {
+                if (!readCallbackCalled) {
+                    readCallbackCalled = true;
+
+                    testCtx.Send(new NPDisk::TEvHarakiri(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound));
+                }
+            });
+
+            testCtx.Send(new NPDisk::TEvReadLog(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, position));
+
+            testCtx.Recv<NPDisk::TEvHarakiriResult>();
+
+            {
+                TVDiskMock mock(&testCtx);
+                mock.Init();
+
+                for (ui32 i = 0; i < 13; ++i) {
+                    NPDisk::TCommitRecord rec;
+                    logNoTest(mock, rec);
+                    testCtx.Recv<NPDisk::TEvLogResult>();
+                }
+            }
+
+            if (!capturedQuarantinedLogChunks) {
+                TString log = ss.Str();
+                capturedQuarantinedLogChunks = log.Contains("along with log chunks");
+            }
+        }
+
+        UNIT_ASSERT(capturedQuarantinedLogChunks);
+    }
+
+    Y_UNIT_TEST(OwnerKilledWhileReadingLog) {
+        TestKillOwnerWhileReadingLog(20);
+    }
+
+    void TestKillOwnerWhileReadingLogAndThenKillLastOwner(ui32 timeLimit) {
+        bool capturedQuarantinedLogChunks = false;
+        THPTimer timer;
+        while (timer.Passed() < timeLimit) {
+            TStringStream ss;
+
+            TActorTestContext testCtx({ 
+                .IsBad = false,
+                .UsePDiskMock = false,
+                .LogBackend = new TStreamLogBackend(&ss),
+            });
+            const TString data = PrepareData(10_MB);
+
+            auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
+                TString dataCopy = data;
+                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(dataCopy),
+                        mock.GetLsnSeg(), nullptr);
+                evLog->Signature.SetCommitRecord();
+                evLog->CommitRecord = std::move(rec);
+                testCtx.Send(evLog.Release());
+            };
+
+            TVDiskMock mock1(&testCtx);
+            mock1.Init();
+
+            TVDiskMock mock2(&testCtx);
+            mock2.Init();
+
+            for (ui32 i = 0; i < 20; ++i) {
+                {
+                    NPDisk::TCommitRecord rec;
+                    logNoTest(mock1, rec);
+                    testCtx.Recv<NPDisk::TEvLogResult>();
+                }
+                {
+                    NPDisk::TCommitRecord rec;
+                    logNoTest(mock2, rec);
+                    testCtx.Recv<NPDisk::TEvLogResult>();
+                }
+            }
+
+            testCtx.RestartPDiskSync();
+
+            mock1.Init();
+            mock2.InitFull();
+
+            NPDisk::TLogPosition position{0, 0};
+
+            bool readCallbackCalled = false;
+
+            testCtx.TestCtx.SectorMap->SetReadCallback([&]() {
+                if (!readCallbackCalled) {
+                    readCallbackCalled = true;
+
+                    testCtx.Send(new NPDisk::TEvHarakiri(mock1.PDiskParams->Owner, mock1.PDiskParams->OwnerRound));
+                    testCtx.Send(new NPDisk::TEvHarakiri(mock2.PDiskParams->Owner, mock2.PDiskParams->OwnerRound));
+                }
+            });
+
+            testCtx.Send(new NPDisk::TEvReadLog(mock1.PDiskParams->Owner, mock1.PDiskParams->OwnerRound, position));
+
+            testCtx.Recv<NPDisk::TEvHarakiriResult>();
+            testCtx.Recv<NPDisk::TEvHarakiriResult>();
+            
+            {
+                TVDiskMock mock(&testCtx);
+                mock.Init();
+
+                for (ui32 i = 0; i < 30; ++i) {
+                    NPDisk::TCommitRecord rec;
+                    logNoTest(mock, rec);
+                    testCtx.Recv<NPDisk::TEvLogResult>();
+                }
+            }
+
+            if (!capturedQuarantinedLogChunks) {
+                TString log = ss.Str();
+                capturedQuarantinedLogChunks = log.Contains("along with log chunks");
+            }
+        }
+
+        UNIT_ASSERT(capturedQuarantinedLogChunks);
+    }
+
+    Y_UNIT_TEST(OwnerKilledWhileReadingLogAndThenKillLastOwner) {
+        TestKillOwnerWhileReadingLogAndThenKillLastOwner(20);
     }
 }
 

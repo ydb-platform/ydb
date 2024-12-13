@@ -38,6 +38,20 @@ message TConnectionParams {
     }
 }
 
+message TConsistencySettings {
+    message TRowConsistency {
+    }
+
+    message TGlobalConsistency {
+        optional uint64 CommitIntervalMilliSeconds = 1;
+    }
+
+    oneof Level {
+        TRowConsistency Row = 1;
+        TGlobalConsistency Global = 2;
+    }
+}
+
 message TReplicationConfig {
     message TTargetEverything {
         optional string DstPrefix = 1;
@@ -79,6 +93,7 @@ message TReplicationConfig {
     }
 
     optional TConnectionParams SrcConnectionParams = 1;
+    optional TConsistencySettings ConsistencySettings = 7;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.
@@ -88,22 +103,10 @@ message TReplicationConfig {
         // replicate specified objects
         TTargetSpecific Specific = 5;
         // transfer  specified objects
-        TTransferSpecific TransferSpecific = 9;
+        TTransferSpecific TransferSpecific = 8;
     }
 
     reserved 6; // InitialSync
-
-    message TWeakConsistency {
-    }
-
-    message TStrongConsistency {
-        optional uint64 CommitIntervalMilliSeconds = 1;
-    }
-
-    oneof Consistency {
-        TWeakConsistency WeakConsistency = 7;
-        TStrongConsistency StrongConsistency = 8;
-    }
 }
 
 message TReplicationState {
@@ -252,6 +255,8 @@ message TRunWorkerCommand {
     oneof Writer {
         TLocalTableWriterSettings LocalTableWriter = 2;
     }
+
+    optional TConsistencySettings ConsistencySettings = 3;
 }
 
 message TEvRunWorker {

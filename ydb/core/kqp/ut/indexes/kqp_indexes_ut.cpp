@@ -5444,6 +5444,199 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), R"([[[100u];[101u]];[[200u];[201u]]])");
         }
     }
+
+    Y_UNIT_TEST_TWIN(JoinWithNonPKColumnsInPredicate, UseStreamJoin) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(UseStreamJoin);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {  // create tables
+            const TString createTableSql = R"(
+                CREATE TABLE `Root/tab1` (
+                    id Text NOT NULL,
+                    dst_ident Text,
+                    exec_dt Timestamp,
+                    PRIMARY KEY(id),
+                    INDEX ix_exec_dt GLOBAL ON (exec_dt)
+                );
+                CREATE TABLE `Root/tab2` (
+                    id Text NOT NULL,
+                    int_ref Text,
+                    ext_ref Text,
+                    send_dttm Timestamp,
+                    PRIMARY KEY(id),
+                    INDEX ix_int_ref GLOBAL ON (int_ref),
+                    INDEX ix_ext_ref GLOBAL ON (ext_ref),
+                    INDEX ix_send_dttm GLOBAL ON (send_dttm)
+                );
+
+                CREATE TABLE `Root/tab3` (
+                    id Text NOT NULL,
+                    dst_ident Text,
+                    exec_dt Timestamp,
+                    PRIMARY KEY(id),
+                    INDEX ix_exec_dt GLOBAL ON (exec_dt)
+                );
+
+                CREATE TABLE `Root/tab4` (
+                    id Text NOT NULL,
+                    int_ref Text,
+                    ext_ref Text,
+                    good_sign Text,
+                    send_dttm Timestamp,
+                    PRIMARY KEY(id),
+                    INDEX ix_int_ref GLOBAL ON (int_ref),
+                    INDEX ix_ext_ref GLOBAL ON (ext_ref),
+                    INDEX ix_send_dttm GLOBAL ON (send_dttm)
+                );
+
+                CREATE TABLE `Root/tab5` (
+                    t5_id Text NOT NULL,
+                    t5_coll Text,
+                    t5_exec_dt Timestamp,
+                    PRIMARY KEY(t5_id),
+                    INDEX ix_exec_dt GLOBAL ON (t5_exec_dt),
+                    INDEX ix_ref_coll GLOBAL ON (t5_coll)
+                );
+
+                CREATE TABLE `Root/tab6` (
+                    t6_id Text NOT NULL,
+                    t6_coll Text NOT NULL,
+                    t6_link_type Text,
+                    PRIMARY KEY(t6_id, t6_coll),
+                    INDEX ix_magic GLOBAL ON (t6_id, t6_link_type)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {  // fill tables
+            const TString upsertSql(Q_(R"(
+                UPSERT INTO `Root/tab1` (id, dst_ident, exec_dt) VALUES
+                    ('t1-0'u, 'id-1'u, Timestamp('2024-12-03T01:00:00.000000Z')),
+                    ('t1-1'u, 'id-2'u, Timestamp('2024-12-03T02:00:00.000000Z')),
+                    ('t1-2'u, 'id-3'u, Timestamp('2024-12-03T03:00:00.000000Z'));
+
+                UPSERT INTO `Root/tab2` (id, int_ref, ext_ref, send_dttm) VALUES
+                    ('t2-0'u, 't1-0'u, 'id-1'u, Timestamp('2024-12-03T01:01:00.000000Z')),
+                    ('t2-1'u, 't1-0'u, null, Timestamp('2024-12-03T02:01:00.000000Z')),
+                    ('t2-2'u, 't1-0'u, null, Timestamp('2024-12-03T02:01:00.000000Z')),
+                    ('t2-3'u, 't1-1'u, 'id-2'u, Timestamp('2024-12-03T03:01:00.000000Z')),
+                    ('t2-4'u, 't1-1'u, null, Timestamp('2024-12-03T04:01:00.000000Z')),
+                    ('t2-5'u, 't1-1'u, null, Timestamp('2024-12-03T05:01:00.000000Z')),
+                    ('t2-6'u, 't1-2'u, 'id-3'u, Timestamp('2024-12-03T06:01:00.000000Z')),
+                    ('t2-7'u, 't1-2'u, null, Timestamp('2024-12-03T07:01:00.000000Z')),
+                    ('t2-8'u, 't1-2'u, null, Timestamp('2024-12-03T08:01:00.000000Z')),
+                    ('t2-9'u, 't1-2'u, null, Timestamp('2024-12-03T09:01:00.000000Z'));
+
+                UPSERT INTO `Root/tab3` (id, dst_ident, exec_dt) VALUES
+                    ('t1-0'u, 'id-1'u, Timestamp('2024-12-03T01:00:00.000000Z')),
+                    ('t1-1'u, 'id-2'u, Timestamp('2024-12-03T02:00:00.000000Z')),
+                    ('t1-2'u, 'id-3'u, Timestamp('2024-12-03T03:00:00.000000Z'));
+
+                UPSERT INTO `Root/tab4` (id, int_ref, ext_ref, good_sign, send_dttm) VALUES
+                    ('t2-0'u, 't1-0'u, 'id-1'u, 'GOOD'u, Timestamp('2024-12-03T01:01:00.000000Z')),
+                    ('t2-1'u, 't1-0'u, null, 'BAD'u, Timestamp('2024-12-03T02:01:00.000000Z')),
+                    ('t2-2'u, 't1-0'u, null, 'BAD'u, Timestamp('2024-12-03T02:01:00.000000Z')),
+                    ('t2-3'u, 't1-1'u, 'id-2'u, 'GOOD'u, Timestamp('2024-12-03T03:01:00.000000Z')),
+                    ('t2-4'u, 't1-1'u, null, 'BAD'u, Timestamp('2024-12-03T04:01:00.000000Z')),
+                    ('t2-5'u, 't1-1'u, null, 'BAD'u, Timestamp('2024-12-03T05:01:00.000000Z')),
+                    ('t2-6'u, 't1-2'u, 'id-3'u, 'GOOD'u, Timestamp('2024-12-03T06:01:00.000000Z')),
+                    ('t2-7'u, 't1-2'u, null, 'BAD'u, Timestamp('2024-12-03T07:01:00.000000Z')),
+                    ('t2-8'u, 't1-2'u, null, 'BAD'u, Timestamp('2024-12-03T08:01:00.000000Z')),
+                    ('t2-9'u, 't1-2'u, null, 'BAD'u, Timestamp('2024-12-03T09:01:00.000000Z'));
+
+                UPSERT INTO `Root/tab5` (t5_id, t5_coll, t5_exec_dt) VALUES
+                    ('k00'u, null,   Timestamp('2024-12-03T01:00:00.000000Z')),
+                    ('k01'u, null,   Timestamp('2024-12-03T02:00:00.000000Z')),
+                    ('k02'u, null,   Timestamp('2024-12-03T03:00:00.000000Z')),
+                    ('k10'u, 'c00'u, Timestamp('2024-12-03T08:00:00.000000Z'));
+
+                UPSERT INTO `Root/tab6` (t6_id, t6_coll, t6_link_type) VALUES
+                    ('k00'u, 'c00'u, 'l00'u),
+                    ('k01'u, 'c00'u, 'l00'u),
+                    ('k02'u, 'c00'u, 'l00'u);
+            )"));
+
+            auto result = session.ExecuteDataQuery(upsertSql, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {  // join with data column req.ext_ref in predicate
+            const TString joinSql(Q1_(R"(
+                $sys_date = DateTime("2024-12-03T00:00:00Z");
+                $ival = DateTime::IntervalFromDays(1);
+                SELECT req.id, doc.id, req.int_ref, doc.dst_ident, req.ext_ref
+                    FROM `Root/tab1` VIEW ix_exec_dt AS doc
+                    LEFT JOIN `Root/tab2` VIEW ix_int_ref req
+                    ON doc.id = req.int_ref AND doc.dst_ident = req.ext_ref
+                    WHERE doc.exec_dt >= $sys_date and doc.exec_dt <$sys_date + $ival
+                    AND doc.id='t1-1'u;
+            )"));
+
+            auto result = session.ExecuteDataQuery(joinSql, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([
+                [["t2-3"];"t1-1";["t1-1"];["id-2"];["id-2"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {  // join with data column req.ext_ref in predicate
+            const TString joinSql(Q1_(R"(
+                $sys_date = DateTime("2024-12-03T00:00:00Z");
+                $ival = DateTime::IntervalFromDays(1);
+                SELECT doc.id, req.id, doc.dst_ident, req.ext_ref, req.good_sign
+                    FROM `Root/tab3` VIEW ix_exec_dt AS doc
+                    LEFT JOIN (
+                        SELECT id, int_ref, ext_ref, good_sign
+                        FROM `Root/tab4` VIEW ix_int_ref
+                        WHERE good_sign='GOOD'u
+                    ) AS req
+                    ON doc.id = req.int_ref AND doc.dst_ident = req.ext_ref
+                    WHERE doc.exec_dt >= $sys_date and doc.exec_dt <$sys_date + $ival
+                    AND doc.id='t1-1'u;
+            )"));
+
+            auto result = session.ExecuteDataQuery(joinSql, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([
+                ["t1-1";["t2-3"];["id-2"];["id-2"];["GOOD"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {  // join with secondary index column in predicate
+            const TString joinSql(Q1_(R"(
+                SELECT * FROM (
+                    SELECT t5.*, t6.*, t5owner.t5_id as owner_id
+                    FROM (SELECT 'l00'u AS link_type) AS cond1
+                    CROSS JOIN `Root/tab5` AS t5
+                    LEFT JOIN `Root/tab6` VIEW ix_magic AS t6
+                    ON t5.t5_id=t6.t6_id AND t6.t6_link_type=cond1.link_type
+                    LEFT JOIN `Root/tab5` VIEW ix_ref_coll AS t5owner
+                    ON t6.t6_coll=t5owner.t5_coll
+                ) WHERE t5_exec_dt BETWEEN DateTime('2024-12-03T00:00:00Z') AND DateTime('2024-12-05T00:00:00Z')
+                ORDER BY t5_id, t6_id, owner_id;
+            )"));
+
+            auto result = session.ExecuteDataQuery(joinSql, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([
+                [["k10"];#;[1733187600000000u];"k00";["c00"];["k00"];["l00"]];
+                [["k10"];#;[1733191200000000u];"k01";["c00"];["k01"];["l00"]];
+                [["k10"];#;[1733194800000000u];"k02";["c00"];["k02"];["l00"]];
+                [#;["c00"];[1733212800000000u];"k10";#;#;#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
 }
 
 }

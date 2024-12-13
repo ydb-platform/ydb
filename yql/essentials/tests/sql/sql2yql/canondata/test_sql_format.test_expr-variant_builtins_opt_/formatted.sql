@@ -25,6 +25,6 @@ $var_2 = VARIANT ("8", "1", $vartype_t);
 SELECT
     Visit(Just($var_1), $handle_a, $handle_b),
     Visit(Just($var_2), $handle_a, $handle_b),
-    VisitOrDefault(Just($var_2), $handle_a, Just(777u)),
+    VisitOrDefault(Just($var_2), Just(777u), $handle_a),
     VariantItem(Just($var_b))
 ;

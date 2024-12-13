@@ -30,6 +30,7 @@ void TBSConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     SETUP_BS_METHOD(ReplaceStorageConfig, DoReplaceBSConfig, Rps, BSCONFIG_REPLACESTORAGECONFIG);
     SETUP_BS_METHOD(FetchStorageConfig, DoFetchBSConfig, Rps, BSCONFIG_FETCHSTORAGECONFIG);
+    SETUP_BS_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, BSCONFIG_BOOTSTRAP);
 
     #undef SETUP_BS_METHOD
 }

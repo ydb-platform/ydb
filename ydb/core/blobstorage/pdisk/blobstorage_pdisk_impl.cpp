@@ -916,7 +916,7 @@ void TPDisk::SendChunkWriteError(TChunkWrite &chunkWrite, const TString &errorRe
 void TPDisk::SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringStream& error, NKikimrProto::EReplyStatus status) {
     error << " for ownerId# " << read->Owner << " can't read chunkIdx# " << read->ChunkIdx;
     Y_ABORT_UNLESS(status != NKikimrProto::OK);
-    P_LOG(PRI_ERROR, BPD01, error.Str());
+    P_LOG(PRI_ERROR, BPD01, "SendChunkReadError" + error.Str(), (ReqId, read->ReqId));
 
     THolder<NPDisk::TEvChunkReadResult> result = MakeHolder<NPDisk::TEvChunkReadResult>(status,
             read->ChunkIdx, read->Offset, read->Cookie, GetStatusFlags(read->Owner, read->OwnerGroupType), error.Str());
@@ -2112,16 +2112,20 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
         }
 
         TryTrimChunk(false, 0, NWilson::TSpan{});
+        bool readingLog = OwnerData[owner].ReadingLog();
         ui64 lastSeenLsn = 0;
         auto it = LogChunks.begin();
         while (it != LogChunks.end()) {
             if (it->OwnerLsnRange.size() > owner && it->OwnerLsnRange[owner].IsPresent) {
-                Y_ABORT_UNLESS(it->CurrentUserCount > 0);
-                it->CurrentUserCount--;
-                it->OwnerLsnRange[owner].IsPresent = false;
-                it->OwnerLsnRange[owner].FirstLsn = 0;
                 lastSeenLsn = Max(it->OwnerLsnRange[owner].LastLsn, lastSeenLsn);
-                it->OwnerLsnRange[owner].LastLsn = 0;
+
+                if (!readingLog) {
+                    Y_ABORT_UNLESS(it->CurrentUserCount > 0);
+                    it->CurrentUserCount--;
+                    it->OwnerLsnRange[owner].IsPresent = false;
+                    it->OwnerLsnRange[owner].FirstLsn = 0;
+                    it->OwnerLsnRange[owner].LastLsn = 0;
+                }
             }
             ++it;
         }
@@ -2214,8 +2218,10 @@ void TPDisk::ProcessChunkWriteQueue() {
     size_t processed = 0;
     size_t processedBytes = 0;
     double processedCostMs = 0;
-    for (; JointChunkWrites.size(); JointChunkWrites.pop()) {
+    while (JointChunkWrites.size()) {
         TRequestBase *req = JointChunkWrites.front();
+        JointChunkWrites.pop();
+
         req->SpanStack.PopOk();
         req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
 
@@ -2257,8 +2263,9 @@ void TPDisk::ProcessChunkReadQueue() {
     size_t processed = 0;
     size_t processedBytes = 0;
     double processedCostMs = 0;
-    for (; JointChunkReads.size(); JointChunkReads.pop()) {
-        auto& req = JointChunkReads.front();
+    while (JointChunkReads.size()) {
+        auto req = std::move(JointChunkReads.front());
+        JointChunkReads.pop();
         req->SpanStack.PopOk();
         req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
 
@@ -2273,7 +2280,7 @@ void TPDisk::ProcessChunkReadQueue() {
         ui32 chunkIdx = read->ChunkIdx;
         ui8 priorityClass = read->PriorityClass;
         NHPTimer::STime creationTime = read->CreationTime;
-        Y_VERIFY(!read->IsReplied);
+        Y_VERIFY_S(!read->IsReplied, "read's reqId# " << read->ReqId);
         P_LOG(PRI_DEBUG, BPD36, "Performing TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx),
             (PieceCurrentSector, piece->PieceCurrentSector),
             (PieceSizeLimit, piece->PieceSizeLimit),
@@ -2369,21 +2376,50 @@ void TPDisk::ClearQuarantineChunks() {
         *Mon.QuarantineChunks = QuarantineChunks.size();
     }
 
+    bool haveChunksToRelease = false;
+
     {
         const auto it = std::partition(QuarantineOwners.begin(), QuarantineOwners.end(), [&] (TOwner i) {
             return Keeper.GetOwnerUsed(i) || OwnerData[i].HaveRequestsInFlight();
         });
         for (auto delIt = it; delIt != QuarantineOwners.end(); ++delIt) {
-            ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[*delIt].OperationLog, "Remove owner from quarantine, OwnerId# " << *delIt);
-            TOwnerRound ownerRound = OwnerData[*delIt].OwnerRound;
-            OwnerData[*delIt].Reset(false);
-            OwnerData[*delIt].OwnerRound = ownerRound;
-            Keeper.RemoveOwner(*delIt);
-            P_LOG(PRI_NOTICE, BPD01, "removed owner from chunks Keeper through QuarantineOwners",
-                (OwnerId, (ui32)*delIt));
+            TOwner owner = *delIt;
+            ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "Remove owner from quarantine, OwnerId# " << owner);
+            TOwnerRound ownerRound = OwnerData[owner].OwnerRound;
+            OwnerData[owner].Reset(false);
+            OwnerData[owner].OwnerRound = ownerRound;
+            Keeper.RemoveOwner(owner);
+
+            ui64 lastSeenLsn = 0;
+            auto it = LogChunks.begin();
+            while (it != LogChunks.end()) {
+                if (it->OwnerLsnRange.size() > owner && it->OwnerLsnRange[owner].IsPresent) {
+                    Y_ABORT_UNLESS(it->CurrentUserCount > 0);
+                    ui32 userCount = --it->CurrentUserCount;
+                    it->OwnerLsnRange[owner].IsPresent = false;
+                    it->OwnerLsnRange[owner].FirstLsn = 0;
+                    lastSeenLsn = Max(it->OwnerLsnRange[owner].LastLsn, lastSeenLsn);
+                    it->OwnerLsnRange[owner].LastLsn = 0;
+
+                    if (userCount == 0) {
+                        haveChunksToRelease = true;
+                    }
+                }
+                ++it;
+            }
+
+            P_LOG(PRI_NOTICE, BPD01, "removed owner from chunks Keeper through QuarantineOwners" << (haveChunksToRelease ? " along with log chunks" : ""),
+                (OwnerId, (ui32)owner), (LastSeenLsn, lastSeenLsn));
         }
         QuarantineOwners.erase(it, QuarantineOwners.end());
         *Mon.QuarantineOwners = QuarantineOwners.size();
+    }
+
+    if (haveChunksToRelease) {
+        THolder<TCompletionEventSender> completion(new TCompletionEventSender(this));
+        if (ReleaseUnusedLogChunks(completion.Get())) {
+            WriteSysLogRestorePoint(completion.Release(), TReqId(TReqId::KillOwnerSysLog, 0), {});
+        }
     }
 }
 
@@ -3580,7 +3616,6 @@ void TPDisk::Update() {
     Mon.UpdateDurationTracker.SchedulingStart();
 
     // Schedule using Forseti Scheduler
-    //if (!UseNoopSchedulerCached || !ForsetiScheduler.IsEmpty()) {
     if (!UseNoopSchedulerCached) {
         GetJobsFromForsetti();
     }

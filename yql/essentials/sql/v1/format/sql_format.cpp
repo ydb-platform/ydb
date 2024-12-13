@@ -62,7 +62,7 @@ void SkipForValidate(
     while (
         in != query.end() && in->Name == "SEMICOLON" &&
         (out == formattedQuery.end() || out->Name != "SEMICOLON") &&
-        in != query.begin() && IsIn({"SEMICOLON", "LBRACE_CURLY", "AS"}, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
+        in != query.begin() && IsIn({"SEMICOLON", "LBRACE_CURLY", "AS", "BEGIN"}, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
     ) {
         in = SkipWS(++in, query.end());
     }
@@ -560,6 +560,10 @@ private:
     void NewLine() {
         if (TokenIndex >= ParsedTokens.size() || ParsedTokens[TokenIndex].Line > LastLine) {
             WriteComments(true);
+        }
+
+        if (AfterComment && Comments[LastComment - 1].Content.StartsWith("--")) {
+            return;
         }
 
         if (OutColumn) {

@@ -2,7 +2,7 @@ import datetime
 import itertools
 from typing import Sequence
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 import ydb.library.yql.providers.generic.connector.tests.utils.types.ms_sql_server as ms_sql_server
@@ -212,8 +212,8 @@ class Factory:
                     datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
                 ],
             ],
-            data_source_kind=EDataSourceKind.MS_SQL_SERVER,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.MS_SQL_SERVER,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -254,8 +254,8 @@ class Factory:
                     42,
                 ],
             ],
-            data_source_kind=EDataSourceKind.MS_SQL_SERVER,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.MS_SQL_SERVER,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
         )
 
@@ -289,8 +289,8 @@ class Factory:
                     3,
                 ],
             ],
-            data_source_kind=EDataSourceKind.MS_SQL_SERVER,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.MS_SQL_SERVER,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
         )
 
@@ -324,11 +324,11 @@ class Factory:
                 name_=test_case_name,
                 data_in=None,
                 data_out_=[[4, None, None]],
-                protocol=EProtocol.NATIVE,
+                protocol=EGenericProtocol.NATIVE,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
                 select_what=SelectWhat.asterisk(schema.columns),
                 select_where=SelectWhere('col_00_id = 4'),
-                data_source_kind=EDataSourceKind.MS_SQL_SERVER,
+                data_source_kind=EGenericDataSourceKind.MS_SQL_SERVER,
                 schema=schema,
             ),
             TestCase(
@@ -337,11 +337,11 @@ class Factory:
                 data_out_=[
                     ['b'],
                 ],
-                protocol=EProtocol.NATIVE,
+                protocol=EGenericProtocol.NATIVE,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
                 select_what=SelectWhat(SelectWhat.Item(name='col_02_text')),
                 select_where=SelectWhere('col_00_id = col_01_integer'),
-                data_source_kind=EDataSourceKind.MS_SQL_SERVER,
+                data_source_kind=EGenericDataSourceKind.MS_SQL_SERVER,
                 schema=schema,
             ),
         ]

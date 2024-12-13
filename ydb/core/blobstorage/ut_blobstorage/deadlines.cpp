@@ -80,12 +80,12 @@ Y_UNIT_TEST_SUITE(Deadlines) {
 
         ui32 NodeCount;
         TBlobStorageGroupType Erasure;
-        std::shared_ptr<TEnvironmentSetup> Env = nullptr;
+        std::shared_ptr<TEnvironmentSetup> Env;
 
         ui32 GroupId;
         TActorId Edge;
         TDuration VDiskDelay;
-        std::shared_ptr<TVDiskDelayEmulator> VDiskDelayEmulator = nullptr;
+        std::shared_ptr<TVDiskDelayEmulator> VDiskDelayEmulator;
     };
 
     using TSendRequest = std::function<void(TestCtx& ctx)>;

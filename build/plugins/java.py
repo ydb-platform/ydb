@@ -38,22 +38,6 @@ def extract_macro_calls2(unit, macro_value_name):
     return calls
 
 
-def ongenerate_script(unit, *args):
-    """
-    heretic@ promised to make tutorial here
-    Don't forget
-    Feel free to remind
-    """
-    flat, kv = common.sort_by_keywords({'OUT': -1, 'TEMPLATE': -1, 'CUSTOM_PROPERTY': -1}, args)
-    if len(kv.get('TEMPLATE', [])) > len(kv.get('OUT', [])):
-        ymake.report_configure_error('To many arguments for TEMPLATE parameter')
-    prev = unit.get(['GENERATE_SCRIPT_VALUE']) or ''
-    new_val = (
-        prev + ' ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(list(args)), encoding='utf-8')))
-    ).strip()
-    unit.set(['GENERATE_SCRIPT_VALUE', new_val])
-
-
 def onjava_module(unit, *args):
     args_delim = unit.get('ARGS_DELIM')
 
@@ -88,7 +72,6 @@ def onjava_module(unit, *args):
         'IDEA_EXCLUDE': extract_macro_calls(unit, 'IDEA_EXCLUDE_DIRS_VALUE', args_delim),
         'IDEA_RESOURCE': extract_macro_calls(unit, 'IDEA_RESOURCE_DIRS_VALUE', args_delim),
         'IDEA_MODULE_NAME': extract_macro_calls(unit, 'IDEA_MODULE_NAME_VALUE', args_delim),
-        'GENERATE_SCRIPT': extract_macro_calls2(unit, 'GENERATE_SCRIPT_VALUE'),
         'FAKEID': extract_macro_calls(unit, 'FAKEID', args_delim),
         'TEST_DATA': extract_macro_calls(unit, 'TEST_DATA_VALUE', args_delim),
         'JAVA_FORBIDDEN_LIBRARIES': extract_macro_calls(unit, 'JAVA_FORBIDDEN_LIBRARIES_VALUE', args_delim),
@@ -349,7 +332,7 @@ def parse_words(words):
         yield o, templates[min(i, len(templates) - 1)], props
 
 
-def on_ymake_generate_script(unit, *args):
+def ongenerate_script(unit, *args):
     for out, tmpl, props in parse_words(list(args)):
         unit.on_add_gen_java_script([out, tmpl] + list(props))
 

@@ -354,16 +354,15 @@ TString MapToYQLFormat(EChangefeedMode mode) {
 }
 
 TString MapToYQLFormat(bool flag) {
-    return TStringBuilder() << flag;
+    return (flag ? "TRUE" : "FALSE");
 }
 
 TString MapToYQLFormat(TDuration period) {
-    return TStringBuilder() << "Interval(PT" << period.Hours() << "H)";
+    return TStringBuilder() << "Interval('PT" << period.Hours() << "H')";
 }
 
-TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath) {
+TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const TString& dbPath) {
     LOG_D("Process " << fsPath.GetPath().Quote());
-
     if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
@@ -375,19 +374,22 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath) {
     auto changefeedDesc = ChangefeedDescriptionFromProto(changefeedProto);
     auto topicDesc = TopicDescriptionFromProto(std::move(topicProto));
 
-    auto createResult = TableClient.RetryOperationSync([&fsPath, &changefeedDesc, &topicDesc](TSession session) {
+    changefeedDesc = changefeedDesc.WithRetentionPeriod(topicDesc.GetRetentionPeriod());
+
+    auto createResult = TableClient.RetryOperationSync([&changefeedDesc, &topicDesc, &dbPath](TSession session) {
         using namespace fmt::literals; 
+
         return session.ExecuteSchemeQuery(fmt::format(R"(
                         ALTER TABLE `{table_name}`
                         ADD CHANGEFEED `{changefeed_name}`
                         WITH (
                             FORMAT = '{format}',
                             MODE = '{mode}',
-                            VIRTUAL_TIMESTAMP = '{virtual_timestamp}',
-                            RETENTION_PERIOD = '{retention_period}'
+                            VIRTUAL_TIMESTAMPS = {virtual_timestamp},
+                            RETENTION_PERIOD = {retention_period}
                         );
                     )",
-                    "table_name"_a = fsPath.Parent().GetName(),
+                    "table_name"_a = dbPath,
                     "changefeed_name"_a = changefeedDesc.GetName(),
                     "format"_a = MapToYQLFormat(changefeedDesc.GetFormat()),
                     "mode"_a = MapToYQLFormat(changefeedDesc.GetMode()),
@@ -402,14 +404,13 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath) {
         LOG_E("Failed to create " << fsPath.GetPath().Quote());
         return Result<TRestoreResult>(fsPath.GetPath(), std::move(createResult));
     }
+
     return Result<TRestoreResult>();
 }
 
 TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath,
     const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
-{
-    LOG_D("Process " << fsPath.GetPath().Quote());
-
+{   
     if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
@@ -463,7 +464,7 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
     fsPath.List(children);
     for (auto fsChildPath : children) {
         if (settings.RestoreChangefeeds_ && IsFileExists(fsChildPath.Child(NFiles::Changefeed().FileName))) {
-            return RestoreChangefeeds(fsChildPath);
+            RestoreChangefeeds(fsChildPath, dbPath);
         }
     }
 

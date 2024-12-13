@@ -85,6 +85,7 @@ void TCommandWorkloadTransferTopicToTableRun::Config(TConfig& config)
 
     config.Opts->AddLongOption("commit-period", "DEPRECATED: use tx-commit-intervall-ms instead. Waiting time between commit in seconds.")
         .DefaultValue(10)
+        .Hidden()
         .StoreResult(&Scenario.CommitPeriodSeconds);
     config.Opts->AddLongOption("tx-commit-interval", "Interval of transaction commit in milliseconds."
                                                             " Both tx-commit-messages and tx-commit-interval can trigger transaction commit.")
@@ -95,11 +96,14 @@ void TCommandWorkloadTransferTopicToTableRun::Config(TConfig& config)
 
     config.Opts->AddLongOption("commit-messages", "DEPRECATED. Use --tx-commit-messages instead. Number of messages per transaction")
         .DefaultValue(1'000'000)
+        .Hidden()
         .StoreResult(&Scenario.CommitMessages);
     config.Opts->AddLongOption("tx-commit-messages", "Number of messages to commit transaction. " 
                                                             " Both tx-commit-messages and tx-commit-interval can trigger transaction commit.")
         .DefaultValue(1'000'000)
         .StoreResult(&Scenario.CommitMessages);
+
+    config.Opts->MutuallyExclusive("commit-messages", "tx-commit-messages");
 
     config.Opts->AddLongOption("only-topic-in-tx", "Use only topic in transaction")
         .DefaultValue(false)

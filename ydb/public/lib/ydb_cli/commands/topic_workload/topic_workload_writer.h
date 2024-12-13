@@ -26,7 +26,6 @@ namespace NYdb {
             size_t BytesPerSec;
             size_t MessageSize;
             ui32 ProducerThreadCount;
-            ui32 ProducersPerThread;
             ui32 WriterIdx;
             ui32 PartitionCount;
             ui32 PartitionSeed;
@@ -76,7 +75,7 @@ namespace NYdb {
             TInstant StartTimestamp;
 
             std::vector<std::shared_ptr<TTopicWorkloadWriterProducer>> Producers;
-            ui64 ProducerIndex;
+            ui64 PartitionToWriteId;
 
             std::shared_ptr<std::atomic<bool>> Closed;
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;

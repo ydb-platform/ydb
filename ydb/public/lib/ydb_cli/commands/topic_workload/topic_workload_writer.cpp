@@ -13,11 +13,11 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
 
 {
     Producers = std::vector<std::shared_ptr<TTopicWorkloadWriterProducer>>();
-    Producers.reserve(Params.ProducersPerThread);
+    Producers.reserve(Params.PartitionCount);
 
-    for (ui32 i = 0; i < Params.ProducersPerThread; ++i) {
+    for (ui32 i = 0; i < Params.PartitionCount; ++i) {
         // write to random partition, cause workload CLI tool can be launched in several instances
-        // and they need to load different partitions of the topic
+        // and they need to load test different partitions of the topic
         ui32 partitionId = (Params.PartitionSeed + i) % Params.PartitionCount;
         
         Producers.emplace_back(std::move(CreateProducer(partitionId)));
@@ -25,7 +25,7 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
 
     WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
             << "WriterId " << Params.WriterIdx
-            << ": Initialized " << Params.ProducersPerThread << " producers");
+            << ": Initialized " << Params.PartitionCount << " producers");
 }
 
 TTopicWorkloadWriterWorker::~TTopicWorkloadWriterWorker()
@@ -94,7 +94,7 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
         if (now > endTime)
             break;
 
-        auto producer = Producers[ProducerIndex % Params.ProducersPerThread];
+        auto producer = Producers[PartitionToWriteId % Params.PartitionCount];
 
         WaitTillNextMessageExpectedCreateTimeAndContinuationToken(producer);
 
@@ -133,7 +133,7 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
                 TryCommitTx(commitTime);
             }
 
-            ProducerIndex++;
+            PartitionToWriteId++;
 
             WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
                     << "Written message " << producer->GetCurrentMessageId() - 1

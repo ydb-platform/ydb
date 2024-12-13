@@ -244,8 +244,8 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
 }
 
 /*!
- * This method starts producers for number of threads specified in -t option. All producers will start in one thread.
- * Yes this is ambigius, we will fix it in later major release to preserve backward API compatibility.
+ * This method starts producers threads specified in -t option, that will write to topic in parallel. Every producer thread will create 
+ * WriteSession for every partition in the topic and will write in partitions in round robin manner. 
  * */
 void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void>>& threads,
                                                     ui32 partitionCount,
@@ -272,7 +272,6 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .BytesPerSec = MessagesPerSec != 0 ? MessagesPerSec * MessageSizeBytes : BytesPerSec,
             .MessageSize = MessageSizeBytes,
             .ProducerThreadCount = ProducerThreadCount,
-            .ProducersPerThread = ProducersPerThread,
             .WriterIdx = writerIdx,
             .PartitionCount = partitionCount,
             .PartitionSeed = partitionSeed,

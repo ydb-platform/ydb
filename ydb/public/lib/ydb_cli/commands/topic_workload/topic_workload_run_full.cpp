@@ -39,18 +39,9 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .StoreResult(&Scenario.TopicName);
 
     // Specific params
-    config.Opts->AddLongOption('p', "producer-threads", "Number of writer threads.")
+    config.Opts->AddLongOption('p', "producer-threads", "Number of writer threads. Every writer thread will produce messages to all topic partitions in round robin manner.")
         .DefaultValue(1)
         .StoreResult(&Scenario.ProducerThreadCount);
-    config.Opts->AddLongOption("producers-per-thread",
-                               "Number of producers in every writer thread. "
-                               "Every producer is dedicated to one partition. "
-                               "If you want to write to all partitions set this param to the number of partitions in the topic. "
-                               "If you use transactions, they will span across all partitions that fit into the transaction "
-                               "(e.g. if you have 100 messages per second, 100ms transaction commit interval and 100 producers per thread "
-                               "then only 10 messages will fit in every transaction).")
-        .DefaultValue(1)
-        .StoreResult(&Scenario.ProducersPerThread);
     config.Opts->AddLongOption("use-cpu-timestamp", "If specified, worload will use cpu current timestamp as message create ts to measure latency."
                                                         " If not specified, will be used expected creation timestamp: e.g. "
                                                         "if we have 100 messages per second rate, then first message is expected at 0ms of first second, second after 10ms elapsed,"
@@ -106,9 +97,9 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .DefaultValue(1'000'000)
         .StoreResult(&Scenario.CommitMessages);
     config.Opts->AddLongOption("only-topic-in-tx", "Put only topic (without table) in transaction")
-        .DefaultValue(true)
         .Hidden()
-        .StoreTrue(&Scenario.OnlyTopicInTx);
+        .StoreTrue(&Scenario.OnlyTopicInTx)
+        .DefaultValue(true);
     config.Opts->AddLongOption("tx-use-table-select", "Select rows from table in transaction")
         .DefaultValue(false)
         .Hidden()

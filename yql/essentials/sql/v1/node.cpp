@@ -91,6 +91,14 @@ void INode::MarkImplicitLabel(bool isImplicitLabel) {
     ImplicitLabel = isImplicitLabel;
 }
 
+void INode::SetRefPos(TPosition pos) {
+    RefPos = pos;
+}
+
+TMaybe<TPosition> INode::GetRefPos() const {
+    return RefPos;
+}
+
 void INode::SetCountHint(bool isCount) {
     State.Set(ENodeState::CountHint, isCount);
 }

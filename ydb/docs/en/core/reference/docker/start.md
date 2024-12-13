@@ -29,7 +29,6 @@ docker run \
     -e GRPC_TLS_PORT=2135 \ # grpcs port, needs to match what's published above
     -e GRPC_PORT=2136 \ # grpc port, needs to match what's published above
     -e MON_PORT=8765 \ # http port, needs to match what's published above
-RAM
     {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }} # docker image name and tag
 ```
 

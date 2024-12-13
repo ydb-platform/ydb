@@ -1,6 +1,6 @@
 # Установка Docker для работы с {{ ydb-short-name }}
 
-Прежде чем воспользоваться Docker образом {{ ydb-short-name }}, необходимо установить и настроить Docker окружение. Для этого можно воспользоваться официальной документацией:
+Прежде чем воспользоваться Docker-образом {{ ydb-short-name }}, необходимо установить и настроить Docker-окружение. Для этого можно воспользоваться официальной документацией:
 
 - [Linux](https://docs.docker.com/desktop/install/linux-install/)
 - [macOS](https://docs.docker.com/desktop/install/mac-install/)

@@ -169,7 +169,7 @@ Y_UNIT_TEST(Full_Statistics_UseTx)
 {
     ExecYdb({"init"});
     auto output = ExecYdb(
-        {"run", "full", "-s", "1", "--warmup", "0", "--use-tx", "--message-rate", "5", "--tx-commit-interval-ms", "500"}, false);
+        {"run", "full", "-s", "1", "--warmup", "0", "--use-tx", "--message-rate", "5", "--tx-commit-interval", "500"}, false);
     TVector<TString> lines;
     Split(output, "\n", lines);
      
@@ -233,7 +233,7 @@ Y_UNIT_TEST(WriteProducesToAllPartitionsEvenly)
                           "--threads", "1",
                           "--message-rate", "2", // 2 messages per second
                           "--use-tx",
-                          "--tx-commit-interval-ms", "1000",
+                          "--tx-commit-interval", "1000",
                           "--seconds", "6"});
 
     UNIT_ASSERT_GE(CountMessagesInPartition(0), 4);

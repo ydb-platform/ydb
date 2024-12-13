@@ -380,14 +380,15 @@ private:
             publicCountersParent = publicCountersParent->GetSubgroup("cloud_id", cloudId)->GetSubgroup("folder_id", folderId);
         }
 
+        ::NMonitoring::TDynamicCounterPtr queryPublicCounters = publicCountersParent;
         if (queryIdLabel) {
-            publicCountersParent = publicCountersParent->GetSubgroup("query_id", queryIdLabel);
+            queryPublicCounters = queryPublicCounters->GetSubgroup("query_id", queryIdLabel);
         }
 
         if (queryNameLabel) {
-            publicCountersParent = publicCountersParent->GetSubgroup("query_name", queryNameLabel);
+            queryPublicCounters = queryPublicCounters->GetSubgroup("query_name", queryNameLabel);
         }
-        queryCounters.PublicCounters = publicCountersParent;
+        queryCounters.PublicCounters = queryPublicCounters;
 
         auto rootCountersParent = ServiceCounters.RootCounters;
         std::set<std::pair<TString, TString>> sensorLabels(task.sensor_labels().begin(), task.sensor_labels().end());
@@ -395,16 +396,17 @@ private:
             rootCountersParent = rootCountersParent->GetSubgroup(label, item);
         }
 
+        ::NMonitoring::TDynamicCounterPtr queryRootCounters = rootCountersParent;
         if (queryIdLabel) {
-            rootCountersParent = rootCountersParent->GetSubgroup("query_id", queryIdLabel);
+            queryRootCounters = queryRootCounters->GetSubgroup("query_id", queryIdLabel);
         }
 
         if (queryNameLabel) {
-            rootCountersParent = rootCountersParent->GetSubgroup("query_name", queryNameLabel);
+            queryRootCounters = queryRootCounters->GetSubgroup("query_name", queryNameLabel);
         }
 
-        queryCounters.RootCounters = rootCountersParent;
-        queryCounters.Counters = queryCounters.RootCounters;
+        queryCounters.RootCounters = queryRootCounters;
+        queryCounters.Counters = queryRootCounters;
 
         queryCounters.InitUptimeCounter();
         const auto createdAt = TInstant::Now();

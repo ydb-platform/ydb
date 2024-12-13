@@ -20,7 +20,7 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
         // and they need to load test different partitions of the topic
         ui32 partitionId = (Params.PartitionSeed + i) % Params.PartitionCount;
         
-        Producers.emplace_back(std::move(CreateProducer(partitionId)));
+        Producers.push_back(CreateProducer(partitionId));
     }
 
     WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
@@ -30,15 +30,18 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
 
 TTopicWorkloadWriterWorker::~TTopicWorkloadWriterWorker()
 {
-    for (std::shared_ptr<TTopicWorkloadWriterProducer> producer : Producers) {
-        producer->Close();
-    }
+    CloseProducers();
 }
 
 void TTopicWorkloadWriterWorker::Close()
 {
     Closed->store(true);
-    for (auto producer: Producers) {
+    CloseProducers();
+}
+
+void TTopicWorkloadWriterWorker::CloseProducers() 
+{
+    for (auto producer : Producers) {
         producer->Close();
     }
 }
@@ -118,7 +121,7 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
             TInstant createTimestamp = GetCreateTimestampForNextMessage(); 
             BytesWritten += Params.MessageSize;
 
-            std::optional<NYdb::NTable::TTransaction> transaction = {};
+            std::optional<NYdb::NTable::TTransaction> transaction;
             if (TxSupport && !TxSupport->Transaction) {
                 TxSupport->BeginTx();
             }
@@ -204,7 +207,6 @@ size_t TTopicWorkloadWriterWorker::InflightMessagesSize() {
 }
 
 void TTopicWorkloadWriterWorker::RetryableWriterLoop(TTopicWorkloadWriterParams& params) {
-    auto logger = params.Log;
     auto errorFlag = params.ErrorFlag;
 
     const TInstant endTime = Now() + TDuration::Seconds(params.TotalSec + 3);
@@ -213,7 +215,7 @@ void TTopicWorkloadWriterWorker::RetryableWriterLoop(TTopicWorkloadWriterParams&
         try {
             WriterLoop(params, endTime);
         } catch (const yexception& ex) {
-            WRITE_LOG(logger, ELogPriority::TLOG_WARNING, TStringBuilder() << ex);
+            WRITE_LOG(params.Log, ELogPriority::TLOG_WARNING, TStringBuilder() << ex);
         }
     }
 }

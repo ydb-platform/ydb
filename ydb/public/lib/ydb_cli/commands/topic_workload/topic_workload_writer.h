@@ -52,6 +52,7 @@ namespace NYdb {
             ~TTopicWorkloadWriterWorker();
 
             void Close();
+            void CloseProducers();
 
             std::shared_ptr<TTopicWorkloadWriterProducer> CreateProducer(ui64 partitionId);
 

@@ -126,7 +126,6 @@ namespace NTests {
                 .BytesPerSec = 100'000,
                 .MessageSize = messageSize,
                 .ProducerThreadCount = 1,
-                .ProducersPerThread = 1,
                 .WriterIdx = 0,
                 .PartitionCount = 100,
                 .PartitionSeed = 123,

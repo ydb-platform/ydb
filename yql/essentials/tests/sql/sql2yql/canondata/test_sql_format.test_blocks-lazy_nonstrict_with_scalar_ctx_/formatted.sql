@@ -20,7 +20,7 @@ SELECT
 FROM
     Input
 WHERE
-    subkey != "1" AND value > $one
+    subkey != '1' AND value > $one
 ;
 
 -- partially converted to blocks - AssumeStrict is calculated outside of scalar context
@@ -29,5 +29,5 @@ SELECT
 FROM
     Input
 WHERE
-    subkey != "2" AND value > $two
+    subkey != '2' AND value > $two
 ;

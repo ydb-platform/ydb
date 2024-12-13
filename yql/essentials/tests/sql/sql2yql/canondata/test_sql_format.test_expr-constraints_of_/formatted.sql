@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
 USE plato;
 

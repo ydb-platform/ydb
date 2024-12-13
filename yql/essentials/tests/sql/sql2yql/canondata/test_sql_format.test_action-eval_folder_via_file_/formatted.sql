@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA yt.FolderInlineItemsLimit = "0";
+PRAGMA yt.FolderInlineItemsLimit = '0';
 
 $list = (
     SELECT
@@ -11,9 +11,9 @@ $list = (
         SELECT
             Path
         FROM
-            folder("")
+            folder('')
         WHERE
-            Type == "table"
+            Type == 'table'
         LIMIT 30
     )
 );

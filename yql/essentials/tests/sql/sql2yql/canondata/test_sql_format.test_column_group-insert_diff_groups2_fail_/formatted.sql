@@ -1,7 +1,7 @@
 /* custom error:Insert with different "column_groups" to existing table is not allowed*/
 USE plato;
 
-PRAGMA yt.ColumnGroupMode = "perusage";
+PRAGMA yt.ColumnGroupMode = 'perusage';
 
 $s1 =
     SELECT
@@ -9,7 +9,7 @@ $s1 =
     FROM
         Input
     WHERE
-        a != ""
+        a != ''
 ;
 
 $s2 =
@@ -18,7 +18,7 @@ $s2 =
     FROM
         Input
     WHERE
-        a > "a1"
+        a > 'a1'
 ;
 
 INSERT INTO Output
@@ -30,7 +30,7 @@ FROM
 
 COMMIT;
 
-INSERT INTO Output WITH column_groups = "{a=#}"
+INSERT INTO Output WITH column_groups = '{a=#}'
 SELECT
     *
 FROM

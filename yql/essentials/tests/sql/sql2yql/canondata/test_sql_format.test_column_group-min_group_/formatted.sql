@@ -1,7 +1,7 @@
 USE plato;
 
-PRAGMA yt.MinColumnGroupSize = "3";
-PRAGMA yt.ColumnGroupMode = "perusage";
+PRAGMA yt.MinColumnGroupSize = '3';
+PRAGMA yt.ColumnGroupMode = 'perusage';
 
 $i =
     SELECT
@@ -9,7 +9,7 @@ $i =
     FROM
         Input
     WHERE
-        a > "a"
+        a > 'a'
 ;
 
 SELECT

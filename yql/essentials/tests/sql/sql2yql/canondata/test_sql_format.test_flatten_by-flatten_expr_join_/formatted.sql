@@ -4,8 +4,8 @@ USE plato;
 
 $data =
     SELECT
-        "075,020,075,020" AS a,
-        "x" AS c
+        '075,020,075,020' AS a,
+        'x' AS c
 ;
 
 SELECT
@@ -13,7 +13,7 @@ SELECT
 FROM ANY
     $data AS x
     FLATTEN BY (
-        String::SplitToList(a, ",") AS aa
+        String::SplitToList(a, ',') AS aa
     )
 JOIN
     Input AS y

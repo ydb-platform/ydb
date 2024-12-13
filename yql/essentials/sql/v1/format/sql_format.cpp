@@ -87,6 +87,15 @@ TParsedToken TransformTokenForValidate(TParsedToken token) {
     return token;
 }
 
+TStringBuf SkipQuotes(const TString& content) {
+    TStringBuf str = content;
+    str.SkipPrefix("\"");
+    str.ChopSuffix("\"");
+    str.SkipPrefix("'");
+    str.ChopSuffix("'");
+    return str;
+}
+
 bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQuery) {
     auto in = query.begin();
     auto out = formattedQuery.begin();
@@ -103,6 +112,10 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
             }
             if (IsProbablyKeyword(inToken)) {
                 if (!AsciiEqualsIgnoreCase(inToken.Content, outToken.Content)) {
+                    return false;
+                }
+            } else if (inToken.Name == "STRING_VALUE") {
+                if (SkipQuotes(inToken.Content) != SkipQuotes(outToken.Content)) {
                     return false;
                 }
             } else {
@@ -1695,6 +1708,13 @@ private:
                 str = "==";
             } else if (str == "<>") {
                 str = "!=";
+            }
+        }
+
+        if (ParsedTokens[TokenIndex].Name == "STRING_VALUE") {
+            TStringBuf checkStr = str;
+            if (checkStr.SkipPrefix("\"") && checkStr.ChopSuffix("\"") && !checkStr.Contains("'")) {
+                str = TStringBuilder() << '\'' << checkStr << '\'';
             }
         }
 

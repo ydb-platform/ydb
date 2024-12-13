@@ -1,5 +1,5 @@
-PRAGMA FeatureR010 = "prototype";
-PRAGMA config.flags("MatchRecognizeStream", "disable");
+PRAGMA FeatureR010 = 'prototype';
+PRAGMA config.flags('MatchRecognizeStream', 'disable');
 
 $input =
     SELECT

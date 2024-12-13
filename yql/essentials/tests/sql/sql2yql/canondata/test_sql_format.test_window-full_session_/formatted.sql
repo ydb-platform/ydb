@@ -6,7 +6,7 @@ USE plato;
 $src =
     SELECT
         t.*,
-        user ?? "u0" AS user_nonopt
+        user ?? 'u0' AS user_nonopt
     FROM
         Input AS t
 ;

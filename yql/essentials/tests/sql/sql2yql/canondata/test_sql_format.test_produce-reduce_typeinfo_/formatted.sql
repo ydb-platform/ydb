@@ -3,7 +3,7 @@
 /* ignore runonopt plan diff */
 USE plato;
 
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
 $r1 =
     REDUCE Input0

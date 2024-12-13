@@ -1,7 +1,7 @@
 /* syntax version 1 */
 USE plato;
 
-PRAGMA yt.JoinEnableStarJoin = "true";
+PRAGMA yt.JoinEnableStarJoin = 'true';
 PRAGMA DisablePullUpFlatMapOverJoin;
 
 $a =

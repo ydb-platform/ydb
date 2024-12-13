@@ -3,7 +3,7 @@
 /* kikimr can not - yt pragma */
 USE plato;
 
-PRAGMA yt.UseSystemColumns = "0";
+PRAGMA yt.UseSystemColumns = '0';
 
 SELECT
     *
@@ -18,7 +18,7 @@ FROM (
     SELECT
         key,
         TableRecordIndex() AS record,
-        "d" AS path
+        'd' AS path
     FROM
         Input
 ) AS x

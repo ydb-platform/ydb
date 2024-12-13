@@ -12,7 +12,7 @@ $a =
     FROM
         Input
     WHERE
-        key > "199" AND value != "bbb"
+        key > '199' AND value != 'bbb'
 ;
 
 SELECT

@@ -5,7 +5,7 @@ $input =
     SELECT
         *
     FROM
-        range("", "Input1", "Input2")
+        range('', 'Input1', 'Input2')
 ;
 
 $key =

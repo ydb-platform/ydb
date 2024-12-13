@@ -6,11 +6,11 @@ SELECT
     t.*,
     COUNT(*) OVER (
         PARTITION BY
-            key || "1"
+            key || '1'
     ) AS c1,
     COUNT(*) OVER (
         PARTITION BY
-            key || "2"
+            key || '2'
     ) AS c2,
     COUNT(*) OVER w AS c3,
 FROM
@@ -18,7 +18,7 @@ FROM
 WINDOW
     w AS (
         PARTITION BY
-            key || "3"
+            key || '3'
     )
 ORDER BY
     subkey

@@ -1,7 +1,7 @@
 /* syntax version 1 */
 USE plato;
 
-$table = "In" || "put";
+$table = 'In' || 'put';
 
 SELECT
     *

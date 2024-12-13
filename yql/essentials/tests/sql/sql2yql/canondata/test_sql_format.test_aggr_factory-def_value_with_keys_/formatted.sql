@@ -64,7 +64,7 @@ $cnt_deserialize = ($state) -> {
 $cnt_default = 0ul;
 
 $cnt_udaf_factory = AggregationFactory(
-    "UDAF",
+    'UDAF',
     $cnt_create,
     $cnt_add,
     $cnt_merge,

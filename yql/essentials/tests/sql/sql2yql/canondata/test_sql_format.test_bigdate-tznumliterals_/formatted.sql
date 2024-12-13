@@ -1,4 +1,4 @@
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
 SELECT
     CAST(Yql::Date32(AsAtom('-53375809')) AS string),

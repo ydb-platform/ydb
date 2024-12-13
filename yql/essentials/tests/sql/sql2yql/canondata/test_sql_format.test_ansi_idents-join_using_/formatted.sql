@@ -8,4 +8,4 @@ FROM
     Input2 AS a
 JOIN
     Input3 AS b
-USING ("key");
+USING ('key');

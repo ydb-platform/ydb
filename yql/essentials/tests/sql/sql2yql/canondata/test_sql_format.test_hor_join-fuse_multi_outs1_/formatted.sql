@@ -37,7 +37,7 @@ SELECT
 FROM
     $i
 WHERE
-    key > "100"
+    key > '100'
 ORDER BY
     key
 ;
@@ -55,7 +55,7 @@ SELECT
 FROM
     $i
 WHERE
-    key > "200"
+    key > '200'
 ;
 
 INSERT INTO @c
@@ -64,5 +64,5 @@ SELECT
 FROM
     $j
 WHERE
-    key > "300"
+    key > '300'
 ;

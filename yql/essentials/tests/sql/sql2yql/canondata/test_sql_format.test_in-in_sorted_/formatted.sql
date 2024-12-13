@@ -8,7 +8,7 @@ $in =
     FROM
         InputSorted
     WHERE
-        key < "100"
+        key < '100'
 ;
 
 SELECT

@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.MapJoinLimit = "1M";
+PRAGMA yt.MapJoinLimit = '1M';
 
 $i =
     SELECT

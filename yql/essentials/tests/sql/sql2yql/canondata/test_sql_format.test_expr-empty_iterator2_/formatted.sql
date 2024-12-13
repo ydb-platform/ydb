@@ -12,7 +12,7 @@ $train =
         key,
         value
     HAVING
-        key > "900"
+        key > '900'
 ;
 
 $method = ($stream) -> {

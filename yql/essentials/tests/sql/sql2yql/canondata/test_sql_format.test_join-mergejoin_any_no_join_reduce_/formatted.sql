@@ -1,7 +1,7 @@
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "10";
-PRAGMA yt.JoinMergeUnsortedFactor = "2";
+PRAGMA yt.JoinMergeTablesLimit = '10';
+PRAGMA yt.JoinMergeUnsortedFactor = '2';
 
 SELECT
     *
@@ -10,12 +10,12 @@ FROM
 WHERE
     key IN (
         SELECT
-            "023" AS key
+            '023' AS key
         UNION ALL
         SELECT
-            "911" AS key
+            '911' AS key
         UNION ALL
         SELECT
-            "911" AS key
+            '911' AS key
     )
 ;

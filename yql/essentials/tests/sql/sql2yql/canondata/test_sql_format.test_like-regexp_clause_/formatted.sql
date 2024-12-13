@@ -7,5 +7,5 @@ SELECT
 FROM
     plato.Input
 WHERE
-    value REGEXP "^a"
+    value REGEXP '^a'
 ;

@@ -5,7 +5,7 @@ SELECT
 FROM
     plato.Input
 GROUP BY
-    `dict`["a"]
+    `dict`['a']
 ORDER BY
     s
 ;

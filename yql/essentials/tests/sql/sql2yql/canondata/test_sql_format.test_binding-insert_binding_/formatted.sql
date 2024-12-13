@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-$a = "Output";
+$a = 'Output';
 
 INSERT INTO $a
 SELECT

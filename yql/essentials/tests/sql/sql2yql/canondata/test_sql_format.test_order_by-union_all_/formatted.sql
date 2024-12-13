@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA DqEngine = "disable";
+PRAGMA DqEngine = 'disable';
 
 DEFINE SUBQUERY $sample($product_type) AS
     SELECT
@@ -14,7 +14,7 @@ DEFINE SUBQUERY $sample($product_type) AS
     LIMIT 10;
 END DEFINE;
 
-$list = ["a", "b"];
+$list = ['a', 'b'];
 $s = SubqueryUnionAllFor($list, $sample);
 
 $concated =

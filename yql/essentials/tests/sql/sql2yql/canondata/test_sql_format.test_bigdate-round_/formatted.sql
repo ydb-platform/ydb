@@ -1,4 +1,4 @@
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
 $date_max_value = 49673l;
 $date_max = unwrap(CAST($date_max_value - 1 AS date));

@@ -1,5 +1,5 @@
 PRAGMA AnsiLike;
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
 USE plato;
 

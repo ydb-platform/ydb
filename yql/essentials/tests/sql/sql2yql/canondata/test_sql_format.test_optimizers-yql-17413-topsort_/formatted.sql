@@ -7,7 +7,7 @@ $filtered =
     FROM
         Input
     WHERE
-        value != "xxx"
+        value != 'xxx'
 ;
 
 SELECT DISTINCT

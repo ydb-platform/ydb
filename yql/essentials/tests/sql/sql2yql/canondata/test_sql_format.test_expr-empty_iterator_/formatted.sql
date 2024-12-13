@@ -8,7 +8,7 @@ $train =
     FROM
         Input
     WHERE
-        key > "900"
+        key > '900'
     GROUP BY
         value
 ;

@@ -1,9 +1,9 @@
 USE plato;
 
-PRAGMA AnsiInForEmptyOrNullableItemsCollections = "true";
-PRAGMA yt.MapJoinLimit = "1m";
-PRAGMA yt.LookupJoinLimit = "64k";
-PRAGMA yt.LookupJoinMaxRows = "100";
+PRAGMA AnsiInForEmptyOrNullableItemsCollections = 'true';
+PRAGMA yt.MapJoinLimit = '1m';
+PRAGMA yt.LookupJoinLimit = '64k';
+PRAGMA yt.LookupJoinMaxRows = '100';
 
 INSERT INTO @T1
 SELECT

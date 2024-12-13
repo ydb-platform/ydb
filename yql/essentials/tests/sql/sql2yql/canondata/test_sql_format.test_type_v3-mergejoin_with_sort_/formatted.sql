@@ -2,8 +2,8 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA yt.JoinMergeTablesLimit = "100";
-PRAGMA yt.JoinMergeForce = "true";
+PRAGMA yt.JoinMergeTablesLimit = '100';
+PRAGMA yt.JoinMergeForce = 'true';
 
 SELECT
     a.key AS key,

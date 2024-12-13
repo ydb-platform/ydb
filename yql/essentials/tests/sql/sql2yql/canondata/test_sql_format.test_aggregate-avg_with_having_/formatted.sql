@@ -7,7 +7,7 @@ FROM
 GROUP BY
     value
 HAVING
-    value > "foo"
+    value > 'foo'
 ORDER BY
     key
 ;

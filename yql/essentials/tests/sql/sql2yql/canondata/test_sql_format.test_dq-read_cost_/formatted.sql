@@ -1,5 +1,5 @@
-PRAGMA warning("disable", "4510");
-PRAGMA CostBasedOptimizer = "PG";
+PRAGMA warning('disable', '4510');
+PRAGMA CostBasedOptimizer = 'PG';
 
 USE plato;
 

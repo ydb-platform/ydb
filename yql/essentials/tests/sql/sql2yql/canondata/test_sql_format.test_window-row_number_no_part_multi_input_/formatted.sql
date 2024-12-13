@@ -16,7 +16,7 @@ $input = (
     FROM
         Input
     WHERE
-        key != "020"
+        key != '020'
     UNION ALL
     SELECT
         *

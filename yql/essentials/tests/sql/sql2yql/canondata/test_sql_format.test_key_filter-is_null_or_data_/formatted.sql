@@ -3,5 +3,5 @@ SELECT
 FROM
     plato.Input
 WHERE
-    key IS NULL OR key == "023"
+    key IS NULL OR key == '023'
 ;

@@ -1,4 +1,4 @@
-PRAGMA warning("disable", "4520");
+PRAGMA warning('disable', '4520');
 
 $my_table =
     SELECT
@@ -60,7 +60,7 @@ $cnt_deserialize = ($state) -> {
 $cnt_default = 0.0;
 
 $cnt_udaf_factory = AggregationFactory(
-    "UDAF",
+    'UDAF',
     $cnt_create,
     $cnt_add,
     $cnt_merge,

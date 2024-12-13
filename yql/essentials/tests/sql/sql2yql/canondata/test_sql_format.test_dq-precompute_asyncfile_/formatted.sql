@@ -6,7 +6,7 @@ $a =
     FROM
         Input
     WHERE
-        key IN ParseFile("String", "list.txt")
+        key IN ParseFile('String', 'list.txt')
 ;
 
 SELECT

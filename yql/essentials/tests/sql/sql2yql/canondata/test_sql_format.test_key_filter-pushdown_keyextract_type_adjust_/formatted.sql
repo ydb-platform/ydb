@@ -5,7 +5,7 @@ USE plato;
 $src =
     SELECT
         Just(key) AS key,
-        "ZZZ" || subkey AS subkey,
+        'ZZZ' || subkey AS subkey,
         value
     FROM
         Input AS u
@@ -20,7 +20,7 @@ SELECT
 FROM
     $src
 WHERE
-    key > "023" AND key < "150"
+    key > '023' AND key < '150'
 ORDER BY
     key
 ;

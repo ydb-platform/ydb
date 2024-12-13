@@ -8,7 +8,7 @@ FROM (
         key,
         subkey || key AS subkey,
         value,
-        RANDOM(value || "x") <= 1.0 AS rn
+        RANDOM(value || 'x') <= 1.0 AS rn
     FROM
         Input1
 ) AS a

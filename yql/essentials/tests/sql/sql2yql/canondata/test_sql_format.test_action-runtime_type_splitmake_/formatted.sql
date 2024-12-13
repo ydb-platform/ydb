@@ -18,18 +18,18 @@ $formatCallable = ($x) -> {
 };
 
 SELECT
-    DataTypeComponents(ParseTypeHandle("Int32")),
-    DataTypeComponents(ParseTypeHandle("Decimal(4,1)")),
-    FormatType(DataTypeHandle(AsList("Int32"))),
-    FormatType(DataTypeHandle(AsList("Decimal", "4", "1"))),
-    FormatType(OptionalItemType(ParseTypeHandle("Int32?"))),
-    FormatType(OptionalTypeHandle(ParseTypeHandle("Int32"))),
-    FormatType(ListItemType(ParseTypeHandle("List<Int32>"))),
-    FormatType(ListTypeHandle(ParseTypeHandle("Int32"))),
-    FormatType(StreamItemType(ParseTypeHandle("Stream<Int32>"))),
-    FormatType(StreamTypeHandle(ParseTypeHandle("Int32"))),
+    DataTypeComponents(ParseTypeHandle('Int32')),
+    DataTypeComponents(ParseTypeHandle('Decimal(4,1)')),
+    FormatType(DataTypeHandle(AsList('Int32'))),
+    FormatType(DataTypeHandle(AsList('Decimal', '4', '1'))),
+    FormatType(OptionalItemType(ParseTypeHandle('Int32?'))),
+    FormatType(OptionalTypeHandle(ParseTypeHandle('Int32'))),
+    FormatType(ListItemType(ParseTypeHandle('List<Int32>'))),
+    FormatType(ListTypeHandle(ParseTypeHandle('Int32'))),
+    FormatType(StreamItemType(ParseTypeHandle('Stream<Int32>'))),
+    FormatType(StreamTypeHandle(ParseTypeHandle('Int32'))),
     ListMap(
-        TupleTypeComponents(ParseTypeHandle("Tuple<Int32,String>")),
+        TupleTypeComponents(ParseTypeHandle('Tuple<Int32,String>')),
         ($x) -> {
             RETURN FormatType($x);
         }
@@ -37,14 +37,14 @@ SELECT
     FormatType(
         TupleTypeHandle(
             ListMap(
-                AsList("Int32", "String"), ($x) -> {
+                AsList('Int32', 'String'), ($x) -> {
                     RETURN ParseTypeHandle($x);
                 }
             )
         )
     ),
     ListMap(
-        StructTypeComponents(ParseTypeHandle("Struct<foo:Int32,bar:String>")),
+        StructTypeComponents(ParseTypeHandle('Struct<foo:Int32,bar:String>')),
         ($x) -> {
             RETURN AsTuple($x.Name, FormatType($x.Type));
         }
@@ -52,7 +52,7 @@ SELECT
     FormatType(
         StructTypeHandle(
             ListMap(
-                AsList(AsTuple("foo", "Int32"), AsTuple("bar", "String")),
+                AsList(AsTuple('foo', 'Int32'), AsTuple('bar', 'String')),
                 ($x) -> {
                     RETURN AsStruct($x.0 AS Name, ParseTypeHandle($x.1) AS Type);
                 }
@@ -60,38 +60,38 @@ SELECT
         )
     ),
     StaticMap(
-        DictTypeComponents(ParseTypeHandle("Dict<String,Int32>")),
+        DictTypeComponents(ParseTypeHandle('Dict<String,Int32>')),
         ($x) -> {
             RETURN FormatType($x);
         }
     ),
-    FormatType(DictTypeHandle(ParseTypeHandle("String"), ParseTypeHandle("Int32"))),
-    ResourceTypeTag(ParseTypeHandle("Resource<foo>")),
-    FormatType(ResourceTypeHandle("foo")),
-    $formatTagged(TaggedTypeComponents(ParseTypeHandle("Tagged<String,foo>"))),
-    FormatType(TaggedTypeHandle(ParseTypeHandle("String"), "foo")),
-    FormatType(VariantUnderlyingType(ParseTypeHandle("Variant<Int32,String>"))),
-    FormatType(VariantTypeHandle(ParseTypeHandle("Tuple<Int32,String>"))),
-    FormatType(VariantUnderlyingType(ParseTypeHandle("Variant<a:Int32,b:String>"))),
-    FormatType(VariantTypeHandle(ParseTypeHandle("Struct<a:Int32,b:String>"))),
+    FormatType(DictTypeHandle(ParseTypeHandle('String'), ParseTypeHandle('Int32'))),
+    ResourceTypeTag(ParseTypeHandle('Resource<foo>')),
+    FormatType(ResourceTypeHandle('foo')),
+    $formatTagged(TaggedTypeComponents(ParseTypeHandle('Tagged<String,foo>'))),
+    FormatType(TaggedTypeHandle(ParseTypeHandle('String'), 'foo')),
+    FormatType(VariantUnderlyingType(ParseTypeHandle('Variant<Int32,String>'))),
+    FormatType(VariantTypeHandle(ParseTypeHandle('Tuple<Int32,String>'))),
+    FormatType(VariantUnderlyingType(ParseTypeHandle('Variant<a:Int32,b:String>'))),
+    FormatType(VariantTypeHandle(ParseTypeHandle('Struct<a:Int32,b:String>'))),
     FormatType(VoidTypeHandle()),
     FormatType(NullTypeHandle()),
-    $formatCallable(CallableTypeComponents(ParseTypeHandle("(Int32,[bar:Double?{Flags:AutoMap}])->String{Payload:foo}"))),
+    $formatCallable(CallableTypeComponents(ParseTypeHandle('(Int32,[bar:Double?{Flags:AutoMap}])->String{Payload:foo}'))),
     FormatType(
         CallableTypeHandle(
-            ParseTypeHandle("String"), AsList(
-                CallableArgument(ParseTypeHandle("Int32")),
-                CallableArgument(ParseTypeHandle("Double?"), "bar", AsList("AutoMap"))
+            ParseTypeHandle('String'), AsList(
+                CallableArgument(ParseTypeHandle('Int32')),
+                CallableArgument(ParseTypeHandle('Double?'), 'bar', AsList('AutoMap'))
             )
         )
     ),
     FormatType(
         CallableTypeHandle(
-            ParseTypeHandle("String"), AsList(
-                CallableArgument(ParseTypeHandle("Int32")),
-                CallableArgument(ParseTypeHandle("Double?"), "bar", AsList("AutoMap"))
+            ParseTypeHandle('String'), AsList(
+                CallableArgument(ParseTypeHandle('Int32')),
+                CallableArgument(ParseTypeHandle('Double?'), 'bar', AsList('AutoMap'))
             ),
-            1, "foo"
+            1, 'foo'
         )
     )
 ;

@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.LookupJoinMaxRows = "3";
+PRAGMA yt.LookupJoinMaxRows = '3';
 PRAGMA yt.LookupJoinLimit = '10M';
 
 INSERT INTO @big

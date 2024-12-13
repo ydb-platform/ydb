@@ -5,7 +5,7 @@ USE plato;
 
 INSERT INTO Output
 SELECT
-    key || "foo" AS key2
+    key || 'foo' AS key2
 FROM
     Input
 ;
@@ -24,7 +24,7 @@ SELECT
 
 INSERT INTO Output WITH TRUNCATE
 SELECT
-    key || "foo" AS key3
+    key || 'foo' AS key3
 FROM
     Input
 ;

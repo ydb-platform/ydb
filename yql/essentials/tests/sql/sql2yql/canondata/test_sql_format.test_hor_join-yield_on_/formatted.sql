@@ -2,7 +2,7 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA config.flags("UdfSupportsYield", "true");
+PRAGMA config.flags('UdfSupportsYield', 'true');
 
 $s = @@
 def f(input, a):

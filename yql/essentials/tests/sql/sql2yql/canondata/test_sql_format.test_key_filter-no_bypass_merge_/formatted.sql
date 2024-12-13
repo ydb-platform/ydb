@@ -9,7 +9,7 @@ $src =
     FROM
         Input
     WHERE
-        key == "1" || "5" || "0"
+        key == '1' || '5' || '0'
 ;
 
 SELECT
@@ -25,5 +25,5 @@ SELECT
 FROM
     $src
 WHERE
-    key >= "000" AND key < "999" AND len(value) > 0
+    key >= '000' AND key < '999' AND len(value) > 0
 ;

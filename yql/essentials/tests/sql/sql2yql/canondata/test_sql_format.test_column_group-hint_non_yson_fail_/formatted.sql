@@ -2,7 +2,7 @@
 USE plato;
 
 -- bad yson
-INSERT INTO Output WITH column_groups = "!"
+INSERT INTO Output WITH column_groups = '!'
 SELECT
     *
 FROM

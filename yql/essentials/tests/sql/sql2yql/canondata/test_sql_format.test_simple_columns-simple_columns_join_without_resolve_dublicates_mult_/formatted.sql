@@ -8,7 +8,7 @@ $data = (
         CAST(CAST(key AS uint32) / 100 AS string) AS key,
         key AS kk,
         CAST(subkey AS uint32) * 10 AS subkey,
-        "data: " || value AS value
+        'data: ' || value AS value
     FROM
         Input
     WHERE

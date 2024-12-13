@@ -8,10 +8,10 @@ $combineQueries = ($query, $list) -> {
             ($world) -> {
                 $queries = ListMap(
                     $list, ($arg) -> {
-                        RETURN FuncCode("Apply", QuoteCode($query), $world, ReprCode($arg));
+                        RETURN FuncCode('Apply', QuoteCode($query), $world, ReprCode($arg));
                     }
                 );
-                RETURN FuncCode("UnionAll", $queries);
+                RETURN FuncCode('UnionAll', $queries);
             }
         )
     );
@@ -25,7 +25,7 @@ DEFINE SUBQUERY $calc($table) AS
     ;
 END DEFINE;
 
-$fullQuery = $combineQueries($calc, AsList("Input", "Input"));
+$fullQuery = $combineQueries($calc, AsList('Input', 'Input'));
 
 SELECT
     count(*)

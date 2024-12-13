@@ -8,7 +8,7 @@ $input =
 SELECT
     YQL::ShuffleByKeys(
         $input,
-        ($_) -> ("dsdsa"),
+        ($_) -> ('dsdsa'),
         ($_) -> ([1]) -- list
     )
 ;

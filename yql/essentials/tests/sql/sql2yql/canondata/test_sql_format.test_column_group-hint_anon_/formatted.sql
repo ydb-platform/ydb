@@ -6,7 +6,7 @@ $i =
     FROM
         Input
     WHERE
-        a > "a"
+        a > 'a'
 ;
 
 SELECT

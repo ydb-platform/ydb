@@ -23,7 +23,7 @@ $src = (
     FROM
         plato.Input
     WHERE
-        key > "200"
+        key > '200'
 );
 
 $r = (
@@ -33,7 +33,7 @@ $r = (
         FROM
             Input
         WHERE
-            key > "100"
+            key > '100'
     ), $src
     ON
         key

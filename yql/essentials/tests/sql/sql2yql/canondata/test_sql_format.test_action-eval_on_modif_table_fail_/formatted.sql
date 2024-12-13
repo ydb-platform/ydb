@@ -5,10 +5,10 @@ USE plato;
 
 INSERT INTO Output
 SELECT
-    "key" AS field
+    'key' AS field
 UNION ALL
 SELECT
-    "subkey" AS field
+    'subkey' AS field
 ;
 
 COMMIT;
@@ -21,7 +21,7 @@ $whitelist =
 ;
 
 SELECT
-    ForceSpreadMembers([("key", key)], Unwrap($whitelist))
+    ForceSpreadMembers([('key', key)], Unwrap($whitelist))
 FROM
     Input
 ;

@@ -1,7 +1,7 @@
 /* postgres can not */
 USE plato;
 
-PRAGMA yt.MapJoinLimit = "1m";
+PRAGMA yt.MapJoinLimit = '1m';
 
 $l1 =
     SELECT
@@ -16,6 +16,6 @@ FROM
     Input
 WHERE
     TRUE
-    AND value != ""
+    AND value != ''
     AND key IN $l1
 ;

@@ -1,7 +1,7 @@
 USE plato;
 
 PRAGMA AnsiOptionalAs;
-PRAGMA config.flags("OptimizerFlags", "FieldSubsetEnableMultiusage", "FilterPushdownEnableMultiusage", "EarlyExpandSkipNull");
+PRAGMA config.flags('OptimizerFlags', 'FieldSubsetEnableMultiusage', 'FilterPushdownEnableMultiusage', 'EarlyExpandSkipNull');
 
 $date_dim =
     SELECT
@@ -22,9 +22,9 @@ $customer =
         *
     FROM
         as_table([
-            <|c_customer_sk: Just(1), c_customer_id: Just(1), c_first_name: Just("Vasya"), c_last_name: Just("Ivanov"), c_preferred_cust_flag: Just("aaa"), c_birth_country: Just("RU"), c_login: Just("ivanov"), c_email_address: Just("foo@bar.com")|>,
-            <|c_customer_sk: Just(2), c_customer_id: Just(2), c_first_name: Just("Petya"), c_last_name: Just("Ivanov"), c_preferred_cust_flag: Just("bbb"), c_birth_country: Just("RU"), c_login: Just("ivanov1"), c_email_address: Just("foo1@bar.com")|>,
-            <|c_customer_sk: Just(3), c_customer_id: NULL, c_first_name: NULL, c_last_name: NULL, c_preferred_cust_flag: NULL, c_birth_country: NULL, c_login: Just("ivanov1"), c_email_address: Just("foo2@bar.com")|>,
+            <|c_customer_sk: Just(1), c_customer_id: Just(1), c_first_name: Just('Vasya'), c_last_name: Just('Ivanov'), c_preferred_cust_flag: Just('aaa'), c_birth_country: Just('RU'), c_login: Just('ivanov'), c_email_address: Just('foo@bar.com')|>,
+            <|c_customer_sk: Just(2), c_customer_id: Just(2), c_first_name: Just('Petya'), c_last_name: Just('Ivanov'), c_preferred_cust_flag: Just('bbb'), c_birth_country: Just('RU'), c_login: Just('ivanov1'), c_email_address: Just('foo1@bar.com')|>,
+            <|c_customer_sk: Just(3), c_customer_id: NULL, c_first_name: NULL, c_last_name: NULL, c_preferred_cust_flag: NULL, c_birth_country: NULL, c_login: Just('ivanov1'), c_email_address: Just('foo2@bar.com')|>,
         ])
 ;
 

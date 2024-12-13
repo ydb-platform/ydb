@@ -16,7 +16,7 @@ FROM (
         a.key
 )
 WHERE
-    x > "aaa"
+    x > 'aaa'
 ORDER BY
     x
 ;

@@ -3,7 +3,7 @@
 /* dq can not */
 /* dqfile can not */
 /* yt can not */
-PRAGMA warning("disable", "4504");
+PRAGMA warning('disable', '4504');
 
 $t = [<|k: 1, v: 2|>];
 

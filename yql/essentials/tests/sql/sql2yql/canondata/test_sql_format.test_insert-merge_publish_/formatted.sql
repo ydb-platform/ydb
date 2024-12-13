@@ -3,11 +3,11 @@
 /* ignore plan diff */
 USE plato;
 
-PRAGMA yt.ScriptCpu = "1.0";
+PRAGMA yt.ScriptCpu = '1.0';
 
 INSERT INTO Output1
 SELECT
-    "1" AS key,
+    '1' AS key,
     subkey,
     value
 FROM
@@ -16,7 +16,7 @@ FROM
 
 INSERT INTO Output2
 SELECT
-    "2" AS key,
+    '2' AS key,
     subkey,
     value
 FROM
@@ -25,7 +25,7 @@ FROM
 
 INSERT INTO Output2
 SELECT
-    "3" AS key,
+    '3' AS key,
     subkey,
     value
 FROM
@@ -34,18 +34,18 @@ FROM
 
 INSERT INTO Output1
 SELECT
-    "4" AS key,
+    '4' AS key,
     subkey,
     value
 FROM
     Input
 ;
 
-PRAGMA yt.ScriptCpu = "2.0";
+PRAGMA yt.ScriptCpu = '2.0';
 
 INSERT INTO Output1
 SELECT
-    "5" AS key,
+    '5' AS key,
     subkey,
     value
 FROM
@@ -54,7 +54,7 @@ FROM
 
 INSERT INTO Output1
 SELECT
-    "6" AS key,
+    '6' AS key,
     subkey,
     value
 FROM

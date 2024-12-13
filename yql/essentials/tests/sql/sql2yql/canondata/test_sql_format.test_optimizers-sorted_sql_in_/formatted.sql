@@ -30,7 +30,7 @@ SELECT
 FROM
     $ou
 WHERE
-    subkey > "0"
+    subkey > '0'
     AND key NOT IN COMPACT (
         SELECT
             key

@@ -7,8 +7,8 @@ PRAGMA FlexibleTypes;
 
 $src =
     SELECT
-        Text("test_text, привет") AS text,
-        Bytes("binary\x00\xff") AS bytes
+        Text('test_text, привет') AS text,
+        Bytes('binary\x00\xff') AS bytes
 ;
 
 SELECT

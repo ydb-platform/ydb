@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.ColumnGroupMode = "perusage";
+PRAGMA yt.ColumnGroupMode = 'perusage';
 
 $s1 =
     SELECT
@@ -8,7 +8,7 @@ $s1 =
     FROM
         Input
     WHERE
-        a != ""
+        a != ''
 ;
 
 $s2 =
@@ -17,10 +17,10 @@ $s2 =
     FROM
         Input
     WHERE
-        a > "a1"
+        a > 'a1'
 ;
 
-INSERT INTO @a WITH column_groups = "{a=#}"
+INSERT INTO @a WITH column_groups = '{a=#}'
 SELECT
     *
 FROM
@@ -41,7 +41,7 @@ FROM
     $s1
 ;
 
-INSERT INTO Output WITH column_groups = "{a=#}"
+INSERT INTO Output WITH column_groups = '{a=#}'
 SELECT
     *
 FROM
@@ -50,7 +50,7 @@ FROM
 
 COMMIT;
 
-INSERT INTO @a WITH column_groups = "{a=#}"
+INSERT INTO @a WITH column_groups = '{a=#}'
 SELECT
     *
 FROM
@@ -64,14 +64,14 @@ FROM
     $s2
 ;
 
-INSERT INTO @c WITH column_groups = "{default=#}"
+INSERT INTO @c WITH column_groups = '{default=#}'
 SELECT
     *
 FROM
     $s2
 ;
 
-INSERT INTO Output WITH column_groups = "{a=#}"
+INSERT INTO Output WITH column_groups = '{a=#}'
 SELECT
     *
 FROM

@@ -20,7 +20,7 @@ $filteredMembers = ListFilter(
             RETURN $x.Name;
         }
     ), ($x) -> {
-        RETURN $x > "k";
+        RETURN $x > 'k';
     }
 );
 

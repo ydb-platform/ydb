@@ -1,7 +1,7 @@
 -- TPC-H/TPC-R Promotion Effect Query (Q14)
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
-$border = Date("1994-08-01");
+$border = Date('1994-08-01');
 
 SELECT
     100.00 * sum(
@@ -18,5 +18,5 @@ ON
     l.l_partkey == p.p_partkey
 WHERE
     CAST(l.l_shipdate AS timestamp) >= $border
-    AND CAST(l.l_shipdate AS timestamp) < ($border + Interval("P31D"))
+    AND CAST(l.l_shipdate AS timestamp) < ($border + Interval('P31D'))
 ;

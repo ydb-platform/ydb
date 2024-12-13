@@ -4,12 +4,12 @@ $input =
     SELECT
         *
     FROM
-        AS_TABLE([<|a: "foo", b: "123"|>])
+        AS_TABLE([<|a: 'foo', b: '123'|>])
 ;
 
 $mapping =
     SELECT
-        {"a": "String", "b": "Int32"}
+        {'a': 'String', 'b': 'Int32'}
     FROM
         Input
     LIMIT 1
@@ -27,11 +27,11 @@ $converter = ($row) -> {
         LambdaCode(
             ($rowCode) -> {
                 RETURN FuncCode(
-                    "AsStruct", ListMap(
+                    'AsStruct', ListMap(
                         StructMembers($row), ($name) -> {
                             RETURN ListCode(
                                 AtomCode($name),
-                                FuncCode("Apply", QuoteCode($transformer(Unwrap($mapping[$name]))), FuncCode("Member", $rowCode, AtomCode($name)))
+                                FuncCode('Apply', QuoteCode($transformer(Unwrap($mapping[$name]))), FuncCode('Member', $rowCode, AtomCode($name)))
                             );
                         }
                     )

@@ -16,7 +16,7 @@ SELECT
 FROM
     $input
 WHERE
-    subkey > "0"
+    subkey > '0'
 ORDER BY
     key
 ;
@@ -28,7 +28,7 @@ SELECT
 FROM
     $input AS t
 WHERE
-    value > "a"
+    value > 'a'
 ;
 
 INSERT INTO @b

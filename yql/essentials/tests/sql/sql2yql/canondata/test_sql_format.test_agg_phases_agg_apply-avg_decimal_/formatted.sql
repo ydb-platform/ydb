@@ -6,7 +6,7 @@ $t =
     SELECT
         *
     FROM
-        AS_TABLE([<|key: 1, value: decimal("2.1", 7, 2)|>, <|key: 1, value: decimal("3.5", 7, 2)|>])
+        AS_TABLE([<|key: 1, value: decimal('2.1', 7, 2)|>, <|key: 1, value: decimal('3.5', 7, 2)|>])
 ;
 
 $p =

@@ -22,7 +22,7 @@ $c =
     FROM
         Input
     WHERE
-        key < "080"
+        key < '080'
 ;
 
 SELECT

@@ -4,7 +4,7 @@ USE plato;
 
 INSERT INTO @src
 SELECT
-    "\xff\xff" || key AS key
+    '\xff\xff' || key AS key
 FROM
     Input
 ORDER BY
@@ -21,5 +21,5 @@ FROM (
     FROM
         @src
     WHERE
-        StartsWith(key, "\xff\xff") AND EndsWith(key, "5")
+        StartsWith(key, '\xff\xff') AND EndsWith(key, '5')
 );

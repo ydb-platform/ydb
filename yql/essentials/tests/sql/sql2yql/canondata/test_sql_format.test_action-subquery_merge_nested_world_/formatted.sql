@@ -9,7 +9,7 @@ DEFINE SUBQUERY $s($_i) AS
         FROM
             FOLDER('')
         WHERE
-            Path LIKE "Input%"
+            Path LIKE 'Input%'
     ;
 
     SELECT

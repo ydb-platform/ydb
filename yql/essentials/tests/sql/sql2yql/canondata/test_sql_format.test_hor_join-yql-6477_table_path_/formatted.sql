@@ -3,7 +3,7 @@
 /* kikimr can not - yt pragma */
 USE plato;
 
-PRAGMA yt.MaxExtraJobMemoryToFuseOperations = "512M";
+PRAGMA yt.MaxExtraJobMemoryToFuseOperations = '512M';
 
 $udfScript = @@
 def AsIs(s):
@@ -22,5 +22,5 @@ SELECT
 FROM
     Input
 WHERE
-    $udf(key) > "080"
+    $udf(key) > '080'
 ;

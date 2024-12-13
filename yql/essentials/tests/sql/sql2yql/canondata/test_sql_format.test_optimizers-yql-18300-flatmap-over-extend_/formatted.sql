@@ -2,9 +2,9 @@ USE plato;
 
 INSERT INTO @tmp WITH truncate
 SELECT
-    "dummy" AS a,
-    "1" AS b,
-    ["b", "s"] AS data
+    'dummy' AS a,
+    '1' AS b,
+    ['b', 's'] AS data
 ORDER BY
     a
 ;

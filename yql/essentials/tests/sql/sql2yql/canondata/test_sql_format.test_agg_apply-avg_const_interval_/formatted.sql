@@ -5,7 +5,7 @@ PRAGMA EmitAggApply;
 $a =
     SELECT
         CurrentUtcDate() AS _date,
-        Just(Interval("P1W")) AS parsed_lag
+        Just(Interval('P1W')) AS parsed_lag
     FROM
         plato.Input
 ;

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Dict
 import functools
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from ydb.library.yql.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import GenericSettings
@@ -13,13 +13,13 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Gen
 @dataclass
 class BaseTestCase:
     name_: str
-    data_source_kind: EDataSourceKind.ValueType
+    data_source_kind: EGenericDataSourceKind.ValueType
     pragmas: Dict[str, str]
-    protocol: EProtocol
+    protocol: EGenericProtocol
 
     @property
     def name(self) -> str:
-        return f'{self.name_}_{EProtocol.Name(self.protocol)}'
+        return f'{self.name_}_{EGenericProtocol.Name(self.protocol)}'
 
     @property
     def database(self) -> Database:
@@ -35,11 +35,11 @@ class BaseTestCase:
         so we provide a random table name instead.
         '''
         match self.data_source_kind:
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
-            case EDataSourceKind.YDB:
+            case EGenericDataSourceKind.YDB:
                 return self.name
 
     @property
@@ -60,22 +60,21 @@ class BaseTestCase:
     @property
     def generic_settings(self) -> GenericSettings:
         match self.data_source_kind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 return GenericSettings(
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
                     clickhouse_clusters=[
-                        GenericSettings.ClickHouseCluster(database=self.database.name, protocol=EProtocol.NATIVE)
+                        GenericSettings.ClickHouseCluster(database=self.database.name, protocol=EGenericProtocol.NATIVE)
                     ],
                     postgresql_clusters=[],
                 )
-
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 return GenericSettings(
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
                     clickhouse_clusters=[],
                     postgresql_clusters=[GenericSettings.PostgreSQLCluster(database=self.database.name, schema=None)],
                 )
-            case EDataSourceKind.YDB:
+            case EGenericDataSourceKind.YDB:
                 return GenericSettings(
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
                     ydb_clusters=[GenericSettings.YdbCluster(database=self.database.name)],

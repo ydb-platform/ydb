@@ -4,7 +4,7 @@ import pathlib
 
 import pytest
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from ydb.library.yql.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.clients.clickhouse import (
     make_client as make_clickhouse_client,
     Client as ClickHouseClient,
@@ -20,7 +20,7 @@ docker_compose_dir: Final = pathlib.Path("ydb/library/yql/providers/generic/conn
 def settings() -> Settings:
     return Settings.from_env(
         docker_compose_dir=docker_compose_dir,
-        data_source_kinds=[EDataSourceKind.POSTGRESQL, EDataSourceKind.CLICKHOUSE],
+        data_source_kinds=[EGenericDataSourceKind.POSTGRESQL, EGenericDataSourceKind.CLICKHOUSE],
     )
 
 

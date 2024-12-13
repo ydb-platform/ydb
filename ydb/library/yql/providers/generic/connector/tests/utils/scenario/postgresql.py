@@ -1,6 +1,6 @@
 from typing import Sequence
 
-import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
+from ydb.library.yql.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
 from ydb.library.yql.providers.generic.connector.tests.utils.comparator import assert_data_outs_equal
@@ -65,7 +65,7 @@ def prepare_table(
             cur.execute(create_schema_stmt)
             table_name = f"{pg_schema}.{table_name}"
 
-        create_table_stmt = f"CREATE TABLE {table_name} ({schema.yql_column_list(data_source_pb2.POSTGRESQL)})"
+        create_table_stmt = f"CREATE TABLE {table_name} ({schema.yql_column_list(EGenericDataSourceKind.POSTGRESQL)})"
         LOGGER.debug(create_table_stmt)
         cur.execute(create_table_stmt)
 

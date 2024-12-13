@@ -5,7 +5,7 @@ from typing import Sequence
 
 import yatest.common
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from ydb.library.yql.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.docker_compose import DockerComposeHelper
@@ -72,7 +72,7 @@ one_time_waiter = OneTimeWaiter(
     ]
 )
 
-settings = Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EDataSourceKind.YDB])
+settings = Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EGenericDataSourceKind.YDB])
 tc_collection = Collection(settings)
 
 

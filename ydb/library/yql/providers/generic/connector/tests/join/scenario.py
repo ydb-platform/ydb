@@ -1,4 +1,4 @@
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from ydb.library.yql.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.comparator import assert_data_outs_equal
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
@@ -25,7 +25,7 @@ def join(
     # prepare tables
     for data_source in test_case.data_sources:
         match data_source.kind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 clickhouse_scenario.prepare_table(
                     test_name=test_name,
                     client=clickhouse_client,
@@ -34,7 +34,7 @@ def join(
                     data_in=data_source.table.data_in,
                     schema=data_source.table.schema,
                 )
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 postgresql_scenario.prepare_table(
                     test_name=test_name,
                     client=postgresql_client,

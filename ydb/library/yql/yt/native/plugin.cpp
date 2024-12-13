@@ -467,7 +467,7 @@ public:
 
         TVector<std::pair<TString, NYql::TCredential>> credentials;
         const auto credentialsMap = NodeFromYsonString(credentialsStr.ToString()).AsMap();
-        credentials.reserve(credentialsMap.size() + credentials.size());
+        credentials.reserve(credentialsMap.size());
         for (const auto& item : credentialsMap) {
             credentials.emplace_back(item.first, NYql::TCredential {
                 item.second.HasKey("category") ? item.second.ChildAsString("category") : "",

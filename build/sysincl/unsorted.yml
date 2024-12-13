@@ -259,7 +259,6 @@
   #endif
 	#if defined(_TRASH_) && TODO
   - gcrypt.h
-  - winmmap.h
   #endif
   #if defined(__TURBOC__) || defined(__BORLANDC__)
   - alloc.h

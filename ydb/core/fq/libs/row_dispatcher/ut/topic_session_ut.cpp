@@ -71,6 +71,7 @@ public:
             Driver,
             CredentialsProviderFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(pqServices),
             16000000
             ).release());

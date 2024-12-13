@@ -1,8 +1,9 @@
 #include "yql_yt_provider_impl.h"
 
+#include <yt/yql/providers/yt/provider/yql_yt_block_io_utils.h>
+#include <yt/yql/providers/yt/common/yql_names.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
-#include <yt/yql/providers/yt/common/yql_names.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -11,9 +12,9 @@ namespace {
 
 using namespace NNodes;
 
-class TYtBlockInputTransformer : public TOptimizeTransformerBase {
+class TYtBlockOutputTransformer : public TOptimizeTransformerBase {
 public:
-    TYtBlockInputTransformer(TYtState::TPtr state)
+    TYtBlockOutputTransformer(TYtState::TPtr state)
         : TOptimizeTransformerBase(
             state ? state->Types : nullptr,
             NLog::EComponent::ProviderYt,
@@ -21,7 +22,7 @@ public:
         )
         , State_(std::move(state))
     {
-#define HNDL(name) "YtBlockInput-"#name, Hndl(&TYtBlockInputTransformer::name)
+#define HNDL(name) "YtBlockOutput-"#name, Hndl(&TYtBlockOutputTransformer::name)
         AddHandler(0, &TYtMap::Match, HNDL(TryTransformMap));
 #undef HNDL
     }
@@ -30,23 +31,23 @@ private:
     TMaybeNode<TExprBase> TryTransformMap(TExprBase node, TExprContext& ctx) const {
         auto map = node.Cast<TYtMap>();
         if (
-            NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied)
-            || !NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputReady)
+            NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockOutputApplied)
+            || !NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockOutputReady)
             || !CanRewriteMap(map, ctx)
         ) {
             return map;
         }
 
-        YQL_CLOG(INFO, ProviderYt) << "Rewrite YtMap with block input";
+        YQL_CLOG(INFO, ProviderYt) << "Rewrite YtMap with block output";
 
-        auto settings = RemoveSetting(map.Settings().Ref(), EYtSettingType::BlockInputReady, ctx);
-        settings = AddSetting(*settings, EYtSettingType::BlockInputApplied, TExprNode::TPtr(), ctx);
+        auto settings = RemoveSetting(map.Settings().Ref(), EYtSettingType::BlockOutputReady, ctx);
+        settings = AddSetting(*settings, EYtSettingType::BlockOutputApplied, TExprNode::TPtr(), ctx);
         auto mapperLambda = Build<TCoLambda>(ctx, map.Mapper().Pos())
             .Args({"flow"})
-            .Body<TExprApplier>()
-                .Apply(map.Mapper())
-                .With<TCoWideFromBlocks>(0)
-                    .Input("flow")
+            .Body<TCoWideToBlocks>()
+                .Input<TExprApplier>()
+                    .Apply(map.Mapper())
+                    .With(0, "flow")
                 .Build()
             .Build()
             .Done()
@@ -57,6 +58,7 @@ private:
             .Settings(settings)
             .Mapper(mapperLambda)
             .Done();
+        return map;
     }
 
     bool CanRewriteMap(const TYtMap& map, TExprContext& ctx) const {
@@ -64,7 +66,13 @@ private:
             return false;
         }
 
-        return EnsureWideFlowType(map.Mapper().Args().Arg(0).Ref(), ctx);
+        auto blockOutputSetting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockOutputReady);
+        auto mode = FromString<EBlockOutputMode>(blockOutputSetting->Child(1)->Content());
+        if (mode == EBlockOutputMode::Auto && !map.Mapper().Body().Ref().IsCallable("WideFromBlocks")) {
+            return false;
+        }
+
+        return EnsureWideFlowType(map.Mapper().Ref(), ctx);
     }
 
 private:
@@ -73,8 +81,8 @@ private:
 
 } // namespace
 
-THolder<IGraphTransformer> CreateYtBlockInputTransformer(TYtState::TPtr state) {
-    return THolder<IGraphTransformer>(new TYtBlockInputTransformer(std::move(state)));
+THolder<IGraphTransformer> CreateYtBlockOutputTransformer(TYtState::TPtr state) {
+    return THolder<IGraphTransformer>(new TYtBlockOutputTransformer(std::move(state)));
 }
 
 } // namespace NYql

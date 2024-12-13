@@ -70,6 +70,12 @@ enum class EColumnGroupMode {
     PerUsage    /* "perusage", "per-usage" */,
 };
 
+enum class EBlockOutputMode {
+    Disable  /* "disable" */,
+    Auto     /* "auto" */,
+    Force    /* "force" */,
+};
+
 struct TYtSettings {
     using TConstPtr = std::shared_ptr<const TYtSettings>;
 
@@ -204,8 +210,6 @@ struct TYtSettings {
     NCommon::TConfSetting<TDuration, true> DQRPCReaderTimeout;
     NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
-    NCommon::TConfSetting<TSet<TString>, true> JobBlockInputSupportedTypes;
-    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> JobBlockInputSupportedDataTypes;
     NCommon::TConfSetting<TString, true> _BinaryCacheFolder;
 
     // Optimizers
@@ -286,6 +290,11 @@ struct TYtSettings {
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
     NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
     NCommon::TConfSetting<bool, false> JobBlockInput;
+    NCommon::TConfSetting<TSet<TString>, false> JobBlockInputSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, false> JobBlockInputSupportedDataTypes;
+    NCommon::TConfSetting<EBlockOutputMode, false> JobBlockOutput;
+    NCommon::TConfSetting<TSet<TString>, false> JobBlockOutputSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, false> JobBlockOutputSupportedDataTypes;
     NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
     NCommon::TConfSetting<bool, false> CompactForDistinct;
 };
@@ -344,7 +353,7 @@ public:
         : TYtConfiguration(types)
     {
     }
-    
+
     ~TYtVersionedConfiguration() = default;
 
     size_t FindNodeVer(const TExprNode& node);

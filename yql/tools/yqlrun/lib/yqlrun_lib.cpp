@@ -33,6 +33,7 @@ public:
         pipeline->Add(NYql::CreateYtWideFlowTransformer(nullptr), "WideFlow");
         pipeline->Add(NYql::CreateYtBlockInputTransformer(nullptr), "BlockInput");
         pipeline->Add(NYql::MakePeepholeOptimization(pipeline->GetTypeAnnotationContext()), "PeepHole");
+        pipeline->Add(NYql::CreateYtBlockOutputTransformer(nullptr), "BlockOutput");
     }
 };
 

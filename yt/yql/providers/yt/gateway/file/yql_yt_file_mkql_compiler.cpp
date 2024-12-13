@@ -629,6 +629,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             values = ApplyPathRangesAndSampling(values, itemType, ytMap.Input().Ref(), ctx);
 
             auto& lambdaInputType = GetSeqItemType(*ytMap.Mapper().Args().Arg(0).Ref().GetTypeAnn());
+            auto& lambdaOutputType = GetSeqItemType(*ytMap.Mapper().Body().Ref().GetTypeAnn());
 
             if (lambdaInputType.GetKind() == ETypeAnnotationKind::Multi) {
                 values = ExpandFlow(values, ctx);
@@ -641,7 +642,11 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMap.Mapper().Ref().UniqueId());
             values = NCommon::MkqlBuildExpr(ytMap.Mapper().Body().Ref(), innerCtx);
 
-            if (ETypeAnnotationKind::Multi == GetSeqItemType(*ytMap.Mapper().Body().Ref().GetTypeAnn()).GetKind())
+            if (IsWideBlockType(lambdaOutputType)) {
+                values = ctx.ProgramBuilder.WideFromBlocks(values);
+            }
+
+            if (ETypeAnnotationKind::Multi == lambdaOutputType.GetKind())
                 values = NarrowFlow(values, ytMap, ctx);
 
             auto res = BuildTableOutput(values, ctx);

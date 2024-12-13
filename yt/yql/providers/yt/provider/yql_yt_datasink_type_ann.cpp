@@ -39,6 +39,26 @@ bool IsWideRepresentation(const TTypeAnnotationNode* leftType, const TTypeAnnota
     return true;
 }
 
+bool IsWideBlockRepresentation(const TTypeAnnotationNode* leftType, const TTypeAnnotationNode* rightType) {
+    const auto structType = dynamic_cast<const TStructExprType*>(leftType);
+    if (!structType || !IsWideBlockType(*rightType)){
+        return false;
+    }
+    const auto multiType = rightType->Cast<TMultiExprType>();
+
+    if (structType->GetSize() != multiType->GetSize() - 1)
+        return false;
+
+    const auto& structItems = structType->GetItems();
+    const auto& multiItems = multiType->GetItems();
+    for (auto i = 0U; i < structItems.size(); ++i) {
+        if (!IsSameAnnotation(*multiItems[i]->Cast<TBlockExprType>()->GetItemType(), *structItems[i]->GetItemType()))
+            return false;
+    }
+
+    return true;
+}
+
 const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, const TExprNode::TPtr& useFlowSetting, const TExprNode::TPtr& blockInputAppliedSetting, TExprContext& ctx) {
     if (!useFlowSetting) {
         return ctx.MakeType<TStreamExprType>(itemType);
@@ -239,7 +259,7 @@ private:
         const size_t outTablesSize = endIdx - beginIdx;
         TPosition pos = ctx.GetPosition(positionHandle);
 
-        if (!EnsurePersistableType(positionHandle, *itemType, ctx)) {
+        if (!IsWideBlockType(*itemType) && !EnsurePersistableType(positionHandle, *itemType, ctx)) {
             return false;
         }
 
@@ -322,7 +342,7 @@ private:
                 return false;
             }
 
-            if (!(IsSameAnnotation(*itemType, *tableItemType) || IsWideRepresentation(tableItemType, itemType))) {
+            if (!(IsSameAnnotation(*itemType, *tableItemType) || IsWideRepresentation(tableItemType, itemType) || IsWideBlockRepresentation(tableItemType, itemType))) {
                 ctx.AddError(TIssue(pos, TStringBuilder()
                     << "Output table row type differs from the write row type: "
                     << GetTypeDiff(*tableItemType, *itemType)));
@@ -1075,7 +1095,9 @@ private:
             | EYtSettingType::KeepSorted
             | EYtSettingType::NoDq
             | EYtSettingType::BlockInputReady
-            | EYtSettingType::BlockInputApplied;
+            | EYtSettingType::BlockInputApplied
+            | EYtSettingType::BlockOutputReady
+            | EYtSettingType::BlockOutputApplied;
         if (!ValidateSettings(map.Settings().Ref(), accpeted, ctx)) {
             return TStatus::Error;
         }
@@ -1100,6 +1122,7 @@ private:
         const auto inputItemType = GetInputItemType(map.Input(), ctx);
         const auto useFlow = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::Flow);
         const auto blockInputApplied = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied);
+        const auto blockOutputApplied = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockOutputApplied);
         const auto lambdaInputType = MakeInputType(inputItemType, useFlow, blockInputApplied, ctx);
 
         auto& lambda = input->ChildRef(TYtMap::idx_Mapper);
@@ -1113,6 +1136,11 @@ private:
         }
 
         if (!(useFlow ? EnsureFlowType(*lambda, ctx) : EnsureStreamType(*lambda, ctx))) {
+            return TStatus::Error;
+        }
+
+        TTypeAnnotationNode::TListType blockItemTypes;
+        if (blockOutputApplied && !EnsureWideFlowBlockType(*lambda, blockItemTypes, ctx)) {
             return TStatus::Error;
         }
 

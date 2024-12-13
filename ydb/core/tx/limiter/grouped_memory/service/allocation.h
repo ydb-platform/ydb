@@ -23,7 +23,7 @@ private:
 
 public:
     ~TAllocationInfo() {
-        if (GetAllocationStatus() != EAllocationStatus::Failed) {
+        if (GetAllocationStatus() == EAllocationStatus::Allocated) {
             Stage->Free(AllocatedVolume, GetAllocationStatus() == EAllocationStatus::Allocated);
         }
 

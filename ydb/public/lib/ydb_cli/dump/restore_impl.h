@@ -132,6 +132,7 @@ class TRestoreClient {
     TRestoreResult RestoreIndexes(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestoreChangefeeds(const TFsPath& path, const TString& dbPath);
     TRestoreResult RestorePermissions(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const THashSet<TString>& oldEntries);
+    TRestoreResult RestoreConsumers(const TString& topicPath, const TVector<NTopic::TConsumer>& consumers);
 
     THolder<NPrivate::IDataWriter> CreateDataWriter(const TString& dbPath, const TRestoreSettings& settings,
         const NTable::TTableDescription& desc, const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators);

@@ -333,6 +333,27 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
+TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const TVector<NTopic::TConsumer>& consumers) {
+    for (auto& consumer : consumers) {
+        auto createResult = TopicClient.AlterTopic(topicPath,
+            NTopic::TAlterTopicSettings()
+                                .BeginAddConsumer()
+                                .ConsumerName(consumer.GetConsumerName())
+                                .Important(consumer.GetImportant())
+                                .ReadFrom(consumer.GetReadFrom())
+                                .Attributes(consumer.GetAttributes())
+                                .EndAddConsumer()
+        ).GetValueSync();
+        if (createResult.IsSuccess()) {
+            LOG_D("Created consumer " << consumer.GetConsumerName() << " for " << topicPath);
+        } else {
+            LOG_E("Failed to create " << consumer.GetConsumerName() << " for " << topicPath);
+            return Result<TRestoreResult>(topicPath, std::move(createResult));
+        }
+    }
+    return Result<TRestoreResult>();
+}
+
 TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const TString& dbPath) {
     LOG_D("Process " << fsPath.GetPath().Quote());
     if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
@@ -358,26 +379,7 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
         return Result<TRestoreResult>(fsPath.GetPath(), std::move(createResult));
     }
 
-    for (auto& consumer : topicDesc.GetConsumers()) {
-        auto createResult = TopicClient.AlterTopic(Join("/", dbPath, fsPath.GetName()),
-            NTopic::TAlterTopicSettings()
-                                .BeginAddConsumer()
-                                .ConsumerName(consumer.GetConsumerName())
-                                .Important(consumer.GetImportant())
-                                .ReadFrom(consumer.GetReadFrom())
-                                .Attributes(consumer.GetAttributes())
-                                .EndAddConsumer()
-        ).GetValueSync();
-        if (createResult.IsSuccess()) {
-            LOG_D("Created consumer " << consumer.GetConsumerName() << " for " << fsPath.GetPath().Quote());
-        } else {
-            LOG_E("Failed to create " << consumer.GetConsumerName() << " for " << fsPath.GetPath().Quote());
-            return Result<TRestoreResult>(fsPath.GetPath(), std::move(createResult));
-        }
-
-    }
-
-    return Result<TRestoreResult>();
+    return RestoreConsumers(Join("/", dbPath, fsPath.GetName()), topicDesc.GetConsumers());;
 }
 
 TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath,
@@ -432,12 +434,20 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
         LOG_D("Skip restoring indexes of " << dbPath.Quote());
     }
 
-    TVector<TFsPath> children;
-    fsPath.List(children);
-    for (auto fsChildPath : children) {
-        if (settings.RestoreChangefeeds_ && IsFileExists(fsChildPath.Child(NFiles::Changefeed().FileName))) {
-            RestoreChangefeeds(fsChildPath, dbPath);
+    if (settings.RestoreChangefeeds_) {
+        TVector<TFsPath> children;
+        fsPath.List(children);
+        for (auto fsChildPath : children) {
+            bool isChangefeedDIr = IsFileExists(fsChildPath.Child(NFiles::Changefeed().FileName));
+            if (isChangefeedDIr) {
+                auto result = RestoreChangefeeds(fsChildPath, dbPath);
+                if (!result.IsSuccess()) {
+                    return result;
+                }
+            }
         }
+    } else {
+        LOG_D("Skip restoring changefeeds of " << dbPath.Quote());
     }
 
     return RestorePermissions(fsPath, dbPath, settings, oldEntries);

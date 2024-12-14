@@ -75,8 +75,8 @@ TMaybe<TNode> GetTableFormat(
 
     auto exists = NDetail::RequestWithRetry<bool>(
         retryPolicy->CreatePolicyForGenericRequest(),
-        [&rawClient, &transactionId, &formatPath] (TMutationId& mutationId) {
-            return rawClient->Exists(mutationId, transactionId, formatPath);
+        [&rawClient, &transactionId, &formatPath] (TMutationId /*mutationId*/) {
+            return rawClient->Exists(transactionId, formatPath);
         });
     if (!exists) {
         return TMaybe<TNode>();
@@ -84,8 +84,8 @@ TMaybe<TNode> GetTableFormat(
 
     auto format = NDetail::RequestWithRetry<TMaybe<TNode>>(
         retryPolicy->CreatePolicyForGenericRequest(),
-        [&rawClient, &transactionId, &formatPath] (TMutationId& mutationId) {
-            return rawClient->Get(mutationId, transactionId, formatPath);
+        [&rawClient, &transactionId, &formatPath] (TMutationId /*mutationId*/) {
+            return rawClient->Get(transactionId, formatPath);
         });
     if (format.Get()->AsString() != "yamred_dsv") {
         return TMaybe<TNode>();

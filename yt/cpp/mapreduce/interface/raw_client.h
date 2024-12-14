@@ -13,13 +13,11 @@ public:
     // Cypress
 
     virtual TNode Get(
-        TMutationId& mutationId,
         const TTransactionId& transactionId,
         const TYPath& path,
         const TGetOptions& options = {}) = 0;
 
     virtual TNode TryGet(
-        TMutationId& mutationId,
         const TTransactionId& transactionId,
         const TYPath& path,
         const TGetOptions& options = {}) = 0;
@@ -32,7 +30,6 @@ public:
         const TSetOptions& options = {}) = 0;
 
     virtual bool Exists(
-        TMutationId& mutataionId,
         const TTransactionId& transactionId,
         const TYPath& path,
         const TExistsOptions& options = {}) = 0;

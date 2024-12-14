@@ -54,9 +54,8 @@ bool UseLocalModeOptimization(
     // so we check if path exists before getting it.
     auto exists = RequestWithRetry<bool>(
         clientRetryPolicy->CreatePolicyForGenericRequest(),
-        [&rawClient, &localModeAttr] (TMutationId& mutationId) {
+        [&rawClient, &localModeAttr] (TMutationId /*mutationId*/) {
             return rawClient->Exists(
-                mutationId,
                 TTransactionId(),
                 localModeAttr,
                 TExistsOptions().ReadFrom(EMasterReadKind::Cache));
@@ -65,9 +64,8 @@ bool UseLocalModeOptimization(
     {
         auto fqdnNode = RequestWithRetry<TNode>(
             clientRetryPolicy->CreatePolicyForGenericRequest(),
-            [&rawClient, &localModeAttr] (TMutationId& mutationId) {
+            [&rawClient, &localModeAttr] (TMutationId /*mutationId*/) {
                 return rawClient->TryGet(
-                    mutationId,
                     TTransactionId(),
                     localModeAttr,
                     TGetOptions().ReadFrom(EMasterReadKind::Cache));

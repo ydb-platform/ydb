@@ -755,9 +755,8 @@ void TJobPreparer::UseFileInCypress(const TRichYPath& file)
 {
     auto exists = RequestWithRetry<bool>(
         OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        [this, &file] (TMutationId& mutationId) {
+        [this, &file] (TMutationId /*mutationId*/) {
             return RawClient_->Exists(
-                mutationId,
                 file.TransactionId_.GetOrElse(OperationPreparer_.GetTransactionId()),
                 file.Path_);
         });
@@ -769,9 +768,8 @@ void TJobPreparer::UseFileInCypress(const TRichYPath& file)
     if (ShouldMountSandbox()) {
         auto size = RequestWithRetry<i64>(
             OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            [this, &file] (TMutationId& mutationId) {
+            [this, &file] (TMutationId /*mutationId*/) {
                 return RawClient_->Get(
-                    mutationId,
                     file.TransactionId_.GetOrElse(OperationPreparer_.GetTransactionId()),
                     file.Path_ + "/@uncompressed_data_size")
                     .AsInt64();

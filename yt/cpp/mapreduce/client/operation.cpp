@@ -1042,9 +1042,8 @@ void CheckInputTablesExist(
         auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
         auto exists = RequestWithRetry<bool>(
             preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            [&preparer, &curTransactionId, &path] (TMutationId& mutationId) {
+            [&preparer, &curTransactionId, &path] (TMutationId /*mutationId*/) {
                 return preparer.GetClient()->GetRawClient()->Exists(
-                    mutationId,
                     curTransactionId,
                     path.Path_);
             });

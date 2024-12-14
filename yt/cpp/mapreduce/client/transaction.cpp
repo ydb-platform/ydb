@@ -68,9 +68,8 @@ TPingableTransaction::TPingableTransaction(
 {
     auto timeoutNode = NDetail::RequestWithRetry<TNode>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, &transactionId] (TMutationId& mutationId) {
+        [this, &transactionId] (TMutationId /*mutationId*/) {
             return RawClient_->TryGet(
-                mutationId,
                 TTransactionId(),
                 "#" + GetGuidAsString(transactionId) + "/@timeout",
                 TGetOptions());
@@ -194,9 +193,8 @@ TYPath Snapshot(
 
     auto lockedNodeId = NDetail::RequestWithRetry<TNode>(
         clientRetryPolicy->CreatePolicyForGenericRequest(),
-        [&rawClient, &transactionId, &lockId] (TMutationId& mutationId) {
+        [&rawClient, &transactionId, &lockId] (TMutationId /*mutationId*/) {
             return rawClient->Get(
-                mutationId,
                 transactionId,
                 ::TStringBuilder() << '#' << GetGuidAsString(lockId) << "/@node_id");
         });

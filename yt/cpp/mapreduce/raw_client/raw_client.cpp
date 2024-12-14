@@ -17,24 +17,23 @@ THttpRawClient::THttpRawClient(const TClientContext& context)
 { }
 
 TNode THttpRawClient::Get(
-    TMutationId& mutationId,
     const TTransactionId& transactionId,
     const TYPath& path,
     const TGetOptions& options)
 {
+    TMutationId mutationId;
     THttpHeader header("GET", "get");
     header.MergeParameters(NRawClient::SerializeParamsForGet(transactionId, Context_.Config->Prefix, path, options));
     return NodeFromYsonString(RequestWithoutRetry(Context_, mutationId, header).Response);
 }
 
 TNode THttpRawClient::TryGet(
-    TMutationId& mutationId,
     const TTransactionId& transactionId,
     const TYPath& path,
     const TGetOptions& options)
 {
     try {
-        return Get(mutationId, transactionId, path, options);
+        return Get(transactionId, path, options);
     } catch (const TErrorResponse& error) {
         if (!error.IsResolveError()) {
             throw;
@@ -58,11 +57,11 @@ void THttpRawClient::Set(
 }
 
 bool THttpRawClient::Exists(
-    TMutationId& mutationId,
     const TTransactionId& transactionId,
     const TYPath& path,
     const TExistsOptions& options)
 {
+    TMutationId mutationId;
     THttpHeader header("GET", "exists");
     header.MergeParameters(NRawClient::SerializeParamsForExists(transactionId, Context_.Config->Prefix, path, options));
     return ParseBoolFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);

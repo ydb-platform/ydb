@@ -18,13 +18,11 @@ public:
     // Cypress
 
     TNode Get(
-        TMutationId& mutationId,
         const TTransactionId& transactionId,
         const TYPath& path,
         const TGetOptions& options = {}) override;
 
     TNode TryGet(
-        TMutationId& mutationId,
         const TTransactionId& transactionId,
         const TYPath& path,
         const TGetOptions& options) override;
@@ -37,7 +35,6 @@ public:
         const TSetOptions& options = {}) override;
 
     bool Exists(
-        TMutationId& mutataionId,
         const TTransactionId& transactionId,
         const TYPath& path,
         const TExistsOptions& options = {}) override;

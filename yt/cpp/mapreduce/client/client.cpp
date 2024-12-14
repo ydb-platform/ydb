@@ -132,8 +132,8 @@ bool TClientBase::Exists(
 {
     return RequestWithRetry<bool>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, &path, &options] (TMutationId& mutationId) {
-            return RawClient_->Exists(mutationId, TransactionId_, path, options);
+        [this, &path, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->Exists(TransactionId_, path, options);
         });
 }
 
@@ -143,8 +143,8 @@ TNode TClientBase::Get(
 {
     return RequestWithRetry<TNode>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, &path, &options] (TMutationId& mutationId) {
-            return RawClient_->Get(mutationId, TransactionId_, path, options);
+        [this, &path, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->Get(TransactionId_, path, options);
         });
 }
 
@@ -342,8 +342,8 @@ IFileWriterPtr TClientBase::CreateFileWriter(
 
     auto exists = RequestWithRetry<bool>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, &realPath] (TMutationId& mutationId) {
-            return RawClient_->Exists(mutationId, TransactionId_, realPath.Path_);
+        [this, &realPath] (TMutationId /*mutationId*/) {
+            return RawClient_->Exists(TransactionId_, realPath.Path_);
         });
     if (!exists) {
         RequestWithRetry<void>(
@@ -745,8 +745,8 @@ THolder<TClientWriter> TClientBase::CreateClientWriter(
 
     auto exists = RequestWithRetry<bool>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, &realPath] (TMutationId& mutationId) {
-            return RawClient_->Exists(mutationId, TransactionId_, realPath.Path_);
+        [this, &realPath] (TMutationId /*mutationId*/) {
+            return RawClient_->Exists(TransactionId_, realPath.Path_);
         });
     if (!exists) {
         RequestWithRetry<void>(

@@ -108,8 +108,8 @@ const TTableSchema& TOperationPreparationContext::GetInputSchema(int index) cons
         Y_ABORT_UNLESS(Inputs_[index]);
         auto schemaNode = RequestWithRetry<TNode>(
             RetryPolicy_->CreatePolicyForGenericRequest(),
-            [this, &index] (TMutationId& mutationId) {
-                return RawClient_->Get(mutationId, TransactionId_, Inputs_[index]->Path_ + "/@schema");
+            [this, &index] (TMutationId /*mutationId*/) {
+                return RawClient_->Get(TransactionId_, Inputs_[index]->Path_ + "/@schema");
             });
         Deserialize(schema, schemaNode);
     }

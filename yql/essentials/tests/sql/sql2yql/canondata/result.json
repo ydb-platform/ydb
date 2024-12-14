@@ -11395,6 +11395,13 @@
             "uri": "https://{canondata_backend}/1937001/40d997912e417875462933d31ee934f62af7dd8a/resource.tar.gz#test_sql2yql.test_optimizers-pushdown_nonsep_over_aggregate_/sql.yql"
         }
     ],
+    "test_sql2yql.test[optimizers-reduce_with_aux_sort_column]": [
+        {
+            "checksum": "5d7c8ddf7ad11a2c7354ab8424a8031a",
+            "size": 2765,
+            "uri": "https://{canondata_backend}/1781765/cb24b9901fae16f9664ce3775954713b77cca79e/resource.tar.gz#test_sql2yql.test_optimizers-reduce_with_aux_sort_column_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[optimizers-sort_by_nonstrict_const]": [
         {
             "checksum": "169c512d23e47b59ae22f678661c4ac2",
@@ -28122,6 +28129,11 @@
     "test_sql_format.test[optimizers-pushdown_nonsep_over_aggregate]": [
         {
             "uri": "file://test_sql_format.test_optimizers-pushdown_nonsep_over_aggregate_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-reduce_with_aux_sort_column]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-reduce_with_aux_sort_column_/formatted.sql"
         }
     ],
     "test_sql_format.test[optimizers-sort_by_nonstrict_const]": [

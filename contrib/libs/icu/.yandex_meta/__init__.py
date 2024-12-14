@@ -103,6 +103,17 @@ icu = NixProject(
     ],
     disable_includes=[
         "sys/isa_defs.h",
+        "sys/neutrino.h",
+        "ascii_a.h",
+        "cics.h",
+        "mih/testptr.h",
+        "qliept.h",
+        "qusec.h",
+        "qusrjobi.h",
+        "ucln_local_hook.c",
+        "uconfig_local.h",
+        "udbgutil.h",
+        "unistrm.h",
     ],
     # We setup ADDINCL GLOBAL, so we have sinlge "usual" way to include ICU headers by default
     addincl_global={".": {"./include"}},

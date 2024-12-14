@@ -68,7 +68,7 @@ TChangefeedDescription ChangefeedDescriptionFromProto(const Ydb::Table::Changefe
 }
 
 NTopic::TTopicDescription TopicDescriptionFromProto(Ydb::Topic::DescribeTopicResult&& proto) {
-    return TProtoAccessor::FromProto(std::move(proto));
+    return NTopic::TTopicDescription(std::move(proto));
 }
 
 TTableDescription TableDescriptionWithoutIndexesFromProto(Ydb::Table::CreateTableRequest proto) {

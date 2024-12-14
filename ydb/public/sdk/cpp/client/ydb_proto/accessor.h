@@ -60,8 +60,6 @@ public:
     static NTable::TChangefeedDescription FromProto(const Ydb::Table::Changefeed& changefeed);
     static NTable::TChangefeedDescription FromProto(const Ydb::Table::ChangefeedDescription& changefeed);
 
-    static NTopic::TTopicDescription FromProto(Ydb::Topic::DescribeTopicResult&& topic);
-
     static Ydb::Table::ValueSinceUnixEpochModeSettings::Unit GetProto(NTable::TValueSinceUnixEpochModeSettings::EUnit value);
     static NTable::TValueSinceUnixEpochModeSettings::EUnit FromProto(Ydb::Table::ValueSinceUnixEpochModeSettings::Unit value);
 

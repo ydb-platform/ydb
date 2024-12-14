@@ -36,10 +36,6 @@ NTable::TChangefeedDescription TProtoAccessor::FromProto(const Ydb::Table::Chang
     return NTable::TChangefeedDescription(changefeed);
 }
 
-NTopic::TTopicDescription TProtoAccessor::FromProto(Ydb::Topic::DescribeTopicResult&& topic) {
-    return NTopic::TTopicDescription(std::move(topic));
-}
-
 Ydb::Table::ValueSinceUnixEpochModeSettings::Unit TProtoAccessor::GetProto(NTable::TValueSinceUnixEpochModeSettings::EUnit value) {
     switch (value) {
     case NTable::TValueSinceUnixEpochModeSettings::EUnit::Seconds:

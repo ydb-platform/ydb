@@ -19,6 +19,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/dump/util
     ydb/public/sdk/cpp/client/ydb_proto
+    ydb/public/sdk/cpp/client/ydb_topic
 )
 
 GENERATE_ENUM_SERIALIZATION(dump.h)

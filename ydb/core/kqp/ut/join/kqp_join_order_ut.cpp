@@ -125,8 +125,8 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 
 void PrintPlan(const TString& plan) {
     Cout << plan << Endl;
-    NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
-    queryPlanPrinter.Print(plan);
+    // NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
+    // queryPlanPrinter.Print(plan);
 
     std::string joinOrder = GetJoinOrder(plan).GetStringRobust();
 

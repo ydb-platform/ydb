@@ -1152,7 +1152,12 @@ TNodePtr TSqlExpression::BindParameterRule(const TRule_bind_parameter& rule, con
         return {};
     }
     Ctx.IncrementMonCounter("sql_features", "NamedNodeUseAtom");
-    return GetNamedNode(namedArg);
+    auto ret = GetNamedNode(namedArg);
+    if (ret) {
+        ret->SetRefPos(Ctx.Pos());
+    }
+
+    return ret;
 }
 
 TNodePtr TSqlExpression::LambdaRule(const TRule_lambda& rule) {

@@ -2,8 +2,6 @@
 #include "restore_import_data.h"
 #include "restore_compat.h"
 
-#include <contrib/libs/fmt/include/fmt/format.h>
-
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
@@ -38,7 +36,7 @@ bool IsFileExists(const TFsPath& path) {
     return path.Exists() && path.IsFile();
 }
 
-template<typename TProtoType>
+template <typename TProtoType>
 TProtoType ReadProtoFromFile(const TFsPath& fsDirPath, const TLog* log, const NDump::NFiles::TFileInfo fileInfo) {
     LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read " << fileInfo.LogObjectType << " from " << fsDirPath.GetPath().Quote());
     TProtoType proto;
@@ -365,6 +363,7 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
             NTopic::TAlterTopicSettings()
                                 .BeginAddConsumer()
                                 .ConsumerName(consumer.GetConsumerName())
+                                .Attributes(consumer.GetAttributes())
                                 .EndAddConsumer()
         ).GetValueSync();
         if (createResult.IsSuccess()) {
@@ -373,6 +372,7 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
             LOG_E("Failed to create " << consumer.GetConsumerName() << " for " << fsPath.GetPath().Quote());
             return Result<TRestoreResult>(fsPath.GetPath(), std::move(createResult));
         }
+
     }
 
     return Result<TRestoreResult>();

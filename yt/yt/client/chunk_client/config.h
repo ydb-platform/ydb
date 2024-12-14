@@ -113,6 +113,8 @@ public:
     //! Factors to calculate peer load as linear combination of disk queue and net queue.
     double NetQueueSizeFactor;
     double DiskQueueSizeFactor;
+    double CachedBlockCountFactor;
+    double CachedBlockSizeFactor;
 
     //! Will locate new replicas from master
     //! if node was suspicious for at least the period (unless null).

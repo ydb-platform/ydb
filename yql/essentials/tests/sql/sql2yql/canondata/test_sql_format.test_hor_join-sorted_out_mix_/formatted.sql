@@ -32,16 +32,16 @@ $udf = ($x) -> {
         Yql::Visit(
             $x,
             AsAtom("0"), ($i) -> {
-                RETURN Yql::Member($i, AsAtom("key"))
+                RETURN Yql::Member($i, AsAtom("key"));
             },
             AsAtom("1"), ($i) -> {
-                RETURN Yql::Member($i, AsAtom("key"))
+                RETURN Yql::Member($i, AsAtom("key"));
             },
             AsAtom("2"), ($i) -> {
-                RETURN Yql::Member($i, AsAtom("key"))
+                RETURN Yql::Member($i, AsAtom("key"));
             }
         ) AS key
-    )
+    );
 };
 
 SELECT

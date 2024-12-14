@@ -453,7 +453,7 @@ public:
     TQueryResult GuardedRun(
         TQueryId queryId,
         TString user,
-        TString token,
+        TYsonString credentialsStr,
         TString queryText,
         TYsonString settings,
         std::vector<TQueryFile> files,
@@ -465,7 +465,17 @@ public:
             ActiveQueriesProgress_[queryId].Program = program;
         }
 
-        program->AddCredentials({{"default_yt", NYql::TCredential("yt", "", token)}});
+        TVector<std::pair<TString, NYql::TCredential>> credentials;
+        const auto credentialsMap = NodeFromYsonString(credentialsStr.ToString()).AsMap();
+        credentials.reserve(credentialsMap.size());
+        for (const auto& item : credentialsMap) {
+            credentials.emplace_back(item.first, NYql::TCredential {
+                item.second.HasKey("category") ? item.second.ChildAsString("category") : "",
+                item.second.HasKey("subcategory") ? item.second.ChildAsString("subcategory") : "",
+                item.second.HasKey("content") ? item.second.ChildAsString("content") : ""
+            });
+        }
+        program->AddCredentials(credentials);
         program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
 
         auto defaultQueryCluster = DefaultCluster_;
@@ -589,14 +599,14 @@ public:
     TQueryResult Run(
         TQueryId queryId,
         TString user,
-        TString token,
+        TYsonString credentials,
         TString queryText,
         TYsonString settings,
         std::vector<TQueryFile> files,
         int executeMode) noexcept override
     {
         try {
-            auto result = GuardedRun(queryId, user, token, queryText, settings, files, executeMode);
+            auto result = GuardedRun(queryId, user, credentials, queryText, settings, files, executeMode);
             if (result.YsonError) {
                 ExtractQuery(queryId);
             }

@@ -588,6 +588,12 @@ void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConf
     IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
     const TString yamlConfigString = protoConfigFileProvider.GetProtoFromFile(yamlConfigFile, errorCollector);
+
+    if (appConfig.HasBlobStorageConfig() && appConfig.GetBlobStorageConfig().HasAutoconfigSettings()) {
+        auto *proto = appConfig.MutableBlobStorageConfig()->MutableAutoconfigSettings();
+        proto->SetInitialConfigYaml(yamlConfigString);
+    }
+
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
      */

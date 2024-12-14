@@ -5,7 +5,7 @@ USE plato;
 $arg1 = "" || "";
 
 $arg2 = ($_item) -> {
-    RETURN TRUE
+    RETURN TRUE;
 };
 
 $arg3 = "" || "";

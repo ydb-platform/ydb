@@ -4,47 +4,47 @@ SELECT
     ListHasItems([]),
     Yql::Filter(
         [], ($x) -> {
-            RETURN $x
+            RETURN $x;
         }
     ),
     Yql::Map(
         [], ($x) -> {
-            RETURN $x * 2
+            RETURN $x * 2;
         }
     ),
     Yql::FlatMap(
         [], ($x) -> {
-            RETURN Just($x * 2)
+            RETURN Just($x * 2);
         }
     ),
     Yql::OrderedFilter(
         [], ($x) -> {
-            RETURN $x
+            RETURN $x;
         }
     ),
     Yql::OrderedMap(
         [], ($x) -> {
-            RETURN $x * 2
+            RETURN $x * 2;
         }
     ),
     Yql::OrderedFlatMap(
         [], ($x) -> {
-            RETURN Just($x * 2)
+            RETURN Just($x * 2);
         }
     ),
     ListFilter(
         [], ($x) -> {
-            RETURN $x
+            RETURN $x;
         }
     ),
     ListMap(
         [], ($x) -> {
-            RETURN $x * 2
+            RETURN $x * 2;
         }
     ),
     ListFlatMap(
         [], ($x) -> {
-            RETURN Just($x * 2)
+            RETURN Just($x * 2);
         }
     ),
     ListCollect([]),
@@ -67,17 +67,17 @@ SELECT
     ListHasItems(Just([])),
     ListFilter(
         Just([]), ($x) -> {
-            RETURN $x
+            RETURN $x;
         }
     ),
     ListMap(
         Just([]), ($x) -> {
-            RETURN $x * 2
+            RETURN $x * 2;
         }
     ),
     ListFlatMap(
         Just([]), ($x) -> {
-            RETURN Just($x * 2)
+            RETURN Just($x * 2);
         }
     ),
     ListCollect(Just([])),

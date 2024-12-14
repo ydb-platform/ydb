@@ -16,7 +16,7 @@ def signal_info(minidump_text):
         line = line.strip()
         if line.startswith('Crash|'):
             # "Crash|SIGSEGV|0x452e|0"
-            signal_name = line.split('|')[1]
+            signal_name = line.split('|')[1].split()[0]
             break
 
     try:
@@ -56,7 +56,7 @@ if __name__ == "__main__":
             "-q",
             "-batch",
             "-iex=set auto-load safe-path /",
-            "-ex=thread apply all bt",
+            "-ex=thread apply all bt 999",
             "/opt/ydb/bin/ydbd",
             core_file,
         ]

@@ -3,7 +3,7 @@
 {%- set with_kotlin = target.with_kotlin -%}
 {%- set kotlin_version = target.kotlin_version -%}
 {%- set has_junit5_test = extra_targets|selectattr('junit5_test') -%}
-{%- set has_errorprone = target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length -%}
+{%- set has_errorprone = target.use_errorprone and not disable_errorprone and target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length -%}
 
 {%- if not target.required_jdk -%}
 {%-     set has_required_jdk = false -%}
@@ -13,15 +13,3 @@
 {%-     set has_required_jdk = true -%}
 {%-     set required_jdk = target.required_jdk -%}
 {%- endif -%}
-
-{%- macro OutDirs(runs, prefix, suffix) -%}
-{%-    if run.args|length and run.out_dir|length -%}
-{%-        for out_dir in run.out_dir -%}
-{#-            search all run arguments ended by /<out_dir> -#}
-{%-            set out_dirs = select_by_ends(run.args, "/" + out_dir) -%}
-{%-            if out_dirs|length %}
-{{ prefix }}{{ out_dirs|first }}{{ suffix }}
-{%-            endif -%}
-{%-        endfor -%}
-{%-    endif -%}
-{%- endmacro -%}

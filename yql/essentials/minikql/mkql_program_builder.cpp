@@ -257,16 +257,6 @@ static std::vector<TType*> ValidateBlockItems(const TArrayRef<TType* const>& wid
     return items;
 }
 
-std::vector<TType*> ValidateBlockStreamType(const TType* streamType, bool unwrap = true) {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
-    return ValidateBlockItems(wideComponents, unwrap);
-}
-
-std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap = true) {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flowType));
-    return ValidateBlockItems(wideComponents, unwrap);
-}
-
 } // namespace
 
 std::string_view ScriptTypeAsStr(EScriptType type) {
@@ -329,6 +319,16 @@ void EnsureDataOrOptionalOfData(TRuntimeNode node) {
     MKQL_ENSURE(node.GetStaticType()->IsData() ||
         node.GetStaticType()->IsOptional() && AS_TYPE(TOptionalType, node.GetStaticType())
         ->GetItemType()->IsData(), "Expected data or optional of data");
+}
+
+std::vector<TType*> ValidateBlockStreamType(const TType* streamType, bool unwrap) {
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
+    return ValidateBlockItems(wideComponents, unwrap);
+}
+
+std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap) {
+    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flowType));
+    return ValidateBlockItems(wideComponents, unwrap);
 }
 
 TProgramBuilder::TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects)
@@ -5827,7 +5827,7 @@ TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode stream, std::optio
         return FromFlow(BuildBlockCombineHashed(__func__, ToFlow(stream), filterColumn, keys, aggs, flowReturnType));
     } else {
         return BuildBlockCombineHashed(__func__, stream, filterColumn, keys, aggs, returnType);
-    }    
+    }
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
@@ -5968,22 +5968,22 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode stream, TRuntimeNode dict,
-    EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
-    const TArrayRef<const ui32>& leftKeyDrops, TType* returnType
+TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
+    const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
+    const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, bool rightAny, TType* returnType
 ) {
-    if constexpr (RuntimeVersion < 51U) {
+    if constexpr (RuntimeVersion < 53U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
     MKQL_ENSURE(joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left ||
                 joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
                 "Unsupported join kind");
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
-    const THashSet<ui32> leftKeySet(leftKeyColumns.cbegin(), leftKeyColumns.cend());
-    for (const auto& drop : leftKeyDrops) {
-        MKQL_ENSURE(leftKeySet.contains(drop),
-                    "Only key columns has to be specified in drop column set");
-    }
+    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
+
+    ValidateBlockStreamType(leftStream.GetStaticType());
+    ValidateBlockStreamType(rightStream.GetStaticType());
+    ValidateBlockStreamType(returnType);
 
     TRuntimeNode::TList leftKeyColumnsNodes;
     leftKeyColumnsNodes.reserve(leftKeyColumns.size());
@@ -5999,12 +5999,29 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode stream, TRuntimeNode
             return NewDataLiteral(idx);
         });
 
+    TRuntimeNode::TList rightKeyColumnsNodes;
+    rightKeyColumnsNodes.reserve(rightKeyColumns.size());
+    std::transform(rightKeyColumns.cbegin(), rightKeyColumns.cend(),
+        std::back_inserter(rightKeyColumnsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    TRuntimeNode::TList rightKeyDropsNodes;
+    rightKeyDropsNodes.reserve(leftKeyDrops.size());
+    std::transform(rightKeyDrops.cbegin(), rightKeyDrops.cend(),
+        std::back_inserter(rightKeyDropsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
     TCallableBuilder callableBuilder(Env, __func__, returnType);
-    callableBuilder.Add(stream);
-    callableBuilder.Add(dict);
+    callableBuilder.Add(leftStream);
+    callableBuilder.Add(rightStream);
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
     callableBuilder.Add(NewTuple(leftKeyDropsNodes));
+    callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
+    callableBuilder.Add(NewTuple(rightKeyDropsNodes));
+    callableBuilder.Add(NewDataLiteral((bool)rightAny));
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

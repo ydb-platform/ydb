@@ -31,7 +31,7 @@ sourceSets {
         java.srcDir("src/intTest/java")
         resources.srcDir("src/intTest/resources")
 {%- for extra_target in extra_targets -%}
-{%-     if extra_target|length -%}
+{%-     if extra_target.runs|length -%}
 {%-         for run in extra_target.runs -%}
 {{              OutDirs(run, '        java.srcDir("', '")') }}
 {%-         endfor -%}

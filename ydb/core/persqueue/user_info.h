@@ -84,7 +84,6 @@ struct TUserInfo: public TUserInfoBase {
     ui32 ActiveReads;
     ui32 ReadsInQuotaQueue;
     ui32 Subscriptions;
-    i64 EndOffset;
 
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgReadBytes;
 
@@ -98,21 +97,21 @@ struct TUserInfo: public TUserInfoBase {
 
     bool Parsed = false;
 
-    void ForgetSubscription(const TInstant& now) {
+    void ForgetSubscription(i64 endOffset, const TInstant& now) {
         if (Subscriptions > 0)
             --Subscriptions;
-        UpdateReadingTimeAndState(now);
+        UpdateReadingTimeAndState(endOffset, now);
     }
 
     void UpdateReadingState() {
         Counter.UpdateState(Subscriptions > 0 || ActiveReads > 0 || ReadsInQuotaQueue > 0); //no data for read or got read requests from client
     }
 
-    void UpdateReadingTimeAndState(TInstant now) {
+    void UpdateReadingTimeAndState(i64 endOffset, TInstant now) {
         Counter.UpdateWorkingTime(now);
         UpdateReadingState();
 
-        if (EndOffset == GetReadOffset()) { //no data to read, so emulate client empty reads
+        if (endOffset == GetReadOffset()) { //no data to read, so emulate client empty reads
             WriteLagMs.Update(0, now);
         }
         if (Subscriptions > 0) {
@@ -121,7 +120,7 @@ struct TUserInfo: public TUserInfoBase {
     }
 
     void ReadDone(const TActorContext& ctx, const TInstant& now, ui64 readSize, ui32 readCount,
-                  const TString& clientDC, const TActorId& tablet, bool isExternalRead) {
+                  const TString& clientDC, const TActorId& tablet, bool isExternalRead, i64 endOffset) {
         Y_UNUSED(tablet);
         if (BytesRead && !clientDC.empty()) {
             BytesRead.Inc(readSize);
@@ -160,7 +159,7 @@ struct TUserInfo: public TUserInfoBase {
         }
         Y_ABORT_UNLESS(ActiveReads > 0);
         --ActiveReads;
-        UpdateReadingTimeAndState(now);
+        UpdateReadingTimeAndState(endOffset, now);
         ReadTimestamp = now;
     }
 
@@ -190,7 +189,6 @@ struct TUserInfo: public TUserInfoBase {
         , ActiveReads(0)
         , ReadsInQuotaQueue(0)
         , Subscriptions(0)
-        , EndOffset(0)
         , AvgReadBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000},
                        {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
         , WriteLagMs(TDuration::Minutes(1), 100)
@@ -269,12 +267,12 @@ struct TUserInfo: public TUserInfoBase {
 
     }
 
-    void UpdateReadOffset(const i64 offset, TInstant writeTimestamp, TInstant createTimestamp, TInstant now) {
+    void UpdateReadOffset(const i64 offset, TInstant writeTimestamp, TInstant createTimestamp, TInstant now, bool force = false) {
         ReadOffset = offset;
         ReadWriteTimestamp = writeTimestamp;
         ReadCreateTimestamp = createTimestamp;
         WriteLagMs.Update((ReadWriteTimestamp - ReadCreateTimestamp).MilliSeconds(), ReadWriteTimestamp);
-        if (Subscriptions > 0) {
+        if (Subscriptions > 0 || force) {
             ReadTimestamp = now;
         }
     }
@@ -335,17 +333,17 @@ struct TUserInfo: public TUserInfoBase {
         return ReadTimestamp;
     }
 
-    TInstant GetWriteTimestamp() const {
-        return Offset == EndOffset ? TAppData::TimeProvider->Now() : WriteTimestamp;
+    TInstant GetWriteTimestamp(i64 endOffset) const {
+        return Offset == endOffset ? TAppData::TimeProvider->Now() : WriteTimestamp;
     }
 
-    TInstant GetCreateTimestamp() const {
-        return Offset == EndOffset ? TAppData::TimeProvider->Now() : CreateTimestamp;
+    TInstant GetCreateTimestamp(i64 endOffset) const {
+        return Offset == endOffset ? TAppData::TimeProvider->Now() : CreateTimestamp;
     }
 
-    TInstant GetReadWriteTimestamp() const {
+    TInstant GetReadWriteTimestamp(i64 endOffset) const {
         TInstant ts =  ReadOffset == -1 ? WriteTimestamp : ReadWriteTimestamp;
-        ts = GetReadOffset() >= EndOffset ? TAppData::TimeProvider->Now() : ts;
+        ts = GetReadOffset() >= endOffset ? TAppData::TimeProvider->Now() : ts;
         return ts;
     }
 
@@ -353,9 +351,9 @@ struct TUserInfo: public TUserInfoBase {
         return WriteLagMs.GetValue();
     }
 
-    TInstant GetReadCreateTimestamp() const {
+    TInstant GetReadCreateTimestamp(i64 endOffset) const {
         TInstant ts = ReadOffset == -1 ? CreateTimestamp : ReadCreateTimestamp;
-        ts = GetReadOffset() >= EndOffset ? TAppData::TimeProvider->Now() : ts;
+        ts = GetReadOffset() >= endOffset ? TAppData::TimeProvider->Now() : ts;
         return ts;
     }
 

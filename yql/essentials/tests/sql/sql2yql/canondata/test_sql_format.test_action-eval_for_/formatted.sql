@@ -28,7 +28,7 @@ EVALUATE FOR $i IN ListMap(ListFromRange(0, 0), $f) DO
 
 EVALUATE FOR $i IN Yql::Map(
     1 / 1, ($x) -> {
-        RETURN AsList($x)
+        RETURN AsList($x);
     }
 ) DO
     $action1($i)
@@ -36,7 +36,7 @@ EVALUATE FOR $i IN Yql::Map(
 
 EVALUATE FOR $i IN Yql::Map(
     1 / 0, ($x) -> {
-        RETURN AsList($x)
+        RETURN AsList($x);
     }
 ) DO
     $action1($i)

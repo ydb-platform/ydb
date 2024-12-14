@@ -15,7 +15,6 @@ SRCS(
     tag_ut.cpp
     cube_ut.cpp
     exporter_ut.cpp
-    perf_counter_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)

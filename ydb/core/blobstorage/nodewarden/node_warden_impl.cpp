@@ -66,6 +66,7 @@ STATEFN(TNodeWarden::StateOnline) {
     switch (ev->GetTypeRewrite()) {
         fFunc(TEvBlobStorage::TEvPut::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvGet::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvGetBlock::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvBlock::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvPatch::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvDiscover::EventType, HandleForwarded);
@@ -1004,6 +1005,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         }
 
         acTo->CopyFrom(acFrom);
+        acTo->ClearInitialConfigYaml();
     } else {
         bsTo->ClearAutoconfigSettings();
     }

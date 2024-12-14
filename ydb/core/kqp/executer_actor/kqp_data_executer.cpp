@@ -146,6 +146,10 @@ public:
         , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(tableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
     {
+        if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
+            ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
+        }
+
         Target = creator;
 
         YQL_ENSURE(!TxManager || tableServiceConfig.GetEnableOltpSink());
@@ -334,7 +338,12 @@ public:
         }
     }
 
-    void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr&) {
+    void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr& ev) {
+        if (ev->Get()->Stats) {
+            if (Stats) {
+                Stats->AddBufferStats(std::move(*ev->Get()->Stats));
+            }
+        }
         MakeResponseAndPassAway();
     }
 
@@ -2007,7 +2016,7 @@ private:
                         default:
                             YQL_ENSURE(false, "unknown source type");
                     }
-                } else if (StreamResult && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0) {
+                } else if ((AllowOlapDataQuery || StreamResult) && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0) {
                     BuildScanTasksFromShards(stageInfo);
                 } else if (stageInfo.Meta.IsSysView()) {
                     BuildSysViewScanTasks(stageInfo);
@@ -2161,7 +2170,7 @@ private:
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
 
-        if (StreamResult) {
+        if (StreamResult || AllowOlapDataQuery) {
             TSet<ui64> shardIds;
             for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (stageInfo.Meta.IsOlap()) {
@@ -2671,7 +2680,8 @@ private:
             .MayRunTasksLocally = mayRunTasksLocally,
             .ResourceManager_ = Request.ResourceManager_,
             .CaFactory_ = Request.CaFactory_,
-            .BlockTrackingMode = BlockTrackingMode
+            .BlockTrackingMode = BlockTrackingMode,
+            .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
         });
 
         auto err = Planner->PlanExecution();
@@ -2994,6 +3004,7 @@ private:
 
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TDuration WaitCAStatsTimeout;
+    TMaybe<ui8> ArrayBufferMinFillPercentage;
 };
 
 } // namespace

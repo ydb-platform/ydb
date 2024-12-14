@@ -609,7 +609,7 @@ public:
             const TString& srcPath,
             const TString& dstPath,
             EReplicationMode mode,
-            EReplicaConsistency consistency)
+            EConsistencyLevel consistency)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -654,7 +654,7 @@ private:
     const TString SrcPath;
     const TString DstPath;
     const EReplicationMode Mode;
-    const EReplicaConsistency Consistency;
+    const EConsistencyLevel Consistency;
     const TActorLogPrefix LogPrefix;
 
     TPathId DomainKey;
@@ -670,12 +670,12 @@ private:
 
 }; // TDstCreator
 
-static NKikimrSchemeOp::TTableReplicationConfig::EConsistency ConvertConsistency(EReplicaConsistency value) {
+static NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel ConvertConsistencyLevel(EConsistencyLevel value) {
     switch (value) {
-    case EReplicaConsistency::Weak:
-        return NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK;
-    case EReplicaConsistency::Strong:
-        return NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG;
+    case EConsistencyLevel::Row:
+        return NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW;
+    case EConsistencyLevel::Global:
+        return NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL;
     }
 }
 
@@ -689,16 +689,16 @@ static NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode ConvertMode(ER
 void FillReplicationConfig(
         NKikimrSchemeOp::TTableReplicationConfig& out,
         EReplicationMode mode,
-        EReplicaConsistency consistency
+        EConsistencyLevel consistency
 ) {
     out.SetMode(ConvertMode(mode));
-    out.SetConsistency(ConvertConsistency(consistency));
+    out.SetConsistencyLevel(ConvertConsistencyLevel(consistency));
 }
 
 bool CheckReplicationConfig(
         const NKikimrSchemeOp::TTableReplicationConfig& in,
         EReplicationMode mode,
-        EReplicaConsistency consistency,
+        EConsistencyLevel consistency,
         TString& error
 ) {
     if (in.GetMode() != ConvertMode(mode)) {
@@ -708,32 +708,39 @@ bool CheckReplicationConfig(
         return false;
     }
 
-    if (in.GetConsistency() != ConvertConsistency(consistency)) {
-        error = TStringBuilder() << "Replication consistency mismatch"
-            << ": expected: " << ConvertConsistency(consistency)
-            << ", got: " << static_cast<int>(in.GetConsistency());
+    if (in.GetConsistencyLevel() != ConvertConsistencyLevel(consistency)) {
+        error = TStringBuilder() << "Replication consistency level mismatch"
+            << ": expected: " << ConvertConsistencyLevel(consistency)
+            << ", got: " << static_cast<int>(in.GetConsistencyLevel());
         return false;
     }
 
     return true;
 }
 
+static EConsistencyLevel ConvertConsistencyLevel(const NKikimrReplication::TConsistencySettings& settings) {
+    switch (settings.GetLevelCase()) {
+    case NKikimrReplication::TConsistencySettings::kRow:
+        return EConsistencyLevel::Row;
+    case NKikimrReplication::TConsistencySettings::kGlobal:
+        return EConsistencyLevel::Global;
+    default:
+        Y_ABORT("Unexpected consistency level");
+    }
+}
+
 IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
-    const auto consistency = replication->GetConfig().HasStrongConsistency()
-        ? EReplicaConsistency::Strong
-        : EReplicaConsistency::Weak;
-
     return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
-        EReplicationMode::ReadOnly, consistency);
+        EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()));
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
-        EReplicationMode mode, EReplicaConsistency consistency)
+        EReplicationMode mode, EConsistencyLevel consistency)
 {
     return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency);
 }

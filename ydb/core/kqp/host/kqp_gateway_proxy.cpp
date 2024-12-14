@@ -2429,11 +2429,11 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
-            if (settings.Settings.WeakConsistency) {
-                config.MutableWeakConsistency();
+            if (settings.Settings.RowConsistency) {
+                config.MutableConsistencySettings()->MutableRow();
             }
-            if (const auto& consistency = settings.Settings.StrongConsistency) {
-                consistency->Serialize(*config.MutableStrongConsistency());
+            if (const auto& consistency = settings.Settings.GlobalConsistency) {
+                consistency->Serialize(*config.MutableConsistencySettings()->MutableGlobal());
             }
 
             auto& targets = *config.MutableSpecific();

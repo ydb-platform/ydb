@@ -9,7 +9,7 @@ SELECT
             AsTuple(
                 AsAtom("res"), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN AsTuple($z.a, 1.0)
+                        RETURN AsTuple($z.a, 1.0);
                     }
                 )
             )
@@ -25,7 +25,7 @@ SELECT
             AsTuple(
                 AsAtom("res"), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN AsTuple($z.a, 1.0)
+                        RETURN AsTuple($z.a, 1.0);
                     }
                 )
             )

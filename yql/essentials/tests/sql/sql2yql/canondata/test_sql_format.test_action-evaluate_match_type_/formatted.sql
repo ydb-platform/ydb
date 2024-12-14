@@ -4,7 +4,7 @@ USE plato;
 
 $keep_only_last = ($row) -> {
     $members = ListFilter(StructMembers($row), ($x) -> (FIND($x, "key") IS NOT NULL));
-    RETURN ChooseMembers($row, $members)
+    RETURN ChooseMembers($row, $members);
 };
 
 SELECT

@@ -195,7 +195,7 @@ message TEvNodeConfigInvokeOnRoot {
         string YAML = 1;
     }
 
-    message TBootstrap {
+    message TBootstrapCluster {
         string SelfAssemblyUUID = 1;
     }
 
@@ -209,7 +209,7 @@ message TEvNodeConfigInvokeOnRoot {
         TAdvanceGeneration AdvanceGeneration = 7;
         TFetchStorageConfig FetchStorageConfig = 8;
         TReplaceStorageConfig ReplaceStorageConfig = 9;
-        TBootstrap Bootstrap = 10;
+        TBootstrapCluster BootstrapCluster = 10;
     }
 }
 

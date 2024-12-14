@@ -10,7 +10,7 @@ DEFINE SUBQUERY $strict() AS
         Input1 AS a
     JOIN
         Input2 AS b
-    USING (k1)
+    USING (k1);
 END DEFINE;
 
 SELECT

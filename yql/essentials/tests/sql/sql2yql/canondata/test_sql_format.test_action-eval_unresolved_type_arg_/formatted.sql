@@ -21,7 +21,7 @@ $myAddSuffix = ($row, $value) -> {
                                     FuncCode("Member", $r, AtomCode($i.Name)),
                                     ReprCode($value)
                                 )
-                            )
+                            );
                         }
                     )
                 );

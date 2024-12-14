@@ -11,4 +11,6 @@ namespace NKikimr::NGRpcService {
 
     void DoFetchBSConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 
+    void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+
 } // NKikimr::NGRpcService

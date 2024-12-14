@@ -497,6 +497,10 @@ public:
         const NKikimrConfig::TBackgroundCleaningConfig& config,
         const TActorContext &ctx);
 
+    void ConfigureLoginProvider(
+        const ::NKikimrProto::TAuthConfig& config,
+        const TActorContext &ctx);
+
     void StartStopCompactionQueues();
 
     void WaitForTableProfiles(ui64 importId, ui32 itemIdx);

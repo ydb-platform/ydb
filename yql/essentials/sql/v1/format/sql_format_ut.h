@@ -557,6 +557,25 @@ Y_UNIT_TEST(DefineActionOrSubquery) {
             "VALUES\n\t\t\t(1)\n\t\t;\n\tEND DEFINE;\n\n\t"
             "DEFINE SUBQUERY $c() AS\n\t\tSELECT\n\t\t\t1\n\t\t;\n\t"
             "END DEFINE;\n\tDO\n\t\t$b()\n\t;\n\n\tPROCESS $c();\nEND DEFINE;\n"},
+        {"define action $foo($bar) as;"
+            "$a = 10;; "
+            "$b = 20;;; "
+            "$c = $a + $b "
+            "end define",
+            "DEFINE ACTION $foo($bar) AS\n\t"
+            "$a = 10;\n\t"
+            "$b = 20;\n\t"
+            "$c = $a + $b;\n"
+            "END DEFINE;\n"},
+        {"define subquery $s() as;"
+            "select * from $t1 "
+            "union all select * from $t2 "
+            "end define",
+            "DEFINE SUBQUERY $s() AS\n\t"
+            "SELECT\n\t\t*\n\tFROM\n\t\t$t1\n\t"
+            "UNION ALL\n\t"
+            "SELECT\n\t\t*\n\tFROM\n\t\t$t2\n\t;\n"
+            "END DEFINE;\n"},
     };
 
     TSetup setup;
@@ -574,6 +593,9 @@ Y_UNIT_TEST(If) {
         {"evaluate if 1=1 do begin select 1; end do else do begin select 2; end do",
             "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1\n\t;\nEND DO "
             "ELSE DO BEGIN\n\tSELECT\n\t\t2\n\t;\nEND DO;\n"},
+        {"evaluate if 1=1 do begin; select 1 end do else do begin select 2;; select 3 end do",
+            "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1\n\t;\nEND DO ELSE DO BEGIN\n\t"
+            "SELECT\n\t\t2\n\t;\n\n\tSELECT\n\t\t3\n\t;\nEND DO;\n"}
     };
 
     TSetup setup;
@@ -592,6 +614,8 @@ Y_UNIT_TEST(For) {
             "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x\n\t;\nEND DO ELSE DO BEGIN\n\tSELECT\n\t\t2\n\t;\nEND DO;\n"},
         {"evaluate parallel for $x in [] do $a($x)",
             "EVALUATE PARALLEL FOR $x IN [] DO\n\t$a($x)\n;\n"},
+        {"evaluate for $x in [] do begin; select $x;; select $y end do",
+            "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x\n\t;\n\n\tSELECT\n\t\t$y\n\t;\nEND DO;\n"},
     };
 
     TSetup setup;
@@ -848,8 +872,10 @@ Y_UNIT_TEST(Select) {
             "SELECT\n\t1\nLIMIT 10;\n"},
         {"select 1 limit 10 offset 5",
             "SELECT\n\t1\nLIMIT 10 OFFSET 5;\n"},
-        { "select 1 union all select 2",
+        {"select 1 union all select 2",
             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\n;\n" },
+        {"select * from $user where key == 1 -- comment",
+            "SELECT\n\t*\nFROM\n\t$user\nWHERE\n\tkey == 1 -- comment\n;\n"},
     };
 
     TSetup setup;
@@ -872,9 +898,11 @@ Y_UNIT_TEST(CompositeTypesAndQuestions) {
 Y_UNIT_TEST(Lambda) {
     TCases cases = {
         {"$f=($a,$b)->{$x=$a+$b;return $a*$x};$g=($a,$b?)->($a+$b??0);select $f(10,4),$g(1,2);",
-            "$f = ($a, $b) -> {\n\t$x = $a + $b;\n\tRETURN $a * $x\n};\n\n"
+            "$f = ($a, $b) -> {\n\t$x = $a + $b;\n\tRETURN $a * $x;\n};\n\n"
             "$g = ($a, $b?) -> ($a + $b ?? 0);\n\n"
             "SELECT\n\t$f(10, 4),\n\t$g(1, 2)\n;\n"},
+        {"$f=($arg)->{;$a=10;;$b=20;;;RETURN $a+$b}",
+            "$f = ($arg) -> {\n\t$a = 10;\n\t$b = 20;\n\tRETURN $a + $b;\n};\n"},
     };
 
     TSetup setup;
@@ -1357,8 +1385,13 @@ USE plato;
 SELECT
     *
 FROM Input MATCH_RECOGNIZE(
-    PATTERN ( A )
-    DEFINE A as A
+    PARTITION BY a, b, c
+    ORDER BY ts
+    MEASURES LAST(B1.ts) AS b1, LAST(B3.ts) AS b3
+    ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW INITIAL
+    PATTERN ( A B2 + B3 )
+    SUBSET U = (C, D), W = (Q, P)
+    DEFINE A as A, B as B
 );
 )",
 R"(PRAGMA FeatureR010 = "prototype";
@@ -1368,7 +1401,26 @@ USE plato;
 SELECT
     *
 FROM
-    Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A)
+    Input MATCH_RECOGNIZE (
+        PARTITION BY
+            a,
+            b,
+            c
+        ORDER BY
+            ts
+        MEASURES
+            LAST(B1.ts) AS b1,
+            LAST(B3.ts) AS b3
+        ONE ROW PER MATCH
+        AFTER MATCH SKIP TO NEXT ROW
+        INITIAL PATTERN (A B2 + B3)
+        SUBSET
+            U = (C, D),
+            W = (Q, P)
+        DEFINE
+            A AS A,
+            B AS B
+    )
 ;
 )"
     }};
@@ -1444,7 +1496,7 @@ Y_UNIT_TEST(ExistsExpr) {
 Y_UNIT_TEST(LambdaInsideExpr) {
     TCases cases = {
         {"SELECT ListMap(AsList(1,2),($x)->{return $x+1});",
-            "SELECT\n\tListMap(\n\t\tAsList(1, 2), ($x) -> {\n\t\t\tRETURN $x + 1\n\t\t}\n\t)\n;\n"},
+            "SELECT\n\tListMap(\n\t\tAsList(1, 2), ($x) -> {\n\t\t\tRETURN $x + 1;\n\t\t}\n\t)\n;\n"},
     };
 
     TSetup setup;

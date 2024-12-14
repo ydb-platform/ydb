@@ -939,9 +939,7 @@ void TPathDescriber::DescribeDomainExtra(TPathElement::TPtr pathEl) {
     for (auto& pool: subDomainInfo->GetStoragePools()) {
         *entry->AddStoragePools() = pool;
     }
-    if (subDomainInfo->HasSecurityState()) {
-        entry->MutableSecurityState()->CopyFrom(subDomainInfo->GetSecurityState());
-    }
+    entry->MutableSecurityState()->CopyFrom(subDomainInfo->GetSecurityState());
 }
 
 void TPathDescriber::DescribeBlockStoreVolume(TPathId pathId, TPathElement::TPtr pathEl) {

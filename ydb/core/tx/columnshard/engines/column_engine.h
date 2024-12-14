@@ -46,7 +46,7 @@ struct TSelectInfo {
         }
     };
 
-    std::vector<std::shared_ptr<TPortionInfo>> PortionsOrderedPK;
+    std::vector<std::shared_ptr<TPortionInfo>> Portions;
 
     TStats Stats() const;
 

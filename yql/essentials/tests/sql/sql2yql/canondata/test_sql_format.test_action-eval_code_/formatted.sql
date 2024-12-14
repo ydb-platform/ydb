@@ -7,7 +7,7 @@ SELECT
 $inc = EvaluateCode(
     LambdaCode(
         ($x) -> {
-            RETURN FuncCode("+", $x, FuncCode("Int32", AtomCode("1")))
+            RETURN FuncCode("+", $x, FuncCode("Int32", AtomCode("1")));
         }
     )
 );

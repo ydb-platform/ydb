@@ -6,10 +6,10 @@ SELECT
                     + Yql::Fold(
                         ListMap(
                             AsList(7, 8), ($y) -> {
-                                RETURN $x + $y
+                                RETURN $x + $y;
                             }
                         ), 0, ($a, $b) -> {
-                            RETURN $a + $b
+                            RETURN $a + $b;
                         }
                     )
                     + Yql::Fold(
@@ -17,14 +17,14 @@ SELECT
                             RETURN $c + $d + Yql::Fold(
                                 ListMap(
                                     AsList(5, 6), ($y) -> {
-                                        RETURN $x + $y
+                                        RETURN $x + $y;
                                     }
                                 ), 0, ($a, $b) -> {
-                                    RETURN $a + $b
+                                    RETURN $a + $b;
                                 }
-                            )
+                            );
                         }
-                    )
+                    );
             }
         )
     )

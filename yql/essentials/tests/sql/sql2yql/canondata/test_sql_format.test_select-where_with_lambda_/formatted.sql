@@ -2,7 +2,7 @@
 USE plato;
 
 $predicate = ($x) -> {
-    RETURN $x == "911"
+    RETURN $x == "911";
 };
 
 $field = "field";

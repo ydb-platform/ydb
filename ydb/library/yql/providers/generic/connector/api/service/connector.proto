@@ -4,7 +4,7 @@ package NYql.NConnector.NApi;
 
 import "ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service";
+option go_package = "a.yandex-team.ru/contrib/ydb/library/yql/providers/generic/connector/libgo/service";
 
 // Connector provides unified interface for various data sources that can be used to extend capabilities
 // of YQ and YQL services.

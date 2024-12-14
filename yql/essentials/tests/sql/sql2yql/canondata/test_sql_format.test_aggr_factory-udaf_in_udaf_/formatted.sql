@@ -2,30 +2,30 @@
 $merge_dicts = ($dict1, $dict2) -> {
     RETURN SetUnion(
         $dict1, $dict2, ($_key, $a, $b) -> {
-            RETURN Coalesce($a, 0) + Coalesce($b, 0)
+            RETURN Coalesce($a, 0) + Coalesce($b, 0);
         }
-    )
+    );
 };
 
 $create_single_item_dict = ($item, $_parent) -> {
-    RETURN AsDict(AsTuple($item, 1))
+    RETURN AsDict(AsTuple($item, 1));
 };
 
 $count_values = AGGREGATION_FACTORY(
     "UDAF",
     $create_single_item_dict,
     ($dict, $item, $parent) -> {
-        RETURN $merge_dicts($create_single_item_dict($item, $parent), $dict)
+        RETURN $merge_dicts($create_single_item_dict($item, $parent), $dict);
     },
     $merge_dicts
 );
 
 $create_dict_from_list = ($list, $_parent) -> {
-    RETURN ListAggregate($list, $count_values)
+    RETURN ListAggregate($list, $count_values);
 };
 
 $add_list_to_dict = ($dict, $list, $parent) -> {
-    RETURN $merge_dicts($create_dict_from_list($list, $parent), $dict)
+    RETURN $merge_dicts($create_dict_from_list($list, $parent), $dict);
 };
 
 $count_list_values = AGGREGATION_FACTORY(

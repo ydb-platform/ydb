@@ -2,27 +2,27 @@
 /* postgres can not */
 -- count example
 $create = ($_item, $_parent) -> {
-    RETURN 1
+    RETURN 1;
 };
 
 $add = ($state, $_item, $_parent) -> {
-    RETURN 1 + $state
+    RETURN 1 + $state;
 };
 
 $merge = ($state1, $state2) -> {
-    RETURN $state1 + $state2
+    RETURN $state1 + $state2;
 };
 
 $get_result = ($state) -> {
-    RETURN $state
+    RETURN $state;
 };
 
 $serialize = ($state) -> {
-    RETURN $state
+    RETURN $state;
 };
 
 $deserialize = ($state) -> {
-    RETURN $state
+    RETURN $state;
 };
 
 $default = 0;
@@ -35,7 +35,7 @@ SELECT
             AsTuple(
                 AsAtom("res"), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN $z.a
+                        RETURN $z.a;
                     }
                 )
             )
@@ -51,7 +51,7 @@ SELECT
             AsTuple(
                 AsAtom("res"), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN $z.a
+                        RETURN $z.a;
                     }
                 )
             )

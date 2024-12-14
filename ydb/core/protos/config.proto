@@ -295,6 +295,9 @@ message TBlobStorageConfig {
 
         // generation of the distconf section; when set, one can automatically apply in-filesystem config
         optional uint64 Generation = 8;
+
+        // internally-used field with initial config.yaml loaded on the start
+        optional bytes InitialConfigYaml = 10;
     }
 
     optional TAutoconfigSettings AutoconfigSettings = 6;
@@ -1451,6 +1454,17 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 200 }];
+        optional uint64 UseNoopSchedulerHDD = 3 [(ControlOptions) = {
+            Description: "Enables noop scheduler for HDD disks only",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 UseNoopSchedulerSSD = 4 [(ControlOptions) = {
+            Description: "Enables noop scheduler for SSD, NVME",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+
     }
 
     message TBlobStorageControllerControls {
@@ -1482,10 +1496,13 @@ message TMeteringConfig {
 };
 
 message TAuditConfig {
+    // For each new format, we need to register the audit event conversion function
+    // See  ydb/core/audit/audit_log_impl.cpp for details
     enum EFormat {
         JSON = 1;                // Outputs audit log in format: "<time>: {"k1": "v1", "k2": "v2", ...}" where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
         TXT = 2;                 // Outputs audit log in format: "<time>: k1=v1, k2=v2, ..." where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
         JSON_LOG_COMPATIBLE = 3; // Outputs audit log in format: "{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}" where @timestamp is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values // Suitable for output both debug log and audit log to the same destination (stderr)
+        FORMAT_4 = 4;        // Reserved
     }
 
     message TStderrBackend {

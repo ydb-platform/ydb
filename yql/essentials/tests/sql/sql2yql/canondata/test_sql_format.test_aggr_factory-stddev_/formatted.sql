@@ -9,7 +9,7 @@ SELECT
             AsTuple(
                 AsAtom("res"), $f(
                     ListItemType(TypeOf($t)), ($z) -> {
-                        RETURN $z.a
+                        RETURN $z.a;
                     }
                 )
             )

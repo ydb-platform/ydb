@@ -140,7 +140,7 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         if (fraction < 0 || fraction > 1) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "provided fraction " << fraction
                        << " violated range [0; 1]. Clamping it to the range");
-            fraction = std::min(1.0, std::max(0.0, fraction));
+            fraction = std::clamp(fraction, 0.0, 1.0);
         }
 
         TSamplingRule<double, TWithTag<TThrottlingSettings>> rule {

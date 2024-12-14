@@ -84,7 +84,7 @@ public:
         Value += value;
     }
     void Sub(const ui64 value) {
-        AFL_VERIFY(value <= Value);
+        AFL_VERIFY(value <= Value)("base", Value)("delta", value);
         Value -= value;
     }
     ui64 Val() const {
@@ -126,11 +126,11 @@ public:
     }
 
     [[nodiscard]] TConclusionStatus Allocate(const ui64 volume) {
+        Waiting.Sub(volume);
         if (HardLimit < Usage.Val() + volume) {
             Counters->OnCannotAllocate();
-            return TConclusionStatus::Fail(TStringBuilder() << "limit:" << HardLimit << ";val:" << Usage.Val() << ";delta=" << volume << ";");
+            return TConclusionStatus::Fail(TStringBuilder() << Name << "::(limit:" << HardLimit << ";val:" << Usage.Val() << ";delta=" << volume << ");");
         }
-        Waiting.Sub(volume);
         Usage.Add(volume);
         if (Counters) {
             Counters->Add(volume, true);
@@ -139,14 +139,14 @@ public:
         if (Owner) {
             const auto ownerResult = Owner->Allocate(volume);
             if (ownerResult.IsFail()) {
-                Free(volume, true);
+                Free(volume, true, false);
                 return ownerResult;
             }
         }
         return TConclusionStatus::Success();
     }
 
-    void Free(const ui64 volume, const bool allocated) {
+    void Free(const ui64 volume, const bool allocated, const bool withOwner = true) {
         if (Counters) {
             Counters->Sub(volume, allocated);
         }
@@ -156,7 +156,7 @@ public:
             Waiting.Sub(volume);
         }
 
-        if (Owner) {
+        if (withOwner && Owner) {
             Owner->Free(volume, allocated);
         }
     }

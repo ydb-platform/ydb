@@ -1230,7 +1230,7 @@ void TKqpQueryCache::InsertQuery(const TKqpCompileResult::TConstPtr& compileResu
 
     auto queryIt = QueryIndex.emplace(query, compileResult->Uid);
     if (!queryIt.second) {
-        EraseByUid(compileResult->Uid);
+        EraseByUidImpl(compileResult->Uid);
         QueryIndex.erase(query);
     }
     Y_ENSURE(queryIt.second);

@@ -5037,6 +5037,45 @@ select FormatType($f());
         )";
         ExpectFailWithError(query, "<main>:2:33: Error: Aggregation function Min requires exactly 1 argument(s), given: 2\n");
     }
+
+    Y_UNIT_TEST(ScalarContextUsage1) {
+        TString query = R"(
+            $a = (select 1 as x, 2 as y);
+            select 1 + $a;
+        )";
+        ExpectFailWithError(query, "<main>:2:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:3:24: Error: Source is used here\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage2) {
+        TString query = R"(
+            use plato;
+            $a = (select 1 as x, 2 as y);
+            select * from concat($a);
+        )";
+        ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:4:34: Error: Source is used here\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage3) {
+        TString query = R"(
+            use plato;
+            $a = (select 1 as x, 2 as y);
+            select * from range($a);
+        )";
+        ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:4:33: Error: Source is used here\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage4) {
+        TString query = R"(
+            use plato;
+            $a = (select 1 as x, 2 as y);
+            insert into $a select 1;
+        )";
+        ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:4:25: Error: Source is used here\n");
+    }
 }
 
 void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {

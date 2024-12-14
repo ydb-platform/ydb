@@ -418,13 +418,8 @@
   - sys/tree.h
   - tcpd.h
   #endif
-  - net/errno.h
   - sys/mode.h
-  - netware.h
-  - perldtrace.h
   - win32thread.h
-  - bsd/ctypes.h
-  - sfio.h
   - GL/glx.h
   - CL/va_ext.h
   - sys/sysconf.h

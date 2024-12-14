@@ -51,6 +51,7 @@ void THttpRawClient::Set(
     const TSetOptions& options)
 {
     THttpHeader header("PUT", "set");
+    header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForSet(transactionId, Context_.Config->Prefix, path, options));
     auto body = NodeToYsonString(value);
     RequestWithoutRetry(Context_, mutationId, header, body);

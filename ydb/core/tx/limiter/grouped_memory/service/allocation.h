@@ -23,7 +23,7 @@ private:
 
 public:
     ~TAllocationInfo() {
-        if (GetAllocationStatus() == EAllocationStatus::Allocated) {
+        if (GetAllocationStatus() != EAllocationStatus::Failed) {
             Stage->Free(AllocatedVolume, GetAllocationStatus() == EAllocationStatus::Allocated);
         }
 
@@ -52,6 +52,7 @@ public:
         if (allocationResult.IsFail()) {
             AllocationFailed = true;
             Allocation->OnAllocationImpossible(allocationResult.GetErrorMessage());
+            Allocation = nullptr;
             return false;
         }
         const bool result = Allocation->OnAllocated(

@@ -16,11 +16,11 @@ TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId, const
     AFL_VERIFY(Allocation);
     AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "add")("id", Allocation->GetIdentifier())("stage", Stage->GetName());
     AllocatedVolume = Allocation->GetMemory();
-    Stage->Add(AllocatedVolume, Allocation->IsAllocated());
     if (allocation->IsAllocated()) {
         AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated_on_add")("allocation_id", Identifier)("stage", Stage->GetName());
         Allocation = nullptr;
     }
+    Stage->Add(AllocatedVolume, GetAllocationStatus() == EAllocationStatus::Allocated);
 }
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

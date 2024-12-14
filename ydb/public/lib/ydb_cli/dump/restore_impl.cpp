@@ -363,6 +363,8 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
             NTopic::TAlterTopicSettings()
                                 .BeginAddConsumer()
                                 .ConsumerName(consumer.GetConsumerName())
+                                .Important(consumer.GetImportant())
+                                .ReadFrom(consumer.GetReadFrom())
                                 .Attributes(consumer.GetAttributes())
                                 .EndAddConsumer()
         ).GetValueSync();

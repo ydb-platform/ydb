@@ -3,6 +3,7 @@ import allure
 import logging
 import os
 import requests
+import atexit
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -17,6 +18,9 @@ LOGGER = logging.getLogger()
 
 
 class YdbClusterInstance:
+    '''
+        Represents either long-running external cluster or create temporary cluster for local run
+    '''
     _temp_ydb_cluster = None
     _endpoint = None
     _database = None
@@ -30,16 +34,22 @@ class YdbClusterInstance:
             cluster = KiKiMR(configurator=config)
             cluster.start()
             node = cluster.nodes[1]
-            self._endpoint = "%s:%d" % (node.host, node.port)
+            self._endpoint = "grpc://%s:%d" % (node.host, node.port)
             self._database = config.domain_name
             self._temp_ydb_cluster = cluster
         LOGGER.info(f'Using YDB, endpoint:{self._endpoint}, database:{self._database}')
+        atexit.register(self.__del__)
 
     def endpoint(self):
         return self._endpoint
 
     def database(self):
         return self._database
+    
+    def __del__(self):
+        if self._temp_ydb_cluster is not None:
+            self._temp_ydb_cluster.stop()
+        self._temp_ydb_cluster = None
 
 
 class YdbCluster:

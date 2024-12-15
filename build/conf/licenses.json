@@ -369,6 +369,7 @@
             "Service-Default-License",
             "Service-Dll-Harness",
             "Service-Py23-Proxy",
+            "Service-Sourceless-Library",
             "Service-Unknown-License-Java"
         ]
     },

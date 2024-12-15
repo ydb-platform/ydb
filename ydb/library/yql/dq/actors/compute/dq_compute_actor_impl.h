@@ -563,7 +563,7 @@ protected:
         }
     }
 
-    void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues, bool forceTerminate = false)
+    void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)
     {
         auto execEv = MakeHolder<TEvDqCompute::TEvState>();
         auto& record = execEv->Record;
@@ -584,7 +584,7 @@ protected:
 
         this->Send(ExecuterId, execEv.Release());
 
-        if (!forceTerminate && Checkpoints && State == NDqProto::COMPUTE_STATE_FINISHED) {
+        if (Checkpoints && State == NDqProto::COMPUTE_STATE_FINISHED) {
             // checkpointed CAs must not self-destroy
             return;
         }
@@ -1041,6 +1041,10 @@ protected:
         auto tag = (EEvWakeupTag) ev->Get()->Tag;
         switch (tag) {
             case EEvWakeupTag::TimeoutTag: {
+                auto abortEv = MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, TStringBuilder()
+                    << "Timeout event from compute actor " << this->SelfId()
+                    << ", TxId: " << TxId << ", task: " << Task.GetId());
+
                 if (ComputeActorSpan) {
                     ComputeActorSpan.EndError(
                         TStringBuilder()
@@ -1049,8 +1053,10 @@ protected:
                     );
                 }
 
-                State = NDqProto::COMPUTE_STATE_FAILURE;
-                ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::TIMEOUT, {TIssue("timeout exceeded")}, true);
+                this->Send(ExecuterId, abortEv.Release());
+
+                TerminateSources("timeout exceeded", false);
+                Terminate(false, "timeout exceeded");
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
@@ -1074,9 +1080,8 @@ protected:
         switch (lostEventType) {
             case TEvDqCompute::TEvState::EventType: {
                 CA_LOG_E("Handle undelivered TEvState event, abort execution");
-
-                TerminateSources("executer lost", false);
-                Terminate(false, "executer lost"); // Executer lost - no need to report state
+                this->TerminateSources("executer lost", false);
+                Terminate(false, "executer lost");
                 break;
             }
             default: {
@@ -1122,17 +1127,14 @@ protected:
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, *ev->Get()->GetIssues().begin());
             return;
         }
-
         TIssues issues = ev->Get()->GetIssues();
         CA_LOG_E("Handle abort execution event from: " << ev->Sender
             << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode())
             << ", reason: " << issues.ToOneLineString());
 
-        if (ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS) {
-            State = NDqProto::COMPUTE_STATE_FINISHED;
-        } else {
-            State = NDqProto::COMPUTE_STATE_FAILURE;
-        }
+        bool success = ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS;
+
+        this->TerminateSources(issues, success);
 
         if (ev->Sender != ExecuterId) {
             if (ComputeActorSpan) {
@@ -1142,7 +1144,7 @@ protected:
             NActors::TActivationContext::Send(ev->Forward(ExecuterId));
         }
 
-        ReportStateAndMaybeDie(ev->Get()->Record.GetStatusCode(), issues, true);
+        Terminate(success, issues);
     }
 
     void HandleExecuteBase(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {

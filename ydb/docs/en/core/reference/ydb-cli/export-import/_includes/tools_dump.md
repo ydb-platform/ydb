@@ -27,7 +27,7 @@ The `tools dump` command dumps the database data and objects schema to the clien
 
 `--save-partial-result`: Don't delete the result of partial dumping. Without this option, the dumps that terminated with an error are deleted.
 
-`--preserve-pool-kinds`: If this option is enabled, `tools dump` command saves storage pool kind settings to the dump. To import such a dump, same storage pools kinds must be present in the database. If at least one is missing, the import procedure will end with an error. By default this option is disabled, and the import procedure will use any existing storage pool kinds.
+`--preserve-pool-kinds`: If this option is enabled, `tools dump` command saves storage device types specified for column groups of the tables to the dump (see `DATA` parameter in [Column groups](https://ydb.tech/docs/en/yql/reference/syntax/create_table/family) for the reference). To import such a dump, same [storage pools](https://ydb.tech/docs/en/concepts/glossary#storage-pool) must be present in the database. If at least one storage pool is missing, the import procedure will end with an error. By default this option is disabled, and the import procedure will use the default storage pool that was specified at the moment of database creation (see [Creating a database](https://ydb.tech/docs/en/devops/manual/initial-deployment#create-db) for the reference).
 
 `--ordered`: Rows in the exported tables will be sorted by the primary key.
 

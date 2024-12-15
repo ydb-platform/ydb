@@ -169,6 +169,7 @@ private:
     static inline TAtomicCounter Counter = 0;
     ui32 FetchStage = 0;
     YDB_READONLY(ui64, RequestId, Counter.Inc());
+    YDB_READONLY_DEF(TString, Consumer);
     THashSet<ui64> PortionIds;
     THashMap<ui64, TPathFetchingState> PathIdStatus;
     THashSet<ui64> PathIds;
@@ -208,7 +209,11 @@ public:
         return sb;
     }
 
-    TDataAccessorsRequest() = default;
+    TDataAccessorsRequest(const TString& consumer)
+        : Consumer(consumer)
+    {
+
+    }
 
     ui64 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
         ui64 result = 0;

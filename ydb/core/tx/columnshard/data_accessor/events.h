@@ -80,12 +80,14 @@ private:
     using TPortions = THashMap<ui64, TPortionInfo::TConstPtr>;
     YDB_ACCESSOR_DEF(TPortions, Portions);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IAccessorCallback>, Callback);
+    YDB_READONLY_DEF(TString, Consumer);
 
 public:
-    explicit TEvAskTabletDataAccessors(
-        const THashMap<ui64, TPortionInfo::TConstPtr>& portions, const std::shared_ptr<NDataAccessorControl::IAccessorCallback>& callback)
+    explicit TEvAskTabletDataAccessors(const THashMap<ui64, TPortionInfo::TConstPtr>& portions,
+        const std::shared_ptr<NDataAccessorControl::IAccessorCallback>& callback, const TString& consumer)
         : Portions(portions)
-        , Callback(callback) {
+        , Callback(callback)
+        , Consumer(consumer) {
     }
 };
 

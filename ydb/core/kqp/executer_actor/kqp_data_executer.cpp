@@ -2255,7 +2255,7 @@ private:
             // Volatile transactions must always use generic readsets
             VolatileTx ||
             // Transactions with topics must always use generic readsets
-            !topicTxs.empty() || 
+            !topicTxs.empty() ||
             // HTAP transactions always use generic readsets
             !evWriteTxs.empty());
 
@@ -2640,6 +2640,7 @@ private:
                 PassAway();
             } else {
                 this->Become(&TThis::WaitShutdownState);
+                Y_ABORT_UNLESS(CurrentStateFuncName() == "WaitShutdownState");
                 LOG_I("Waiting for shutdown of " << Planner->GetPendingComputeTasks().size() << " tasks and "
                                                  << Planner->GetPendingComputeActors().size() << " compute actors");
                 // TODO(ilezhankin): the CA awaiting timeout should be configurable.

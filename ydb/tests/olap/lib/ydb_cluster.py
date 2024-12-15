@@ -45,7 +45,7 @@ class YdbClusterInstance:
 
     def database(self):
         return self._database
-    
+
     def __del__(self):
         if self._temp_ydb_cluster is not None:
             self._temp_ydb_cluster.stop()

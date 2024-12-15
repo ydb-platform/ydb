@@ -2,6 +2,7 @@
 #include <ydb/core/base/appdata.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <util/generic/overloaded.h>
 
 namespace NKikimr::NMetadata::NSecret {
 

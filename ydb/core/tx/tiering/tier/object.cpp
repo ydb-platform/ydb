@@ -6,15 +6,27 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
-NKikimrSchemeOp::TS3Settings TTierConfig::GetPatchedConfig(
+TConclusion<NKikimrSchemeOp::TS3Settings> TTierConfig::GetPatchedConfig(
     const std::shared_ptr<NMetadata::NSecret::ISecretAccessor>& secrets) const {
     auto config = ProtoConfig;
     if (secrets) {
-        if (!secrets->GetSecretValue(GetAccessKey(), *config.MutableAccessKey())) {
-            AFL_ERROR(NKikimrServices::TX_TIERING)("error", "cannot_read_access_key")("secret", GetAccessKey().DebugString());
+        {
+            auto secretIdOrValue = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(config.GetAccessKey());
+            AFL_VERIFY(secretIdOrValue);
+            auto value = secrets->GetSecretValue(*secretIdOrValue);
+            if (value.IsFail()) {
+                return TConclusionStatus::Fail(TStringBuilder() << "Can't read access key: " << value.GetErrorMessage());
+            }
+            config.SetAccessKey(value.DetachResult());
         }
-        if (!secrets->GetSecretValue(GetSecretKey(), *config.MutableSecretKey())) {
-            AFL_ERROR(NKikimrServices::TX_TIERING)("error", "cannot_read_secret_key")("secret", GetSecretKey().DebugString());
+        {
+            auto secretIdOrValue = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(config.GetSecretKey());
+            AFL_VERIFY(secretIdOrValue);
+            auto value = secrets->GetSecretValue(*secretIdOrValue);
+            if (value.IsFail()) {
+                return TConclusionStatus::Fail(TStringBuilder() << "Can't read secret key: " << value.GetErrorMessage());
+            }
+            config.SetSecretKey(value.DetachResult());
         }
     }
     return config;
@@ -25,14 +37,9 @@ TConclusionStatus TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExte
         return TConclusionStatus::Fail("AWS auth is not defined for storage tier");
     }
 
-    // TODO fix secret owner
-    {
-        auto makeSecretId = [](const TStringBuf& secret) -> TString {
-            return NMetadata::NSecret::TSecretId("root@builtin", secret).SerializeToString();   // ... here
-        };
-        ProtoConfig.SetAccessKey(makeSecretId(proto.GetAuth().GetAws().GetAwsAccessKeyIdSecretName()));
-        ProtoConfig.SetSecretKey(makeSecretId(proto.GetAuth().GetAws().GetAwsSecretAccessKeySecretName()));
-    }
+    ProtoConfig.SetAccessKey(NMetadata::NSecret::TSecretName(proto.GetAuth().GetAws().GetAwsAccessKeyIdSecretName()).SerializeToString());
+    ProtoConfig.SetSecretKey(
+        NMetadata::NSecret::TSecretName(proto.GetAuth().GetAws().GetAwsSecretAccessKeySecretName()).SerializeToString());
 
     NUri::TUri url;
     if (url.Parse(proto.GetLocation(), NUri::TFeature::FeaturesAll) != NUri::TState::EParsed::ParsedOK) {

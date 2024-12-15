@@ -29,27 +29,9 @@ public:
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto);
 
-    NMetadata::NSecret::TSecretIdOrValue GetAccessKey() const {
-        auto accessKey =
-            NMetadata::NSecret::TSecretIdOrValue::DeserializeFromOptional(ProtoConfig.GetSecretableAccessKey(), ProtoConfig.GetAccessKey());
-        if (!accessKey) {
-            return NMetadata::NSecret::TSecretIdOrValue::BuildEmpty();
-        }
-        return *accessKey;
-    }
-
-    NMetadata::NSecret::TSecretIdOrValue GetSecretKey() const {
-        auto secretKey =
-            NMetadata::NSecret::TSecretIdOrValue::DeserializeFromOptional(ProtoConfig.GetSecretableSecretKey(), ProtoConfig.GetSecretKey());
-        if (!secretKey) {
-            return NMetadata::NSecret::TSecretIdOrValue::BuildEmpty();
-        }
-        return *secretKey;
-    }
-
     NJson::TJsonValue SerializeConfigToJson() const;
 
-    NKikimrSchemeOp::TS3Settings GetPatchedConfig(const std::shared_ptr<NMetadata::NSecret::ISecretAccessor>& secrets) const;
+    TConclusion<NKikimrSchemeOp::TS3Settings> GetPatchedConfig(const std::shared_ptr<NMetadata::NSecret::ISecretAccessor>& secrets) const;
 
     bool IsSame(const TTierConfig& item) const;
     NJson::TJsonValue GetDebugJson() const;

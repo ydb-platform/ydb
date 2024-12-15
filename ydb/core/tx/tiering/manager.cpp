@@ -155,7 +155,12 @@ bool TManager::Stop() {
 
 bool TManager::Start(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
     AFL_VERIFY(!S3Settings)("tier", TierName)("event", "already started");
-    S3Settings = config.GetPatchedConfig(secrets);
+    auto patchedConfig = config.GetPatchedConfig(secrets);
+    if (patchedConfig.IsFail()) {
+        AFL_ERROR(NKikimrServices::TX_TIERING)("error", "cannot_read_secrets")("reason", patchedConfig.GetErrorMessage());
+        return false;
+    }
+    S3Settings = patchedConfig.DetachResult();
     ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << TierName << "' started at tablet " << TabletId;
     return true;
 }

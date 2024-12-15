@@ -84,9 +84,7 @@ icu = NixProject(
         "g:cpp-contrib",
     ],
     arcdir="contrib/libs/icu",
-    nixattr="icu67",
-    # https://github.com/NixOS/nixpkgs/blob/b2f6aa631edc025cb6748133864317983bf5c6d1/pkgs/development/libraries/icu/base.nix#L17-L20
-    nixsrcdir="icu/source",
+    nixattr="icu74",
     put_with={
         "icuio": [
             "icuuc",

@@ -6,6 +6,8 @@ self: super: with self; rec {
     hash = "sha256-36y0a/5HR0EEcs4+EUS/KKEC/uqk44dbrJtMbPMPTz4=";
   };
 
+  sourceRoot = "icu/source";
+
   configureFlags = [
     "--build=x86_64-unknown-linux-gnu"
   ];

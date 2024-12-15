@@ -2,6 +2,8 @@
 
 #include "rpc_parameters_serialization.h"
 
+#include <yt/cpp/mapreduce/common/helpers.h>
+
 #include <yt/cpp/mapreduce/http/http.h>
 #include <yt/cpp/mapreduce/http/requests.h>
 #include <yt/cpp/mapreduce/http/retry_request.h>
@@ -96,12 +98,12 @@ TNodeId THttpRawClient::Create(
 
 
 TNodeId THttpRawClient::CopyWithoutRetries(
-    TMutationId& mutationId,
     const TTransactionId& transactionId,
     const TYPath& sourcePath,
     const TYPath& destinationPath,
     const TCopyOptions& options)
 {
+    TMutationId mutationId;
     THttpHeader header("POST", "copy");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForCopy(transactionId, Context_.Config->Prefix, sourcePath, destinationPath, options));
@@ -123,6 +125,118 @@ TNodeId THttpRawClient::CopyInsideMasterCell(
     params["enable_cross_cell_copying"] = false;
     header.MergeParameters(params);
     return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+}
+
+TNodeId THttpRawClient::MoveWithoutRetries(
+    const TTransactionId& transactionId,
+    const TYPath& sourcePath,
+    const TYPath& destinationPath,
+    const TMoveOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("POST", "move");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForMove(transactionId, Context_.Config->Prefix, sourcePath, destinationPath, options));
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+}
+
+TNodeId THttpRawClient::MoveInsideMasterCell(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    const TYPath& sourcePath,
+    const TYPath& destinationPath,
+    const TMoveOptions& options)
+{
+    THttpHeader header("POST", "move");
+    header.AddMutationId();
+    auto params = NRawClient::SerializeParamsForMove(transactionId, Context_.Config->Prefix, sourcePath, destinationPath, options);
+
+    // Make cross cell copying disable.
+    params["enable_cross_cell_copying"] = false;
+    header.MergeParameters(params);
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+}
+
+void THttpRawClient::Remove(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    const TRemoveOptions& options)
+{
+    THttpHeader header("POST", "remove");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForRemove(transactionId, Context_.Config->Prefix, path, options));
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+TNode::TListType THttpRawClient::List(
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    const TListOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "list");
+
+    TYPath updatedPath = AddPathPrefix(path, Context_.Config->Prefix);
+    // Translate "//" to "/"
+    // Translate "//some/constom/prefix/from/config/" to "//some/constom/prefix/from/config"
+    if (path.empty() && updatedPath.EndsWith('/')) {
+        updatedPath.pop_back();
+    }
+    header.MergeParameters(NRawClient::SerializeParamsForList(transactionId, Context_.Config->Prefix, updatedPath, options));
+    auto result = RequestWithoutRetry(Context_, mutationId, header);
+    return NodeFromYsonString(result.Response).AsList();
+}
+
+TNodeId THttpRawClient::Link(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    const TYPath& targetPath,
+    const TYPath& linkPath,
+    const TLinkOptions& options)
+{
+    THttpHeader header("POST", "link");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForLink(transactionId, Context_.Config->Prefix, targetPath, linkPath, options));
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+}
+
+TLockId THttpRawClient::Lock(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    ELockMode mode,
+    const TLockOptions& options)
+{
+    THttpHeader header("POST", "lock");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForLock(transactionId, Context_.Config->Prefix, path, mode, options));
+    return ParseGuidFromResponse(RequestWithoutRetry(Context_, mutationId, header).Response);
+}
+
+void THttpRawClient::Unlock(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    const TUnlockOptions& options)
+{
+    THttpHeader header("POST", "unlock");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForUnlock(transactionId, Context_.Config->Prefix, path, options));
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+void THttpRawClient::Concatenate(
+    const TTransactionId& transactionId,
+    const TVector<TRichYPath>& sourcePaths,
+    const TRichYPath& destinationPath,
+    const TConcatenateOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("POST", "concatenate");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForConcatenate(transactionId, Context_.Config->Prefix, sourcePaths, destinationPath, options));
+    RequestWithoutRetry(Context_, mutationId, header);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

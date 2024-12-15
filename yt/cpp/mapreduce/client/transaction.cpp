@@ -180,16 +180,18 @@ void TPingableTransaction::Stop(EStopAction action)
 TYPath Snapshot(
     const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& clientRetryPolicy,
-    const TClientContext& context,
     const TTransactionId& transactionId,
     const TYPath& path)
 {
-    auto lockId = NDetail::NRawClient::Lock(
+    auto lockId = NDetail::RequestWithRetry<TLockId>(
         clientRetryPolicy->CreatePolicyForGenericRequest(),
-        context,
-        transactionId,
-        path,
-        ELockMode::LM_SNAPSHOT);
+        [&rawClient, &transactionId, &path] (TMutationId& mutationId) {
+            return rawClient->Lock(
+                mutationId,
+                transactionId,
+                path,
+                ELockMode::LM_SNAPSHOT);
+        });
 
     auto lockedNodeId = NDetail::RequestWithRetry<TNode>(
         clientRetryPolicy->CreatePolicyForGenericRequest(),

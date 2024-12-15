@@ -332,8 +332,6 @@ protected:
     TClientPtr GetParentClientImpl() override;
 
 private:
-    const IRawClientPtr RawClient_;
-
     ITransactionPingerPtr TransactionPinger_;
     THolder<TPingableTransaction> PingableTx_;
     TClientPtr ParentClient_;

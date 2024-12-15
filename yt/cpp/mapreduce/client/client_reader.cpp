@@ -68,7 +68,6 @@ TClientReader::TClientReader(
         Path_.Path(Snapshot(
             RawClient_,
             ClientRetryPolicy_,
-            Context_,
             ReadTransaction_->GetId(),
             path.Path_));
     }

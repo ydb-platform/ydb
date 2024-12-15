@@ -89,7 +89,6 @@ private:
 TYPath Snapshot(
     const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& clientRetryPolicy,
-    const TClientContext& context,
     const TTransactionId& transactionId,
     const TYPath& path);
 

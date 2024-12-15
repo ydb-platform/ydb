@@ -36,69 +36,6 @@ void ExecuteBatch(
     const TExecuteBatchOptions& options = TExecuteBatchOptions());
 
 //
-// Cypress
-//
-
-TNodeId MoveWithoutRetries(
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& sourcePath,
-    const TYPath& destinationPath,
-    const TMoveOptions& options = TMoveOptions());
-
-TNodeId MoveInsideMasterCell(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& sourcePath,
-    const TYPath& destinationPath,
-    const TMoveOptions& options = TMoveOptions());
-
-void Remove(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TRemoveOptions& options = TRemoveOptions());
-
-TNode::TListType List(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TListOptions& options = TListOptions());
-
-TNodeId Link(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& targetPath,
-    const TYPath& linkPath,
-    const TLinkOptions& options = TLinkOptions());
-
-TLockId Lock(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    ELockMode mode,
-    const TLockOptions& options = TLockOptions());
-
-void Unlock(
-    IRequestRetryPolicyPtr retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TUnlockOptions& options = TUnlockOptions());
-
-void Concatenate(
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TVector<TRichYPath>& sourcePaths,
-    const TRichYPath& destinationPath,
-    const TConcatenateOptions& options = TConcatenateOptions());
-
-//
 // Transactions
 //
 

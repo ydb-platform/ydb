@@ -61,7 +61,7 @@ TStreamReaderBase::~TStreamReaderBase() = default;
 
 TYPath TStreamReaderBase::Snapshot(const TYPath& path)
 {
-    return NYT::Snapshot(RawClient_, ClientRetryPolicy_, Context_, ReadTransaction_->GetId(), path);
+    return NYT::Snapshot(RawClient_, ClientRetryPolicy_, ReadTransaction_->GetId(), path);
 }
 
 TString TStreamReaderBase::GetActiveRequestId() const

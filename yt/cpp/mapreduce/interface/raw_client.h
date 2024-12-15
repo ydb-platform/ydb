@@ -49,7 +49,6 @@ public:
         const TCreateOptions& options = {}) = 0;
 
     virtual TNodeId CopyWithoutRetries(
-        TMutationId& mutationId,
         const TTransactionId& transactionId,
         const TYPath& sourcePath,
         const TYPath& destinationPath,
@@ -61,6 +60,56 @@ public:
         const TYPath& sourcePath,
         const TYPath& destinationPath,
         const TCopyOptions& options = {}) = 0;
+
+    virtual TNodeId MoveWithoutRetries(
+        const TTransactionId& transactionId,
+        const TYPath& sourcePath,
+        const TYPath& destinationPath,
+        const TMoveOptions& options = {}) = 0;
+
+    virtual TNodeId MoveInsideMasterCell(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TYPath& sourcePath,
+        const TYPath& destinationPath,
+        const TMoveOptions& options = {}) = 0;
+
+    virtual void Remove(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TYPath& path,
+        const TRemoveOptions& options = {}) = 0;
+
+    virtual TNode::TListType List(
+        const TTransactionId& transactionId,
+        const TYPath& path,
+        const TListOptions& options = {}) = 0;
+
+    virtual TNodeId Link(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TYPath& targetPath,
+        const TYPath& linkPath,
+        const TLinkOptions& options = {}) = 0;
+
+    virtual TLockId Lock(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TYPath& path,
+        ELockMode mode,
+        const TLockOptions& options = {}) = 0;
+
+    virtual void Unlock(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TYPath& path,
+        const TUnlockOptions& options = {}) = 0;
+
+    virtual void Concatenate(
+        const TTransactionId& transactionId,
+        const TVector<TRichYPath>& sourcePaths,
+        const TRichYPath& destinationPath,
+        const TConcatenateOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

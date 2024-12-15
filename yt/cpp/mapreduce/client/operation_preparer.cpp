@@ -559,12 +559,11 @@ TString TJobPreparer::PutFileToCypressCache(
         GetCachePath(),
         putFileToCacheOptions);
 
-    Remove(
+    RequestWithRetry<void>(
         OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        OperationPreparer_.GetContext(),
-        transactionId,
-        path,
-        TRemoveOptions().Force(true));
+        [this, &transactionId, &path] (TMutationId& mutationId) {
+            RawClient_->Remove(mutationId, transactionId, path, TRemoveOptions().Force(true));
+        });
 
     return cachePath;
 }

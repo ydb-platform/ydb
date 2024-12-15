@@ -231,7 +231,7 @@ bool THttpHeader::HasMutationId() const
 
 void THttpHeader::SetMutationId(TMutationId mutationId)
 {
-    AddParameter("mutation_id", GetGuidAsString(mutationId), /* overwrite */ true);
+    AddParameter("mutation_id", GetGuidAsString(mutationId), /*overwrite*/ true);
 }
 
 void THttpHeader::SetToken(const TString& token)

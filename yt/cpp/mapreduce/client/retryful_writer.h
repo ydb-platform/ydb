@@ -4,18 +4,23 @@
 #include "transaction_pinger.h"
 
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+
 #include <yt/cpp/mapreduce/http/http.h>
+#include <yt/cpp/mapreduce/http/retry_request.h>
+
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/io.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
+
 #include <yt/cpp/mapreduce/io/helpers.h>
 
 #include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
 #include <library/cpp/threading/blocking_queue/blocking_queue.h>
 
-#include <util/stream/output.h>
 #include <util/generic/buffer.h>
 #include <util/stream/buffer.h>
+#include <util/stream/output.h>
 #include <util/system/thread.h>
 #include <util/system/event.h>
 
@@ -67,7 +72,11 @@ public:
             WriteTransaction_.ConstructInPlace(rawClient, ClientRetryPolicy_, context, parentId, TransactionPinger_->GetChildTxPinger(), TStartTransactionOptions());
             auto append = path.Append_.GetOrElse(false);
             auto lockMode = (append  ? LM_SHARED : LM_EXCLUSIVE);
-            NDetail::NRawClient::Lock(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, WriteTransaction_->GetId(), path.Path_, lockMode);
+            NDetail::RequestWithRetry<void>(
+                ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+                [this, &path, &lockMode] (TMutationId& mutationId) {
+                    RawClient_->Lock(mutationId, WriteTransaction_->GetId(), path.Path_, lockMode);
+                });
         }
 
         EmptyBuffers_.Push(TBuffer(BufferSize_ * 2));

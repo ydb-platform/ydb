@@ -129,9 +129,13 @@ public:
         Waiting.Sub(volume);
         if (HardLimit < Usage.Val() + volume) {
             Counters->OnCannotAllocate();
+            AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", Name)("event", "cannot_allocate")("limit", HardLimit)(
+                "usage", Usage.Val())(
+                "delta", volume);
             return TConclusionStatus::Fail(TStringBuilder() << Name << "::(limit:" << HardLimit << ";val:" << Usage.Val() << ";delta=" << volume << ");");
         }
         Usage.Add(volume);
+        AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", Name)("event", "allocate")("usage", Usage.Val())("delta", volume);
         if (Counters) {
             Counters->Add(volume, true);
             Counters->Sub(volume, false);
@@ -155,6 +159,7 @@ public:
         } else {
             Waiting.Sub(volume);
         }
+        AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", Name)("event", "free")("usage", Usage.Val())("delta", volume);
 
         if (withOwner && Owner) {
             Owner->Free(volume, allocated);
@@ -166,6 +171,8 @@ public:
             Counters->Sub(from, allocated);
             Counters->Add(to, allocated);
         }
+        AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", Name)("event", "update")("usage", Usage.Val())("waiting", Waiting.Val())(
+            "allocated", allocated)("from", from)("to", to);
         if (allocated) {
             Usage.Sub(from);
             Usage.Add(to);

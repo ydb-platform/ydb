@@ -524,10 +524,11 @@ private:
 class TPrettyVisitor {
 friend struct TStaticData;
 public:
-    TPrettyVisitor(const TParsedTokenList& parsedTokens, const TParsedTokenList& comments)
+    TPrettyVisitor(const TParsedTokenList& parsedTokens, const TParsedTokenList& comments, bool ansiLexer)
         : StaticData(TStaticData::GetInstance())
         , ParsedTokens(parsedTokens)
         , Comments(comments)
+        , AnsiLexer(ansiLexer)
     {
     }
 
@@ -1737,7 +1738,7 @@ private:
             }
         }
 
-        if (ParsedTokens[TokenIndex].Name == "STRING_VALUE") {
+        if (!AnsiLexer && ParsedTokens[TokenIndex].Name == "STRING_VALUE") {
             TStringBuf checkStr = str;
             if (checkStr.SkipPrefix("\"") && checkStr.ChopSuffix("\"") && !checkStr.Contains("'")) {
                 str = TStringBuilder() << '\'' << checkStr << '\'';
@@ -2929,6 +2930,7 @@ private:
     const TStaticData& StaticData;
     const TParsedTokenList& ParsedTokens;
     const TParsedTokenList& Comments;
+    const bool AnsiLexer;
     TStringBuilder SB;
     ui32 OutColumn = 0;
     ui32 OutLine = 1;
@@ -3236,7 +3238,7 @@ public:
                 continue;
             }
 
-            TPrettyVisitor visitor(parsedTokens, comments);
+            TPrettyVisitor visitor(parsedTokens, comments, parsedSettings.AnsiLexer);
             bool addLineBefore = false;
             bool addLineAfter = false;
             TMaybe<ui32> stmtCoreAltCase;

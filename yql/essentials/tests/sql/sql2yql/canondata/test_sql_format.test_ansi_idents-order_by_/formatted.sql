@@ -3,10 +3,10 @@
 USE plato;
 
 SELECT
-    'a'.*
+    "a".*
 FROM
-    Input AS 'a'
+    Input AS "a"
 ORDER BY
-    'key',
+    "key",
     `subkey`
 ;

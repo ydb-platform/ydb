@@ -1737,7 +1737,7 @@ Y_UNIT_TEST(ResourcePoolClassifierOperations) {
 Y_UNIT_TEST(Backup) {
     TCases cases = {
         {"\tBaCKup\n\n TestCollection      incremENTAl",
-         "BACKUP TestCollection INCREMENTAL;\n"},
+            "BACKUP TestCollection INCREMENTAL;\n"},
     };
 
     TSetup setup;
@@ -1747,9 +1747,19 @@ Y_UNIT_TEST(Backup) {
 Y_UNIT_TEST(Restore) {
     TCases cases = {
         {"resToRe\n\n\n TestCollection       aT\n  \t \n     '2024-06-16_20-14-02'",
-         "RESTORE TestCollection AT '2024-06-16_20-14-02';\n"},
+            "RESTORE TestCollection AT '2024-06-16_20-14-02';\n"},
     };
 
     TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(AnsiLexer) {
+    TCases cases = {
+        {"select 'a', \"a\" from (select 1 as \"a\")",
+            "SELECT\n\t'a',\n\t\"a\"\nFROM (\n\tSELECT\n\t\t1 AS \"a\"\n);\n"},
+    };
+
+    TSetup setup(/* ansiLexer = */ true);
     setup.Run(cases);
 }

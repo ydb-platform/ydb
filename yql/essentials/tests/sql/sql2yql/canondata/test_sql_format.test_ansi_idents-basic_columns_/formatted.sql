@@ -3,7 +3,7 @@
 USE plato;
 
 SELECT
-    'key' || subkey AS 'akey'
+    "key" || subkey AS "akey"
 FROM
     Input
 ORDER BY

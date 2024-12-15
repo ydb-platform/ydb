@@ -10653,6 +10653,13 @@
             "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql2yql.test_library-library_via_http_/sql.yql"
         }
     ],
+    "test_sql2yql.test[library-library_yqls]": [
+        {
+            "checksum": "da2872b19c48276062e74b52d7310e26",
+            "size": 1082,
+            "uri": "https://{canondata_backend}/1937001/cf140a1b2b53c08f9746ee7c7b322863316889f0/resource.tar.gz#test_sql2yql.test_library-library_yqls_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[library-package]": [
         {
             "checksum": "106486465eec39d06f2253ff07547c25",
@@ -27580,6 +27587,11 @@
             "uri": "file://test_sql_format.test_library-library_via_http_/formatted.sql"
         }
     ],
+    "test_sql_format.test[library-library_yqls]": [
+        {
+            "uri": "file://test_sql_format.test_library-library_yqls_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[library-package]": [
         {
             "uri": "file://test_sql_format.test_library-package_/formatted.sql"
@@ -32262,9 +32274,9 @@
     ],
     "test_sql_negative.test[select-autoextract_source_value_in_where-default.txt]": [
         {
-            "checksum": "0a04f9617e0bd69931c6f09f4579ad25",
-            "size": 237,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql_negative.test_select-autoextract_source_value_in_where-default.txt_/err_file.out"
+            "checksum": "8dae30c2b591ac52d6135d1fdc127b81",
+            "size": 347,
+            "uri": "https://{canondata_backend}/1889210/2ddfda0b16ee484b8c32025195f554d885acf48d/resource.tar.gz#test_sql_negative.test_select-autoextract_source_value_in_where-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[select-normalize_name-default.txt]": [
@@ -32290,9 +32302,9 @@
     ],
     "test_sql_negative.test[select-use_subrequest_as_table-default.txt]": [
         {
-            "checksum": "b487c7081e29ca693370513c4786c0b5",
-            "size": 134,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql_negative.test_select-use_subrequest_as_table-default.txt_/err_file.out"
+            "checksum": "e0ce66df53204c1c27e622ecb103c627",
+            "size": 289,
+            "uri": "https://{canondata_backend}/1889210/2ddfda0b16ee484b8c32025195f554d885acf48d/resource.tar.gz#test_sql_negative.test_select-use_subrequest_as_table-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[udf-named_args_for_script_with_wrong_order-default.txt]": [

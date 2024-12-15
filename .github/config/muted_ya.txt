@@ -76,14 +76,7 @@ ydb/library/actors/http/ut sole chunk chunk
 ydb/library/actors/http/ut sole+chunk+chunk
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_non_nullable_NATIVE-dqrun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[primitives-dqrun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[primitives-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[primitives-dqrun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[PRIMITIVES-dqrun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[primitive_types-dqrun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_asterisk-dqrun]
-ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1_HTTP-dqrun]
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*] chunk chunk
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*]+chunk+chunk
 ydb/services/datastreams/ut DataStreams.TestPutRecordsCornerCases

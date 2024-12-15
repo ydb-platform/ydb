@@ -1,5 +1,52 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 24.2 {#24-2}
+
+Release date: August 20, 2024.
+
+### Functionality
+
+* Added [task priorities](./devops/manual/maintenance-without-downtime#priority) in the [CMS](./concepts/glossary#cms).
+* Added a [configuration for stable names](./reference/configuration/#node-broker-config) of cluster nodes.
+* Added support for retrieving nested groups from an LDAP server.
+* Improved host parsing and added an option to disable built-in login/password authentication in LDAP configuration.
+* Enabled SSL certificate-based authentication for [dynamic nodes](./concepts/glossary#dynamic).
+* Implemented removal of inactive nodes from [Hive](./concepts/glossary#hive) without requiring a restart.
+* Enhanced inflight ping management during Hive restarts in large clusters.
+
+### Embedded UI
+
+* Added the ability to set a TTL for user sessions via the configuration file.
+* Added sorting by `CPUTime` in the query list table.
+* Added statistics for columnar tables.
+* Enabled transaction mode configurations for queries using asynchronous indexes or replica reads.
+* Corrected precision loss for double/float types.
+
+### Performance
+
+* [Changed](https://github.com/ydb-platform/ydb/pull/6381) the order of establishing connections to nodes during Hive restarts to improve performance.
+
+### Bug fixes
+
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/6677) where schema operations failed during the export/backup of large databases by adding a check for local transaction size before committing. Transactions exceeding the limit are now aborted.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/7709) duplicate results in SELECT queries when reducing quotas in [DataShard](./concepts/glossary#data-shard).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/6461) [errors](https://github.com/ydb-platform/ydb/issues/6220) occurring during [coordinator](./concepts/glossary#tablet-types) state changes.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/5992) issues during the initial CDC scan.
+* [Resolved](https://github.com/ydb-platform/ydb/pull/6615) race conditions in asynchronous change delivery (asynchronous indexes, CDC).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/5993) a crash that sometimes occurred during [TTL-based](./concepts/ttl) deletions.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/5760) an issue with PDisk status display in the [CMS](./concepts/glossary#cms).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/6008) a bug where soft tablet transfer (drain) from a node could hang (#vporyadke).
+* [Resolved](https://github.com/ydb-platform/ydb/pull/6445) a problem where the interconnect proxy on a node without restarts would stop when adding another node to the cluster.
+* [Corrected](https://github.com/ydb-platform/ydb/pull/7023) string escaping in error messages.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/6695) free memory accounting in the interconnect.
+* [Corrected](https://github.com/ydb-platform/ydb/issues/6405) UnreplicatedPhantoms and UnreplicatedNonPhantoms counters in VDisk.
+* [Fixed](https://github.com/ydb-platform/ydb/issues/6398) handling of empty garbage collection requests on VDisk.
+* [Resolved](https://github.com/ydb-platform/ydb/pull/5894) issues with managing TVDiskControls settings through CMS.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/5883) a bug where data created by newer versions of VDisk failed to load.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/5862) execution of `REPLACE INTO` queries with default values.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/7714) errors in queries with multiple LEFT JOINs to a single string table.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/7740) precision loss for float/double types when using CDC.
+
 ## Version 24.1 {#24-1}
 
 Release date: July 31, 2024.

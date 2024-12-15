@@ -1,5 +1,51 @@
 # Список изменений {{ ydb-short-name }} Server
 
+## Версия 24.2 {#24-2}
+
+Дата выхода: 20 августа 2024.
+
+**Функциональность:**
+
+* Добавлены [приоритеты задач](./devops/manual/maintenance-without-downtime#priority) в [CMS](./concepts/glossary#cms).
+* Добавлена [настройка стабильных имён](./reference/configuration/#node-broker-config) для узлов кластера.
+* Добавлено получение вложенных групп от LDAP-сервера.
+* В LDAP-конфигурации улучшен парсинг хостов и добавлена настройка для отключения встроенной аутентификацию по логину и паролю.
+* Добавлена возможность аутентификации [динамических нод](./concepts/glossary#dynamic) по SSL-сертификату.
+* Реализовано удаление неактивных узлов из [Hive](./concepts/glossary#hive) без его перезапуска.
+* Улучшено управление inflight pings при перезапуске Hive в кластерах большого размера.
+
+**Встроенный UI:**
+
+* Добавлена возможность задать TTL для сессии пользователя в конфигурационном файле.
+* Добавлена сортировка по `CPUTime` в таблицы со списком запросов.
+* Добавлена статистика для колоночных таблиц.
+* Исправлена потеря точности при работа с double/float.
+
+**Производительность:**
+
+* [Изменен](https://github.com/ydb-platform/ydb/pull/6381) порядок установления соединения с узлами при перезапуске Hive.
+
+**Исправления ошибок:**
+
+* Исправлена [ошибка](https://github.com/ydb-platform/ydb/issues/6677), которая приводила к неработоспособности схемных операции при выполнении экспорта/бекапа больших баз, добавлением проверки на размер локальной транзакции до её коммита. В случае превышения, локальная транзакция будет отменена.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/7709) [ошибка](https://github.com/ydb-platform/ydb/issues/7674) дублирования результатов select-запроса при уменьшении квоты в [DataShard](./concepts/glossary#data-shard).
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/6461) [ошибки](https://github.com/ydb-platform/ydb/issues/6220), возникающие при изменении состояния [координатора](./concepts/glossary#tablet-types).
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/5992) ошибки, возникающие в момент первичного сканирования CDC.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/6615) состояние гонки в асинхронной доставке изменений (асинхронные индексы, CDC).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/5993) редкая ошибка, из-за которой удаление по [TTL](./concepts/ttl) приводило к аварийному завершению процесса.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/5760) ошибка отображения статуса PDisk в интерфейсе [CMS](./concepts/glossary#cms). 
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/6008) ошибки, из-за которых мягкий перенос (drain) таблеток с узла мог зависать.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/6445) ошибка остановки interconnect proxy на узле, работающем без перезапусков, при добавлении другого узла в кластер.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/7023) экранирование строк в сообщениях об ошибках.
+* [Исправлен](https://github.com/ydb-platform/ydb/pull/6695) учет свободной памяти в interconnect.
+* [Исправлены](https://github.com/ydb-platform/ydb/issues/6405) счетчики UnreplicatedPhantoms/UnreplicatedNonPhantoms в VDisk.
+* [Исправлена](https://github.com/ydb-platform/ydb/issues/6398) обработка пустых запросов сборки мусора на VDisk.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/5894) управление настройками TVDiskControls через CMS.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/5883) ошибка загрузки данных, созданных более новыми версиями VDisk. 
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/5862) ошибка выполнении запроса REPLACE INTO со значением по умолчанию.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/7714) ошибка исполнения запросов, в которых выполнялось несколько left join'ов к одной строковой таблице.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/7740) потеря точности для float/double типов при использовании CDC.
+
 ## Версия 24.1 {#24-1}
 
 Дата выхода: 31 июля 2024.

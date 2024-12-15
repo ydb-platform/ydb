@@ -1,5 +1,5 @@
 {
-  "op_name":"InnerJoin (MapJoin)",
+  "op_name":"InnerJoin (Grace)",
   "args":
     [
       {
@@ -93,33 +93,28 @@
                                                                                       "args":
                                                                                         [
                                                                                           {
-<<<<<<< HEAD
-                                                                                            "op_name":"TableRangeScan",
-                                                                                            "args":
-                                                                                              [
-                                                                                                {
-                                                                                                  "op_name":"Filter",
-                                                                                                  "args":
-                                                                                                    [
-                                                                                                      {
-                                                                                                        "op_name":"TableFullScan",
-                                                                                                        "table":"test\/ds\/item"
-                                                                                                      }
-                                                                                                    ]
-                                                                                                }
-                                                                                              ]
-=======
                                                                                             "op_name":"TableFullScan",
                                                                                             "table":"test\/ds\/store_returns"
->>>>>>> 806d77103e5... Added statistics inference for DqJoins (#11994)
                                                                                           },
                                                                                           {
                                                                                             "op_name":"InnerJoin (MapJoin)",
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"TableLookup",
-                                                                                                  "table":"test\/ds\/store_sales"
+                                                                                                  "op_name":"TableRangeScan",
+                                                                                                  "args":
+                                                                                                    [
+                                                                                                      {
+                                                                                                        "op_name":"Filter",
+                                                                                                        "args":
+                                                                                                          [
+                                                                                                            {
+                                                                                                              "op_name":"TableFullScan",
+                                                                                                              "table":"test\/ds\/item"
+                                                                                                            }
+                                                                                                          ]
+                                                                                                      }
+                                                                                                    ]
                                                                                                 },
                                                                                                 {
                                                                                                   "op_name":"TableFullScan",
@@ -294,33 +289,28 @@
                                                                                       "args":
                                                                                         [
                                                                                           {
-<<<<<<< HEAD
-                                                                                            "op_name":"TableRangeScan",
-                                                                                            "args":
-                                                                                              [
-                                                                                                {
-                                                                                                  "op_name":"Filter",
-                                                                                                  "args":
-                                                                                                    [
-                                                                                                      {
-                                                                                                        "op_name":"TableFullScan",
-                                                                                                        "table":"test\/ds\/item"
-                                                                                                      }
-                                                                                                    ]
-                                                                                                }
-                                                                                              ]
-=======
                                                                                             "op_name":"TableFullScan",
                                                                                             "table":"test\/ds\/store_returns"
->>>>>>> 806d77103e5... Added statistics inference for DqJoins (#11994)
                                                                                           },
                                                                                           {
                                                                                             "op_name":"InnerJoin (MapJoin)",
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"TableLookup",
-                                                                                                  "table":"test\/ds\/store_sales"
+                                                                                                  "op_name":"TableRangeScan",
+                                                                                                  "args":
+                                                                                                    [
+                                                                                                      {
+                                                                                                        "op_name":"Filter",
+                                                                                                        "args":
+                                                                                                          [
+                                                                                                            {
+                                                                                                              "op_name":"TableFullScan",
+                                                                                                              "table":"test\/ds\/item"
+                                                                                                            }
+                                                                                                          ]
+                                                                                                      }
+                                                                                                    ]
                                                                                                 },
                                                                                                 {
                                                                                                   "op_name":"TableFullScan",

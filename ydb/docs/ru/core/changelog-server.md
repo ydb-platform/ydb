@@ -28,7 +28,7 @@
 **Исправления ошибок:**
 
 * Исправлена [ошибка](https://github.com/ydb-platform/ydb/issues/6677), которая приводила к неработоспособности схемных операции при выполнении экспорта/бекапа больших баз, добавлением проверки на размер локальной транзакции до её коммита. В случае превышения, локальная транзакция будет отменена.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/7709) [ошибка](https://github.com/ydb-platform/ydb/issues/7674) дублирования результатов select-запроса при уменьшении квоты в [DataShard](./concepts/glossary#data-shard).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/7709) [ошибка](https://github.com/ydb-platform/ydb/issues/7674) дублирования результатов SELECT-запроса при уменьшении квоты в [DataShard](./concepts/glossary#data-shard).
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/6461) [ошибки](https://github.com/ydb-platform/ydb/issues/6220), возникающие при изменении состояния [координатора](./concepts/glossary#tablet-types).
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/5992) ошибки, возникающие в момент первичного сканирования CDC.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/6615) состояние гонки в асинхронной доставке изменений (асинхронные индексы, CDC).
@@ -42,7 +42,7 @@
 * [Исправлена](https://github.com/ydb-platform/ydb/issues/6398) обработка пустых запросов сборки мусора на VDisk.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/5894) управление настройками TVDiskControls через CMS.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/5883) ошибка загрузки данных, созданных более новыми версиями VDisk. 
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/5862) ошибка выполнении запроса REPLACE INTO со значением по умолчанию.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/5862) ошибка выполнении запроса `REPLACE INTO` со значением по умолчанию.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/7714) ошибка исполнения запросов, в которых выполнялось несколько left join'ов к одной строковой таблице.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/7740) потеря точности для float/double типов при использовании CDC.
 

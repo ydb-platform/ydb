@@ -5,6 +5,7 @@ services:
     - 2130
     volumes:
     - ../../fq-connector-go/:/opt/ydb/cfg/
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.11-rc.1@sha256:c018b2f1151fac8a86aaf79950ccdffaa72150785f303096d9a466f50eb62498
   postgresql:
     command:
     - postgres

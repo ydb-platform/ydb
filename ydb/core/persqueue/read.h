@@ -260,23 +260,23 @@ namespace NPQ {
         {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "CacheProxy. Passthrough write request to KV");
 
-            auto srcRequest = ev->Get()->Record;
+            auto& srcRequest = ev->Get()->Record;
 
             TKvRequest kvReq(TKvRequest::TypeWrite, ev->Sender, Max<ui64>(), TPartitionId(Max<ui32>()));
             kvReq.Blobs.reserve(srcRequest.CmdWriteSize());
 
             for (ui32 i = 0; i < srcRequest.CmdWriteSize(); ++i) {
-                auto cmd = srcRequest.GetCmdWrite(i);
+                const auto& cmd = srcRequest.GetCmdWrite(i);
                 if (cmd.HasKeyToCache()) {
-                    TString strKey = cmd.GetKeyToCache();
-                    TKey key = TKey(strKey);
+                    const TString& strKey = cmd.GetKeyToCache();
+                    Y_ABORT_UNLESS(strKey.size() == TKey::KeySize(), "Unexpected key size: %" PRIu64, strKey.size());
+                    TKey key(strKey);
                     Y_ABORT_UNLESS(!key.IsHead());
 
-                    Y_ABORT_UNLESS(strKey.size() == TKey::KeySize(), "Unexpected key size: %" PRIu64, strKey.size());
-                    TString value = cmd.GetValue();
+                    const TString& value = cmd.GetValue();
                     kvReq.Partition = key.GetPartition();
-                    TRequestedBlob blob(key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount(), value.size(), value, key);
-                    kvReq.Blobs.push_back(blob);
+                    kvReq.Blobs.emplace_back(key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount(), value.size(), value, key);
+                    const TRequestedBlob& blob = kvReq.Blobs.back();
 
                     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "CacheProxy. Passthrough blob. Partition "
                         << kvReq.Partition << " offset " << blob.Offset << " partNo " << blob.PartNo << " count " << blob.Count << " size " << value.size());
@@ -288,7 +288,7 @@ namespace NPQ {
             ui64 cookie = SaveKvRequest(std::move(kvReq));
 
             THolder<TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
-            request->Record = std::move(ev->Get()->Record);
+            request->Record = std::move(srcRequest);
             request->Record.SetCookie(cookie);
             ctx.Send(Tablet, request.Release()); // -> KV
         }

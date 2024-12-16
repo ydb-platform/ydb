@@ -355,7 +355,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 limitExceeded = true;
                 break;
             }
-            changes->AddPortionToDrop(info);
+            changes->AddPortionToRemove(info);
             ++portionsFromDrop;
         }
         changes->AddTableToDrop(pathId);

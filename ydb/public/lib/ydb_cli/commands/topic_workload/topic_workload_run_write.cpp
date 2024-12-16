@@ -89,6 +89,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
 
     config.Opts->AddLongOption("commit-messages", "DEPRECATED. Use --tx-commit-messages instead. Number of messages per transaction")
         .DefaultValue(1'000'000)
+        .Hidden()
         .StoreResult(&Scenario.CommitMessages);
     config.Opts->AddLongOption("tx-commit-messages", "Number of messages to commit transaction. " 
                                                             " Both tx-commit-messages and tx-commit-interval can trigger transaction commit.")

@@ -891,7 +891,7 @@ public:
             if (checks) {
                 checks
                     .DepthLimit()
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .IsTheSameDomain(srcPath)
                     .DirChildrenLimit()
                     .IsValidACL(acl);

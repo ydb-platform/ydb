@@ -168,7 +168,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .PathsLimit()
                     .DirChildrenLimit();
             }
@@ -774,7 +774,7 @@ void DoCreateStream(
 
 namespace {
 
-ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& streamPath, const bool acceptExisted) {
+ISubOperation::TPtr RejectOnCdcChecks(const TOperationContext& context, const TOperationId& opId, const TPath& streamPath, const bool acceptExisted) {
     const auto checks = streamPath.Check();
     checks
         .IsAtLocalSchemeShard();
@@ -792,7 +792,7 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& str
 
     if (checks) {
         checks
-            .IsValidLeafName()
+            .IsValidLeafName(context.UserToken.Get())
             .PathsLimit()
             .DirChildrenLimit();
     }
@@ -873,6 +873,7 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
 } // anonymous
 
 std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
+    const TOperationContext& context,
     const TOperationId& opId,
     const TPath& workingDirPath,
     const TString& tableName,
@@ -886,7 +887,7 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     }
 
     const auto streamPath = tablePath.Child(streamName);
-    if (auto reject = RejectOnCdcChecks(opId, streamPath, acceptExisted)) {
+    if (auto reject = RejectOnCdcChecks(context, opId, streamPath, acceptExisted)) {
         return reject;
     }
 
@@ -927,7 +928,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     const auto& streamName = streamDesc.GetName();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto checksResult = DoNewStreamPathChecks(opId, workingDirPath, tableName, streamName, acceptExisted);
+    const auto checksResult = DoNewStreamPathChecks(context, opId, workingDirPath, tableName, streamName, acceptExisted);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }

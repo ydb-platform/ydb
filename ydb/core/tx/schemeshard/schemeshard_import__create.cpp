@@ -87,7 +87,8 @@ bool ValidateDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain)
 
     if (checks) {
         checks
-            .IsValidLeafName()
+            //FIXME: where to get user token?
+            .IsValidLeafName(/*context.UserToken.Get()*/)
             .DepthLimit()
             .PathsLimit();
 

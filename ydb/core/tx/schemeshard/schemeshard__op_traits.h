@@ -5,6 +5,7 @@
 #include "schemeshard__operation.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <util/generic/string.h>
 #include <util/generic/map.h>
@@ -19,6 +20,10 @@ struct TSchemeTxTraitsFallback {
     constexpr inline static bool CreateDirsFromName = false;
     constexpr inline static bool CreateAdditionalDirs = false;
     constexpr inline static bool NeedRewrite = false;
+
+    // constexpr inline static bool Create = false;
+    // constexpr inline static bool Alter = false;
+    // constexpr inline static bool Drop = false;
 };
 
 template <NKikimrSchemeOp::EOperationType opType>
@@ -232,4 +237,9 @@ bool Rewrite(TTraits traits, TTxTransaction& tx) {
     return false;
 }
 
-}// namespace NKikimr::NSchemeShard
+bool IsCreateOperation(NKikimrSchemeOp::EOperationType op);
+bool IsAlterOperation(NKikimrSchemeOp::EOperationType op);
+bool IsDropOperation(NKikimrSchemeOp::EOperationType op);
+bool IsOtherOperation(NKikimrSchemeOp::EOperationType op);
+
+}  // namespace NKikimr::NSchemeShard

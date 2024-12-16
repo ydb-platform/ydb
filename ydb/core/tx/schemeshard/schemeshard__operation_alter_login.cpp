@@ -225,12 +225,10 @@ public:
                     context.OnComplete.PublishToSchemeBoard(OperationId, parent->PathId);
                 }
             }
-            if (!path->IsMigrated()) {
-                context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-            }
+            // TODO: publish only changed paths
+            context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
         }
 
-        // Note: it seems useless to update only the affected paths as we may update database's root
         context.OnComplete.UpdateTenants(std::move(subTree));
         db.Table<Schema::LoginSids>().Key(user).Delete();
         for (const TString& group : removeUserResponse.TouchedGroups) {

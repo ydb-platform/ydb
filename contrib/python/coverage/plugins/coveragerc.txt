@@ -1,0 +1,29 @@
+[report]
+skip_empty = True
+
+exclude_lines =
+    pragma\s*:\s*no\s*cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if 0:
+    if False:
+    if __name__ == .__main__.:
+    if self\.debug:
+    if settings\.DEBUG
+
+[run]
+suppress_plugin_errors = False
+plugins =
+    contrib.python.coverage.plugins.yarcadia.plugin
+    contrib.tools.cython.Cython.Coverage
+
+[contrib.python.coverage.plugins.yarcadia.plugin]
+pylib_paths =
+    # don't trace contrib
+    contrib/python
+    contrib/python3
+    # don't trace python sources
+    contrib/tools/python
+    contrib/tools/python3
+    contrib/libs/protobuf

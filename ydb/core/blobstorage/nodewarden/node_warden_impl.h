@@ -414,6 +414,7 @@ namespace NKikimr::NStorage {
         std::map<TVSlotId, TVDiskRecord> LocalVDisks;
         THashMap<TActorId, TVSlotId> VDiskIdByActor;
         std::map<TVSlotId, ui64> SlayInFlight;
+        // PDiskId -> is another restart required after the current restart.
         std::unordered_map<ui32, bool> PDiskRestartInFlight;
         TIntrusiveList<TVDiskRecord, TUnreportedMetricTag> VDisksWithUnreportedMetrics;
 

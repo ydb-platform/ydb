@@ -8,7 +8,7 @@ The `tools restore` command creates the items of the database schema in the data
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
-If the table or directory already exists in the database, no changes will be made to its schema. If some columns present in the imported files are missing in the database or have mismatching types, this may lead to the data import operation failing.
+If the table or directory already exists in the database, no changes will be made to its schema and ACL. If some columns present in the imported files are missing in the database or have mismatching types, this may lead to the data import operation failing.
 
 To import data to the table, use the [YQL `REPLACE` command](../../../../yql/reference/syntax/replace_into.md). If the table included any records before the import, the records whose keys are present in the imported files are replaced by the data from the file. The records whose keys are absent in the imported files aren't affected.
 

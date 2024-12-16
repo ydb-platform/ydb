@@ -12,7 +12,7 @@ NYql::NUdf::TCounter TDqTaskCountersProvider::GetCounter(const NUdf::TStringRef&
         TString id;
         TOperatorType opType(TOperatorType::Unknown);
 
-               if (op.StartsWith(NKikimr::NMiniKQL::Operator_Join)) {
+        if (op.StartsWith(NKikimr::NMiniKQL::Operator_Join)) {
             opType = TOperatorType::Join;
             id = op.substr(NKikimr::NMiniKQL::Operator_Join.size());
         } else if (op.StartsWith(NKikimr::NMiniKQL::Operator_Aggregation)) {
@@ -30,7 +30,9 @@ NYql::NUdf::TCounter TDqTaskCountersProvider::GetCounter(const NUdf::TStringRef&
         opStat->OperatorId = id;
     };
 
-    if (name == NKikimr::NMiniKQL::Counter_OutputRows) return NYql::NUdf::TCounter(&opStat->Rows);
+    if (name == NKikimr::NMiniKQL::Counter_OutputRows) {
+        return NYql::NUdf::TCounter(&opStat->Rows);
+    }
 
     return NYql::NUdf::TCounter();
 }

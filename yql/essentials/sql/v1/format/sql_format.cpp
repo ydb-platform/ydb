@@ -60,20 +60,6 @@ void SkipForValidate(
     in = SkipWS(in, query.end());
     out = SkipWS(out, formattedQuery.end());
 
-    auto skipDeletedToken = [&](const TString& deletedToken, const TVector<TString>& afterTokens) {
-        if (
-            in != query.end() && in->Name == deletedToken &&
-            (out == formattedQuery.end() || out->Name != deletedToken) &&
-            in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
-        ) {
-            in = SkipWS(++in, query.end());
-            return true;
-        }
-        return false;
-    };
-
-    while (skipDeletedToken("SEMICOLON", {"AS", "BEGIN", "LBRACE_CURLY", "SEMICOLON"})) {}
-
     auto inSkippedComments = SkipWSOrComment(in, query.end());
 
     auto skipAddedToken = [&](const TString& addedToken, const TVector<TString>& beforeTokens, const TVector<TString>& afterTokens) {
@@ -95,6 +81,20 @@ void SkipForValidate(
     skipAddedToken("LPAREN", {}, {"EQUALS"});
     skipAddedToken("RPAREN", {"END", "EOF", "SEMICOLON"}, {});
     skipAddedToken("SEMICOLON", {"END", "RBRACE_CURLY"}, {});
+
+    auto skipDeletedToken = [&](const TString& deletedToken, const TVector<TString>& afterTokens) {
+        if (
+            in != query.end() && in->Name == deletedToken &&
+            (out == formattedQuery.end() || out->Name != deletedToken) &&
+            in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
+        ) {
+            in = SkipWS(++in, query.end());
+            return true;
+        }
+        return false;
+    };
+
+    while (skipDeletedToken("SEMICOLON", {"AS", "BEGIN", "LBRACE_CURLY", "SEMICOLON"})) {}
 }
 
 TParsedToken TransformTokenForValidate(TParsedToken token) {
@@ -139,6 +139,19 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
                 }
             } else if (inToken.Name == "STRING_VALUE") {
                 if (SkipQuotes(inToken.Content) != SkipQuotes(outToken.Content)) {
+                    return false;
+                }
+            } else if (inToken.Name == "COMMENT") {
+                TStringBuf inContent = inToken.Content;
+                TStringBuf outContent = outToken.Content;
+
+                auto inNextToken = SkipWS(in + 1, inEnd);
+                if (inNextToken != inEnd && inNextToken->Name == "EOF") {
+                    inContent.ChopSuffix("\n");
+                    outContent.ChopSuffix("\n");
+                }
+
+                if (inContent != outContent) {
                     return false;
                 }
             } else {
@@ -600,10 +613,6 @@ private:
             WriteComments(true);
         }
 
-        if (AfterComment && Comments[LastComment - 1].Content.StartsWith("--")) {
-            return;
-        }
-
         if (OutColumn) {
             Out('\n');
         }
@@ -624,6 +633,10 @@ private:
         }
 
         Out(text);
+
+        if (text.StartsWith("--") && !text.EndsWith("\n")) {
+            Out('\n');
+        }
 
         if (!text.StartsWith("--") &&
             TokenIndex < ParsedTokens.size() &&
@@ -3211,15 +3224,12 @@ public:
 
             TVector<NSQLTranslation::TParsedToken> comments;
             TParsedTokenList parsedTokens, stmtTokens;
-            bool hasTrailingComments = false;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtTokens.push_back(token);
                 if (token.Name == "COMMENT") {
                     comments.emplace_back(std::move(token));
-                    hasTrailingComments = true;
                 } else if (token.Name != "WS" && token.Name != "EOF") {
                     parsedTokens.emplace_back(std::move(token));
-                    hasTrailingComments = false;
                 }
             };
 
@@ -3267,11 +3277,6 @@ public:
 
             finalFormattedQuery << currentFormattedQuery;
             if (parsedTokens.back().Name != "SEMICOLON") {
-                if (hasTrailingComments
-                     && !comments.back().Content.EndsWith("\n")
-                     && comments.back().Content.StartsWith("--")) {
-                    finalFormattedQuery << "\n";
-                }
                 finalFormattedQuery << ";\n";
             }
         }

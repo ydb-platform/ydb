@@ -66,6 +66,8 @@ public:
     void SetTabletId(ui64 value);
     ui64 GetTabletId() const;
 
+    TMaybe<TString> GetTopicName() const;
+
     bool HasReadOperations() const;
     bool HasWriteOperations() const;
 
@@ -122,6 +124,8 @@ public:
 
     TSet<ui64> GetReceivingTabletIds() const;
     TSet<ui64> GetSendingTabletIds() const;
+
+    TMaybe<TString> GetTabletName(ui64 tabletId) const;
 
     size_t GetSize() const;
 

@@ -2,7 +2,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/env.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/persqueue/percentile_counter.h>
 #include <ydb/core/persqueue/partition.h>

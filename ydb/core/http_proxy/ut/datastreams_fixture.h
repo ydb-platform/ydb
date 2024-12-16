@@ -16,7 +16,7 @@
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/http_proxy/http_service.h>
 #include <ydb/core/http_proxy/metrics_actor.h>
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
 
 #include <ydb/library/aclib/aclib.h>
@@ -817,7 +817,7 @@ private:
         MonPort = TPortManager().GetPort();
         Counters = new NMonitoring::TDynamicCounters();
 
-        Monitoring.Reset(new NActors::TSyncHttpMon({
+        Monitoring.Reset(new NActors::TMon({
             .Port = MonPort,
             .Address = "127.0.0.1",
             .Threads = 3,
@@ -825,7 +825,7 @@ private:
             .Host = "127.0.0.1",
         }));
         Monitoring->RegisterCountersPage("counters", "Counters", Counters);
-        Monitoring->Start();
+        Monitoring->Start(ActorRuntime->GetAnyNodeActorSystem());
 
         Sleep(TDuration::Seconds(1));
 

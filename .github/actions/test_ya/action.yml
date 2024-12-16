@@ -256,7 +256,7 @@ runs:
     
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
           params+=(${{ inputs.additional_ya_make_args }})
-          params+=("--python-coverage" "--clang-coverage" "--coverage-report")
+          params+=("--python-coverage" "--coverage-report")
         fi
         
 

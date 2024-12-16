@@ -327,7 +327,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             } else {
                 proposal->Record.SetUserToken(this->Request_->GetSerializedToken());
             }
-            
+
             static_cast<TDerived*>(this)->FillProposeRequest(*proposal, ctx, workingDir, name);
 
             if (!TActorBase::IsDead) {

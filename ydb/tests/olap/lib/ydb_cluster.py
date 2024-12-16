@@ -3,11 +3,7 @@ import allure
 import logging
 import os
 import requests
-import atexit
 from ydb.tests.olap.lib.utils import get_external_param
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-
 import ydb
 from copy import deepcopy
 from time import sleep, time
@@ -15,41 +11,6 @@ from typing import List, Optional
 from enum import Enum
 
 LOGGER = logging.getLogger()
-
-
-class YdbClusterInstance:
-    '''
-        Represents either long-running external cluster or create temporary cluster for local run
-    '''
-    _temp_ydb_cluster = None
-    _endpoint = None
-    _database = None
-
-    def __init__(self, endpoint, database):
-        if endpoint is not None:
-            self._endpoint = endpoint
-            self._database = database
-        else:
-            config = KikimrConfigGenerator(extra_feature_flags=[])
-            cluster = KiKiMR(configurator=config)
-            cluster.start()
-            node = cluster.nodes[1]
-            self._endpoint = "grpc://%s:%d" % (node.host, node.port)
-            self._database = config.domain_name
-            self._temp_ydb_cluster = cluster
-        LOGGER.info(f'Using YDB, endpoint:{self._endpoint}, database:{self._database}')
-        atexit.register(self.__del__)
-
-    def endpoint(self):
-        return self._endpoint
-
-    def database(self):
-        return self._database
-
-    def __del__(self):
-        if self._temp_ydb_cluster is not None:
-            self._temp_ydb_cluster.stop()
-        self._temp_ydb_cluster = None
 
 
 class YdbCluster:
@@ -87,13 +48,11 @@ class YdbCluster:
                 self.role = YdbCluster.Node.Role.UNKNOWN
             self.tablets = [YdbCluster.Node.Tablet(t) for t in desc.get('Tablets', [])]
 
-    _ydb_cluster_instance = None
     _ydb_driver = None
     _results_driver = None
     _cluster_info = None
-
-    ydb_endpoint = get_external_param('ydb-endpoint', None)
-    ydb_database = get_external_param('ydb-db', "").lstrip('/')
+    ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
+    ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
     ydb_mon_port = 8765
     tables_path = get_external_param('tables-path', 'olap_yatests')
     _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
@@ -194,15 +153,15 @@ class YdbCluster:
             )
             raise
 
+    @classmethod 
+    def reset(cls, ydb_endpoint, ydb_database):
+        cls.ydb_endpoint = ydb_endpoint
+        cls.ydb_database = ydb_database
+        cls._ydb_driver = None
+
     @classmethod
     def get_ydb_driver(cls):
         if cls._ydb_driver is None:
-            if cls._ydb_cluster_instance is not None:
-                raise 'Double cluster initialization attempt'
-            cluster = YdbClusterInstance(cls.ydb_endpoint, cls.ydb_database)
-            cls.ydb_endpoint = cluster.endpoint()
-            cls.ydb_database = cluster.database()
-            cls._ydb_cluster_instance = cluster
             cls._ydb_driver = cls._create_ydb_driver(
                 cls.ydb_endpoint, cls.ydb_database, oauth=os.getenv('OLAP_YDB_OAUTH', None)
             )

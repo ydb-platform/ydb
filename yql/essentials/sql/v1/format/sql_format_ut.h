@@ -366,6 +366,22 @@ Y_UNIT_TEST(AsyncReplication) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(Transfer) {
+    TCases cases = {
+        {"create transfer user for topic1 to table1 with (user='foo')",
+            "CREATE TRANSFER user FOR topic1 TO table1 WITH (user = 'foo');\n"},
+        {"alter transfer user set (user='foo')",
+            "ALTER TRANSFER user SET (user = 'foo');\n"},
+        {"drop transfer user",
+            "DROP TRANSFER user;\n"},
+        {"drop transfer user cascade",
+            "DROP TRANSFER user CASCADE;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(ExternalTableOperations) {
     TCases cases = {
         {"creAte exTernAl TabLe usEr (a int) With (a = \"b\")",

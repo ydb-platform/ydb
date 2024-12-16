@@ -76,6 +76,9 @@ sql_stmt_core:
   | backup_stmt
   | restore_stmt
   | alter_sequence_stmt
+  | create_transfer_stmt
+  | alter_transfer_stmt
+  | drop_transfer_stmt
 ;
 
 expr:
@@ -903,6 +906,23 @@ alter_replication_action:
 alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 
 drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
+
+create_transfer_stmt: CREATE TRANSFER object_ref
+    FROM object_ref TO object_ref
+    WITH LPAREN transfer_settings RPAREN
+;
+
+transfer_settings: transfer_settings_entry (COMMA transfer_settings_entry)*;
+transfer_settings_entry: an_id EQUALS expr;
+
+alter_transfer_stmt: ALTER TRANSFER object_ref alter_transfer_action (COMMA alter_transfer_action)*;
+alter_transfer_action:
+    alter_transfer_set_setting
+;
+
+alter_transfer_set_setting: SET LPAREN transfer_settings RPAREN;
+
+drop_transfer_stmt: DROP TRANSFER object_ref CASCADE?;
 
 action_or_subquery_args: opt_bind_parameter (COMMA opt_bind_parameter)*;
 

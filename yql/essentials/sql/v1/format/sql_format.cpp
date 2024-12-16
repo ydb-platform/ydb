@@ -1486,6 +1486,21 @@ private:
         VisitAllFields(TRule_drop_replication_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateTransfer(const TRule_create_transfer_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_create_transfer_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterAsyncTransfer(const TRule_alter_transfer_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_alter_transfer_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropAsyncTransfer(const TRule_drop_transfer_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_drop_transfer_stmt::GetDescriptor(), msg);
+    }
+
     void VisitCreateResourcePool(const TRule_create_resource_pool_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_create_resource_pool_stmt::GetDescriptor(), msg);

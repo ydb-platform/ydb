@@ -164,6 +164,8 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::Replication:
                 return TStatus::Ok;
+            case TKikimrKey::Type::Transfer:
+                return TStatus::Ok;
             case TKikimrKey::Type::BackupCollection:
                 return TStatus::Ok;
             case TKikimrKey::Type::Sequence:

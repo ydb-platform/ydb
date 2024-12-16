@@ -223,6 +223,10 @@ private:
             {
                 return TStatus::Ok;
             }
+            case TKikimrKey::Type::Transfer:
+            {
+                return TStatus::Ok;
+            }
             case TKikimrKey::Type::BackupCollection:
             {
                 return TStatus::Ok;
@@ -1820,6 +1824,64 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleDropReplication(TKiDropReplication node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleCreateTransfer(TKiCreateTransfer node, TExprContext& ctx) override {
+        const THashSet<TString> supportedSettings = {
+            "connection_string",
+            "endpoint",
+            "database",
+            "token",
+            "token_secret_name",
+            "user",
+            "password",
+            "password_secret_name",
+            "commit_interval",
+        };
+
+        if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!node.Settings().Empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Unsupported settings"));
+            return TStatus::Error;
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterTransfer(TKiAlterTransfer node, TExprContext& ctx) override {
+        const THashSet<TString> supportedSettings = {
+            "connection_string",
+            "endpoint",
+            "database",
+            "token",
+            "token_secret_name",
+            "user",
+            "password",
+            "password_secret_name",
+            "state",
+            "failover_mode",
+        };
+
+        if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!node.Settings().Empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Unsupported settings"));
+            return TStatus::Error;
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleDropTransfer(TKiDropTransfer node, TExprContext&) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

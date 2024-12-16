@@ -1135,6 +1135,12 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropReplication(const TString& cluster, const TDropReplicationSettings& settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> CreateTransfer(const TString& cluster, const TCreateTransferSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterTransfer(const TString& cluster, const TAlterTransferSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropTransfer(const TString& cluster, const TDropTransferSettings& settings) = 0;
+
     virtual NThreading::TFuture<TGenericResult> ModifyPermissions(const TString& cluster, const TModifyPermissionsSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateBackupCollection(const TString& cluster, const TCreateBackupCollectionSettings& settings) = 0;

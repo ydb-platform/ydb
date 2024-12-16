@@ -1747,6 +1747,18 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildAlterSequence(pos, service, cluster, id, params, Ctx.Scoped));
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore58: {
+            // CREATE TRANSFER
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore59: {
+            // ALTER TRANSFER
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore60: {
+            // DROP TRANSFER
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);

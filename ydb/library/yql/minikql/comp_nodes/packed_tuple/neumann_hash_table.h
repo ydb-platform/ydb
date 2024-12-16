@@ -128,10 +128,17 @@ class TNeumannHashTable {
         Clear();
     }
 
-    void Build(const ui8 *tuples, ui32 nItems, ui32 estimatedLogSize = 20) {
-        Y_ASSERT(Directories_.empty() && Buffer_.empty() && Tuples_ == nullptr);
+    /// TODO: memory management
+    TNeumannHashTable(const TNeumannHashTable &) = delete;
+    TNeumannHashTable &operator=(const TNeumannHashTable &) = delete;
+
+    void Build(const ui8 *const tuples, const ui8 *const overflow, ui32 nItems,
+               ui32 estimatedLogSize = 20) {
+        Y_ASSERT(Directories_.empty() && Buffer_.empty() &&
+                 Tuples_ == nullptr && Overflow_ == nullptr);
 
         Tuples_ = tuples;
+        Overflow_ = overflow;
 
         DirectoryHashBits_ = estimatedLogSize;
         DirectoryHashShift_ = sizeof(Hash) * 8 - DirectoryHashBits_;
@@ -178,12 +185,14 @@ class TNeumannHashTable {
                 outRow->Index = ind;
             }
         }
-
     }
 
     // void Apply(ui32 hash, const ui8 *key, OnMatchCallback *onMatch) {
-    void Apply(ui32 hash, const ui8 *key, auto &&onMatch) {
-        const THash &thash = reinterpret_cast<THash &>(hash);
+    void Apply(const ui8 *const row, const ui8 *const overflow,
+               auto &&onMatch) {
+        Y_ASSERT(!Directories_.empty() && Tuples_ != nullptr);
+
+        const THash &thash = reinterpret_cast<const THash &>(row[0]);
         const TBloom hashBloomTag = kBloomTags[thash.BloomTagSlot];
 
         const Hash dirSlot = getDirectorySlot(thash);
@@ -201,30 +210,25 @@ class TNeumannHashTable {
             BufferSlotSize_ * Directories_[dirSlot + 1].BufferSlot;
 
         /// TODO: key ordering
-        /// TODO: better key comparison
-        /// TODO: variable length keys
-
-        const size_t keyOffset = Layout_->KeyColumnsOffset;
-        const size_t keySize = Layout_->KeyColumnsSize;
 
         for (auto it = begin; it != end; it += BufferSlotSize_) {
-            const ui8 *row;
+            const ui8 *matchRow;
             if (IsInplace_) {
-                const Hash rowHash = ReadUnaligned<Hash>(it);
-                if (rowHash != hash) {
+                const Hash matchRowHash = ReadUnaligned<Hash>(it);
+                if (matchRowHash != *thash) {
                     continue;
                 }
-                row = it;
+                matchRow = it;
             } else {
                 const auto *const outRow =
                     reinterpret_cast<const TOutplace *>(it);
-                if (outRow->Hash != hash) {
+                if (outRow->Hash != *thash) {
                     continue;
                 }
-                row = Tuples_ + Layout_->TotalRowSize * outRow->Index;
+                matchRow = Tuples_ + Layout_->TotalRowSize * outRow->Index;
             }
 
-            if (std::equal(key, key + keySize, row + keyOffset)) {
+            if (Layout_->KeysEqual(row, overflow, matchRow, Overflow_)) {
                 onMatch(row);
             }
         }
@@ -234,10 +238,11 @@ class TNeumannHashTable {
         Directories_.clear();
         Buffer_.clear();
         Tuples_ = nullptr;
+        Overflow_ = nullptr;
     }
 
   private:
-    const TTupleLayout *Layout_;
+    const TTupleLayout *const Layout_;
 
     unsigned DirectoryHashBits_;
     unsigned DirectoryHashShift_;
@@ -248,6 +253,7 @@ class TNeumannHashTable {
     const ui32 BufferSlotSize_;
 
     const ui8 *Tuples_;
+    const ui8 *Overflow_;
 };
 
 } // namespace NPackedTuple

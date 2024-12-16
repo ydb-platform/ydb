@@ -90,6 +90,59 @@ void transposeBitmatrix(ui8 *dst[], const ui8 src[], const size_t row_size) {
 
 } // namespace
 
+bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,
+                             const ui8 *rhsRow, const ui8 *rhsOverflow) const {
+    static const ui32 keyOffset = 4;
+    if (std::memcmp(lhsRow + keyOffset, rhsRow + keyOffset,
+                    KeyColumnsFixedEnd - keyOffset)) {
+        return false;
+    }
+
+    for (auto colInd = KeyColumnsFixedNum; colInd != KeyColumnsNum; ++colInd) {
+        const auto &col = Columns[colInd];
+        Y_ASSERT(col.Role == EColumnRole::Payload);
+
+        /// TODO: better key comparison
+
+        {
+            const auto lhsPrefSize = ReadUnaligned<ui8>(lhsRow + col.Offset);
+            const auto rhsPrefSize = ReadUnaligned<ui8>(rhsRow + col.Offset);
+            if (lhsPrefSize != rhsPrefSize) {
+                return false;
+            }
+
+            if (lhsPrefSize < 255) {
+                if (std::memcmp(lhsRow + col.Offset + 1,
+                                rhsRow + col.Offset + 1, lhsPrefSize)) {
+                    return false;
+                }
+            } else {
+                const auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
+                const auto lhsOverflowOffset = ReadUnaligned<ui32>(
+                    lhsRow + col.Offset + 1 + 0 * sizeof(ui32));
+                const auto lhsOverflowSize = ReadUnaligned<ui32>(
+                    lhsRow + col.Offset + 1 + 1 * sizeof(ui32));
+                const auto rhsOverflowOffset = ReadUnaligned<ui32>(
+                    rhsRow + col.Offset + 1 + 0 * sizeof(ui32));
+                const auto rhsOverflowSize = ReadUnaligned<ui32>(
+                    rhsRow + col.Offset + 1 + 1 * sizeof(ui32));
+
+                if (lhsOverflowSize != rhsOverflowSize ||
+                    std::memcmp(lhsRow + col.Offset + 1 + 2 * sizeof(ui32),
+                                rhsRow + col.Offset + 1 + 2 * sizeof(ui32),
+                                prefixSize) ||
+                    std::memcmp(lhsOverflow + lhsOverflowOffset,
+                                rhsOverflow + rhsOverflowOffset,
+                                lhsOverflowSize)) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
 THolder<TTupleLayout>
 TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
 

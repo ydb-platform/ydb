@@ -84,6 +84,8 @@ struct TTupleLayout {
     // outputs vector of column sizes in bytes
     virtual void CalculateColumnSizes(
         const ui8* res, ui32 count, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const = 0;
+
+    bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
 };
 
 template <typename TTrait> struct TTupleLayoutFallback : public TTupleLayout {

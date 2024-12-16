@@ -16,6 +16,7 @@
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
 
 #include <ydb/library/formats/arrow/transformer/abstract.h>
 
@@ -57,7 +58,7 @@ private:
     std::vector<ui32> PKColumnIds;
     std::vector<TNameTypeInfo> PKColumns;
 
-    std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;   // 2 wpc (1 shared_ptr)
+    std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
     std::shared_ptr<std::set<TString>> UsedStorageIds;
 
@@ -67,9 +68,8 @@ private:
     std::optional<TString> ScanReaderPolicyName;
 
     ui64 Version = 0;
-    std::vector<ui32> SchemaColumnIdsWithSpecials;   // .5 wpc
-    std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;   // 2 wpc
-    std::shared_ptr<NArrow::TSchemaLite> Schema;   // 2 wpc
+    std::vector<ui32> SchemaColumnIdsWithSpecials;
+    std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> PrimaryKey;
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 
@@ -112,24 +112,7 @@ private:
 
     void Validate() const;
     void Precalculate();
-    void BuildColumnIndexByName() {
-        const ui32 columnCount = SchemaColumnIdsWithSpecials.size() - SpecialColumnsCount;
-        std::erase_if(ColumnIdxSortedByName, [columnCount](const ui32 idx) {
-            return idx >= columnCount;
-        });
-        ColumnIdxSortedByName.reserve(columnCount);
-        for (ui32 i = 0; i < columnCount; ++i) {
-            ColumnIdxSortedByName.push_back(i);
-        }
-
-        std::sort(ColumnIdxSortedByName.begin(), ColumnIdxSortedByName.end(), [this](const ui32 lhs, const ui32 rhs) {
-            return CompareColumnIndexByName(lhs, rhs);
-        });
-    }
-
-    bool CompareColumnIndexByName(const ui32 lhs, const ui32 rhs) const {
-        return Schema->GetFieldByIndexVerified(lhs)->name() < Schema->GetFieldByIndexVerified(rhs)->name();
-    }
+    void BuildColumnIndexByName();
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
         const std::shared_ptr<TSchemaObjectsCache>& cache);
@@ -163,6 +146,12 @@ private:
     }
 
     void SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns);
+
+    bool CompareColumnIdxByName(const ui32 lhs, const ui32 rhs) const {
+        AFL_VERIFY(lhs < ColumnFeatures.size());
+        AFL_VERIFY(rhs < ColumnFeatures.size());
+        return ColumnFeatures[lhs]->GetColumnName() < ColumnFeatures[rhs]->GetColumnName();
+    }
 
 public:
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
@@ -237,15 +226,11 @@ public:
 
     static TIndexInfo BuildDefault();
 
-    static TIndexInfo BuildDefault(
-        const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<TString>& pkNames) {
+    static TIndexInfo BuildDefault(const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<ui32>& pkIds) {
         TIndexInfo result = BuildDefault();
-        result.BuildColumnIndexByName();
-        for (auto&& i : pkNames) {
-            const ui32 columnId = result.GetColumnIdVerified(i);
-            result.PKColumnIds.emplace_back(columnId);
-        }
+        result.PKColumnIds = pkIds;
         result.SetAllKeys(operators, columns);
+        result.Validate();
         return result;
     }
 
@@ -369,8 +354,8 @@ public:
 
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
-    std::vector<std::string> GetColumnSTLNames(const std::span<const ui32>& ids) const;
-    std::span<const ui32> GetColumnIds(const bool withSpecial = true) const;
+    std::vector<std::string> GetColumnSTLNames(const bool withSpecial = true) const;
+    TColumnIdsView GetColumnIds(const bool withSpecial = true) const;
     ui32 GetColumnIdByIndexVerified(const ui32 index) const {
         AFL_VERIFY(index < SchemaColumnIdsWithSpecials.size());
         return SchemaColumnIdsWithSpecials[index];
@@ -401,7 +386,7 @@ public:
 
     std::vector<ui32> GetColumnIds(const std::vector<TString>& columnNames) const;
 
-    const std::shared_ptr<NArrow::TSchemaLite>& ArrowSchema() const;
+    NArrow::TSchemaLiteView ArrowSchema() const;
     const std::shared_ptr<NArrow::TSchemaLite>& ArrowSchemaWithSpecials() const;
 
     bool AllowTtlOverColumn(const TString& name) const;

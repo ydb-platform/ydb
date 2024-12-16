@@ -155,7 +155,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
         const auto& indexSchema = Context.GetActualSchema()->GetIndexInfo().ArrowSchema();
         auto subsetConclusion = NArrow::TColumnOperator().IgnoreOnDifferentFieldTypes().BuildSequentialSubset(OriginalBatch, indexSchema);
         if (subsetConclusion.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())(
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema.ToString())(
                 "problem", subsetConclusion.GetErrorMessage());
             ReplyError("unadaptable schema: " + subsetConclusion.GetErrorMessage(),
                 NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
@@ -163,13 +163,13 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
         }
         NArrow::TSchemaSubset subset = subsetConclusion.DetachResult();
 
-        if (OriginalBatch->num_columns() != indexSchema->num_fields()) {
-            AFL_VERIFY(OriginalBatch->num_columns() < indexSchema->num_fields())("original", OriginalBatch->num_columns())(
-                                                          "index", indexSchema->num_fields());
+        if (OriginalBatch->num_columns() != indexSchema.num_fields()) {
+            AFL_VERIFY(OriginalBatch->num_columns() < indexSchema.num_fields())("original", OriginalBatch->num_columns())(
+                                                          "index", indexSchema.num_fields());
             if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOptionalColumnsInColumnShard() &&
                 WriteData.GetWriteMeta().GetModificationType() != NEvWrite::EModificationType::Delete) {
                 subset = NArrow::TSchemaSubset::AllFieldsAccepted();
-                const std::span<const ui32> columnIdsVector = Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false);
+                const auto columnIdsVector = Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false);
                 const std::set<ui32> columnIdsSet(columnIdsVector.begin(), columnIdsVector.end());
                 auto normalized =
                     Context.GetActualSchema()

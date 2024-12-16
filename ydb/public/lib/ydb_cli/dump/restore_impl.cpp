@@ -335,8 +335,9 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
 
 TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath,
     const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
-{   
+{
     LOG_D("Process " << fsPath.GetPath().Quote());
+    
     if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
@@ -665,26 +666,6 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
     return Result<TRestoreResult>();
 }
 
-TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const TVector<NTopic::TConsumer>& consumers) {
-    for (const auto& consumer : consumers) {
-        auto createResult = TopicClient.AlterTopic(topicPath,
-            NTopic::TAlterTopicSettings()
-                .BeginAddConsumer()
-                    .ConsumerName(consumer.GetConsumerName())
-                    .Important(consumer.GetImportant())
-                    .Attributes(consumer.GetAttributes())
-                .EndAddConsumer()
-        ).GetValueSync();
-        if (createResult.IsSuccess()) {
-            LOG_D("Created consumer " << consumer.GetConsumerName().Quote() << " for " << topicPath.Quote());
-        } else {
-            LOG_E("Failed to create " << consumer.GetConsumerName().Quote() << " for " << topicPath.Quote());
-            return Result<TRestoreResult>(topicPath, std::move(createResult));
-        }
-    }
-    return Result<TRestoreResult>();
-}
-
 TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const TString& dbPath) {
     LOG_D("Process " << fsPath.GetPath().Quote());
     if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
@@ -711,6 +692,26 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
     }
 
     return RestoreConsumers(Join("/", dbPath, fsPath.GetName()), topicDesc.GetConsumers());;
+}
+
+TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const TVector<NTopic::TConsumer>& consumers) {
+    for (const auto& consumer : consumers) {
+        auto createResult = TopicClient.AlterTopic(topicPath,
+            NTopic::TAlterTopicSettings()
+                .BeginAddConsumer()
+                    .ConsumerName(consumer.GetConsumerName())
+                    .Important(consumer.GetImportant())
+                    .Attributes(consumer.GetAttributes())
+                .EndAddConsumer()
+        ).GetValueSync();
+        if (createResult.IsSuccess()) {
+            LOG_D("Created consumer " << consumer.GetConsumerName().Quote() << " for " << topicPath.Quote());
+        } else {
+            LOG_E("Failed to create " << consumer.GetConsumerName().Quote() << " for " << topicPath.Quote());
+            return Result<TRestoreResult>(topicPath, std::move(createResult));
+        }
+    }
+    return Result<TRestoreResult>();
 }
 
 TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const TString& dbPath,

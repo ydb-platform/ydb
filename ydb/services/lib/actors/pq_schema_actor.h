@@ -135,11 +135,11 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         void SendDescribeProposeRequest(const NActors::TActorContext& ctx, bool showPrivate) {
             auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-            // if (!SetRequestToken(navigateRequest.get())) {
-            //     AddIssue(FillIssue("Unauthenticated access is forbidden, please provide credentials",
-            //                        Ydb::PersQueue::ErrorCode::ACCESS_DENIED));
-            //     return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
-            // }
+            if (!SetRequestToken(navigateRequest.get())) {
+                AddIssue(FillIssue("Unauthenticated access is forbidden, please provide credentials",
+                                   Ydb::PersQueue::ErrorCode::ACCESS_DENIED));
+                return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
+            }
 
             navigateRequest->DatabaseName = CanonizePath(Database);
             navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{

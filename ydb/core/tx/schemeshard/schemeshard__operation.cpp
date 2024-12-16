@@ -91,14 +91,6 @@ struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TT
     }
 };
 
-NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme::TEvModifySchemeTransaction& record) {
-    auto recordForPrint = record;
-    if (record.HasUserToken()) {
-        recordForPrint.SetUserToken("***hide token***");
-    }
-    return recordForPrint;
-}
-
 bool TSchemeShard::ProcessOperationParts(
     const TVector<ISubOperation::TPtr>& parts,
     const TTxId& txId,

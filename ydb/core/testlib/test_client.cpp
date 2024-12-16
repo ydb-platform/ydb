@@ -197,12 +197,15 @@ namespace Tests {
         app.SetChangesQueueBytesLimit(Settings->ChangesQueueBytesLimit);
         app.SetAwsRegion(Settings->AwsRegion);
         app.CompactionConfig = Settings->CompactionConfig;
-        app.FeatureFlags = Settings->FeatureFlags;
         app.ImmediateControlsConfig = Settings->Controls;
         app.InitIcb(StaticNodes() + DynamicNodes());
         if (Settings->AppConfig->HasResourceBrokerConfig()) {
             app.ResourceBrokerConfig = Settings->AppConfig->GetResourceBrokerConfig();
         }
+
+        // forcibly turn on some feature flags
+        app.FeatureFlags = Settings->FeatureFlags;
+        app.FeatureFlags.SetCheckDatabaseAccessPermission(true);
 
         if (!Settings->UseRealThreads)
             Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId&, const TActorId& actorId) {

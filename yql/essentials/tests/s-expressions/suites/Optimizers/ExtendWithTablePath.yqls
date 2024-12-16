@@ -3,7 +3,7 @@
 #    (select TablePath() as table from CONCAT([Input],[Input])) group by table;
     
 (
-(import aggregate_module '"/lib/yql/aggregate.yql")
+(import aggregate_module '"/lib/yql/aggregate.yqls")
 (let world (block '(
   (let x (Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"Input1"))) (Key '('table (String '"Input2")))) '() '()))
   (let world (Left! x))

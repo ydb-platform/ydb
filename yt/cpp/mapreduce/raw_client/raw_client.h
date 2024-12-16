@@ -116,6 +116,44 @@ public:
         const TRichYPath& destinationPath,
         const TConcatenateOptions& options = {}) override;
 
+    // Transactions
+
+    void PingTx(const TTransactionId& transactionId) override;
+
+    // Operations
+
+    TOperationAttributes GetOperation(
+        const TOperationId& operationId,
+        const TGetOperationOptions& options = {}) override;
+
+    TOperationAttributes GetOperation(
+        const TString& operationId,
+        const TGetOperationOptions& options = {}) override;
+
+    void AbortOperation(
+        TMutationId& mutationId,
+        const TOperationId& operationId) override;
+
+    void CompleteOperation(
+        TMutationId& mutationId,
+        const TOperationId& operationId) override;
+
+    void SuspendOperation(
+        TMutationId& mutationId,
+        const TOperationId& operationId,
+        const TSuspendOperationOptions& options = {}) override;
+
+    void ResumeOperation(
+        TMutationId& mutationId,
+        const TOperationId& operationId,
+        const TResumeOperationOptions& options = {}) override;
+
+    TListOperationsResult ListOperations(const TListOperationsOptions& options = {}) override;
+
+    void UpdateOperationParameters(
+        const TOperationId& operationId,
+        const TUpdateOperationParametersOptions& options = {}) override;
+
 private:
     const TClientContext Context_;
 };

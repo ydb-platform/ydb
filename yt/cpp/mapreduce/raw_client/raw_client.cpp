@@ -1,5 +1,6 @@
 #include "raw_client.h"
 
+#include "raw_requests.h"
 #include "rpc_parameters_serialization.h"
 
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -7,6 +8,8 @@
 #include <yt/cpp/mapreduce/http/http.h>
 #include <yt/cpp/mapreduce/http/requests.h>
 #include <yt/cpp/mapreduce/http/retry_request.h>
+
+#include <yt/cpp/mapreduce/interface/operation.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -236,6 +239,139 @@ void THttpRawClient::Concatenate(
     THttpHeader header("POST", "concatenate");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForConcatenate(transactionId, Context_.Config->Prefix, sourcePaths, destinationPath, options));
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+void THttpRawClient::PingTx(const TTransactionId& transactionId)
+{
+    TMutationId mutationId;
+    THttpHeader header("POST", "ping_tx");
+    header.MergeParameters(NRawClient::SerializeParamsForPingTx(transactionId));
+    TRequestConfig requestConfig;
+    requestConfig.HttpConfig = NHttpClient::THttpConfig{
+        .SocketTimeout = Context_.Config->PingTimeout
+    };
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+TOperationAttributes THttpRawClient::GetOperation(
+    const TOperationId& operationId,
+    const TGetOperationOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "get_operation");
+    header.MergeParameters(NRawClient::SerializeParamsForGetOperation(operationId, options));
+    auto result = RequestWithoutRetry(Context_, mutationId, header);
+    return NRawClient::ParseOperationAttributes(NodeFromYsonString(result.Response));
+}
+
+TOperationAttributes THttpRawClient::GetOperation(
+    const TString& alias,
+    const TGetOperationOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "get_operation");
+    header.MergeParameters(NRawClient::SerializeParamsForGetOperation(alias, options));
+    auto result = RequestWithoutRetry(Context_, mutationId, header);
+    return NRawClient::ParseOperationAttributes(NodeFromYsonString(result.Response));
+}
+
+void THttpRawClient::AbortOperation(
+    TMutationId& mutationId,
+    const TOperationId& operationId)
+{
+    THttpHeader header("POST", "abort_op");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForAbortOperation(operationId));
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+void THttpRawClient::CompleteOperation(
+    TMutationId& mutationId,
+    const TOperationId& operationId)
+{
+    THttpHeader header("POST", "complete_op");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForCompleteOperation(operationId));
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+void THttpRawClient::SuspendOperation(
+    TMutationId& mutationId,
+    const TOperationId& operationId,
+    const TSuspendOperationOptions& options)
+{
+    THttpHeader header("POST", "suspend_op");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForSuspendOperation(operationId, options));
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+void THttpRawClient::ResumeOperation(
+    TMutationId& mutationId,
+    const TOperationId& operationId,
+    const TResumeOperationOptions& options)
+{
+    THttpHeader header("POST", "resume_op");
+    header.AddMutationId();
+    header.MergeParameters(NRawClient::SerializeParamsForResumeOperation(operationId, options));
+    RequestWithoutRetry(Context_, mutationId, header);
+}
+
+template <typename TKey>
+static THashMap<TKey, i64> GetCounts(const TNode& countsNode)
+{
+    THashMap<TKey, i64> counts;
+    for (const auto& entry : countsNode.AsMap()) {
+        counts.emplace(FromString<TKey>(entry.first), entry.second.AsInt64());
+    }
+    return counts;
+}
+
+TListOperationsResult THttpRawClient::ListOperations(const TListOperationsOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "list_operations");
+    header.MergeParameters(NRawClient::SerializeParamsForListOperations(options));
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
+    auto resultNode = NodeFromYsonString(responseInfo.Response);
+
+    const auto& operationNodesList = resultNode["operations"].AsList();
+
+    TListOperationsResult result;
+    result.Operations.reserve(operationNodesList.size());
+    for (const auto& operationNode : operationNodesList) {
+        result.Operations.push_back(NRawClient::ParseOperationAttributes(operationNode));
+    }
+
+    if (resultNode.HasKey("pool_counts")) {
+        result.PoolCounts = GetCounts<TString>(resultNode["pool_counts"]);
+    }
+    if (resultNode.HasKey("user_counts")) {
+        result.UserCounts = GetCounts<TString>(resultNode["user_counts"]);
+    }
+    if (resultNode.HasKey("type_counts")) {
+        result.TypeCounts = GetCounts<EOperationType>(resultNode["type_counts"]);
+    }
+    if (resultNode.HasKey("state_counts")) {
+        result.StateCounts = GetCounts<TString>(resultNode["state_counts"]);
+    }
+    if (resultNode.HasKey("failed_jobs_count")) {
+        result.WithFailedJobsCount = resultNode["failed_jobs_count"].AsInt64();
+    }
+
+    result.Incomplete = resultNode["incomplete"].AsBool();
+
+    return result;
+}
+
+void THttpRawClient::UpdateOperationParameters(
+    const TOperationId& operationId,
+    const TUpdateOperationParametersOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("POST", "update_op_parameters");
+    header.MergeParameters(NRawClient::SerializeParamsForUpdateOperationParameters(operationId, options));
     RequestWithoutRetry(Context_, mutationId, header);
 }
 

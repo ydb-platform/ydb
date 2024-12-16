@@ -536,9 +536,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
 }
 
 TDuration TDqPqRdReadActor::GetCpuTime() {
-    TDuration value = TDuration::MicroSeconds(CpuMicrosec);
-    CpuMicrosec = 0;
-    return value;
+    return TDuration::MicroSeconds(CpuMicrosec);
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {

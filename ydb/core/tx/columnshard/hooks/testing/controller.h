@@ -193,6 +193,7 @@ protected:
         return OverrideRejectMemoryIntervalLimit.value_or(def);
     }
     virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 def) const override {
+        Y_UNUSED(def);
         return 0;
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {

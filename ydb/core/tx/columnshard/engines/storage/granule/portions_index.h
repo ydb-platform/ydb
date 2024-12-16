@@ -19,6 +19,7 @@ public:
         : Owner(owner)
     {
         Y_UNUSED(Owner);
+        Y_UNUSED(counters);
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {

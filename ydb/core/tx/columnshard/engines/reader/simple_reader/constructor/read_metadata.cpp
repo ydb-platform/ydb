@@ -13,6 +13,9 @@ std::unique_ptr<TScanIteratorBase> TReadMetadata::StartScan(const std::shared_pt
 
 TConclusionStatus TReadMetadata::DoInitCustom(
     const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) {
+    Y_UNUSED(owner);
+    Y_UNUSED(readDescription);
+    Y_UNUSED(dataAccessor);
     return TConclusionStatus::Success();
 }
 

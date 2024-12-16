@@ -95,6 +95,7 @@ class TCreateExternalDataSource : public TSubOperation {
     }
 
     static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
+                                const TOperationContext& context,
                                 const TPath& dstPath,
                                 const TString& acl,
                                 bool acceptExisted) {
@@ -113,7 +114,7 @@ class TCreateExternalDataSource : public TSubOperation {
 
         if (checks) {
             checks
-                .IsValidLeafName()
+                .IsValidLeafName(context.UserToken.Get())
                 .DepthLimit()
                 .PathsLimit()
                 .DirChildrenLimit()
@@ -249,7 +250,7 @@ public:
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
         TPath dstPath     = parentPath.Child(name);
 
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, acceptExisted));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath, acl, acceptExisted));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
         RETURN_RESULT_UNLESS(IsDescriptionValid(result,
                                                 externalDataSourceDescription,

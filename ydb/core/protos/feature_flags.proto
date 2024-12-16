@@ -213,4 +213,5 @@ message TFeatureFlags {
     optional bool EnableAddUniqueIndex = 187 [default = false];
     optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
     optional bool RequireDbPrefixInSecretName = 189 [default = false];
+    optional bool EnableSystemNamesProtection = 190 [default = false];
 }

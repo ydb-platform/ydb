@@ -60,7 +60,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         // TODO(mbkkt) less than necessary for vector index
         checks
-            .IsValidLeafName()
+            .IsValidLeafName(context.UserToken.Get())
             .PathsLimit(2) // index and impl-table
             .DirChildrenLimit();
 

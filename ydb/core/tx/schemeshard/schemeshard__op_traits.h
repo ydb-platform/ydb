@@ -5,6 +5,7 @@
 #include "schemeshard_path.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <util/generic/map.h>
 #include <util/generic/string.h>
@@ -232,4 +233,6 @@ bool Rewrite(TTraits traits, TTxTransaction& tx) {
     return false;
 }
 
-}// namespace NKikimr::NSchemeShard
+bool IsCreatePathOperation(NKikimrSchemeOp::EOperationType op);
+
+}  // namespace NKikimr::NSchemeShard

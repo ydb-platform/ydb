@@ -52,6 +52,7 @@ RECURSE_FOR_TESTS(
     ut_stats
     ut_subdomain
     ut_subdomain_reboots
+    ut_system_names
     ut_sysview
     ut_sysview_reboots
     ut_topic_splitmerge
@@ -92,6 +93,8 @@ SRCS(
     schemeshard__op_traits.h
     schemeshard__operation.cpp
     schemeshard__operation.h
+    schemeshard__op_traits.cpp
+    schemeshard__op_traits.h
     schemeshard__operation_alter_bsv.cpp
     schemeshard__operation_alter_cdc_stream.cpp
     schemeshard__operation_alter_continuous_backup.cpp
@@ -262,6 +265,8 @@ SRCS(
     schemeshard_shard_deleter.h
     schemeshard_svp_migration.cpp
     schemeshard_svp_migration.h
+    schemeshard_system_names.cpp
+    schemeshard_system_names.h
     schemeshard_tx_infly.h
     schemeshard_types.cpp
     schemeshard_types.h

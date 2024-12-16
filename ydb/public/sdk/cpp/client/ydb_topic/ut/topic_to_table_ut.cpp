@@ -2587,6 +2587,23 @@ Y_UNIT_TEST_F(OltpSink_WriteToTopic_4, TFixtureOltpSink)
     TestWriteToTopic9();
 }
 
+Y_UNIT_TEST_F(OltpSink_WriteToTopic_5, TFixtureOltpSink)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #1", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #2", &tx);
+
+    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 0);
+
+    RollbackTx(tx, EStatus::SUCCESS);
+
+    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 0);
+}
+
 Y_UNIT_TEST_F(OltpSink_WriteToTopics_1, TFixtureOltpSink)
 {
     TestWriteToTopic1();

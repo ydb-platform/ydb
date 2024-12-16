@@ -249,8 +249,9 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::MilliSeconds(250)); // 4 requests per second
             }
-            UNIT_ASSERT_EQUAL(traced, 250);
-            UNIT_ASSERT(sampled >= 110 && sampled <= 135);
+            // 1 of each 4 requests external traced + 1 of each 3 other requests sampled
+            // (but not greater than 0.5 of them according to throttling)
+            UNIT_ASSERT_C(traced >= 250 + 125 - 50 && traced <= 250 + 125 + 50, traced);
         }
         timeProvider->Advance(TDuration::Minutes(1));
 

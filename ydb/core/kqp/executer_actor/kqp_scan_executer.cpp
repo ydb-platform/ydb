@@ -276,7 +276,7 @@ public:
         YQL_ENSURE(!AlreadyReplied);
         AlreadyReplied = true;
 
-        ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
+        FillResponseStats(Ydb::StatusIds::SUCCESS);
 
         LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, ResponseEv->ResultsSize());
 

@@ -673,10 +673,6 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
         }
 
         // checking whether the task is long
-
-        // TODO(ilezhankin): investigate - for some reason `task.FinishTimeMs` may be large (or small?)
-        //      enough to result in an enormous duration - triggering the "long tasks" mode.
-
         auto taskDuration = TDuration::MilliSeconds(task.GetFinishTimeMs() - task.GetStartTimeMs());
         bool longTask = taskDuration > collectLongTaskStatsTimeout;
         if (longTask) {
@@ -1096,7 +1092,7 @@ void TQueryExecutionStats::Finish() {
     Result->SetCpuTimeUs(Result->GetCpuTimeUs() + ExecuterCpuTime.MicroSeconds());
     Result->SetDurationUs(FinishTs.MicroSeconds() - StartTs.MicroSeconds());
 
-    // Result->Result* fields are (temporary?) commented out in proto due to lack of use
+    // Result->Result* feilds are (temporary?) commented out in proto due to lack of use
     //
     // Result->SetResultBytes(ResultBytes);
     // Result->SetResultRows(ResultRows);

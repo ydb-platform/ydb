@@ -1087,15 +1087,15 @@ private:
             } else if (TMaybeNode<TKqpReadOlapTableRangesBase>(node)) {
                 auto olapTable = TExprBase(node).Cast<TKqpReadOlapTableRangesBase>();
 
-                auto pred = [](const TExprNode::TPtr& n) -> bool { 
-                    if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false; 
+                auto pred = [](const TExprNode::TPtr& n) -> bool {
+                    if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false;
                 };
                 if (auto maybeOlapFilter = FindNode(olapTable.Process().Body().Ptr(), pred)) {
                     auto olapFilter = TExprBase(maybeOlapFilter).Cast<TKqpOlapFilter>();
 
                     TOperator op;
                     op.Properties["Name"] = "Filter";
-                    
+
                     op.Properties["Predicate"] = OlapStr(olapFilter.Condition().Ptr());
 
                     AddOptimizerEstimates(op, olapFilter);
@@ -1139,7 +1139,7 @@ private:
             size_t listSize = listPtr->Children().size();
             if (listSize == 3) {
                 THashMap<TString, TString> strComp = {
-                    {"eq", "=="}, 
+                    {"eq", "=="},
                     {"neq", "!="},
                     {"lt", "<"},
                     {"lte", "<="},
@@ -1160,7 +1160,7 @@ private:
                     } else if (listPtr->Child(2)->ChildrenSize() == 0 && listPtr->Child(2)->Content()) {
                         value = TString(listPtr->Child(2)->Content());
                     }
-                    
+
                     return Sprintf("%s %s %s", attr.c_str(), strComp[compSign].c_str(), value.c_str());
                 } else if (strRegexp.contains(compSign)) {
                     return compSign;
@@ -1180,7 +1180,7 @@ private:
             delim = " And ";
         } else if (TMaybeNode<TKqpOlapOr>(node)) {
             delim = " Or ";
-        } 
+        }
         return JoinStrings(s, delim);
     }
 
@@ -2066,7 +2066,7 @@ struct TQueryPlanReconstructor {
     TQueryPlanReconstructor(
         const THashMap<int, NJson::TJsonValue>& planIndex,
         const THashMap<TString, NJson::TJsonValue>& precomputes
-    ) 
+    )
         : PlanIndex(planIndex)
         , Precomputes(precomputes)
         , NodeIDCounter(0)
@@ -2163,14 +2163,14 @@ struct TQueryPlanReconstructor {
                 NJson::TJsonValue newOps;
                 NJson::TJsonValue op;
 
-                op["Name"] = "TableLookup"; 
+                op["Name"] = "TableLookup";
                 op["Columns"] = plan.GetMapSafe().at("Columns");
                 op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
                 op["Table"] = plan.GetMapSafe().at("Table");
 
                 if (plan.GetMapSafe().contains("E-Cost")) {
                     op["E-Cost"] = plan.GetMapSafe().at("E-Cost");
-                } 
+                }
                 if (plan.GetMapSafe().contains("E-Rows")) {
                     op["E-Rows"] = plan.GetMapSafe().at("E-Rows");
                 }
@@ -2245,8 +2245,8 @@ struct TQueryPlanReconstructor {
             op.GetMapSafe().erase("Inputs");
         }
 
-        if (op.GetMapSafe().contains("Input") 
-            || op.GetMapSafe().contains("ToFlow") 
+        if (op.GetMapSafe().contains("Input")
+            || op.GetMapSafe().contains("ToFlow")
             || op.GetMapSafe().contains("Member")
             || op.GetMapSafe().contains("AssumeSorted")
             || op.GetMapSafe().contains("Iterator")) {
@@ -2289,7 +2289,7 @@ private:
     const THashMap<int, NJson::TJsonValue>& PlanIndex;
     const THashMap<TString, NJson::TJsonValue>& Precomputes;
     ui32 NodeIDCounter;
-    i32 Budget; // Prevent bugs with inf recursion 
+    i32 Budget; // Prevent bugs with inf recursion
 };
 
 double ComputeCpuTimes(NJson::TJsonValue& plan) {

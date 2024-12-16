@@ -205,7 +205,9 @@ public:
             return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
         }
 
-        ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
+        auto& response = *ResponseEv->Record.MutableResponse();
+
+        FillResponseStats(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
 
         auto addLocks = [this](const ui64 taskId, const auto& data) {
@@ -253,7 +255,7 @@ public:
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
-            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
+            BuildLocks(*response.MutableResult()->MutableLocks(), Locks);
         }
 
         auto resultSize = ResponseEv->GetByteSize();
@@ -278,6 +280,7 @@ public:
 
         ExecuterSpan.EndOk();
 
+        Request.Transactions.crop(0);
         AlreadyReplied = true;
         PassAway();
     }

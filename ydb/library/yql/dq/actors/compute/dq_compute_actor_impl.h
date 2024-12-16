@@ -313,12 +313,12 @@ protected:
     void OnMemoryLimitExceptionHandler() {
         TString memoryConsumptionDetails = MemoryLimits.MemoryQuotaManager->MemoryConsumptionDetails();
         TStringBuilder failureReason = TStringBuilder()
-            << "Mkql memory limit exceeded, allocated by task " << Task.GetId() << ": " << GetMkqlMemoryLimit()
+            << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
             << ", host: " << HostName()
             << ", canAllocateExtraMemory: " << CanAllocateExtraMemory;
 
         if (!memoryConsumptionDetails.empty()) {
-            failureReason << ", memory manager details for current node: " << memoryConsumptionDetails;
+            failureReason << ", memory manager details: " << memoryConsumptionDetails;
         }
 
         InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, failureReason);
@@ -1823,8 +1823,6 @@ public:
                     }
                 }
             }
-        } else {
-            // TODO: what should happen in this case?
         }
 
         static_cast<TDerived*>(this)->FillExtraStats(dst, last);

@@ -126,6 +126,7 @@ private:
     }
 
     static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
+                                       const TOperationContext& context,
                                        const TPath& dstPath,
                                        const TString& acl,
                                        bool acceptExisted) {
@@ -144,7 +145,7 @@ private:
 
         if (checks) {
             checks
-                .IsValidLeafName()
+                .IsValidLeafName(context.UserToken.Get())
                 .DepthLimit()
                 .PathsLimit()
                 .DirChildrenLimit()
@@ -316,7 +317,7 @@ public:
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
         TPath dstPath     = parentPath.Child(name);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(
-            result, dstPath, acl, acceptExisted));
+            result, context, dstPath, acl, acceptExisted));
 
         const auto dataSourcePath =
             TPath::Resolve(externalTableDescription.GetDataSourcePath(), context.SS);

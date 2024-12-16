@@ -281,7 +281,7 @@ namespace NKikimr::NSchemeShard {
 
                     if (checks) {
                         checks
-                            .IsValidLeafName()
+                            .IsValidLeafName(context.UserToken.Get())
                             .DepthLimit()
                             .PathsLimit()
                             .DirChildrenLimit()

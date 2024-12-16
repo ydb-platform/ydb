@@ -616,11 +616,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TestMkDir(runtime, ++txId, "/MyRoot", "..", {NKikimrScheme::StatusSchemeError});
         TestMkDir(runtime, ++txId, "/MyRoot", "...", {NKikimrScheme::StatusSchemeError});
         TestMkDir(runtime, ++txId, "/MyRoot", "................", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", ".SubDirA");
+        TestMkDir(runtime, ++txId, "/MyRoot", ".SubDirA", {{NKikimrScheme::StatusSchemeError, "prefix is reserved by the system: '.'"}});
         TestMkDir(runtime, ++txId, "/MyRoot", "SubDirB.");
         TestMkDir(runtime, ++txId, "/MyRoot", "a.............");
-        TestMkDir(runtime, ++txId, "/MyRoot", ".......a......");
-        TestMkDir(runtime, ++txId, "/MyRoot", ".............a");
+        TestMkDir(runtime, ++txId, "/MyRoot", ".......a......", {{NKikimrScheme::StatusSchemeError, "prefix is reserved by the system: '.'"}});
+        TestMkDir(runtime, ++txId, "/MyRoot", ".............a", {{NKikimrScheme::StatusSchemeError, "prefix is reserved by the system: '.'"}});
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: ".")", {NKikimrScheme::StatusSchemeError});
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "..")", {NKikimrScheme::StatusSchemeError});

@@ -122,6 +122,7 @@ namespace NSchemeShardUT_Private {
             : Status(status)
             , ReasonFragment(reasonFragment)
         {}
+        bool operator==(const TExpectedResult&) const = default;
     };
 
     ////////// modification results

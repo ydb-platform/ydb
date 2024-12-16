@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.library.yql.providers.generic.connector.tests.common_test_cases.base import BaseTestCase
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import GenericSettings
 
@@ -31,7 +31,7 @@ class Factory:
     def __init__(self, ss: Settings):
         self.ss = ss
 
-    def make_test_cases(self, data_source_kind: EDataSourceKind) -> List[TestCase]:
+    def make_test_cases(self, data_source_kind: EGenericDataSourceKind) -> List[TestCase]:
         test_cases = []
 
         test_case_name = 'missing_table'
@@ -39,7 +39,7 @@ class Factory:
         test_case = TestCase(
             name_=test_case_name,
             data_source_kind=data_source_kind,
-            protocol=EProtocol.NATIVE,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
             service_name=self.ss.oracle.service_name if self.ss.oracle is not None else None,
         )

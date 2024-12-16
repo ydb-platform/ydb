@@ -47,7 +47,8 @@ IDqOutputConsumer::TPtr CreateOutputMapConsumer(IDqOutput::TPtr output);
 IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<IDqOutput::TPtr>&& outputs,
     TVector<TColumnInfo>&& keyColumns, const  NKikimr::NMiniKQL::TType* outputType,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory);
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    TMaybe<ui8> minFillPercentage);
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth);
 

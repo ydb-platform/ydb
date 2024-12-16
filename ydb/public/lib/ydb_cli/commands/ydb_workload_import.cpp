@@ -1,5 +1,5 @@
 #include "ydb_workload_import.h"
-#include <ydb/core/io_formats/arrow/table/table.h>
+#include <ydb/library/formats/arrow/csv/table/table.h>
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>

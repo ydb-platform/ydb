@@ -274,9 +274,15 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         };
     }
 
-    static std::function<IActor*(void)> WriterFn(const NKikimrReplication::TLocalTableWriterSettings& settings) {
-        return [tablePathId = PathIdFromPathId(settings.GetPathId())]() {
-            return CreateLocalTableWriter(tablePathId);
+    static std::function<IActor*(void)> WriterFn(
+            const NKikimrReplication::TLocalTableWriterSettings& writerSettings,
+            const NKikimrReplication::TConsistencySettings& consistencySettings)
+    {
+        const auto mode = consistencySettings.HasGlobal()
+            ? EWriteMode::Consistent
+            : EWriteMode::Simple;
+        return [tablePathId = PathIdFromPathId(writerSettings.GetPathId()), mode]() {
+            return CreateLocalTableWriter(tablePathId, mode);
         };
     }
 
@@ -317,8 +323,9 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
         const auto& writerSettings = cmd.GetLocalTableWriter();
+        const auto& consistencySettings = cmd.GetConsistencySettings();
         const auto actorId = session.RegisterWorker(this, id,
-            CreateWorker(SelfId(), ReaderFn(readerSettings), WriterFn(writerSettings)));
+            CreateWorker(SelfId(), ReaderFn(readerSettings), WriterFn(writerSettings, consistencySettings)));
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 

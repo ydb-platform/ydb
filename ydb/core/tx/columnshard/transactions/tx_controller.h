@@ -198,6 +198,8 @@ public:
         std::optional<EStatus> Status = EStatus::Created;
 
     private:
+        mutable TAtomicCounter PreparationsStarted = 0;
+
         friend class TTxController;
         virtual bool DoParse(TColumnShard& owner, const TString& data) = 0;
         virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
@@ -215,6 +217,9 @@ public:
             return false;
         }
 
+        virtual bool DoIsInProgress() const {
+            return false;
+        }
         virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* /*owner*/) const {
             return nullptr;
         }
@@ -240,6 +245,10 @@ public:
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
         using OpType = TString;
 
+        bool IsInProgress() const {
+            return DoIsInProgress();
+        }
+
         bool PingTimeout(TColumnShard& owner, const TMonotonic now) {
             return DoPingTimeout(owner, now);
         }
@@ -257,6 +266,13 @@ public:
         }
 
         std::unique_ptr<NTabletFlatExecutor::ITransaction> BuildTxPrepareForProgress(TColumnShard* owner) const {
+            if (!IsInProgress()) {
+                return nullptr;
+            }
+            if (PreparationsStarted.Val()) {
+                return nullptr;
+            }
+            PreparationsStarted.Inc();
             return DoBuildTxPrepareForProgress(owner);
         }
 

@@ -78,6 +78,7 @@ public:
         bool Retriable = false;
         bool Truncated = false;
         ui64 RowsCount = 0;
+        bool Timeout = false;
 
         TOperationStatistics Statistics;
 

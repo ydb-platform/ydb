@@ -223,6 +223,20 @@ namespace NFake {
             return new TEvBlobStorage::TEvBlockResult(status);
         }
 
+        TEvBlobStorage::TEvGetBlockResult* Handle(TEvBlobStorage::TEvGetBlock *msg) {
+            NKikimrProto::EReplyStatus status = NKikimrProto::OK;
+            ui32 generation = 0;
+
+            auto it = Blocks.find(msg->TabletId);
+            if (it != Blocks.end()) {
+                generation = it->second;
+            } else {
+                status = NKikimrProto::NODATA;
+            }
+
+            return new TEvBlobStorage::TEvGetBlockResult(status, msg->TabletId, generation);
+        }
+
         TEvBlobStorage::TEvDiscoverResult* Handle(TEvBlobStorage::TEvDiscover *msg) {
             ui32 blockedGeneration = 0;
             if (msg->DiscoverBlockedGeneration) {

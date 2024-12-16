@@ -714,8 +714,9 @@ void TPDisk::ProcessLogWriteQueue() {
         TVector<TLogWrite*> commits;
         commits.reserve(JointLogWrites.size());
         size_t batchSizeBytes = 0;
-        for (; JointLogWrites.size(); JointLogWrites.pop()) {
+        while (JointLogWrites.size()) {
             auto *log = static_cast<TLogWrite*>(JointLogWrites.front());
+            JointLogWrites.pop();
 
             logWrites.push_back(log);
             batchSizeBytes += log->Data.Size();

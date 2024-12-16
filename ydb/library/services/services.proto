@@ -52,6 +52,7 @@ enum EServiceKikimr {
     BS_VDISK_DEFRAG = 346;
     BS_PROXY_ASSIMILATE = 347;
     BS_VDISK_BALANCING = 2600;
+    BS_PROXY_GETBLOCK = 2601;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -301,6 +302,7 @@ enum EServiceKikimr {
     TX_COLUMNSHARD_ACTUALIZATION = 850;
     TX_COLUMNSHARD_COMPACTION = 851;
     TX_COLUMNSHARD_WRITE = 852;
+    TX_COLUMNSHARD_TX = 853;
 
     // System views
     SYSTEM_VIEWS = 900;
@@ -1068,5 +1070,6 @@ message TActivity {
         RESHUFFLE_KMEANS_SCAN_ACTOR = 650;
         FEATURE_FLAGS_CONFIGURATOR = 651;
         DATASHARD_READ_SCAN = 652;
+        BS_GROUP_GETBLOCK = 653;
     };
 };

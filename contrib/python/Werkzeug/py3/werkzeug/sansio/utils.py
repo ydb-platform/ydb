@@ -140,3 +140,26 @@ def get_current_url(
         url.append(url_quote(query_string, safe=":&%=+$!*'(),"))
 
     return uri_to_iri("".join(url))
+
+
+def get_content_length(
+    http_content_length: t.Union[str, None] = None,
+    http_transfer_encoding: t.Union[str, None] = "",
+) -> t.Optional[int]:
+    """Returns the content length as an integer or ``None`` if
+    unavailable or chunked transfer encoding is used.
+
+    :param http_content_length: The Content-Length HTTP header.
+    :param http_transfer_encoding: The Transfer-Encoding HTTP header.
+
+    .. versionadded:: 2.2
+    """
+    if http_transfer_encoding == "chunked":
+        return None
+
+    if http_content_length is not None:
+        try:
+            return max(0, int(http_content_length))
+        except (ValueError, TypeError):
+            pass
+    return None

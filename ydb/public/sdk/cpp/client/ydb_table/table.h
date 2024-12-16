@@ -389,6 +389,7 @@ public:
     const std::optional<TInitialScanProgress>& GetInitialScanProgress() const;
 
     void SerializeTo(Ydb::Table::Changefeed& proto) const;
+    void SerializeTo(Ydb::Table::ChangefeedDescription& proto) const;
     TString ToString() const;
     void Out(IOutputStream& o) const;
 
@@ -398,6 +399,9 @@ private:
 
     template <typename TProto>
     static TChangefeedDescription FromProto(const TProto& proto);
+
+    template <typename TProto>
+    void SerializeCommonFields(TProto& proto) const;
 
 private:
     TString Name_;

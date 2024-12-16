@@ -59,7 +59,7 @@ struct TNfaSetup {
         for (auto& d: Defines) {
             defines.push_back(d);
         }
-        return TNfa(transitionGraph, MatchedVars, defines);
+        return TNfa(transitionGraph, MatchedVars, defines, TAfterMatchSkipTo{EAfterMatchSkipTo::PastLastRow, ""});
     }
 
     TComputationNodeFactory GetAuxCallableFactory() {
@@ -261,8 +261,8 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
                 Iota(expectedTo.begin(), expectedTo.end(), i - seriesLength + 1);
                 for (size_t matchCount = 0; matchCount < seriesLength; ++matchCount) {
                     auto match = setup.Nfa.GetMatched();
-                    UNIT_ASSERT_C(match.has_value(), i);
-                    auto vars = match.value();
+                    UNIT_ASSERT_C(match, i);
+                    auto vars = match->Vars;
                     UNIT_ASSERT_VALUES_EQUAL_C(1, vars.size(), i);
                     auto var = vars[0];
                     UNIT_ASSERT_VALUES_EQUAL_C(1, var.size(), i);

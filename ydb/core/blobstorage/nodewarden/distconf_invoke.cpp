@@ -160,8 +160,8 @@ namespace NKikimr::NStorage {
                 case TQuery::kReplaceStorageConfig:
                     return ReplaceStorageConfig(record.GetReplaceStorageConfig().GetYAML());
 
-                case TQuery::kBootstrap:
-                    return DoBootstrap(record.GetBootstrap().GetSelfAssemblyUUID());
+                case TQuery::kBootstrapCluster:
+                    return BootstrapCluster(record.GetBootstrapCluster().GetSelfAssemblyUUID());
 
                 case TQuery::REQUEST_NOT_SET:
                     return FinishWithError(TResult::ERROR, "Request field not set");
@@ -670,7 +670,7 @@ namespace NKikimr::NStorage {
             StartProposition(&config);
         }
 
-        void DoBootstrap(const TString& selfAssemblyUUID) {
+        void BootstrapCluster(const TString& selfAssemblyUUID) {
             if (!RunCommonChecks()) {
                 return;
             } else if (Self->StorageConfig->GetGeneration()) {
@@ -679,6 +679,8 @@ namespace NKikimr::NStorage {
                 } else {
                     return FinishWithError(TResult::ERROR, "bootstrap on already bootstrapped cluster");
                 }
+            } else if (!selfAssemblyUUID) {
+                return FinishWithError(TResult::ERROR, "SelfAssemblyUUID can't be empty");
             }
 
             const ERootState prevState = std::exchange(Self->RootState, ERootState::IN_PROGRESS);
@@ -765,6 +767,8 @@ namespace NKikimr::NStorage {
             auto *propose = task.MutableProposeStorageConfig();
             propose->MutableConfig()->CopyFrom(*Self->CurrentProposedStorageConfig);
             IssueScatterTask(std::move(task), done);
+
+            Self->RootState = ERootState::IN_PROGRESS; // forbid any concurrent activity
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

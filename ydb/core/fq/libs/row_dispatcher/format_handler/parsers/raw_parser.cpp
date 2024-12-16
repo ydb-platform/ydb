@@ -17,8 +17,8 @@ public:
     using TPtr = TIntrusivePtr<TRawParser>;
 
 public:
-    TRawParser(IParsedDataConsumer::TPtr consumer, const TSchemaColumn& schema)
-        : TBase(std::move(consumer), __LOCATION__)
+    TRawParser(IParsedDataConsumer::TPtr consumer, const TSchemaColumn& schema, const TCountersDesc& counters)
+        : TBase(std::move(consumer), __LOCATION__, counters)
         , Schema(schema)
         , LogPrefix("TRawParser: ")
     {}
@@ -108,13 +108,13 @@ private:
 
 }  // anonymous namespace
 
-TValueStatus<ITopicParser::TPtr> CreateRawParser(IParsedDataConsumer::TPtr consumer) {
+TValueStatus<ITopicParser::TPtr> CreateRawParser(IParsedDataConsumer::TPtr consumer, const TCountersDesc& counters) {
     const auto& columns = consumer->GetColumns();
     if (columns.size() != 1) {
         return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Expected only one column for raw format, but got " << columns.size());
     }
 
-    TRawParser::TPtr parser = MakeIntrusive<TRawParser>(consumer, columns[0]);
+    TRawParser::TPtr parser = MakeIntrusive<TRawParser>(consumer, columns[0], counters);
     if (auto status = parser->InitColumnParser(); status.IsFail()) {
         return status.AddParentIssue(TStringBuilder() << "Failed to create raw parser for column " << columns[0].ToString());
     }

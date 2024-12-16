@@ -5,7 +5,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
-ydb/core/blobstorage/ut_mirror3of4 Mirror3of4.ReplicationSmall
 ydb/core/blobstorage/ut_vdisk TBsLocalRecovery.WriteRestartReadHugeDecreased
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
@@ -18,6 +17,7 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
+ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.Select
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWrite
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertViaLegacyScripting-Streaming
@@ -69,24 +69,14 @@ ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlter-PQConfigTr
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlterDropPqGroupWithReboots-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
-ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-false
 ydb/core/viewer/ut Viewer.TabletMerging
 ydb/core/viewer/ut Viewer.TabletMergingPacked
-ydb/core/viewer/ut Viewer.TenantInfo5kkTablets
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole chunk chunk
 ydb/library/actors/http/ut sole+chunk+chunk
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_non_nullable_NATIVE-dqrun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[primitives-dqrun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[primitives-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[primitives-dqrun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[primitives-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[PRIMITIVES-dqrun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[primitive_types-dqrun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_asterisk-dqrun]
-ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1_HTTP-dqrun]
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*] chunk chunk
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*]+chunk+chunk
 ydb/services/datastreams/ut DataStreams.TestPutRecordsCornerCases
@@ -141,6 +131,7 @@ ydb/tests/fq/yt/kqp_yt_file/part18 test.py.test[pg-join_brackets2-default.txt]
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
+ydb/tests/functional/serializable sole chunk chunk
 ydb/tests/functional/serializable test.py.test_local
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]

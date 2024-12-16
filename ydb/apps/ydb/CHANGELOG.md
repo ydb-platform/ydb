@@ -1,7 +1,9 @@
+* Use QueryService by default (`--executer generic`) in `ydb workload kv` and `ydb workload stock` commands
 * Use parquet format instead of CSV to fill tables in `ydb workload` benchmarks
 * Made `--consumer` flag in `ydb topic read` command optional. Now if this flag is not specified, reading is performed in no-consumer mode. In this mode partition IDs should be specified with `--partition-ids` option. 
 * Fixed a bug in `ydb import file csv` where multiple columns with escaped quotes in the same row were parsed incorrectly
 * Truncate query results output in benchmarks
+* Added `ydb admin cluster bootstrap` command to bootstrap automatically configured cluster
 
 ## 2.17.0 ##
 

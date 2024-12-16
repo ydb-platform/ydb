@@ -44,7 +44,7 @@ namespace NKikimr {
 namespace NKikimrReplication {
     class TOAuthToken;
     class TStaticCredentials;
-    class TReplicationConfig_TStrongConsistency;
+    class TConsistencySettings_TGlobalConsistency;
 }
 
 namespace NYql {
@@ -797,12 +797,12 @@ struct TReplicationSettings {
         void Serialize(NKikimrReplication::TStaticCredentials& proto) const;
     };
 
-    struct TWeakConsistency {};
+    struct TRowConsistency {};
 
-    struct TStrongConsistency {
+    struct TGlobalConsistency {
         TDuration CommitInterval;
 
-        void Serialize(NKikimrReplication::TReplicationConfig_TStrongConsistency& proto) const;
+        void Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const;
     };
 
     TMaybe<TString> ConnectionString;
@@ -810,8 +810,8 @@ struct TReplicationSettings {
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
-    TMaybe<TWeakConsistency> WeakConsistency;
-    TMaybe<TStrongConsistency> StrongConsistency;
+    TMaybe<TRowConsistency> RowConsistency;
+    TMaybe<TGlobalConsistency> GlobalConsistency;
     TMaybe<TStateDone> StateDone;
 
     TOAuthToken& EnsureOAuthToken() {
@@ -830,20 +830,20 @@ struct TReplicationSettings {
         return *StaticCredentials;
     }
 
-    TWeakConsistency& EnsureWeakConsistency() {
-        if (!WeakConsistency) {
-            WeakConsistency = TWeakConsistency();
+    TRowConsistency& EnsureRowConsistency() {
+        if (!RowConsistency) {
+            RowConsistency = TRowConsistency();
         }
 
-        return *WeakConsistency;
+        return *RowConsistency;
     }
 
-    TStrongConsistency& EnsureStrongConsistency() {
-        if (!StrongConsistency) {
-            StrongConsistency = TStrongConsistency();
+    TGlobalConsistency& EnsureGlobalConsistency() {
+        if (!GlobalConsistency) {
+            GlobalConsistency = TGlobalConsistency();
         }
 
-        return *StrongConsistency;
+        return *GlobalConsistency;
     }
 
     using EFailoverMode = TStateDone::EFailoverMode;

@@ -128,18 +128,13 @@ private:
     }
 
     static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
-                                       const TPath& dstPath,
-                                       const TString& acl) {
+                                       const TPath& dstPath) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()
             .FailOnWrongType(TPathElement::EPathType::EPathTypeExternalTable)
-            .IsValidLeafName()
-            .DepthLimit()
-            .PathsLimit()
-            .DirChildrenLimit()
-            .IsValidACL(acl);
+            ;
 
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
@@ -272,13 +267,9 @@ private:
         const TExternalDataSourceInfo::TPtr& externalDataSource,
         const TPathId& oldExternalDataSourcePathId,
         const TExternalDataSourceInfo::TPtr& oldExternalDataSource,
-        const TString& acl,
         bool isSameDataSource) const {
         context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
 
-        if (!acl.empty()) {
-            externalTable->ApplyACL(acl);
-        }
         context.SS->PersistPath(db, externalTable->PathId);
 
         if (!isSameDataSource) {
@@ -325,9 +316,8 @@ public:
         const auto parentPath = TPath::Resolve(parentPathStr, context.SS);
         RETURN_RESULT_UNLESS(NExternalTable::IsParentPathValid(result, parentPath));
 
-        const TString acl = Transaction.GetModifyACL().GetDiffACL();
-        TPath dstPath = parentPath.Child(name);
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl));
+        TPath dstPath     = parentPath.Child(name);
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath));
 
         const auto dataSourcePath =
             TPath::Resolve(externalTableDescription.GetDataSourcePath(), context.SS);
@@ -392,7 +382,7 @@ public:
 
         PersistExternalTable(context, db, externalTable, externalTableInfo, oldExternalTableInfo,
                              dataSourcePath->PathId, externalDataSource,
-                             OldDataSourcePathId, oldDataSource, acl,
+                             OldDataSourcePathId, oldDataSource,
                              IsSameDataSource);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,

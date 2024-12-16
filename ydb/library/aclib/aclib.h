@@ -118,6 +118,7 @@ public:
     std::pair<ui32, ui32> RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
     std::pair<ui32, ui32> RemoveAccess(const NACLibProto::TACE& filter);
     bool RemoveAccess(const NACLib::TSID& sid);
+    bool HasAccess(const NACLib::TSID& sid);
     std::pair<ui32, ui32> ClearAccess();
     std::pair<ui32, ui32> ApplyDiff(const NACLibProto::TDiffACL& diffACL);
     NACLibProto::TACL GetImmediateACL() const;

@@ -225,8 +225,10 @@ public:
                     context.OnComplete.PublishToSchemeBoard(OperationId, parent->PathId);
                 }
             }
-            // TODO: publish only changed paths
-            context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+            NACLib::TACL effectiveACL(path->CachedEffectiveACL.GetForSelf());
+            if (effectiveACL.HasAccess(user)) {
+                context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+            }
         }
 
         context.OnComplete.UpdateTenants(std::move(subTree));

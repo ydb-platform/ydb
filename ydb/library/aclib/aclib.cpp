@@ -395,6 +395,16 @@ bool TACL::RemoveAccess(const NACLib::TSID& sid) {
     return true;
 }
 
+bool TACL::HasAccess(const NACLib::TSID& sid) {
+    for (const auto& ace : GetACE()) {
+        if (ace.GetSID() == sid) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
 void TACL::SortACL() {
     Sort(*(MutableACE()), [](const NACLibProto::TACE& a, const NACLibProto::TACE& b) -> bool { return a.GetAccessType() < b.GetAccessType(); });
 }

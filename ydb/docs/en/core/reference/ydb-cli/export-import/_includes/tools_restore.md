@@ -35,7 +35,7 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 
 `--save-partial-result`: Save the partial import result. If disabled, an import error results in reverting to the database state before the import.
 
-`--import-data`: Use ImportData – a more efficient way to upload data than the default one. This method sends data to the server partitioned by client and in a lighter format. However, it will return an error when attempting to restore into an existing table that already has secondary indexes or is in the process of building them. Therefore, if you need to restore a table with secondary indexes, make sure they're not already present in the scheme (for example, using `[ydb yscheme ls](https://ydb.tech/docs/en/reference/ydb-cli/commands/scheme-ls)` command). By default ImportData is disabled.
+`--import-data`: Use ImportData – a more efficient way to upload data than the default one. This method sends data to the server partitioned by client and in a lighter format. However, it will return an error when attempting to restore into an existing table that already has secondary indexes or is in the process of building them. Therefore, if you need to restore a table with secondary indexes, make sure they're not already present in the scheme (for example, using [`ydb yscheme ls`](https://ydb.tech/docs/en/reference/ydb-cli/commands/scheme-ls) command). By default ImportData is disabled.
 
 ### Workload restriction parameters {#limiters}
 

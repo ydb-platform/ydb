@@ -17,23 +17,20 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
         }
     }
 
-    // TODO: enable b-tree index after benchmarks
-    mixedIndex = true;
-
     return mixedIndex
         ? BuildStatsMixedIndex(subset, stats, rowCountResolution, dataSizeResolution, env, yieldHandler)
         : BuildStatsBTreeIndex(subset, stats, histogramBucketsCount, env, yieldHandler);
 }
 
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners) {
-    for (auto& pi : subset.Flatten) {
-        partOwners.insert(pi->Label.TabletID());
+    for (const auto& partView : subset.Flatten) {
+        partOwners.insert(partView->Label.TabletID());
     }
-    for (auto& pi : subset.ColdParts) {
-        partOwners.insert(pi->Label.TabletID());
+    for (const auto& coldPart : subset.ColdParts) {
+        partOwners.insert(coldPart->Label.TabletID());
     }
-    for (auto& pi : subset.TxStatus) {
-        partOwners.insert(pi->Label.TabletID());
+    for (const auto& txStatus : subset.TxStatus) {
+        partOwners.insert(txStatus->Label.TabletID());
     }
 }
 

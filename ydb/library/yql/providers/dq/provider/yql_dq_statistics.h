@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 #include <util/generic/ptr.h>
 

@@ -1,0 +1,45 @@
+commit a46378f35d88b65b816774a43196ac9862692071
+author: dldmitry
+date: 2016-04-27T13:25:03+03:00
+revision: 2291017
+
+    libevent: don't use ADDRCONFIG
+    __BYPASS_CHECKS__
+
+--- libevent/http.c	(index)
++++ libevent/http.c	(working tree)
+@@ -4424,12 +4424,33 @@ make_addrinfo(const char *address, ev_uint16_t port)
+ 	char strport[NI_MAXSERV];
+ 	int ai_result;
+
++	static const char* names[] = {
++		"127.0.0.1",
++		"::1",
++		"localhost",
++		"localhost.localdomain",
++		"localhost6",
++		"localhost6.localdomain6",
++		NULL
++	};
++	const char **name_ptr = names;
++	int name_exists = 0;
++
+ 	memset(&hints, 0, sizeof(hints));
+ 	hints.ai_family = AF_UNSPEC;
+ 	hints.ai_socktype = SOCK_STREAM;
+ 	/* turn NULL hostname into INADDR_ANY, and skip looking up any address
+ 	 * types we don't have an interface to connect to. */
+-	hints.ai_flags = EVUTIL_AI_PASSIVE|EVUTIL_AI_ADDRCONFIG;
++	hints.ai_flags = EVUTIL_AI_PASSIVE;
++	while (*name_ptr) {
++	    const char* tmp = *name_ptr++;
++	    if (evutil_ascii_strcasecmp(tmp, address) == 0) {
++	        name_exists = 1;
++	        break;
++	    }
++	}
++	if (!name_exists)
++	    hints.ai_flags |= EVUTIL_AI_ADDRCONFIG;
+ 	evutil_snprintf(strport, sizeof(strport), "%d", port);
+ 	if ((ai_result = evutil_getaddrinfo(address, strport, &hints, &ai))
+ 	    != 0) {

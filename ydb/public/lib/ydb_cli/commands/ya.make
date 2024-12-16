@@ -1,8 +1,6 @@
 LIBRARY(clicommands)
 
 SRCS(
-    interactive/interactive_cli.cpp
-    interactive/line_reader.cpp
     benchmark_utils.cpp
     topic_operations_scenario.cpp
     topic_read_scenario.cpp
@@ -11,8 +9,10 @@ SRCS(
     query_workload.cpp
     ydb_admin.cpp
     ydb_benchmark.cpp
-    ydb_sdk_core_access.cpp
+    ydb_cluster.cpp
+    ydb_debug.cpp
     ydb_dynamic_config.cpp
+    ydb_ping.cpp
     ydb_profile.cpp
     ydb_root_common.cpp
     ydb_service_auth.cpp
@@ -25,6 +25,7 @@ SRCS(
     ydb_service_topic.cpp
     ydb_service_table.cpp
     ydb_sql.cpp
+    ydb_storage_config.cpp
     ydb_tools.cpp
     ydb_workload.cpp
     ydb_workload_import.cpp
@@ -33,26 +34,31 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
-    contrib/restricted/patched/replxx
     library/cpp/histogram/hdr
     library/cpp/protobuf/json
     library/cpp/regex/pcre
     library/cpp/threading/local_executor
     ydb/library/backup
+    ydb/library/formats/arrow/csv/table
     ydb/library/workload
     ydb/library/yaml_config/public
     ydb/public/lib/operation_id
     ydb/public/lib/stat_visualization
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/commands/command_base
+    ydb/public/lib/ydb_cli/commands/interactive
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
     ydb/public/lib/ydb_cli/commands/ydb_discovery
+    ydb/public/lib/ydb_cli/commands/sdk_core_access
     ydb/public/lib/ydb_cli/dump
+    ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/import
     ydb/public/lib/ydb_cli/topic
     ydb/public/sdk/cpp/client/draft
+    ydb/public/sdk/cpp/client/ydb_bsconfig
     ydb/public/sdk/cpp/client/ydb_coordination
+    ydb/public/sdk/cpp/client/ydb_debug
     ydb/public/sdk/cpp/client/ydb_export
     ydb/public/sdk/cpp/client/ydb_import
     ydb/public/sdk/cpp/client/ydb_monitoring
@@ -65,8 +71,15 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_types/credentials/login
 )
 
+GENERATE_ENUM_SERIALIZATION(ydb_ping.h)
+
 END()
 
-RECURSE_FOR_TESTS(
-    topic_workload/ut
+RECURSE(
+    command_base
+    interactive
+    sdk_core_access
+    topic_workload
+    transfer_workload
+    ydb_discovery
 )

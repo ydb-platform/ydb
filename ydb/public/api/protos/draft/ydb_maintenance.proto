@@ -161,12 +161,15 @@ message ActionState {
         ACTION_REASON_WRONG_REQUEST = 6;
         // Too many unavailable nodes with system tablets.
         ACTION_REASON_SYS_TABLETS_NODE_LIMIT_REACHED = 7;
+        // Generic reason.
+        ACTION_REASON_GENERIC = 8;
     }
 
     Action action = 1;
     ActionUid action_uid = 2;
     ActionStatus status = 3;
     ActionReason reason = 4;
+    string reason_details = 6;
     google.protobuf.Timestamp deadline = 5;
 }
 

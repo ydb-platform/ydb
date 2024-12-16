@@ -3,30 +3,35 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/pool_stats_collector.h>
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/mon/async_http_mon.h>
 #include <ydb/core/mon_alloc/profiler.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tablet/tablet_impl.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
+#include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 /**** ACHTUNG: Do not make here any new dependecies on kikimr ****/
 
 namespace NActors {
 
     void TTestActorRuntime::TNodeData::Stop() {
-        TNodeDataBase::Stop();
         if (Mon) {
             Mon->Stop();
         }
+        TNodeDataBase::Stop();
     }
 
     TTestActorRuntime::TNodeData::~TNodeData() {
@@ -41,6 +46,15 @@ namespace NActors {
         SetScheduledEventFilter(&TTestActorRuntime::DefaultScheduledFilterFunc);
         NodeFactory = MakeHolder<TNodeFactory>();
         InitNodes();
+    }
+
+    void TTestActorRuntime::SetupStatsCollectors() {
+        NeedStatsCollectors = true;
+    }
+
+    void TTestActorRuntime::SetupActorSystemConfig(const TActorSystemSetupConfig& config, const TActorSystemPools& pools) {
+        ActorSystemSetupConfig = config;
+        ActorSystemPools = pools;
     }
 
     TTestActorRuntime::TTestActorRuntime(THeSingleSystemEnv d)
@@ -88,6 +102,9 @@ namespace NActors {
         SetRegistrationObserverFunc(&TTestActorRuntimeBase::DefaultRegistrationObserver);
 
         CleanupNodes();
+
+        App0 = nullptr;
+        NKikimr::NJaegerTracing::ClearTracingControl();
     }
 
     void TTestActorRuntime::AddAppDataInit(std::function<void(ui32, NKikimr::TAppData&)> callback) {
@@ -125,7 +142,7 @@ namespace NActors {
                 node->ActorSystem = MakeActorSystem(nodeIndex, node);
                 node->ExecutorThread.Reset(new TExecutorThread(0, 0, node->ActorSystem.Get(), node->SchedulerPool.Get(), node->MailboxTable.Get(), "TestExecutor"));
             } else {
-                node->AppData0.reset(new NKikimr::TAppData(0, 1, 2, 3, { }, app0->TypeRegistry, app0->FunctionRegistry, app0->FormatFactory, nullptr));
+                node->AppData0.reset(new NKikimr::TAppData(ActorSystemPools.SystemPoolId, ActorSystemPools.UserPoolId, ActorSystemPools.IOPoolId, ActorSystemPools.BatchPoolId, ActorSystemPools.ServicePools, app0->TypeRegistry, app0->FunctionRegistry, app0->FormatFactory, nullptr));
                 node->ActorSystem = MakeActorSystem(nodeIndex, node);
             }
             node->LogSettings->MessagePrefix = " node " + ToString(nodeId);
@@ -143,7 +160,7 @@ namespace NActors {
             nodeAppData->PQConfig = app0->PQConfig;
             nodeAppData->NetClassifierConfig.CopyFrom(app0->NetClassifierConfig);
             nodeAppData->EnableKqpSpilling = app0->EnableKqpSpilling;
-            nodeAppData->FeatureFlags = app0->FeatureFlags;
+            nodeAppData->InitFeatureFlags(app0->FeatureFlags);
             nodeAppData->CompactionConfig = app0->CompactionConfig;
             nodeAppData->HiveConfig.SetWarmUpBootWaitingPeriod(10);
             nodeAppData->HiveConfig.SetMaxNodeUsageToKick(100);
@@ -212,7 +229,26 @@ namespace NActors {
         return MonPorts[nodeIndex];
     }
 
-    void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& /*setup*/) {
+    void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) {
+        if (ActorSystemSetupConfig) {
+            setup.Executors.Reset();
+            setup.ExecutorsCount = 0;
+
+            setup.CpuManager = ActorSystemSetupConfig->CpuManagerConfig;
+            setup.MonitorStuckActors = ActorSystemSetupConfig->MonitorStuckActors;
+
+            auto schedulerConfig = ActorSystemSetupConfig->SchedulerConfig;
+            schedulerConfig.MonCounters = NKikimr::GetServiceCounters(node->DynamicCounters, "utils");
+            setup.Scheduler.Reset(CreateSchedulerThread(schedulerConfig));
+        }
+
+        if (NeedMonitoring && NeedStatsCollectors) {
+            NActors::IActor* statsCollector = NKikimr::CreateStatsCollector(1, setup, node->DynamicCounters);
+            setup.LocalServices.push_back({
+                TActorId(),
+                NActors::TActorSetupCmd(statsCollector, NActors::TMailboxType::HTSwap, node->GetAppData<NKikimr::TAppData>()->SystemPoolId)
+            });
+        }
     }
 
     NKikimr::TAppData& TTestActorRuntime::GetAppData(ui32 nodeIndex) {

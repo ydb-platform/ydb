@@ -29,4 +29,7 @@ message TCommonConfig {
     bool KeepInternalErrors = 13;
     bool UseNativeProtocolForClickHouse = 14;
     bool DisableSslForGenericDataSources = 15;
+    bool ShowQueryTimeline = 16;
+    uint64 MaxQueryTimelineSize = 17; // default: 200KB
+    string PqReconnectPeriod = 18; // default: disabled
 }

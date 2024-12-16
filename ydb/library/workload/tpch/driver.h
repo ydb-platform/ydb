@@ -1,7 +1,6 @@
 extern "C" {
 
 #define VECTORWISE
-#define LINUX
 #define TPCH
 #define RNG_TEST
 

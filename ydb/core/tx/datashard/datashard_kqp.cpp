@@ -13,6 +13,7 @@
 #include <ydb/core/protos/kqp_stats.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 
 #include <util/generic/size_literals.h>
@@ -503,8 +504,8 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
                         const size_t outputDataSize = serialized.Size();
                         *outputData = std::move(serialized.Proto);
                         outputData->ClearPayloadId();
-                        if (!serialized.Payload.IsEmpty()) {
-                            outputData->SetPayloadId(dataEv->AddPayload(std::move(serialized.Payload)));
+                        if (!serialized.Payload.Empty()) {
+                            outputData->SetPayloadId(dataEv->AddPayload(NYql::MakeReadOnlyRope(std::move(serialized.Payload))));
                         }
                         dataEv->Record.MutableChannelData()->SetFinished(fetchStatus == NUdf::EFetchStatus::Finish);
                         if (outputDataSize > MaxDatashardReplySize) {
@@ -1001,7 +1002,7 @@ namespace {
 class TKqpTaskRunnerExecutionContext: public NDq::IDqTaskRunnerExecutionContext {
 public:
     NDq::IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory, TVector<NDq::IDqOutput::TPtr>&& outputs) const override {
-        return NKqp::KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, holderFactory, std::move(outputs));
+        return NKqp::KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, holderFactory, std::move(outputs), {});
     }
 
     NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */) const override {
@@ -1012,7 +1013,15 @@ public:
         return {};
     }
 
-    std::function<void()> GetWakeupCallback() const override {
+    NDq::TWakeUpCallback GetWakeupCallback() const override {
+        return {};
+    }
+
+    NDq::TErrorCallback GetErrorCallback() const override {
+        return {};
+    }
+
+    TIntrusivePtr<NDq::TSpillingTaskCounters> GetSpillingTaskCounters() const override {
         return {};
     }
 

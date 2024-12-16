@@ -1,7 +1,7 @@
 #pragma once
 #include "settings.h"
 
-#include <ydb/library/yql/core/pg_settings/guc_settings.h>
+#include <yql/essentials/core/pg_settings/guc_settings.h>
 
 #include <util/generic/string.h>
 
@@ -13,6 +13,7 @@ namespace NKikimr::NKqp {
 struct TKqpQueryId {
     TString Cluster;
     TString Database;
+    TString DatabaseId;
     TString UserSid;
     TString Text;
     TKqpQuerySettings Settings;
@@ -21,7 +22,7 @@ struct TKqpQueryId {
     TGUCSettings GUCSettings;
 
 public:
-    TKqpQueryId(const TString& cluster, const TString& database, const TString& text,
+    TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& text,
         const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
         const TGUCSettings& gUCSettings);
 
@@ -44,6 +45,8 @@ public:
             GUCSettings.GetHash());
         return THash<decltype(tuple)>()(tuple);
     }
+
+    TString SerializeToString() const;
 };
 } // namespace NKikimr::NKqp
 

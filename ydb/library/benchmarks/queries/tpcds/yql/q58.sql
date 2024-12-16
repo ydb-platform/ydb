@@ -3,7 +3,7 @@
 -- NB: Subquerys
 $week_seq = (select d_week_seq
                                       from {{date_dim}} as date_dim
-                                      where cast(d_date as date) = cast('1998-02-21' as date));
+                                      where cast(d_date as date) = cast('2000-01-03' as date));
 $ss_items =
  (select item.i_item_id item_id
         ,sum(ss_ext_sales_price) ss_item_rev
@@ -58,7 +58,7 @@ $ws_items =
    and cs_item_rev between $z0_9_35 * ws_item_rev and $z1_1_35 * ws_item_rev
    and ws_item_rev between $z0_9_35 * ss_item_rev and $z1_1_35 * ss_item_rev
    and ws_item_rev between $z0_9_35 * cs_item_rev and $z1_1_35 * cs_item_rev
- order by item_id
+ order by ss_items.item_id
          ,ss_item_rev
  limit 100;
 

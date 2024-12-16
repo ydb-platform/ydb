@@ -1,0 +1,4 @@
+requirements:
+  - contrib/libs/yaml
+mark_as_cython_c:
+  - yaml/_yaml.pyx

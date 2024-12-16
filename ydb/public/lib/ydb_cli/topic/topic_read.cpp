@@ -283,6 +283,16 @@ namespace NYdb::NConsoleClient {
         return EXIT_SUCCESS;
     }
 
+    int TTopicReader::HandleEndPartitionSessionEvent(NTopic::TReadSessionEvent::TEndPartitionSessionEvent *event) {
+        if (!HasSession(event->GetPartitionSession()->GetPartitionSessionId())) {
+            return EXIT_SUCCESS;
+        }
+
+        event->Confirm();
+
+        return EXIT_SUCCESS;
+    }
+
     int TTopicReader::HandleEvent(NYdb::NTopic::TReadSessionEvent::TEvent& event, IOutputStream& output) {
         if (auto* dataEvent = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
             return HandleDataReceivedEvent(dataEvent, output);
@@ -292,10 +302,12 @@ namespace NYdb::NConsoleClient {
             return HandleCommitOffsetAcknowledgementEvent(commitEvent);
         } else if (auto* partitionStatusEvent = std::get_if<NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&event)) {
             return HandlePartitionSessionStatusEvent(partitionStatusEvent);
-        } else if (auto* stopPartitionSessionEvent = std::get_if<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) { 
+        } else if (auto* stopPartitionSessionEvent = std::get_if<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
             return HandleStopPartitionSessionEvent(stopPartitionSessionEvent);
         } else if (auto* partitionSessionClosedEvent = std::get_if<NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&event)) {
             return HandlePartitionSessionClosedEvent(partitionSessionClosedEvent);
+        } else if (auto* endPartitionSessionEvent = std::get_if<NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&event)) {
+            return HandleEndPartitionSessionEvent(endPartitionSessionEvent);
         } else if (auto* sessionClosedEvent = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
             ThrowOnError(*sessionClosedEvent);
             return 1;

@@ -90,7 +90,6 @@ JOIN_SRCS(
     generic/buffer.cpp
     generic/cast.cpp
     generic/deque.cpp
-    generic/enum_range.cpp
     generic/explicit_type.cpp
     generic/fastqueue.cpp
     generic/flags.cpp
@@ -249,6 +248,10 @@ IF (TSTRING_IS_STD_STRING)
     CFLAGS(GLOBAL -DTSTRING_IS_STD_STRING)
 ENDIF()
 
+IF (NO_CUSTOM_CHAR_PTR_STD_COMPARATOR)
+    CFLAGS(GLOBAL -DNO_CUSTOM_CHAR_PTR_STD_COMPARATOR)
+ENDIF()
+
 JOIN_SRCS(
     all_system_1.cpp
     system/atexit.cpp
@@ -390,6 +393,21 @@ JOIN_SRCS(
     thread/lfstack.cpp
     thread/pool.cpp
     thread/singleton.cpp
+)
+
+HEADERS(
+    datetime
+    digest
+    folder
+    generic
+    memory
+    network
+    random
+    stream
+    string
+    system
+    thread
+    EXCLUDE **/*_ut.h
 )
 
 END()

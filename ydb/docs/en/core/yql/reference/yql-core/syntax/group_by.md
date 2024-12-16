@@ -1,8 +1,3 @@
----
-title: "Overview of the GROUP BY operator in {{ ydb-full-name }}"
-description: "The article describes which functions are used with the GROUP BY operator in {{ ydb-full-name }}. We review examples of queries using the GROUP BY operator."
----
-
 {% if select_command == "SELECT STREAM" %}
 
 {% include [x](_includes/group_by/general_stream.md) %}

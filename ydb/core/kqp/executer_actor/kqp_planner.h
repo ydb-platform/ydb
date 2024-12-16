@@ -43,6 +43,8 @@ public:
     struct TArgs {
         TKqpTasksGraph& TasksGraph;
         const ui64 TxId;
+        const TMaybe<ui64> LockTxId;
+        const ui32 LockNodeId;
         const TActorId& Executer;
         const IKqpGateway::TKqpSnapshot& Snapshot;
         const TString& Database;
@@ -64,18 +66,27 @@ public:
         const ui64 OutputChunkMaxSize = 0;
         const TGUCSettings::TPtr GUCSettings;
         const bool MayRunTasksLocally = false;
+        const std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager>& ResourceManager_;
+        const std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory>& CaFactory_;
+        const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
+        const TMaybe<ui8> ArrayBufferMinFillPercentage;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
     bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
     std::unique_ptr<IEventHandle> PlanExecution();
     std::unique_ptr<IEventHandle> AssignTasksToNodes();
+    bool AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state);
+    bool CompletedCA(ui64 taskId, TActorId computeActor);
+    void TaskNotStarted(ui64 taskId);
+    TProgressStat::TEntry CalculateConsumptionUpdate();
+    void ShiftConsumption();
     void Submit();
     ui32 GetCurrentRetryDelay(ui32 requestId);
     void Unsubscribe();
 
-    THashMap<TActorId, TProgressStat>& GetPendingComputeActors();
-    THashSet<ui64>& GetPendingComputeTasks();
+    const THashMap<TActorId, TProgressStat>& GetPendingComputeActors();
+    const THashSet<ui64>& GetPendingComputeTasks();
 
     ui32 GetnScanTasks();
     ui32 GetnComputeTasks();
@@ -83,7 +94,7 @@ public:
 private:
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const;
-    void ExecuteDataComputeTask(ui64 taskId, bool shareMailbox, bool optimizeProtoForLocalExecution);
+    TString ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize);
     void PrepareToProcess();
     TString GetEstimationsInfo() const;
 
@@ -94,6 +105,8 @@ private:
 
 private:
     const ui64 TxId;
+    const TMaybe<ui64> LockTxId;
+    const ui32 LockNodeId;
     const TActorId ExecuterId;
     TVector<ui64> ComputeTasks;
     THashMap<ui64, TVector<ui64>> TasksPerNode;
@@ -128,6 +141,13 @@ private:
     const ui64 OutputChunkMaxSize;
     const TGUCSettings::TPtr GUCSettings;
     const bool MayRunTasksLocally;
+    TString SerializedGUCSettings;
+    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
+    std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
+    TIntrusivePtr<NRm::TTxState> TxInfo;
+    TVector<TProgressStat> LastStats;
+    const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
+    const TMaybe<ui8> ArrayBufferMinFillPercentage;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

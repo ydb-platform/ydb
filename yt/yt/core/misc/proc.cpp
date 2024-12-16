@@ -42,6 +42,7 @@
     #include <unistd.h>
 #endif
 #ifdef _linux_
+    #include <fcntl.h>
     #include <pty.h>
     #include <pwd.h>
     #include <grp.h>
@@ -64,9 +65,9 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Proc");
+namespace {
 
-////////////////////////////////////////////////////////////////////////////////
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Proc");
 
 TString LinuxErrorCodeFormatter(int code)
 {
@@ -74,6 +75,8 @@ TString LinuxErrorCodeFormatter(int code)
 }
 
 YT_DEFINE_ERROR_CODE_RANGE(4200, 4399, "NYT::ELinuxErrorCode", LinuxErrorCodeFormatter);
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -523,6 +526,20 @@ TCgroupMemoryStat GetCgroupMemoryStat(
 #endif
 }
 
+std::optional<i64> GetCgroupAnonymousMemoryLimit(
+    const TString& cgroupPath,
+    const TString& cgroupMountPoint)
+{
+#ifdef _linux_
+    TString path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.anon.limit";
+    auto content = Trim(TUnbufferedFileInput(path).ReadAll(), "\n");
+    return FromString<i64>(content);
+#else
+    Y_UNUSED(cgroupPath, cgroupMountPoint);
+    return {};
+#endif
+}
+
 THashMap<TString, i64> GetVmstat()
 {
 #ifdef _linux_
@@ -935,6 +952,36 @@ void SafeSetPipeCapacity(int fd, int capacity)
     }
 }
 
+bool TryEnableEmptyPipeEpollEvent(TFileDescriptor fd)
+{
+// TODO(arkady-e1ppa): To not waste gpu we swallow an error
+// resulting in a potentially broken behavior.
+// if F_SET_PIPE_WAKE_WRITER is not defined and/or properly
+// implemented we should return false.
+#if defined(_linux_) && defined(F_SET_PIPE_WAKE_WRITER)
+    int res = ::fcntl(fd, F_SET_PIPE_WAKE_WRITER, 1);
+
+    // TODO(arkady-e1ppa): Once kernel version is fresh enough
+    // remove this branch altogether.
+    if (res == -1) {
+        return errno == EINVAL;
+    }
+
+    return res != -1;
+#else
+    Y_UNUSED(fd);
+    return true;
+#endif
+}
+
+void SafeEnableEmptyPipeEpollEvent(TFileDescriptor fd)
+{
+    if (!TryEnableEmptyPipeEpollEvent(fd)) {
+        THROW_ERROR_EXCEPTION("Failed to enable empty pipe epoll event for descriptor %v", fd)
+            << TError::FromSystem();
+    }
+}
+
 bool TrySetUid(int uid)
 {
 #ifdef _linux_
@@ -1199,7 +1246,7 @@ void SendSignal(const std::vector<int>& pids, const TString& signalName)
     auto sig = FindSignalIdBySignalName(signalName);
     for (int pid : pids) {
         if (kill(pid, *sig) != 0 && errno != ESRCH) {
-            THROW_ERROR_EXCEPTION("Unable to kill process %d", pid)
+            THROW_ERROR_EXCEPTION("Unable to kill process %v", pid)
                 << TError::FromSystem();
         }
     }
@@ -1610,7 +1657,7 @@ TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
                 if (fields[0] == "read_bytes:") {
                     TryFromString(fields[1], stat.ReadBytes);
                 } else if (fields[0] == "write_bytes:") {
-                    TryFromString(fields[1], stat.ReadBytes);
+                    TryFromString(fields[1], stat.WriteBytes);
                 }
             }
         } catch (const TSystemError& ex) {

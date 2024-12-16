@@ -13,6 +13,7 @@ namespace NYdb::NConsoleClient {
     TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs);
     TVector<NTopic::ECodec> InitAllowedCodecs();
     const TVector<NTopic::ECodec> AllowedCodecs = InitAllowedCodecs();
+    std::function<void(const TString& opt)> TimestampOptionHandler(TMaybe<TInstant>* destination); // parses timestamp in the following formats: unix time, ISO-8601
 
     class TCommandWithSupportedCodecs {
     protected:
@@ -71,9 +72,9 @@ namespace NYdb::NConsoleClient {
         ui64 RetentionPeriodHours_;
         ui64 RetentionStorageMb_;
         ui32 MinActivePartitions_;
-        ui32 MaxActivePartitions_;
-
+        TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
+        TMaybe<ui32> PartitionsPerTablet_;
     };
 
     class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
@@ -122,7 +123,8 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString ConsumerName_;
-        TMaybe<ui64> StartingMessageTimestamp_;
+        bool IsImportant_;
+        TMaybe<TInstant> StartingMessageTimestamp_;
     };
 
     class TCommandTopicConsumerDrop: public TYdbCommand, public TCommandWithTopicName {
@@ -134,6 +136,21 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString ConsumerName_;
+    };
+
+    class TCommandTopicConsumerDescribe: public TYdbCommand, public TCommandWithOutput, public TCommandWithTopicName {
+    public:
+        TCommandTopicConsumerDescribe();
+        void Config(TConfig& config) override;
+        void Parse(TConfig& config) override;
+        int Run(TConfig& config) override;
+
+    private:
+        int PrintPrettyResult(const NYdb::NTopic::TConsumerDescription& description) const;
+
+    private:
+        TString ConsumerName_;
+        bool ShowPartitionStats_ = false;
     };
 
     class TCommandTopicConsumerCommitOffset: public TYdbCommand, public TCommandWithTopicName {
@@ -162,7 +179,7 @@ namespace NYdb::NConsoleClient {
     };
 
     class TCommandTopicRead: public TYdbCommand,
-                             public TCommandWithFormat,
+                             public TCommandWithMessagingFormat,
                              public TInterruptibleCommand,
                              public TCommandWithTopicName,
                              public TCommandWithTransformBody {
@@ -177,7 +194,7 @@ namespace NYdb::NConsoleClient {
         TVector<ui64> PartitionIds_;
         TMaybe<uint32_t> Offset_;
         TMaybe<uint32_t> Partition_;
-        TMaybe<ui64> Timestamp_;
+        TMaybe<TInstant> Timestamp_;
         TMaybe<TString> File_;
         TMaybe<TString> TransformStr_;
 
@@ -210,16 +227,16 @@ namespace NYdb::NConsoleClient {
     protected:
         void AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NTopic::ECodec>& allowedCodecs);
         void ParseCodec();
-        NTopic::ECodec GetCodec() const;
+        TMaybe<NTopic::ECodec> GetCodec() const;
 
     private:
         TVector<NTopic::ECodec> AllowedCodecs_;
         TString CodecStr_;
-        NTopic::ECodec Codec_ = NTopic::ECodec::RAW;
+        TMaybe<NTopic::ECodec> Codec_;
     };
 
     class TCommandTopicWrite: public TYdbCommand,
-                              public TCommandWithFormat,
+                              public TCommandWithMessagingFormat,
                               public TInterruptibleCommand,
                               public TCommandWithTopicName,
                               public TCommandWithCodec,

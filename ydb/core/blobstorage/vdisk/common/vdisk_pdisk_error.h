@@ -1,7 +1,9 @@
 #pragma once
+
 #include "defs.h"
-#include <ydb/core/base/blobstorage.h>
 #include "vdisk_config.h"
+
+#include <ydb/core/base/blobstorage.h>
 
 namespace NKikimr {
 
@@ -31,43 +33,52 @@ namespace NKikimr {
         }
 
         TPDiskErrorState() {
-            SetPrivate(Good);
+            SetPrivate(Good, "");
         }
 
         EState GetState() const {
-            return static_cast<EState>(AtomicGet(State));
+            return State;
+        }
+
+        const TString& GetErrorReason() const {
+            return ErrorReason;
         }
 
         // We call this function when PDisk returned ERROR and we pass pdiskFlags to set the correct state
-        EState Set(NKikimrProto::EReplyStatus status, ui32 pdiskFlags) {
+        EState Set(NKikimrProto::EReplyStatus status, ui32 pdiskFlags, const TString& errorReason) {
             switch (status) {
                 case NKikimrProto::CORRUPTED:
-                    return SetPrivate(NoWrites);
+                    return SetPrivate(NoWrites, errorReason);
                 case NKikimrProto::OUT_OF_SPACE:
                     // check flags additionally
                     Y_ABORT_UNLESS(pdiskFlags & NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation);
-                    return SetPrivate(WriteOnlyLog);
+                    return SetPrivate(WriteOnlyLog, errorReason);
                 default:
                     Y_ABORT("Unexpected state# %s", NKikimrProto::EReplyStatus_Name(status).data());
             }
         }
 
-    private:
-        TAtomic State = 0;
-
-        EState SetPrivate(EState state) {
-            // make sure bad state increments (not decrements), use CAS for that
-            while (true) {
-                EState curState = GetState();
-                if (state > curState) {
-                    // if state is worse than curState:
-                    TAtomicBase newState = static_cast<TAtomicBase>(state);
-                    bool done = AtomicCas(&State, newState, curState);
-                    if (done)
-                        return state;
-                } else
-                    return curState;
+        TString ToString() const {
+            TStringStream ss;
+            ss << "State# " << StateToString(State);
+            if (!ErrorReason.empty()) {
+                ss << ", PDiskError# " << ErrorReason;
             }
+            return ss.Str();
+        }
+
+    private:
+        EState State = EState::Unspecified;
+
+        TString ErrorReason;
+
+        EState SetPrivate(EState state, const TString& errorReason) {
+            if (state > State) {
+                State = state;
+                ErrorReason = errorReason;
+                return state;
+            } else
+                return State;
         }
     };
 
@@ -80,10 +91,14 @@ namespace NKikimr {
     struct TEvPDiskErrorStateChange :
         public TEventLocal<TEvPDiskErrorStateChange, TEvBlobStorage::EvPDiskErrorStateChange>
     {
-        const TPDiskErrorState::EState State;
+        const NKikimrProto::EReplyStatus Status;
+        const ui32 PDiskFlags;
+        const TString ErrorReason;
 
-        TEvPDiskErrorStateChange(TPDiskErrorState::EState state)
-            : State(state)
+        TEvPDiskErrorStateChange(NKikimrProto::EReplyStatus status, ui32 pdiskFlags, const TString &errorReason)
+            : Status(status)
+            , PDiskFlags(pdiskFlags)
+            , ErrorReason(errorReason)
         {}
     };
 

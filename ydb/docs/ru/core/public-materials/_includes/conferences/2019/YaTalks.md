@@ -1,4 +1,4 @@
-### {{ ydb-name }} — как выжать 10K IOPS из HDD и вставить в таблицу 50K записей на одном ядре {#2019-conf-yatalks-10k-iops}
+## {{ ydb-name }} — как выжать 10K IOPS из HDD и вставить в таблицу 50K записей на одном ядре {#2019-conf-yatalks-10k-iops}
 
 {% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 
@@ -9,11 +9,12 @@
 
 [Слайды](https://storage.yandexcloud.net/ydb-public-talks/yatalks-ydb.pptx)
 
-### {{ ydb-name }}: Distributed SQL база данных Яндекса {#2019-conf-yatalks-dist-sql}
+## {{ ydb-name }}: Distributed SQL база данных Яндекса {#2019-conf-yatalks-dist-sql}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
-[ {{ team.puchin.name }} ]( {{ team.puchin.profile }} ) ( {{ team.puchin.position }} ) рассказал об основных моментах, связанных с выполнением распределенных запросов в {{ ydb-short-name }}:
+[{{ team.puchin.name }}]({{ team.puchin.profile }}) ({{ team.puchin.position }}) рассказал об основных моментах, связанных с выполнением распределенных запросов в {{ ydb-short-name }}:
+
 * Модель транзакций и уровни изоляции.
 * Особенности SQL-диалекта Yandex Query Language (YQL).
 * Многошаговые транзакции и механизм оптимистичных блокировок.
@@ -23,6 +24,6 @@
 
 @[YouTube](https://youtu.be/tzANIAbc99o?t=3012)
 
-Доклад будет интересен тем, кто хочет глубже погрузиться в процессы работы {{ ydb-name }} и узнать как клиентские приложения взаимодействуют с {{ ydb-name }}, и как работает система распределенных транзакций {{ ydb-short-name }}.   
+Доклад будет интересен тем, кто хочет глубже погрузиться в процессы работы {{ ydb-name }} и узнать как клиентские приложения взаимодействуют с {{ ydb-name }}, и как работает система распределенных транзакций {{ ydb-short-name }}.
 
 [Слайды](https://storage.yandexcloud.net/ydb-public-talks/YdbInCloud_2.pptx)

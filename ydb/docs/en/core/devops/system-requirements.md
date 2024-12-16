@@ -6,27 +6,27 @@ This section provides recommendations for deploying {{ ydb-short-name }} cluster
 
 The fault-tolerance requirements determine the necessary number of servers and disks. For more information, see [{#T}](../concepts/topology.md).
 
-* **Processor (CPU)**
+### Processor (CPU)
 
- A {{ ydb-short-name }} server can only run on x86-64 processors with AVX2 instruction support: Intel Haswell (4th generation) and later, AMD EPYC and later.
+A {{ ydb-short-name }} server can only run on x86-64 processors with AVX2 instruction support: Intel Haswell (4th generation) and later, AMD EPYC and later.
 
- The ARM architecture is currently not supported.
+The ARM architecture is currently not supported.
 
-* **RAM**
+### RAM
 
- We recommend using error-correcting code (ECC) memory to protect against hardware failures.
+We recommend using error-correcting code (ECC) memory to protect against hardware failures.
 
-* **Disk subsystem**
+### Disk subsystem
 
- A {{ ydb-short-name }} server can run on servers with any disk type (HDD/SSD/NVMe). However, we recommend using SSD/NVMe disks for better performance.
+A {{ ydb-short-name }} server can run on servers with any disk type (HDD/SSD/NVMe). However, we recommend using SSD/NVMe disks for better performance.
 
- {% include [_includes/storage-device-requirements.md](../_includes/storage-device-requirements.md) %}
+{% include [_includes/storage-device-requirements.md](../_includes/storage-device-requirements.md) %}
 
- {{ ydb-short-name }} works with disk drives directly and does not use any filesystem to store data. Don't mount a file system or perform other operations with partitions used by {{ ydb-short-name }}. Also, avoid sharing the {{ ydb-short-name }}'s block device with the operating system and different processes, which can lead to significant performance degradation.
+{{ ydb-short-name }} works with disk drives directly and does not use any filesystem to store data. Don't mount a file system or perform other operations with partitions used by {{ ydb-short-name }}. Also, avoid sharing the {{ ydb-short-name }}'s block device with the operating system and different processes, which can lead to significant performance degradation.
 
- Prefer to use physical local disk drives for {{ ydb-short-name }} instead of virtual or network storage devices.
+Prefer to use physical local disk drives for {{ ydb-short-name }} instead of virtual or network storage devices.
 
- Remember that {{ ydb-short-name }} uses some disk space for internal needs when planning disk capacity. For example, on a medium-sized cluster of 8 nodes, you can expect approximately 100 GB to be consumed for a static group on the whole cluster. On a large cluster with more than 1500 nodes, this will be about 200 GB. There are also 25.6 GB of logs on each Pdisk and a system area on each Pdisk. Its size depends on the size of the Pdisk but is no less than 0.2 GB.
+Remember that {{ ydb-short-name }} uses some disk space for internal needs when planning disk capacity. For example, on a medium-sized cluster of 8 nodes, you can expect approximately 100 GB to be consumed for a static group on the whole cluster. On a large cluster with more than 1500 nodes, this will be about 200 GB. There are also 25.6 GB of logs on each Pdisk and a system area on each Pdisk. Its size depends on the size of the Pdisk but is no less than 0.2 GB.
 
 ## Software configuration {#software}
 

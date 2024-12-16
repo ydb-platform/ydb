@@ -104,8 +104,6 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
     topicsIter->second.IsServerless = entry.DomainInfo->IsServerless();
 
-    NPQ::TPartitionGraph graph = NPQ::MakePartitionGraph(pqDescr);
-
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
         topicsIter->second.Partitions[partitionDescription.GetPartitionId()] =
             TPartitionInfo{ partitionDescription.GetTabletId() };
@@ -180,7 +178,7 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
     }
 
     // ToDo[migration] - separate option - ?
-    bool doCheckClientAcl = DoCheckACL && !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen();
+    bool doCheckClientAcl = DoCheckACL && !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !SkipReadRuleCheck;
     if (doCheckClientAcl) {
         CheckClientACL(ctx);
     } else {
@@ -231,7 +229,9 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
     auto path = "/" + JoinPath(entry.Path); // ToDo [migration] - through converter ?
     if (navigate->ErrorCount > 0) {
         const NSchemeCache::TSchemeCacheNavigate::EStatus status = navigate->ResultSet.front().Status;
-        CloseSession(TStringBuilder() << "Failed to read ACL for '" << path << "' Scheme cache error : " << status, PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
+        PersQueue::ErrorCode::ErrorCode errorCode = ConvertNavigateStatus(status);
+
+        CloseSession(TStringBuilder() << "Failed to read ACL for '" << path << "' Scheme cache error : " << status,  errorCode, ctx);
         return;
     }
 

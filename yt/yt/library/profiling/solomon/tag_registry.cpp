@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <yt/yt/core/misc/protobuf_helpers.h>
+
 #include <library/cpp/yt/assert/assert.h>
 
 namespace NYT::NProfiling {
@@ -71,9 +73,9 @@ int TTagRegistry::GetSize() const
     return TagById_.size();
 }
 
-THashMap<TString, int> TTagRegistry::GetTopByKey() const
+THashMap<std::string, int> TTagRegistry::GetTopByKey() const
 {
-    THashMap<TString, int> counts;
+    THashMap<std::string, int> counts;
     for (const auto& [key, value] : TagById_) {
         counts[key]++;
     }
@@ -85,9 +87,9 @@ void TTagRegistry::DumpTags(NProto::TSensorDump* dump)
     dump->add_tags();
 
     for (int i = 0; i < std::ssize(TagById_); i++) {
-        auto tag = dump->add_tags();
-        tag->set_key(TagById_[i].first);
-        tag->set_value(TagById_[i].second);
+        auto* tag = dump->add_tags();
+        tag->set_key(ToProto(TagById_[i].first));
+        tag->set_value(ToProto(TagById_[i].second));
     }
 }
 

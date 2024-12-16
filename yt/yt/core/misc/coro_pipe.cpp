@@ -26,14 +26,14 @@ public:
                 return 0;
             }
             std::tie(PendingData_) = Coroutine_->Yield();
-            if (PendingData_.Empty()) {
+            if (PendingData_.empty()) {
                 Finished_ = true;
                 *ptr = nullptr;
                 return 0;
             }
         }
-        *ptr = PendingData_.Data();
-        len = Min(len, PendingData_.Size());
+        *ptr = PendingData_.data();
+        len = Min(len, PendingData_.size());
         PendingData_.Skip(len);
         return len;
     }
@@ -42,7 +42,7 @@ public:
     {
         if (!Finished_) {
             const void* ptr;
-            if (!PendingData_.Empty() || DoNext(&ptr, 1)) {
+            if (!PendingData_.empty() || DoNext(&ptr, 1)) {
                 THROW_ERROR_EXCEPTION("Stray data in stream");
             }
         }

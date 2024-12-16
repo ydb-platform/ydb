@@ -41,6 +41,7 @@ struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Set
     FLUENT_SETTING_VECTOR(TItem, Item);
     FLUENT_SETTING_OPTIONAL(TString, Description);
     FLUENT_SETTING_OPTIONAL(ui32, NumberOfRetries);
+    FLUENT_SETTING_OPTIONAL(bool, NoACL);
 };
 
 class TImportFromS3Response : public TOperation {

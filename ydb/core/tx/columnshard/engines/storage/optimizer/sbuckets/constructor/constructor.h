@@ -1,13 +1,16 @@
 #pragma once
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/logic/abstract/logic.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
 class TOptimizerPlannerConstructor: public IOptimizerPlannerConstructor {
 private:
     YDB_READONLY_DEF(TString, LogicName);
-    YDB_READONLY(TDuration, FreshnessCheckDuration, TDuration::Seconds(300));
+    YDB_READONLY(TDuration, FreshnessCheckDuration, NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration());
+
 public:
     static TString GetClassNameStatic() {
         return "s-buckets";

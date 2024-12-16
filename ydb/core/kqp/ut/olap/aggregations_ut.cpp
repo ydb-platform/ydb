@@ -75,6 +75,33 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             Cout << result << Endl;
             CompareYson(result, R"([[23000u;]])");
         }
+
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(
+                ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )")
+                          .GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[23000u;]])");
+        }
     }
 
     Y_UNIT_TEST(AggregationCountPushdown) {
@@ -95,7 +122,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
         }
-        while (csController->GetInsertFinishedCounter().Val() == 0) {
+        while (csController->GetCompactionFinishedCounter().Val() == 0) {
             Cout << "Wait indexation..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
@@ -163,11 +190,54 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
             // Check plan
 #if SSA_RUNTIME_VERSION >= 2U
-            CheckPlanForAggregatePushdown(query, tableClient, { "WideCombiner" }, "Aggregate-TableFullScan");
+            CheckPlanForAggregatePushdown(query, tableClient, { "WideCombiner" }, "TableFullScan");
 //            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
 #else
             CheckPlanForAggregatePushdown(query, tableClient, { "CombineCore" }, "");
 #endif
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DisableBlockEngineInAggregationWithSpilling, AllowSpilling) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE);
+        if (AllowSpilling) {
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("Aggregation");
+        } else {
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
+        }
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
+        }
+
+        {
+            TString query = R"(
+                --!syntax_v1
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+                GROUP BY level
+            )";
+
+            auto res = StreamExplainQuery(query, client);
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+            auto plan = CollectStreamResult(res);
+
+            bool hasWideCombiner = plan.QueryStats->Getquery_ast().Contains("WideCombiner");
+            UNIT_ASSERT_C(hasWideCombiner == AllowSpilling, plan.QueryStats->Getquery_ast());
         }
     }
 
@@ -331,7 +401,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .AddExpectedPlanOptions("KqpOlapFilter")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
-            .MutableLimitChecker().SetExpectedResultCount(1)
+            .MutableLimitChecker().SetExpectedResultCount(2)
 #else
             .AddExpectedPlanOptions("Condense")
 #endif
@@ -352,7 +422,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .AddExpectedPlanOptions("KqpOlapFilter")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
-            .MutableLimitChecker().SetExpectedResultCount(1)
+            // See https://github.com/ydb-platform/ydb/issues/7299 for explanation, why resultCount = 3
+            .MutableLimitChecker().SetExpectedResultCount(3)
 #else
             .AddExpectedPlanOptions("CombineCore")
 #endif
@@ -373,7 +444,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .AddExpectedPlanOptions("KqpOlapFilter")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
-            .MutableLimitChecker().SetExpectedResultCount(1)
+            .MutableLimitChecker().SetExpectedResultCount(2)
 #else
             .AddExpectedPlanOptions("CombineCore")
             .AddExpectedPlanOptions("KqpOlapFilter")
@@ -980,7 +1051,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 ORDER BY c, resource_id DESC LIMIT 3
             )")
             .SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .SetExpectedReadNodeType("Aggregate-TableFullScan");
+            .SetExpectedReadNodeType("TableFullScan");
         testCase.FillExpectedAggregationGroupByPlanOptions();
         TestAggregations({ testCase });
     }

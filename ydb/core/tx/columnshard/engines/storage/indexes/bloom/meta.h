@@ -20,6 +20,27 @@ private:
         AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
         HashesCount = -1 * std::log(FalsePositiveProbability) / std::log(2);
     }
+
+    static const ui64 HashesConstructorP = ((ui64)2 << 31) - 1;
+    static const ui64 HashesConstructorA = (ui64)2 << 16;
+
+    template <class TActor>
+    void BuildHashesSet(const ui64 originalHash, const TActor& actor) const {
+        AFL_VERIFY(HashesCount < HashesConstructorP);
+        for (ui32 b = 1; b < HashesCount; ++b) {
+            const ui64 hash = (HashesConstructorA * originalHash + b) % HashesConstructorP;
+            actor(hash);
+        }
+    }
+
+    template <class TContainer, class TActor>
+    void BuildHashesSet(const TContainer& originalHashes, const TActor& actor) const {
+        AFL_VERIFY(HashesCount < HashesConstructorP);
+        for (auto&& hOriginal : originalHashes) {
+            BuildHashesSet(hOriginal, actor);
+        }
+    }
+
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override {
         const auto* bMeta = dynamic_cast<const TBloomIndexMeta*>(&newMeta);
@@ -31,7 +52,7 @@ protected:
     }
     virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const override;
 
-    virtual std::shared_ptr<arrow::RecordBatch> DoBuildIndexImpl(TChunkedBatchReader& reader) const override;
+    virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
         AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
@@ -54,8 +75,8 @@ protected:
 
 public:
     TBloomIndexMeta() = default;
-    TBloomIndexMeta(const ui32 indexId, const TString& indexName, std::set<ui32>& columnIds, const double fpProbability)
-        : TBase(indexId, indexName, columnIds)
+    TBloomIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, std::set<ui32>& columnIds, const double fpProbability)
+        : TBase(indexId, indexName, columnIds, storageId)
         , FalsePositiveProbability(fpProbability) {
         Initialize();
     }

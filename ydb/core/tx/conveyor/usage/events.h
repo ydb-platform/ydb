@@ -10,7 +10,6 @@ namespace NKikimr::NConveyor {
 struct TEvExecution {
     enum EEv {
         EvNewTask = EventSpaceBegin(TKikimrEvents::ES_CONVEYOR),
-        EvTaskProcessedResult,
         EvEnd
     };
 
@@ -22,18 +21,7 @@ struct TEvExecution {
     public:
         TEvNewTask() = default;
 
-        explicit TEvNewTask(ITask::TPtr task)
-            : Task(task) {
-        }
-    };
-
-    class TEvTaskProcessedResult:
-        public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult>,
-        public TConclusion<ITask::TPtr> {
-    private:
-        using TBase = TConclusion<ITask::TPtr>;
-    public:
-        using TBase::TBase;
+        explicit TEvNewTask(ITask::TPtr task);
     };
 };
 

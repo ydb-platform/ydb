@@ -115,7 +115,7 @@ namespace {
 
         virtual ~TGenericTlsBase() = default;
     };
-}
+} // namespace
 
 #if defined(_unix_)
 namespace {
@@ -126,7 +126,7 @@ namespace {
         }
 
         inline ~TMasterTls() override {
-            //explicitly call dtor for main thread
+            // explicitly call dtor for main thread
             Dtor(pthread_getspecific(Key_));
 
             Y_ABORT_UNLESS(!pthread_key_delete(Key_), "pthread_key_delete failed");
@@ -158,7 +158,7 @@ namespace {
     };
 
     using TKeyDescriptor = TMasterTls::TPerThreadStorage::TKey;
-}
+} // namespace
 
 class TKey::TImpl: public TKeyDescriptor {
 public:
@@ -211,7 +211,7 @@ namespace {
         TMutex Lock_;
         THashMap<TThread::TId, TPTSRef> Datas_;
     };
-}
+} // namespace
 
 class TKey::TImpl {
 public:

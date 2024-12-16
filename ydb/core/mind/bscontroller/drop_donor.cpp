@@ -18,7 +18,7 @@ public:
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_DROP_DONOR; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+        State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
         State->CheckConsistency();
         for (const TVSlotId& vslotId : VSlotIds) {
             if (const TVSlotInfo *vslot = State->VSlots.Find(vslotId); vslot && !vslot->IsBeingDeleted()) {

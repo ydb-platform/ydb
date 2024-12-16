@@ -41,6 +41,9 @@ public:
     //! Returns true if alert must be issued when a request is missing request info.
     bool ShouldAlertOnMissingRequestInfo();
 
+    //! Returns true if tracing baggage must be sent.
+    bool ShouldSendTracingBaggage();
+
     NServiceDiscovery::IServiceDiscoveryPtr GetServiceDiscovery();
     void SetServiceDiscovery(NServiceDiscovery::IServiceDiscoveryPtr serviceDiscovery);
 

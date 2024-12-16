@@ -1,0 +1,139 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 203f9a81f7fc1de8d3edc99e490b8f76
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2020 Pantelis Antoniou <pantelis.antoniou@konsulko.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/fy-accel.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 353fb5eb2c627206fdb6a6329618aa0a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2022 Pantelis Antoniou <pantelis.antoniou@konsulko.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/fy-docbuilder.c [4:4]
+        src/lib/fy-docbuilder.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 66399e7e5655d2b1740b2e5c54aa4444
+BELONGS ya.make
+    License text:
+        Copyright (c) 2019 Pantelis Antoniou <pantelis.antoniou@konsulko.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1:1]
+        README.md [155:155]
+        README.md [187:187]
+        src/lib/fy-accel.c [4:4]
+        src/lib/fy-atom.c [4:4]
+        src/lib/fy-atom.h [4:4]
+        src/lib/fy-ctype.c [4:4]
+        src/lib/fy-ctype.h [4:4]
+        src/lib/fy-diag.c [4:4]
+        src/lib/fy-diag.h [4:4]
+        src/lib/fy-doc.c [4:4]
+        src/lib/fy-doc.h [4:4]
+        src/lib/fy-docstate.c [4:4]
+        src/lib/fy-docstate.h [4:4]
+        src/lib/fy-dump.c [4:4]
+        src/lib/fy-dump.h [4:4]
+        src/lib/fy-emit-accum.h [4:4]
+        src/lib/fy-emit.c [4:4]
+        src/lib/fy-emit.h [4:4]
+        src/lib/fy-event.h [4:4]
+        src/lib/fy-input.c [4:4]
+        src/lib/fy-input.h [4:4]
+        src/lib/fy-parse.c [4:4]
+        src/lib/fy-parse.h [4:4]
+        src/lib/fy-path.c [4:4]
+        src/lib/fy-token.c [4:4]
+        src/lib/fy-token.h [4:4]
+        src/lib/fy-typelist.h [4:4]
+        src/lib/fy-types.c [4:4]
+        src/lib/fy-types.h [4:4]
+        src/lib/fy-utf8.c [4:4]
+        src/lib/fy-utf8.h [4:4]
+        src/lib/fy-utils.c [7:7]
+        src/lib/fy-utils.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a56ae22b430b6c076daf3d9081263d33
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2022 Innokentii Mokin <iam@justregular.dev>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/fy-list.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cb0266b95ccde957e2cb43256b0c835c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019-2021 Pantelis Antoniou <pantelis.antoniou@konsulko.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/libfyaml.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d4ffeea00008cc621ac98b421e56207d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2021 Pantelis Antoniou <pantelis.antoniou@konsulko.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/fy-composer.c [4:4]
+        src/lib/fy-composer.h [4:4]
+        src/lib/fy-event.c [4:4]
+        src/lib/fy-path.h [4:4]
+        src/lib/fy-walk.c [4:4]
+        src/lib/fy-walk.h [4:4]

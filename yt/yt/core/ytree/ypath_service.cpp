@@ -22,9 +22,10 @@
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
 #include <yt/yt/core/misc/checksum.h>
-#include <yt/yt/core/misc/atomic_object.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 
 namespace NYT::NYTree {
 
@@ -461,7 +462,7 @@ private:
         try {
             Producer_.Run(consumer.get());
         } catch (const TErrorException& ex) {
-            if (ex.Error().FindMatching(EErrorCode::ResolveError)) {
+            if (ex.Error().FindMatching(NYTree::EErrorCode::ResolveError)) {
                 Reply(context, /*exists*/ false);
                 return;
             }
@@ -523,7 +524,7 @@ private:
     const IInvokerPtr WorkerInvoker_;
     const TDuration UpdatePeriod_;
 
-    TAtomicObject<TYsonString> CachedString_ = {BuildYsonStringFluently().Entity()};
+    NThreading::TAtomicObject<TYsonString> CachedString_ = {BuildYsonStringFluently().Entity()};
 
     void Produce(IYsonConsumer* consumer)
     {
@@ -873,7 +874,7 @@ void TCachedYPathService::RebuildCache()
         auto yson = WaitFor(asyncYson)
             .ValueOrThrow();
 
-        ProfilingCounters_->ByteSize.Update(yson.AsStringBuf().Size());
+        ProfilingCounters_->ByteSize.Update(yson.AsStringBuf().size());
 
         UpdateCachedTree(ConvertToNode(yson));
     } catch (const std::exception& ex) {
@@ -905,10 +906,10 @@ class TPermissionValidatingYPathService
 public:
     TPermissionValidatingYPathService(
         IYPathServicePtr underlyingService,
-        TCallback<void(const TString&, EPermission)> validationCallback)
+        TPermissionValidator validator)
         : UnderlyingService_(std::move(underlyingService))
-        , ValidationCallback_(std::move(validationCallback))
-        , PermissionValidator_(this, EPermissionCheckScope::This)
+        , Validator_(std::move(validator))
+        , CachingPermissionValidator_(this, EPermissionCheckScope::This)
     { }
 
     TResolveResult Resolve(
@@ -925,30 +926,30 @@ public:
 
 private:
     const IYPathServicePtr UnderlyingService_;
-    const TCallback<void(const TString&, EPermission)> ValidationCallback_;
+    const TPermissionValidator Validator_;
 
-    TCachingPermissionValidator PermissionValidator_;
+    TCachingPermissionValidator CachingPermissionValidator_;
 
     void ValidatePermission(
         EPermissionCheckScope /*scope*/,
         EPermission permission,
-        const TString& user) override
+        const std::string& user) override
     {
-        ValidationCallback_.Run(user, permission);
+        Validator_.Run(user, permission);
     }
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {
         // TODO(max42): choose permission depending on method.
-        PermissionValidator_.Validate(EPermission::Read, context->GetAuthenticationIdentity().User);
+        CachingPermissionValidator_.Validate(EPermission::Read, context->GetAuthenticationIdentity().User);
         ExecuteVerb(UnderlyingService_, context);
         return true;
     }
 };
 
-IYPathServicePtr IYPathService::WithPermissionValidator(TCallback<void(const TString&, EPermission)> validationCallback)
+IYPathServicePtr IYPathService::WithPermissionValidator(TPermissionValidator validator)
 {
-    return New<TPermissionValidatingYPathService>(this, std::move(validationCallback));
+    return New<TPermissionValidatingYPathService>(this, std::move(validator));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

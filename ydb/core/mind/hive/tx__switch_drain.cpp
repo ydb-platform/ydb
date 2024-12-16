@@ -38,7 +38,10 @@ public:
                     }
                     node->SetDown(true);
                     if (Settings.Persist) {
-                        db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(true, node->BecomeUpOnRestart);
+                        db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::BecomeUpOnRestart>(node->BecomeUpOnRestart);
+                        if (Settings.DownPolicy == NKikimrHive::DRAIN_POLICY_KEEP_DOWN) {
+                            db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down>(true);
+                        }
                     }
                 }
                 Self->StartHiveDrain(NodeId, std::move(Settings));

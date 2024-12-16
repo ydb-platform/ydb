@@ -2,7 +2,7 @@
 
 #include "registry.h" 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/formats/arrow/protos/ssa.pb.h>
+#include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/core/formats/arrow/program.h>
 #include <ydb/core/formats/arrow/custom_registry.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
@@ -20,7 +20,6 @@ public:
     virtual ~IColumnResolver() = default;
     virtual TString GetColumnName(ui32 id, bool required = true) const = 0;
     virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const = 0;
-    virtual const NTable::TScheme::TTableSchema& GetSchema() const = 0;
     virtual NSsa::TColumnInfo GetDefaultColumn() const = 0;
 };
 
@@ -35,10 +34,6 @@ public:
 
     virtual TString GetColumnName(ui32 id, bool required = true) const override;
     virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const override;
-    virtual const NTable::TScheme::TTableSchema& GetSchema() const override {
-        AFL_VERIFY(false);
-        return Default<NTable::TScheme::TTableSchema>();
-    }
     virtual NSsa::TColumnInfo GetDefaultColumn() const override {
         return NSsa::TColumnInfo::Original((ui32)NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX, NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP);
     }
@@ -88,6 +83,11 @@ public:
         } else {
             return Program->Steps;
         }
+    }
+
+    const std::vector<std::shared_ptr<NSsa::TProgramStep>>& GetStepsVerified() const {
+        AFL_VERIFY(!!Program);
+        return Program->Steps;
     }
 
     template <class TDataContainer>

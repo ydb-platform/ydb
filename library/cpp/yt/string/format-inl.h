@@ -4,6 +4,7 @@
 #include "format.h"
 #endif
 
+#include "guid.h"
 #include "enum.h"
 #include "string.h"
 
@@ -15,7 +16,7 @@
 
 #include <library/cpp/yt/misc/concepts.h>
 #include <library/cpp/yt/misc/enum.h>
-#include <library/cpp/yt/misc/wrapper_traits.h>
+#include <library/cpp/yt/misc/source_location.h>
 
 #include <util/generic/maybe.h>
 
@@ -29,7 +30,56 @@
     #include <filesystem>
 #endif
 
+#ifdef __cpp_lib_source_location
+#include <source_location>
+#endif // __cpp_lib_source_location
+
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+inline void FormatValue(TStringBuilderBase* builder, const TStringBuilder& value, TStringBuf /*spec*/)
+{
+    builder->AppendString(value.GetBuffer());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+TString ToStringViaBuilder(const T& value, TStringBuf spec)
+{
+    TStringBuilder builder;
+    FormatValue(&builder, value, spec);
+    return builder.Flush();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Compatibility for users of NYT::ToString(nyt_type).
+template <CFormattable T>
+TString ToString(const T& t)
+{
+    return ToStringViaBuilder(t);
+}
+
+// Sometime we want to implement
+// FormatValue using util's ToString
+// However, if we inside the FormatValue
+// we cannot just call the ToString since
+// in this scope T is already CFormattable
+// and ToString will call the very
+// FormatValue we are implementing,
+// causing an infinite recursion loop.
+// This method is basically a call to
+// util's ToString default implementation.
+template <class T>
+TString ToStringIgnoringFormatValue(const T& t)
+{
+    TString s;
+    ::TStringOutput o(s);
+    o << t;
+    return s;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -72,24 +122,67 @@ void FormatPointerValue(
 // so that someone doesn't accidentally implement the
 // "SimpleRange" concept and have a non-trivial
 // formatting procedure at the same time.
+// Sadly, clang is bugged and thus we must do implementation by hand
+// if we want to use this concept in class specializations.
 
 template <class R>
-concept CKnownRange =
-    requires (R r) { [] <class... Ts> (std::vector<Ts...>) { } (r); } ||
-    requires (R r) { [] <class T, size_t E> (std::span<T, E>) { } (r); } ||
-    requires (R r) { [] <class T, size_t N> (TCompactVector<T, N>) { } (r); } ||
-    requires (R r) { [] <class... Ts> (std::set<Ts...>) { } (r); } ||
-    requires (R r) { [] <class... Ts> (THashSet<Ts...>) { } (r); } ||
-    requires (R r) { [] <class... Ts> (THashMultiSet<Ts...>) { } (r); };
+constexpr bool CKnownRange = false;
+
+template <class T>
+    requires requires (T* t) { [] <class... Ts> (std::vector<Ts...>*) {} (t); }
+constexpr bool CKnownRange<T> = true;
+template <class T, size_t E>
+constexpr bool CKnownRange<std::span<T, E>> = true;
+template <class T, size_t N>
+constexpr bool CKnownRange<std::array<T, N>> = true;
+template <class T, size_t N>
+constexpr bool CKnownRange<TCompactVector<T, N>> = true;
+template <class T>
+    requires requires (T* t) { [] <class... Ts> (std::set<Ts...>*) {} (t); }
+constexpr bool CKnownRange<T> = true;
+template <class T>
+    requires requires (T* t) { [] <class... Ts> (std::multiset<Ts...>*) {} (t); }
+constexpr bool CKnownRange<T> = true;
+template <class... Ts>
+constexpr bool CKnownRange<THashSet<Ts...>> = true;
+template <class... Ts>
+constexpr bool CKnownRange<THashMultiSet<Ts...>> = true;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class R>
-concept CKnownKVRange =
-    requires (R r) { [] <class... Ts> (std::map<Ts...>) { } (r); } ||
-    requires (R r) { [] <class... Ts> (std::multimap<Ts...>) { } (r); } ||
-    requires (R r) { [] <class... Ts> (THashMap<Ts...>) { } (r); } ||
-    requires (R r) { [] <class... Ts> (THashMultiMap<Ts...>) { } (r); };
+constexpr bool CKnownKVRange = false;
+
+template <class T>
+    requires requires (T* t) { [] <class... Ts> (std::map<Ts...>*) {} (t); }
+constexpr bool CKnownKVRange<T> = true;
+template <class T>
+    requires requires (T* t) { [] <class... Ts> (std::multimap<Ts...>*) {} (t); }
+constexpr bool CKnownKVRange<T> = true;
+template <class... Ts>
+constexpr bool CKnownKVRange<THashMap<Ts...>> = true;
+template <class... Ts>
+constexpr bool CKnownKVRange<THashMultiMap<Ts...>> = true;
+
+// TODO(arkady-e1ppa): Uncomment me when
+// https://github.com/llvm/llvm-project/issues/58534 is shipped.
+// template <class R>
+// concept CKnownRange =
+//     requires (R r) { [] <class... Ts> (std::vector<Ts...>) { } (r); } ||
+//     requires (R r) { [] <class T, size_t E> (std::span<T, E>) { } (r); } ||
+//     requires (R r) { [] <class T, size_t N> (TCompactVector<T, N>) { } (r); } ||
+//     requires (R r) { [] <class... Ts> (std::set<Ts...>) { } (r); } ||
+//     requires (R r) { [] <class... Ts> (THashSet<Ts...>) { } (r); } ||
+//     requires (R r) { [] <class... Ts> (THashMultiSet<Ts...>) { } (r); };
+
+// ////////////////////////////////////////////////////////////////////////////////
+
+// template <class R>
+// concept CKnownKVRange =
+//     requires (R r) { [] <class... Ts> (std::map<Ts...>) { } (r); } ||
+//     requires (R r) { [] <class... Ts> (std::multimap<Ts...>) { } (r); } ||
+//     requires (R r) { [] <class... Ts> (THashMap<Ts...>) { } (r); } ||
+//     requires (R r) { [] <class... Ts> (THashMultiMap<Ts...>) { } (r); };
 
 } // namespace NDetail
 
@@ -149,6 +242,22 @@ concept CFormattableKVRange =
     NDetail::CKnownKVRange<R> &&
     CFormattable<typename R::key_type> &&
     CFormattable<typename R::value_type>;
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Specializations of TFormatArg for ranges
+template <class R>
+    requires CFormattableRange<std::remove_cvref_t<R>>
+struct TFormatArg<R>
+    : public TFormatArgBase
+{
+    using TUnderlying = typename std::remove_cvref_t<R>::value_type;
+
+    static constexpr auto ConversionSpecifiers = TFormatArg<TUnderlying>::ConversionSpecifiers;
+
+    static constexpr auto FlagSpecifiers = TFormatArg<TUnderlying>::FlagSpecifiers;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -383,6 +492,58 @@ inline void FormatValue(TStringBuilderBase* builder, const std::filesystem::path
 }
 #endif
 
+#ifdef __cpp_lib_source_location
+// std::source_location
+inline void FormatValue(TStringBuilderBase* builder, const std::source_location& location, TStringBuf /*spec*/)
+{
+    if (location.file_name() != nullptr) {
+        builder->AppendFormat(
+            "%v:%v:%v",
+            location.file_name(),
+            location.line(),
+            location.column());
+    } else {
+        builder->AppendString("<unknown>");
+    }
+}
+#endif // __cpp_lib_source_location
+
+// TSourceLocation
+inline void FormatValue(TStringBuilderBase* builder, const TSourceLocation& location, TStringBuf /*spec*/)
+{
+    if (location.GetFileName() != nullptr) {
+        builder->AppendFormat(
+            "%v:%v",
+            location.GetFileName(),
+            location.GetLine());
+    } else {
+        builder->AppendString("<unknown>");
+    }
+}
+
+// std::monostate
+inline void FormatValue(TStringBuilderBase* builder, const std::monostate&, TStringBuf /*spec*/)
+{
+    builder->AppendString(TStringBuf("<monostate>"));
+}
+
+// std::variant
+template <class... Ts>
+    requires (CFormattable<Ts> && ...)
+void FormatValue(TStringBuilderBase* builder, const std::variant<Ts...>& variant, TStringBuf spec)
+{
+    [&] <size_t... Ids> (std::index_sequence<Ids...>) {
+        ([&] {
+            if (variant.index() == Ids) {
+                FormatValue(builder, std::get<Ids>(variant), spec);
+                return false;
+            }
+
+            return true;
+        } () && ...);
+    } (std::index_sequence_for<Ts...>());
+}
+
 // char
 inline void FormatValue(TStringBuilderBase* builder, char value, TStringBuf spec)
 {
@@ -590,9 +751,9 @@ void FormatValue(TStringBuilderBase* builder, const TEnumIndexedArray<E, T>& col
 
 // One-valued ranges
 template <CFormattableRange TRange>
-void FormatValue(TStringBuilderBase* builder, const TRange& collection, TStringBuf /*spec*/)
+void FormatValue(TStringBuilderBase* builder, const TRange& collection, TStringBuf spec)
 {
-    NYT::FormatRange(builder, collection, TDefaultFormatter());
+    NYT::FormatRange(builder, collection, TSpecBoundFormatter(spec));
 }
 
 // Two-valued ranges
@@ -710,12 +871,43 @@ concept CFormatter = CInvocable<T, void(size_t, TStringBuilderBase*, TStringBuf)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <CFormatter TFormatter>
-void RunFormatter(
+void RunFormatterAt(
+    const TFormatter& formatter,
+    size_t index,
+    TStringBuilderBase* builder,
+    TStringBuf spec,
+    bool singleQuotes,
+    bool doubleQuotes)
+{
+    // 'n' means 'nothing'; skip the argument.
+    if (!spec.Contains('n')) {
+        if (singleQuotes) {
+            builder->AppendChar('\'');
+        }
+        if (doubleQuotes) {
+            builder->AppendChar('"');
+        }
+
+        formatter(index, builder, spec);
+
+        if (singleQuotes) {
+            builder->AppendChar('\'');
+        }
+        if (doubleQuotes) {
+            builder->AppendChar('"');
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <CFormatter TFormatter>
+void RunFormatterFullScan(
     TStringBuilderBase* builder,
     TStringBuf format,
-    const TFormatter& formatter)
+    const TFormatter& formatter,
+    int argIndex = 0)
 {
-    size_t argIndex = 0;
     auto current = std::begin(format);
     auto end = std::end(format);
     while (true) {
@@ -751,27 +943,13 @@ void RunFormatter(
         bool singleQuotes = false;
         bool doubleQuotes = false;
 
+        static constexpr TStringBuf conversionSpecifiers =
+            "diuoxXfFeEgGaAcspn";
+
         while (
             argFormatEnd != end &&
-            *argFormatEnd != GenericSpecSymbol &&     // value in generic format
-            *argFormatEnd != 'd' &&                   // others are standard specifiers supported by printf
-            *argFormatEnd != 'i' &&
-            *argFormatEnd != 'u' &&
-            *argFormatEnd != 'o' &&
-            *argFormatEnd != 'x' &&
-            *argFormatEnd != 'X' &&
-            *argFormatEnd != 'f' &&
-            *argFormatEnd != 'F' &&
-            *argFormatEnd != 'e' &&
-            *argFormatEnd != 'E' &&
-            *argFormatEnd != 'g' &&
-            *argFormatEnd != 'G' &&
-            *argFormatEnd != 'a' &&
-            *argFormatEnd != 'A' &&
-            *argFormatEnd != 'c' &&
-            *argFormatEnd != 's' &&
-            *argFormatEnd != 'p' &&
-            *argFormatEnd != 'n')
+            *argFormatEnd != GenericSpecSymbol &&            // value in generic format
+            !conversionSpecifiers.Contains(*argFormatEnd)) // others are standard specifiers supported by printf
         {
             switch (*argFormatEnd) {
                 case 'q':
@@ -791,27 +969,162 @@ void RunFormatter(
             ++argFormatEnd;
         }
 
-        // 'n' means 'nothing'; skip the argument.
-        if (*argFormatBegin != 'n') {
-            // Format argument.
-            TStringBuf argFormat(argFormatBegin, argFormatEnd);
-            if (singleQuotes) {
-                builder->AppendChar('\'');
-            }
-            if (doubleQuotes) {
-                builder->AppendChar('"');
-            }
-            formatter(argIndex++, builder, argFormat);
-            if (singleQuotes) {
-                builder->AppendChar('\'');
-            }
-            if (doubleQuotes) {
-                builder->AppendChar('"');
-            }
-        }
+        RunFormatterAt(
+            formatter,
+            argIndex++,
+            builder,
+            TStringBuf{argFormatBegin, argFormatEnd},
+            singleQuotes,
+            doubleQuotes);
 
         current = argFormatEnd;
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <CFormatter TFormatter, class... TArgs>
+void RunFormatter(
+    TStringBuilderBase* builder,
+    TBasicFormatString<TArgs...> formatString,
+    const TFormatter& formatter)
+{
+    auto isValidLocations = [] (const auto& t) {
+        return std::get<0>(t) != std::get<1>(t);
+    };
+    // Generally marker is simply "%v" e.g. 2 symbols.
+    // We assume it is used to insert something for roughly 5 symbols
+    // of size.
+    builder->Preallocate(std::size(formatString.Get()) + sizeof...(TArgs) * (5 - 2));
+
+    // Empty marker positions -- fallback to the normal impl.
+    if constexpr (sizeof...(TArgs) != 0) {
+        if (!isValidLocations(formatString.Markers[0])) {
+            RunFormatterFullScan(builder, formatString.Get(), formatter);
+            return;
+        }
+    } else {
+        if (formatString.Escapes[0] == -2) {
+            RunFormatterFullScan(builder, formatString.Get(), formatter);
+            return;
+        }
+    }
+
+    int escapesFound = 0;
+    int currentPos = 0;
+
+    auto beginIt = formatString.Get().begin();
+    auto size = formatString.Get().size();
+
+    const auto& [markers, escapes] = std::tie(formatString.Markers, formatString.Escapes);
+
+    auto appendVerbatim = [&] (int offsetToEnd) {
+        builder->AppendString(TStringBuf{beginIt + currentPos, beginIt + offsetToEnd});
+    };
+
+    auto processEscape = [&] () mutable {
+        // OpenMP doesn't support structured bindings :(.
+        auto escapePos = formatString.Escapes[escapesFound];
+
+        // Append everything that's present until %%.
+        appendVerbatim(escapePos);
+
+        // Append '%'.
+        builder->AppendChar('%');
+
+        // Advance position to first '%' pos + 2.
+        currentPos = escapePos + 2;
+    };
+
+    int argIndex = 0;
+
+    while(argIndex < std::ssize(markers)) {
+        auto [markerStart, markerEnd] = markers[argIndex];
+
+        if (
+            escapes[escapesFound] != -1 &&
+            escapes[escapesFound] - currentPos < markerStart - currentPos)
+        {
+            // Escape sequence is closer.
+            processEscape();
+            ++escapesFound;
+        } else {
+            // Normal marker is closer.
+
+            // Append everything that's present until marker start.
+            appendVerbatim(markerStart);
+
+            // Parsing format string.
+
+            // We skip '%' here since spec does not contain it.
+            auto spec = TStringBuf{beginIt + markerStart + 1, beginIt + markerEnd};
+            bool singleQuotes = false;
+            bool doubleQuotes = false;
+            for (auto c : spec) {
+                if (c == 'q') {
+                    singleQuotes = true;
+                }
+                if (c == 'Q') {
+                    doubleQuotes = true;
+                }
+            }
+            RunFormatterAt(
+                formatter,
+                argIndex,
+                builder,
+                spec,
+                singleQuotes,
+                doubleQuotes);
+
+            // Advance position past marker's end.
+            currentPos = markerEnd;
+            ++argIndex;
+            continue;
+        }
+
+        // Check if the number of escapes we have found has exceeded the recorded limit
+        // e.g. we have to manually scan the rest of the formatString.
+        if (escapesFound == std::ssize(escapes)) {
+            break;
+        }
+    }
+
+    // Process remaining escapes.
+    while (escapesFound < std::ssize(escapes)) {
+        if (escapes[escapesFound] == -1) {
+            break;
+        }
+
+        processEscape();
+        ++escapesFound;
+    }
+
+    // We either ran out of markers or reached the limit of allowed
+    // escape sequences.
+
+    // Happy path: no limit on escape sequences.
+    if (escapesFound != std::ssize(escapes)) {
+        // Append whatever's left until the end.
+        appendVerbatim(size);
+        return;
+    }
+
+    // Sad path: we have to fully parse remainder of format.
+    RunFormatterFullScan(builder, TStringBuf{beginIt + currentPos, beginIt + size}, formatter, argIndex);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// For benchmarking purposes.
+template <class... TArgs>
+TString FormatOld(TFormatString<TArgs...> format, TArgs&&... args)
+{
+    TStringBuilder builder;
+    if constexpr ((CFormattable<TArgs> && ...)) {
+        NYT::NDetail::TValueFormatter<0, TArgs...> formatter(args...);
+        NYT::NDetail::RunFormatterFullScan(&builder, format.Get(), formatter);
+    }
+    return builder.Flush();
 }
 
 } // namespace NDetail
@@ -830,7 +1143,7 @@ void Format(TStringBuilderBase* builder, TFormatString<TArgs...> format, TArgs&&
     // a second error.
     if constexpr ((CFormattable<TArgs> && ...)) {
         NYT::NDetail::TValueFormatter<0, TArgs...> formatter(args...);
-        NYT::NDetail::RunFormatter(builder, format.Get(), formatter);
+        NYT::NDetail::RunFormatter(builder, format, formatter);
     }
 }
 
@@ -851,7 +1164,7 @@ void FormatVector(
     const TVector& vec)
 {
     NYT::NDetail::TRangeFormatter<typename TVector::value_type> formatter(vec);
-    NYT::NDetail::RunFormatter(builder, format, formatter);
+    NYT::NDetail::RunFormatterFullScan(builder, format, formatter);
 }
 
 template <class TVector>
@@ -861,7 +1174,7 @@ void FormatVector(
     const TVector& vec)
 {
     NYT::NDetail::TRangeFormatter<typename TVector::value_type> formatter(vec);
-    NYT::NDetail::RunFormatter(builder, format, formatter);
+    NYT::NDetail::RunFormatterFullScan(builder, format, formatter);
 }
 
 template <size_t Length, class TVector>
@@ -887,3 +1200,30 @@ TString FormatVector(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
+
+#include <util/string/cast.h>
+
+// util/string/cast.h extension for yt and std types only
+// TODO(arkady-e1ppa): Abolish ::ToString in
+// favour of either NYT::ToString or
+// automatic formatting wherever it is needed.
+namespace NPrivate {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+    requires (
+        (NYT::NDetail::IsNYTName<T>() ||
+        NYT::NDetail::IsStdName<T>()) &&
+        NYT::CFormattable<T>)
+struct TToString<T, false>
+{
+    static TString Cvt(const T& t)
+    {
+        return NYT::ToStringViaBuilder(t);
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NPrivate

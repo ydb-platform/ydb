@@ -203,6 +203,36 @@ namespace NActors {
         }
     };
 
+    /**
+     * Allows customizing behavior based on the event type
+     */
+    template<class TEvType>
+    struct TTestEventObserverTraits {
+        static bool Match(IEventHandle::TPtr& ev) noexcept {
+            return ev->GetTypeRewrite() == TEvType::EventType;
+        }
+
+        static typename TEvType::TPtr& Convert(IEventHandle::TPtr& ev) noexcept {
+            return reinterpret_cast<typename TEvType::TPtr&>(ev);
+        }
+    };
+
+    template<>
+    struct TTestEventObserverTraits<IEventHandle> {
+        static constexpr bool Match(IEventHandle::TPtr&) noexcept {
+            return true;
+        }
+
+        static constexpr IEventHandle::TPtr& Convert(IEventHandle::TPtr& ev) noexcept {
+            return ev;
+        }
+    };
+
+    template<class TEvType>
+    struct TTestEventObserverTraits<TEventHandle<TEvType>>
+        : public TTestEventObserverTraits<TEvType>
+    {};
+
     class TTestActorRuntimeBase: public TNonCopyable {
     public:
         class TEdgeActor;
@@ -249,12 +279,19 @@ namespace NActors {
         }
         TDuration SetReschedulingDelay(TDuration delay);
         void SetLogBackend(const TAutoPtr<TLogBackend> logBackend);
+        void SetLogBackendFactory(std::function<TAutoPtr<TLogBackend>()> logBackendFactory);
         void SetLogPriority(NActors::NLog::EComponent component, NActors::NLog::EPriority priority);
         TIntrusivePtr<ITimeProvider> GetTimeProvider();
         TIntrusivePtr<IMonotonicTimeProvider> GetMonotonicTimeProvider();
         TInstant GetCurrentTime() const;
         TMonotonic GetCurrentMonotonicTime() const;
-        void UpdateCurrentTime(TInstant newTime);
+        /**
+         * When `rewind` is true allows time to go backwards. This is unsafe,
+         * since both wallclock and monotonic times are currently linked and
+         * both go backwards, but it may be necessary for testing wallclock
+         * time oddities.
+         */
+        void UpdateCurrentTime(TInstant newTime, bool rewind = false);
         void AdvanceCurrentTime(TDuration duration);
         void AddLocalService(const TActorId& actorId, TActorSetupCmd cmd, ui32 nodeIndex = 0);
         virtual void Initialize();
@@ -266,7 +303,7 @@ namespace NActors {
         TActorId Register(IActor* actor, ui32 nodeIndex = 0, ui32 poolId = 0,
             TMailboxType::EType mailboxType = TMailboxType::Simple, ui64 revolvingCounter = 0,
             const TActorId& parentid = TActorId());
-        TActorId Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailboxHeader *mailbox, ui32 hint,
+        TActorId Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailbox *mailbox,
             const TActorId& parentid = TActorId());
         TActorId RegisterService(const TActorId& serviceId, const TActorId& actorId, ui32 nodeIndex = 0);
         TActorId AllocateEdgeActor(ui32 nodeIndex = 0);
@@ -368,21 +405,16 @@ namespace NActors {
             observerHolder.Remove();
         */
 
-        template <typename TEvType>
+        template <typename TEvType = IEventHandle>
         TEventObserverHolder AddObserver(std::function<void(typename TEvType::TPtr&)> observerFunc)
         {
-            auto baseFunc = [observerFunc](TAutoPtr<IEventHandle>& event) {
-                if (event && event->GetTypeRewrite() == TEvType::EventType)
-                    observerFunc(*(reinterpret_cast<typename TEvType::TPtr*>(&event)));
+            auto baseFunc = [observerFunc](IEventHandle::TPtr& event) {
+                if (event && TTestEventObserverTraits<TEvType>::Match(event)) {
+                    observerFunc(TTestEventObserverTraits<TEvType>::Convert(event));
+                }
             };
 
             auto iter = ObserverFuncs.insert(ObserverFuncs.end(), baseFunc);
-            return TEventObserverHolder(&ObserverFuncs, std::move(iter));
-        }
-
-        TEventObserverHolder AddObserver(std::function<void(TAutoPtr<IEventHandle>&)> observerFunc)
-        {
-            auto iter = ObserverFuncs.insert(ObserverFuncs.end(), observerFunc);
             return TEventObserverHolder(&ObserverFuncs, std::move(iter));
         }
 
@@ -438,15 +470,14 @@ namespace NActors {
                 TDuration simTimeout = TDuration::Max())
         {
             typename TEvent::TPtr handle;
-            const ui32 eventType = TEvent::EventType;
             WaitForEdgeEvents([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                 Y_UNUSED(runtime);
-                if (event->GetTypeRewrite() != eventType)
+                if (!TTestEventObserverTraits<TEvent>::Match(event))
                     return false;
 
-                typename TEvent::TPtr* typedEvent = reinterpret_cast<typename TEvent::TPtr*>(&event);
-                if (predicate(*typedEvent)) {
-                    handle = *typedEvent;
+                typename TEvent::TPtr& typedEvent = TTestEventObserverTraits<TEvent>::Convert(event);
+                if (predicate(typedEvent)) {
+                    handle = std::move(typedEvent);
                     return true;
                 }
 
@@ -611,8 +642,8 @@ namespace NActors {
 
         THolder<TActorSystemSetup> MakeActorSystemSetup(ui32 nodeIndex, TNodeDataBase* node);
         THolder<TActorSystem> MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node);
-        virtual void InitActorSystemSetup(TActorSystemSetup& setup) {
-            Y_UNUSED(setup);
+        virtual void InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) {
+            Y_UNUSED(setup, node);
         }
 
    private:
@@ -654,6 +685,7 @@ namespace NActors {
         ui64 DispatcherRandomSeed;
         TIntrusivePtr<IRandomProvider> DispatcherRandomProvider;
         TAutoPtr<TLogBackend> LogBackend;
+        std::function<TAutoPtr<TLogBackend>()> LogBackendFactory;
         bool NeedMonitoring;
         ui16 MonitoringPortOffset = 0;
         bool MonitoringTypeAsync = false;
@@ -693,8 +725,9 @@ namespace NActors {
             std::shared_ptr<void> AppData0;
             THolder<TActorSystem> ActorSystem;
             THolder<IExecutorPool> SchedulerPool;
-            TVector<IExecutorPool*> ExecutorPools;
+            THashMap<ui32, IExecutorPool*> ExecutorPools;
             THolder<TExecutorThread> ExecutorThread;
+            std::unique_ptr<IHarmonizer> Harmonizer;
         };
 
         struct INodeFactory {
@@ -800,8 +833,8 @@ namespace NActors {
         const std::function<bool(const typename TEvent::TPtr&)>& predicate) {
         ev.Destroy();
         for (auto& event : events) {
-            if (event && event->GetTypeRewrite() == TEvent::EventType) {
-                if (predicate(reinterpret_cast<const typename TEvent::TPtr&>(event))) {
+            if (event && TTestEventObserverTraits<TEvent>::Match(event)) {
+                if (predicate(TTestEventObserverTraits<TEvent>::Convert(event))) {
                     ev = event;
                     return ev->CastAsLocal<TEvent>();
                 }

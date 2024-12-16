@@ -75,11 +75,19 @@ public:
     void InitObserver();
 
 private:
+
+    // Use single-threaded executor to prevent deadlocks inside subsession event handlers.
+    NTopic::IExecutor::TPtr GetSubsessionHandlersExecutor();
+
+private:
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     const TFederatedTopicClientSettings ClientSettings;
     std::shared_ptr<TFederatedDbObserver> Observer;
     std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs =
         std::make_shared<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>>();
+
+    NTopic::IExecutor::TPtr SubsessionHandlersExecutor;
+
     TAdaptiveLock Lock;
 };
 

@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -1146,7 +1147,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui64 schemeShardTabletId = Tests::ChangeStateStorage(Tests::SchemeRoot, Tests::TestDomain);
 
         NKikimrMiniKQL::TResult result;
-        bool ok = annoyingClient.LocalQuery(schemeShardTabletId, Sprintf(R"(
+        auto status = LocalQuery(*cleverServer.GetRuntime(), schemeShardTabletId, Sprintf(R"(
                                    (
                                         (let key '('('Id (Uint64 '3)))) # SysParam_IsReadOnlyMode
                                         (let value '('('Value (Utf8 '"%s"))))
@@ -1154,7 +1155,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                                         (return ret)
                                    ))", (isReadOnly ? "1" : "0")), result);
         // Cerr << result << "\n";
-        UNIT_ASSERT(ok);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
         annoyingClient.KillTablet(cleverServer, schemeShardTabletId);
 
         // Wait for schemeshard to restart

@@ -6,10 +6,15 @@
 
 #include "common.h"
 #include "counters_logger.h"
+#include "offsets_collector.h"
+#include "transaction.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
@@ -143,7 +148,7 @@ public:
     }
 
     void DeferReadFromProcessor(const typename IProcessor<UseMigrationProtocol>::TPtr& processor, TServerMessage<UseMigrationProtocol>* dst, typename IProcessor<UseMigrationProtocol>::TReadCallback callback);
-    void DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction task);
+    void DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction&& task);
     void DeferAbortSession(TCallbackContextPtr<UseMigrationProtocol> cbContext, TASessionClosedEvent<UseMigrationProtocol>&& closeEvent);
     void DeferAbortSession(TCallbackContextPtr<UseMigrationProtocol> cbContext, EStatus statusCode, NYql::TIssues&& issues);
     void DeferAbortSession(TCallbackContextPtr<UseMigrationProtocol> cbContext, EStatus statusCode, const TString& message);
@@ -208,6 +213,8 @@ public:
                                 TDeferredActions<UseMigrationProtocol>& deferred);
     void PlanDecompressionTasks(double averageCompressionRatio,
                                 TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream);
+
+    void OnDestroyReadSession();
 
     bool IsReady() const {
         return SourceDataNotProcessed == 0;
@@ -305,6 +312,8 @@ private:
         i64 GetEstimatedDecompressedSize() const {
             return EstimatedDecompressedSize;
         }
+
+        void ClearParent();
 
     private:
         TDataDecompressionInfo::TPtr Parent;
@@ -1098,6 +1107,11 @@ public:
 
     void OnCreateNewDecompressionTask();
     void OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount, i64 serverBytesSize);
+    void OnDecompressionInfoDestroyImpl(i64 compressedSize,
+                                        i64 decompressedSize,
+                                        i64 messagesCount,
+                                        i64 serverBytesSize,
+                                        TDeferredActions<UseMigrationProtocol>& deferred);
 
     void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize = 0);
 
@@ -1149,6 +1163,13 @@ public:
         TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SetSelfContext(std::move(ptr));
         EventsQueue->SetCallbackContext(TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SelfContext);
     }
+
+    void CollectOffsets(NTable::TTransaction& tx,
+                        const TVector<TReadSessionEvent::TEvent>& events,
+                        std::shared_ptr<TTopicClient::TImpl> client);
+    void CollectOffsets(NTable::TTransaction& tx,
+                        const TReadSessionEvent::TEvent& event,
+                        std::shared_ptr<TTopicClient::TImpl> client);
 
 private:
     void BreakConnectionAndReconnectImpl(TPlainStatus&& status, TDeferredActions<UseMigrationProtocol>& deferred);
@@ -1287,11 +1308,29 @@ private:
         {
         }
 
+        void OnDestroyReadSession();
+
         TDataDecompressionInfoPtr<UseMigrationProtocol> BatchInfo;
         TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> PartitionStream;
     };
 
 private:
+    struct TTransactionInfo {
+        TSpinLock Lock;
+        bool IsActive = false;
+        bool Subscribed = false;
+        bool CommitCalled = false;
+        TOffsetsCollector OffsetsCollector;
+    };
+
+    using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
+    using TTransactionMap = THashMap<TTransactionId, TTransactionInfoPtr>;
+
+    void TrySubscribeOnTransactionCommit(NTable::TTransaction& tx,
+                                         std::shared_ptr<TTopicClient::TImpl> client);
+    TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
+    void DeleteTx(const TTransactionId& txId);
+
     const TAReadSessionSettings<UseMigrationProtocol> Settings;
     const TString Database;
     const TString SessionId;
@@ -1339,6 +1378,8 @@ private:
 
     std::unordered_map<ui32, std::vector<TParentInfo>> HierarchyData;
     std::unordered_set<ui64> ReadingFinishedData;
+
+    TTransactionMap Txs;
 };
 
 }  // namespace NYdb::NTopic

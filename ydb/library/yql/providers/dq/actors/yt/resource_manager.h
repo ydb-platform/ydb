@@ -6,15 +6,17 @@
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
 
 #include <ydb/library/yql/providers/dq/task_runner/file_cache.h>
-#include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
+#include <yql/essentials/providers/common/metrics/metrics_registry.h>
 
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/yt/yson_string/string.h>
 
 namespace NYql {
     namespace NCommonJobVars {
         extern const TString ACTOR_PORT;
         extern const TString ACTOR_NODE_ID;
+        extern const TString ADDRESS_RESOLVER_CONFIG;
         extern const TString UDFS_PATH;
         extern const TString OPERATION_SIZE;
         extern const TString YT_COORDINATOR;
@@ -70,6 +72,8 @@ namespace NYql {
         int MaxRetries = -1;
 
         bool ForceIPv4 = false;
+
+        std::optional<NYT::NYson::TYsonString> AddressResolverConfig;
 
         // Pinger
         TString DieOnFileAbsence; // see YQL-14099

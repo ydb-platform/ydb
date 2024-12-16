@@ -52,7 +52,7 @@ TTenantTestConfig DefaultConsoleTestConfig() {
 
 void InitJaegerTracingConfigurator(
     TTenantTestRuntime& runtime,
-    TSamplingThrottlingConfigurator configurator,
+    TIntrusivePtr<TSamplingThrottlingConfigurator> configurator,
     const NKikimrConfig::TTracingConfig& initCfg
 ) {
     runtime.Register(CreateJaegerTracingConfigurator(std::move(configurator), initCfg));
@@ -99,7 +99,7 @@ public:
 
     std::pair<ETraceState, ui8> HandleTracing(bool isExternal, TRequestDiscriminator discriminator) {
         auto& control = RandomChoice(Controls);
-        
+
         NWilson::TTraceId traceId;
         if (isExternal) {
             traceId = NWilson::TTraceId::NewTraceId(TComponentTracingLevels::ProductionVerbose, Max<ui32>());
@@ -125,13 +125,13 @@ private:
     TVector<TIntrusivePtr<TSamplingThrottlingControl>> Controls;
 };
 
-std::pair<TTracingControls, TSamplingThrottlingConfigurator>
+std::pair<TTracingControls, TIntrusivePtr<TSamplingThrottlingConfigurator>>
     CreateSamplingThrottlingConfigurator(size_t n, TIntrusivePtr<ITimeProvider> timeProvider) {
     auto randomProvider = CreateDefaultRandomProvider();
-    TSamplingThrottlingConfigurator configurator(timeProvider, randomProvider);
+    TIntrusivePtr<TSamplingThrottlingConfigurator> configurator = MakeIntrusive<TSamplingThrottlingConfigurator>(timeProvider, randomProvider);
     TVector<TIntrusivePtr<TSamplingThrottlingControl>> controls;
     for (size_t i = 0; i < n; ++i) {
-        controls.emplace_back(configurator.GetControl());
+        controls.emplace_back(configurator->GetControl());
     }
 
     return {TTracingControls(std::move(controls)), std::move(configurator)};
@@ -206,7 +206,6 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         };
 
         {
-            size_t sampled = 0;
             size_t traced = 0;
             for (size_t i = 0; i < 1000; ++i) {
                 auto [state, level] = controls.HandleTracing(true, RandomChoice(discriminators));
@@ -215,17 +214,15 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 case TTracingControls::OFF:
                     break;
                 case TTracingControls::SAMPLED:
-                    UNIT_ASSERT_EQUAL(level, 5);
-                    ++sampled;
+                    UNIT_ASSERT(false); // We provide external trace id, => new sampled trace must not be generated
                     break;
                 case TTracingControls::EXTERNAL:
                     ++traced;
                     break;
                 }
-                timeProvider->Advance(TDuration::MilliSeconds(250));
+                timeProvider->Advance(TDuration::MilliSeconds(250)); // 4 requests per second
             }
-            UNIT_ASSERT_EQUAL(traced, 250);
-            UNIT_ASSERT(sampled >= 110 && sampled <= 135);
+            UNIT_ASSERT_C(traced >= 250 + 125 - 50 && traced <= 250 + 125 + 50, traced); // 1 of each 4 requests external traced + 1 of each 3 other requests sampled (but not greater than 0.5 of them according to throttling)
         }
         timeProvider->Advance(TDuration::Minutes(1));
 
@@ -249,7 +246,62 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(1));
             }
-            UNIT_ASSERT(sampled >= 210 && sampled <= 300);
+            UNIT_ASSERT_C(sampled >= 210 && sampled <= 300, sampled);
+        }
+        timeProvider->Advance(TDuration::Minutes(1));
+    }
+
+    Y_UNIT_TEST(ExternalTracePlusSampling) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        auto timeProvider = MakeIntrusive<TTimeProviderMock>(TInstant::Now());
+        auto [controls, configurator] = CreateSamplingThrottlingConfigurator(10, timeProvider);
+        NKikimrConfig::TTracingConfig cfg;
+        {
+            auto rule = cfg.AddExternalThrottling();
+            rule->SetMaxTracesBurst(0);
+            rule->SetMaxTracesPerMinute(60);
+        }
+        {
+            auto rule = cfg.AddSampling();
+            rule->SetFraction(0.5);
+            rule->SetLevel(5);
+            rule->SetMaxTracesBurst(10);
+            rule->SetMaxTracesPerMinute(90);
+        }
+        InitJaegerTracingConfigurator(runtime, std::move(configurator), cfg);
+
+        std::array discriminators{
+            TRequestDiscriminator{
+                .RequestType = ERequestType::TABLE_READROWS,
+                .Database = "/Root/test3",
+            },
+            TRequestDiscriminator{
+                .RequestType = ERequestType::KEYVALUE_READ,
+            },
+            TRequestDiscriminator{
+                .Database = "/Root/test2",
+            },
+            TRequestDiscriminator{},
+        };
+
+        {
+            size_t traced = 0;
+            for (size_t i = 0; i < 1000; ++i) {
+                auto [state, level] = controls.HandleTracing(true, RandomChoice(discriminators));
+
+                switch (state) {
+                case TTracingControls::OFF:
+                    break;
+                case TTracingControls::SAMPLED:
+                    UNIT_ASSERT(false); // We provide external trace id, => new sampled trace must not be generated
+                    break;
+                case TTracingControls::EXTERNAL:
+                    ++traced;
+                    break;
+                }
+                timeProvider->Advance(TDuration::MilliSeconds(250)); // 4 requests per second
+            }
+            UNIT_ASSERT_C(traced >= 250 + 375 - 75 && traced <= 250 + 375 + 75, traced); // 1 of each 4 requests external traced + 1.5 of each 3 other requests sampled
         }
     }
 

@@ -177,9 +177,7 @@ void TCommitTransactionCommand::DoExecute(ICommandContextPtr context)
     auto transactionCommitResult = WaitFor(transaction->Commit(Options))
         .ValueOrThrow();
 
-    if (context->GetConfig()->ApiVersion == ApiVersion3 || !context->GetConfig()->EnableInternalCommands) {
-        ProduceEmptyOutput(context);
-    } else {
+    if (context->GetConfig()->ApiVersion >= ApiVersion4) {
         ProduceOutput(
             context,
             [&] (IYsonConsumer* consumer) {
@@ -188,11 +186,13 @@ void TCommitTransactionCommand::DoExecute(ICommandContextPtr context)
                         .Item("primary_commit_timestamp").Value(transactionCommitResult.PrimaryCommitTimestamp)
                         .Item("commit_timestamps").DoMapFor(
                             transactionCommitResult.CommitTimestamps.Timestamps,
-                            [&](auto fluent, const auto& pair) {
+                            [&] (auto fluent, const auto& pair) {
                                 fluent.Item(ToString(pair.first)).Value(pair.second);
                             })
                     .EndMap();
             });
+    } else {
+        ProduceEmptyOutput(context);
     }
 }
 

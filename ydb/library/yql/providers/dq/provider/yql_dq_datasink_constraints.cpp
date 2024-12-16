@@ -1,9 +1,9 @@
 #include "yql_dq_state.h"
 
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/common/transform/yql_visit.h>
-#include <ydb/library/yql/core/yql_expr_constraint.h>
-#include <ydb/library/yql/ast/yql_constraint.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
+#include <yql/essentials/core/yql_expr_constraint.h>
+#include <yql/essentials/ast/yql_constraint.h>
 
 namespace NYql {
 
@@ -48,6 +48,7 @@ public:
         AddHandler({TDqReplicate::CallableName()}, Hndl(&TDqDataSinkConstraintTransformer::HandleReplicate));
         AddHandler({
             TDqJoin::CallableName(),
+            TDqPhyGraceJoin::CallableName(),
             TDqPhyMapJoin::CallableName(),
             TDqPhyCrossJoin::CallableName(),
             TDqPhyJoinDict::CallableName(),

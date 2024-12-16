@@ -11,7 +11,7 @@ with ss_items as
                   from {{date_dim}}
                   where d_week_seq = (select d_week_seq
                                       from {{date_dim}}
-                                      where d_date = '1998-02-21'::date))
+                                      where d_date = '2000-01-03'::date))
    and ss_sold_date_sk   = d_date_sk
  group by i_item_id),
  cs_items as
@@ -25,7 +25,7 @@ with ss_items as
                   from {{date_dim}}
                   where d_week_seq = (select d_week_seq
                                       from {{date_dim}}
-                                      where d_date = '1998-02-21'::date))
+                                      where d_date = '2000-01-03'::date))
   and  cs_sold_date_sk = d_date_sk
  group by i_item_id),
  ws_items as
@@ -39,7 +39,7 @@ with ss_items as
                   from {{date_dim}}
                   where d_week_seq =(select d_week_seq
                                      from {{date_dim}}
-                                     where d_date = '1998-02-21'::date))
+                                     where d_date = '2000-01-03'::date))
   and ws_sold_date_sk   = d_date_sk
  group by i_item_id)
   select  ss_items.item_id
@@ -53,12 +53,12 @@ with ss_items as
  from ss_items,cs_items,ws_items
  where ss_items.item_id=cs_items.item_id
    and ss_items.item_id=ws_items.item_id
-   and ss_item_rev between 0.9 * cs_item_rev and 1.1 * cs_item_rev
-   and ss_item_rev between 0.9 * ws_item_rev and 1.1 * ws_item_rev
-   and cs_item_rev between 0.9 * ss_item_rev and 1.1 * ss_item_rev
-   and cs_item_rev between 0.9 * ws_item_rev and 1.1 * ws_item_rev
-   and ws_item_rev between 0.9 * ss_item_rev and 1.1 * ss_item_rev
-   and ws_item_rev between 0.9 * cs_item_rev and 1.1 * cs_item_rev
+   and ss_item_rev between 0.9::numeric * cs_item_rev and 1.1::numeric * cs_item_rev
+   and ss_item_rev between 0.9::numeric * ws_item_rev and 1.1::numeric * ws_item_rev
+   and cs_item_rev between 0.9::numeric * ss_item_rev and 1.1::numeric * ss_item_rev
+   and cs_item_rev between 0.9::numeric * ws_item_rev and 1.1::numeric * ws_item_rev
+   and ws_item_rev between 0.9::numeric * ss_item_rev and 1.1::numeric * ss_item_rev
+   and ws_item_rev between 0.9::numeric * cs_item_rev and 1.1::numeric * cs_item_rev
  order by item_id
          ,ss_item_rev
  limit 100;

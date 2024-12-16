@@ -1,9 +1,11 @@
 #include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common_subdomain.h"
-#include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_subdomain.h"
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/hive.h>
 
 
 #define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -814,7 +816,7 @@ public:
     }
 
     bool HandleReply(TEvHive::TEvUpdateDomainReply::TPtr& ev, TOperationContext& context) override {
-        const TTabletId hive = TTabletId(ev->Get()->Record.GetOrigin()); 
+        const TTabletId hive = TTabletId(ev->Get()->Record.GetOrigin());
 
         LOG_I(DebugHint() << "HandleReply TEvUpdateDomainReply"
             << ", from hive: " << hive);
@@ -936,21 +938,23 @@ public:
         // Create or derive alter.
         // (We could have always created new alter from a current subdomainInfo but
         // we need to take into account possible version increase from CreateHive suboperation.)
-        auto createAlterFrom = [&inputSettings, &delta](auto prototype) {
+        auto createAlterFrom = [&inputSettings](auto prototype, const TStoragePools& additionalPools) {
             return MakeIntrusive<TSubDomainInfo>(
                 *prototype,
                 inputSettings.GetPlanResolution(),
                 inputSettings.GetTimeCastBucketsPerMediator(),
-                delta.StoragePoolsAdded
+                additionalPools
             );
         };
         TSubDomainInfo::TPtr alter = [&delta, &subdomainInfo, &createAlterFrom, &context]() {
             if (delta.AddExternalHive && context.SS->EnableAlterDatabaseCreateHiveFirst) {
                 Y_ABORT_UNLESS(subdomainInfo->GetAlter());
-                return createAlterFrom(subdomainInfo->GetAlter());
+                //NOTE: existing alter already has all storage pools that combined operation wanted to add,
+                // should not add them second time when deriving alter from alter
+                return createAlterFrom(subdomainInfo->GetAlter(), {});
             } else {
                 Y_ABORT_UNLESS(!subdomainInfo->GetAlter());
-                return createAlterFrom(subdomainInfo);
+                return createAlterFrom(subdomainInfo, delta.StoragePoolsAdded);
             }
         }();
 
@@ -1084,7 +1088,13 @@ ISubOperation::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxState 
 }
 
 TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
-    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain);
+    //NOTE: Accepting ESchemeOpAlterSubDomain operation for an ExtSubDomain is a special compatibility case
+    // for those old subdomains that at the time went through migration to a separate tenants.
+    // Console tablet holds records about types of the subdomains but they hadn't been updated
+    // at the migration time. So Console still thinks that old subdomains are plain subdomains
+    // whereas they had been migrated to the extsubdomains.
+    // This compatibility case should be upholded until Console records would be updated.
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain || tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSubDomain);
 
     LOG_I("CreateCompatibleAlterExtSubDomain, opId " << id
         << ", feature flag EnableAlterDatabaseCreateHiveFirst " << context.SS->EnableAlterDatabaseCreateHiveFirst

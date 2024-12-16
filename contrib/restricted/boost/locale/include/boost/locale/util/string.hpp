@@ -38,7 +38,7 @@ namespace boost { namespace locale { namespace util {
     /// Cast an unsigned char to a (possibly signed) char avoiding implementation defined behavior
     constexpr char to_char(unsigned char c)
     {
-        return static_cast<char>((c - std::numeric_limits<char>::min()) + std::numeric_limits<char>::min());
+        return static_cast<char>((c - (std::numeric_limits<char>::min)()) + (std::numeric_limits<char>::min)());
     }
 
 }}} // namespace boost::locale::util

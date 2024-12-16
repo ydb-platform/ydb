@@ -3,6 +3,7 @@ import functools
 import logging
 from typing import (
     TYPE_CHECKING,
+    Callable,
     Dict,
     FrozenSet,
     Iterable,
@@ -11,6 +12,7 @@ from typing import (
     Mapping,
     NamedTuple,
     Optional,
+    Protocol,
     Sequence,
     Set,
     Tuple,
@@ -21,13 +23,16 @@ from typing import (
 from pip._vendor.packaging.requirements import InvalidRequirement
 from pip._vendor.packaging.specifiers import SpecifierSet
 from pip._vendor.packaging.utils import NormalizedName, canonicalize_name
+from pip._vendor.packaging.version import InvalidVersion, Version
 from pip._vendor.resolvelib import ResolutionImpossible
 
 from pip._internal.cache import CacheEntry, WheelCache
 from pip._internal.exceptions import (
     DistributionNotFound,
     InstallationError,
+    InvalidInstalledPackage,
     MetadataInconsistent,
+    MetadataInvalid,
     UnsupportedPythonVersion,
     UnsupportedWheel,
 )
@@ -50,7 +55,7 @@ from pip._internal.utils.hashes import Hashes
 from pip._internal.utils.packaging import get_requirement
 from pip._internal.utils.virtualenv import running_under_virtualenv
 
-from .base import Candidate, CandidateVersion, Constraint, Requirement
+from .base import Candidate, Constraint, Requirement
 from .candidates import (
     AlreadyInstalledCandidate,
     BaseCandidate,
@@ -70,7 +75,6 @@ from .requirements import (
 )
 
 if TYPE_CHECKING:
-    from typing import Protocol
 
     class ConflictCause(Protocol):
         requirement: RequiresPythonRequirement
@@ -118,6 +122,7 @@ class Factory:
         self._extras_candidate_cache: Dict[
             Tuple[int, FrozenSet[NormalizedName]], ExtrasCandidate
         ] = {}
+        self._supported_tags_cache = get_supported()
 
         if not ignore_installed:
             env = get_default_environment()
@@ -177,7 +182,7 @@ class Factory:
         extras: FrozenSet[str],
         template: InstallRequirement,
         name: Optional[NormalizedName],
-        version: Optional[CandidateVersion],
+        version: Optional[Version],
     ) -> Optional[Candidate]:
         base: Optional[BaseCandidate] = self._make_base_candidate_from_link(
             link, template, name, version
@@ -191,7 +196,7 @@ class Factory:
         link: Link,
         template: InstallRequirement,
         name: Optional[NormalizedName],
-        version: Optional[CandidateVersion],
+        version: Optional[Version],
     ) -> Optional[BaseCandidate]:
         # TODO: Check already installed candidate, and use it if the link and
         # editable flag match.
@@ -211,7 +216,7 @@ class Factory:
                         name=name,
                         version=version,
                     )
-                except MetadataInconsistent as e:
+                except (MetadataInconsistent, MetadataInvalid) as e:
                     logger.info(
                         "Discarding [blue underline]%s[/]: [yellow]%s[reset]",
                         link,
@@ -279,10 +284,15 @@ class Factory:
                 installed_dist = self._installed_dists[name]
             except KeyError:
                 return None
-            # Don't use the installed distribution if its version does not fit
-            # the current dependency graph.
-            if not specifier.contains(installed_dist.version, prereleases=True):
-                return None
+
+            try:
+                # Don't use the installed distribution if its version
+                # does not fit the current dependency graph.
+                if not specifier.contains(installed_dist.version, prereleases=True):
+                    return None
+            except InvalidVersion as e:
+                raise InvalidInstalledPackage(dist=installed_dist, invalid_exc=e)
+
             candidate = self._make_candidate_from_dist(
                 dist=installed_dist,
                 extras=extras,
@@ -391,6 +401,7 @@ class Factory:
         incompatibilities: Mapping[str, Iterator[Candidate]],
         constraint: Constraint,
         prefers_installed: bool,
+        is_satisfied_by: Callable[[Requirement, Candidate], bool],
     ) -> Iterable[Candidate]:
         # Collect basic lookup information from the requirements.
         explicit_candidates: Set[Candidate] = set()
@@ -456,7 +467,7 @@ class Factory:
             for c in explicit_candidates
             if id(c) not in incompat_ids
             and constraint.is_satisfied_by(c)
-            and all(req.is_satisfied_by(c) for req in requirements[identifier])
+            and all(is_satisfied_by(req, c) for req in requirements[identifier])
         )
 
     def _make_requirements_from_install_req(
@@ -604,7 +615,7 @@ class Factory:
         return self._wheel_cache.get_cache_entry(
             link=link,
             package_name=name,
-            supported_tags=get_supported(),
+            supported_tags=self._supported_tags_cache,
         )
 
     def get_dist_to_uninstall(self, candidate: Candidate) -> Optional[BaseDistribution]:
@@ -668,8 +679,8 @@ class Factory:
         cands = self._finder.find_all_candidates(req.project_name)
         skipped_by_requires_python = self._finder.requires_python_skipped_reasons()
 
-        versions_set: Set[CandidateVersion] = set()
-        yanked_versions_set: Set[CandidateVersion] = set()
+        versions_set: Set[Version] = set()
+        yanked_versions_set: Set[Version] = set()
         for c in cands:
             is_yanked = c.link.is_yanked if c.link else False
             if is_yanked:
@@ -799,7 +810,7 @@ class Factory:
             + "\n\n"
             + "To fix this you could try to:\n"
             + "1. loosen the range of package versions you've specified\n"
-            + "2. remove package versions to allow pip attempt to solve "
+            + "2. remove package versions to allow pip to attempt to solve "
             + "the dependency conflict\n"
         )
 

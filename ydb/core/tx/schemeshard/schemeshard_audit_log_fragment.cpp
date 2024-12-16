@@ -2,8 +2,9 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/string/builder.h>
@@ -151,6 +152,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex:
         return "ALTER TABLE INDEX RENAME";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
+        return "ALTER SEQUENCE RENAME";
     // filestore
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
         return "CREATE FILE STORE";
@@ -201,6 +204,15 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP REPLICATION";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
         return "DROP REPLICATION CASCADE";
+    // replication
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
+        return "CREATE TRANSFER";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer:
+        return "ALTER TRANSFER";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer:
+        return "DROP TRANSFER";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade:
+        return "DROP TRANSFER CASCADE";
     // blob depot
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:
         return "CREATE BLOB DEPOT";
@@ -235,12 +247,31 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER TABLE ALTER CONTINUOUS BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
         return "ALTER TABLE DROP CONTINUOUS BACKUP";
+    // resource pool
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
         return "CREATE RESOURCE POOL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool:
         return "DROP RESOURCE POOL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return "ALTER RESOURCE POOL";
+    // incremental backup
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
+        return "RESTORE";
+    // backup collection
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+        return "CREATE BACKUP COLLECTION";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
+        return "ALTER BACKUP COLLECTION";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
+        return "DROP BACKUP COLLECTION";
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+        return "BACKUP";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
+        return "BACKUP INCREMENTAL";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
+        return "RESTORE";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -467,6 +498,10 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(tx.GetMoveTableIndex().GetSrcPath());
         result.emplace_back(tx.GetMoveTableIndex().GetDstPath());
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
+        result.emplace_back(tx.GetMoveSequence().GetSrcPath());
+        result.emplace_back(tx.GetMoveSequence().GetDstPath());
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSequence().GetName()}));
         break;
@@ -476,12 +511,16 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetReplication().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer:
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:
@@ -543,6 +582,32 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         result.emplace_back(tx.GetCreateResourcePool().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
+        for (const auto& table : tx.GetRestoreMultipleIncrementalBackups().GetSrcTablePaths()) {
+            result.emplace_back(table);
+        }
+        result.emplace_back(tx.GetRestoreMultipleIncrementalBackups().GetDstTablePath());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropBackupCollection().GetName()}));
+        break;
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
         break;
     }
 

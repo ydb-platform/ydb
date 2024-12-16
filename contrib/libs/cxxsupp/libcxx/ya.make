@@ -14,9 +14,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2023-10-05)
+VERSION(2023-12-18)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/dc129d6f715cf83a2072fc8de8b4e4c70bca6935.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/3b0705827dbe711788c6b6bec3afa94205db1ce8.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
@@ -218,11 +218,11 @@ ENDIF()
 
 SRCS(
     src/algorithm.cpp
-    src/algorithm_old.cpp
     src/any.cpp
     src/atomic.cpp
     src/barrier.cpp
     src/bind.cpp
+    src/call_once.cpp
     src/charconv.cpp
     src/chrono.cpp
     src/condition_variable.cpp

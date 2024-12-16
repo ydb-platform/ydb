@@ -1,6 +1,6 @@
 #include "yql_pq_session.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql {
 
@@ -85,10 +85,10 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             return client->DescribePath(path);
         }
 
-        return GetYdbPqClient(cluster, database, *config, credentialsProviderFactory).DescribeTopic(path).Apply([cluster, path](const NYdb::NTopic::TAsyncDescribeTopicResult& describeTopicResultFuture) {
+        return GetYdbPqClient(cluster, database, *config, credentialsProviderFactory).DescribeTopic(path).Apply([cluster, path, database](const NYdb::NTopic::TAsyncDescribeTopicResult& describeTopicResultFuture) {
             const NYdb::NTopic::TDescribeTopicResult& describeTopicResult = describeTopicResultFuture.GetValue();
             if (!describeTopicResult.IsSuccess()) {
-                throw yexception() << "Failed to describe topic `" << cluster << "`.`" << path << "`: " << describeTopicResult.GetIssues().ToString();
+                throw yexception() << "Failed to describe topic `" << cluster << "`.`" << path << "` in the database `" << database << "`: " << describeTopicResult.GetIssues().ToString();
             }
             NPq::NConfigurationManager::TTopicDescription desc(path);
             desc.PartitionsCount = describeTopicResult.GetTopicDescription().GetTotalPartitionsCount();

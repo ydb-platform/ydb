@@ -157,6 +157,8 @@ struct TPDiskMon {
 
         ::NMonitoring::TDynamicCounters::TCounterPtr PDiskThreadBusyTimeNs;
 
+        ui32 PDiskId = 0;
+
     public:
         NMonitoring::TPercentileTrackerLg<5, 4, 15> UpdateCycleTime;
 
@@ -164,6 +166,10 @@ struct TPDiskMon {
         TUpdateDurationTracker()
             : BeginUpdateAt(HPNow())
         {}
+
+        void SetPDiskId(ui32 pdiskId) {
+            PDiskId = pdiskId;
+        }
 
         void SetCounter(const ::NMonitoring::TDynamicCounters::TCounterPtr& pDiskThreadBusyTimeNs) {
             PDiskThreadBusyTimeNs = pDiskThreadBusyTimeNs;
@@ -200,18 +206,19 @@ struct TPDiskMon {
             }
         }
 
-        void UpdateEnded() {
+        float UpdateEnded() {
             NHPTimer::STime updateEndedAt = HPNow();
+            float entireUpdateMs = HPMilliSecondsFloat(updateEndedAt - BeginUpdateAt);
             if (IsLwProbeEnabled) {
-                float entireUpdateMs = HPMilliSecondsFloat(updateEndedAt - BeginUpdateAt);
                 float inputQueueMs = HPMilliSecondsFloat(SchedulingStartAt - BeginUpdateAt);
                 float schedulingMs = HPMilliSecondsFloat(ProcessingStartAt - SchedulingStartAt);
                 float processingMs = HPMilliSecondsFloat(WaitingStartAt - ProcessingStartAt);
                 float waitingMs = HPMilliSecondsFloat(updateEndedAt - WaitingStartAt);
-                GLOBAL_LWPROBE(BLOBSTORAGE_PROVIDER, PDiskUpdateCycleDetails, entireUpdateMs, inputQueueMs,
+                GLOBAL_LWPROBE(BLOBSTORAGE_PROVIDER, PDiskUpdateCycleDetails, PDiskId, entireUpdateMs, inputQueueMs,
                         schedulingMs, processingMs, waitingMs);
             }
             BeginUpdateAt = updateEndedAt;
+            return entireUpdateMs;
         }
     };
 
@@ -302,6 +309,7 @@ struct TPDiskMon {
     THistogram DeviceReadDuration;
     THistogram DeviceWriteDuration;
     THistogram DeviceTrimDuration;
+    THistogram DeviceFlushDuration;
 
     // <BASE_BITS, EXP_BITS, FRAME_COUNT>
     using TDurationTracker = NMonitoring::TPercentileTrackerLg<5, 4, 15>;

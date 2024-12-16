@@ -23,7 +23,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/protobuf
+    library/cpp/protobuf/runtime
     library/cpp/type_info
     library/cpp/threading/future
     library/cpp/yson/node
@@ -45,4 +45,6 @@ GENERATE_ENUM_SERIALIZATION(protobuf_format.h)
 
 END()
 
-RECURSE_FOR_TESTS(ut)
+RECURSE_FOR_TESTS(
+    ut
+)

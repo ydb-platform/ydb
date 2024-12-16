@@ -1,10 +1,5 @@
 PROGRAM(query_replay_yt)
 
-OWNER(
-    shumkovnd
-    g:kikimr
-)
-
 ALLOCATOR(LF)
 
 YQL_LAST_ABI_VERSION()

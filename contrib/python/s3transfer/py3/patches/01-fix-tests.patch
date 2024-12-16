@@ -1,0 +1,110 @@
+--- contrib/python/s3transfer/py3/tests/functional/test_copy.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_copy.py	(working tree)
+@@ -15,1 +15,1 @@ from botocore.stub import Stubber
+-from tests import BaseGeneralInterfaceTest, FileSizeProvider
++from __tests__ import BaseGeneralInterfaceTest, FileSizeProvider
+--- contrib/python/s3transfer/py3/tests/functional/test_crt.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_crt.py	(working tree)
+@@ -18,1 +18,1 @@ from concurrent.futures import Future
+-from tests import (
++from __tests__ import (
+--- contrib/python/s3transfer/py3/tests/functional/test_delete.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_delete.py	(working tree)
+@@ -11,1 +11,1 @@
+-from tests import BaseGeneralInterfaceTest
++from __tests__ import BaseGeneralInterfaceTest
+--- contrib/python/s3transfer/py3/tests/functional/test_download.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_download.py	(working tree)
+@@ -23,1 +23,1 @@ from botocore.exceptions import ClientError
+-from tests import (
++from __tests__ import (
+--- contrib/python/s3transfer/py3/tests/functional/test_manager.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_manager.py	(working tree)
+@@ -17,1 +17,1 @@ from botocore.awsrequest import create_request_object
+-from tests import StubbedClientTest, mock, skip_if_using_serial_implementation
++from __tests__ import StubbedClientTest, mock, skip_if_using_serial_implementation
+--- contrib/python/s3transfer/py3/tests/functional/test_processpool.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_processpool.py	(working tree)
+@@ -21,1 +21,1 @@ from botocore.stub import Stubber
+-from tests import FileCreator, mock, unittest
++from __tests__ import FileCreator, mock, unittest
+--- contrib/python/s3transfer/py3/tests/functional/test_upload.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_upload.py	(working tree)
+@@ -23,1 +23,1 @@ from botocore.stub import ANY
+-from tests import (
++from __tests__ import (
+--- contrib/python/s3transfer/py3/tests/functional/test_utils.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_utils.py	(working tree)
+@@ -16,1 +16,1 @@ import socket
+-from tests import skip_if_windows, unittest
++from __tests__ import skip_if_windows, unittest
+--- contrib/python/s3transfer/py3/tests/unit/test_bandwidth.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_bandwidth.py	(working tree)
+@@ -25,1 +25,1 @@ from s3transfer.bandwidth import (
+-from tests import mock, unittest
++from __tests__ import mock, unittest
+--- contrib/python/s3transfer/py3/tests/unit/test_compat.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_compat.py	(working tree)
+@@ -17,1 +17,1 @@ import tempfile
+-from tests import skip_if_windows, unittest
++from __tests__ import skip_if_windows, unittest
+--- contrib/python/s3transfer/py3/tests/unit/test_copies.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_copies.py	(working tree)
+@@ -11,1 +11,1 @@
+-from tests import BaseTaskTest, RecordingSubscriber
++from __tests__ import BaseTaskTest, RecordingSubscriber
+--- contrib/python/s3transfer/py3/tests/unit/test_crt.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_crt.py	(working tree)
+@@ -15,1 +15,1 @@ from botocore.session import Session
+-from tests import HAS_CRT, FileCreator, mock, requires_crt, unittest
++from __tests__ import HAS_CRT, FileCreator, mock, requires_crt, unittest
+--- contrib/python/s3transfer/py3/tests/unit/test_delete.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_delete.py	(working tree)
+@@ -11,1 +11,1 @@
+-from tests import BaseTaskTest
++from __tests__ import BaseTaskTest
+--- contrib/python/s3transfer/py3/tests/unit/test_download.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_download.py	(working tree)
+@@ -37,1 +37,1 @@ from s3transfer.download import (
+-from tests import (
++from __tests__ import (
+--- contrib/python/s3transfer/py3/tests/unit/test_futures.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_futures.py	(working tree)
+@@ -37,1 +37,1 @@ from s3transfer.utils import (
+-from tests import (
++from __tests__ import (
+--- contrib/python/s3transfer/py3/tests/unit/test_manager.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_manager.py	(working tree)
+@@ -16,1 +16,1 @@ from concurrent.futures import ThreadPoolExecutor
+-from tests import TransferCoordinatorWithInterrupt, unittest
++from __tests__ import TransferCoordinatorWithInterrupt, unittest
+--- contrib/python/s3transfer/py3/tests/unit/test_processpool.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_processpool.py	(working tree)
+@@ -39,1 +39,1 @@ from s3transfer.processpool import (
+-from tests import (
++from __tests__ import (
+--- contrib/python/s3transfer/py3/tests/unit/test_s3transfer.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_s3transfer.py	(working tree)
+@@ -33,1 +33,1 @@ from s3transfer import (
+-from tests import mock, unittest
++from __tests__ import mock, unittest
+--- contrib/python/s3transfer/py3/tests/unit/test_subscribers.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_subscribers.py	(working tree)
+@@ -12,1 +12,1 @@
+-from tests import unittest
++from __tests__ import unittest
+--- contrib/python/s3transfer/py3/tests/unit/test_tasks.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_tasks.py	(working tree)
+@@ -23,1 +23,1 @@ from s3transfer.tasks import (
+-from tests import (
++from __tests__ import (
+--- contrib/python/s3transfer/py3/tests/unit/test_upload.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_upload.py	(working tree)
+@@ -32,1 +32,1 @@ from s3transfer.upload import (
+-from tests import (
++from __tests__ import (
+--- contrib/python/s3transfer/py3/tests/unit/test_utils.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_utils.py	(working tree)
+@@ -43,1 +43,1 @@ from s3transfer.utils import (
+-from tests import NonSeekableWriter, RecordingSubscriber, mock, unittest
++from __tests__ import NonSeekableWriter, RecordingSubscriber, mock, unittest

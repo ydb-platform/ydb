@@ -4,8 +4,6 @@ FORK_SUBTESTS()
 
 SIZE(LARGE)
 
-TIMEOUT(3600)
-
 TAG(ya:fat)
 
 SRCS(
@@ -15,11 +13,6 @@ SRCS(
 
 PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib
-)
-
-REQUIREMENTS(
-    cpu:4
-    ram:32
 )
 
 END()

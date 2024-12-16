@@ -3,9 +3,11 @@ LIBRARY()
 SRCS(
     schema.cpp
     update.cpp
+    validator.cpp
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/core/protos
 )
 

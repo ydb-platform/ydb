@@ -110,6 +110,13 @@ TStringBuf GetServiceHostName(TStringBuf address)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TString FormatNetworkAddress(TStringBuf address, int port)
+{
+    return Format("[%v]:%v", address, port);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 const TNetworkAddress NullNetworkAddress;
 
 TNetworkAddress::TNetworkAddress()
@@ -709,6 +716,13 @@ bool TIP6Address::FromString(TStringBuf str, TIP6Address* address)
     return true;
 }
 
+bool TIP6Address::IsMtn() const
+{
+    static const auto BackboneNetwork = TIP6Network::FromString("2a02:6b8:c00::/40");
+    static const auto FastboneNetwork = TIP6Network::FromString("2a02:6b8:fc00::/40");
+    return BackboneNetwork.Contains(*this) || FastboneNetwork.Contains(*this);
+}
+
 void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStringBuf /*spec*/)
 {
     const auto* parts = reinterpret_cast<const ui16*>(address.GetRawBytes());
@@ -966,19 +980,19 @@ void Serialize(const TIP6Network& value, IYsonConsumer* consumer)
 //! Performs asynchronous host name resolution.
 class TAddressResolver::TImpl
     : public virtual TRefCounted
-    , private TAsyncExpiringCache<TString, TNetworkAddress>
+    , private TAsyncExpiringCache<std::string, TNetworkAddress>
 {
 public:
     explicit TImpl(TAddressResolverConfigPtr config)
         : TAsyncExpiringCache(
             config,
             /*logger*/ {},
-            DnsProfiler.WithPrefix("/resolve_cache"))
+            DnsProfiler().WithPrefix("/resolve_cache"))
     {
         Configure(std::move(config));
     }
 
-    TFuture<TNetworkAddress> Resolve(const TString& hostName)
+    TFuture<TNetworkAddress> Resolve(const std::string& hostName)
     {
         // Check if |address| parses into a valid IPv4 or IPv6 address.
         if (auto result = TNetworkAddress::TryParse(hostName); result.IsOK()) {
@@ -1053,7 +1067,7 @@ private:
 
     TAtomicIntrusivePtr<IDnsResolver> DnsResolver_;
 
-    TFuture<TNetworkAddress> DoGet(const TString& hostName, bool /*isPeriodicUpdate*/) noexcept override
+    TFuture<TNetworkAddress> DoGet(const std::string& hostName, bool /*isPeriodicUpdate*/) noexcept override
     {
         TDnsResolveOptions options{
             .EnableIPv4 = Config_->EnableIPv4,
@@ -1102,7 +1116,7 @@ TAddressResolver* TAddressResolver::Get()
     return LeakySingleton<TAddressResolver>();
 }
 
-TFuture<TNetworkAddress> TAddressResolver::Resolve(const TString& address)
+TFuture<TNetworkAddress> TAddressResolver::Resolve(const std::string& address)
 {
     return Impl_->Resolve(address);
 }
@@ -1187,7 +1201,7 @@ TMtnAddress& TMtnAddress::SetHost(ui64 host)
     return *this;
 }
 
-const TIP6Address& TMtnAddress::ToIP6Address() const
+TIP6Address TMtnAddress::ToIP6Address() const
 {
     return Address_;
 }

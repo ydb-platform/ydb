@@ -1,4 +1,5 @@
 import io
+import warnings
 from typing import Any, Iterable, List, Optional
 from urllib.parse import urlencode
 
@@ -24,7 +25,7 @@ class FormData:
         charset: Optional[str] = None,
     ) -> None:
         self._writer = multipart.MultipartWriter("form-data")
-        self._fields = []  # type: List[Any]
+        self._fields: List[Any] = []
         self._is_multipart = False
         self._is_processed = False
         self._quote_fields = quote_fields
@@ -53,10 +54,15 @@ class FormData:
         if isinstance(value, io.IOBase):
             self._is_multipart = True
         elif isinstance(value, (bytes, bytearray, memoryview)):
+            msg = (
+                "In v4, passing bytes will no longer create a file field. "
+                "Please explicitly use the filename parameter or pass a BytesIO object."
+            )
             if filename is None and content_transfer_encoding is None:
+                warnings.warn(msg, DeprecationWarning)
                 filename = name
 
-        type_options = MultiDict({"name": name})  # type: MultiDict[str]
+        type_options: MultiDict[str] = MultiDict({"name": name})
         if filename is not None and not isinstance(filename, str):
             raise TypeError(
                 "filename must be an instance of str. " "Got: %s" % filename
@@ -81,7 +87,11 @@ class FormData:
                     "content_transfer_encoding must be an instance"
                     " of str. Got: %s" % content_transfer_encoding
                 )
-            headers[hdrs.CONTENT_TRANSFER_ENCODING] = content_transfer_encoding
+            msg = (
+                "content_transfer_encoding is deprecated. "
+                "To maintain compatibility with v4 please pass a BytesPayload."
+            )
+            warnings.warn(msg, DeprecationWarning)
             self._is_multipart = True
 
         self._fields.append((type_options, headers, value))

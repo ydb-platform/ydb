@@ -18,9 +18,11 @@ PEERDIR(
     ydb/core/kqp/gateway/behaviour/table
     ydb/core/kqp/gateway/behaviour/external_data_source
     ydb/core/kqp/gateway/behaviour/resource_pool
+    ydb/core/kqp/gateway/behaviour/resource_pool_classifier
     ydb/core/kqp/gateway/behaviour/view
     ydb/core/kqp/gateway/utils
-    ydb/library/yql/providers/result/expr_nodes
+    ydb/core/statistics/service    
+    yql/essentials/providers/result/expr_nodes
 )
 
 YQL_LAST_ABI_VERSION()

@@ -32,6 +32,7 @@ public:
 
     enum class ETargetKind: ui8 {
         Table,
+        IndexTable,
     };
 
     enum class EDstState: ui8 {
@@ -69,6 +70,7 @@ public:
 
         virtual const TString& GetStreamName() const = 0;
         virtual void SetStreamName(const TString& value) = 0;
+        virtual TString GetStreamPath() const = 0;
 
         virtual EStreamState GetStreamState() const = 0;
         virtual void SetStreamState(EStreamState value) = 0;

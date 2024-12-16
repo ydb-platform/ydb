@@ -6,6 +6,12 @@ LICENSE(GPL-3.0-or-later)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(3.7.6)
+
+PEERDIR(
+    contrib/libs/libiconv
+)
+
 ADDINCL(
     contrib/tools/bison
     contrib/tools/bison/lib
@@ -15,21 +21,32 @@ NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 
+CFLAGS(
+    -DDEFAULT_TEXT_DOMAIN=\"bison-gnulib\"
+    -DEXEEXT=\"\"
+)
+
 SRCS(
-    abitset.c
+    allocator.c
+    areadlink.c
     argmatch.c
     asnprintf.c
+    asprintf.c
     basename-lgpl.c
     basename.c
     binary-io.c
     bitrotate.c
     bitset.c
-    bitset_stats.c
-    bitsetv-print.c
+    bitset/array.c
+    bitset/list.c
+    bitset/stats.c
+    bitset/table.c
+    bitset/vector.c
     bitsetv.c
     c-ctype.c
     c-strcasecmp.c
     c-strncasecmp.c
+    careadlinkat.c
     cloexec.c
     close-stream.c
     closeout.c
@@ -38,25 +55,34 @@ SRCS(
     dirname.c
     dup-safer-flag.c
     dup-safer.c
-    ebitset.c
     exitfail.c
     fatal-signal.c
-    fd-hook.c
     fd-safer-flag.c
     fd-safer.c
     fopen-safer.c
-    fseterr.c
+    fstrcmp.c
     get-errno.c
+    gethrxtime.c
+    getprogname.c
+    gl_array_list.c
+    gl_linked_list.c
+    gl_list.c
+    gl_oset.c
+    gl_rbtree_oset.c
+    gl_rbtreehash_list.c
+    gl_xlist.c
     glthread/lock.c
     glthread/threadlib.c
+    glthread/tls.c
+    hard-locale.c
     hash.c
-    isnand.c
-    isnanf.c
-    isnanl.c
-    lbitset.c
     localcharset.c
     math.c
+    mbchar.c
+    mbfile.c
+    mbrtowc.c
     mbswidth.c
+    path-join.c
     pipe-safer.c
     pipe2-safer.c
     pipe2.c
@@ -66,25 +92,47 @@ SRCS(
     printf-parse.c
     progname.c
     quotearg.c
+    readline.c
+    setlocale_null.c
     sig-handler.c
     spawn-pipe.c
     stripslash.c
+    timespec.c
     timevar.c
+    unicodeio.c
     unistd.c
+    unistr/u8-mbtoucr.c
+    unistr/u8-uctomb-aux.c
+    unistr/u8-uctomb.c
     uniwidth/width.c
     vasnprintf.c
-    vbitset.c
+    vasprintf.c
     wait-process.c
     wctype-h.c
     xalloc-die.c
     xconcat-filename.c
+    xhash.c
     xmalloc.c
     xmemdup0.c
+    xreadlink.c
     xsize.c
     xstrndup.c
+    xtime.c
 )
 
-IF (OS_DARWIN)
+IF (NOT MUSL)
+    SRCS(
+        fseterr.c
+    )
+ENDIF()
+
+IF (MUSL)
+    SRCS(
+        error.c
+        obstack.c
+        obstack_printf.c
+    )
+ELSEIF (OS_DARWIN)
     SRCS(
         error.c
         fpending.c
@@ -101,6 +149,7 @@ ELSEIF (OS_WINDOWS)
         dup2.c
         error.c
         fcntl.c
+        fd-hook.c
         fpending.c
         getdtablesize.c
         getopt.c
@@ -114,10 +163,16 @@ ELSEIF (OS_WINDOWS)
         sigaction.c
         sigprocmask.c
         stpcpy.c
+        stpncpy.c
         strndup.c
         strverscmp.c
         waitpid.c
         wcwidth.c
+        windows-mutex.c
+        windows-once.c
+        windows-recmutex.c
+        windows-rwlock.c
+        windows-tls.c
     )
 ENDIF()
 

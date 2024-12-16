@@ -1,14 +1,25 @@
 #pragma once
 
-#include "defs.h"
-#include "node_warden.h"
-#include "node_warden_events.h"
+#include <ydb/library/actors/core/invoke.h>
 
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
+#include <ydb/core/blobstorage/incrhuge/incrhuge.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+
+namespace NKikimr {
+    struct TNodeWardenConfig;
+}
 
 namespace NKikimr::NStorage {
+
+    struct TEvNodeWardenReadMetadata;
+    struct TEvNodeConfigInvokeOnRootResult;
+    struct TEvNodeWardenQueryBaseConfig;
+    struct TEvNodeWardenWriteMetadata;
 
     constexpr ui32 ProxyConfigurationTimeoutMilliseconds = 200;
     constexpr TDuration BackoffMin = TDuration::MilliSeconds(20);
@@ -64,6 +75,9 @@ namespace NKikimr::NStorage {
         TReplQuoter::TPtr ReplPDiskReadQuoter;
         TReplQuoter::TPtr ReplPDiskWriteQuoter;
 
+        ui32 RefCount = 0;
+        bool Temporary = false;
+
         TPDiskRecord(NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk record)
             : Record(std::move(record))
         {}
@@ -100,6 +114,13 @@ namespace NKikimr::NStorage {
         TIntrusiveList<TPDiskRecord, TUnreportedMetricTag> PDisksWithUnreportedMetrics;
         std::map<ui64, ui32> PDiskRestartRequests;
 
+        struct TPDiskByPathInfo {
+            TPDiskKey RunningPDiskId; // currently running PDiskId
+            std::optional<NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk> Pending; // pending
+        };
+        THashMap<TString, TPDiskByPathInfo> PDiskByPath;
+        THashSet<ui32> PDisksWaitingToStart;
+
         ui64 LastScrubCookie = RandomNumber<ui64>();
 
         ui32 AvailDomainId;
@@ -125,10 +146,16 @@ namespace NKikimr::NStorage {
                 EvReadCache,
                 EvGetGroup,
                 EvGroupPendingQueueTick,
+                EvDereferencePDisk,
             };
 
             struct TEvSendDiskMetrics : TEventLocal<TEvSendDiskMetrics, EvSendDiskMetrics> {};
             struct TEvUpdateNodeDrives : TEventLocal<TEvUpdateNodeDrives, EvUpdateNodeDrives> {};
+
+            struct TEvDereferencePDisk : TEventLocal<TEvDereferencePDisk, EvDereferencePDisk> {
+                TPDiskKey PDiskKey;
+                TEvDereferencePDisk(TPDiskKey pdiskKey) : PDiskKey(pdiskKey) {}
+            };
         };
 
         TControlWrapper EnablePutBatching;
@@ -139,11 +166,32 @@ namespace NKikimr::NStorage {
         TControlWrapper EnableSyncLogChunkCompressionSSD;
         TControlWrapper MaxSyncLogChunksInFlightHDD;
         TControlWrapper MaxSyncLogChunksInFlightSSD;
+        TControlWrapper DefaultHugeGarbagePerMille;
+        TControlWrapper HugeDefragFreeSpaceBorderPerMille;
+        TControlWrapper MaxCommonLogChunksHDD;
+        TControlWrapper MaxCommonLogChunksSSD;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
 
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
+
+        class TPDiskMetadataInteractionActor;
+
+        TControlWrapper SlowDiskThreshold;
+        TControlWrapper SlowDiskThresholdHDD;
+        TControlWrapper SlowDiskThresholdSSD;
+
+        TControlWrapper PredictedDelayMultiplier;
+        TControlWrapper PredictedDelayMultiplierHDD;
+        TControlWrapper PredictedDelayMultiplierSSD;
+    
+        TControlWrapper MaxNumOfSlowDisks;
+        TControlWrapper MaxNumOfSlowDisksHDD;
+        TControlWrapper MaxNumOfSlowDisksSSD;
+
+        TControlWrapper LongRequestThresholdMs;
+        TControlWrapper LongRequestReportingDelayMs;
 
     public:
         struct TGroupRecord;
@@ -153,33 +201,7 @@ namespace NKikimr::NStorage {
             return NKikimrServices::TActivity::NODE_WARDEN;
         }
 
-        TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
-            : Cfg(cfg)
-            , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
-            , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true)
-            , EnableLocalSyncLogDataCutting(0, 0, 1)
-            , EnableSyncLogChunkCompressionHDD(1, 0, 1)
-            , EnableSyncLogChunkCompressionSSD(0, 0, 1)
-            , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
-            , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
-            , CostMetricsParametersByMedia({
-                TCostMetricsParameters{200},
-                TCostMetricsParameters{50},
-                TCostMetricsParameters{32},
-            })
-        {
-            Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
-            AvailDomainId = 1;
-            for (const auto& domain : Cfg->BlobStorageConfig.GetServiceSet().GetAvailabilityDomains()) {
-                AvailDomainId = domain;
-            }
-            if (Cfg->DomainsConfig) {
-                for (const auto& ssconf : Cfg->DomainsConfig->GetStateStorage()) {
-                    BuildStateStorageInfos(ssconf, StateStorageInfo, BoardInfo, SchemeBoardInfo);
-                    StateStorageProxyConfigured = true;
-                }
-            }
-        }
+        TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg);
 
         NPDisk::TOwnerRound NextLocalPDiskInitOwnerRound() {
             LocalPDiskInitOwnerRound++;
@@ -187,7 +209,7 @@ namespace NKikimr::NStorage {
         }
 
         TIntrusivePtr<TPDiskConfig> CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
-        void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
+        void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary);
         void AskBSCToRestartPDisk(ui32 pdiskId, ui64 requestCookie);
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);
         void DestroyLocalPDisk(ui32 pdiskId);
@@ -216,6 +238,7 @@ namespace NKikimr::NStorage {
         void StartLocalProxy(ui32 groupId);
         void StartVirtualGroupAgent(ui32 groupId);
         void StartStaticProxies();
+        void StartRequestReportingThrottler();
 
         /**
          * Removes drives with bad serial numbers and reports them to monitoring.
@@ -558,14 +581,19 @@ namespace NKikimr::NStorage {
         void ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConfig *proposed);
         void ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss);
 
-        void Handle(TEvNodeWardenQueryBaseConfig::TPtr ev);
+        void Handle(TEventHandle<TEvNodeWardenQueryBaseConfig>::TPtr ev);
+
+        void Handle(TEventHandle<TEvNodeWardenReadMetadata>::TPtr ev);
+        void Handle(TEventHandle<TEvNodeWardenWriteMetadata>::TPtr ev);
+        TPDiskKey GetPDiskForMetadata(const TString& path);
+        void Handle(TEvPrivate::TEvDereferencePDisk::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         ui64 NextInvokeCookie = 1;
         std::unordered_map<ui64, std::function<void(TEvNodeConfigInvokeOnRootResult&)>> InvokeCallbacks;
 
-        void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev);
+        void Handle(TEventHandle<TEvNodeConfigInvokeOnRootResult>::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -584,94 +612,11 @@ namespace NKikimr::NStorage {
 
         bool VDiskStatusChanged = false;
 
-        STATEFN(StateOnline) {
-            switch (ev->GetTypeRewrite()) {
-                fFunc(TEvBlobStorage::TEvPut::EventType, HandleForwarded);
-                fFunc(TEvBlobStorage::TEvGet::EventType, HandleForwarded);
-                fFunc(TEvBlobStorage::TEvBlock::EventType, HandleForwarded);
-                fFunc(TEvBlobStorage::TEvPatch::EventType, HandleForwarded);
-                fFunc(TEvBlobStorage::TEvDiscover::EventType, HandleForwarded);
-                fFunc(TEvBlobStorage::TEvRange::EventType, HandleForwarded);
-                fFunc(TEvBlobStorage::TEvCollectGarbage::EventType, HandleForwarded);
-                fFunc(TEvBlobStorage::TEvStatus::EventType, HandleForwarded);
-                fFunc(TEvBlobStorage::TEvAssimilate::EventType, HandleForwarded);
-                fFunc(TEvBlobStorage::TEvBunchOfEvents::EventType, HandleForwarded);
-                fFunc(TEvRequestProxySessionsState::EventType, HandleForwarded);
-
-                cFunc(TEvPrivate::EvGroupPendingQueueTick, HandleGroupPendingQueueTick);
-
-                hFunc(NIncrHuge::TEvIncrHugeInit, HandleIncrHugeInit);
-
-                hFunc(TEvInterconnect::TEvNodeInfo, Handle);
-
-                hFunc(TEvTabletPipe::TEvClientConnected, Handle);
-                hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-
-                hFunc(NPDisk::TEvSlayResult, Handle);
-
-                hFunc(TEvRegisterPDiskLoadActor, Handle);
-
-                hFunc(TEvStatusUpdate, Handle);
-                hFunc(TEvBlobStorage::TEvDropDonor, Handle);
-                hFunc(TEvBlobStorage::TEvAskRestartVDisk, Handle);
-                hFunc(TEvBlobStorage::TEvAskWardenRestartPDisk, Handle);
-                hFunc(TEvBlobStorage::TEvNotifyWardenPDiskRestarted, Handle);
-
-                hFunc(TEvGroupStatReport, Handle);
-
-                hFunc(TEvBlobStorage::TEvControllerNodeServiceSetUpdate, Handle);
-                hFunc(TEvBlobStorage::TEvUpdateGroupInfo, Handle);
-                hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
-                hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
-                hFunc(TEvPrivate::TEvSendDiskMetrics, Handle);
-                hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
-                hFunc(NMon::TEvHttpInfo, Handle);
-                cFunc(NActors::TEvents::TSystem::Poison, PassAway);
-
-                hFunc(TEvBlobStorage::TEvControllerScrubQueryStartQuantum, Handle);
-                hFunc(TEvBlobStorage::TEvControllerScrubStartQuantum, Handle);
-                hFunc(TEvBlobStorage::TEvControllerScrubQuantumFinished, Handle);
-
-                hFunc(TEvents::TEvInvokeResult, Handle);
-
-                hFunc(TEvNodeWardenQueryGroupInfo, Handle);
-                hFunc(TEvNodeWardenQueryStorageConfig, Handle);
-                hFunc(TEvNodeWardenStorageConfig, Handle);
-                fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
-
-                // proxy requests for the NodeWhiteboard to prevent races
-                hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
-
-                hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
-
-                cFunc(TEvPrivate::EvReadCache, HandleReadCache);
-                fFunc(TEvPrivate::EvGetGroup, HandleGetGroup);
-
-                fFunc(TEvBlobStorage::EvNodeConfigPush, ForwardToDistributedConfigKeeper);
-                fFunc(TEvBlobStorage::EvNodeConfigReversePush, ForwardToDistributedConfigKeeper);
-                fFunc(TEvBlobStorage::EvNodeConfigUnbind, ForwardToDistributedConfigKeeper);
-                fFunc(TEvBlobStorage::EvNodeConfigScatter, ForwardToDistributedConfigKeeper);
-                fFunc(TEvBlobStorage::EvNodeConfigGather, ForwardToDistributedConfigKeeper);
-                fFunc(TEvBlobStorage::EvNodeConfigInvokeOnRoot, ForwardToDistributedConfigKeeper);
-                fFunc(TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe, ForwardToDistributedConfigKeeper);
-                fFunc(TEvBlobStorage::EvNodeWardenDynamicConfigPush, ForwardToDistributedConfigKeeper);
-
-                hFunc(TEvNodeWardenQueryBaseConfig, Handle);
-                hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
-
-                fFunc(TEvents::TSystem::Gone, HandleGone);
-
-                default:
-                    EnqueuePendingMessage(ev);
-                    break;
-            }
-
-            if (VDiskStatusChanged) {
-                SendDiskMetrics(false);
-                VDiskStatusChanged = false;
-            }
-        }
+        STATEFN(StateOnline);
     };
+
+    bool DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig, NKikimrBlobStorage::TStorageConfig *config,
+        TString *errorReason);
 
 }
 

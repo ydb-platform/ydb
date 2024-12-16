@@ -1,8 +1,10 @@
-# Installing the SDK
+# Installing the {{ ydb-short-name }} SDK
+
+<!-- markdownlint-disable blanks-around-fences -->
 
 Follow the instructions below to quickly install the OpenSource SDK. Make sure to preinstall and configure tools for working with the selected programming language and package managers on your workstation.
 
-The build process using the source code is described in the source code repositories on GitHub. Follow the links given on the [YDB SDK - Overview](../index.md) page.
+The build process using the source code is described in the source code repositories on GitHub. Follow the links given on the [{{ ydb-short-name }} SDK - Overview](../index.md) page.
 
 {% list tabs %}
 

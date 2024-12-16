@@ -2,16 +2,17 @@
 
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_task_runner_exec_ctx.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h>
 #include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
 
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -80,6 +81,10 @@ class TDummyMemoryQuotaManager: public IMemoryQuotaManager {
 
     ui64 GetMaxMemorySize() const override {
         return std::numeric_limits<ui64>::max();
+    }
+
+    TString MemoryConsumptionDetails() const override {
+        return TString();
     }
 
     bool IsReasonableToUseSpilling() const override {
@@ -276,8 +281,9 @@ private:
         limits.ChannelBufferSize = 20_MB;
         limits.OutputChunkMaxSize = 2_MB;
 
-        auto wakeup = [this]{ ResumeExecution(EResumeSource::Default); };
-        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TraceId, std::move(wakeup));
+        auto wakeupCallback = [this]{ ResumeExecution(EResumeSource::Default); };
+        auto errorCallback = [this](const TString& error){ this->Send(this->SelfId(), new TEvDqFailure(StatusIds::INTERNAL_ERROR, error)); };
+        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TraceId, std::move(wakeupCallback), std::move(errorCallback));
 
         Send(TaskRunnerActor, new TEvTaskRunnerCreate(std::move(ev->Get()->Record.GetTask()), limits, NDqProto::DQ_STATS_MODE_BASIC, execCtx));
     }
@@ -419,8 +425,8 @@ private:
                 TDqSerializedBatch& batch = ev->Get()->Data.front();
                 response.MutableData()->Swap(&batch.Proto);
                 response.MutableData()->ClearPayloadId();
-                if (!batch.Payload.IsEmpty()) {
-                    response.MutableData()->SetPayloadId(responseMsg->AddPayload(std::move(batch.Payload)));
+                if (!batch.Payload.Empty()) {
+                    response.MutableData()->SetPayloadId(responseMsg->AddPayload(MakeReadOnlyRope(std::move(batch.Payload))));
                 }
             }
 
@@ -465,7 +471,7 @@ private:
         } else {
             TDqSerializedBatch data;
             if (response.GetData().HasPayloadId()) {
-                data.Payload = ev->Get()->GetPayload(response.GetData().GetPayloadId());
+                data.Payload = MakeChunkedBuffer(ev->Get()->GetPayload(response.GetData().GetPayloadId()));
             }
             data.Proto = std::move(*response.MutableData());
             data.Proto.ClearPayloadId();

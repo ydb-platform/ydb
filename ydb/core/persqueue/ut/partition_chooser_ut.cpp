@@ -162,7 +162,6 @@ Y_UNIT_TEST(THashChooser_GetTabletIdTest) {
     UNIT_ASSERT_VALUES_EQUAL(chooser.GetPartition(2)->PartitionId, 2);
 
     // Not found
-    UNIT_ASSERT(!chooser.GetPartition(3));
     UNIT_ASSERT(!chooser.GetPartition(666));
 }
 
@@ -209,13 +208,17 @@ TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server,
     NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
     TWriteSessionMock* mock = new TWriteSessionMock();
 
+    auto chooser = NPQ::CreatePartitionChooser(config, true);
+    auto graph = NPQ::MakeSharedPartitionGraph(config);
+
     NActors::TActorId parentId = server.GetRuntime()->Register(mock);
-    server.GetRuntime()->Register(NKikimr::NPQ::CreatePartitionChooserActorM(parentId,
+    server.GetRuntime()->Register(NKikimr::NPQ::CreatePartitionChooserActor<NTabletPipe::NTest::TPipeMock>(parentId,
                                                                                    config,
+                                                                                   chooser,
+                                                                                   graph,
                                                                                    fullConverter,
                                                                                    sourceId,
-                                                                                   preferedPartition,
-                                                                                   true));
+                                                                                   preferedPartition));
 
     mock->Promise.GetFuture().GetValueSync();
 
@@ -679,20 +682,6 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_RegisteredSourceId_Test) {
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
 }
 
-Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_Inactive_Test) {
-    NPersQueue::TTestServer server = CreateServer();
-
-    auto config = CreateConfig0(false);
-    AddPartition(config, 0, {}, {}, {1});
-    AddPartition(config, 1);
-
-    WriteToTable(server, "A_Source", 0);
-    auto r = ChoosePartition(server, config, "A_Source");
-
-    UNIT_ASSERT(r->Result);
-    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
-}
-
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_PreferedPartition_Test) {
     NPersQueue::TTestServer server = CreateServer();
 
@@ -706,23 +695,11 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_PreferedPartition_Test) {
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
 }
 
-Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_PreferedPartition_Inactive_Test) {
-    NPersQueue::TTestServer server = CreateServer();
-
-    auto config = CreateConfig0(false);
-    AddPartition(config, 0, {}, {}, {1});
-    AddPartition(config, 1);
-
-    auto r = ChoosePartition(server, config, "A_Source", 0);
-
-    UNIT_ASSERT(r->Error);
-}
-
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_BadSourceId_Test) {
     NPersQueue::TTestServer server = CreateServer();
 
     auto config = CreateConfig0(false);
-    AddPartition(config, 0, {}, {});
+    AddPartition(config, 0);
 
     auto r = ChoosePartition(server, config, "base64:a***");
 

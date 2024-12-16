@@ -1,0 +1,11 @@
+--- a/src/python/grpcio/grpc/_cython/_cygrpc/aio/completion_queue.pyx.pxi       (index)
++++ b/src/python/grpcio/grpc/_cython/_cygrpc/aio/completion_queue.pyx.pxi       (working tree)
+@@ -22,7 +22,7 @@ IF UNAME_SYSNAME == "Windows":
+     cdef void _unified_socket_write(int fd) nogil:
+         win_socket_send(<WIN_SOCKET>fd, b"1", 1, 0)
+ ELSE:
+-    from posix cimport unistd
++    cimport posix.unistd as unistd
+
+     cdef void _unified_socket_write(int fd) nogil:
+         unistd.write(fd, b"1", 1)

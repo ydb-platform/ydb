@@ -2,20 +2,23 @@
 
 `CurrentTzDate()`, `CurrentTzDatetime()` и `CurrentTzTimestamp()` - получение текущей даты и/или времени в указанной в первом аргументе [IANA временной зоне](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). Тип данных результата указан в конце названия функции.
 
-**Сигнатуры**
-```
+### Сигнатуры
+
+```yql
 CurrentTzDate(String, ...)->TzDate
 CurrentTzDatetime(String, ...)->TzDatetime
 CurrentTzTimestamp(String, ...)->TzTimestamp
 ```
 
-Последующие аргументы опциональны и работают по тому же принципу, что и у [RANDOM](#random).
+Последующие аргументы опциональны и работают по тому же принципу, что и у [RANDOM](../../basic.md#random).
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT CurrentTzDate("Europe/Moscow");
 ```
-``` yql
+
+```yql
 SELECT CurrentTzTimestamp("Europe/Moscow", TableRow()) FROM my_table;
 ```
 
@@ -23,8 +26,9 @@ SELECT CurrentTzTimestamp("Europe/Moscow", TableRow()) FROM my_table;
 
 Добавление информации о временной зоне к дате/времени, заданных в UTC. При выводе в результате `SELECT` или после `CAST` в `String` будут применены правила временной зоны по вычислению смещения времени.
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 AddTimezone(Date, String)->TzDate
 AddTimezone(Date?, String)->TzDate?
 AddTimezone(Datetime, String)->TzDatetime
@@ -40,8 +44,9 @@ AddTimezone(Timestamp?, String)->TzTimestamp?
 
 Тип результата - `TzDate`/`TzDatetime`/`TzTimestamp`, в зависимости от типа данных входа.
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT AddTimezone(Datetime("2018-02-01T12:00:00Z"), "Europe/Moscow");
 ```
 
@@ -49,8 +54,9 @@ SELECT AddTimezone(Datetime("2018-02-01T12:00:00Z"), "Europe/Moscow");
 
 Удаление информации о временной зоне и перевод в дату/время, заданные в UTC.
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 RemoveTimezone(TzDate)->Date
 RemoveTimezone(TzDate?)->Date?
 RemoveTimezone(TzDatetime)->Datetime
@@ -65,7 +71,8 @@ RemoveTimezone(TzTimestamp?)->Timestamp?
 
 Тип результата - `Date`/`Datetime`/`Timestamp`, в зависимости от типа данных входа.
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));
 ```

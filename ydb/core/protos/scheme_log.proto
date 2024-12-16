@@ -1,4 +1,4 @@
-import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/compaction.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 
 package NTabletFlatScheme;
@@ -43,8 +43,9 @@ message TAlterRecord {
     //_ Table: Attributes of storage (page collection)
 
     optional uint32 Main = 9;       // Default channel for main data
-    optional uint32 Blobs = 15;     // Channel for external blobs
+    optional uint32 Blobs = 15 [deprecated = true];     // Channel for external blobs
     optional uint32 Outer = 19;     // Channel for outer packed values
+    repeated uint32 ExternalBlobs = 26; // Channels for external blobs
 
     //_ Table: Attributes of family columns
 
@@ -63,7 +64,7 @@ message TAlterRecord {
     optional bool NotNull = 24 [default = false];
 
     optional uint64 ExecutorCacheSize = 100;
-    optional NKikimrSchemeOp.TCompactionPolicy CompactionPolicy = 101;
+    optional NKikimrCompaction.TCompactionPolicy CompactionPolicy = 101;
     optional bool ExecutorAllowLogBatching = 102;
     optional uint64 ExecutorLogFlushPeriod = 103;
     optional uint32 ExecutorLimitInFlyTx = 104;

@@ -1,0 +1,13 @@
+diff --git a/include/__memory/allocator.h b/include/__memory/allocator.h
+index 915ff7c..318c19d 100644
+--- a/include/__memory/allocator.h
++++ b/include/__memory/allocator.h
+@@ -109,7 +109,7 @@ public:
+     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17
+     void deallocate(_Tp* __p, size_t __n) _NOEXCEPT {
+         if (__libcpp_is_constant_evaluated()) {
+-            ::operator delete(__p);
++            ::operator delete((void*)__p);
+         } else {
+             _VSTD::__libcpp_deallocate((void*)__p, __n * sizeof(_Tp), _LIBCPP_ALIGNOF(_Tp));
+         }

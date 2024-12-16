@@ -87,11 +87,11 @@ struct Storage {
   constexpr Storage() = default;
   template <typename V>
   explicit constexpr Storage(y_absl::in_place_t, V&& v)
-      : value(y_absl::forward<V>(v)) {}
+      : value(std::forward<V>(v)) {}
   constexpr const T& get() const& { return value; }
-  T& get() & { return value; }
-  constexpr const T&& get() const&& { return y_absl::move(*this).value; }
-  T&& get() && { return std::move(*this).value; }
+  constexpr T& get() & { return value; }
+  constexpr const T&& get() const&& { return std::move(*this).value; }
+  constexpr T&& get() && { return std::move(*this).value; }
 };
 
 template <typename T, size_t I>
@@ -99,13 +99,12 @@ struct Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC Storage<T, I, true> : T {
   constexpr Storage() = default;
 
   template <typename V>
-  explicit constexpr Storage(y_absl::in_place_t, V&& v)
-      : T(y_absl::forward<V>(v)) {}
+  explicit constexpr Storage(y_absl::in_place_t, V&& v) : T(std::forward<V>(v)) {}
 
   constexpr const T& get() const& { return *this; }
-  T& get() & { return *this; }
-  constexpr const T&& get() const&& { return y_absl::move(*this); }
-  T&& get() && { return std::move(*this); }
+  constexpr T& get() & { return *this; }
+  constexpr const T&& get() const&& { return std::move(*this); }
+  constexpr T&& get() && { return std::move(*this); }
 };
 
 template <typename D, typename I, bool ShouldAnyUseBase>
@@ -123,7 +122,7 @@ struct Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTupleImpl<
   constexpr CompressedTupleImpl() = default;
   template <typename... Vs>
   explicit constexpr CompressedTupleImpl(y_absl::in_place_t, Vs&&... args)
-      : Storage<Ts, I>(y_absl::in_place, y_absl::forward<Vs>(args))... {}
+      : Storage<Ts, I>(y_absl::in_place, std::forward<Vs>(args))... {}
   friend CompressedTuple<Ts...>;
 };
 
@@ -135,7 +134,7 @@ struct Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTupleImpl<
   constexpr CompressedTupleImpl() = default;
   template <typename... Vs>
   explicit constexpr CompressedTupleImpl(y_absl::in_place_t, Vs&&... args)
-      : Storage<Ts, I, false>(y_absl::in_place, y_absl::forward<Vs>(args))... {}
+      : Storage<Ts, I, false>(y_absl::in_place, std::forward<Vs>(args))... {}
   friend CompressedTuple<Ts...>;
 };
 
@@ -234,11 +233,11 @@ class Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTuple
                 bool> = true>
   explicit constexpr CompressedTuple(First&& first, Vs&&... base)
       : CompressedTuple::CompressedTupleImpl(y_absl::in_place,
-                                             y_absl::forward<First>(first),
-                                             y_absl::forward<Vs>(base)...) {}
+                                             std::forward<First>(first),
+                                             std::forward<Vs>(base)...) {}
 
   template <int I>
-  ElemT<I>& get() & {
+  constexpr ElemT<I>& get() & {
     return StorageT<I>::get();
   }
 
@@ -248,13 +247,13 @@ class Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTuple
   }
 
   template <int I>
-  ElemT<I>&& get() && {
+  constexpr ElemT<I>&& get() && {
     return std::move(*this).StorageT<I>::get();
   }
 
   template <int I>
   constexpr const ElemT<I>&& get() const&& {
-    return y_absl::move(*this).StorageT<I>::get();
+    return std::move(*this).StorageT<I>::get();
   }
 };
 

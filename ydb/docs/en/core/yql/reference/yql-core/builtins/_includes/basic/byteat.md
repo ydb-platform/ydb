@@ -7,7 +7,7 @@ Arguments:
 1. String: `String` or `Utf8`.
 2. Index: `Uint32`.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

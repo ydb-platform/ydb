@@ -1,6 +1,8 @@
 #include "workload.h"
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <ydb/public/api/protos/ydb_formats.pb.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
+#include <contrib/libs/yaml-cpp/include/yaml-cpp/node/parse.h>
 #include <util/string/cast.h>
 #include <util/system/spinlock.h>
 
@@ -16,6 +18,15 @@ const TString TWorkloadGeneratorBase::TsvFormatString = [] () {
     return settings.SerializeAsString();
 } ();
 
+const TString TWorkloadGeneratorBase::PsvDelimiter = "|";
+const TString TWorkloadGeneratorBase::PsvFormatString = [] () {
+    Ydb::Formats::CsvSettings settings;
+    settings.set_delimiter(PsvDelimiter);
+    settings.set_header(true);
+    settings.mutable_quoting()->set_disabled(true);
+    return settings.SerializeAsString();
+} ();
+
 const TString TWorkloadGeneratorBase::CsvDelimiter = ",";
 const TString TWorkloadGeneratorBase::CsvFormatString = [] () {
     Ydb::Formats::CsvSettings settings;
@@ -24,51 +35,91 @@ const TString TWorkloadGeneratorBase::CsvFormatString = [] () {
     return settings.SerializeAsString();
 } ();
 
-std::string TWorkloadGeneratorBase::GetDDLQueries() const {
-    TString storageType = "-- ";
-    TString notNull = "";
-    TString createExternalDataSource;
-    TString external;
-    TString partitioning = "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT";
-    TString primaryKey = ", PRIMARY KEY";
-    TString partitionBy = "-- ";
-    switch (Params.GetStoreType()) {
-    case TWorkloadBaseParams::EStoreType::Column:
-        storageType = "STORE = COLUMN, --";
-        notNull = "NOT NULL";
-        partitionBy = "PARTITION BY HASH";
-        break;
-    case TWorkloadBaseParams::EStoreType::ExternalS3:
-        storageType = fmt::format(R"(DATA_SOURCE = "{}_tpc_s3_external_source", FORMAT = "parquet", LOCATION = )", Params.GetPath());
-        notNull = "NOT NULL";
-        createExternalDataSource = fmt::format(R"(
-            CREATE EXTERNAL DATA SOURCE `{}_tpc_s3_external_source` WITH (
-                SOURCE_TYPE="ObjectStorage",
-                LOCATION="{}",
-                AUTH_METHOD="NONE"
-            );
-        )", Params.GetFullTableName(nullptr), Params.GetS3Endpoint());
-        external = "EXTERNAL";
-        partitioning = "--";
-        primaryKey = "--";
-    case TWorkloadBaseParams::EStoreType::Row:
-        break;
+void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, bool single) const {
+    auto specialTypes = GetSpecialDataTypes();
+    specialTypes["string_type"] = Params.GetStringType();
+    specialTypes["date_type"] = Params.GetDateType();
+    specialTypes["timestamp_type"] = Params.GetTimestampType();
+
+    const auto& tableName = table["name"].GetString();
+    const auto path = Params.GetFullTableName(single ? nullptr : tableName.c_str());
+    result << Endl << "CREATE ";
+    if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
+        result << "EXTERNAL ";
     }
-    auto createSql = DoGetDDLQueries();
-    SubstGlobal(createSql, "{createExternal}", createExternalDataSource);
-    SubstGlobal(createSql, "{external}", external);
-    SubstGlobal(createSql, "{notnull}", notNull);
-    SubstGlobal(createSql, "{partitioning}", partitioning);
-    SubstGlobal(createSql, "{path}", Params.GetFullTableName(nullptr));
-    SubstGlobal(createSql, "{primary_key}", primaryKey);
-    SubstGlobal(createSql, "{s3_prefix}", Params.GetS3Prefix());
-    SubstGlobal(createSql, "{store}", storageType);
-    SubstGlobal(createSql, "{partition_by}", partitionBy);
-    SubstGlobal(createSql, "{string_type}", Params.GetStringType());
-    SubstGlobal(createSql, "{date_type}", Params.GetDateType());
-    SubstGlobal(createSql, "{timestamp_type}", Params.GetTimestampType());
-    SubstGlobal(createSql, "{float_type}", Params.GetFloatType());
-    return createSql.c_str();
+    result << "TABLE `" << path << "` (" << Endl;
+    TVector<TStringBuilder> columns;
+    for (const auto& column: table["columns"].GetArray()) {
+        const auto& columnName = column["name"].GetString();
+        columns.emplace_back();
+        auto& so = columns.back();
+        so << "    " << columnName << " ";
+        const auto& type = column["type"].GetString();
+        if (const auto* st = MapFindPtr(specialTypes, type)) {
+            so << *st;
+        } else {
+            so << type;
+        }
+        if (column["not_null"].GetBooleanSafe(false) && Params.GetStoreType() != TWorkloadBaseParams::EStoreType::Row) {
+            so << " NOT NULL";
+        }
+    }
+    result << JoinSeq(",\n", columns);
+    TVector<TStringBuf> keysV;
+    for (const auto& k: table["primary_key"].GetArray()) {
+        keysV.emplace_back(k.GetString());
+    }
+    const TString keys = JoinSeq(", ", keysV);
+    if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
+        result << Endl;
+    } else {
+        result << "," << Endl << "    PRIMARY KEY (" << keys << ")" << Endl;
+    }
+    result << ")" << Endl;
+
+    if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::Column) {
+        result << "PARTITION BY HASH (" << keys << ")" << Endl;
+    }
+
+    result << "WITH (" << Endl;
+    if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
+        result << "    DATA_SOURCE = \""+ Params.GetFullTableName(nullptr) + "_s3_external_source\", FORMAT = \"parquet\", LOCATION = \"" << Params.GetS3Prefix()
+            << "/" << (single ? TFsPath(Params.GetPath()).GetName() : (tableName + "/")) << "\"" << Endl;
+    } else {
+        if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::Column) {
+            result << "    STORE = COLUMN," << Endl;
+        }
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(64) << Endl;
+    }
+    result << ");" << Endl;
+}
+
+std::string TWorkloadGeneratorBase::GetDDLQueries() const {
+    const auto json = GetTablesJson();
+
+    TStringBuilder result;
+    result << "--!syntax_v1" << Endl;
+    if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
+        result << "CREATE EXTERNAL DATA SOURCE `" << Params.GetFullTableName(nullptr) << "_s3_external_source` WITH (" << Endl
+            << "    SOURCE_TYPE=\"ObjectStorage\"," << Endl
+            << "    LOCATION=\"" << Params.GetS3Endpoint() << "\"," << Endl
+            << "    AUTH_METHOD=\"NONE\"" << Endl
+            << ");" << Endl;
+    }
+
+    for (const auto& table: json["tables"].GetArray()) {
+        GenerateDDLForTable(result.Out, table, false);
+    }
+    if (json.Has("table")) {
+        GenerateDDLForTable(result.Out, json["table"], true);
+    }
+    return result;
+}
+
+NJson::TJsonValue TWorkloadGeneratorBase::GetTablesJson() const {
+    const auto tablesYaml = GetTablesYaml();
+    const auto yaml = YAML::Load(tablesYaml.c_str());
+    return NKikimr::NYaml::Yaml2Json(yaml, true);
 }
 
 TVector<std::string> TWorkloadGeneratorBase::GetCleanPaths() const {
@@ -119,8 +170,6 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
         opts.AddLongOption("string", "Use String type in tables instead Utf8 one.").NoArgument().StoreValue(&StringType, "String");
         opts.AddLongOption("datetime", "Use Date and Timestamp types in tables instead Date32 and Timestamp64 ones.").NoArgument()
             .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp");
-        opts.AddLongOption("decimal", "Use Decimal(22,9) type in tables instead Double one.").NoArgument()
-            .StoreValue(&FloatType, "Decimal(22,9)");
         break;
     case TWorkloadParams::ECommandType::Root:
         opts.AddLongOption('p', "path", "Path where benchmark tables are located")
@@ -136,11 +185,20 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
 }
 
 TString TWorkloadBaseParams::GetFullTableName(const char* table) const {
-    return TFsPath(DbPath) / Path/ table;
+    return TFsPath(DbPath) / Path / table;
 }
 
 TWorkloadGeneratorBase::TWorkloadGeneratorBase(const TWorkloadBaseParams& params)
     : Params(params)
 {}
+
+TString TWorkloadBaseParams::GetTablePathQuote(EQuerySyntax syntax) {
+    switch(syntax) {
+    case EQuerySyntax::YQL:
+        return "`";
+    case EQuerySyntax::PG:
+        return "\"";
+    }
+}
 
 }

@@ -68,7 +68,7 @@ Package name is expected to be given as ``project_name.package_name``; from pack
 
 Example for a package with flat hierarchy which consists of two libraries - foo.sql and bar.sql:
 
-``` yql
+```yql
 PRAGMA package("project.package", "{{ corporate-yt }}/{{ corporate-yt-cluster }}/path/to/package");
 IMPORT pkg.project.package.foo SYMBOLS $foo;
 IMPORT pkg.project.package.bar SYMBOLS $bar;
@@ -77,7 +77,7 @@ SELECT $foo, $bar;
 
 You can also use text parameter value substitution in the URL:
 
-``` yql
+```yql
 DECLARE $_path AS STRING; -- "path"
 PRAGMA package("project.package","{{ corporate-yt }}/{{ corporate-yt-cluster }}/{$_path}/to/package");
 IMPORT pkg.project.package.foo SYMBOLS $foo;

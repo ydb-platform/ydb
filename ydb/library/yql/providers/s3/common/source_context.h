@@ -9,8 +9,6 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 
-#include <ydb/core/kqp/common/kqp_tx.h>
-
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 
@@ -34,12 +32,7 @@ struct TSourceContext {
         , NMonitoring::THistogramPtr decodedChunkSizeHist
         , NMonitoring::TDynamicCounters::TCounterPtr httpInflightSize
         , NMonitoring::TDynamicCounters::TCounterPtr httpDataRps
-        , NMonitoring::TDynamicCounters::TCounterPtr deferredQueueSize
-        , const TString format
-        , const TString compression
-        , std::shared_ptr<arrow::Schema> schema
-        , std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> rowTypes
-        , NDB::FormatSettings settings)
+        , NMonitoring::TDynamicCounters::TCounterPtr deferredQueueSize)
         : SourceId(sourceId)
         , Limit(limit)
         , ActorSystem(actorSystem)
@@ -54,11 +47,6 @@ struct TSourceContext {
         , HttpInflightSize(httpInflightSize)
         , HttpDataRps(httpDataRps)
         , DeferredQueueSize(deferredQueueSize)
-        , Format(format)
-        , Compression(compression)
-        , Schema(schema)
-        , RowTypes(rowTypes)
-        , Settings(settings)
     {
     }
 
@@ -105,11 +93,6 @@ struct TSourceContext {
     NMonitoring::TDynamicCounters::TCounterPtr HttpInflightSize;
     NMonitoring::TDynamicCounters::TCounterPtr HttpDataRps;
     NMonitoring::TDynamicCounters::TCounterPtr DeferredQueueSize;
-    const TString Format;
-    const TString Compression;
-    std::shared_ptr<arrow::Schema> Schema;
-    std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> RowTypes;
-    NDB::FormatSettings Settings;
 private:
     std::atomic_uint64_t Value;
     std::mutex Mutex;
@@ -121,68 +104,5 @@ private:
     std::atomic_uint64_t DecodedRows;
 };
 
-// per split context to pass params to load/decoding implementation
-
-struct TSplitReadContext {
-    using TPtr = std::shared_ptr<TSplitReadContext>;
-
-    TSplitReadContext(
-        TSourceContext::TPtr sourceContext,
-        IHTTPGateway::TPtr gateway,
-        TString url,
-        std::size_t splitOffset, std::size_t splitSize, std::size_t fileSize,
-        std::size_t pathIndex,
-        IHTTPGateway::THeaders headers,
-        IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
-        TTxId txId, TString requestId)
-        : SourceContext(sourceContext)
-        , Gateway(gateway)
-        , Url(url)
-        , SplitOffset(splitOffset), SplitSize(splitSize), FileSize(fileSize)
-        , PathIndex(pathIndex)
-        , Headers(headers)
-        , RetryPolicy(retryPolicy)
-        , TxId(txId), RequestId(requestId)
-    {
-
-    }
-
-    TSourceContext::TPtr SourceContext;
-
-    const IHTTPGateway::TPtr Gateway;
-    const TString Url;
-    const std::size_t SplitOffset;
-    const std::size_t SplitSize;
-    const std::size_t FileSize;
-    const std::size_t PathIndex;
-    const IHTTPGateway::THeaders Headers;
-    IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
-    IHTTPGateway::TRetryPolicy::IRetryState::TPtr RetryState;
-    IHTTPGateway::TCancelHook CancelHook;
-    TMaybe<TDuration> NextRetryDelay;
-    std::atomic_bool Cancelled = false;
-
-    const TTxId TxId;
-    const TString RequestId;
-
-    const IHTTPGateway::TRetryPolicy::IRetryState::TPtr& GetRetryState() {
-        if (!RetryState) {
-            RetryState = RetryPolicy->CreateRetryState();
-        }
-        return RetryState;
-    }
-
-    void Cancel() {
-        Cancelled.store(true);
-        if (const auto cancelHook = std::move(CancelHook)) {
-            CancelHook = {};
-            cancelHook(TIssue("Request cancelled."));
-        }
-    }
-
-    bool IsCancelled() {
-        return Cancelled.load();
-    }
-};
 
 } // namespace NYql::NDq

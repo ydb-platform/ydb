@@ -21,7 +21,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydb_impl.h>
@@ -55,7 +54,7 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        Client = std::make_shared<NYdb::NTable::TTableClient>(std::move(Location.GetTableClient(Request, NYdb::NTable::TClientSettings().Database(Location.RootDomain))));
+        Client = std::make_shared<NYdb::NTable::TTableClient>(std::move(Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location))));
 
         NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
         NActors::TActorId actorId = ctx.SelfID;

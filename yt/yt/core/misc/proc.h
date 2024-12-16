@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-#include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/stripped_error.h>
 
 #include <util/system/file.h>
 
@@ -20,7 +20,7 @@ constexpr int LinuxErrorCodeCount = 2000;
 DEFINE_ENUM(ELinuxErrorCode,
     ((NOENT)              ((LinuxErrorCodeBase + ENOENT)))
     ((IO)                 ((LinuxErrorCodeBase + EIO)))
-    ((ACCESS)              ((LinuxErrorCodeBase + EACCES)))
+    ((ACCESS)             ((LinuxErrorCodeBase + EACCES)))
     ((NFILE)              ((LinuxErrorCodeBase + ENFILE)))
     ((MFILE)              ((LinuxErrorCodeBase + EMFILE)))
     ((NOSPC)              ((LinuxErrorCodeBase + ENOSPC)))
@@ -104,6 +104,11 @@ TCgroupMemoryStat GetCgroupMemoryStat(
     const TString& cgroupPath,
     const TString& cgroupMountPoint = "/sys/fs/cgroup");
 
+
+std::optional<i64> GetCgroupAnonymousMemoryLimit(
+    const TString& cgroupPath,
+    const TString& cgroupMountPoint = "/sys/fs/cgroup");
+
 THashMap<TString, i64> GetVmstat();
 
 ui64 GetProcessCumulativeMajorPageFaults(int pid = -1);
@@ -160,6 +165,9 @@ void SafeMakeNonblocking(TFileDescriptor fd);
 
 bool TrySetPipeCapacity(TFileDescriptor fd, int capacity);
 void SafeSetPipeCapacity(TFileDescriptor fd, int capacity);
+
+bool TryEnableEmptyPipeEpollEvent(TFileDescriptor fd);
+void SafeEnableEmptyPipeEpollEvent(TFileDescriptor fd);
 
 bool TrySetUid(int uid);
 void SafeSetUid(int uid);

@@ -1,6 +1,6 @@
-# Username and password based authentication
+<!-- markdownlint-disable blanks-around-fences -->
 
-{% include [work in progress message](_includes/addition.md) %}
+# Username and password based authentication
 
 Below are examples of the code for authentication based on a username and token in different {{ ydb-short-name }} SDKs.
 

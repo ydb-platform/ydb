@@ -17,6 +17,7 @@
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config_units.pb.h>
 #include <ydb/core/protos/counters_cms.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -35,6 +36,38 @@ namespace NKikimr::NCms {
 
 using namespace NNodeWhiteboard;
 using namespace NKikimrCms;
+
+namespace {
+
+constexpr size_t MAX_ISSUES_TO_STORE = 100;
+
+TAction::TIssue ConvertIssue(const TReason& reason) {
+    TAction::TIssue issue;
+    switch (reason.GetType()) {
+        case TReason::EType::Generic:
+            issue.SetType(TAction::TIssue::GENERIC);
+            break;
+        case TReason::EType::TooManyUnavailableVDisks:
+            issue.SetType(TAction::TIssue::TOO_MANY_UNAVAILABLE_VDISKS);
+            break;
+        case TReason::EType::TooManyUnavailableStateStorageRings:
+            issue.SetType(TAction::TIssue::TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS);
+            break;
+        case TReason::EType::DisabledNodesLimitReached:
+            issue.SetType(TAction::TIssue::DISABLED_NODES_LIMIT_REACHED);
+            break;
+        case TReason::EType::TenantDisabledNodesLimitReached:
+            issue.SetType(TAction::TIssue::TENANT_DISABLED_NODES_LIMIT_REACHED);
+            break;
+        case TReason::EType::SysTabletsNodeLimitReached:
+            issue.SetType(TAction::TIssue::SYS_TABLETS_NODE_LIMIT_REACHED);
+            break;
+    }
+    issue.SetMessage(reason.GetMessage());
+    return issue;
+}
+
+} // anonymous namespace
 
 void TCms::DefaultSignalTabletActive(const TActorContext &)
 {
@@ -326,6 +359,8 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     };
 
     auto point = ClusterInfo->PushRollbackPoint();
+    size_t storedIssues = 0;
+    size_t processedActions = 0;
     for (const auto &action : request.GetActions()) {
         TDuration permissionDuration = State->Config.DefaultPermissionDuration;
         if (request.HasDuration())
@@ -352,28 +387,40 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
             auto *permission = response.AddPermissions();
             permission->MutableAction()->CopyFrom(action);
+            permission->MutableAction()->ClearIssue();
             permission->SetDeadline(error.Deadline.GetValue());
             AddPermissionExtensions(action, *permission);
 
             ClusterInfo->AddTempLocks(action, &ctx);
         } else {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
-                      ToString(error.Code).data(), error.Reason.data());
+                      ToString(error.Code).data(), error.Reason.GetMessage().data());
 
             if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
                 response.MutableStatus()->SetCode(error.Code);
-                response.MutableStatus()->SetReason(error.Reason);
+                response.MutableStatus()->SetReason(error.Reason.GetMessage());
                 if (error.Code == TStatus::DISALLOW_TEMP
                     || error.Code == TStatus::ERROR_TEMP)
                     response.SetDeadline(error.Deadline.GetValue());
             }
 
+            if (schedule) {
+                auto *scheduledAction = scheduled.AddActions();
+                scheduledAction->CopyFrom(action);
+
+                // Limit stored issues to avoid overloading the local database
+                if (storedIssues < MAX_ISSUES_TO_STORE) {
+                    *scheduledAction->MutableIssue() = ConvertIssue(error.Reason);
+                    ++storedIssues;
+                } else {
+                    scheduledAction->ClearIssue();
+                }
+            }
+
             if (!allowPartial)
                 break;
-
-            if (schedule)
-                scheduled.AddActions()->CopyFrom(action);
         }
+        ++processedActions;
     }
     ClusterInfo->RollbackLocks(point);
 
@@ -396,9 +443,21 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     if (schedule && response.GetStatus().GetCode() != TStatus::ALLOW_PARTIAL) {
         if (response.GetStatus().GetCode() == TStatus::DISALLOW_TEMP
             || response.GetStatus().GetCode() == TStatus::ERROR_TEMP)
-            scheduled.MutableActions()->CopyFrom(request.GetActions());
-        else
+        {   
+            if (!allowPartial) {
+                // Only the first problem action was scheduled during
+                // the actions check loop. Merge it with rest actions.
+                Y_ABORT_UNLESS(scheduled.ActionsSize() == 1);
+                TAction::TIssue issue = std::move(*scheduled.MutableActions()->begin()->MutableIssue());
+                scheduled.MutableActions()->CopyFrom(request.GetActions());
+                for (auto &action : *scheduled.MutableActions()) {
+                    action.ClearIssue();
+                }
+                *scheduled.MutableActions(processedActions)->MutableIssue() = std::move(issue);
+            }
+        } else {
             scheduled.ClearActions();
+        }
     }
 
     return response.GetStatus().GetCode() == TStatus::ALLOW
@@ -502,6 +561,12 @@ bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
     if (!State->Sentinel) {
         error.Code = TStatus::ERROR;
         error.Reason = "Unable to evict vdisks while Sentinel (self heal) is disabled";
+        return false;
+    }
+
+    if (State->Config.SentinelConfig.EvictVDisksStatus.Empty()) {
+        error.Code = TStatus::ERROR;
+        error.Reason = "Evict vdisks is disabled in Sentinel (self heal)";
         return false;
     }
 
@@ -701,12 +766,15 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         case MODE_MAX_AVAILABILITY:
             if (restartRings + lockedRings > 1) {
                 error.Code = TStatus::DISALLOW_TEMP;
-                error.Reason = TStringBuilder() << "Too many unavailable state storage rings"
-                                                << ". Restarting rings: "
-                                                    << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
-                                                << ". Temporary (for a 2 minutes) locked rings: "
-                                                    << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
-                                                << ". Maximum allowed number of unavailable rings for this mode: " << 1;
+                error.Reason = TReason(
+                    TStringBuilder() << "Too many unavailable state storage rings"
+                    << ". Restarting rings: "
+                    << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
+                    << ". Temporary (for a 2 minutes) locked rings: "
+                    << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
+                    << ". Maximum allowed number of unavailable rings for this mode: " << 1,
+                    TReason::EType::TooManyUnavailableStateStorageRings
+                );
                 error.Deadline = defaultDeadline;
                 return false;
             }
@@ -714,13 +782,16 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         case MODE_KEEP_AVAILABLE:
             if (restartRings + lockedRings + disabledRings > (nToSelect - 1) / 2) {
                 error.Code = TStatus::DISALLOW_TEMP;
-                error.Reason = TStringBuilder() << "Too many unavailable state storage rings"
-                                                << ". Restarting rings: "
-                                                    << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
-                                                << ". Temporary (for a 2 minutes) locked rings: "
-                                                    << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
-                                                << ". Disabled rings: " << disabledRings
-                                                << ". Maximum allowed number of unavailable rings for this mode: " << (nToSelect - 1) / 2;
+                error.Reason = TReason(
+                    TStringBuilder() << "Too many unavailable state storage rings"
+                    << ". Restarting rings: "
+                    << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
+                    << ". Temporary (for a 2 minutes) locked rings: "
+                    << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
+                    << ". Disabled rings: " << disabledRings
+                    << ". Maximum allowed number of unavailable rings for this mode: " << (nToSelect - 1) / 2,
+                    TReason::EType::TooManyUnavailableStateStorageRings
+                );
                 error.Deadline = defaultDeadline;
                 return false;
             }
@@ -857,7 +928,7 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
             return false;
         }
 
-        auto counters = CreateErasureCounter(ClusterInfo->BSGroup(groupId).Erasure.GetErasure(), vdisk, groupId);
+        auto counters = CreateErasureCounter(ClusterInfo->BSGroup(groupId).Erasure.GetErasure(), vdisk, groupId, TabletCounters);
         counters->CountGroupState(ClusterInfo, State->Config.DefaultRetryTime, duration, error);
 
         switch (opts.AvailabilityMode) {
@@ -872,10 +943,11 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
             }
             break;
         case MODE_FORCE_RESTART:
-            if ( counters->GroupAlreadyHasLockedDisks() && opts.PartialPermissionAllowed) {
+            if (counters->GroupAlreadyHasLockedDisks() && !counters->GroupHasMoreThanOneDiskPerNode() && opts.PartialPermissionAllowed) {
+                TabletCounters->Cumulative()[COUNTER_PARTIAL_PERMISSIONS_OPTIMIZED].Increment(1);
                 error.Code = TStatus::DISALLOW_TEMP;
                 error.Reason = "You cannot get two or more disks from the same group at the same time"
-                               " without specifying the PartialPermissionAllowed parameter";
+                               " in partial permissions allowed mode";
                 error.Deadline = defaultDeadline;
                 return false;
             }
@@ -1482,6 +1554,13 @@ void TCms::CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const 
     if (-100 > rec.GetPriority() || rec.GetPriority() > 100) {
         return ReplyWithError<TEvCms::TEvPermissionResponse>(
             ev, TStatus::WRONG_REQUEST, "Priority value is out of range", ctx);
+    }
+
+    for (const auto &action : rec.GetActions()) {
+        if (action.HasIssue()) {
+            return ReplyWithError<TEvCms::TEvPermissionResponse>(
+                ev, TStatus::WRONG_REQUEST, TStringBuilder() << "Action issue is read-only", ctx);
+        }
     }
 
     EnqueueRequest(ev.Release(), ctx);
@@ -2272,8 +2351,13 @@ void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
 {
     const auto& appConfig = ev->Get()->Record.GetConfig();
     if (appConfig.HasFeatureFlags()) {
-        State->EnableCMSRequestPriorities = appConfig.GetFeatureFlags().GetEnableCMSRequestPriorities();
-        State->EnableSingleCompositeActionGroup = appConfig.GetFeatureFlags().GetEnableSingleCompositeActionGroup();
+        const auto& featureFlags = appConfig.GetFeatureFlags();
+        if (featureFlags.HasEnableCMSRequestPriorities()) {
+            State->EnableCMSRequestPriorities = featureFlags.GetEnableCMSRequestPriorities();
+        }
+        if (featureFlags.HasEnableSingleCompositeActionGroup()) {
+            State->EnableSingleCompositeActionGroup = featureFlags.GetEnableSingleCompositeActionGroup();
+        }
     }
 
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {

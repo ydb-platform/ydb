@@ -7,6 +7,7 @@
 #include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/column_rename_descriptor.h>
 #include <yt/yt/client/table_client/schema.h>
+#include <yt/yt/client/table_client/versioned_io_options.h>
 
 #include <yt/yt/core/misc/error.h>
 
@@ -216,15 +217,15 @@ void TRichYPath::SetReadViaExecNode(bool value)
     Attributes().Set("read_via_exec_node", value);
 }
 
-std::optional<std::vector<TString>> TRichYPath::GetColumns() const
+std::optional<std::vector<std::string>> TRichYPath::GetColumns() const
 {
     if (Attributes().Contains("channel")) {
         THROW_ERROR_EXCEPTION("Deprecated attribute \"channel\" in YPath");
     }
-    return FindAttribute<std::vector<TString>>(*this, "columns");
+    return FindAttribute<std::vector<std::string>>(*this, "columns");
 }
 
-void TRichYPath::SetColumns(const std::vector<TString>& columns)
+void TRichYPath::SetColumns(const std::vector<std::string>& columns)
 {
     Attributes().Set("columns", columns);
 }
@@ -654,14 +655,15 @@ std::optional<TSortColumns> TRichYPath::GetChunkSortColumns() const
     return FindAttribute<TSortColumns>(*this, "chunk_sort_columns");
 }
 
-std::optional<TString> TRichYPath::GetCluster() const
+std::optional<std::string> TRichYPath::GetCluster() const
 {
-    return FindAttribute<TString>(*this, "cluster");
+    return FindAttribute<std::string>(*this, "cluster");
 }
 
-void TRichYPath::SetCluster(const TString& value)
+void TRichYPath::SetCluster(const std::string& value)
 {
-    Attributes().Set("cluster", value);
+    // TODO(babenko): switch to std::string
+    Attributes().Set("cluster", TString(value));
 }
 
 std::optional<std::vector<TString>> TRichYPath::GetClusters() const
@@ -677,6 +679,16 @@ void TRichYPath::SetClusters(const std::vector<TString>& value)
 bool TRichYPath::GetCreate() const
 {
     return GetAttribute<bool>(*this, "create", false);
+}
+
+TVersionedReadOptions TRichYPath::GetVersionedReadOptions() const
+{
+    return GetAttribute(*this, "versioned_read_options", TVersionedReadOptions());
+}
+
+TVersionedWriteOptions TRichYPath::GetVersionedWriteOptions() const
+{
+    return GetAttribute(*this, "versioned_write_options", TVersionedWriteOptions());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -741,6 +753,16 @@ void FromProto(TRichYPath* path, const TString& protoPath)
     *path = TRichYPath::Parse(protoPath);
 }
 
+void ToProto(std::string* protoPath, const TRichYPath& path)
+{
+    *protoPath = ConvertToString(path, EYsonFormat::Binary);
+}
+
+void FromProto(TRichYPath* path, const std::string& protoPath)
+{
+    *path = TRichYPath::Parse(TString(protoPath));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 const std::vector<TString>& GetWellKnownRichYPathAttributes()
@@ -779,6 +801,8 @@ const std::vector<TString>& GetWellKnownRichYPathAttributes()
         "clusters",
         "create",
         "read_via_exec_node",
+        "versioned_read_options",
+        "versioned_write_options",
     };
     return WellKnownAttributes;
 }

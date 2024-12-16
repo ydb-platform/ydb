@@ -245,6 +245,9 @@ public:
     //! Use chunk prober to reduce the number of probing requests.
     bool UseChunkProber;
 
+    //! Use request batcher to reduce the number of get blocks requests.
+    bool UseReadBlocksBatcher;
+
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
     static void Register(TRegistrar registrar);
@@ -266,6 +269,9 @@ public:
 
     //! If |True| block fetcher will try to fetch block from local uncompressed block cache.
     bool UseUncompressedBlockCache;
+
+    //! If |True| block fetcher will try to fetch multiple blocks using less data node requests.
+    bool GroupOutOfOrderBlocks;
 
     REGISTER_YSON_STRUCT(TBlockFetcherConfig);
 

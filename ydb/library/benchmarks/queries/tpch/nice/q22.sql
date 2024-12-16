@@ -11,7 +11,7 @@ select
 from
     (
         select
-            Substring(c_phone, 0u, 2u) as cntrycode,
+            Substring(CAST(c_phone as String), 0u, 2u) as cntrycode,
             c_acctbal
         from
             {{customer}}
@@ -22,14 +22,14 @@ from
                     {{customer}}
                 where
                     c_acctbal > 0.00
-                    and Substring(c_phone, 0u, 2u) in
+                    and Substring(CAST (c_phone as String), 0u, 2u) in
                         ('31', '29', '30', '26', '28', '25', '15')
             ) avg_customer
             left only join 
                 {{orders}}
             on {{orders}}.o_custkey = {{customer}}.c_custkey
         where
-            Substring(c_phone, 0u, 2u) in
+            Substring(CAST (c_phone as String), 0u, 2u) in
                 ('31', '29', '30', '26', '28', '25', '15')
             and c_acctbal > avg_acctbal
     ) as custsale

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/base/events.h>
-#include <ydb/library/yql/dq/actors/dq_events_ids.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -44,7 +43,13 @@ struct TKqpEvents {
         EvListSessionsRequest,
         EvListSessionsResponse,
         EvListProxyNodesRequest,
-        EvListProxyNodesResponse
+        EvListProxyNodesResponse,
+        EvUpdateDatabaseInfo,
+        EvDelayedRequestError,
+        EvBufferWrite,
+        EvBufferWriteResult,
+        EvProxyPingRequest,
+        EvProxyPingResponse,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
@@ -174,6 +179,21 @@ struct TKqpWorkloadServiceEvents {
         EvContinueRequest,
         EvCleanupRequest,
         EvCleanupResponse,
+        EvUpdatePoolInfo,
+        EvSubscribeOnPoolChanges,
+        EvFetchDatabaseResponse,
+    };
+};
+
+struct TKqpBufferWriterEvents {
+    enum EKqpBufferWriterEvents {
+        EvPrepare = EventSpaceBegin(TKikimrEvents::ES_KQP) + 800,
+        EvCommit,
+        EvRollback,
+        EvFlush,
+        EvResult,
+        EvError,
+        EvTerminate,
     };
 };
 

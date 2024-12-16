@@ -2,23 +2,23 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/ast/yql_type_string.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_type_string.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
     using namespace NNodes;
@@ -28,8 +28,8 @@ namespace NYql {
     struct TGenericTableDescription {
         using TPtr = std::shared_ptr<TGenericTableDescription>;
 
-        NConnector::NApi::TDataSourceInstance DataSourceInstance;
-        NConnector::NApi::TDescribeTableResponse Response;
+        NYql::TGenericDataSourceInstance DataSourceInstance;
+        std::optional<NConnector::NApi::TDescribeTableResponse> Response;
     };
 
     class TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
@@ -114,7 +114,7 @@ namespace NYql {
                         // Check only transport errors;
                         // logic errors will be checked later in DoApplyAsyncChanges
                         if (result.Status.Ok()) {
-                            desc->Response = std::move(*result.Response);
+                            desc->Response = std::move(result.Response);
                             promise.SetValue();
                         } else {
                             promise.SetException(result.Status.ToDebugString());
@@ -156,9 +156,10 @@ namespace NYql {
                 const auto it = Results_.find(TGenericState::TTableAddress(clusterName, tableName));
                 if (Results_.cend() != it) {
                     const auto& response = it->second->Response;
-                    if (NConnector::IsSuccess(response)) {
+
+                    if (NConnector::IsSuccess(*response)) {
                         TGenericState::TTableMeta tableMeta;
-                        tableMeta.Schema = response.schema();
+                        tableMeta.Schema = response->schema();
                         tableMeta.DataSourceInstance = it->second->DataSourceInstance;
 
                         const auto& parse = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
@@ -192,7 +193,7 @@ namespace NYql {
                             break;
                         }
                     } else {
-                        const auto& error = response.error();
+                        const auto& error = response->error();
                         NConnector::ErrorToExprCtx(error, ctx, ctx.GetPosition(read.Pos()),
                                                    TStringBuilder() << "Loading metadata for table: " << clusterName << '.' << tableName);
                         hasErrors = true;
@@ -327,28 +328,49 @@ namespace NYql {
             request.set_schema(schema);
         }
 
+        void SetOracleServiceName(NYql::TOracleDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
+            const auto it = clusterConfig.GetDataSourceOptions().find("service_name");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                options.set_service_name(it->second);
+            }
+        }
+
+        void SetLoggingFolderId(NYql::TLoggingDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
+            const auto it = clusterConfig.GetDataSourceOptions().find("folder_id");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                options.set_folder_id(it->second);
+            }
+        }
+
         void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
             const auto dataSourceKind = clusterConfig.GetKind();
             switch (dataSourceKind) {
-                case NYql::NConnector::NApi::CLICKHOUSE:
+                case NYql::EGenericDataSourceKind::CLICKHOUSE:
                     break;
-                case NYql::NConnector::NApi::YDB:
+                case NYql::EGenericDataSourceKind::YDB:
                     break;
-                case NYql::NConnector::NApi::MYSQL:
+                case NYql::EGenericDataSourceKind::MYSQL:
                     break;
-                case NYql::NConnector::NApi::GREENPLUM: {
+                case NYql::EGenericDataSourceKind::GREENPLUM: {
                     auto* options = request.mutable_data_source_instance()->mutable_gp_options();
                     SetSchema(*options, clusterConfig);
                 } break;
-                case NYql::NConnector::NApi::MS_SQL_SERVER:
+                case NYql::EGenericDataSourceKind::MS_SQL_SERVER:
                     break;
-                case NYql::NConnector::NApi::POSTGRESQL: {
+                case NYql::EGenericDataSourceKind::POSTGRESQL: {
                     auto* options = request.mutable_data_source_instance()->mutable_pg_options();
                     SetSchema(*options, clusterConfig);
                 } break;
-
+                case NYql::EGenericDataSourceKind::ORACLE: {
+                    auto* options = request.mutable_data_source_instance()->mutable_oracle_options();
+                    SetOracleServiceName(*options, clusterConfig);
+                } break;
+                case NYql::EGenericDataSourceKind::LOGGING: {
+                    auto* options = request.mutable_data_source_instance()->mutable_logging_options();
+                    SetLoggingFolderId(*options, clusterConfig);
+                } break;
                 default:
-                    ythrow yexception() << "Unexpected data source kind: '" << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind)
+                    ythrow yexception() << "Unexpected data source kind: '" << NYql::EGenericDataSourceKind_Name(dataSourceKind)
                                         << "'";
             }
         }
@@ -367,38 +389,8 @@ namespace NYql {
 
         void FillTablePath(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
                            const TString& tablePath) {
-            // for backward compability full path can be used (cluster_name.`db_name.table`)
-            // TODO: simplify during https://st.yandex-team.ru/YQ-2494
-            const auto dataSourceKind = clusterConfig.GetKind();
-            const auto& dbNameFromConfig = clusterConfig.GetDatabaseName();
-            TStringBuf dbNameTarget, tableName;
-            auto isFullPath = TStringBuf(tablePath).TrySplit('.', dbNameTarget, tableName);
-
-            if (!dbNameFromConfig.empty()) {
-                dbNameTarget = dbNameFromConfig;
-                if (!isFullPath) {
-                    tableName = tablePath;
-                }
-            } else if (!isFullPath) {
-                tableName = tablePath;
-                switch (dataSourceKind) {
-                    case NYql::NConnector::NApi::CLICKHOUSE:
-                        dbNameTarget = "default";
-                        break;
-                    case NYql::NConnector::NApi::POSTGRESQL:
-                        dbNameTarget = "postgres";
-                        break;
-                    case NYql::NConnector::NApi::MS_SQL_SERVER:
-                        dbNameTarget = "mssqlserver";
-                        break;
-                    default:
-                        ythrow yexception() << "You must provide database name explicitly for data source kind: '"
-                                            << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
-                }
-            } // else take database name from table path
-
-            request.mutable_data_source_instance()->set_database(TString(dbNameTarget));
-            request.set_table(TString(tableName));
+            request.mutable_data_source_instance()->set_database(clusterConfig.GetDatabaseName());
+            request.set_table(tablePath);
         }
 
     private:

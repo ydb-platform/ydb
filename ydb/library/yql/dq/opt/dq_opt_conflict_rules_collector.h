@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h> 
 
 /*
  * This header contains an algorithm for resolving join conflicts with TConflictRulesCollector class
@@ -57,18 +57,18 @@ public:
 private:
     auto GetLeftConflictsVisitor() {
         auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
-            if (!OperatorsAreAssociative(child->JoinType, Root_->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
+            if (!OperatorsAreAssociative(child->JoinType, Root_->JoinType)) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->RightArg],
                     SubtreeNodes_[child->LeftArg]
                 );
             }
 
-            if (!OperatorsAreLeftAsscom(child->JoinType, Root_->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
+            if (!OperatorsAreLeftAsscom(child->JoinType, Root_->JoinType)) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->LeftArg],
                     SubtreeNodes_[child->RightArg]
-                );     
+                );
             }
         };
 
@@ -77,18 +77,18 @@ private:
 
     auto GetRightConflictsVisitor() {
         auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
-            if (!OperatorsAreAssociative(Root_->JoinType, child->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
+            if (!OperatorsAreAssociative(Root_->JoinType, child->JoinType)) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->LeftArg],
                     SubtreeNodes_[child->RightArg]
                 );
             }
 
-            if (!OperatorsAreRightAsscom(Root_->JoinType, child->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
+            if (!OperatorsAreRightAsscom(Root_->JoinType, child->JoinType)) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->RightArg],
                     SubtreeNodes_[child->LeftArg]
-                );     
+                );
             }
         };
 
@@ -105,6 +105,20 @@ private:
         auto childJoinNode = std::static_pointer_cast<TJoinOptimizerNode>(child);
         VisitJoinTree(childJoinNode->LeftArg, visitor);
         VisitJoinTree(childJoinNode->RightArg, visitor);
+
+        if (childJoinNode->LeftAny || !childJoinNode->IsReorderable) {
+            ConflictRules_.emplace_back(
+                SubtreeNodes_[childJoinNode->LeftArg], 
+                SubtreeNodes_[childJoinNode->RightArg]
+            );
+        }
+
+        if (childJoinNode->RightAny || !childJoinNode->IsReorderable) {
+            ConflictRules_.emplace_back(
+                SubtreeNodes_[childJoinNode->RightArg], 
+                SubtreeNodes_[childJoinNode->LeftArg]
+            );
+        }
 
         visitor(childJoinNode);
     }

@@ -31,7 +31,7 @@ void TPQCounters::Apply(ui64 tabletId, const NKikimr::TTabletLabeledCountersBase
         }
     }
 
-    auto& el = LabeledCountersByGroup.InsertIfAbsent(group, new TAggregatedLabeledCounters(
+    auto el = LabeledCountersByGroup.InsertIfAbsent(group, new TAggregatedLabeledCounters(
         labeledCounters->GetCounters().Size(), labeledCounters->GetAggrFuncs(),
         labeledCounters->GetNames(), labeledCounters->GetTypes(), groupNames));
 

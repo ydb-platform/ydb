@@ -27,6 +27,8 @@ IndentFunctionDeclarationAfterType: false
 MaxEmptyLinesToKeep: 1
 KeepEmptyLinesAtTheStartOfBlocks: false
 NamespaceIndentation: All
+FixNamespaceComments: true
+ShortNamespaceLines: 0
 ObjCSpaceAfterProperty: false
 ObjCSpaceBeforeProtocolList: true
 PackConstructorInitializers: Never
@@ -45,6 +47,7 @@ IndentWidth:     4
 TabWidth:        4
 UseTab:          Never
 BreakBeforeBraces: Attach
+InsertBraces: true
 
 # NB: BraceWrapping has no effect unless BreakBeforeBraces is set to Custom
 BraceWrapping:
@@ -84,10 +87,10 @@ SortIncludes: false
 IndentPPDirectives: BeforeHash
 
 SpaceBeforeInheritanceColon: false
-NamespaceMacros: [Y_UNIT_TEST_SUITE, Y_UNIT_TEST]
+NamespaceMacros: [Y_UNIT_TEST_SUITE]
 AttributeMacros: [Y_PRINTF_FORMAT, Y_NO_SANITIZE, Y_FORCE_INLINE, Y_NO_INLINE, Y_WARN_UNUSED_RESULT, Y_HIDDEN, Y_PUBLIC, Y_PURE_FUNCTION]
 IndentExternBlock: Indent
 TypenameMacros: [Y_THREAD, Y_STATIC_THREAD, Y_POD_THREAD, Y_POD_STATIC_THREAD]
 SpacesInLineCommentPrefix:
- Minimum: 0
- Maximum: -1
+ Minimum: 1
+ Maximum: 1

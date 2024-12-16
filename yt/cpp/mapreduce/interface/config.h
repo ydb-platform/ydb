@@ -2,9 +2,10 @@
 
 #include "fwd.h"
 #include "common.h"
-#include "node.h"
 
 #include <library/cpp/yt/misc/enum.h>
+
+#include <library/cpp/yson/node/node.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
@@ -78,6 +79,19 @@ struct TConfig
     TString Prefix;
     TString ApiVersion;
     TString LogLevel;
+    TString LogPath;
+
+    ///
+    /// For historical reasons mapreduce client uses its own logging system.
+    ///
+    /// If this options is set to true library switches to yt/yt/core logging by default.
+    /// But if user calls @ref NYT::SetLogger library switches back to logger provided by user
+    /// (except for messages from yt/yt/core).
+    ///
+    /// This is temporary option. In future it would be true by default, and then removed.
+    ///
+    /// https://st.yandex-team.ru/YT-23645
+    bool LogUseCore = false;
 
     // Compression for data that is sent to YT cluster.
     EEncoding ContentEncoding;
@@ -103,7 +117,6 @@ struct TConfig
     TDuration PingTimeout;
     TDuration PingInterval;
 
-    bool UseAsyncTxPinger;
     int AsyncHttpClientThreads;
     int AsyncTxPingerPoolThreads;
 
@@ -125,6 +138,9 @@ struct TConfig
 
     TString RemoteTempFilesDirectory;
     TString RemoteTempTablesDirectory;
+    // @brief Keep temp tables produced by TTempTable (despite their name). Should not be used in user programs,
+    // but may be useful for setting via environment variable for debugging purposes.
+    bool KeepTempTables = false;
 
     //
     // Infer schemas for nonexstent tables from typed rows (e.g. protobuf)
@@ -233,16 +249,13 @@ struct TProcessState
 {
     TString FqdnHostName;
     TString UserName;
-    TVector<TString> CommandLine;
 
-    // Command line with everything that looks like tokens censored.
-    TVector<TString> CensoredCommandLine;
     int Pid;
     TString ClientVersion;
+    TString BinaryPath;
+    TString BinaryName;
 
     TProcessState();
-
-    void SetCommandLine(int argc, const char* argv[]);
 
     static TProcessState* Get();
 };

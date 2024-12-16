@@ -1,6 +1,7 @@
 /* GNU m4 -- A simple macro processor
 
-   Copyright (C) 1989-1994, 2004-2013 Free Software Foundation, Inc.
+   Copyright (C) 1989-1994, 2004-2014, 2016 Free Software Foundation,
+   Inc.
 
    This file is part of GNU M4.
 
@@ -307,7 +308,9 @@ static const struct option long_options[] =
   {"trace", required_argument, NULL, 't'},
   {"traditional", no_argument, NULL, 'G'},
   {"undefine", required_argument, NULL, 'U'},
+#ifdef ENABLE_CHANGEWORD
   {"word-regexp", required_argument, NULL, 'W'},
+#endif
 
   {"debugfile", optional_argument, NULL, DEBUGFILE_OPTION},
   {"diversions", required_argument, NULL, DIVERSIONS_OPTION},
@@ -364,9 +367,7 @@ process_file (const char *name)
 int
 main (int argc, char *const *argv)
 {
-#if !defined(_WIN32) && !defined(_WIN64)
   struct sigaction act;
-#endif
   macro_definition *head;       /* head of deferred argument list */
   macro_definition *tail;
   macro_definition *defn;
@@ -402,9 +403,7 @@ main (int argc, char *const *argv)
   signal_message[SIGFPE] = xstrdup (strsignal (SIGFPE));
   if (SIGBUS != SIGILL && SIGBUS != SIGSEGV)
     signal_message[SIGBUS] = xstrdup (strsignal (SIGBUS));
-#if !defined(_WIN32) && !defined(_WIN64)
-  // No such signals on Windows
-  sigemptyset(&act.sa_mask);
+  sigemptyset (&act.sa_mask);
   /* One-shot - if we fault while handling a fault, we want to revert
      to default signal behavior.  */
   act.sa_flags = SA_NODEFER | SA_RESETHAND;
@@ -414,7 +413,6 @@ main (int argc, char *const *argv)
   sigaction (SIGILL, &act, NULL);
   sigaction (SIGFPE, &act, NULL);
   sigaction (SIGBUS, &act, NULL);
-#endif
   if (c_stack_action (fault_handler) == 0)
     nesting_limit = 0;
 

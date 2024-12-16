@@ -1,19 +1,19 @@
 #include "yql_yt_lookup_actor.h"
 
-#include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_text_yson.h>
-#include <ydb/library/yql/providers/yt/codec/yt_codec.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_file_input_state.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_file_list.h>
-#include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/schema/parser/yql_type_parser.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yt/yql/providers/yt/gateway/file/yql_yt_file_text_yson.h>
+#include <yt/yql/providers/yt/codec/yt_codec.h>
+#include <yt/yql/providers/yt/comp_nodes/yql_mkql_file_input_state.h>
+#include <yt/yql/providers/yt/comp_nodes/yql_mkql_file_list.h>
+#include <yt/yql/providers/yt/common/yql_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -87,12 +87,17 @@ public:
     {
     }
     ~TYtLookupActor() {
+        Free();
+    }
+
+private:
+    void Free() {
         auto guard = Guard(*Alloc);
         KeyTypeHelper.reset();
         TKeyTypeHelper empty;
         Data = IDqAsyncLookupSource::TUnboxedValueMap{0, empty.GetValueHash(), empty.GetValueEqual()};
     }
-
+public:
 
     void Bootstrap() {
         YQL_CLOG(INFO, ProviderYt) << "New Yt proivider lookup source actor(ActorId=" << SelfId() << ") for"
@@ -156,20 +161,29 @@ private: //IDqAsyncLookupSource
     size_t GetMaxSupportedKeysInRequest() const override {
         return MaxKeysInRequest;
     }
-    void AsyncLookup(IDqAsyncLookupSource::TUnboxedValueMap&& request) override {
-        YQL_CLOG(DEBUG, ProviderYt) << "ActorId=" << SelfId() << " Got LookupRequest for " << request.size() << " keys";
+    void AsyncLookup(std::weak_ptr<IDqAsyncLookupSource::TUnboxedValueMap> wrequest) override {
         Y_ABORT_IF(InProgress);
-        Y_ABORT_IF(request.size() > MaxKeysInRequest);
-        InProgress = true;
         auto guard = Guard(*Alloc);
-        for (const auto& [k, _]: request) {
+        auto request = wrequest.lock();
+        if (!request) {
+            YQL_CLOG(DEBUG, ProviderYt) << "ActorId=" << SelfId() << " LookupRequest was lost";
+            return;
+        }
+        YQL_CLOG(DEBUG, ProviderYt) << "ActorId=" << SelfId() << " Got LookupRequest for " << request->size() << " keys";
+        InProgress = true;
+        Y_ABORT_IF(request->size() > MaxKeysInRequest);
+        for (auto& [k, val]: *request) {
             if (const auto* v = Data.FindPtr(k)) {
-                request[k] = *v;
+                val = *v;
             }
         }
-        auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(request));
+        auto ev = new IDqAsyncLookupSource::TEvLookupResult(request);
         TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
         InProgress = false;
+    }
+    void PassAway() override {
+        Free();
+        TBase::PassAway();
     }
 
 private: //events

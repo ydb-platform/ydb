@@ -1,25 +1,30 @@
 # results.py
+from __future__ import annotations
+
+import collections
 from collections.abc import (
     MutableMapping,
     Mapping,
     MutableSequence,
     Iterator,
-    Sequence,
-    Container,
+    Iterable,
 )
 import pprint
-from typing import Tuple, Any, Dict, Set, List
+from typing import Any
 
-str_type: Tuple[type, ...] = (str, bytes)
+from .util import replaced_by_pep8
+
+
+str_type: tuple[type, ...] = (str, bytes)
 _generator_type = type((_ for _ in ()))
 
 
 class _ParseResultsWithOffset:
-    tup: Tuple["ParseResults", int]
+    tup: tuple[ParseResults, int]
     __slots__ = ["tup"]
 
-    def __init__(self, p1: "ParseResults", p2: int):
-        self.tup: Tuple[ParseResults, int] = (p1, p2)
+    def __init__(self, p1: ParseResults, p2: int):
+        self.tup: tuple[ParseResults, int] = (p1, p2)
 
     def __getitem__(self, i):
         return self.tup[i]
@@ -77,14 +82,14 @@ class ParseResults:
         - year: '1999'
     """
 
-    _null_values: Tuple[Any, ...] = (None, [], ())
+    _null_values: tuple[Any, ...] = (None, [], ())
 
     _name: str
-    _parent: "ParseResults"
-    _all_names: Set[str]
+    _parent: ParseResults
+    _all_names: set[str]
     _modal: bool
-    _toklist: List[Any]
-    _tokdict: Dict[str, Any]
+    _toklist: list[Any]
+    _tokdict: dict[str, Any]
 
     __slots__ = (
         "_name",
@@ -170,8 +175,8 @@ class ParseResults:
     # constructor as small and fast as possible
     def __init__(
         self, toklist=None, name=None, asList=True, modal=True, isinstance=isinstance
-    ):
-        self._tokdict: Dict[str, _ParseResultsWithOffset]
+    ) -> None:
+        self._tokdict: dict[str, _ParseResultsWithOffset]
         self._modal = modal
 
         if name is None or name == "":
@@ -224,7 +229,7 @@ class ParseResults:
             self._toklist[k] = v
             sub = v
         else:
-            self._tokdict[k] = self._tokdict.get(k, list()) + [
+            self._tokdict[k] = self._tokdict.get(k, []) + [
                 _ParseResultsWithOffset(v, 0)
             ]
             sub = v
@@ -441,12 +446,12 @@ class ParseResults:
                 raise AttributeError(name)
             return ""
 
-    def __add__(self, other: "ParseResults") -> "ParseResults":
+    def __add__(self, other: ParseResults) -> ParseResults:
         ret = self.copy()
         ret += other
         return ret
 
-    def __iadd__(self, other: "ParseResults") -> "ParseResults":
+    def __iadd__(self, other: ParseResults) -> ParseResults:
         if not other:
             return self
 
@@ -468,7 +473,7 @@ class ParseResults:
         self._all_names |= other._all_names
         return self
 
-    def __radd__(self, other) -> "ParseResults":
+    def __radd__(self, other) -> ParseResults:
         if isinstance(other, int) and other == 0:
             # useful for merging many ParseResults using sum() builtin
             return self.copy()
@@ -502,9 +507,10 @@ class ParseResults:
                 out.append(str(item))
         return out
 
-    def as_list(self) -> list:
+    def as_list(self, *, flatten: bool = False) -> list:
         """
         Returns the parse results as a nested list of matching tokens, all converted to strings.
+        If flatten is True, all the nesting levels in the returned list are collapsed.
 
         Example::
 
@@ -517,10 +523,22 @@ class ParseResults:
             result_list = result.as_list()
             print(type(result_list), result_list) # -> <class 'list'> ['sldkj', 'lsdkj', 'sldkj']
         """
-        return [
-            res.as_list() if isinstance(res, ParseResults) else res
-            for res in self._toklist
-        ]
+        def flattened(pr):
+            to_visit = collections.deque([*self])
+            while to_visit:
+                to_do = to_visit.popleft()
+                if isinstance(to_do, ParseResults):
+                    to_visit.extendleft(to_do[::-1])
+                else:
+                    yield to_do
+
+        if flatten:
+            return [*flattened(self)]
+        else:
+            return [
+                res.as_list() if isinstance(res, ParseResults) else res
+                for res in self._toklist
+            ]
 
     def as_dict(self) -> dict:
         """
@@ -551,7 +569,7 @@ class ParseResults:
 
         return dict((k, to_item(v)) for k, v in self.items())
 
-    def copy(self) -> "ParseResults":
+    def copy(self) -> ParseResults:
         """
         Returns a new shallow copy of a :class:`ParseResults` object. `ParseResults`
         items contained within the source are shared with the copy. Use
@@ -565,7 +583,7 @@ class ParseResults:
         ret._name = self._name
         return ret
 
-    def deepcopy(self) -> "ParseResults":
+    def deepcopy(self) -> ParseResults:
         """
         Returns a new deep copy of a :class:`ParseResults` object.
         """
@@ -573,20 +591,20 @@ class ParseResults:
         # replace values with copies if they are of known mutable types
         for i, obj in enumerate(self._toklist):
             if isinstance(obj, ParseResults):
-                self._toklist[i] = obj.deepcopy()
+                ret._toklist[i] = obj.deepcopy()
             elif isinstance(obj, (str, bytes)):
                 pass
             elif isinstance(obj, MutableMapping):
-                self._toklist[i] = dest = type(obj)()
+                ret._toklist[i] = dest = type(obj)()
                 for k, v in obj.items():
                     dest[k] = v.deepcopy() if isinstance(v, ParseResults) else v
-            elif isinstance(obj, Container):
-                self._toklist[i] = type(obj)(
-                    v.deepcopy() if isinstance(v, ParseResults) else v for v in obj
+            elif isinstance(obj, Iterable):
+                ret._toklist[i] = type(obj)(
+                    v.deepcopy() if isinstance(v, ParseResults) else v for v in obj  # type: ignore[call-arg]
                 )
         return ret
 
-    def get_name(self):
+    def get_name(self) -> str | None:
         r"""
         Returns the results name for this token expression. Useful when several
         different expressions might match at a particular location.
@@ -614,7 +632,7 @@ class ParseResults:
         if self._name:
             return self._name
         elif self._parent:
-            par: "ParseResults" = self._parent
+            par: ParseResults = self._parent
             parent_tokdict_items = par._tokdict.items()
             return next(
                 (
@@ -759,7 +777,7 @@ class ParseResults:
         return dir(type(self)) + list(self.keys())
 
     @classmethod
-    def from_dict(cls, other, name=None) -> "ParseResults":
+    def from_dict(cls, other, name=None) -> ParseResults:
         """
         Helper classmethod to construct a ``ParseResults`` from a ``dict``, preserving the
         name-value relations as results names. If an optional ``name`` argument is

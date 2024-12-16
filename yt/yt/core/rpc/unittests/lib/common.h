@@ -143,6 +143,11 @@ public:
         return false;
     }
 
+    static int GetMaxSimultaneousRequestCount()
+    {
+        return TImpl::MaxSimultaneousRequestCount;
+    }
+
 private:
     NConcurrency::IThreadPoolPtr WorkerPool_;
     TTestNodeMemoryTrackerPtr MemoryUsageTracker_;
@@ -158,6 +163,7 @@ class TRpcOverBus
 public:
     static constexpr bool AllowTransportErrors = false;
     static constexpr bool Secure = false;
+    static constexpr int MaxSimultaneousRequestCount = 1000;
 
     static TTestServerHostPtr CreateTestServerHost(
         NTesting::TPortHolder port,
@@ -175,8 +181,8 @@ public:
     }
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& serverAddress,
+        const std::string& address,
+        const std::string& serverAddress,
         THashMap<TString, NYTree::INodePtr> grpcArguments)
     {
         return TImpl::CreateChannel(address, serverAddress, std::move(grpcArguments));
@@ -195,8 +201,8 @@ class TRpcOverBusImpl
 {
 public:
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& /*serverAddress*/,
+        const std::string& address,
+        const std::string& /*serverAddress*/,
         THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
     {
         auto client = CreateBusClient(NYT::NBus::TBusClientConfig::CreateTcp(address));
@@ -361,10 +367,11 @@ class TRpcOverGrpcImpl
 public:
     static constexpr bool AllowTransportErrors = true;
     static constexpr bool Secure = EnableSsl;
+    static constexpr int MaxSimultaneousRequestCount = 1000;
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& /*serverAddress*/,
+        const std::string& address,
+        const std::string& /*serverAddress*/,
         THashMap<TString, NYTree::INodePtr> grpcArguments)
     {
         auto channelConfig = New<NGrpc::TChannelConfig>();
@@ -441,8 +448,8 @@ public:
     }
 
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& serverAddress,
+        const std::string& address,
+        const std::string& serverAddress,
         THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
     {
         auto clientConfig = NYT::NBus::TBusClientConfig::CreateUds(
@@ -452,7 +459,7 @@ public:
     }
 
 private:
-    static TString SocketPath_;
+    static inline std::string SocketPath_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -467,17 +474,21 @@ public:
     // TODO(melkov): Fill ssl_credentials_ext in server code and enable the Secure flag.
     static constexpr bool Secure = false;
 
+    // HTTP will use at least two file descriptors per test connection.
+    // Allow tests to run when the limit for the file descriptors is low.
+    static constexpr int MaxSimultaneousRequestCount = 400;
+
     static IChannelPtr CreateChannel(
-        const TString& address,
-        const TString& /*serverAddress*/,
+        const std::string& address,
+        const std::string& /*serverAddress*/,
         THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
     {
         static auto poller = NConcurrency::CreateThreadPoolPoller(4, "HttpChannelTest");
         auto credentials = New<NHttps::TClientCredentialsConfig>();
         credentials->PrivateKey = New<NCrypto::TPemBlobConfig>();
-        credentials->PrivateKey->Value = ServerKey;
+        credentials->PrivateKey->Value = ClientKey;
         credentials->CertChain = New<NCrypto::TPemBlobConfig>();
-        credentials->CertChain->Value = ServerCert;
+        credentials->CertChain->Value = ClientCert;
         return NHttp::CreateHttpChannel(address, poller, EnableSsl, credentials);
     }
 

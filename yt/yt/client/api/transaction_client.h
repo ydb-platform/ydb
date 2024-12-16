@@ -57,6 +57,9 @@ struct TTransactionStartOptions
     //! By default, all master transactions are Cypress expect for some
     //! system ones (e.g. store flusher transactions).
     bool StartCypressTransaction = true;
+
+    //! Clock cluster tag used for timestamp generation on coordinators
+    TClusterTag ClockClusterTag = NObjectClient::InvalidCellTag;
 };
 
 struct TTransactionAttachOptions

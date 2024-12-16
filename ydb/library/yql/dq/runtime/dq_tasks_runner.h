@@ -9,13 +9,14 @@
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_watermark.h>
+#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_watermark.h>
 
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
@@ -48,6 +49,14 @@ struct TTaskRunnerStatsBase {
     TDuration ComputeCpuTime;
     TDuration WaitInputTime;
     TDuration WaitOutputTime;
+
+    ui64 SpillingComputeWriteBytes;
+    ui64 SpillingChannelWriteBytes;
+
+    TDuration SpillingComputeReadTime;
+    TDuration SpillingComputeWriteTime;
+    TDuration SpillingChannelReadTime;
+    TDuration SpillingChannelWriteTime;
 
     // profile stats
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis
@@ -138,7 +147,9 @@ public:
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
 
-    virtual std::function<void()> GetWakeupCallback() const = 0;
+    virtual TWakeUpCallback GetWakeupCallback() const = 0;
+    virtual TErrorCallback GetErrorCallback() const = 0;
+    virtual TIntrusivePtr<TSpillingTaskCounters> GetSpillingTaskCounters() const = 0;
     virtual TTxId GetTxId() const = 0;
 };
 
@@ -161,7 +172,15 @@ public:
         return {};
     };
 
-    std::function<void()> GetWakeupCallback() const override {
+    TWakeUpCallback GetWakeupCallback() const override {
+        return {};
+    }
+
+    TErrorCallback GetErrorCallback() const override {
+        return {};
+    }
+
+    TIntrusivePtr<TSpillingTaskCounters> GetSpillingTaskCounters() const override {
         return {};
     }
 
@@ -192,7 +211,7 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& channels);
+    TVector<IDqOutput::TPtr>&& channels, TMaybe<ui8> minFillPercentage = {});
 
 using TDqTaskRunnerParameterProvider = std::function<
     bool(std::string_view name, NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -282,6 +301,10 @@ public:
             auto guard = typeEnv.BindAllocator();
             TDqDataSerializer::DeserializeParam(it->second, type, holderFactory, value);
         }
+    }
+
+    bool EnableMetering() const {
+        return Task_->GetEnableMetering();
     }
 
     ui64 GetStageId() const {
@@ -414,8 +437,8 @@ public:
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, 
-    const TDqTaskRunnerContext& ctx, 
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+    const TDqTaskRunnerContext& ctx,
     const TDqTaskRunnerSettings& settings,
     const TLogFunc& logFunc
 );

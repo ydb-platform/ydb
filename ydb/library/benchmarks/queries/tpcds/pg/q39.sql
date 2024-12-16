@@ -12,7 +12,7 @@ with inv as
       where inv_item_sk = i_item_sk
         and inv_warehouse_sk = w_warehouse_sk
         and inv_date_sk = d_date_sk
-        and d_year =2000
+        and d_year =2001
       group by w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy) foo
  where case mean when 0 then 0 else stdev/mean end > 1)
 select inv1.w_warehouse_sk as inv1_w_warehouse_sk,inv1.i_item_sk as inv1_i_item_sk,inv1.d_moy as inv1_d_moy,inv1.mean as inv1_mean, inv1.cov as inv1_cov
@@ -20,8 +20,8 @@ select inv1.w_warehouse_sk as inv1_w_warehouse_sk,inv1.i_item_sk as inv1_i_item_
 from inv inv1,inv inv2
 where inv1.i_item_sk = inv2.i_item_sk
   and inv1.w_warehouse_sk =  inv2.w_warehouse_sk
-  and inv1.d_moy=2
-  and inv2.d_moy=2+1
+  and inv1.d_moy=1
+  and inv2.d_moy=1+1
 order by inv1_w_warehouse_sk,inv1_i_item_sk,inv1_d_moy,inv1_mean,inv1_cov
         ,inv2_d_moy,inv2_mean, inv2_cov
 ;
@@ -37,7 +37,7 @@ with inv as
       where inv_item_sk = i_item_sk
         and inv_warehouse_sk = w_warehouse_sk
         and inv_date_sk = d_date_sk
-        and d_year =2000
+        and d_year =2001
       group by w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy) foo
  where case mean when 0 then 0 else stdev/mean end > 1)
 select inv1.w_warehouse_sk as inv1_w_warehouse_sk,inv1.i_item_sk as inv1_i_item_sk,inv1.d_moy as inv1_d_moy,inv1.mean as inv1_mean, inv1.cov as inv1_cov
@@ -45,8 +45,8 @@ select inv1.w_warehouse_sk as inv1_w_warehouse_sk,inv1.i_item_sk as inv1_i_item_
 from inv inv1,inv inv2
 where inv1.i_item_sk = inv2.i_item_sk
   and inv1.w_warehouse_sk =  inv2.w_warehouse_sk
-  and inv1.d_moy=2
-  and inv2.d_moy=2+1
+  and inv1.d_moy=1
+  and inv2.d_moy=1+1
   and inv1.cov > 1.5
 order by inv1_w_warehouse_sk,inv1_i_item_sk,inv1_d_moy,inv1_mean,inv1_cov
         ,inv2_d_moy,inv2_mean, inv2_cov

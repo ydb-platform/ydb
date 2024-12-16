@@ -201,12 +201,15 @@ namespace NKikimr::NBsController {
                 const TVDiskIdShort vdisk = Topology.GetVDiskId(orderNumber);
                 const ui32 domainIdx = Topology.GetFailDomainOrderNumber(vdisk);
 
+                const auto& disksPerRealm = NumDisksPerRealm[vdisk.FailRealm][pos.Realm];
+                const auto& disksPerDomain = NumDisksPerDomain[domainIdx][pos.Domain];
+
                 return {
-                    .RealmInterlace = NumDisksPerRealmTotal[pos.Realm] - NumDisksPerRealm[vdisk.FailRealm][pos.Realm],
-                    .DomainInterlace = NumDisksPerDomainTotal[pos.Domain] - NumDisksPerDomain[domainIdx][pos.Domain],
+                    .RealmInterlace = NumDisksPerRealmTotal[pos.Realm] - disksPerRealm,
+                    .DomainInterlace = NumDisksPerDomainTotal[pos.Domain] - disksPerDomain,
                     .RealmGroupScatter = NumDisks - NumDisksPerRealmGroup[pos.RealmGroup],
-                    .RealmScatter = NumDisksInRealm[vdisk.FailRealm] - NumDisksPerRealm[vdisk.FailRealm][pos.Realm],
-                    .DomainScatter = NumDisksInDomain[domainIdx] - NumDisksPerDomain[domainIdx][pos.Domain],
+                    .RealmScatter = NumDisksInRealm[vdisk.FailRealm] - disksPerRealm,
+                    .DomainScatter = NumDisksInDomain[domainIdx] - disksPerDomain,
                 };
             }
 

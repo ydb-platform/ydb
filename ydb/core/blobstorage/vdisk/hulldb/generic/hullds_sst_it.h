@@ -109,6 +109,11 @@ namespace NKikimr {
             merger->AddFromSegment(Ptr->MemRec, Segment->GetOutbound(), GetCurKey(), Segment->Info.LastLsn);
         }
 
+        template <class Heap>
+        void PutToHeap(Heap& heap) {
+            heap.Add(this);
+        }
+
         bool operator == (const TMemIterator &it) const {
             Y_ABORT_UNLESS(Segment == it.Segment);
             return Ptr == it.Ptr;

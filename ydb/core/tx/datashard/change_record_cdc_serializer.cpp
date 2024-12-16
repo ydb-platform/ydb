@@ -1,14 +1,15 @@
 #include "change_record_cdc_serializer.h"
 #include "change_record.h"
-#include "export_common.h"
+#include "type_serialization.h"
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
@@ -61,6 +62,7 @@ public:
         case TChangeRecord::EKind::CdcHeartbeat:
             return SerializeHeartbeat(cmd, record);
         case TChangeRecord::EKind::AsyncIndex:
+        case TChangeRecord::EKind::IncrementalRestore:
             Y_ABORT("Unexpected");
         }
     }
@@ -91,10 +93,16 @@ class TJsonSerializer: public TBaseSerializer {
     friend class TChangeRecord; // used in GetPartitionKey()
 
     static NJson::TJsonWriterConfig DefaultJsonConfig() {
-        NJson::TJsonWriterConfig jsonConfig;
-        jsonConfig.ValidateUtf8 = false;
-        jsonConfig.WriteNanAsString = true;
-        return jsonConfig;
+        constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
+        constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
+        constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
+        return NJson::TJsonWriterConfig {
+            .DoubleNDigits = doubleNDigits,
+            .FloatNDigits = floatNDigits,
+            .FloatToStringMode = floatMode,
+            .ValidateUtf8 = false,
+            .WriteNanAsString = true,
+        };
     }
 
 protected:
@@ -114,6 +122,15 @@ protected:
         NJson::TJsonValue result;
         Y_ABORT_UNLESS(NJson2Yson::DeserializeYsonAsJsonValue(in, &result));
         return result;
+    }
+
+    static NJson::TJsonValue UuidToJson(const TCell& cell) {
+        TStringStream ss;
+        ui16 dw[8];
+        Y_ABORT_UNLESS(cell.Size() == 16);
+        cell.CopyDataInto((char*)dw);
+        NUuid::UuidToString(dw, ss);
+        return NJson::TJsonValue(ss.Str());
     }
 
     static NJson::TJsonValue ToJson(const TCell& cell, NScheme::TTypeInfo type) {
@@ -159,7 +176,7 @@ protected:
         case NScheme::NTypeIds::Timestamp64:
             return NJson::TJsonValue(cell.AsValue<i64>());            
         case NScheme::NTypeIds::Decimal:
-            return NJson::TJsonValue(DecimalToString(cell.AsValue<std::pair<ui64, i64>>()));
+            return NJson::TJsonValue(DecimalToString(cell.AsValue<std::pair<ui64, i64>>(), type));
         case NScheme::NTypeIds::DyNumber:
             return NJson::TJsonValue(DyNumberToString(cell.AsBuf()));
         case NScheme::NTypeIds::String:
@@ -175,10 +192,9 @@ protected:
         case NScheme::NTypeIds::Yson:
             return YsonToJson(cell.AsBuf());
         case NScheme::NTypeIds::Pg:
-            // TODO: support pg types
-            Y_ABORT("pg types are not supported");
+            return NJson::TJsonValue(PgToString(cell.AsBuf(), type));
         case NScheme::NTypeIds::Uuid:
-            return NJson::TJsonValue(NUuid::UuidBytesToString(cell.Data()));
+            return UuidToJson(cell);
         default:
             Y_ABORT("Unexpected type");
         }
@@ -370,6 +386,9 @@ class TDynamoDBStreamsJsonSerializer: public TJsonSerializer {
             } else if (name.StartsWith("__Hash_")) {
                 bool indexed = false;
                 for (const auto& [_, index] : schema->Indexes) {
+                    if (index.Type != TUserTable::TTableIndex::EType::EIndexTypeGlobalAsync) {
+                        continue;
+                    }
                     Y_ABORT_UNLESS(index.KeyColumnIds.size() >= 1);
                     if (index.KeyColumnIds.at(0) == tag) {
                         indexed = true;

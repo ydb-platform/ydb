@@ -13,14 +13,9 @@
 namespace NActors {
     class TChunkSerializer;
     class IActor;
-    class ISerializerToStream {
-    public:
-        virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
-    };
-
+    
     class IEventBase
-        : TNonCopyable,
-          public ISerializerToStream {
+        : TNonCopyable {
     protected:
         // for compatibility with virtual actors
         virtual bool DoExecute(IActor* /*actor*/, std::unique_ptr<IEventHandle> /*eventPtr*/) {
@@ -66,6 +61,13 @@ namespace NActors {
             {
             }
         };
+
+    public:
+        typedef TAutoPtr<IEventHandle> TPtr;
+
+    public:
+        // Used by a mailbox intrusive list
+        std::atomic<uintptr_t> NextLinkPtr;
 
     public:
         template <typename TEv>
@@ -349,6 +351,10 @@ namespace NActors {
     template <typename TEventType>
     class TEventHandle: public IEventHandle {
         TEventHandle(); // we never made instance of TEventHandle
+
+    public:
+        typedef TAutoPtr<TEventHandle<TEventType>> TPtr;
+
     public:
         TEventType* Get() {
             return IEventHandle::Get<TEventType>();
@@ -371,7 +377,7 @@ namespace NActors {
         // still abstract
 
         typedef TEventHandle<TEventType> THandle;
-        typedef TAutoPtr<THandle> TPtr;
+        typedef typename THandle::TPtr TPtr;
     };
 
 #define DEFINE_SIMPLE_LOCAL_EVENT(eventType, header)                    \

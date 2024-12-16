@@ -32,14 +32,14 @@ class VendorImporter:
         """
         root, base, target = fullname.partition(self.root_name + '.')
         for prefix in self.search_path:
+            extant = prefix + target
             try:
-                extant = prefix + target
                 __import__(extant)
-                mod = sys.modules[extant]
-                sys.modules[fullname] = mod
-                return mod
             except ImportError:
-                pass
+                continue
+            mod = sys.modules[extant]
+            sys.modules[fullname] = mod
+            return mod
         else:
             raise ImportError(
                 "The '{target}' package is required; "
@@ -85,6 +85,7 @@ names = (
     'ordered_set',
     'packaging',
     'tomli',
+    'wheel',
     'zipp',
 )
 # [[[end]]]

@@ -3,6 +3,7 @@
 #include "common.h"
 
 #include <library/cpp/yt/assert/assert.h>
+#include <library/cpp/yt/string/format.h>
 
 namespace NYT {
 
@@ -365,9 +366,18 @@ public:
         : Container_(container)
     { }
 
+    using value_type = typename TContainer::value_type;
+
 private:
     TContainer& Container_;
 };
+
+namespace NDetail {
+
+template <class T, class Allocator>
+constexpr bool CKnownRange<TRingQueueIterableWrapper<T, Allocator>> = true;
+
+} // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
 

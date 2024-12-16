@@ -233,7 +233,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Send " << records.size() << " change records"
                 << ": to# " << to
                 << ", at tablet# " << Self->TabletID());
-            ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvRecords(std::make_shared<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>(std::move(records))));
+            ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvRecords(std::move(records)));
         }
 
         size_t forgotten = 0;
@@ -286,7 +286,7 @@ class TDataShard::TTxRemoveChangeRecords: public TTransactionBase<TDataShard> {
                 ChangeExchangeSplit = true;
             } else {
                 for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) {
-                    if (Self->SplitSrcSnapshotSender.Acked(dstTabletId)) {
+                    if (Self->SplitSrcSnapshotSender.Acked(dstTabletId) && !Self->ChangeSenderActivator.Acked(dstTabletId)) {
                         ActivationList.insert(dstTabletId);
                     }
                 }
@@ -346,9 +346,7 @@ public:
         }
 
         for (const auto dstTabletId : ActivationList) {
-            if (!Self->ChangeSenderActivator.Acked(dstTabletId)) {
-                Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
-            }
+            Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
         }
 
         Self->CheckStateChange(ctx);
@@ -383,7 +381,7 @@ public:
         Y_ABORT_UNLESS(Self->ChangeExchangeSplitter.Done());
 
         for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) {
-            if (Self->SplitSrcSnapshotSender.Acked(dstTabletId)) {
+            if (Self->SplitSrcSnapshotSender.Acked(dstTabletId) && !Self->ChangeSenderActivator.Acked(dstTabletId)) {
                 ActivationList.insert(dstTabletId);
             }
         }
@@ -396,9 +394,7 @@ public:
             << ", at tablet# " << Self->TabletID());
 
         for (const auto dstTabletId : ActivationList) {
-            if (!Self->ChangeSenderActivator.Acked(dstTabletId)) {
-                Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
-            }
+            Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
         }
     }
 

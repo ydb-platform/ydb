@@ -351,6 +351,9 @@ TPartitionConsumerStats::TPartitionConsumerStats(const Ydb::Topic::DescribeConsu
     , LastReadOffset_(partitionStats.last_read_offset())
     , ReaderName_(partitionStats.reader_name())
     , ReadSessionId_(partitionStats.read_session_id())
+    , LastReadTime_(TInstant::Seconds(partitionStats.last_read_time().seconds()))
+    , MaxReadTimeLag_(TDuration::Seconds(partitionStats.max_read_time_lag().seconds()))
+    , MaxWriteTimeLag_(TDuration::Seconds(partitionStats.max_write_time_lag().seconds()))
 {}
 
 ui64 TPartitionConsumerStats::GetCommittedOffset() const {
@@ -367,6 +370,18 @@ TString TPartitionConsumerStats::GetReaderName() const {
 
 TString TPartitionConsumerStats::GetReadSessionId() const {
     return ReadSessionId_;
+}
+
+const TInstant& TPartitionConsumerStats::GetLastReadTime() const {
+    return LastReadTime_;
+}
+
+const TDuration& TPartitionConsumerStats::GetMaxReadTimeLag() const {
+    return MaxReadTimeLag_;
+}
+
+const TDuration& TPartitionConsumerStats::GetMaxWriteTimeLag() const {
+    return MaxWriteTimeLag_;
 }
 
 TPartitionLocation::TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation)
@@ -395,12 +410,21 @@ TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionI
     for (const auto& partId : partitionInfo.parent_partition_ids()) {
         ParentPartitionIds_.push_back(partId);
     }
+
     if (partitionInfo.has_partition_stats()) {
         PartitionStats_ = TPartitionStats{partitionInfo.partition_stats()};
     }
 
     if (partitionInfo.has_partition_location()) {
         PartitionLocation_ = TPartitionLocation{partitionInfo.partition_location()};
+    }
+
+    if (partitionInfo.has_key_range() && partitionInfo.key_range().has_from_bound()) {
+        FromBound_ = TString(partitionInfo.key_range().from_bound());
+    }
+
+    if (partitionInfo.has_key_range() && partitionInfo.key_range().has_to_bound()) {
+        ToBound_ = TString(partitionInfo.key_range().to_bound());
     }
 }
 
@@ -437,12 +461,28 @@ const TMaybe<TPartitionLocation>& TPartitionInfo::GetPartitionLocation() const {
     return PartitionLocation_;
 }
 
+const TVector<ui64> TPartitionInfo::GetChildPartitionIds() const {
+    return ChildPartitionIds_;
+}
+
+const TVector<ui64> TPartitionInfo::GetParentPartitionIds() const {
+    return ParentPartitionIds_;
+}
+
 bool TPartitionInfo::GetActive() const {
     return Active_;
 }
 
 ui64 TPartitionInfo::GetPartitionId() const {
     return PartitionId_;
+}
+
+const TMaybe<TString>& TPartitionInfo::GetFromBound() const {
+    return FromBound_;
+}
+
+const TMaybe<TString>& TPartitionInfo::GetToBound() const {
+    return ToBound_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -30,11 +30,11 @@ namespace NYT::NConcurrency {
 
 using namespace NProfiling;
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FairShareThreadPool");
-
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
+
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FairShareThreadPool");
 
 DECLARE_REFCOUNTED_CLASS(TBucketMapping)
 DECLARE_REFCOUNTED_CLASS(TTwoLevelFairShareQueue)
@@ -45,7 +45,7 @@ struct TExecutionPool;
 // High 16 bits is thread index and 48 bits for thread pool ptr.
 YT_DEFINE_THREAD_LOCAL(TPackedPtr, ThreadCookie, 0);
 
-static constexpr auto LogDurationThreshold = TDuration::Seconds(1);
+constexpr auto LogDurationThreshold = TDuration::Seconds(1);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -443,11 +443,11 @@ public:
         }
 
         // Detach under lock.
-        auto* poolDangerousPtr = bucket->Pool.Release();
+        auto* rawPool = bucket->Pool.Release();
 
         // Do not want use NewWithDeleter and keep pointer to TTwoLevelFairShareQueue in each execution pool.
-        if (NYT::GetRefCounter(poolDangerousPtr)->Unref(1)) {
-            auto poolsToRemove = DetachPool(poolDangerousPtr);
+        if (NYT::GetRefCounter(rawPool)->Unref(1)) {
+            auto poolsToRemove = DetachPool(rawPool);
             guard.Release();
 
             while (poolsToRemove.GetSize() > 0) {
@@ -466,19 +466,21 @@ public:
         if (!inserted) {
             YT_ASSERT(mappingIt->second->PoolName == poolName);
 
-            auto* pool = mappingIt->second;
+            auto* rawPool = mappingIt->second;
             // If RetainPoolQueue_ contains only one element its LinkedListNode will be null.
             // Determine that pool is in RetainPoolQueue_ by checking its ref count.
-            if (NYT::GetRefCounter(pool)->GetRefCount() == 0) {
-                RetainPoolQueue_.Remove(pool);
-                pool->LinkedListNode = {};
+            if (NYT::GetRefCounter(rawPool)->GetRefCount() == 0) {
+                RetainPoolQueue_.Remove(rawPool);
+                rawPool->LinkedListNode = {};
 
-                YT_LOG_TRACE("Restoring pool (PoolName: %v)", pool->PoolName);
+                YT_LOG_TRACE("Restoring pool (PoolName: %v)", rawPool->PoolName);
             }
 
-            YT_LOG_TRACE("Reusing pool (PoolName: %v)", pool->PoolName);
+            YT_LOG_TRACE("Reusing pool (PoolName: %v)", rawPool->PoolName);
 
-            return pool;
+            // NB: Strong RC could be zero, see above.
+            NYT::GetRefCounter(rawPool)->DangerousRef();
+            return TExecutionPoolPtr(rawPool, /*addReference*/ false);
         } else {
             YT_LOG_TRACE("Creating pool (PoolName: %v)", poolName);
             auto pool = New<TExecutionPool>(poolName, GetPoolProfiler(poolName));
@@ -620,7 +622,7 @@ public:
 
     void Configure(TDuration pollingPeriod)
     {
-        TNotifyManager::Reconfigure(pollingPeriod);
+        TNotifyManager::SetPollingPeriod(pollingPeriod);
     }
 
     // (arkady-e1ppa): Explanation of memory orders and fences around Stopped_:
@@ -629,13 +631,13 @@ public:
         For our logic Invoke method does 2 things:
         1) It pushes callback to the queue (we assume it be release RMW operation)
         In reality right now it is seq_cst, but it this can and should be changed in the future.
-        2) Now, the second (and third) action is seq_cst fence and then seq_cst read of Stopping_.
+        2) Now, the second (and third) action is seq_cst fence and then seq_cst read of Stopped_.
         Shutdown also does two thigns:
-        1) It does a seq_cst rmw in Stopping_ (effectively, just write)
+        1) It does a seq_cst rmw in Stopped_ (effectively, just write)
         2) It drains the queue.
         In order to prevent losing callbacks in queue
         We need to make sure that either Invoke observes |true| in the read
-        or Shutdown observes places callback from said Invoke.
+        or Shutdown observes placed callback from said Invoke.
         We care about this, because if callback is stuck in queue it will
         remain there until process is killed. If said callback MUST be
         either executed or discarded (e.g. IPollable or Fiber) in order
@@ -1117,7 +1119,7 @@ private:
         }
 
         // Schedule other actions.
-        for (int threadIndex : MakeRange(threadIds.data(), requestCount)) {
+        for (int threadIndex : TRange(threadIds.data(), requestCount)) {
             if (threadRequests[threadIndex]) {
                 if (otherActionCount > 0) {
                     ServeBeginExecute(&ThreadStates_[threadIndex], currentInstant, std::move(OtherActions_[--otherActionCount]));
@@ -1315,7 +1317,7 @@ public:
             ThreadNamePrefix_,
             options))
     {
-        Configure(threadCount);
+        SetThreadCount(threadCount);
     }
 
     ~TTwoLevelFairShareThreadPool()
@@ -1323,12 +1325,12 @@ public:
         Shutdown();
     }
 
-    void Configure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        TThreadPoolBase::Configure(threadCount);
+        TThreadPoolBase::SetThreadCount(threadCount);
     }
 
-    void Configure(TDuration pollingPeriod) override
+    void SetPollingPeriod(TDuration pollingPeriod) override
     {
         Queue_->Configure(pollingPeriod);
     }
@@ -1367,10 +1369,10 @@ private:
         Queue_->Drain();
     }
 
-    void DoConfigure(int threadCount) override
+    void DoSetThreadCount(int threadCount) override
     {
         Queue_->Configure(threadCount);
-        TThreadPoolBase::DoConfigure(threadCount);
+        TThreadPoolBase::DoSetThreadCount(threadCount);
     }
 
     TSchedulerThreadPtr SpawnThread(int index) override

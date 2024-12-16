@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+from itertools import pairwise
 from typing import TYPE_CHECKING, Any, cast
 
 import matplotlib.collections as mcollections
@@ -100,9 +101,9 @@ class MplRenderer(Renderer):
 
         Args:
             filled (sequence of arrays): Filled contour data as returned by
-                :func:`~contourpy.ContourGenerator.filled`.
-            fill_type (FillType or str): Type of ``filled`` data as returned by
-                :attr:`~contourpy.ContourGenerator.fill_type`, or string equivalent
+                :meth:`~.ContourGenerator.filled`.
+            fill_type (FillType or str): Type of :meth:`~.ContourGenerator.filled` data as returned
+                by :attr:`~.ContourGenerator.fill_type`, or string equivalent
             ax (int or Maplotlib Axes, optional): Which axes to plot on, default ``0``.
             color (str, optional): Color to plot with. May be a string color or the letter ``"C"``
                 followed by an integer in the range ``"C0"`` to ``"C9"`` to use a color from the
@@ -177,9 +178,9 @@ class MplRenderer(Renderer):
 
         Args:
             lines (sequence of arrays): Contour line data as returned by
-                :func:`~contourpy.ContourGenerator.lines`.
-            line_type (LineType or str): Type of ``lines`` data as returned by
-                :attr:`~contourpy.ContourGenerator.line_type`, or string equivalent.
+                :meth:`~.ContourGenerator.lines`.
+            line_type (LineType or str): Type of :meth:`~.ContourGenerator.lines` data as returned
+                by :attr:`~.ContourGenerator.line_type`, or string equivalent.
             ax (int or Matplotlib Axes, optional): Which Axes to plot on, default ``0``.
             color (str, optional): Color to plot lines. May be a string color or the letter ``"C"``
                 followed by an integer in the range ``"C0"`` to ``"C9"`` to use a color from the
@@ -404,7 +405,7 @@ class MplDebugRenderer(MplRenderer):
             for points, offsets in zip(*filled):
                 if points is None:
                     continue
-                for start, end in zip(offsets[:-1], offsets[1:]):
+                for start, end in pairwise(offsets):
                     xys = points[start:end]
                     ax.plot(xys[:, 0], xys[:, 1], c=line_color, alpha=line_alpha)
 

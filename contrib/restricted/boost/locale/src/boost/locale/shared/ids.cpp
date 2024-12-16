@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2024 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
@@ -24,6 +25,7 @@ namespace boost { namespace locale {
     BOOST_LOCALE_DEFINE_ID(calendar_facet);
 
 #define BOOST_LOCALE_INSTANTIATE(CHARTYPE)            \
+    BOOST_LOCALE_DEFINE_ID(collator<CHARTYPE>);       \
     BOOST_LOCALE_DEFINE_ID(converter<CHARTYPE>);      \
     BOOST_LOCALE_DEFINE_ID(message_format<CHARTYPE>); \
     BOOST_LOCALE_DEFINE_ID(boundary::boundary_indexing<CHARTYPE>);
@@ -48,6 +50,7 @@ namespace boost { namespace locale {
             void init_by(const std::locale& l)
             {
                 init_facet<boundary::boundary_indexing<Char>>(l);
+                init_facet<collator<Char>>(l);
                 init_facet<converter<Char>>(l);
                 init_facet<message_format<Char>>(l);
             }

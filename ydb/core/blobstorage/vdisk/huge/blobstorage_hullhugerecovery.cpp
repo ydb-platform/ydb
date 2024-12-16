@@ -64,7 +64,6 @@ namespace NKikimr {
                                                            const ui32 chunkSize,
                                                            const ui32 appendBlockSize,
                                                            const ui32 minHugeBlobInBytes,
-                                                           const ui32 oldMinHugeBlobInBytes,
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
@@ -73,11 +72,11 @@ namespace NKikimr {
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
-                                    minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
+                                    minHugeBlobInBytes, milestoneHugeBlobInBytes,
                                     maxBlobInBytes, overhead, freeChunksReservation))
-            , AllocatedSlots()
             , Guid(TAppData::RandomProvider->GenRand64())
         {
+            Heap->FinishRecovery();
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
                 "Recovery started (guid# %" PRIu64 " entryLsn# null): State# %s",
                 Guid, ToString().data()));
@@ -87,7 +86,6 @@ namespace NKikimr {
                                                            const ui32 chunkSize,
                                                            const ui32 appendBlockSize,
                                                            const ui32 minHugeBlobInBytes,
-                                                           const ui32 oldMinHugeBlobInBytes,
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
@@ -98,13 +96,13 @@ namespace NKikimr {
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
-                                    minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
+                                    minHugeBlobInBytes, milestoneHugeBlobInBytes,
                                     maxBlobInBytes, overhead, freeChunksReservation))
-            , AllocatedSlots()
             , Guid(TAppData::RandomProvider->GenRand64())
             , PersistentLsn(entryPointLsn)
         {
             ParseFromString(entryPointData);
+            Heap->FinishRecovery();
             Y_ABORT_UNLESS(entryPointLsn == LogPos.EntryPointLsn);
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
                 "Recovery started (guid# %" PRIu64 " entryLsn# %" PRIu64 "): State# %s",
@@ -115,7 +113,6 @@ namespace NKikimr {
                                                            const ui32 chunkSize,
                                                            const ui32 appendBlockSize,
                                                            const ui32 minHugeBlobInBytes,
-                                                           const ui32 oldMinHugeBlobInBytes,
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
@@ -126,13 +123,13 @@ namespace NKikimr {
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
-                                    minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
+                                    minHugeBlobInBytes, milestoneHugeBlobInBytes,
                                     maxBlobInBytes, overhead, freeChunksReservation))
-            , AllocatedSlots()
             , Guid(TAppData::RandomProvider->GenRand64())
             , PersistentLsn(entryPointLsn)
         {
             ParseFromArray(entryPointData.GetData(), entryPointData.GetSize());
+            Heap->FinishRecovery();
             Y_ABORT_UNLESS(entryPointLsn == LogPos.EntryPointLsn);
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
                 "Recovery started (guid# %" PRIu64 " entryLsn# %" PRIu64 "): State# %s",
@@ -153,7 +150,18 @@ namespace NKikimr {
             str.Write(serializedLogPos.data(), THullHugeRecoveryLogPos::SerializedSize);
 
             // heap
+            std::vector<bool> inLockedChunks;
+            inLockedChunks.reserve(SlotsInFlight.size());
+            for (const THugeSlot& slot : SlotsInFlight) {
+                inLockedChunks.push_back(Heap->ReleaseSlot(slot)); // mark this slot as free one for the means of serialization
+            }
             TString serializedHeap = Heap->Serialize();
+            size_t index = 0;
+            for (const THugeSlot& slot : SlotsInFlight) {
+                Y_DEBUG_ABORT_UNLESS(index < inLockedChunks.size());
+                Heap->OccupySlot(slot, inLockedChunks[index++]); // restore slot ownership
+            }
+            Y_DEBUG_ABORT_UNLESS(index == inLockedChunks.size());
             ui32 heapSize = serializedHeap.size();
             str.Write(&heapSize, sizeof(ui32));
             str.Write(serializedHeap.data(), heapSize);
@@ -163,14 +171,9 @@ namespace NKikimr {
             Y_ABORT_UNLESS(!chunksSize);
             str.Write(&chunksSize, sizeof(ui32));
 
-            // allocated slots
-            ui32 slotsSize = AllocatedSlots.size();
+            // allocated slots (we really never save them now, they're considered as free ones while serializing Heap)
+            ui32 slotsSize = 0;
             str.Write(&slotsSize, sizeof(ui32));
-            for (const auto &x : AllocatedSlots) {
-                x.Serialize(str);
-                ui64 refPointLsn = 0; // refPointLsn (for backward compatibility, can be removed)
-                str.Write(&refPointLsn, sizeof(ui64));
-            }
 
             return str.Str();
         }
@@ -181,7 +184,7 @@ namespace NKikimr {
 
         void THullHugeKeeperPersState::ParseFromArray(const char* data, size_t size) {
             Y_UNUSED(size);
-            AllocatedSlots.clear();
+            SlotsInFlight.clear();
 
             const char *cur = data;
             cur += sizeof(ui32); // signature
@@ -209,8 +212,7 @@ namespace NKikimr {
                 hugeSlot.Parse(cur, cur + NHuge::THugeSlot::SerializedSize);
                 cur += NHuge::THugeSlot::SerializedSize;
                 cur += sizeof(ui64); // refPointLsn (for backward compatibility, can be removed)
-                bool inserted = AllocatedSlots.insert(hugeSlot).second;
-                Y_ABORT_UNLESS(inserted);
+                AddSlotInFlight(hugeSlot);
             }
         }
 
@@ -280,9 +282,9 @@ namespace NKikimr {
         TString THullHugeKeeperPersState::ToString() const {
             TStringStream str;
             str << "LogPos: " << LogPos.ToString();
-            str << " AllocatedSlots:";
-            if (!AllocatedSlots.empty()) {
-                for (const auto &x : AllocatedSlots) {
+            str << " SlotsInFlight:";
+            if (!SlotsInFlight.empty()) {
+                for (const auto &x : SlotsInFlight) {
                     str << " " << x.ToString();
                 }
             } else {
@@ -294,13 +296,37 @@ namespace NKikimr {
 
         void THullHugeKeeperPersState::RenderHtml(IOutputStream &str) const {
             str << "LogPos: " << LogPos.ToString() << "<br/>";
-            str << "AllocatedSlots:";
-            if (!AllocatedSlots.empty()) {
-                for (const auto &x : AllocatedSlots) {
+            str << "SlotsInFlight:";
+            if (!SlotsInFlight.empty()) {
+                for (const auto &x : SlotsInFlight) {
                     str << " " << x.ToString();
                 }
             } else {
                 str << " empty<br>";
+            }
+            HTML(str) {
+                COLLAPSED_BUTTON_CONTENT("chunkstoslotsizeid", "ChunksToSlotSize") {
+                    TABLE_CLASS ("table table-condensed") {
+                        TABLEHEAD() {
+                            TABLER() {
+                                TABLEH() {str << "ChunkId";}
+                                TABLEH() {str << "RefCount";}
+                                TABLEH() {str << "SlotSize";}
+                            }
+                        }
+                        TABLEBODY() {
+                            for (const auto& [key, value] : ChunkToSlotSize) {
+                                TABLER() {
+                                    const auto& [refcount, size] = value;
+                                    TABLED() {str << key;}
+                                    TABLED() {str << refcount;}
+                                    TABLED() {str << size;}
+                                }
+                            }
+                        }
+                    }
+                }
+                str << "<br/>";
             }
             Heap->RenderHtml(str);
         }
@@ -402,6 +428,7 @@ namespace NKikimr {
                 const TActorContext &ctx,
                 ui64 lsn,
                 const TDiskPartVec &rec,
+                const TDiskPartVec& allocated,
                 ESlotDelDbType type)
         {
             ui64 *logPosDelLsn = nullptr;
@@ -420,24 +447,24 @@ namespace NKikimr {
             }
             if (lsn > *logPosDelLsn) {
                 // apply
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "RmHugeBlobs apply: %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
-                for (const auto &x : rec)
+                LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64
+                    " entryLsn# %" PRIu64 "): " "RmHugeBlobs apply: %s", Guid, lsn, LogPos.EntryPointLsn,
+                    rec.ToString().data()));
+                for (const auto &x : rec) {
                     Heap->RecoveryModeFree(x);
+                }
+                for (const auto& x : allocated) {
+                    Heap->RecoveryModeAllocate(x);
+                }
 
                 *logPosDelLsn = lsn;
                 PersistentLsn = Min(PersistentLsn, lsn);
                 return TRlas(true, false);
             } else {
                 // skip
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "RmHugeBlobs skip: %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64
+                    " entryLsn# %" PRIu64 "): " "RmHugeBlobs skip: %s", Guid, lsn, LogPos.EntryPointLsn,
+                    rec.ToString().data()));
                 return TRlas(true, true);
             }
         }
@@ -461,9 +488,7 @@ namespace NKikimr {
             NHuge::THugeSlot hugeSlot(Heap->ConvertDiskPartToHugeSlot(rec.DiskAddr));
             if (lsn > LogPos.HugeBlobLoggedLsn) {
                 // apply
-                TAllocatedSlots::iterator it = AllocatedSlots.find(hugeSlot);
-                if (it != AllocatedSlots.end()) {
-                    AllocatedSlots.erase(it);
+                if (DeleteSlotInFlight(hugeSlot)) {
                     LOG_DEBUG(ctx, BS_HULLHUGE,
                               VDISKP(VCtx->VDiskLogPrefix,
                                     "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
@@ -536,13 +561,11 @@ namespace NKikimr {
         }
 
         void THullHugeKeeperPersState::FinishRecovery(const TActorContext &ctx) {
-            // handle AllocatedSlots
-            if (!AllocatedSlots.empty()) {
-                for (const auto &x : AllocatedSlots) {
-                    Heap->RecoveryModeFree(x.GetDiskPart());
-                }
-                AllocatedSlots.clear();
+            // handle SlotsInFlight
+            for (const auto &x : SlotsInFlight) {
+                Heap->RecoveryModeFree(x.GetDiskPart());
             }
+            SlotsInFlight.clear();
 
             Recovered = true;
             LOG_DEBUG(ctx, BS_HULLHUGE,
@@ -551,6 +574,52 @@ namespace NKikimr {
 
         void THullHugeKeeperPersState::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             Heap->GetOwnedChunks(chunks);
+        }
+
+        void THullHugeKeeperPersState::AddSlotInFlight(THugeSlot hugeSlot) {
+            const auto [it, inserted] = SlotsInFlight.insert(hugeSlot);
+            Y_ABORT_UNLESS(inserted);
+        }
+
+        bool THullHugeKeeperPersState::DeleteSlotInFlight(THugeSlot hugeSlot) {
+            if (const auto it = SlotsInFlight.find(hugeSlot); it != SlotsInFlight.end()) {
+                Y_ABORT_UNLESS(it->GetSize() == hugeSlot.GetSize());
+                SlotsInFlight.erase(it);
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        void THullHugeKeeperPersState::AddChunkSize(THugeSlot hugeSlot) {
+            const auto it = ChunkToSlotSize.emplace(hugeSlot.GetChunkId(), std::make_tuple(0, hugeSlot.GetSize())).first;
+            auto& [refcount, size] = it->second;
+            Y_VERIFY_DEBUG_S(size == hugeSlot.GetSize(), VCtx->VDiskLogPrefix << "HugeSlot# " << hugeSlot.ToString()
+                << " Expected# " << size);
+            if (size != hugeSlot.GetSize() && TlsActivationContext) {
+                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_HULLHUGE, VCtx->VDiskLogPrefix
+                    << "HugeSlot# " << hugeSlot.ToString() << " size is not as Expected# " << size);
+            }
+            ++refcount;
+        }
+
+        void THullHugeKeeperPersState::DeleteChunkSize(THugeSlot hugeSlot) {
+            const auto jt = ChunkToSlotSize.find(hugeSlot.GetChunkId());
+            Y_VERIFY_S(jt != ChunkToSlotSize.end(), VCtx->VDiskLogPrefix << "HugeSlot# " << hugeSlot.ToString());
+            auto& [refcount, size] = jt->second;
+            Y_VERIFY_DEBUG_S(size == hugeSlot.GetSize(), VCtx->VDiskLogPrefix << "HugeSlot# " << hugeSlot.ToString()
+                << " Expected# " << size);
+            if (size != hugeSlot.GetSize() && TlsActivationContext) {
+                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_HULLHUGE, VCtx->VDiskLogPrefix
+                    << "HugeSlot# " << hugeSlot.ToString() << " size is not as Expected# " << size);
+            }
+            if (!--refcount) {
+                ChunkToSlotSize.erase(jt);
+            }
+        }
+
+        void THullHugeKeeperPersState::RegisterBlob(TDiskPart diskPart) {
+            AddChunkSize(Heap->ConvertDiskPartToHugeSlot(diskPart));
         }
 
     } // NHuge

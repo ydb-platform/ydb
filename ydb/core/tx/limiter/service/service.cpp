@@ -12,7 +12,7 @@ TLimiterActor::TLimiterActor(const TConfig& config, const TString& limiterName, 
 
 void TLimiterActor::HandleMain(TEvExternal::TEvAskResource::TPtr& ev) {
     const auto now = TMonotonic::Now();
-    if (RequestsInFlight.empty() || VolumeInFlight + ev->Get()->GetRequest()->GetVolume() <= Config.GetLimit()) {
+    if (RequestsInFlight.empty() || (RequestsQueue.empty() && VolumeInFlight + ev->Get()->GetRequest()->GetVolume() <= Config.GetLimit())) {
         VolumeInFlight += ev->Get()->GetRequest()->GetVolume();
         RequestsInFlight.emplace_back(now, ev->Get()->GetRequest()->GetVolume());
         if (RequestsInFlight.size() == 1) {

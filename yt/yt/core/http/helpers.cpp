@@ -12,6 +12,8 @@
 #include <yt/yt/core/json/json_parser.h>
 #include <yt/yt/core/json/config.h>
 
+#include <yt/yt/core/net/address.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <util/stream/buffer.h>
@@ -308,8 +310,9 @@ std::optional<TString> FindBalancerRealIP(const IRequestPtr& req)
     auto forwardedFor = headers->Find(XForwardedForYHeaderName);
     auto sourcePort = headers->Find(XSourcePortYHeaderName);
 
-    if (forwardedFor && sourcePort) {
-        return Format("[%v]:%v", *forwardedFor, *sourcePort);
+    int port = 0;
+    if (forwardedFor && sourcePort && TryIntFromString<10>(*sourcePort, port)) {
+        return NNet::FormatNetworkAddress(*forwardedFor, port);
     }
 
     return {};
@@ -413,7 +416,7 @@ bool TryParseTraceParent(const TString& traceParent, NTracing::TSpanContext& spa
     // Now we have exactly three parts: traceId-spanId-options.
 
     // Parse trace context.
-    if (!TGuid::FromStringHex32(parts[0], &spanContext.TraceId)) {
+    if (!NTracing::TTraceId::FromStringHex32(parts[0], &spanContext.TraceId)) {
         return false;
     }
 

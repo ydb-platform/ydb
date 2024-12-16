@@ -13,18 +13,13 @@ import os
 import sys
 import textwrap
 import traceback
+from functools import partial
 from inspect import getframeinfo
 from pathlib import Path
-from typing import Dict, NamedTuple, Optional, Type
+from typing import Dict, NamedTuple, Optional, Tuple, Type
 
 import hypothesis
-from hypothesis.errors import (
-    DeadlineExceeded,
-    HypothesisException,
-    StopTest,
-    UnsatisfiedAssumption,
-    _Trimmable,
-)
+from hypothesis.errors import _Trimmable
 from hypothesis.internal.compat import BaseExceptionGroup
 from hypothesis.utils.dynamicvariables import DynamicVariable
 
@@ -54,30 +49,10 @@ def belongs_to(package):
     return accept
 
 
-PREVENT_ESCALATION = os.getenv("HYPOTHESIS_DO_NOT_ESCALATE") == "true"
-
 FILE_CACHE: Dict[bytes, bool] = {}
 
 
 is_hypothesis_file = belongs_to(hypothesis)
-
-HYPOTHESIS_CONTROL_EXCEPTIONS = (DeadlineExceeded, StopTest, UnsatisfiedAssumption)
-
-
-def escalate_hypothesis_internal_error():
-    if PREVENT_ESCALATION:
-        return
-
-    _, e, tb = sys.exc_info()
-
-    if getattr(e, "hypothesis_internal_never_escalate", False):
-        return
-
-    filepath = None if tb is None else traceback.extract_tb(tb)[-1][0]
-    if is_hypothesis_file(filepath) and not isinstance(
-        e, (HypothesisException, *HYPOTHESIS_CONTROL_EXCEPTIONS)
-    ):
-        raise
 
 
 def get_trimmed_traceback(exception=None):
@@ -133,20 +108,27 @@ class InterestingOrigin(NamedTuple):
         return f"{self.exc_type.__name__} at {self.filename}:{self.lineno}{ctx}{group}"
 
     @classmethod
-    def from_exception(cls, exception: BaseException, /) -> "InterestingOrigin":
+    def from_exception(
+        cls, exception: BaseException, /, seen: Tuple[BaseException, ...] = ()
+    ) -> "InterestingOrigin":
         filename, lineno = None, None
         if tb := get_trimmed_traceback(exception):
             filename, lineno, *_ = traceback.extract_tb(tb)[-1]
+        seen = (*seen, exception)
+        make = partial(cls.from_exception, seen=seen)
+        context: "InterestingOrigin | tuple[()]" = ()
+        if exception.__context__ is not None and exception.__context__ not in seen:
+            context = make(exception.__context__)
         return cls(
             type(exception),
             filename,
             lineno,
             # Note that if __cause__ is set it is always equal to __context__, explicitly
             # to support introspection when debugging, so we can use that unconditionally.
-            cls.from_exception(exception.__context__) if exception.__context__ else (),
+            context,
             # We distinguish exception groups by the inner exceptions, as for __context__
             (
-                tuple(map(cls.from_exception, exception.exceptions))
+                tuple(make(exc) for exc in exception.exceptions if exc not in seen)
                 if isinstance(exception, BaseExceptionGroup)
                 else ()
             ),

@@ -1,6 +1,9 @@
 #pragma once
 
+#include "format_string.h"
 #include "string_builder.h"
+
+#include <util/generic/string.h>
 
 namespace NYT {
 
@@ -55,9 +58,17 @@ namespace NYT {
  */
 
 template <class... TArgs>
-void Format(TStringBuilderBase* builder, TFormatString<TArgs...> format, TArgs&&... args);
-template <class... TArgs>
 TString Format(TFormatString<TArgs...> format, TArgs&&... args);
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class... TArgs>
+void Format(TStringBuilderBase* builder, TFormatString<TArgs...> format, TArgs&&... args);
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+TString ToStringViaBuilder(const T& value, TStringBuf spec = TStringBuf("v"));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -99,11 +110,11 @@ struct TFormatterWrapper
 // Allows insertion of text conditionally.
 // Usage:
 /*
- NYT::Format(
+NYT::Format(
     "Value is %v%v",
     42,
     MakeFormatterWrapper([&] (auto* builder) {
-        If (PossiblyMissingInfo_) {
+        if (PossiblyMissingInfo_) {
             builder->AppendString(", PossiblyMissingInfo: ");
             FormatValue(builder, PossiblyMissingInfo_, "v");
         }

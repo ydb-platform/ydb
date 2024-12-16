@@ -22,6 +22,7 @@ DEFINE_ENUM(ETransactionState,
     (FlushedModifications)
     (Aborting)
     (Aborted)
+    (AbortFailed)
     (Detached)
 );
 
@@ -85,6 +86,15 @@ public:
         std::optional<i64> oldOffset,
         i64 newOffset,
         const TAdvanceQueueConsumerOptions& options) override;
+
+    TFuture<TPushQueueProducerResult> PushQueueProducer(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        NQueueClient::TQueueProducerEpoch epoch,
+        NTableClient::TNameTablePtr nameTable,
+        const std::vector<TSharedRef>& serializedRows,
+        const TPushQueueProducerOptions& options) override;
 
     TFuture<TPushQueueProducerResult> PushQueueProducer(
         const NYPath::TRichYPath& producerPath,
@@ -225,6 +235,14 @@ public:
         const NYPath::TYPath& path,
         const NApi::TJournalWriterOptions& options) override;
 
+    TFuture<TDistributedWriteSessionPtr> StartDistributedWriteSession(
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options = {}) override;
+
+    TFuture<void> FinishDistributedWriteSession(
+        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionFinishOptions& options = {}) override;
+
     // Custom methods.
 
     //! Returns proxy address this transaction is sticking to.
@@ -269,7 +287,7 @@ private:
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     ETransactionState State_ = ETransactionState::Active;
-    const TPromise<void> AbortPromise_ = NewPromise<void>();
+    TPromise<void> AbortPromise_;
     std::vector<NApi::ITransactionPtr> AlienTransactions_;
 
     THashSet<NObjectClient::TCellId> AdditionalParticipantCellIds_;

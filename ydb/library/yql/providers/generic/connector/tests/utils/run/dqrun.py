@@ -6,7 +6,7 @@ import jinja2
 
 from yt import yson
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
@@ -14,7 +14,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.log import make_log
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings, GenericSettings
 
-from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner, DefaultTimeout
 from ydb.library.yql.providers.generic.connector.tests.utils.run.result import Result
 
 LOGGER = make_logger(__name__)
@@ -33,8 +33,11 @@ Generic {
 
 {% set CLICKHOUSE = 'CLICKHOUSE' %}
 {% set POSTGRESQL = 'POSTGRESQL' %}
+{% set MS_SQL_SERVER = 'MS_SQL_SERVER' %}
+{% set MYSQL = 'MYSQL' %}
+{% set ORACLE = 'ORACLE' %}
 
-{% macro data_source(kind, cluster, host, port, username, password, protocol, database, schema) -%}
+{% macro data_source(kind, cluster, host, port, username, password, protocol, database, schema, service_name) -%}
     ClusterMapping {
         Kind: {{kind}}
         Name: "{{cluster}}"
@@ -58,6 +61,13 @@ Generic {
             value: "{{schema}}"
         }
         {% endif %}
+
+        {% if kind == ORACLE and service_name %}
+        DataSourceOptions: {
+            key: "service_name"
+            value: "{{service_name}}"
+        }
+        {% endif %}
     }
 {%- endmacro -%}
 
@@ -66,10 +76,10 @@ Generic {
 
 {% for cluster in generic_settings.clickhouse_clusters %}
 
-{% if cluster.protocol == EProtocol.NATIVE %}
+{% if cluster.protocol == EGenericProtocol.NATIVE %}
 {% set CLICKHOUSE_PORT = settings.clickhouse.native_port_internal %}
 {% set CLICKHOUSE_PROTOCOL = NATIVE %}
-{% elif cluster.protocol == EProtocol.HTTP %}
+{% elif cluster.protocol == EGenericProtocol.HTTP %}
 {% set CLICKHOUSE_PORT = settings.clickhouse.http_port_internal %}
 {% set CLICKHOUSE_PROTOCOL = HTTP %}
 {% endif %}
@@ -83,7 +93,52 @@ Generic {
     settings.clickhouse.password,
     CLICKHOUSE_PROTOCOL,
     cluster.database,
+    NONE,
     NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.ms_sql_server_clusters %}
+{{ data_source(
+    MS_SQL_SERVER,
+    settings.ms_sql_server.cluster_name,
+    settings.ms_sql_server.host_internal,
+    settings.ms_sql_server.port_internal,
+    settings.ms_sql_server.username,
+    settings.ms_sql_server.password,
+    NATIVE,
+    cluster.database,
+    NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.mysql_clusters %}
+{{ data_source(
+    MYSQL,
+    settings.mysql.cluster_name,
+    settings.mysql.host_internal,
+    settings.mysql.port_internal,
+    settings.mysql.username,
+    settings.mysql.password,
+    NATIVE,
+    cluster.database,
+    NONE,
+    NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.oracle_clusters %}
+{{ data_source(
+    ORACLE,
+    settings.oracle.cluster_name,
+    settings.oracle.host_internal,
+    settings.oracle.port_internal,
+    settings.oracle.username,
+    settings.oracle.password,
+    NATIVE,
+    cluster.database,
+    NONE,
+    cluster.service_name)
 }}
 {% endfor %}
 
@@ -97,7 +152,8 @@ Generic {
     settings.postgresql.password,
     NATIVE,
     cluster.database,
-    cluster.schema)
+    cluster.schema,
+    NONE)
 }}
 {% endfor %}
 
@@ -188,7 +244,7 @@ Dq {
         self.template = jinja2.Environment(loader=jinja2.BaseLoader, undefined=jinja2.DebugUndefined).from_string(
             self._template
         )
-        self.template.globals['EProtocol'] = EProtocol
+        self.template.globals['EGenericProtocol'] = EGenericProtocol
         self.template.globals['EDateTimeFormat'] = EDateTimeFormat
 
     def render(self, file_path: Path, settings: Settings, generic_settings: GenericSettings) -> None:
@@ -239,7 +295,7 @@ class DqRunner(Runner):
         returncode = 0
 
         try:
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=60)
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=DefaultTimeout)
         except subprocess.CalledProcessError as e:
             LOGGER.error(
                 'Execution failed:\n\nSTDOUT: %s\n\nSTDERR: %s\n\n',

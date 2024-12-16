@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -192,7 +193,7 @@ private:
         }
 
         TOlapSchemaUpdate schemaDiff;
-        if (!schemaDiff.Parse(description.GetSchema(), errors)) {
+        if (!schemaDiff.Parse(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
             return false;
         }
 
@@ -223,7 +224,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateColumnTable TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -342,7 +343,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateColumnTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -429,7 +430,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateColumnTable TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -558,13 +559,35 @@ class TCreateColumnTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    void AddDefaultFamilyIfNotExists(NKikimrSchemeOp::TColumnTableDescription& createDescription) {
+        auto schema = createDescription.GetSchema();
+        for (const auto& family : schema.GetColumnFamilies()) {
+            if (family.GetName() == "default") {
+                return;
+            }
+        }
+
+        auto mutableSchema = createDescription.MutableSchema();
+        auto defaultFamily = mutableSchema->AddColumnFamilies();
+        defaultFamily->SetName("default");
+        defaultFamily->SetId(0);
+        defaultFamily->SetColumnCodec(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+
+        for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+            if (!schema.GetColumns(i).HasColumnFamilyName() || !schema.GetColumns(i).HasColumnFamilyId()) {
+                mutableSchema->MutableColumns(i)->SetColumnFamilyName("default");
+                mutableSchema->MutableColumns(i)->SetColumnFamilyId(0);
+            }
+        }
+    }
+
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
 
-        // Copy CreateColumnTable for changes. Update default sharding if not set.
+        // Copy CreateColumnTable for changes. Update default sharding if not set and add default family if not set.
         auto createDescription = Transaction.GetCreateColumnTable();
         if (!createDescription.HasColumnShardCount()) {
             createDescription.SetColumnShardCount(TTableConstructorBase::DEFAULT_SHARDS_COUNT);
@@ -582,12 +605,10 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
 
-        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
-            if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "OLAP schema operations are not supported");
-                return result;
-            }
+        if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->ColumnTables.empty()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "OLAP schema operations are not supported");
+            return result;
         }
 
         if (createDescription.GetSharding().GetColumnShards().size()) {
@@ -683,11 +704,24 @@ public:
         TProposeErrorCollector errors(*result);
         TColumnTableInfo::TPtr tableInfo;
         bool needUpdateObject = false;
+        auto domainInfo = parentPath.DomainInfo();
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+
         if (storeInfo) {
             TOlapPresetConstructor tableConstructor(*storeInfo);
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
             needUpdateObject = tableConstructor.GetNeedUpdateObject();
         } else {
+            ui64 columnCount = createDescription.schema().columns().size();
+            if (columnCount > limits.MaxColumnTableColumns) {
+                TString errStr = TStringBuilder()
+                    << "Too many columns"
+                    << ". new: " << columnCount
+                    << ". Limit: " << limits.MaxColumnTableColumns;
+                result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+                return result;
+            }
+            AddDefaultFamilyIfNotExists(createDescription);
             TOlapTableConstructor tableConstructor;
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
         }
@@ -751,8 +785,8 @@ public:
             olapStorePath.Base()->LastTxId = opTxId;
             context.SS->PersistLastTxId(db, olapStorePath.Base());
         } else {
-            NKikimrSchemeOp::TColumnStorageConfig storageConfig; // default
-            storageConfig.SetDataChannelCount(1);
+            tableInfo->StandaloneSharding = NKikimrSchemeOp::TColumnStoreSharding();
+            const NKikimrSchemeOp::TColumnStorageConfig& storageConfig = tableInfo->Description.GetStorageConfig();
 
             TChannelsBindings channelsBindings;
             if (!context.SS->GetOlapChannelsBindings(dstPath.GetPathIdForDomain(), storageConfig, channelsBindings, errStr)) {
@@ -766,7 +800,6 @@ public:
             TShardInfo columnShardInfo = TShardInfo::ColumnShardInfo(opTxId, pathId);
             columnShardInfo.BindedChannels = channelsBindings;
 
-            tableInfo->StandaloneSharding = NKikimrSchemeOp::TColumnStoreSharding();
             Y_ABORT_UNLESS(tableInfo->GetOwnedColumnShardsVerified().empty());
 
             for (ui64 i = 0; i < shardsCount; ++i) {
@@ -848,6 +881,30 @@ public:
 };
 
 }
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateColumnTable().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateColumnTable()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewColumnTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateColumnTable>(id, tx);

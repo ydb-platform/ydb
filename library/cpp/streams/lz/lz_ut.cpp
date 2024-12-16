@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(TLzTest) {
     Y_UNIT_TEST(TestYQ609) {
         auto data = NResource::Find("/yq_609.data");
 
-        TMemoryInput input(data.Data(), data.Size());
+        TMemoryInput input(data.data(), data.size());
 
         TLz4Decompress d(&input);
         UNIT_ASSERT_EXCEPTION(d.ReadAll(), TDecompressorError);

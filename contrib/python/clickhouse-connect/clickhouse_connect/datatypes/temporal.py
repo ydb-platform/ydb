@@ -4,7 +4,7 @@ from datetime import date, datetime, tzinfo
 from typing import Union, Sequence, MutableSequence
 
 from clickhouse_connect.datatypes.base import TypeDef, ClickHouseType
-from clickhouse_connect.driver.common import write_array, np_date_types, int_size
+from clickhouse_connect.driver.common import write_array, np_date_types, int_size, first_value
 from clickhouse_connect.driver.exceptions import ProgrammingError
 from clickhouse_connect.driver.ctypes import data_conv, numpy_conv
 from clickhouse_connect.driver.insert import InsertContext
@@ -32,7 +32,7 @@ class Date(ClickHouseType):
         return data_conv.read_date_col(source, num_rows)
 
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
-        first = self._first_value(column)
+        first = first_value(column, self.nullable)
         if isinstance(first, int) or self.write_format(ctx) == 'int':
             if self.nullable:
                 column = [x if x else 0 for x in column]
@@ -45,7 +45,7 @@ class Date(ClickHouseType):
                 column = [0 if x is None else (x - esd).days for x in column]
             else:
                 column = [(x - esd).days for x in column]
-        write_array(self._array_type, column, dest)
+        write_array(self._array_type, column, dest, ctx.column_name)
 
     def _active_null(self, ctx: QueryContext):
         fmt = self.read_format(ctx)
@@ -79,7 +79,6 @@ class Date32(Date):
         return data_conv.read_date32_col(source, num_rows)
 
 
-from_ts_naive = datetime.utcfromtimestamp
 from_ts_tz = datetime.fromtimestamp
 
 
@@ -127,7 +126,7 @@ class DateTime(DateTimeBase):
         return data_conv.read_datetime_col(source, num_rows, active_tz)
 
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
-        first = self._first_value(column)
+        first = first_value(column, self.nullable)
         if isinstance(first, int) or self.write_format(ctx) == 'int':
             if self.nullable:
                 column = [x if x else 0 for x in column]
@@ -136,7 +135,7 @@ class DateTime(DateTimeBase):
                 column = [int(x.timestamp()) if x else 0 for x in column]
             else:
                 column = [int(x.timestamp()) for x in column]
-        write_array(self._array_type, column, dest)
+        write_array(self._array_type, column, dest, ctx.column_name)
 
 
 class DateTime64(DateTimeBase):
@@ -193,7 +192,7 @@ class DateTime64(DateTimeBase):
     def _read_binary_naive(self, column: Sequence):
         new_col = []
         app = new_col.append
-        dt_from = datetime.utcfromtimestamp
+        dt_from = datetime.fromtimestamp
         prec = self.prec
         for ticks in column:
             seconds = ticks // prec
@@ -202,7 +201,7 @@ class DateTime64(DateTimeBase):
         return new_col
 
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
-        first = self._first_value(column)
+        first = first_value(column, self.nullable)
         if isinstance(first, int) or self.write_format(ctx) == 'int':
             if self.nullable:
                 column = [x if x else 0 for x in column]
@@ -213,4 +212,4 @@ class DateTime64(DateTimeBase):
                           for x in column]
             else:
                 column = [((int(x.timestamp()) * 1000000 + x.microsecond) * prec) // 1000000 for x in column]
-        write_array('q', column, dest)
+        write_array('q', column, dest, ctx.column_name)

@@ -4,8 +4,6 @@ FORK_SUBTESTS()
 
 SIZE(LARGE)
 
-TIMEOUT(3600)
-
 TAG(ya:fat)
 
 SRCS(
@@ -16,9 +14,8 @@ PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib
 )
 
-REQUIREMENTS(
-    cpu:4
-    ram:32
-)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32)
+ENDIF()
 
 END()

@@ -3,6 +3,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/api/protos/draft/ydb_object_storage.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_object_storage_v1.grpc.pb.h>
+#include <ydb/core/tablet_flat/shared_sausagecache.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <grpc++/client_context.h>
 #include <grpc++/create_channel.h>
 
@@ -101,39 +103,37 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                 }}
                 PartitionConfig {
                     ExecutorCacheSize: 100
+                    CompactionPolicy {
+                        InMemSizeToSnapshot: 2000
+                        InMemStepsToSnapshot: 1
+                        InMemForceStepsToSnapshot: 50
+                        InMemForceSizeToSnapshot: 16777216
+                        InMemCompactionBrokerQueue: 0
+                        ReadAheadHiThreshold: 1048576
+                        ReadAheadLoThreshold: 16384
+                        MinDataPageSize: 300
+                        SnapBrokerQueue: 0
 
-                                        CompactionPolicy {
-                                                InMemSizeToSnapshot: 2000
-                                                InMemStepsToSnapshot: 1
-                                                InMemForceStepsToSnapshot: 50
-                                                InMemForceSizeToSnapshot: 16777216
-                                                InMemCompactionBrokerQueue: 0
-                                                ReadAheadHiThreshold: 1048576
-                                                ReadAheadLoThreshold: 16384
-                                                MinDataPageSize: 300
-                                                SnapBrokerQueue: 0
+                        LogOverheadSizeToSnapshot: 16777216
+                        LogOverheadCountToSnapshot: 500
+                        DroppedRowsPercentToCompact: 146
 
-                                                LogOverheadSizeToSnapshot: 16777216
-                                                LogOverheadCountToSnapshot: 500
-                                                DroppedRowsPercentToCompact: 146
-
-                                                Generation {
-                                                  GenerationId: 0
-                                                  SizeToCompact: 0
-                                                  CountToCompact: 2000
-                                                  ForceCountToCompact: 4000
-                                                  ForceSizeToCompact: 100000000
-                                                  #CompactionBrokerQueue: 4294967295
-                                                  KeepInCache: false
-                                                  ResourceBrokerTask: "compaction_gen1"
-                                                  ExtraCompactionPercent: 100
-                                                  ExtraCompactionMinSize: 16384
-                                                  ExtraCompactionExpPercent: 110
-                                                  ExtraCompactionExpMaxSize: 0
-                                                  UpliftPartSize: 0
-                                                }
-                                        }
-
+                        Generation {
+                            GenerationId: 0
+                            SizeToCompact: 0
+                            CountToCompact: 2000
+                            ForceCountToCompact: 4000
+                            ForceSizeToCompact: 100000000
+                            #CompactionBrokerQueue: 4294967295
+                            KeepInCache: false
+                            ResourceBrokerTask: "compaction_gen1"
+                            ExtraCompactionPercent: 100
+                            ExtraCompactionMinSize: 16384
+                            ExtraCompactionExpPercent: 110
+                            ExtraCompactionExpMaxSize: 0
+                            UpliftPartSize: 0
+                        }
+                    }
                 }
             )");
     }
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         endpoint << "localhost:" << grpcPort;
         std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());
         auto stub = Ydb::ObjectStorage::V1::ObjectStorageService::NewStub(channel);
-        
+
         TAutoPtr<Ydb::ObjectStorage::ListingRequest> request = new Ydb::ObjectStorage::ListingRequest();
         request->Setpath_column_prefix(pathPrefix);
         request->Settable_name(table);
@@ -427,7 +427,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         grpc::Status status = stub->List(&rcontext, *request, &response);
 
         UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
-        
+
         commonPrefixes.clear();
         contents.clear();
 
@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                 commonPrefixes.emplace_back(row);
             }
         }
-        
+
         if (response.has_contents()) {
             auto &files = response.contents();
             for (auto row : files.rows()) {
@@ -468,7 +468,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         TVector<TString> commonPrefixes;
         TVector<TString> contents;
-        DoS3Listing(GRPC_PORT, bucket, pathPrefix, pathDelimiter, startAfter, nullptr, columnsToReturn, maxKeys, commonPrefixes, contents);
+        DoS3Listing(GRPC_PORT, bucket, pathPrefix, pathDelimiter, startAfter, "", columnsToReturn, maxKeys, commonPrefixes, contents);
 
         UNIT_ASSERT_VALUES_EQUAL(expectedCommonPrefixes.size(), commonPrefixes.size());
         ui32 i = 0;
@@ -518,7 +518,6 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         PrepareS3Data(annoyingClient);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NActors::NLog::PRI_DEBUG);
-//        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
         TestS3Listing(annoyingClient, 50, "", "", 10, {});
         TestS3Listing(annoyingClient, 50, "", "/", 7, {});
@@ -576,7 +575,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         }
     }
 
-    void TestS3GenericListingRequest(const TVector<TString>& prefixColumns, const TString& pathPrefix, const TString& pathDelimiter,
+    Ydb::ObjectStorage::ListingResponse TestS3GenericListingRequest(const TVector<TString>& prefixColumns, const TString& pathPrefix, const TString& pathDelimiter,
                     const TVector<TString>& startAfterSuffixColumns,
                     const TVector<TString>& columnsToReturn, ui32 maxKeys,
                     Ydb::StatusIds_StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
@@ -598,9 +597,10 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         } else {
             UNIT_ASSERT_VALUES_EQUAL(response.issues().size(), 0);
         }
+        return response;
     }
 
-    void TestS3ListingRequest(const TVector<TString>& prefixColumns, 
+    Ydb::ObjectStorage::ListingResponse TestS3ListingRequest(const TVector<TString>& prefixColumns,
                     const TString& pathPrefix, const TString& pathDelimiter,
                     const TString& startAfter, const TVector<TString>& columnsToReturn, ui32 maxKeys,
                     Ydb::StatusIds_StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
@@ -610,7 +610,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         if (!startAfter.empty()) {
             startAfterSuffix.push_back(startAfter);
         }
-        TestS3GenericListingRequest(prefixColumns, pathPrefix, pathDelimiter,
+        return TestS3GenericListingRequest(prefixColumns, pathPrefix, pathDelimiter,
                                            startAfterSuffix,
                                            columnsToReturn, maxKeys,
                                            expectedStatus, expectedErrMessage);
@@ -699,7 +699,6 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         PrepareS3Data(annoyingClient);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NActors::NLog::PRI_DEBUG);
-//        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
         TestS3ListingRequest({"100", "Bucket100"}, "/", "/", "", {"Path"}, 10,
             Ydb::StatusIds::SUCCESS,
@@ -775,10 +774,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         cleverServer.EnableGRpc(GRPC_PORT);
 
         // Disable shared cache to trigger restarts
-        TAtomic unused = 42;
-        cleverServer.GetRuntime()->GetAppData().Icb->SetValue("SharedPageCache_Size", 10, unused);
-        cleverServer.GetRuntime()->GetAppData().Icb->SetValue("SharedPageCache_Size", 10, unused);
-        UNIT_ASSERT_VALUES_EQUAL(unused, 10);
+        cleverServer.GetRuntime()->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
 
         TFlatMsgBusClient annoyingClient(port);
 
@@ -858,7 +854,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         TVector<TString> contents;
 
         auto continuationToken = DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", "", {}, 1, commonPrefixes, contents);
-        
+
         UNIT_ASSERT(continuationToken);
         UNIT_ASSERT_EQUAL(1, contents.size());
         UNIT_ASSERT_EQUAL(0, commonPrefixes.size());
@@ -951,7 +947,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         {
             TVector<TString> folders;
             TVector<TString> files;
-            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", nullptr, nullptr, {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL);
+            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", "", "", {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL);
 
             TVector<TString> expectedFolders = {"/Photos/games/", "/Photos/inner/", "/Photos/test/", "/Photos/test3/", "/Photos/test5/", "/Photos/test6/"};
             TVector<TString> expectedFiles = {"/Photos/a.jpg", "/Photos/c.jpg"};
@@ -963,14 +959,189 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         {
             TVector<TString> folders;
             TVector<TString> files;
-            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", nullptr, nullptr, {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_NOT_EQUAL);
+            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", "", "", {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_NOT_EQUAL);
 
             TVector<TString> expectedFolders = {"/Photos/folder/", "/Photos/inner/", "/Photos/test/", "/Photos/test2/", "/Photos/test3/", "/Photos/test4/", "/Photos/test5/", "/Photos/test6/"};
             TVector<TString> expectedFiles = {"/Photos/b.jpg"};
-            
+
             UNIT_ASSERT_VALUES_EQUAL(expectedFolders, folders);
             UNIT_ASSERT_VALUES_EQUAL(expectedFiles, files);
         }
+    }
+
+    Y_UNIT_TEST(TestSkipShards) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServerSettings serverSettings(port);
+
+        TStringStream ss;
+
+        serverSettings.SetLogBackend(new TStreamLogBackend(&ss));
+
+        TServer cleverServer = TServer(serverSettings);
+        GRPC_PORT = pm.GetPort(2135);
+        cleverServer.EnableGRpc(GRPC_PORT);
+
+        TFlatMsgBusClient annoyingClient(port);
+
+        annoyingClient.InitRoot();
+        annoyingClient.MkDir("/dc-1", "Dir");
+        annoyingClient.CreateTable("/dc-1/Dir",
+            R"(Name: "Table"
+                Columns { Name: "Hash"      Type: "Uint64"}
+                Columns { Name: "Name"      Type: "Utf8"}
+                Columns { Name: "Path"      Type: "Utf8"}
+                Columns { Name: "Version"   Type: "Uint64"}
+                Columns { Name: "Timestamp" Type: "Uint64"}
+                Columns { Name: "Data"      Type: "String"}
+                Columns { Name: "ExtraData" Type: "String"}
+                Columns { Name: "Int32Data" Type: "Int32"}
+                Columns { Name: "Unused1"   Type: "Uint32"}
+                Columns { Name: "SomeBool"  Type: "Bool"}
+                KeyColumnNames: [
+                    "Hash",
+                    "Name",
+                    "Path",
+                    "Version"
+                    ]
+                SplitBoundary { KeyPrefix {
+                    Tuple { Optional { Uint64 : 100 }}
+                    Tuple { Optional { Text : 'Bucket100' }}
+                    Tuple { Optional { Text : '/Photos/test5/inner/inner2/a.jpg' }}
+                }}
+                SplitBoundary { KeyPrefix {
+                    Tuple { Optional { Uint64 : 100 }}
+                    Tuple { Optional { Text : 'Bucket100' }}
+                    Tuple { Optional { Text : '/Photos/test6/a.jpg' }}
+                }}
+            )");
+
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/c.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/folder/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/folder/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/games/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/inner/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test/inner/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test2/inner/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test2/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/c.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/d.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/e.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/c.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/xyz.io", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/yyyyy.txt", 1, 10, "", "Table");
+
+        const auto& runtime = cleverServer.GetRuntime();
+
+        runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+
+        TVector<TString> folders;
+        TVector<TString> files;
+        DoS3Listing(GRPC_PORT, 100, "/", "/", nullptr, nullptr, {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL);
+
+        TVector<TString> expectedFolders = {"/Photos/"};
+        TVector<TString> expectedFiles = {};
+
+        TString log = ss.Str();
+        TString sub = "S3 Listing: start at key";
+
+        int count = 0;
+        size_t pos = log.find(sub);
+
+        while (pos != TString::npos) {
+            ++count;
+            pos = log.find(sub, pos + sub.length());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedFolders, folders);
+        UNIT_ASSERT_VALUES_EQUAL(expectedFiles, files);
+        // Three partitions, second should be skipped, because it's next prefix of /Photos/ (/Photos0) exceeds
+        // the range of second partition. Third (last) partition will always be checked.
+        UNIT_ASSERT_EQUAL(2, count);
+    }
+
+    Y_UNIT_TEST(Decimal) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableParameterizedDecimal(true);
+        TServerSettings serverSettings(port);
+        serverSettings.SetFeatureFlags(featureFlags);
+        TServer cleverServer = TServer(serverSettings);
+        GRPC_PORT = pm.GetPort(2135);
+        cleverServer.EnableGRpc(GRPC_PORT);
+
+        TFlatMsgBusClient annoyingClient(port);
+        annoyingClient.InitRoot();
+        annoyingClient.MkDir("/dc-1", "Dir");
+        annoyingClient.CreateTable("/dc-1/Dir",
+            R"_(Name: "Table"
+                Columns { Name: "Hash"      Type: "Uint64"}
+                Columns { Name: "Name"      Type: "Utf8"}
+                Columns { Name: "Path"      Type: "Utf8"}
+                Columns { Name: "Version"   Type: "Uint64"}
+                Columns { Name: "DecimalData" Type: "Decimal"}
+                Columns { Name: "Decimal35Data" Type: "Decimal(35,10)"}
+                KeyColumnNames: [
+                    "Hash",
+                    "Name",
+                    "Path",
+                    "Version"
+                    ]
+            )_");
+
+        TString insertRowQuery =  R"(
+                    (
+                    (let key '(
+                        '('Hash (Uint64 '%llu))
+                        '('Name (Utf8 '"%s"))
+                        '('Path (Utf8 '"%s"))
+                        '('Version (Uint64 '%llu))
+                    ))
+                    (let value '(
+                        '('DecimalData (Decimal '"%s" '22 '9))
+                        '('Decimal35Data (Decimal '"%s" '35 '10))
+                    ))
+                    (let ret_ (AsList
+                        (UpdateRow '/dc-1/Dir/%s key value)
+                    ))
+                    (return ret_)
+                    )
+                )";
+
+        annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), 100, "Bucket100", "/Path1", 1, "123.321", "355555555555555.123456789", "Table" ));
+
+        Ydb::ObjectStorage::ListingResponse response = TestS3ListingRequest({"100", "Bucket100"}, "/", "/", "", {"DecimalData", "Decimal35Data"}, 10,
+            Ydb::StatusIds::SUCCESS,
+            "");
+
+        Ydb::ResultSet resultSet = response.contents();
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.columns_size(), 4);
+        UNIT_ASSERT_STRINGS_EQUAL(resultSet.columns(2).name(), "Decimal35Data");
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.columns(2).type().optional_type().item().decimal_type().precision(), 35);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.columns(2).type().optional_type().item().decimal_type().scale(), 10);
+        UNIT_ASSERT_STRINGS_EQUAL(resultSet.columns(3).name(), "DecimalData");
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.columns(3).type().optional_type().item().decimal_type().precision(), 22);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.columns(3).type().optional_type().item().decimal_type().scale(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.rows(0).items(2).low_128(), 975580256289238738);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.rows(0).items(2).high_128(), 192747);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.rows(0).items(3).low_128(), 123321000000);
     }
 }
 

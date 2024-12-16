@@ -8,13 +8,26 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! A typical number of configured time windows.
+constexpr int TypicalWindowCount = 2;
+
+template <int WindowCount = TypicalWindowCount>
+using TEmaCounterWindowDurations = TCompactVector<TDuration, WindowCount>;
+
+template <int WindowCount = TypicalWindowCount>
+using TEmaCounterWindowRates = TCompactVector<double, WindowCount>;
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! A helper structure for maintaining a monotonic counter and
 //! estimating its average rate over a set of configured time windows
 //! using EMA (exponential moving average) technique.
+template<typename T, int WindowCount = TypicalWindowCount>
+    requires std::is_arithmetic_v<T>
 struct TEmaCounter
 {
     //! Current value of the counter.
-    i64 Count = 0;
+    T Count = 0;
     //! Last update time.
     std::optional<TInstant> LastTimestamp;
     //! First update time.
@@ -24,20 +37,15 @@ struct TEmaCounter
     //! according to the last update.
     double ImmediateRate = 0.0;
 
-    //! A typical number of configured time windows.
-    static constexpr int TypicalWindowCount = 2;
-    using TWindowDurations = TCompactVector<TDuration, TypicalWindowCount>;
-    using TWindowRates = TCompactVector<double, TypicalWindowCount>;
-
     //! Durations of configured time windows.
-    TWindowDurations WindowDurations;
+    TEmaCounterWindowDurations<WindowCount> WindowDurations;
     //! Estimates of a rate over corresponding time windows.
-    TWindowRates WindowRates;
+    TEmaCounterWindowRates<WindowCount> WindowRates;
 
-    explicit TEmaCounter(TWindowDurations windowDurations);
+    explicit TEmaCounter(TEmaCounterWindowDurations<WindowCount> windowDurations);
 
     //! Set new value of counter, optionally providing a current timestamp.
-    void Update(i64 newCount, TInstant newTimestamp = TInstant::Now());
+    void Update(T newCount, TInstant newTimestamp = TInstant::Now());
 
     //! Returns the rate for the given window after enough time has passed
     //! for the values to be accurate (at least the duration of the window itself).
@@ -47,10 +55,22 @@ struct TEmaCounter
 
 // Operators for linear transformations (addition, scaling) of counters over the fixed set of windows.
 
-TEmaCounter operator+(const TEmaCounter& lhs, const TEmaCounter& rhs);
-TEmaCounter& operator+=(TEmaCounter& lhs, const TEmaCounter& rhs);
-TEmaCounter& operator*=(TEmaCounter& lhs, double coefficient);
+template <class T, int WindowCount>
+    requires std::is_arithmetic_v<T>
+TEmaCounter<T, WindowCount> operator+(const TEmaCounter<T, WindowCount>& lhs, const TEmaCounter<T, WindowCount>& rhs);
+
+template <class T, int WindowCount>
+    requires std::is_arithmetic_v<T>
+TEmaCounter<T, WindowCount>& operator+=(TEmaCounter<T, WindowCount>& lhs, const TEmaCounter<T, WindowCount>& rhs);
+
+template <class T, int WindowCount>
+    requires std::is_arithmetic_v<T>
+TEmaCounter<T, WindowCount>& operator*=(TEmaCounter<T, WindowCount>& lhs, double coefficient);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
+
+#define EMA_COUNTER_INL_H_
+#include "ema_counter-inl.h"
+#undef EMA_COUNTER_INL_H_

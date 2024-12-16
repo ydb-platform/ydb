@@ -14,6 +14,7 @@
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -159,9 +160,9 @@ void SetupServices(TTestActorRuntime &runtime,
         SetupNodeWhiteboard(runtime, nodeIndex);
         SetupTabletResolver(runtime, nodeIndex);
         SetupResourceBroker(runtime, nodeIndex, {});
-        SetupSharedPageCache(runtime, nodeIndex, NFake::TCaches{
-            .Shared = 1,
-        });
+        NSharedCache::TSharedCacheConfig sharedCacheConfig;
+        sharedCacheConfig.SetMemoryLimit(0);
+        SetupSharedPageCache(runtime, nodeIndex, sharedCacheConfig);
         SetupSchemeCache(runtime, nodeIndex, DOMAIN_NAME);
     }
 
@@ -367,6 +368,26 @@ void CheckRegistration(TTestActorRuntime &runtime,
 {
     CheckRegistration(runtime, sender, host, port, host, "", 0, 0, 0, 0, code, nodeId, expire,
                       false, path, Nothing(), name);
+}
+
+THolder<TEvNodeBroker::TEvGracefulShutdownRequest>
+MakeEventGracefulShutdown (ui32 nodeId) 
+{
+    auto eventGracefulShutdown = MakeHolder<TEvNodeBroker::TEvGracefulShutdownRequest>();
+    eventGracefulShutdown->Record.SetNodeId(nodeId);
+    return eventGracefulShutdown;
+}
+
+void CheckGracefulShutdown(TTestActorRuntime &runtime,
+                           TActorId sender,
+                           ui32 nodeId)
+{   
+    auto eventGracefulShutdown = MakeEventGracefulShutdown(nodeId);
+    TAutoPtr<IEventHandle> handle;
+    runtime.SendToPipe(MakeNodeBrokerID(), sender, eventGracefulShutdown.Release(), 0, GetPipeConfigWithRetries());
+    auto replyGracefulShutdown = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvGracefulShutdownResponse>(handle);
+
+    UNIT_ASSERT_VALUES_EQUAL(replyGracefulShutdown->Record.GetStatus().GetCode(), TStatus::OK);
 }
 
 NKikimrNodeBroker::TEpoch GetEpoch(TTestActorRuntime &runtime,
@@ -856,6 +877,48 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch1.GetId(), epoch.GetId() + 2);
         epoch1 = CheckFilteredNodesList(runtime, sender, {}, {}, epoch.GetId() + 5, 0);
         UNIT_ASSERT_VALUES_EQUAL(epoch1.GetId(), epoch.GetId() + 5);
+    }
+
+    Y_UNIT_TEST(TestListNodesEpochDeltas)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 10);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+
+        auto epoch0 = GetEpoch(runtime, sender);
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch0.GetNextEnd());
+        auto epoch1 = CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, epoch0.GetVersion());
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
+                          1, 2, 3, 5, TStatus::OK, NODE2, epoch1.GetNextEnd());
+        auto epoch2 = CheckFilteredNodesList(runtime, sender, {NODE2}, {}, 0, epoch1.GetVersion());
+        CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.6",
+                          1, 2, 3, 6, TStatus::OK, NODE3, epoch2.GetNextEnd());
+        auto epoch3 = CheckFilteredNodesList(runtime, sender, {NODE3}, {}, 0, epoch2.GetVersion());
+
+        CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3}, {}, 0, epoch0.GetVersion());
+        CheckFilteredNodesList(runtime, sender, {NODE2, NODE3}, {}, 0, epoch1.GetVersion());
+        CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch3.GetVersion());
+
+        RebootTablet(runtime, MakeNodeBrokerID(), sender);
+        CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch3.GetVersion());
+
+        CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.7",
+                          1, 2, 3, 7, TStatus::OK, NODE4, epoch3.GetNextEnd());
+        auto epoch4 = CheckFilteredNodesList(runtime, sender, {NODE4}, {}, 0, epoch3.GetVersion());
+
+        // NodeBroker doesn't have enough history in memory and replies with the full node list
+        CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3, NODE4}, {}, 0, epoch2.GetVersion());
+
+        WaitForEpochUpdate(runtime, sender);
+        auto epoch5 = GetEpoch(runtime, sender);
+        CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch5.GetVersion());
+
+        // New epoch may remove nodes, so deltas are not returned on epoch change
+        CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3, NODE4}, {}, 0, epoch3.GetVersion());
     }
 
     Y_UNIT_TEST(TestRandomActions)
@@ -1749,6 +1812,26 @@ Y_UNIT_TEST_SUITE(TSlotIndexesPoolTest) {
         pool.Release(200);
         UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(pool.Capacity(), 128);
+    }
+}
+
+Y_UNIT_TEST_SUITE(GracefulShutdown) {
+    Y_UNIT_TEST(TTxGracefulShutdown) {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto epoch = GetEpoch(runtime, sender);
+
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd(),
+                          false, DOMAIN_NAME, {}, "slot-0");
+
+        CheckGracefulShutdown(runtime, sender, NODE1);    
+
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
+                          1, 2, 3, 5, TStatus::OK, NODE2, epoch.GetNextEnd(),
+                          false, DOMAIN_NAME, {}, "slot-0");
     }
 }
 

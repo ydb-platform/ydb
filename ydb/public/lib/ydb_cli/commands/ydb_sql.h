@@ -6,19 +6,22 @@
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/lib/ydb_cli/common/parameters.h>
 
 namespace NYdb {
 namespace NConsoleClient {
 
-class TCommandSql : public TYdbCommand, public TCommandWithFormat,
+class TCommandSql : public TYdbCommand, public TCommandWithOutput, public TCommandWithParameters,
     public TInterruptibleCommand
 {
 public:
     TCommandSql();
-    TCommandSql(TString script, TString collectStatsMode);
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
+    void SetSyntax(TString&& syntax);
+    void SetCollectStatsMode(TString&& collectStatsMode);
+    void SetScript(TString&& script);
 
 private:
     int RunCommand(TConfig& config);
@@ -30,6 +33,7 @@ private:
     TString Syntax;
     bool ExplainMode = false;
     bool ExplainAnalyzeMode = false;
+    bool ExplainAst = false;
 };
 
 }

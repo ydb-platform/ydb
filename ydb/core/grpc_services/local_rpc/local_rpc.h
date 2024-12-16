@@ -153,7 +153,12 @@ public:
         if (key == NYdb::YDB_DATABASE_HEADER) {
             return GetDatabaseName();
         }
-        return TMaybe<TString>{};
+        auto valueIt = PeerMeta.find(key);
+        return valueIt == PeerMeta.end() ? Nothing() : TMaybe<TString>(valueIt->second);
+    }
+
+    void PutPeerMeta(const TString& key, const TString& value) {
+        PeerMeta.insert_or_assign(key, value);
     }
 
     TVector<TStringBuf> FindClientCert() const override {
@@ -188,10 +193,6 @@ public:
     }
 
     const google::protobuf::Message* GetRequest() const override {
-        return &Request;
-    }
-
-    google::protobuf::Message* GetRequestMut() override {
         return &Request;
     }
 
@@ -278,6 +279,7 @@ private:
     const bool InternalCall;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
     const TString EmptySerializedTokenMessage_;
+    TMap<TString, TString> PeerMeta;
     google::protobuf::Arena Arena;
 };
 
@@ -316,6 +318,41 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest
 template<typename TRpc>
 NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TActorSystem* actorSystem, bool internalCall = false) {
     return DoLocalRpc<TRpc>(std::move(proto), database, token, Nothing(), actorSystem, internalCall);
+}
+
+template<typename TRpc>
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(
+        typename TRpc::TRequest&& proto,
+        const TString& database,
+        const TMaybe<TString>& token,
+        const TMaybe<TString>& requestType,
+        TActorSystem* actorSystem,
+        const TMap<TString, TString>& peerMeta,
+        bool internalCall = false
+)
+{
+    auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
+
+    SetRequestSyncOperationMode(proto);
+
+    using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
+    auto req = new TLocalRpcCtx<TRpc, TCbWrapper>(
+        std::move(proto),
+        TCbWrapper(promise),
+        database,
+        token,
+        requestType,
+        internalCall
+    );
+
+    for (const auto& [key, value] : peerMeta) {
+        req->PutPeerMeta(key, value);
+    }
+
+    auto actor = TRpc::CreateRpcActor(req);
+    actorSystem->Register(actor, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
+
+    return promise.GetFuture();
 }
 
 template<typename TRpc>
@@ -374,10 +411,6 @@ public:
 protected:
     const NProtoBuf::Message* GetRequest() const override {
         return GetBaseRequest().GetRequest();
-    }
-
-    NProtoBuf::Message* GetRequestMut() override {
-        return GetBaseRequest().GetRequestMut();
     }
 
     TAsyncFinishResult GetFinishFuture() override {
@@ -470,27 +503,29 @@ private:
 template <typename TResponsePart>
 using TStreamReadProcessorPtr = TIntrusivePtr<TStreamReadProcessor<TResponsePart>>;
 
-using TFacilityProviderPtr = std::shared_ptr<NGRpcService::IFacilityProvider>;
-TFacilityProviderPtr CreateFacilityProviderSameMailbox(TActorContext actorContext, ui64 channelBufferSize);
-
-using TRpcActorCreator = std::function<void((std::unique_ptr<NGRpcService::IRequestNoOpCtx> p, const NGRpcService::IFacilityProvider& f))>;
-
-template <typename TRpc>
-TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType, TFacilityProviderPtr facilityProvider, TRpcActorCreator actorCreator, bool internalCall = false) {
+template <typename TRpc, typename... TRpcActorArgs>
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto,
+    const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType,
+    const TActorContext& ctx, bool internalCall, TRpcActorArgs... args)
+{
     using TCbWrapper = std::function<void(const typename TRpc::TResponse&)>;
     using TLocalRpcStreamCtx = TStreamReadProcessor<typename TRpc::TResponse>;
 
     auto localRpcCtx = std::make_shared<TLocalRpcCtx<TRpc, TCbWrapper>>(std::move(proto), [](const typename TRpc::TResponse&) {}, database, token, requestType, internalCall);
     auto localRpcStreamCtx = MakeIntrusive<TLocalRpcStreamCtx>(std::move(localRpcCtx));
     auto localRpcRequest = std::make_unique<TRpc>(localRpcStreamCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
-    actorCreator(std::move(localRpcRequest), *facilityProvider);
+    auto actor = TRpc::CreateRpcActor(localRpcRequest.release(), args...);
+    ctx.RegisterWithSameMailbox(actor);
 
     return localRpcStreamCtx;
 }
 
-template <typename TRpc>
-TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TFacilityProviderPtr facilityProvider, TRpcActorCreator actorCreator, bool internalCall = false) {
-    return DoLocalRpcStreamSameMailbox<TRpc>(std::move(proto), database, token, Nothing(), std::move(facilityProvider), std::move(actorCreator), internalCall);
+template <typename TRpc, typename... TRpcActorArgs>
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto,
+    const TString& database, const TMaybe<TString>& token, const TActorContext& ctx, bool internalCall,
+    TRpcActorArgs... args)
+{
+    return DoLocalRpcStreamSameMailbox<TRpc>(std::move(proto), database, token, Nothing(), ctx, internalCall, args...);
 }
 
 } // namespace NRpcService

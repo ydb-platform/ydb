@@ -2,7 +2,14 @@
 
 #include "public.h"
 
+#include <yt/yt/client/hydra/public.h>
+
 #include <yt/yt/client/node_tracker_client/public.h>
+
+#include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/type_decl.h>
+
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 namespace NYT::NChunkClient {
 
@@ -88,6 +95,15 @@ void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithLocation replica,
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TWrittenChunkReplicasInfo
+{
+    TChunkReplicaWithLocationList Replicas;
+    // Revision upon confirmation of the chunk. Not every writer is expected to set this field.
+    NHydra::TRevision ConfirmationRevision = NHydra::NullRevision;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TChunkReplica
 {
 public:
@@ -110,6 +126,12 @@ private:
 
     friend void ToProto(ui32* value, TChunkReplica replica);
     friend void FromProto(TChunkReplica* replica, ui32 value);
+
+    using TLoadContext = NPhoenix2::TLoadContext;
+    using TSaveContext = NPhoenix2::TSaveContext;
+    using TPersistenceContext = NPhoenix2::TPersistenceContext;
+
+    PHOENIX_DECLARE_TYPE(TChunkReplica, 0x004d1b8a);
 };
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplica replica, TStringBuf spec);
@@ -167,6 +189,9 @@ bool IsArtifactChunkId(TChunkId id);
 //! Returns |true| iff this is a chunk or any type (journal or blob, replicated or erasure-coded).
 bool IsPhysicalChunkType(NObjectClient::EObjectType type);
 
+//! Returns |true| iff this is a chunk or any type (journal or blob, replicated or erasure-coded).
+bool IsPhysicalChunkId(TChunkId id);
+
 //! Returns |true| iff this is a journal chunk type.
 bool IsJournalChunkType(NObjectClient::EObjectType type);
 
@@ -184,6 +209,9 @@ bool IsErasureChunkType(NObjectClient::EObjectType type);
 
 //! Returns |true| iff this is an erasure chunk.
 bool IsErasureChunkId(TChunkId id);
+
+//! Returns |true| iff this is an erasure chunk part.
+bool IsErasureChunkPartType(NObjectClient::EObjectType type);
 
 //! Returns |true| iff this is an erasure chunk part.
 bool IsErasureChunkPartId(TChunkId id);
@@ -219,16 +247,35 @@ public:
     explicit TChunkReplicaAddressFormatter(NNodeTrackerClient::TNodeDirectoryPtr nodeDirectory);
 
     void operator()(TStringBuilderBase* builder, TChunkReplicaWithMedium replica) const;
-
     void operator()(TStringBuilderBase* builder, TChunkReplica replica) const;
 
 private:
-    NNodeTrackerClient::TNodeDirectoryPtr NodeDirectory_;
+    const NNodeTrackerClient::TNodeDirectoryPtr NodeDirectory_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChunkClient
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct TProtoTraits<NChunkClient::TChunkReplica>
+{
+    using TSerialized = ui32;
+};
+
+template <>
+struct TProtoTraits<NChunkClient::TChunkReplicaWithMedium>
+{
+    using TSerialized = ui64;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
 
 //! A hasher for TChunkIdWithIndex.
 template <>

@@ -552,7 +552,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDescribeConnection) {
         TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
         TString connectionId;
         {
-            const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.CreateClickHouse("my_db", "my_login", "my_pswd", "").Build());
+            const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.CreateClickHouse(
+                "my_db", "my_login", "my_pswd", "", "database_name").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             connectionId = result.connection_id();
         }
@@ -574,10 +575,10 @@ void TestShouldNotShowPassword(NYql::EDatabaseType databaseType) {
         TCreateConnectionBuilder connBuilder{};
         switch(databaseType) {
             case NYql::EDatabaseType::ClickHouse:
-                request = connBuilder.CreateClickHouse("my_db", "my_login", "my_pswd", "").Build();
+                request = connBuilder.CreateClickHouse("my_db", "my_login", "my_pswd", "", "database_name").Build();
                 break;
             case NYql::EDatabaseType::PostgreSQL:
-                request = connBuilder.CreatePostgreSQL("my_db", "my_login", "my_pswd", "").Build();
+                request = connBuilder.CreatePostgreSQL("my_db", "my_login", "my_pswd", "", "database_name").Build();
                 break;
             default:
                 ythrow yexception() << TStringBuilder() << "unexpected database type: " << NYql::DatabaseTypeToMdbUrlPath(databaseType);

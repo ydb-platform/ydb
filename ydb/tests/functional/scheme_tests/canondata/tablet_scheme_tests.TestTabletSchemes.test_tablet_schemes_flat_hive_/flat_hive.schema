@@ -8,6 +8,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "ScaleRecommenderPolicies",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "SchemeshardId",
                 "ColumnType": "Uint64"
@@ -42,6 +47,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
@@ -61,7 +67,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -108,7 +117,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -143,7 +155,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -322,7 +337,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -370,7 +388,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -430,7 +451,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -478,7 +502,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -520,6 +547,11 @@
                 "ColumnId": 5,
                 "ColumnName": "Timestamp",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "DeletedAtGeneration",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -531,7 +563,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -545,7 +578,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -598,7 +634,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -693,7 +732,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -740,7 +782,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -842,7 +887,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -878,6 +926,11 @@
                 "ColumnId": 5,
                 "ColumnName": "Statistics",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "DataCenter",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -888,7 +941,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -902,7 +956,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -943,7 +1000,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1003,7 +1063,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1069,7 +1132,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     }

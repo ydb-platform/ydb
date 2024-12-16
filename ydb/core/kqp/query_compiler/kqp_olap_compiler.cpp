@@ -2,13 +2,13 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
-#include <ydb/core/formats/arrow/protos/ssa.pb.h>
+#include <ydb/library/formats/arrow/protos/ssa.pb.h>
 
-#include <ydb/library/yql/core/arrow_kernels/request/request.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/core/arrow_kernels/request/request.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <memory>
 
@@ -325,6 +325,8 @@ ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
         ssaValue->MutableConstant()->SetUint64(FromString<ui64>(nodeValue));
     } else if (value.Maybe<TCoTimestamp>()) {
         ssaValue->MutableConstant()->SetTimestamp(FromString<ui64>(nodeValue));
+    } else if (value.Maybe<TCoDate>()) {
+        ssaValue->MutableConstant()->SetTimestamp(FromString<ui16>(nodeValue));
     } else {
         YQL_ENSURE(false, "Unsupported content: " << value.Ref().Content());
     }
@@ -856,6 +858,8 @@ TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileCo
         return BuildLogicalNot(maybeNot.Cast().Value(), ctx);
     } else if (const auto& maybeJsonValue = node.Maybe<TKqpOlapJsonValue>()) {
         return ConvertJsonValueToColumn(maybeJsonValue.Cast(), ctx);
+    } else if (const auto& maybeJsonValue = node.Maybe<TKqpOlapJsonExists>()) {
+        return CompileJsonExists(maybeJsonValue.Cast(), ctx);
     } else if (const auto& maybeApply = node.Maybe<TKqpOlapApply>()) {
         return CompileYqlKernelScalarApply(maybeApply.Cast(), ctx);
     }

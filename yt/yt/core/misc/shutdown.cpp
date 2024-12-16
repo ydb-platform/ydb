@@ -4,7 +4,6 @@
 
 #include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/proc.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
@@ -12,6 +11,10 @@
 #include <library/cpp/yt/threading/event_count.h>
 
 #include <library/cpp/yt/misc/tls.h>
+
+#include <library/cpp/yt/system/exit.h>
+
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 #include <util/generic/algorithm.h>
 
@@ -102,11 +105,12 @@ public:
             ::TThread::SetCurrentThreadName("ShutdownWD");
             if (!shutdownCompleteEvent.Wait(options.GraceTimeout)) {
                 if (options.AbortOnHang) {
-                    ::fprintf(stderr, "*** Shutdown hung, aborting\n");
                     YT_ABORT();
                 } else {
-                    ::fprintf(stderr, "*** Shutdown hung, exiting\n");
-                    ::_exit(options.HungExitCode);
+                    AbortProcessDramatically(
+                        options.HungExitCode,
+                        /*exitCodeStr*/ TStringBuf(),
+                        "Shutdown hung");
                 }
             }
         });

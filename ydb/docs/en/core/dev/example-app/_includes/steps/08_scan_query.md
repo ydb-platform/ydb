@@ -1,4 +1,3 @@
 ## Scan queries {#scan-query}
 
-Making a [scan query](../../../../concepts/scan_query.md) that results in a data stream. Streaming lets you read an unlimited number of rows and amount of data.
-
+Execute a [scan query](../../../../concepts/scan_query.md) to produce a data stream. Streaming allows to read an unlimited number of rows and an unlimited amount of data.

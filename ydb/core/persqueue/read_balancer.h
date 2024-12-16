@@ -106,7 +106,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr &ev, const TActorContext& ctx);
     // End balancing
 
-    TStringBuilder GetPrefix() const;
+    TStringBuilder LogPrefix() const;
 
     TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
     void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&, bool pipeReconnected = false);
@@ -270,7 +270,7 @@ private:
     ui64 StatsReportRound;
 
     std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
-    std::deque<TAutoPtr<TEvPersQueue::TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
+    std::deque<TAutoPtr<TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
 
     TActorId FindSubDomainPathIdActor;
 
@@ -353,7 +353,7 @@ public:
 
 };
 
-NKikimrPQ::EConsumerScalingSupport DefaultScalingSupport();
+TString EncodeAnchor(const TString& value);
 
 }
 }

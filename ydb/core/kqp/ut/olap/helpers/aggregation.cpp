@@ -13,6 +13,7 @@ void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases) {
 
     TLocalHelper(kikimr).CreateTestOlapTable();
     auto tableClient = kikimr.GetTableClient();
+    Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::GROUPED_MEMORY_LIMITER, NKikimrServices::TX_COLUMNSHARD_SCAN }, "CS").Initialize();
 
     {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
@@ -49,10 +50,11 @@ void TestAggregationsInternal(const std::vector<TAggregationTestCase>& cases) {
     Tests::TServer::TPtr server = new Tests::TServer(settings);
 
     auto runtime = server->GetRuntime();
+    Tests::NCommon::TLoggerInit(runtime).Initialize();
+    Tests::NCommon::TLoggerInit(runtime).SetComponents({ NKikimrServices::GROUPED_MEMORY_LIMITER }, "CS").Initialize();
     auto sender = runtime->AllocateEdgeActor();
 
     InitRoot(server, sender);
-    Tests::NCommon::TLoggerInit(runtime).Initialize();
 
     ui32 numShards = 1;
     ui32 numIterations = 10;

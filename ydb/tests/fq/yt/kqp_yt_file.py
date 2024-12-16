@@ -1,12 +1,13 @@
+import codecs
+
 import pytest
 
-from file_common import check_provider, get_sql_query
+from test_file_common import check_provider, get_sql_query
 from kqprun import KqpRun
-from utils import DATA_PATH, get_config, get_parameters_files, replace_vars
-from yql_utils import KSV_ATTR, get_files, get_http_files, get_tables, is_xfail, yql_binary_path
+from test_utils import DATA_PATH, get_config, get_parameters_files, replace_vars
+from yql_utils import KSV_ATTR, get_files, get_http_files, get_tables, is_xfail, yql_binary_path, yql_source_path
 
 EXCLUDED_SUITES = [
-    'match_recognize',  # MATCH_RECOGNIZE is disabled in KQP
 ]
 
 EXCLUDED_TESTS = [
@@ -54,6 +55,9 @@ EXCLUDED_TESTS = [
     'simple_columns/simple_columns_join_coalesce_qualified_all_enable',
     # PRECONDITION_FAILED, Unexpected flow status, YQ-3174
     'produce/reduce_typeinfo',
+    # GENERIC ERROR. Cannot infer schema for table "InputView"
+    # (unsupported standalone view)
+    'view/standalone_view_lambda',
 ]
 
 
@@ -107,6 +111,9 @@ def validate_sql(sql_query):
     if 'library(' in sql_query.lower() or 'file(' in sql_query.lower() or 'filecontent(' in sql_query.lower():
         pytest.skip('Attaching files and libraries is not supported in KQP')
 
+    if 'Python' in sql_query or 'Javascript' in sql_query:
+        pytest.skip('ScriptUdf is not supported in KQP')
+
     # Unsupported pragmas
     if 'refselect' in sql_query.lower():
         pytest.skip('RefSelect mode isn\'t supported by provider: kikimr')
@@ -150,6 +157,12 @@ def validate_sql(sql_query):
         pytest.skip('custom checks is not supported for KqpRun output format')
 
 
+def read_test_whitelist():
+    test_whitelist_path = yql_source_path('ydb/tests/fq/yt/cfg/test_whitelist.txt')
+    with codecs.open(test_whitelist_path, 'r', encoding='utf-8') as test_whitelist_file:
+        return set(test_whitelist_file.read().split('\n'))
+
+
 def run_test(suite, case, cfg):
     if suite in EXCLUDED_SUITES:
         pytest.skip('skip sute ' + suite)
@@ -158,7 +171,13 @@ def run_test(suite, case, cfg):
     if full_test_name in EXCLUDED_TESTS:
         pytest.skip('skip case ' + full_test_name)
 
+    if full_test_name not in run_test.test_whitelist:
+        pytest.skip('skip case ' + full_test_name + ', out of test whitelist')
+
     run_file_kqp(suite, case, cfg)
+
+
+run_test.test_whitelist = read_test_whitelist()
 
 
 def run_file_kqp_no_cache(suite, case, cfg):
@@ -180,7 +199,7 @@ def run_file_kqp_no_cache(suite, case, cfg):
     if is_xfail(config):
         pytest.skip('skip fail tests')
 
-    kqprun = KqpRun(udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps'))
+    kqprun = KqpRun(udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'))
 
     return kqprun.yql_exec(program=sql_query, verbose=True, check_error=True, tables=in_tables)
 

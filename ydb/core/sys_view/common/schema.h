@@ -4,8 +4,8 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/locks/sys_tables.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -46,6 +46,9 @@ constexpr TStringBuf TopPartitions1MinuteName = "top_partitions_one_minute";
 constexpr TStringBuf TopPartitions1HourName = "top_partitions_one_hour";
 
 constexpr TStringBuf PgTablesName = "pg_tables";
+constexpr TStringBuf InformationSchemaTablesName = "tables";
+constexpr TStringBuf PgClassName = "pg_class";
+
 
 struct Schema : NIceDb::Schema {
     struct PartitionStats : Table<1> {
@@ -75,8 +78,9 @@ struct Schema : NIceDb::Schema {
         struct LastTtlRunTime       : Column<24, NScheme::NTypeIds::Timestamp> {};
         struct LastTtlRowsProcessed : Column<25, NScheme::NTypeIds::Uint64> {};
         struct LastTtlRowsErased    : Column<26, NScheme::NTypeIds::Uint64> {};
+        struct FollowerId           : Column<27, NScheme::NTypeIds::Uint32> {};
 
-        using TKey = TableKey<OwnerId, PathId, PartIdx>;
+        using TKey = TableKey<OwnerId, PathId, PartIdx, FollowerId>;
         using TColumns = TableColumns<
             OwnerId,
             PathId,
@@ -103,7 +107,8 @@ struct Schema : NIceDb::Schema {
             TxRejectedByOutOfStorage,
             LastTtlRunTime,
             LastTtlRowsProcessed,
-            LastTtlRowsErased>;
+            LastTtlRowsErased,
+            FollowerId>;
     };
 
     struct Nodes : Table<2> {
@@ -212,6 +217,7 @@ struct Schema : NIceDb::Schema {
         struct ExpectedSlotCount : Column<15, NScheme::NTypeIds::Uint32> {};
         struct NumActiveSlots : Column<16, NScheme::NTypeIds::Uint32> {};
         struct DecommitStatus : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct State : Column<18, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -227,6 +233,7 @@ struct Schema : NIceDb::Schema {
             AvailableSize,
             TotalSize,
             Status,
+            State,
             StatusChangeTimestamp,
             ExpectedSlotCount,
             NumActiveSlots,
@@ -249,6 +256,9 @@ struct Schema : NIceDb::Schema {
         //struct StopFactor : Column<13, NScheme::NTypeIds::Double> {};
         struct Kind : Column<14, NScheme::NTypeIds::Utf8> {};
         struct FailRealm : Column<15, NScheme::NTypeIds::Uint32> {};
+        struct Replicated : Column<16, NScheme::NTypeIds::Bool> {};
+        struct DiskSpace : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct State : Column <18, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeId, PDiskId, VSlotId>;
         using TColumns = TableColumns<
@@ -262,8 +272,11 @@ struct Schema : NIceDb::Schema {
             AllocatedSize,
             AvailableSize,
             Status,
+            State,
             Kind,
-            FailRealm>;
+            FailRealm,
+            Replicated,
+            DiskSpace>;
     };
 
     struct Groups : Table<6> {
@@ -415,7 +428,7 @@ struct Schema : NIceDb::Schema {
         struct BlobId : Column<10, NScheme::NTypeIds::Utf8> {};
         struct BlobRangeOffset : Column<11, NScheme::NTypeIds::Uint64> {};
         struct BlobRangeSize : Column<12, NScheme::NTypeIds::Uint64> {};
-        struct Activity : Column<13, NScheme::NTypeIds::Bool> {};
+        struct Activity : Column<13, NScheme::NTypeIds::Uint8> {};
         struct TierName: Column<14, NScheme::NTypeIds::Utf8> {};
         struct EntityType: Column<15, NScheme::NTypeIds::Utf8> {};
 
@@ -465,6 +478,7 @@ struct Schema : NIceDb::Schema {
         struct RowCount        : Column<9, NScheme::NTypeIds::Uint64> {};
         struct IndexSize       : Column<10, NScheme::NTypeIds::Uint64> {};
         struct InFlightTxCount : Column<11, NScheme::NTypeIds::Uint32> {};
+        struct FollowerId      : Column<12, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<IntervalEnd, Rank>;
         using TColumns = TableColumns<
@@ -478,7 +492,8 @@ struct Schema : NIceDb::Schema {
             DataSize,
             RowCount,
             IndexSize,
-            InFlightTxCount>;
+            InFlightTxCount,
+            FollowerId>;
     };
 
     struct QuerySessions : Table<13> {
@@ -525,9 +540,12 @@ struct Schema : NIceDb::Schema {
         struct ColumnBlobBytes: Column<7, NScheme::NTypeIds::Uint64> {};
         struct IndexBlobBytes: Column<8, NScheme::NTypeIds::Uint64> {};
         struct PortionId: Column<9, NScheme::NTypeIds::Uint64> {};
-        struct Activity: Column<10, NScheme::NTypeIds::Bool> {};
+        struct Activity: Column<10, NScheme::NTypeIds::Uint8> {};
         struct TierName: Column<11, NScheme::NTypeIds::Utf8> {};
         struct Stats: Column<12, NScheme::NTypeIds::Utf8> {};
+        struct Optimized: Column<13, NScheme::NTypeIds::Uint8> {};
+        struct CompactionLevel: Column<14, NScheme::NTypeIds::Uint64> {};
+        struct Details: Column<15, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<PathId, TabletId, PortionId>;
         using TColumns = TableColumns<
@@ -542,7 +560,10 @@ struct Schema : NIceDb::Schema {
             PortionId,
             Activity,
             TierName,
-            Stats
+            Stats,
+            Optimized,
+            CompactionLevel,
+            Details
         >;
     };
 
@@ -595,13 +616,15 @@ struct Schema : NIceDb::Schema {
         NIceDb::TColumnId _ColumnId;
         NScheme::TTypeInfo _ColumnTypeInfo;
         TString _ColumnName;
-        PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName) 
-            : _ColumnId(columnId), _ColumnTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeName(columnTypeName)), _ColumnName(columnName)
-        {}
+        PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName);
     };
 
-    struct PgTables {
-        const static TVector<PgColumn> Columns;
+    class PgTablesSchemaProvider {
+    public:
+        PgTablesSchemaProvider();
+        const TVector<PgColumn>& GetColumns(TStringBuf tableName) const;
+    private:
+        std::unordered_map<TString, TVector<PgColumn>> columnsStorage;
     };
 };
 
@@ -622,7 +645,7 @@ public:
     struct TSystemViewPath {
         TVector<TString> Parent;
         TString ViewName;
-    };
+        };
 
     struct TSchema {
         THashMap<NTable::TTag, TSysTables::TTableColumnInfo> Columns;

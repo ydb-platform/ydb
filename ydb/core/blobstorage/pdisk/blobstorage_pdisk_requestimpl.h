@@ -7,6 +7,7 @@
 #include "blobstorage_pdisk_internal_interface.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_request_id.h"
+#include "blobstorage_pdisk_impl_metadata.h"
 
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
@@ -92,6 +93,10 @@ public:
 
     double LifeDurationMs(NHPTimer::STime now) {
         return HPMilliSecondsFloat(now - CreationTime);
+    }
+
+    double GetCostMs() const {
+        return Cost / 1.0e6; // since cost is in nanoseconds
     }
 
     ui64 GetCost() const {
@@ -294,6 +299,8 @@ public:
     THolder<NPDisk::TEvLogResult> Result;
     std::function<void()> OnDestroy;
 
+    bool Replied = false;
+
     TLogWrite(NPDisk::TEvLog &ev, const TActorId &sender, ui32 estimatedChunkIdx, TReqId reqId, NWilson::TSpan span)
         : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, NPriInternal::LogWrite, std::move(span))
         , Signature(ev.Signature)
@@ -310,10 +317,10 @@ public:
     }
 
     virtual ~TLogWrite() {
+        Y_DEBUG_ABORT_UNLESS(Replied);
         if (OnDestroy) {
             OnDestroy();
         }
-        delete NextInBatch;
     }
 
     ERequestType GetType() const override {
@@ -342,6 +349,13 @@ public:
         OnDestroy = std::move(onDestroy);
     }
 
+    void Abort(TActorSystem* actorSystem) override {
+        auto *result = new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, "TLogWrite is being aborted");
+        result->Results.emplace_back(Lsn, Cookie);
+        actorSystem->Send(Sender, result);
+        Replied = true;
+    }
+
     TString ToString() const {
         TStringStream str;
         str << "TLogWrite {";
@@ -361,7 +375,6 @@ class TCompletionChunkRead;
 //
 class TChunkRead : public TRequestBase {
 protected:
-    static TAtomic LastIndex;
     static constexpr ui64 ReferenceCanary = 890461871990457885ull;
 public:
     ui32 ChunkIdx;
@@ -372,7 +385,6 @@ public:
     ui64 CurrentSector = 0;
     ui64 RemainingSize;
     TCompletionChunkRead *FinalCompletion = nullptr;
-    TAtomicBase Index;
     bool IsReplied = false;
 
     ui64 SlackSize;
@@ -398,7 +410,6 @@ public:
         , SlackSize(Max<ui32>())
         , DoubleFreeCanary(ReferenceCanary)
     {
-        Index = AtomicIncrement(LastIndex);
     }
 
     virtual ~TChunkRead() {
@@ -478,8 +489,6 @@ public:
 // TChunkWrite
 //
 class TChunkWrite : public TRequestBase {
-protected:
-    static TAtomic LastIndex;
 public:
     ui32 ChunkIdx;
     ui32 Offset;
@@ -493,11 +502,12 @@ public:
     ui32 CurrentPart = 0;
     ui32 CurrentPartOffset = 0;
     ui32 RemainingSize = 0;
-    ui32 UnenqueuedSize;
-    TAtomicBase Index;
 
     ui32 SlackSize;
     ui32 BytesWritten = 0;
+
+    TAtomic Pieces = 0;
+    TAtomic Aborted = 0;
 
     THolder<NPDisk::TCompletionAction> Completion;
 
@@ -510,15 +520,23 @@ public:
         , DoFlush(ev.DoFlush)
         , IsSeqWrite(ev.IsSeqWrite)
     {
-        Index = AtomicIncrement(LastIndex);
         if (PartsPtr) {
             for (size_t i = 0; i < PartsPtr->Size(); ++i) {
                 RemainingSize += (*PartsPtr)[i].second;
             }
         }
         TotalSize = RemainingSize;
-        UnenqueuedSize = RemainingSize;
         SlackSize = Max<ui32>();
+    }
+
+    void RegisterPiece() {
+        AtomicIncrement(Pieces);
+    }
+
+    void AbortPiece(TActorSystem *actorSystem) {
+        if (AtomicDecrement(Pieces) == 0) {
+            this->Abort(actorSystem);
+        }
     }
 
     ERequestType GetType() const override {
@@ -526,15 +544,7 @@ public:
     }
 
     void EstimateCost(const TDriveModel &drive) override {
-        Cost = drive.SeekTimeNs() + drive.TimeForSizeNs((ui64)UnenqueuedSize, ChunkIdx, TDriveModel::OP_TYPE_WRITE);
-    }
-
-    bool IsFinalIteration() {
-        return UnenqueuedSize <= SlackSize;
-    }
-
-    bool IsTotallyEnqueued() {
-        return UnenqueuedSize == 0;
+        Cost = drive.SeekTimeNs() + drive.TimeForSizeNs((ui64)TotalSize, ChunkIdx, TDriveModel::OP_TYPE_WRITE);
     }
 
     bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) override {
@@ -546,12 +556,18 @@ public:
         if (SlackSize >= appendBlockSize) {
             SlackSize = Min(
                 SlackSize / appendBlockSize * appendBlockSize,
-                (UnenqueuedSize + appendBlockSize - 1) / appendBlockSize * appendBlockSize);
+                (TotalSize + appendBlockSize - 1) / appendBlockSize * appendBlockSize);
             ui64 costNs = (adhesion? 0: drive.SeekTimeNs()) + drive.TimeForSizeNs((ui64)SlackSize, ChunkIdx, TDriveModel::OP_TYPE_WRITE);
             slackNs -= costNs;
             return true;
         } else {
             return false;
+        }
+    }
+
+    void Abort(TActorSystem* actorSystem) override {
+        if (!AtomicSwap(&Aborted, true)) {
+            actorSystem->Send(Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED, ChunkIdx, Cookie, 0, "TChunkWrite is being aborted"));
         }
     }
 };
@@ -570,7 +586,9 @@ public:
         , ChunkWrite(write)
         , PieceShift(pieceShift)
         , PieceSize(pieceSize)
-    {}
+    {
+        ChunkWrite->RegisterPiece();
+    }
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkWritePiece;
@@ -579,6 +597,12 @@ public:
     void EstimateCost(const TDriveModel &drive) override {
         Cost = drive.SeekTimeNs() +
             drive.TimeForSizeNs((ui64)PieceSize, ChunkWrite->ChunkIdx, TDriveModel::OP_TYPE_WRITE);
+    }
+
+    void Abort(TActorSystem* actorSystem) override {
+        if (ChunkWrite) {
+            ChunkWrite->AbortPiece(actorSystem);
+        }
     }
 };
 
@@ -1004,6 +1028,117 @@ public:
     }
 };
 
+class TReadMetadata : public TRequestBase {
+public:
+    const TMainKey MainKey;
+    std::optional<TMetadataFormatSector> Format;
+
+    TReadMetadata(TActorId sender, const TMainKey& mainKey, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ReadMetadata, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , MainKey(mainKey)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestReadMetadata;
+    }
+
+    void Abort(TActorSystem *actorSystem) override {
+        actorSystem->Send(Sender, new TEvReadMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
+    }
+};
+
+class TInitialReadMetadataResult : public TRequestBase {
+public:
+    const NMeta::TSlotKey Key;
+    std::optional<TString> ErrorReason;
+    TMetadataHeader Header;
+    TRcBuf Payload;
+
+    TInitialReadMetadataResult(NMeta::TSlotKey key, TAtomicBase reqIdx)
+        : TRequestBase({}, TReqId(TReqId::InitialReadMetadataResult, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , Key(key)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestInitialReadMetadataResult;
+    }
+};
+
+class TWriteMetadata : public TRequestBase {
+public:
+    TRcBuf Metadata;
+    TMainKey MainKey;
+
+    TWriteMetadata(TActorId sender, TRcBuf&& metadata, const TMainKey& mainKey, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::WriteMetadata, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , Metadata(std::move(metadata))
+        , MainKey(mainKey)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestWriteMetadata;
+    }
+
+    void Abort(TActorSystem *actorSystem) override {
+        actorSystem->Send(Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
+    }
+};
+
+class TWriteMetadataResult : public TRequestBase {
+public:
+    const bool Success;
+
+    TWriteMetadataResult(bool success, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::WriteMetadataResult, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , Success(success)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestWriteMetadataResult;
+    }
+
+    void Abort(TActorSystem *actorSystem) override {
+        actorSystem->Send(Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
+    }
+};
+
+class TPushUnformattedMetadataSector : public TRequestBase {
+public:
+    const std::optional<TMetadataFormatSector> Format;
+    const bool WantEvent;
+
+    TPushUnformattedMetadataSector(const std::optional<TMetadataFormatSector>& format, bool wantEvent, TAtomicBase reqIdx)
+        : TRequestBase({}, TReqId(TReqId::PushUnformattedMetadataSector, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , Format(format)
+        , WantEvent(wantEvent)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestPushUnformattedMetadataSector;
+    }
+};
+
+class TContinueReadMetadata : public TRequestBase {
+    std::function<void(bool, TActorSystem*)> Callback;
+
+public:
+    TContinueReadMetadata(std::function<void(bool, TActorSystem*)> callback, TAtomicBase reqIdx)
+        : TRequestBase({}, TReqId(TReqId::ContinueReadMetadata, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , Callback(std::move(callback))
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestContinueReadMetadata;
+    }
+
+    void Execute(TActorSystem *actorSystem) {
+        Callback(true, actorSystem);
+    }
+
+    void Abort(TActorSystem *actorSystem) override {
+        Callback(false, actorSystem);
+    }
+};
+
 } // NPDisk
 } // NKikimr
-

@@ -104,7 +104,7 @@ namespace NActors {
     TGenericExecutorThread::~TGenericExecutorThread()
     { }
 
-    void TGenericExecutorThread::UnregisterActor(TMailboxHeader* mailbox, TActorId actorId) {
+    void TGenericExecutorThread::UnregisterActor(TMailbox* mailbox, TActorId actorId) {
         Y_DEBUG_ABORT_UNLESS(actorId.PoolID() == ExecutorPool->PoolId && ExecutorPool->ResolveMailbox(actorId.Hint()) == mailbox);
         IActor* actor = mailbox->DetachActor(actorId.LocalId());
         Ctx.DecrementActorsAliveByActivity(actor->GetActivityType());
@@ -181,11 +181,8 @@ namespace NActors {
                 SafeTypeName(actorType));
     }
 
-    template <typename TMailbox>
-    TGenericExecutorThread::TProcessingResult TGenericExecutorThread::Execute(TMailbox* mailbox, ui32 hint, bool isTailExecution) {
+    TGenericExecutorThread::TProcessingResult TGenericExecutorThread::Execute(TMailbox* mailbox, bool isTailExecution) {
         Y_DEBUG_ABORT_UNLESS(DyingActors.empty());
-
-        bool reclaimAsFree = false;
 
         if (!isTailExecution) {
             Ctx.HPStart = GetCycleCountFast();
@@ -205,9 +202,9 @@ namespace NActors {
         NHPTimer::STime eventStart = Ctx.HPStart;
         TlsThreadContext->ActivationStartTS.store(Ctx.HPStart, std::memory_order_release);
 
+        bool drained = false;
         for (; Ctx.ExecutedEvents < Ctx.EventsPerMailbox; ++Ctx.ExecutedEvents) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
-                mailbox->ProcessEvents(mailbox);
                 recipient = evExt->GetRecipientRewrite();
                 TActorContext ctx(*mailbox, *this, eventStart, recipient);
                 TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
@@ -226,7 +223,7 @@ namespace NActors {
                     CurrentActorScheduledEventsCounter = 0;
 
                     if (firstEvent) {
-                        double usec = Ctx.AddActivationStats(AtomicLoad(&mailbox->ScheduleMoment), hpprev);
+                        double usec = Ctx.AddActivationStats(mailbox->ScheduleMoment, hpprev);
                         if (usec > 500) {
                             GLOBAL_LWPROBE(ACTORLIB_PROVIDER, SlowActivation, Ctx.PoolId, usec / 1000.0);
                         }
@@ -253,22 +250,23 @@ namespace NActors {
                     hpnow = GetCycleCountFast();
                     hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
 
-                    mailbox->ProcessEvents(mailbox);
                     actor->OnDequeueEvent();
 
                     size_t dyingActorsCnt = DyingActors.size();
                     Ctx.UpdateActorsStats(dyingActorsCnt);
                     if (dyingActorsCnt) {
                         DropUnregistered();
-                        mailbox->ProcessEvents(mailbox);
                         actor = nullptr;
                     }
 
-                    if (mailbox->IsEmpty()) // was not-free and become free, we must reclaim mailbox
-                        reclaimAsFree = true;
-                    
+                    if (mailbox->IsEmpty()) {
+                        // had actors and became empty, prepare to reclaim mailbox
+                        mailbox->LockToFree();
+                    }
+
                     Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
                     NHPTimer::STime elapsed = Ctx.AddEventProcessingStats(eventStart, hpnow, activityType, CurrentActorScheduledEventsCounter);
+                    mailbox->AddElapsedCycles(elapsed);
                     if (elapsed > 1000000) {
                         LwTraceSlowEvent(ev.Get(), evTypeForTracing, actorType, Ctx.PoolId, CurrentRecipient, NHPTimer::GetSeconds(elapsed) * 1000.0);
                     }
@@ -294,7 +292,6 @@ namespace NActors {
                 eventStart = hpnow;
 
                 if (TlsThreadContext->CapturedType == ESendingType::Tail) {
-                    AtomicStore(&mailbox->ScheduleMoment, hpnow);
                     Ctx.IncrementMailboxPushedOutByTailSending();
                     LWTRACK(MailboxPushedOutByTailSending,
                             Ctx.Orbit,
@@ -310,7 +307,6 @@ namespace NActors {
 
                 // Soft preemption in united pool
                 if (Ctx.SoftDeadlineTs < (ui64)hpnow) {
-                    AtomicStore(&mailbox->ScheduleMoment, hpnow);
                     Ctx.IncrementMailboxPushedOutBySoftPreemption();
                     LWTRACK(MailboxPushedOutBySoftPreemption,
                             Ctx.Orbit,
@@ -327,7 +323,6 @@ namespace NActors {
 
                 // time limit inside one mailbox passed, let others do some work
                 if (hpnow - Ctx.HPStart > (i64)Ctx.TimePerMailboxTs) {
-                    AtomicStore(&mailbox->ScheduleMoment, hpnow);
                     Ctx.IncrementMailboxPushedOutByTime();
                     LWTRACK(MailboxPushedOutByTime,
                             Ctx.Orbit,
@@ -343,7 +338,6 @@ namespace NActors {
                 }
 
                 if (Ctx.ExecutedEvents + 1 == Ctx.EventsPerMailbox) {
-                    AtomicStore(&mailbox->ScheduleMoment, hpnow);
                     Ctx.IncrementMailboxPushedOutByEventCount();
                     LWTRACK(MailboxPushedOutByEventCount,
                             Ctx.Orbit,
@@ -369,15 +363,21 @@ namespace NActors {
                         Ctx.WorkerId,
                         recipient.ToString(),
                         SafeTypeName(actor));
+                drained = true;
                 break; // empty queue, leave
             }
         }
-        TlsThreadContext->ActivationStartTS.store(GetCycleCountFast(), std::memory_order_release);
+        TlsThreadContext->ActivationStartTS.store(hpnow, std::memory_order_release);
         TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
 
         NProfiling::TMemoryTagScope::Reset(0);
         TlsActivationContext = nullptr;
-        UnlockFromExecution(mailbox, Ctx.Executor, reclaimAsFree, hint, Ctx.WorkerId, RevolvingWriteCounter);
+        if (mailbox->IsEmpty() && drained) {
+            Y_DEBUG_ABORT_UNLESS(mailbox->IsFree());
+            Ctx.MailboxCache.Free(mailbox);
+        } else {
+            mailbox->Unlock(Ctx.Executor, hpnow, RevolvingWriteCounter);
+        }
         return {preempted, wasWorking};
     }
 
@@ -413,34 +413,21 @@ namespace NActors {
         bool needToStop = false;
         bool wasWorking = false;
 
-        auto executeActivation = [&](ui32 activation, bool isTailExecution) {
+        auto executeActivation = [&](TMailbox* mailbox, bool isTailExecution) {
             LWTRACK(ActivationBegin, Ctx.Orbit, Ctx.CpuId, Ctx.PoolId, Ctx.WorkerId, NHPTimer::GetSeconds(Ctx.Lease.GetPreciseExpireTs()) * 1e3);
             readyActivationCount++;
-            if (TMailboxHeader* header = Ctx.MailboxTable->Get(activation)) {
-                if (header->LockForExecution()) {
+            if (true /* already have pointer TMailbox* mailbox = Ctx.MailboxTable->Get(activation) */) {
+                if (true /* already locked header->LockForExecution() */) {
                     hpnow = GetCycleCountFast();
                     nonExecCycles += hpnow - hpprev;
                     hpprev = hpnow;
-#define EXECUTE_MAILBOX(type) \
-    case TMailboxType:: type: \
-        { \
-            using TMailBox = TMailboxTable:: T ## type ## Mailbox ; \
-            auto result = Execute<TMailBox>(static_cast<TMailBox*>(header), activation, isTailExecution); \
-            if (result.IsPreempted) { \
-                TlsThreadContext->CapturedType = ESendingType::Lazy; \
-            } \
-            wasWorking |= result.WasWorking; \
-        } \
-        break \
-// EXECUTE_MAILBOX
-                    switch (header->Type) {
-                        EXECUTE_MAILBOX(Simple);
-                        EXECUTE_MAILBOX(Revolving);
-                        EXECUTE_MAILBOX(HTSwap);
-                        EXECUTE_MAILBOX(ReadAsFilled);
-                        EXECUTE_MAILBOX(TinyReadAsFilled);
+                    {
+                        auto result = Execute(mailbox, isTailExecution);
+                        if (result.IsPreempted) {
+                            TlsThreadContext->CapturedType = ESendingType::Lazy;
+                        }
+                        wasWorking |= result.WasWorking;
                     }
-#undef EXECUTE_MAILBOX
                     hpnow = GetCycleCountFast();
                     i64 currentExecCycles = hpnow - hpprev;
                     execCycles += currentExecCycles;
@@ -474,20 +461,20 @@ namespace NActors {
         while (!needToStop && !StopFlag.load(std::memory_order_relaxed)) {
             if (TlsThreadContext->CapturedType == ESendingType::Tail) {
                 TlsThreadContext->CapturedType = ESendingType::Lazy;
-                ui32 activation = std::exchange(TlsThreadContext->CapturedActivation, 0);
+                TMailbox* activation = std::exchange(TlsThreadContext->CapturedActivation, nullptr);
                 executeActivation(activation, true);
                 continue;
             }
             Ctx.IsNeededToWaitNextActivation = !TlsThreadContext->CapturedActivation && !IsSharedThread;
-            ui32 activation = ExecutorPool->GetReadyActivation(Ctx, ++RevolvingReadCounter);
+            TMailbox* activation = ExecutorPool->GetReadyActivation(Ctx, ++RevolvingReadCounter);
             if (!activation) {
-                activation = std::exchange(TlsThreadContext->CapturedActivation, 0);
+                activation = std::exchange(TlsThreadContext->CapturedActivation, nullptr);
             } else if (TlsThreadContext->CapturedActivation) {
-                ui32 capturedActivation = std::exchange(TlsThreadContext->CapturedActivation, 0);
+                TMailbox* capturedActivation = std::exchange(TlsThreadContext->CapturedActivation, nullptr);
                 ExecutorPool->ScheduleActivation(capturedActivation);
             }
             if (!activation) {
-                return {IsSharedThread, wasWorking};
+                break;
             }
             executeActivation(activation, false);
         }
@@ -581,205 +568,6 @@ namespace NActors {
         } while (!StopFlag.load(std::memory_order_acquire));
 
         return nullptr;
-    }
-
-    // there must be barrier and check-read with following cas
-    // or just cas w/o read.
-    // or queue unlocks must be performed with exchange and not generic write
-    // TODO: check performance of those options under contention
-
-    // placed here in hope for better compiler optimization
-
-    bool TMailboxHeader::MarkForSchedule() {
-        AtomicBarrier();
-        for (;;) {
-            const ui32 state = AtomicLoad(&ExecutionState);
-            switch (state) {
-                case TExecutionState::Inactive:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::Scheduled, TExecutionState::Inactive))
-                        return true;
-                    break;
-                case TExecutionState::Scheduled:
-                    return false;
-                case TExecutionState::Leaving:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::LeavingMarked, TExecutionState::Leaving))
-                        return true;
-                    break;
-                case TExecutionState::Executing:
-                case TExecutionState::LeavingMarked:
-                    return false;
-                case TExecutionState::Free:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeScheduled, TExecutionState::Free))
-                        return true;
-                    break;
-                case TExecutionState::FreeScheduled:
-                    return false;
-                case TExecutionState::FreeLeaving:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeLeavingMarked, TExecutionState::FreeLeaving))
-                        return true;
-                    break;
-                case TExecutionState::FreeExecuting:
-                case TExecutionState::FreeLeavingMarked:
-                    return false;
-                default:
-                    Y_ABORT();
-            }
-        }
-    }
-
-    bool TMailboxHeader::LockForExecution() {
-        AtomicBarrier(); // strictly speaking here should be AtomicBarrier, but as we got mailboxes from queue - this barrier is already set implicitly and could be removed
-        for (;;) {
-            const ui32 state = AtomicLoad(&ExecutionState);
-            switch (state) {
-                case TExecutionState::Inactive:
-                    return false;
-                case TExecutionState::Scheduled:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::Executing, TExecutionState::Scheduled))
-                        return true;
-                    break;
-                case TExecutionState::Leaving:
-                case TExecutionState::Executing:
-                case TExecutionState::LeavingMarked:
-                    return false;
-                case TExecutionState::Free:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeExecuting, TExecutionState::Free))
-                        return true;
-                    break;
-                case TExecutionState::FreeScheduled:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeExecuting, TExecutionState::FreeScheduled))
-                        return true;
-                    break;
-                case TExecutionState::FreeLeaving:
-                case TExecutionState::FreeExecuting:
-                case TExecutionState::FreeLeavingMarked:
-                    return false;
-                default:
-                    Y_ABORT();
-            }
-        }
-    }
-
-    bool TMailboxHeader::LockFromFree() {
-        AtomicBarrier();
-        for (;;) {
-            const ui32 state = AtomicLoad(&ExecutionState);
-            switch (state) {
-                case TExecutionState::Inactive:
-                case TExecutionState::Scheduled:
-                case TExecutionState::Leaving:
-                case TExecutionState::Executing:
-                case TExecutionState::LeavingMarked:
-                    Y_ABORT();
-                case TExecutionState::Free:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::Executing, TExecutionState::Free))
-                        return true;
-                    break;
-                case TExecutionState::FreeScheduled:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::Executing, TExecutionState::FreeScheduled))
-                        return true;
-                    break;
-                case TExecutionState::FreeLeaving:
-                case TExecutionState::FreeExecuting:
-                case TExecutionState::FreeLeavingMarked:
-                    return false;
-                default:
-                    Y_ABORT();
-            }
-        }
-    }
-
-    void TMailboxHeader::UnlockFromExecution1() {
-        const ui32 state = AtomicLoad(&ExecutionState);
-        if (state == TExecutionState::Executing)
-            AtomicStore(&ExecutionState, (ui32)TExecutionState::Leaving);
-        else if (state == TExecutionState::FreeExecuting)
-            AtomicStore(&ExecutionState, (ui32)TExecutionState::FreeLeaving);
-        else
-            Y_ABORT();
-        AtomicBarrier();
-    }
-
-    bool TMailboxHeader::UnlockFromExecution2(bool wouldReschedule) {
-        AtomicBarrier();
-        for (;;) {
-            const ui32 state = AtomicLoad(&ExecutionState);
-            switch (state) {
-                case TExecutionState::Inactive:
-                case TExecutionState::Scheduled:
-                    Y_ABORT();
-                case TExecutionState::Leaving:
-                    if (!wouldReschedule) {
-                        if (AtomicUi32Cas(&ExecutionState, TExecutionState::Inactive, TExecutionState::Leaving))
-                            return false;
-                    } else {
-                        if (AtomicUi32Cas(&ExecutionState, TExecutionState::Scheduled, TExecutionState::Leaving))
-                            return true;
-                    }
-                    break;
-                case TExecutionState::Executing:
-                    Y_ABORT();
-                case TExecutionState::LeavingMarked:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::Scheduled, TExecutionState::LeavingMarked))
-                        return true;
-                    break;
-                case TExecutionState::Free:
-                case TExecutionState::FreeScheduled:
-                    Y_ABORT();
-                case TExecutionState::FreeLeaving:
-                    if (!wouldReschedule) {
-                        if (AtomicUi32Cas(&ExecutionState, TExecutionState::Free, TExecutionState::FreeLeaving))
-                            return false;
-                    } else {
-                        if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeScheduled, TExecutionState::FreeLeaving))
-                            return true;
-                    }
-                    break;
-                case TExecutionState::FreeExecuting:
-                    Y_ABORT();
-                case TExecutionState::FreeLeavingMarked:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeScheduled, TExecutionState::FreeLeavingMarked))
-                        return true;
-                    break;
-                default:
-                    Y_ABORT();
-            }
-        }
-    }
-
-    bool TMailboxHeader::UnlockAsFree(bool wouldReschedule) {
-        AtomicBarrier();
-        for (;;) {
-            const ui32 state = AtomicLoad(&ExecutionState);
-            switch (state) {
-                case TExecutionState::Inactive:
-                case TExecutionState::Scheduled:
-                    Y_ABORT();
-                case TExecutionState::Leaving:
-                    if (!wouldReschedule) {
-                        if (AtomicUi32Cas(&ExecutionState, TExecutionState::Free, TExecutionState::Leaving))
-                            return false;
-                    } else {
-                        if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeScheduled, TExecutionState::Leaving))
-                            return true;
-                    }
-                    break;
-                case TExecutionState::Executing:
-                    Y_ABORT();
-                case TExecutionState::LeavingMarked:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeScheduled, TExecutionState::LeavingMarked))
-                        return true;
-                    break;
-                case TExecutionState::Free:
-                case TExecutionState::FreeScheduled:
-                case TExecutionState::FreeLeaving:
-                case TExecutionState::FreeExecuting:
-                case TExecutionState::FreeLeavingMarked:
-                    Y_ABORT();
-                default:
-                    Y_ABORT();
-            }
-        }
     }
 
     void TGenericExecutorThread::UpdateThreadStats() {

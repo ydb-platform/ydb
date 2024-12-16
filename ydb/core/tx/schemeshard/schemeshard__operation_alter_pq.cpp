@@ -2,6 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for PQGroupReserve
+
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/config/config.h>
@@ -16,6 +18,9 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TAlterPQ: public TSubOperation {
+    // Make sure we make decisions using a consistent runtime value
+    const bool EnableTopicSplitMerge = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
+
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -59,7 +64,7 @@ public:
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
     {
-        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
+        bool splitMergeEnabled = EnableTopicSplitMerge
             && NPQ::SplitMergeEnabled(*tabletConfig)
             && (!alter.HasPQTabletConfig() || !alter.GetPQTabletConfig().HasPartitionStrategy() || NPQ::SplitMergeEnabled(alter.GetPQTabletConfig()));
 
@@ -136,6 +141,10 @@ public:
                 return nullptr;
             }
 
+            if (!alterConfig.HasPartitionStrategy() && tabletConfig->HasPartitionStrategy()) {
+                alterConfig.MutablePartitionStrategy()->CopyFrom(tabletConfig->GetPartitionStrategy());
+            }
+
             if (alterConfig.GetPartitionConfig().HasLifetimeSeconds()) {
                 const auto lifetimeSeconds = alterConfig.GetPartitionConfig().GetLifetimeSeconds();
                 if (lifetimeSeconds <= 0 || (ui32)lifetimeSeconds > TSchemeShard::MaxPQLifetimeSeconds) {
@@ -177,12 +186,8 @@ public:
 
             if (alterConfig.HasPartitionStrategy() && !NPQ::SplitMergeEnabled(alterConfig)
                 && tabletConfig->HasPartitionStrategy() && NPQ::SplitMergeEnabled(*tabletConfig)) {
-                if (!alterConfig.GetPartitionStrategy().HasMaxPartitionCount() || 0 != alterConfig.GetPartitionStrategy().GetMaxPartitionCount()) {
-                    errStr = TStringBuilder() << "Can`t disable auto partitioning. Disabling auto partitioning is a destructive operation, "
-                            << "after which all partitions will become active and the message order guarantee will be violated. "
-                            << "If you are sure of this, then set max_active_partitions to 0.";
-                    return nullptr;
-                }
+                errStr = TStringBuilder() << "Can`t disable auto partitioning.";
+                return nullptr;
             }
 
             if (!alterConfig.HasPartitionStrategy() && tabletConfig->HasPartitionStrategy()) {
@@ -529,7 +534,7 @@ public:
                 .IsPQGroup()
                 .NotUnderOperation();
 
-            if (!Transaction.GetAllowAccessToPrivatePaths()) {
+            if (!Transaction.GetAllowAccessToPrivatePaths() && !Transaction.GetInternal()) {
                 checks.IsCommonSensePath();
             }
 
@@ -577,10 +582,13 @@ public:
             return result;
         }
 
-        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
+        alterData->ActivePartitionCount = topic->ActivePartitionCount;
+
+        bool splitMergeEnabled = EnableTopicSplitMerge
                 && NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
                 && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
 
+        THashSet<ui32> involvedPartitions;
         if (splitMergeEnabled) {
             auto Hex = [](const auto& value) {
                 return HexText(TBasicStringBuf(value));
@@ -589,10 +597,9 @@ public:
             ui32 nextId = topic->NextPartitionId;
             ui32 nextGroupId = topic->TotalGroupCount;
 
-            THashSet<ui32> involvedPartitions;
-
             for (const auto& split : alter.GetSplit()) {
                 alterData->TotalGroupCount += 2;
+                ++alterData->ActivePartitionCount;
 
                 const auto splittedPartitionId = split.GetPartition();
                 if (!topic->Partitions.contains(splittedPartitionId)) {
@@ -654,6 +661,7 @@ public:
             }
             for (const auto& merge : alter.GetMerge()) {
                 alterData->TotalGroupCount += 1;
+                --alterData->ActivePartitionCount;
 
                 const auto partitionId = merge.GetPartition();
                 if (!topic->Partitions.contains(partitionId)) {
@@ -737,6 +745,10 @@ public:
         }
 
         alterData->TotalPartitionCount = topic->TotalPartitionCount + alterData->PartitionsToAdd.size();
+        if (!splitMergeEnabled) {
+            alterData->ActivePartitionCount = alterData->TotalPartitionCount;
+        }
+
         alterData->NextPartitionId = topic->NextPartitionId;
         for (const auto& p : alterData->PartitionsToAdd) {
             if (p.GroupId == 0 || p.GroupId > alterData->TotalGroupCount) {
@@ -780,10 +792,11 @@ public:
             return result;
         }
 
-        const PQGroupReserve reserve(newTabletConfig, alterData->TotalPartitionCount);
-        const PQGroupReserve oldReserve(tabletConfig, topic->TotalPartitionCount);
+        const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount);
+        const PQGroupReserve reserveForCheckLimit(newTabletConfig, alterData->ActivePartitionCount + involvedPartitions.size());
+        const PQGroupReserve oldReserve(tabletConfig, topic->ActivePartitionCount);
 
-        const ui64 storageToReserve = reserve.Storage > oldReserve.Storage ? reserve.Storage - oldReserve.Storage : 0;
+        const ui64 storageToReserve = reserveForCheckLimit.Storage > oldReserve.Storage ? reserveForCheckLimit.Storage - oldReserve.Storage : 0;
 
         {
             TPath::TChecker checks = path.Check();

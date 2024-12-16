@@ -7,7 +7,8 @@ import ydb
 import json
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from abc import abstractmethod, ABC
-from typing import Set, List, Dict, Any, Callable
+from typing import Set, List, Dict, Any, Callable, Optional
+from time import sleep
 
 
 class TestContext:
@@ -58,6 +59,13 @@ class ScenarioTestHelper:
         sth.bulk_upsert(table_name, dg.DataGeneratorPerColumn(schema, 100), comment="100 sequetial ids")
         sth.execute_scheme_query(DropTable(table_name))
     """
+
+    DEFAULT_RETRIABLE_ERRORS = {
+        ydb.StatusCode.OVERLOADED,
+        ydb.StatusCode.BAD_SESSION,
+        ydb.StatusCode.CONNECTION_LOST,
+        ydb.StatusCode.UNAVAILABLE,
+    }
 
     class Column:
         """A class that describes a table column."""
@@ -215,7 +223,7 @@ class ScenarioTestHelper:
 
             pass
 
-    def __init__(self, context: TestContext) -> None:
+    def __init__(self, context: Optional[TestContext]) -> None:
         """Constructor.
 
         Args:
@@ -247,21 +255,37 @@ class ScenarioTestHelper:
         return result
 
     @staticmethod
-    def _run_with_expected_status(operation: callable, expected_status: ydb.StatusCode | Set[ydb.StatusCode]):
+    def _run_with_expected_status(
+        operation: Callable,
+        expected_status: ydb.StatusCode | Set[ydb.StatusCode],
+        retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = {},
+        n_retries=0,
+    ):
         if isinstance(expected_status, ydb.StatusCode):
             expected_status = {expected_status}
-        try:
-            result = operation()
-            if ydb.StatusCode.SUCCESS not in expected_status:
-                pytest.fail(
-                    f'Unexpected status: must be in {repr(expected_status)}, but get {repr(ydb.StatusCode.SUCCESS)}'
-                )
-            return result
-        except ydb.issues.Error as e:
-            allure.attach(f'{repr(e.status)}: {e}', 'request status', allure.attachment_type.TEXT)
-            if e.status not in expected_status:
-                pytest.fail(f'Unexpected status: must be in {repr(expected_status)}, but get {repr(e)}')
-            return None
+        if isinstance(retriable_status, ydb.StatusCode):
+            retriable_status = {retriable_status}
+
+        result = None
+        error = None
+        status = None
+        for _ in range(n_retries + 1):
+            try:
+                result = operation()
+                error = None
+                status = ydb.StatusCode.SUCCESS
+            except ydb.issues.Error as e:
+                result = None
+                error = e
+                status = error.status
+                allure.attach(f'{repr(status)}: {error}', 'request status', allure.attachment_type.TEXT)
+
+            if status in expected_status:
+                return result
+            if status not in retriable_status:
+                pytest.fail(f'Unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
+            sleep(3)
+        pytest.fail(f'Retries exceeded with unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
 
     def _bulk_upsert_impl(
         self, tablename: str, data_generator: ScenarioTestHelper.IDataGenerator, expected_status: ydb.StatusCode | Set[ydb.StatusCode]
@@ -296,12 +320,14 @@ class ScenarioTestHelper:
             assert sth.check_if_ydb_alive()
         """
 
-        return YdbCluster.check_if_ydb_alive(timeout)
+        return YdbCluster.check_if_ydb_alive(timeout)[0] is None
 
     def execute_scheme_query(
         self,
         yqlble: ScenarioTestHelper.IYqlble,
         expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS,
+        retries=0,
+        retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = DEFAULT_RETRIABLE_ERRORS,
         comment: str = '',
     ) -> None:
         """Run a schema query on the database under test.
@@ -330,7 +356,7 @@ class ScenarioTestHelper:
             yql = yqlble.to_yql(self.test_context)
             allure.attach(yql, 'request', allure.attachment_type.TEXT)
             self._run_with_expected_status(
-                lambda: YdbCluster.get_ydb_driver().table_client.session().create().execute_scheme(yql), expected_status
+                lambda: YdbCluster.get_ydb_driver().table_client.session().create().execute_scheme(yql), expected_status, retriable_status, retries
             )
 
     @classmethod
@@ -368,6 +394,26 @@ class ScenarioTestHelper:
                 rows += result_set.result_set.rows
         allure.attach(json.dumps(rows), 'result', allure.attachment_type.JSON)
         return ret
+
+    @allure.step('Execute query')
+    def execute_query(
+        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS
+    ):
+        """Run a query on the tested database.
+
+        Args:
+            yql: Query text.
+            expected_status: Expected status or set of database response statuses. If the response status is not in the expected set, an exception is thrown.
+
+        Example:
+            tablename = 'testTable'
+            sth = ScenarioTestHelper(ctx)
+            sth.execute_query(f'INSERT INTO `{sth.get_full_path("tablename") }` (key, c) values(1, 100)')
+        """
+
+        allure.attach(yql, 'request', allure.attachment_type.TEXT)
+        with ydb.QuerySessionPool(YdbCluster.get_ydb_driver()) as pool:
+            self._run_with_expected_status(lambda: pool.execute_with_retries(yql), expected_status)
 
     def drop_if_exist(self, names: List[str], operation) -> None:
         """Erase entities in the tested database, if it exists.
@@ -524,25 +570,20 @@ class ScenarioTestHelper:
             result_set = self.execute_scan_query(f'SELECT count(*) FROM `{self.get_full_path(tablename)}`')
             return result_set.result_set.rows[0][0]
 
-    @classmethod
-    def _list_directory_impl(cls, root_path: str, rel_path: str) -> List[ydb.SchemeEntry]:
-        result = []
-        for child in (
-            YdbCluster.get_ydb_driver().scheme_client.list_directory(os.path.join(root_path, rel_path)).children
-        ):
-            if child.name == '.sys':
-                continue
-            child.name = os.path.join(rel_path, child.name)
-            if child.is_directory() or child.is_column_store():
-                result += cls._list_directory_impl(root_path, child.name)
-            result.append(child)
-        return result
+    @allure.step('Describe table {path}')
+    def describe_table(self, path: str, settings: ydb.DescribeTableSettings = None) -> ydb.TableSchemeEntry:
+        """Get table description.
 
-    @classmethod
-    def _describe_path_impl(cls, path: str) -> ydb.SchemeEntry:
-        return cls._run_with_expected_status(
-            lambda: YdbCluster.get_ydb_driver().scheme_client.describe_path(path),
-            {ydb.StatusCode.SUCCESS, ydb.StatusCode.SCHEME_ERROR},
+        Args:
+            path: Relative path to a table.
+            settings: DescribeTableSettings.
+
+        Returns:
+            TableSchemeEntry object.
+        """
+
+        return self._run_with_expected_status(
+            lambda: YdbCluster.get_ydb_driver().table_client.session().create().describe_table(self.get_full_path(path), settings), ydb.StatusCode.SUCCESS
         )
 
     @allure.step('List path {path}')
@@ -560,15 +601,18 @@ class ScenarioTestHelper:
         """
 
         root_path = self.get_full_path('')
-        result = []
-        self_descr = self._describe_path_impl(os.path.join(root_path, path))
-        if self_descr is not None:
-            self_descr.name = path
-            if self_descr.is_directory():
-                result = self._list_directory_impl(root_path, path)
-            result.append(self_descr)
-        allure.attach('\n'.join([f'{e.name}: {repr(e.type)}' for e in result]), 'result', allure.attachment_type.TEXT)
-        return result
+        try:
+            self_descr = YdbCluster._describe_path_impl(os.path.join(root_path, path))
+        except ydb.issues.SchemeError:
+            return []
+
+        if self_descr is None:
+            return []
+
+        if self_descr.is_directory():
+            return list(reversed(YdbCluster.list_directory(root_path, path))) + [self_descr]
+        else:
+            return self_descr
 
     @allure.step('Remove path {path}')
     def remove_path(self, path: str) -> None:

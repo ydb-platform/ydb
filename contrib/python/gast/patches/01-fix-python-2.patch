@@ -1,0 +1,8 @@
+--- contrib/python/gast/gast/ast2.py	(index)
++++ contrib/python/gast/gast/ast2.py	(working tree)
+@@ -1,4 +1,4 @@
+-from astn import AstToGAst, GAstToAst
++from .astn import AstToGAst, GAstToAst
+ import ast
+ import gast
+ 

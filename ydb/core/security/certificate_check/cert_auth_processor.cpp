@@ -1,6 +1,7 @@
 #include "cert_auth_processor.h"
 
 #include <openssl/x509.h>
+#include <openssl/x509v3.h>
 #include <openssl/pem.h>
 #include <openssl/bio.h>
 #include <openssl/objects.h>
@@ -100,6 +101,56 @@ TVector<std::pair<TString, TString>> X509CertificateReader::ReadIssuerTerms(cons
     return ReadTerms(name);
 }
 
+static void FreeList(GENERAL_NAMES* list) {
+    sk_GENERAL_NAME_pop_free(list, GENERAL_NAME_free);
+}
+
+TVector<TString> X509CertificateReader::ReadSubjectDns(const X509Ptr& x509, const std::vector<std::pair<TString, TString>>& subjectTerms) {
+    TVector<TString> result;
+    // 1. Subject's common name (CN) must be a subject DNS name, so add it to DNS names of subject first
+    for (const auto& [k, v] : subjectTerms) {
+        if (k == "CN") {
+            result.emplace_back(v);
+        }
+    }
+
+    using TGeneralNamesPtr = std::unique_ptr<GENERAL_NAMES, deleter_from_fn<&FreeList>>;
+    TGeneralNamesPtr subjectAltNames((GENERAL_NAMES*)X509_get_ext_d2i(x509.get(), NID_subject_alt_name, NULL, NULL));
+    if (!subjectAltNames) {
+        return result;
+    }
+    const int subjectAltNamesCount = sk_GENERAL_NAME_num(subjectAltNames.get());
+    if (subjectAltNamesCount <= 0) {
+        return result;
+    }
+
+    result.reserve(static_cast<size_t>(subjectAltNamesCount) + result.size());
+    // 2. Additionally find subject alternative names with type=DNS
+    for (int i = 0; i < subjectAltNamesCount; ++i) {
+        const GENERAL_NAME* name = sk_GENERAL_NAME_value(subjectAltNames.get(), i);
+        if (!name) {
+            continue;
+        }
+        if (name->type == GEN_DNS) {
+            const ASN1_STRING* value = name->d.dNSName;
+            if (!value) {
+                continue;
+            }
+
+            const char* data = reinterpret_cast<const char*>(ASN1_STRING_get0_data(value));
+            if (!data) {
+                continue;
+            }
+            int size = ASN1_STRING_length(value);
+            if (size <= 0) {
+                continue;
+            }
+            result.emplace_back(data, static_cast<size_t>(size));
+        }
+    }
+    return result;
+}
+
 TString X509CertificateReader::GetFingerprint(const X509Ptr& x509) {
     static constexpr size_t FINGERPRINT_LENGTH = SHA_DIGEST_LENGTH;
     unsigned char fingerprint[FINGERPRINT_LENGTH];
@@ -109,14 +160,16 @@ TString X509CertificateReader::GetFingerprint(const X509Ptr& x509) {
     return HexEncode(fingerprint, FINGERPRINT_LENGTH);
 }
 
-TCertificateAuthorizationParams::TCertificateAuthorizationParams(const TDN& dn, bool requireSameIssuer, const std::vector<TString>& groups)
+TCertificateAuthorizationParams::TCertificateAuthorizationParams(const TDN& dn, const std::optional<TRDN>& subjectDns, bool requireSameIssuer, const std::vector<TString>& groups)
     : SubjectDn(dn)
+    , SubjectDns(subjectDns)
     , RequireSameIssuer(requireSameIssuer)
     , Groups(groups)
 {}
 
-TCertificateAuthorizationParams::TCertificateAuthorizationParams(TDN&& dn, bool requireSameIssuer, std::vector<TString>&& groups)
+TCertificateAuthorizationParams::TCertificateAuthorizationParams(TDN&& dn, std::optional<TRDN>&& subjectDns, bool requireSameIssuer, std::vector<TString>&& groups)
     : SubjectDn(std::move(dn))
+    , SubjectDns(std::move(subjectDns))
     , RequireSameIssuer(requireSameIssuer)
     , Groups(std::move(groups))
 {}
@@ -127,59 +180,44 @@ TCertificateAuthorizationParams::TDN& TCertificateAuthorizationParams::TDN::AddR
 }
 
 TCertificateAuthorizationParams::operator bool() const {
-    return SubjectDn;
+    return SubjectDn || SubjectDns;
 }
 
-bool TCertificateAuthorizationParams::CheckSubject(const std::unordered_map<TString, std::vector<TString>>& subjectDescription) const {
-    bool isDescriptionMatched = false;
-    for (const auto& rdn: SubjectDn.RDNs) {
-        isDescriptionMatched = false;
+bool TCertificateAuthorizationParams::CheckSubject(const std::unordered_map<TString, std::vector<TString>>& subjectDescription, const std::vector<TString>& subjectDns) const {
+    for (const TRDN& rdn: SubjectDn.RDNs) {
         auto fieldIt = subjectDescription.find(rdn.Attribute);
         if (fieldIt == subjectDescription.cend()) {
-            break;
+            return false;
         }
 
         const auto& attributeValues = fieldIt->second;
-        bool attributeMatched = false;
-        for (const auto& attributeValue : attributeValues) {
-            attributeMatched = false;
-            for (const auto& value: rdn.Values) {
-                if (value == attributeValue) {
-                    attributeMatched = true;
-                    break;
-                }
-            }
-            if (!attributeMatched) {
-                for (const auto& suffix: rdn.Suffixes) {
-                    if (attributeValue.EndsWith(suffix)) {
-                        attributeMatched = true;
-                        break;
-                    }
-                }
-            }
-            if (!attributeMatched) {
+        if (!rdn.Match(attributeValues)) {
+            return false;
+        }
+    }
+
+    if (SubjectDns) {
+        bool dnsMatched = false;
+        for (const TString& dns : subjectDns) {
+            if (SubjectDns->Match(dns)) {
+                dnsMatched = true;
                 break;
             }
         }
-        if (!attributeMatched) {
-            isDescriptionMatched = false;
-            break;
+        if (!dnsMatched) {
+            return false;
         }
-        isDescriptionMatched = true;
     }
 
-    if (isDescriptionMatched) {
-        return true;
-    }
-    return false;
+    return true;
 }
 
 TCertificateAuthorizationParams::TDN::operator bool() const {
     return !RDNs.empty();
 }
 
-TCertificateAuthorizationParams::TRDN::TRDN(const TString& Attribute)
-    :Attribute(Attribute)
+TCertificateAuthorizationParams::TRDN::TRDN(const TString& attribute)
+    : Attribute(attribute)
 {}
 
 TCertificateAuthorizationParams::TRDN& TCertificateAuthorizationParams::TRDN::AddValue(const TString& val)
@@ -192,6 +230,32 @@ TCertificateAuthorizationParams::TRDN& TCertificateAuthorizationParams::TRDN::Ad
 {
     Suffixes.push_back(suffix);
     return *this;
+}
+
+bool TCertificateAuthorizationParams::TRDN::Match(const TString& value) const
+{
+    for (const auto& v : Values) {
+        if (value == v) {
+            return true;
+        }
+    }
+    for (const auto& s : Suffixes) {
+        if (value.EndsWith(s)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool TCertificateAuthorizationParams::TRDN::Match(const std::vector<TString>& values) const
+{
+    for (const auto& value : values) {
+        if (!Match(value)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 }  //namespace NKikimr {

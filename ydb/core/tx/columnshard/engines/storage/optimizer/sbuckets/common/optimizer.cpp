@@ -4,8 +4,7 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
 TDuration GetCommonFreshnessCheckDuration() {
-    static const TDuration CommonFreshnessCheckDuration = TDuration::Seconds(300);
-    return NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration(CommonFreshnessCheckDuration);
+    return NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration();
 }
 
-}
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets

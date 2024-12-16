@@ -25,8 +25,7 @@ For example, you need to move equipment from data center-1 (DC-1) to data center
 1. The DC-2 hosts buffer equipment to transfer the first chunk of data to.
 1. Switch the status of all DC-1 disks to `DECOMMIT_PENDING` so that no data can be moved inside the DC-1.
 1. Switch the status of all DC-1 disks to `DECOMMIT_IMMINENT` on the equipment that is equivalent to the buffer one.
-
-   Wait until all the disks in the `DECOMMIT_IMMINENT` status are released.
+1. Wait until all the disks in the `DECOMMIT_IMMINENT` status are released.
 1. Move the released equipment from the DC-1 to the DC-2 and switch the status of its disks to `DECOMMIT_NONE`.
 
 Repeat the above steps for the next set of equipment in the DC-1 until all the equipment is moved.

@@ -42,12 +42,12 @@ namespace NKikimr {
     TEvFrontRecoveryStatus::TEvFrontRecoveryStatus(EPhase phase,
             NKikimrProto::EReplyStatus status,
             const TIntrusivePtr<TPDiskParams> &dsk,
-            ui32 minREALHugeBlobInBytes,
+            ui32 minHugeBlobInBytes,
             TVDiskIncarnationGuid vdiskIncarnationGuid)
         : Phase(phase)
         , Status(status)
         , Dsk(dsk)
-        , MinREALHugeBlobInBytes(minREALHugeBlobInBytes)
+        , MinHugeBlobInBytes(minHugeBlobInBytes)
         , VDiskIncarnationGuid(vdiskIncarnationGuid)
     {}
 
@@ -636,6 +636,7 @@ namespace NKikimr {
         friend class TIntQueueClass;
 
         TVDiskContextPtr VCtx;
+        TPDiskErrorState PDiskErrorState;
         TIntrusivePtr<TVDiskConfig> Config;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
@@ -815,7 +816,7 @@ namespace NKikimr {
                         TBlobStorageGroupType type = (GInfo ? GInfo->Type : TErasureType::ErasureNone);
                         VCtx->UpdateCostModel(std::make_unique<TCostModel>(msg->Dsk->SeekTimeUs, msg->Dsk->ReadSpeedBps,
                             msg->Dsk->WriteSpeedBps, msg->Dsk->ReadBlockSize, msg->Dsk->WriteBlockSize,
-                            msg->MinREALHugeBlobInBytes, type));
+                            msg->MinHugeBlobInBytes, type));
                         break;
                     }
                     case TEvFrontRecoveryStatus::SyncGuidRecoveryDone:
@@ -830,7 +831,7 @@ namespace NKikimr {
         void Handle(TEvMinHugeBlobSizeUpdate::TPtr &ev) {
             VCtx->UpdateCostModel(std::make_unique<TCostModel>(VCtx->CostModel->SeekTimeUs, VCtx->CostModel->ReadSpeedBps,
                 VCtx->CostModel->WriteSpeedBps, VCtx->CostModel->ReadBlockSize, VCtx->CostModel->WriteBlockSize,
-                ev->Get()->MinREALHugeBlobInBytes, VCtx->CostModel->GType));
+                ev->Get()->MinHugeBlobInBytes, VCtx->CostModel->GType));
         }
 
         static NKikimrWhiteboard::EFlag ToLightSignal(NKikimrWhiteboard::EVDiskState st) {
@@ -934,7 +935,7 @@ namespace NKikimr {
                                         TABLED() {str << "Error Details";}
                                         TABLED() {
                                             str << "PDisk reported error: "
-                                                << TPDiskErrorState::StateToString(VCtx->GetPDiskErrorState());
+                                                << PDiskErrorState.ToString();
                                         }
                                     }
                                 } else if (VCtx->LocalRecoveryErrorStr) {
@@ -1093,6 +1094,16 @@ namespace NKikimr {
                 ev->Record.SetReplicationSecondsRemaining(0);
             }
             ctx.Send(SelfId(), ev.release());
+            ctx.Send(MakeBlobStorageNodeWardenID(VCtx->NodeId),
+                     new TEvBlobStorage::TEvControllerUpdateDiskStatus(
+                         SelfVDiskId,
+                         SelfId().NodeId(),
+                         Config->BaseInfo.PDiskId,
+                         Config->BaseInfo.VDiskSlotId,
+                         std::nullopt,
+                         state,
+                         replicated,
+                         outOfSpaceFlags));
             // repeat later
             if (schedule) {
                 ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard);
@@ -1663,11 +1674,14 @@ namespace NKikimr {
         }
 
         void Handle(TEvPDiskErrorStateChange::TPtr &ev, const TActorContext &ctx) {
+            auto errorStateChange = ev->Get();
+            
+            PDiskErrorState.Set(errorStateChange->Status, errorStateChange->PDiskFlags, errorStateChange->ErrorReason);
+
             LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
                     << "SkeletonFront: got TEvPDiskErrorStateChange;"
-                    << " state# " << TPDiskErrorState::StateToString(ev->Get()->State)
+                    << PDiskErrorState.ToString()
                     << " Marker# BSVSF03");
-
 
             // switch skeleton state to PDiskError
             SkeletonFrontGroup->ResetCounters();

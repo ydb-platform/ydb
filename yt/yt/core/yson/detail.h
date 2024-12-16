@@ -64,7 +64,7 @@ public:
         Offset += end - begin;
         for (auto current = begin; current != end; ++current) {
             ++Column;
-            if (*current == '\n') { //TODO: memchr
+            if (*current == '\n') { // TODO: memchr
                 ++Line;
                 Column = 1;
             }

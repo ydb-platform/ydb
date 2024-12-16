@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
-#include <ydb/library/yql/ast/yql_pos_handle.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_pos_handle.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 namespace NYql {
 
@@ -46,8 +46,31 @@ struct TKqpPhyTxSettings {
 constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
 constexpr TStringBuf KqpTableSinkName = "KqpTableSinkName";
 
-static constexpr std::string_view TKqpStreamLookupStrategyName = "LookupRows"sv;
-static constexpr std::string_view TKqpStreamLookupJoinStrategyName = "LookupJoinRows"sv;
+enum class EStreamLookupStrategyType {
+    Unspecified,
+    LookupRows,
+    LookupJoinRows,
+    LookupSemiJoinRows,
+};
+
+struct TKqpStreamLookupSettings {
+    static constexpr TStringBuf StrategySettingName = "Strategy";
+    static constexpr TStringBuf AllowNullKeysSettingName = "AllowNullKeysPrefixSize";
+
+    // stream lookup strategy types
+    static constexpr std::string_view LookupStrategyName = "LookupRows"sv;
+    static constexpr std::string_view LookupJoinStrategyName = "LookupJoinRows"sv;
+    static constexpr std::string_view LookupSemiJoinStrategyName = "LookupSemiJoinRows"sv;
+
+    TMaybe<ui32> AllowNullKeysPrefixSize;
+    EStreamLookupStrategyType Strategy = EStreamLookupStrategyType::Unspecified;
+
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
+    static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupTable& node);
+    static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupIndex& node);
+    static TKqpStreamLookupSettings Parse(const NNodes::TKqpCnStreamLookup& node);
+    static TKqpStreamLookupSettings Parse(const NNodes::TCoNameValueTupleList& node);
+};
 
 struct TKqpReadTableSettings {
     static constexpr TStringBuf SkipNullKeysSettingName = "SkipNullKeys";

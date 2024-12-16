@@ -81,6 +81,7 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     ui64 DocumentApiVersion = 0;
     NJson::TJsonValue AsyncReplication;
     bool IsAsyncReplica = false;
+    bool IsRestoreTable = false;
 
     // Number of references to this path element in the database
     size_t DbRefCount = 0;
@@ -124,6 +125,7 @@ public:
     bool IsColumnTable() const;
     bool IsSequence() const;
     bool IsReplication() const;
+    bool IsTransfer() const;
     bool IsBlobDepot() const;
     bool IsContainer() const;
     bool IsLikeDirectory() const;
@@ -131,9 +133,11 @@ public:
     bool IsCreateFinished() const;
     bool IsExternalTable() const;
     bool IsExternalDataSource() const;
+    bool IsIncrementalBackupTable() const;
     bool IsView() const;
     bool IsTemporary() const;
     bool IsResourcePool() const;
+    bool IsBackupCollection() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);
@@ -160,7 +164,8 @@ public:
     void ChangeFileStoreSpaceBegin(TFileStoreSpace newSpace, TFileStoreSpace oldSpace);
     void ChangeFileStoreSpaceCommit(TFileStoreSpace newSpace, TFileStoreSpace oldSpace);
     bool CheckFileStoreSpaceChange(TFileStoreSpace newSpace, TFileStoreSpace oldSpace, TString& errStr);
-    void SetAsyncReplica();
+    void SetAsyncReplica(bool value);
+    void SetRestoreTable();
     bool HasRuntimeAttrs() const;
     void SerializeRuntimeAttrs(google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TUserAttribute>* userAttrs) const;
 };

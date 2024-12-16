@@ -1,17 +1,26 @@
 items:
-- name: Log records collection using FluentBit
-  href: fluent-bit.md
-- name: Grafana data source
-  href: grafana.md
-- name: Logstash plugins
-  href: logstash.md
-- name: Schema migrations with goose
-  href: goose.md
-- name: Schema migrations with Liquibase
-  href: liquibase.md
-- name: Schema migrations with Flyway
-  href: flyway.md
-- name: Using Hibernate
-  href: hibernate.md
-- name: Importing from JDBC data sources
-  href: import-jdbc.md
+- name: Graphical user interfaces
+  href: gui/index.md
+  include:
+    mode: link
+    path: gui/toc-ide.yaml
+- name: Data visualization
+  href: visualization/index.md
+  include:
+    mode: link
+    path: visualization/toc-visualization.yaml
+- name: Data ingestion
+  href: ingestion/index.md
+  include:
+    mode: link
+    path: ingestion/toc-ingestion.yaml
+- name: Data migrations
+  href: migration/index.md
+  include:
+    mode: link
+    path: migration/toc-migration.yaml
+- name: Object–relational mapping
+  href: orm/index.md
+  include:
+    mode: link
+    path: orm/toc-orm.yaml

@@ -9,6 +9,7 @@
 #include <yt/yt/client/transaction_client/public.h>
 
 #include <yt/yt/core/misc/range.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
@@ -45,6 +46,8 @@ class THunkChunkRef;
 class TColumnMetaExt;
 class TVersionedRowDigestExt;
 class TCompressionDictionaryExt;
+class TVersionedReadOptions;
+class TVersionedWriteOptions;
 
 } // namespace NProto
 
@@ -74,7 +77,7 @@ using NTransactionClient::AsyncLastCommittedTimestamp;
 using NTransactionClient::AllCommittedTimestamp;
 using NTransactionClient::NotPreparedTimestamp;
 
-using TKeyColumns = std::vector<TString>;
+using TKeyColumns = std::vector<std::string>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -116,18 +119,20 @@ constexpr int MaxColumnId = 32 * 1024;
 constexpr int MaxSchemaTotalTypeComplexity = MaxColumnId;
 constexpr int MaxSchemaDepth = 32;
 
-extern const TString SystemColumnNamePrefix;
-extern const TString TableIndexColumnName;
-extern const TString RowIndexColumnName;
-extern const TString RangeIndexColumnName;
-extern const TString TabletIndexColumnName;
-extern const TString TimestampColumnName;
-extern const TString TtlColumnName;
-extern const TString TimestampColumnPrefix;
-extern const TString CumulativeDataWeightColumnName;
-extern const TString EmptyValueColumnName;
-extern const TString PrimaryLockName;
-extern const TString SequenceNumberColumnName;
+extern const std::string PrimaryLockName;
+
+extern const std::string SystemColumnNamePrefix;
+extern const std::string NonexistentColumnName;
+extern const std::string TableIndexColumnName;
+extern const std::string RowIndexColumnName;
+extern const std::string RangeIndexColumnName;
+extern const std::string TabletIndexColumnName;
+extern const std::string TimestampColumnName;
+extern const std::string TtlColumnName;
+extern const std::string TimestampColumnPrefix;
+extern const std::string CumulativeDataWeightColumnName;
+extern const std::string EmptyValueColumnName;
+extern const std::string SequenceNumberColumnName;
 
 constexpr int TypicalHunkColumnCount = 8;
 
@@ -146,7 +151,13 @@ DEFINE_ENUM(ETableSchemaMode,
     ((Strong)    (1))
 );
 
-DEFINE_ENUM(EOptimizeFor,
+// TODO(cherepashka): remove after corresponding compat in 25.1 will be removed.
+DEFINE_ENUM(ECompatOptimizeFor,
+    ((Lookup)  (0))
+    ((Scan)    (1))
+);
+
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, int,
     ((Lookup)  (0))
     ((Scan)    (1))
 );
@@ -177,7 +188,7 @@ YT_DEFINE_ERROR_ENUM(
     ((DuplicateColumnInSchema)           (322))
     ((MissingRequiredColumnInSchema)     (323))
     ((IncomparableComplexValues)         (324))
-    ((KeyCannotBeNan)                    (325))
+    ((KeyCannotBeNaN)                    (325))
     ((StringLikeValueLengthLimitExceeded)(326))
     ((NameTableUpdateFailed)             (327))
     ((InvalidTableChunkFormat)           (328))
@@ -303,7 +314,7 @@ class TKeyComparer;
 struct TColumnRenameDescriptor;
 using TColumnRenameDescriptors = std::vector<TColumnRenameDescriptor>;
 
-YT_DEFINE_STRONG_TYPEDEF(TColumnStableName, TString);
+YT_DEFINE_STRONG_TYPEDEF(TColumnStableName, std::string);
 
 class TColumnSchema;
 
@@ -439,6 +450,7 @@ static_assert(sizeof(TDynamicTableKeyMask) * 8 == MaxKeyColumnCountInDynamicTabl
 using TUUComparerSignature = int(const TUnversionedValue*, const TUnversionedValue*, int);
 
 struct TVersionedReadOptions;
+struct TVersionedWriteOptions;
 
 ////////////////////////////////////////////////////////////////////////////////
 

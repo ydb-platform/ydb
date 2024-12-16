@@ -42,8 +42,7 @@ public:
     )
     
     void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        auto response = MakeHolder<NKikimr::NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        response->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        auto response = MakeHolder<NKikimr::NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(ResultSizeLimit_);
 
         auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
@@ -102,12 +101,17 @@ private:
 class TAsyncQueryRunnerActor : public NActors::TActor<TAsyncQueryRunnerActor> {
     using TBase = NActors::TActor<TAsyncQueryRunnerActor>;
 
+    struct TRequestInfo {
+        TInstant StartTime;
+        NThreading::TFuture<TQueryResponse> RequestFuture;
+    };
+
 public:
-    TAsyncQueryRunnerActor(ui64 inFlightLimit)
+    TAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings)
         : TBase(&TAsyncQueryRunnerActor::StateFunc)
-        , InFlightLimit_(inFlightLimit)
+        , Settings_(settings)
     {
-        RunningRequests_.reserve(InFlightLimit_);
+        RunningRequests_.reserve(Settings_.InFlightLimit);
     }
 
     STRICT_STFUNC(StateFunc,
@@ -123,19 +127,27 @@ public:
 
     void Handle(TEvPrivate::TEvAsyncQueryFinished::TPtr& ev) {
         const ui64 requestId = ev->Get()->RequestId;
+        RequestsLatency_ += TInstant::Now() - RunningRequests_[requestId].StartTime;
         RunningRequests_.erase(requestId);
 
-        const auto& response = ev->Get()->Result.Response->Get()->Record.GetRef();
+        const auto& response = ev->Get()->Result.Response->Get()->Record;
         const auto status = response.GetYdbStatus();
 
         if (status == Ydb::StatusIds::SUCCESS) {
             Completed_++;
-            Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " completed. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
+            if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::EachQuery) {
+                Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " completed. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
+            }
         } else {
             Failed_++;
             NYql::TIssues issues;
             NYql::IssuesFromMessage(response.GetResponse().GetQueryIssues(), issues);
             Cout << CoutColors_.Red() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " failed " << status << ". " << CoutColors_.Yellow() << GetInfoString() << "\n" << CoutColors_.Red() << "Issues:\n" << issues.ToString() << CoutColors_.Default();
+        }
+
+        if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::Final && TInstant::Now() - LastReportTime_ > TDuration::Seconds(1)) {
+            Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Finished " << Failed_ + Completed_ << " requests. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
+            LastReportTime_ = TInstant::Now();
         }
 
         StartDelayedRequests();
@@ -151,18 +163,23 @@ public:
 
 private:
     void StartDelayedRequests() {
-        while (!DelayedRequests_.empty() && (!InFlightLimit_ || RunningRequests_.size() < InFlightLimit_)) {
+        while (!DelayedRequests_.empty() && (!Settings_.InFlightLimit || RunningRequests_.size() < Settings_.InFlightLimit)) {
             auto request = std::move(DelayedRequests_.front());
             DelayedRequests_.pop();
 
             auto promise = NThreading::NewPromise<TQueryResponse>();
             Register(CreateRunScriptActorMock(std::move(request->Get()->Request), promise, nullptr));
-            RunningRequests_[RequestId_] = promise.GetFuture().Subscribe([id = RequestId_, this](const NThreading::TFuture<TQueryResponse>& f) {
-                Send(SelfId(), new TEvPrivate::TEvAsyncQueryFinished(id, std::move(f.GetValue())));
-            });
+            RunningRequests_[RequestId_] = {
+                .StartTime = TInstant::Now(),
+                .RequestFuture = promise.GetFuture().Subscribe([id = RequestId_, this](const NThreading::TFuture<TQueryResponse>& f) {
+                    Send(SelfId(), new TEvPrivate::TEvAsyncQueryFinished(id, std::move(f.GetValue())));
+                })
+            };
 
             MaxInFlight_ = std::max(MaxInFlight_, RunningRequests_.size());
-            Cout << TStringBuilder() << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << RequestId_ << " started. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
+            if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::EachQuery) {
+                Cout << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << RequestId_ << " started. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
+            }
 
             RequestId_++;
             request->Get()->StartPromise.SetValue();
@@ -174,28 +191,38 @@ private:
             return false;
         }
 
+        if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::Final) {
+            Cout << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " All async requests finished. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
+        }
+
         FinalizePromise_->SetValue();
         PassAway();
         return true;
     }
 
     TString GetInfoString() const {
-        return TStringBuilder() << "completed: " << Completed_ << ", failed: " << Failed_ << ", in flight: " << RunningRequests_.size() << ", max in flight: " << MaxInFlight_ << ", spend time: " << TInstant::Now() - StartTime_;
+        TStringBuilder result = TStringBuilder() << "completed: " << Completed_ << ", failed: " << Failed_ << ", in flight: " << RunningRequests_.size() << ", max in flight: " << MaxInFlight_ << ", spend time: " << TInstant::Now() - StartTime_;
+        if (const auto amountRequests = Completed_ + Failed_) {
+            result << ", average latency: " << RequestsLatency_ / amountRequests;
+        }
+        return result;
     }
 
 private:
-    const ui64 InFlightLimit_;
+    const TAsyncQueriesSettings Settings_;
     const TInstant StartTime_ = TInstant::Now();
     const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
 
     std::optional<NThreading::TPromise<void>> FinalizePromise_;
     std::queue<TEvPrivate::TEvStartAsyncQuery::TPtr> DelayedRequests_;
-    std::unordered_map<ui64, NThreading::TFuture<TQueryResponse>> RunningRequests_;
+    std::unordered_map<ui64, TRequestInfo> RunningRequests_;
+    TInstant LastReportTime_ = TInstant::Now();
 
     ui64 RequestId_ = 1;
     ui64 MaxInFlight_ = 0;
     ui64 Completed_ = 0;
     ui64 Failed_ = 0;
+    TDuration RequestsLatency_;
 };
 
 class TResourcesWaiterActor : public NActors::TActorBootstrapped<TResourcesWaiterActor> {
@@ -264,18 +291,129 @@ private:
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
 };
 
+class TSessionHolderActor : public NActors::TActorBootstrapped<TSessionHolderActor> {
+public:
+    TSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise)
+        : TargetNode_(request.TargetNode)
+        , TraceId_(request.Event->Record.GetTraceId())
+        , Request_(std::move(request.Event))
+        , OpenPromise_(openPromise)
+        , ClosePromise_(closePromise)
+    {}
+
+    void Bootstrap() {
+        Become(&TSessionHolderActor::StateFunc);
+        Send(NKikimr::NKqp::MakeKqpProxyID(TargetNode_), std::move(Request_));
+    }
+
+    void Handle(NKikimr::NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
+        const auto& response = ev->Get()->Record;
+        if (response.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+            FailAndPassAway(TStringBuilder() << "Failed to create session, " << response.GetYdbStatus() << ", reason: " << response.GetError() << "\n");
+            return;
+        }
+
+        SessionId_ = response.GetResponse().GetSessionId();
+        Cout << CoutColors_.Cyan() << "Created new session on node " << TargetNode_ << " with id " << SessionId_ << "\n";
+
+        PingSession();
+    }
+
+    void PingSession() {
+        auto event = std::make_unique<NKikimr::NKqp::TEvKqp::TEvPingSessionRequest>();
+        event->Record.SetTraceId(TraceId_);
+        event->Record.MutableRequest()->SetSessionId(SessionId_);
+        NActors::ActorIdToProto(SelfId(), event->Record.MutableRequest()->MutableExtSessionCtrlActorId());
+
+        Send(NKikimr::NKqp::MakeKqpProxyID(TargetNode_), std::move(event));
+    }
+
+    void Handle(NKikimr::NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev) {
+        const auto& response = ev->Get()->Record;
+        if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(response.GetIssues(), issues);
+            FailAndPassAway(TStringBuilder() << "Failed to ping session, " << response.GetStatus() << ", reason:\n" << issues.ToString() << "\n");
+            return;
+        }
+
+        if (!OpenPromise_.HasValue()) {
+            OpenPromise_.SetValue(SessionId_);
+        }
+
+        Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
+    }
+
+    void CloseSession() {
+        if (!SessionId_) {
+            FailAndPassAway("Failed to close session, creation is not finished");
+            return;
+        }
+
+        auto event = std::make_unique<NKikimr::NKqp::TEvKqp::TEvCloseSessionRequest>();
+        event->Record.SetTraceId(TraceId_);
+        event->Record.MutableRequest()->SetSessionId(SessionId_);
+
+        Send(NKikimr::NKqp::MakeKqpProxyID(TargetNode_), std::move(event));
+    }
+
+    void Handle(NKikimr::NKqp::TEvKqp::TEvCloseSessionResponse::TPtr& ev) {
+        const auto& response = ev->Get()->Record;
+        if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(response.GetIssues(), issues);
+            FailAndPassAway(TStringBuilder() << "Failed to close session, " << response.GetStatus() << ", reason:\n" << issues.ToString() << "\n");
+            return;
+        }
+
+        ClosePromise_.SetValue();
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(NKikimr::NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+        hFunc(NKikimr::NKqp::TEvKqp::TEvPingSessionResponse, Handle);
+        hFunc(NKikimr::NKqp::TEvKqp::TEvCloseSessionResponse, Handle);
+        sFunc(NActors::TEvents::TEvWakeup, PingSession);
+        sFunc(NActors::TEvents::TEvPoison, CloseSession);
+    )
+
+private:
+    void FailAndPassAway(const TString& error) {
+        if (!OpenPromise_.HasValue()) {  
+            OpenPromise_.SetException(error);
+        }
+        ClosePromise_.SetException(error);
+        PassAway();
+    }
+
+private:
+    const ui32 TargetNode_;
+    const TString TraceId_;
+    const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
+
+    std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest> Request_;
+    NThreading::TPromise<TString> OpenPromise_;
+    NThreading::TPromise<void> ClosePromise_;
+    TString SessionId_;
+};
+
 }  // anonymous namespace
 
 NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback) {
     return new TRunScriptActorMock(std::move(request), promise, progressCallback);
 }
 
-NActors::IActor* CreateAsyncQueryRunnerActor(ui64 inFlightLimit) {
-    return new TAsyncQueryRunnerActor(inFlightLimit);
+NActors::IActor* CreateAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings) {
+    return new TAsyncQueryRunnerActor(settings);
 }
 
 NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount) {
     return new TResourcesWaiterActor(promise, expectedNodeCount);
+}
+
+NActors::IActor* CreateSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise) {
+    return new TSessionHolderActor(std::move(request), openPromise, closePromise);
 }
 
 }  // namespace NKqpRun

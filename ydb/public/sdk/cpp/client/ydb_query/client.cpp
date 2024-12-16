@@ -18,7 +18,8 @@
 
 namespace NYdb::NQuery {
 
-using TRetryContextAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
+using TRetryContextResultAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
+using TRetryContextAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
 
 NYdb::NRetry::TRetryOperationSettings GetRetrySettings(TDuration timeout, bool isIndempotent) {
     return NYdb::NRetry::TRetryOperationSettings()
@@ -86,7 +87,7 @@ public:
         auto request = MakeOperationRequest<ExecuteScriptRequest>(settings);
         request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
         request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
-        request.set_pool_id(settings.PoolId_);
+        request.set_pool_id(settings.ResourcePool_);
         request.mutable_script_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
         request.mutable_script_content()->set_text(script);
         SetDuration(settings.ResultsTtl_, *request.mutable_results_ttl());
@@ -483,15 +484,11 @@ public:
             return false;
         };
 
-        // No need to keep-alive
-        auto keepAliveCmd = [](TKqpSessionCommon*) {
-        };
-
         std::weak_ptr<TQueryClient::TImpl> weak = shared_from_this();
         Connections_->AddPeriodicTask(
             SessionPool_.CreatePeriodicTask(
                 weak,
-                std::move(keepAliveCmd),
+                NSessionPool::TSessionPool::TKeepAliveCmd(), // no keep-alive cmd for query service
                 std::move(deletePredicate)
             ), NSessionPool::PERIODIC_ACTION_INTERVAL);
     }
@@ -574,10 +571,30 @@ i64 TQueryClient::GetCurrentPoolSize() const {
     return Impl_->GetCurrentPoolSize();
 }
 
-TAsyncExecuteQueryResult TQueryClient::RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings)
+TAsyncExecuteQueryResult TQueryClient::RetryQuery(TQueryResultFunc&& queryFunc, TRetryOperationSettings settings)
 {
+    TRetryContextResultAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
+    return ctx->Execute();
+}
+
+TAsyncStatus TQueryClient::RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings) {
     TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
     return ctx->Execute();
+}
+
+TAsyncStatus TQueryClient::RetryQuery(TQueryWithoutSessionFunc&& queryFunc, TRetryOperationSettings settings) {
+    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithoutSession(*this, std::move(queryFunc), settings));
+    return ctx->Execute();
+}
+
+TStatus TQueryClient::RetryQuerySync(const TQuerySyncFunc& queryFunc, TRetryOperationSettings settings) {
+    NRetry::Sync::TRetryWithSession ctx(*this, queryFunc, settings);
+    return ctx.Execute();
+}
+
+TStatus TQueryClient::RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings) {
+    NRetry::Sync::TRetryWithoutSession ctx(*this, queryFunc, settings);
+    return ctx.Execute();
 }
 
 TAsyncExecuteQueryResult TQueryClient::RetryQuery(const TString& query, const TTxControl& txControl,
@@ -587,7 +604,7 @@ TAsyncExecuteQueryResult TQueryClient::RetryQuery(const TString& query, const TT
     auto queryFunc = [&query, &txControl](TSession session, TDuration duration) -> TAsyncExecuteQueryResult {
         return session.ExecuteQuery(query, txControl, TExecuteQuerySettings().ClientTimeout(duration));
     };
-    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
+    TRetryContextResultAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
     return ctx->Execute();
 }
 

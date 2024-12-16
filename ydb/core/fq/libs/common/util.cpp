@@ -62,18 +62,24 @@ private:
     TString DatabasePath; 
 };
 
+void EscapeBackslashes(TString& value) {
+    SubstGlobal(value, "\\", "\\\\");
+}
+
 }
 
 TString EscapeString(const TString& value,
                      const TString& enclosingSeq,
                      const TString& replaceWith) {
     auto escapedValue = value;
+    EscapeBackslashes(escapedValue);
     SubstGlobal(escapedValue, enclosingSeq, replaceWith);
     return escapedValue;
 }
 
 TString EscapeString(const TString& value, char enclosingChar) {
     auto escapedValue = value;
+    EscapeBackslashes(escapedValue);
     SubstGlobal(escapedValue,
                 TString{enclosingChar},
                 TStringBuilder{} << '\\' << enclosingChar);
@@ -129,6 +135,12 @@ TString ExtractServiceAccountId(const FederatedQuery::ConnectionSetting& setting
     case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
         return GetServiceAccountId(setting.greenplum_cluster().auth());
     }
+    case FederatedQuery::ConnectionSetting::kMysqlCluster: {
+        return GetServiceAccountId(setting.mysql_cluster().auth());
+    }
+    case FederatedQuery::ConnectionSetting::kLogging: {
+        return GetServiceAccountId(setting.logging().auth());
+    }
     // Do not replace with default. Adding a new connection should cause a compilation error
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
     break;
@@ -162,6 +174,10 @@ TMaybe<TString> GetLogin(const FederatedQuery::ConnectionSetting& setting) {
             return setting.postgresql_cluster().login();
         case FederatedQuery::ConnectionSetting::kGreenplumCluster:
             return setting.greenplum_cluster().login();
+        case FederatedQuery::ConnectionSetting::kMysqlCluster:
+            return setting.mysql_cluster().login();
+        case FederatedQuery::ConnectionSetting::kLogging:
+            return {};
     }
 }
 
@@ -183,6 +199,10 @@ TMaybe<TString> GetPassword(const FederatedQuery::ConnectionSetting& setting) {
             return setting.postgresql_cluster().password();
         case FederatedQuery::ConnectionSetting::kGreenplumCluster:
             return setting.greenplum_cluster().password();
+        case FederatedQuery::ConnectionSetting::kMysqlCluster:
+            return setting.mysql_cluster().password();
+        case FederatedQuery::ConnectionSetting::kLogging:
+            return {};
     }
 }
 
@@ -204,6 +224,10 @@ EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting&
             return GetBasicAuthMethod(setting.postgresql_cluster().auth());
         case FederatedQuery::ConnectionSetting::kGreenplumCluster:
             return GetBasicAuthMethod(setting.greenplum_cluster().auth());
+        case FederatedQuery::ConnectionSetting::kMysqlCluster:
+            return GetBasicAuthMethod(setting.mysql_cluster().auth());
+        case FederatedQuery::ConnectionSetting::kLogging:
+            return GetIamAuthMethod(setting.logging().auth());
     }
 }
 
@@ -223,6 +247,10 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
         return connection.content().setting().postgresql_cluster().auth();
     case FederatedQuery::ConnectionSetting::kGreenplumCluster:
         return connection.content().setting().greenplum_cluster().auth();
+    case FederatedQuery::ConnectionSetting::kMysqlCluster:
+        return connection.content().setting().mysql_cluster().auth();
+    case FederatedQuery::ConnectionSetting::kLogging:
+        return connection.content().setting().logging().auth();
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         return FederatedQuery::IamAuth{};
     }

@@ -2,9 +2,9 @@
 
 Union of the results of the underlying queries, with duplicates removed.
 Behavior is identical to using `UNION ALL` followed by `SELECT DISTINCT *`.
-Refer to [UNION ALL](#union-all) for more details.
+Refer to [UNION ALL](../../select/union.md#union-all) for more details.
 
-**Примеры**
+### Examples
 
 ```yql
 SELECT key FROM T1

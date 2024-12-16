@@ -1,6 +1,7 @@
 #include "data_generator.h"
 #include "driver.h"
 #include <util/folder/path.h>
+#include <util/string/printf.h>
 
 namespace NYdbWorkload {
 
@@ -44,29 +45,10 @@ TBulkDataGeneratorList TTpchWorkloadDataInitializerGenerator::DoGetBulkInitialDa
     return TBulkDataGeneratorList(gens.begin(), gens.end());
 }
 
-
-ui64 TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::CalcCountToGenerate(const TTpchWorkloadDataInitializerGenerator& owner, int tableNum, bool useState) {
-    if (tableNum == NONE) {
-        return 0;
-    }
-    ui64 position = 0;
-    if (useState && owner.StateProcessor && owner.StateProcessor->GetState().contains(tdefs[tableNum].name)) {
-        position = owner.StateProcessor->GetState().at(tdefs[tableNum].name).Position;
-    }
-    if (tableNum >= NATION) {
-        return owner.GetProcessIndex() ? 0 : (tdefs[tableNum].base - position);
-    }
-    ui64 rowCount = tdefs[tableNum].base * owner.GetScale();
-    ui64 extraRows = 0;
-    if (owner.GetProcessIndex() + 1 >= owner.GetProcessCount()) {
-        extraRows = rowCount % owner.GetProcessCount();
-    }
-    return rowCount / owner.GetProcessCount() + extraRows - position;
-}
-
-TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::TContext(const TBulkDataGenerator& owner, int tableNum)
+TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::TContext(const TBulkDataGenerator& owner, int tableNum, TGeneratorStateProcessor* state)
     : Owner(owner)
     , TableNum(tableNum)
+    , State(state)
 {}
 
 NYdb::TValueBuilder& TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::GetBuilder() {
@@ -85,9 +67,23 @@ void TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::Append
     const auto path = Owner.GetFullTableName(tdefs[TableNum].name);
     if (Builder) {
         Builder->EndList();
-        result.push_back(MakeIntrusive<TDataPortion>(path, Builder->Build(), Count));
+        result.push_back(MakeIntrusive<TDataPortionWithState>(
+            State,
+            path,
+            tdefs[TableNum].name,
+            Builder->Build(),
+            Start - Owner.FirstRow,
+            Count
+        ));
     } else if (Csv) {
-        result.push_back(MakeIntrusive<TDataPortion>(path, TDataPortion::TCsv(std::move(Csv), TWorkloadGeneratorBase::TsvFormatString), Count));
+        result.push_back(MakeIntrusive<TDataPortionWithState>(
+            State,
+            path,
+            tdefs[TableNum].name,
+            TDataPortion::TCsv(std::move(Csv), TWorkloadGeneratorBase::PsvFormatString),
+            Start - Owner.FirstRow,
+            Count
+        ));
     }
 }
 
@@ -96,53 +92,94 @@ TString TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::GetFullTableN
 }
 
 TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TBulkDataGenerator(const TTpchWorkloadDataInitializerGenerator& owner, int tableNum)
-    : IBulkDataGenerator(tdefs[tableNum].name, CalcCountToGenerate(owner, tableNum, true))
+    : IBulkDataGenerator(tdefs[tableNum].name, 0)
     , TableNum(tableNum)
     , Owner(owner)
-    , TableSize(CalcCountToGenerate(owner, tableNum, false))
-{}
+{
+    if (TableNum == NONE) {
+        return;
+    }
+    if (tableNum >= NATION) {
+        Size = owner.GetProcessIndex() ? 0 : tdefs[tableNum].base;
+    } else {
+        DSS_HUGE extraRows = 0;
+        Size = set_state(TableNum, Owner.GetScale(), Owner.GetProcessCount(), Owner.GetProcessIndex() + 1, &extraRows);
+        FirstRow += Size * Owner.GetProcessIndex();
+        if (Owner.GetProcessIndex() + 1 == Owner.GetProcessCount()) {
+            Size += extraRows;
+        }
+    }
+    if (!!Owner.StateProcessor) {
+        if (const auto* state = MapFindPtr(Owner.StateProcessor->GetState(), GetName())) {
+            Generated = state->Position;
+            FirstPortion = MakeIntrusive<TDataPortion>(
+                GetFullTableName(tdefs[TableNum].name),
+                TDataPortion::TSkip(),
+                Generated
+            );
+            GenSeed(TableNum, Generated);
+        }
+    }
+}
 
 TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::GenerateDataPortion() {
-    if (Owner.StateProcessor) {
-        Owner.StateProcessor->FinishPortions();
-    }
     TDataPortions result;
-    if (TableSize == 0) {
+    if (GetSize() == 0) {
         return result;
     }
     TContexts ctxs;
-    ctxs.emplace_back(*this, TableNum);
+    ctxs.emplace_back(*this, TableNum, Owner.StateProcessor.Get());
     if (tdefs[TableNum].child != NONE) {
-        ctxs.emplace_back(*this, tdefs[TableNum].child);
+        ctxs.emplace_back(*this, tdefs[TableNum].child, nullptr);
     }
-    with_lock(NumbersLock) {
-        if (!Generated) {
-            if (Owner.GetProcessCount() > 1) {
-                DSS_HUGE e;
-                set_state(TableNum, Owner.GetScale(), Owner.GetProcessCount(), Owner.GetProcessIndex() + 1, &e);
-            }
-            if (!!Owner.StateProcessor && Owner.StateProcessor->GetState().contains(GetName())) {
-                Generated = Owner.StateProcessor->GetState().at(TString(GetName())).Position;
-                GenSeed(TableNum, Generated);
-            }
-        }
-        const auto count = TableSize > Generated ? std::min(ui64(TableSize - Generated), Owner.Params.BulkSize) : 0;
-        if (!count) {
-            return result;
-        }
-        ctxs.front().SetCount(count);
-        ctxs.front().SetStart((tdefs[TableNum].base * Owner.GetScale() / Owner.GetProcessCount()) * Owner.GetProcessIndex() + Generated + 1);
-        if (Owner.StateProcessor) {
-            Owner.StateProcessor->AddPortion(TString(GetName()), Generated, count);
-        }
-        Generated += count;
+
+    auto g = Guard(Lock);
+    if (FirstPortion) {
+        result.emplace_back(std::move(FirstPortion));
     }
-    GenerateRows(ctxs);
+    const auto count = GetSize() > Generated ? std::min(ui64(GetSize() - Generated), Owner.Params.BulkSize) : 0;
+    if (!count) {
+        return result;
+    }
+    ctxs.front().SetCount(count);
+    ctxs.front().SetStart(FirstRow + Generated);
+    Generated += count;
+    GenerateRows(ctxs, std::move(g));
     for(auto& ctx: ctxs) {
         ctx.AppendPortions(result);
     }
     return result;
 }
+
+#define CSV_WRITER_REGISTER_FIELD(writer, column_name, record_field) \
+    writer.RegisterField(column_name, [](const decltype(writer)::TItem& item, IOutputStream& out) { \
+        out << item.record_field; \
+    });
+
+#define CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, column_name) \
+    CSV_WRITER_REGISTER_FIELD(writer, #column_name, column_name);
+
+#define CSV_WRITER_REGISTER_FIELD_DATE(writer, column_name, record_field) \
+    writer.RegisterField(column_name, [](const decltype(writer)::TItem& item, IOutputStream& out) { \
+        out << item.record_field; \
+    });
+
+#define CSV_WRITER_REGISTER_FIELD_COMMENT(writer, prefix) \
+    writer.RegisterField(#prefix "_comment", [](const decltype(writer)::TItem& item, IOutputStream& out) { \
+        out << TStringBuf(item.comment, item.clen); \
+    });
+
+#define CSV_WRITER_REGISTER_FIELD_MONEY(writer, column_name, record_field) \
+    writer.RegisterField(column_name, [](const decltype(writer)::TItem& item, IOutputStream& out) { \
+        int cents = item.record_field; \
+        if (cents < 0) { \
+            out << "-"; \
+            cents = -cents; \
+        } \
+        int dollars = cents / 100; \
+        cents %= 100; \
+        out << Sprintf("%d.%02d", dollars, cents); \
+    });
 
 class TBulkDataGeneratorOrderLine : public TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator {
 public:
@@ -151,146 +188,59 @@ public:
     {}
 
 protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
-        TVector<order_t> orderList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_order(ctxs.front().GetStart() + i, &orderList[i], 0);
-            }
+    virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) override {
+        TVector<order_t> ordersList(ctxs.front().GetCount());
+        for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
+            row_start(TableNum);
+            mk_order(ctxs.front().GetStart() + i, &ordersList[i], 0);
+            row_stop(TableNum);
         }
-        auto& orders = ctxs[0].GetCsv();
-        orders
-            << "o_clerk" << TWorkloadGeneratorBase::TsvDelimiter
-            << "o_comment" << TWorkloadGeneratorBase::TsvDelimiter
-            << "o_custkey" << TWorkloadGeneratorBase::TsvDelimiter
-            << "o_orderdate" << TWorkloadGeneratorBase::TsvDelimiter
-            << "o_orderkey" << TWorkloadGeneratorBase::TsvDelimiter
-            << "o_orderpriority" << TWorkloadGeneratorBase::TsvDelimiter
-            << "o_orderstatus" << TWorkloadGeneratorBase::TsvDelimiter
-            << "o_shippriority" << TWorkloadGeneratorBase::TsvDelimiter
-            << "o_totalprice"
-            << Endl;
-        auto& lines = ctxs[1].GetCsv();
-        lines
-            << "l_comment" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_commitdate" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_discount" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_extendedprice" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_linenumber" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_linestatus" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_orderkey" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_partkey" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_quantity" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_receiptdate" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_returnflag" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_shipdate" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_shipinstruct" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_shipmode" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_suppkey" << TWorkloadGeneratorBase::TsvDelimiter
-            << "l_tax"
-            << Endl;
-        for (const auto& order: orderList) {
-            orders
-                << order.clerk << TWorkloadGeneratorBase::TsvDelimiter
-                << order.comment << TWorkloadGeneratorBase::TsvDelimiter
-                << order.custkey << TWorkloadGeneratorBase::TsvDelimiter
-                << ConvertDate(order.odate) << TWorkloadGeneratorBase::TsvDelimiter
-                << order.okey << TWorkloadGeneratorBase::TsvDelimiter
-                << order.opriority << TWorkloadGeneratorBase::TsvDelimiter
-                << TStringBuf(&order.orderstatus, 1) << TWorkloadGeneratorBase::TsvDelimiter
-                << order.spriority << TWorkloadGeneratorBase::TsvDelimiter
-                << order.totalprice
-                << Endl;
-            for (i64 i = 0; i < order.lines; i++) {
-                const auto& l = order.l[i];
-                lines
-                    << l.comment << TWorkloadGeneratorBase::TsvDelimiter
-                    << ConvertDate(l.cdate) << TWorkloadGeneratorBase::TsvDelimiter
-                    << l.discount << TWorkloadGeneratorBase::TsvDelimiter
-                    << l.eprice << TWorkloadGeneratorBase::TsvDelimiter
-                    << l.lcnt << TWorkloadGeneratorBase::TsvDelimiter
-                    << TStringBuf(l.lstatus, 1) << TWorkloadGeneratorBase::TsvDelimiter
-                    << l.okey << TWorkloadGeneratorBase::TsvDelimiter
-                    << l.partkey << TWorkloadGeneratorBase::TsvDelimiter
-                    << l.quantity << TWorkloadGeneratorBase::TsvDelimiter
-                    << ConvertDate(l.rdate) << TWorkloadGeneratorBase::TsvDelimiter
-                    << TStringBuf(l.rflag, 1) << TWorkloadGeneratorBase::TsvDelimiter
-                    << ConvertDate(l.sdate) << TWorkloadGeneratorBase::TsvDelimiter
-                    << l.shipinstruct << TWorkloadGeneratorBase::TsvDelimiter
-                    << l.shipmode << TWorkloadGeneratorBase::TsvDelimiter
-                    << l.suppkey << TWorkloadGeneratorBase::TsvDelimiter
-                    << l.tax
-                    << Endl;
-            }
+        g.Release();
+
+        TCsvItemWriter<order_t> ordersWriter(ctxs[0].GetCsv().Out);
+        CSV_WRITER_REGISTER_FIELD(ordersWriter, "o_orderkey", okey);
+        CSV_WRITER_REGISTER_FIELD(ordersWriter, "o_custkey", custkey);
+        ordersWriter.RegisterField("o_orderstatus", [](const decltype(ordersWriter)::TItem& item, IOutputStream& out) {
+            out << TStringBuf(&item.orderstatus, 1);
+        });
+        CSV_WRITER_REGISTER_FIELD_MONEY(ordersWriter, "o_totalprice", totalprice);
+        CSV_WRITER_REGISTER_FIELD_DATE(ordersWriter, "o_orderdate", odate);
+        CSV_WRITER_REGISTER_FIELD(ordersWriter, "o_orderpriority", opriority);
+        CSV_WRITER_REGISTER_FIELD(ordersWriter, "o_clerk", clerk);
+        CSV_WRITER_REGISTER_FIELD(ordersWriter, "o_shippriority", spriority);
+        CSV_WRITER_REGISTER_FIELD_COMMENT(ordersWriter, o);
+        ordersWriter.Write(ordersList);
+
+        TCsvItemWriter<line_t> linesWriter(ctxs[1].GetCsv().Out);
+        CSV_WRITER_REGISTER_FIELD(linesWriter, "l_orderkey", okey);
+        CSV_WRITER_REGISTER_FIELD(linesWriter, "l_partkey", partkey);
+        CSV_WRITER_REGISTER_FIELD(linesWriter, "l_suppkey", suppkey);
+        CSV_WRITER_REGISTER_FIELD(linesWriter, "l_linenumber", lcnt);
+        CSV_WRITER_REGISTER_FIELD(linesWriter, "l_quantity", quantity);
+        CSV_WRITER_REGISTER_FIELD_MONEY(linesWriter, "l_extendedprice", eprice);
+        CSV_WRITER_REGISTER_FIELD_MONEY(linesWriter, "l_discount", discount);
+        CSV_WRITER_REGISTER_FIELD_MONEY(linesWriter, "l_tax", tax);
+        linesWriter.RegisterField("l_returnflag", [](const decltype(linesWriter)::TItem& item, IOutputStream& out) {
+            out << TStringBuf(item.rflag, 1);
+        });
+        linesWriter.RegisterField("l_linestatus", [](const decltype(linesWriter)::TItem& item, IOutputStream& out) {
+            out << TStringBuf(item.lstatus, 1);
+        });
+        CSV_WRITER_REGISTER_FIELD_DATE(linesWriter, "l_shipdate", sdate);
+        CSV_WRITER_REGISTER_FIELD_DATE(linesWriter, "l_commitdate", cdate);
+        CSV_WRITER_REGISTER_FIELD_DATE(linesWriter, "l_receiptdate", rdate);
+        CSV_WRITER_REGISTER_FIELD(linesWriter, "l_shipinstruct", shipinstruct);
+        CSV_WRITER_REGISTER_FIELD(linesWriter, "l_shipmode", shipmode);
+        CSV_WRITER_REGISTER_FIELD_COMMENT(linesWriter, l);
+        for (const auto& order: ordersList) {
+            linesWriter.Write(order.l, order.lines);
         }
     };
 
     static const TFactory::TRegistrator<TBulkDataGeneratorOrderLine> Registrar;
-
-private:
-    static ui64 ConvertDate(const char date[]) {
-        return  TInstant::ParseIso8601(date).Days();
-    }
 };
 
 const TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TFactory::TRegistrator<TBulkDataGeneratorOrderLine> TBulkDataGeneratorOrderLine::Registrar("order_line");
-
-class TBulkDataGeneratorOrderLineSdk : public TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator {
-public:
-    explicit TBulkDataGeneratorOrderLineSdk(const TTpchWorkloadDataInitializerGenerator& owner)
-        : TBulkDataGenerator(owner, ORDER_LINE)
-    {}
-
-protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
-        TVector<order_t> orderList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_order(ctxs.front().GetStart() + i, &orderList[i], 0);
-            }
-        }
-        auto& orders = ctxs[0].GetBuilder();
-        auto& lines = ctxs[1].GetBuilder();
-        for (const auto& order: orderList) {
-            orders.AddListItem().BeginStruct()
-                .AddMember("o_clerk").Utf8(order.clerk)
-                .AddMember("o_comment").Utf8(order.comment)
-                .AddMember("o_custkey").Int64(order.custkey)
-                .AddMember("o_orderdate").Date(TInstant::ParseIso8601(order.odate))
-                .AddMember("o_orderkey").Int64(order.okey)
-                .AddMember("o_orderpriority").Utf8(order.opriority)
-                .AddMember("o_orderstatus").Utf8(TString(order.orderstatus))
-                .AddMember("o_shippriority").Int32(order.spriority)
-                .AddMember("o_totalprice").Double(order.totalprice)
-                .EndStruct();
-            for (i64 i = 0; i < order.lines; i++) {
-                const auto& l = order.l[i];
-                lines.AddListItem().BeginStruct()
-                    .AddMember("l_comment").Utf8(l.comment)
-                    .AddMember("l_commitdate").Date(TInstant::ParseIso8601(l.cdate))
-                    .AddMember("l_discount").Double(l.discount)
-                    .AddMember("l_extendedprice").Double(l.eprice)
-                    .AddMember("l_linenumber").Int32(l.lcnt)
-                    .AddMember("l_linestatus").Utf8(l.lstatus)
-                    .AddMember("l_orderkey").Int64(l.okey)
-                    .AddMember("l_partkey").Int64(l.partkey)
-                    .AddMember("l_quantity").Double(l.quantity)
-                    .AddMember("l_receiptdate").Date(TInstant::ParseIso8601(l.rdate))
-                    .AddMember("l_returnflag").Utf8(l.rflag)
-                    .AddMember("l_shipdate").Date(TInstant::ParseIso8601(l.sdate))
-                    .AddMember("l_shipinstruct").Utf8(l.shipinstruct)
-                    .AddMember("l_shipmode").Utf8(l.shipmode)
-                    .AddMember("l_suppkey").Int64(l.suppkey)
-                    .AddMember("l_tax").Double(l.tax)
-                    .EndStruct();
-            }
-        }
-    };
-
-    static const TFactory::TRegistrator<TBulkDataGeneratorOrderLineSdk> Registrar;
-};
-
-const TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TFactory::TRegistrator<TBulkDataGeneratorOrderLineSdk> TBulkDataGeneratorOrderLineSdk::Registrar("__sdk_order_line");
 
 class TBulkDataGeneratorPartPSupp : public TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator {
 public:
@@ -299,56 +249,35 @@ public:
     {}
 
 protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
-        TVector<part_t> partList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_part(ctxs.front().GetStart() + i, &partList[i]);
-            }
+    virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) override {
+        TVector<part_t> partsList(ctxs.front().GetCount());
+        for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
+            row_start(TableNum);
+            mk_part(ctxs.front().GetStart() + i, &partsList[i]);
+            row_stop(TableNum);
         }
-        auto& parts = ctxs.front().GetCsv();
-        parts
-            << "p_brand" << TWorkloadGeneratorBase::TsvDelimiter
-            << "p_comment" << TWorkloadGeneratorBase::TsvDelimiter
-            << "p_container" << TWorkloadGeneratorBase::TsvDelimiter
-            << "p_mfgr" << TWorkloadGeneratorBase::TsvDelimiter
-            << "p_name" << TWorkloadGeneratorBase::TsvDelimiter
-            << "p_partkey" << TWorkloadGeneratorBase::TsvDelimiter
-            << "p_retailprice" << TWorkloadGeneratorBase::TsvDelimiter
-            << "p_size" << TWorkloadGeneratorBase::TsvDelimiter
-            << "p_type"
-            << Endl;
-        auto& psupps = ctxs[1].GetCsv();
-        psupps
-            << "ps_availqty" << TWorkloadGeneratorBase::TsvDelimiter
-            << "ps_comment" << TWorkloadGeneratorBase::TsvDelimiter
-            << "ps_partkey" << TWorkloadGeneratorBase::TsvDelimiter
-            << "ps_suppkey" << TWorkloadGeneratorBase::TsvDelimiter
-            << "ps_supplycost"
-            << Endl;
+        g.Release();
 
-        for (const auto& part: partList) {
-            parts
-                << part.brand << TWorkloadGeneratorBase::TsvDelimiter
-                << part.comment << TWorkloadGeneratorBase::TsvDelimiter
-                << part.container << TWorkloadGeneratorBase::TsvDelimiter
-                << part.mfgr << TWorkloadGeneratorBase::TsvDelimiter
-                << part.name << TWorkloadGeneratorBase::TsvDelimiter
-                << part.partkey << TWorkloadGeneratorBase::TsvDelimiter
-                << part.retailprice << TWorkloadGeneratorBase::TsvDelimiter
-                << part.size << TWorkloadGeneratorBase::TsvDelimiter
-                << part.type
-                << Endl;
-            for (i64 i = 0; i < SUPP_PER_PART; i++) {
-                const auto& s = part.s[i];
-                psupps
-                    << s.qty << TWorkloadGeneratorBase::TsvDelimiter
-                    << s.comment << TWorkloadGeneratorBase::TsvDelimiter
-                    << s.partkey << TWorkloadGeneratorBase::TsvDelimiter
-                    << s.suppkey << TWorkloadGeneratorBase::TsvDelimiter
-                    << s.scost
-                    << Endl;
-            }
+        TCsvItemWriter<part_t> partsWriter(ctxs[0].GetCsv().Out);
+        CSV_WRITER_REGISTER_FIELD(partsWriter, "p_partkey", partkey);
+        CSV_WRITER_REGISTER_FIELD(partsWriter, "p_name", name);
+        CSV_WRITER_REGISTER_FIELD(partsWriter, "p_mfgr", mfgr);
+        CSV_WRITER_REGISTER_FIELD(partsWriter, "p_brand", brand);
+        CSV_WRITER_REGISTER_FIELD(partsWriter, "p_type", type);
+        CSV_WRITER_REGISTER_FIELD(partsWriter, "p_size", size);
+        CSV_WRITER_REGISTER_FIELD(partsWriter, "p_container", container);
+        CSV_WRITER_REGISTER_FIELD_MONEY(partsWriter, "p_retailprice", retailprice);
+        CSV_WRITER_REGISTER_FIELD_COMMENT(partsWriter, p);
+        partsWriter.Write(partsList);
+
+        TCsvItemWriter<partsupp_t> psuppsWriter(ctxs[1].GetCsv().Out);
+        CSV_WRITER_REGISTER_FIELD(psuppsWriter, "ps_partkey", partkey);
+        CSV_WRITER_REGISTER_FIELD(psuppsWriter, "ps_suppkey", suppkey);
+        CSV_WRITER_REGISTER_FIELD(psuppsWriter, "ps_availqty", qty);
+        CSV_WRITER_REGISTER_FIELD_MONEY(psuppsWriter, "ps_supplycost", scost);
+        CSV_WRITER_REGISTER_FIELD_COMMENT(psuppsWriter, ps);
+        for (const auto& part: partsList) {
+            psuppsWriter.Write(part.s, SUPP_PER_PART);
         }
     };
     const static TFactory::TRegistrator<TBulkDataGeneratorPartPSupp> Registrar;
@@ -363,34 +292,24 @@ public:
     {}
 
 protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
+    virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) override {
         TVector<supplier_t> suppList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_supp(ctxs.front().GetStart() + i, &suppList[i]);
-            }
+        for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
+            row_start(TableNum);
+            mk_supp(ctxs.front().GetStart() + i, &suppList[i]);
+            row_stop(TableNum);
         }
-        auto& suppliers = ctxs.front().GetCsv();
-        suppliers
-            << "s_acctbal" << TWorkloadGeneratorBase::TsvDelimiter
-            << "s_address" << TWorkloadGeneratorBase::TsvDelimiter
-            << "s_comment" << TWorkloadGeneratorBase::TsvDelimiter
-            << "s_name" << TWorkloadGeneratorBase::TsvDelimiter
-            << "s_nationkey" << TWorkloadGeneratorBase::TsvDelimiter
-            << "s_phone" << TWorkloadGeneratorBase::TsvDelimiter
-            << "s_suppkey"
-            << Endl;
-        for (const auto& supp: suppList) {
-            suppliers
-                << supp.acctbal << TWorkloadGeneratorBase::TsvDelimiter
-                << supp.address << TWorkloadGeneratorBase::TsvDelimiter
-                << supp.comment << TWorkloadGeneratorBase::TsvDelimiter
-                << supp.name << TWorkloadGeneratorBase::TsvDelimiter
-                << supp.nation_code << TWorkloadGeneratorBase::TsvDelimiter
-                << supp.phone << TWorkloadGeneratorBase::TsvDelimiter
-                << supp.suppkey
-                << Endl;
-        }
+        g.Release();
+
+        TCsvItemWriter<supplier_t> writer(ctxs[0].GetCsv().Out);
+        CSV_WRITER_REGISTER_FIELD(writer, "s_suppkey", suppkey);
+        CSV_WRITER_REGISTER_FIELD(writer, "s_name", name);
+        CSV_WRITER_REGISTER_FIELD(writer, "s_address", address);
+        CSV_WRITER_REGISTER_FIELD(writer, "s_nationkey", nation_code);
+        CSV_WRITER_REGISTER_FIELD(writer, "s_phone", phone);
+        CSV_WRITER_REGISTER_FIELD_MONEY(writer, "s_acctbal", acctbal);
+        CSV_WRITER_REGISTER_FIELD_COMMENT(writer, s);
+        writer.Write(suppList);
     };
     const static TFactory::TRegistrator<TBulkDataGeneratorSupplier> Registrar;
 };
@@ -404,36 +323,25 @@ public:
     {}
 
 protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
+    virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) override {
         TVector<customer_t> custList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_cust(ctxs.front().GetStart() + i, &custList[i]);
-            }
+        for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
+            row_start(TableNum);
+            mk_cust(ctxs.front().GetStart() + i, &custList[i]);
+            row_stop(TableNum);
         }
-        auto& customers = ctxs.front().GetCsv();
-        customers
-            << "c_acctbal" << TWorkloadGeneratorBase::TsvDelimiter
-            << "c_address" << TWorkloadGeneratorBase::TsvDelimiter
-            << "c_comment" << TWorkloadGeneratorBase::TsvDelimiter
-            << "c_custkey" << TWorkloadGeneratorBase::TsvDelimiter
-            << "c_mktsegment" << TWorkloadGeneratorBase::TsvDelimiter
-            << "c_name" << TWorkloadGeneratorBase::TsvDelimiter
-            << "c_nationkey" << TWorkloadGeneratorBase::TsvDelimiter
-            << "c_phone"
-            << Endl;
-        for (const auto& cust: custList) {
-            customers
-                << cust.acctbal << TWorkloadGeneratorBase::TsvDelimiter
-                << cust.address << TWorkloadGeneratorBase::TsvDelimiter
-                << cust.comment << TWorkloadGeneratorBase::TsvDelimiter
-                << cust.custkey << TWorkloadGeneratorBase::TsvDelimiter
-                << cust.mktsegment << TWorkloadGeneratorBase::TsvDelimiter
-                << cust.name << TWorkloadGeneratorBase::TsvDelimiter
-                << cust.nation_code << TWorkloadGeneratorBase::TsvDelimiter
-                << cust.phone
-                << Endl;
-        }
+        g.Release();
+
+        TCsvItemWriter<customer_t> writer(ctxs[0].GetCsv().Out);
+        CSV_WRITER_REGISTER_FIELD(writer, "c_custkey", custkey);
+        CSV_WRITER_REGISTER_FIELD(writer, "c_name", name);
+        CSV_WRITER_REGISTER_FIELD(writer, "c_address", address);
+        CSV_WRITER_REGISTER_FIELD(writer, "c_nationkey", nation_code);
+        CSV_WRITER_REGISTER_FIELD(writer, "c_phone", phone);
+        CSV_WRITER_REGISTER_FIELD_MONEY(writer, "c_acctbal", acctbal);
+        CSV_WRITER_REGISTER_FIELD(writer, "c_mktsegment", mktsegment);
+        CSV_WRITER_REGISTER_FIELD_COMMENT(writer, c);
+        writer.Write(custList);
     };
     const static TFactory::TRegistrator<TBulkDataGeneratorCustomer> Registrar;
 };
@@ -447,28 +355,21 @@ public:
     {}
 
 protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
+    virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) override {
         TVector<code_t> nationList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_nation(ctxs.front().GetStart() + i, &nationList[i]);
-            }
+        for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
+            row_start(TableNum);
+            mk_nation(ctxs.front().GetStart() + i, &nationList[i]);
+            row_stop(TableNum);
         }
-        auto& nations = ctxs.front().GetCsv();
-        nations
-            << "n_comment" << TWorkloadGeneratorBase::TsvDelimiter
-            << "n_name" << TWorkloadGeneratorBase::TsvDelimiter
-            << "n_nationkey" << TWorkloadGeneratorBase::TsvDelimiter
-            << "n_regionkey"
-            << Endl;
-        for (const auto& nation: nationList) {
-            nations
-                << TString(nation.comment, nation.clen) << TWorkloadGeneratorBase::TsvDelimiter
-                << nation.text << TWorkloadGeneratorBase::TsvDelimiter
-                << nation.code << TWorkloadGeneratorBase::TsvDelimiter
-                << nation.join
-                << Endl;
-        }
+        g.Release();
+
+        TCsvItemWriter<code_t> writer(ctxs[0].GetCsv().Out);
+        CSV_WRITER_REGISTER_FIELD(writer, "n_nationkey", code);
+        CSV_WRITER_REGISTER_FIELD(writer, "n_name", text);
+        CSV_WRITER_REGISTER_FIELD(writer, "n_regionkey", join);
+        CSV_WRITER_REGISTER_FIELD_COMMENT(writer, n);
+        writer.Write(nationList);
     };
     const static TFactory::TRegistrator<TBulkDataGeneratorNation> Registrar;
 };
@@ -482,26 +383,20 @@ public:
     {}
 
 protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
+    virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) override {
         TVector<code_t> regionList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_region(ctxs.front().GetStart() + i, &regionList[i]);
-            }
+        for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
+            row_start(TableNum);
+            mk_region(ctxs.front().GetStart() + i, &regionList[i]);
+            row_stop(TableNum);
         }
-        auto& regions = ctxs.front().GetCsv();
-        regions
-            << "r_comment" << TWorkloadGeneratorBase::TsvDelimiter
-            << "r_name" << TWorkloadGeneratorBase::TsvDelimiter
-            << "r_regionkey"
-            << Endl;
-        for (const auto & region: regionList) {
-            regions
-                << TString(region.comment, region.clen) << TWorkloadGeneratorBase::TsvDelimiter
-                << region.text << TWorkloadGeneratorBase::TsvDelimiter
-                << region.code
-                << Endl;
-        }
+        g.Release();
+
+        TCsvItemWriter<code_t> writer(ctxs[0].GetCsv().Out);
+        CSV_WRITER_REGISTER_FIELD(writer, "r_regionkey", code);
+        CSV_WRITER_REGISTER_FIELD(writer, "r_name", text);
+        CSV_WRITER_REGISTER_FIELD_COMMENT(writer, r);
+        writer.Write(regionList);
     };
     const static TFactory::TRegistrator<TBulkDataGeneratorRegion> Registrar;
 };

@@ -1,6 +1,6 @@
-## WITH
+# WITH
 
-It's set after the data source in `FROM` and is used for additional hints for tables. You can't use hints for subqueries and [named expressions](../../expressions.md#named-nodes).
+It's set after the data source in `FROM` and is used for additional hints for {% if backend_name == "YDB" %}row-oriented and column-oriented{% else %} tables{% endif %}. You can't use hints for subqueries and [named expressions](../../expressions.md#named-nodes).
 
 The following values are supported:
 
@@ -22,7 +22,7 @@ If you use the `SCHEMA` hint, then with the table functions [EACH](#each), [RANG
 
 {% endif %}
 
-**Examples:**
+## Examples
 
 ```yql
 SELECT key FROM my_table WITH INFER_SCHEMA;
@@ -47,4 +47,3 @@ SELECT key, value FROM my_table WITH COLUMNS Struct<value:Int32?>;
 ```yql
 SELECT key, value FROM EACH($my_tables) WITH SCHEMA Struct<key:String, value:List<Int32>>;
 ```
-

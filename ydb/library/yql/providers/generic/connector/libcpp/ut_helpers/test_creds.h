@@ -33,4 +33,4 @@ namespace NYql::NTestCreds {
         }
     };
 
-} //namespace  NYql::NTestCreds
+} // namespace  NYql::NTestCreds

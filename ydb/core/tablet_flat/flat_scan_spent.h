@@ -26,9 +26,9 @@ namespace NTable {
             const auto now = Time->Now();
 
             out
-                << "Spent{" << NFmt::TDelay(now - Fired)
-                << " wa " << NFmt::TDelay(Waits + (now - Since))
-                << " cnt " << Interrupts << "}";
+                << "Spent{time=" << NFmt::TDelay(now - Fired)
+                << ",wait=" << NFmt::TDelay(Waits + (now - Since))
+                << ",interrupts=" << Interrupts << "}";
         }
 
         void Alter(bool available) noexcept

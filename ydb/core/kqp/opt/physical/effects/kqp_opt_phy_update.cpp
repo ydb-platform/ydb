@@ -91,7 +91,7 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
 
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, update.Table().Path());
 
-    const bool isSink = NeedSinks(table, kqpCtx) && table.Metadata->Kind == EKikimrTableKind::Olap;
+    const bool isSink = NeedSinks(table, kqpCtx);
     const bool needPrecompute = !isSink;
     
     if (needPrecompute) {

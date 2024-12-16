@@ -8,6 +8,9 @@ import tarfile
 import zipfile
 import sys
 
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 import java_command_file as jcf
 
@@ -58,7 +61,7 @@ def main():
     for s in jsrcs:
         if s.endswith('.jsrc'):
             with contextlib.closing(tarfile.open(s, 'r')) as tf:
-                tf.extractall(sources_dir)
+                tf.extractall(path=sources_dir, filter='data')
 
     srcs = []
     for r, _, files in os.walk(sources_dir):

@@ -13,16 +13,18 @@ import pathlib
 import re
 import sys
 from itertools import chain, groupby, repeat
-from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, Iterator, List, Literal, Optional, Union
 
-from pip._vendor.requests.models import Request, Response
+from pip._vendor.packaging.requirements import InvalidRequirement
+from pip._vendor.packaging.version import InvalidVersion
 from pip._vendor.rich.console import Console, ConsoleOptions, RenderResult
 from pip._vendor.rich.markup import escape
 from pip._vendor.rich.text import Text
 
 if TYPE_CHECKING:
     from hashlib import _Hash
-    from typing import Literal
+
+    from pip._vendor.requests.models import Request, Response
 
     from pip._internal.metadata import BaseDistribution
     from pip._internal.req.req_install import InstallRequirement
@@ -184,10 +186,6 @@ class InstallationError(PipError):
     """General exception during installation"""
 
 
-class UninstallationError(PipError):
-    """General exception during uninstallation"""
-
-
 class MissingPyProjectBuildRequires(DiagnosticPipError):
     """Raised when pyproject.toml has `build-system`, but no `build-system.requires`."""
 
@@ -294,8 +292,8 @@ class NetworkConnectionError(PipError):
     def __init__(
         self,
         error_msg: str,
-        response: Optional[Response] = None,
-        request: Optional[Request] = None,
+        response: Optional["Response"] = None,
+        request: Optional["Request"] = None,
     ) -> None:
         """
         Initialize NetworkConnectionError with  `request` and `response`
@@ -356,6 +354,17 @@ class MetadataInconsistent(InstallationError):
             f"Requested {self.ireq} has inconsistent {self.field}: "
             f"expected {self.f_val!r}, but metadata has {self.m_val!r}"
         )
+
+
+class MetadataInvalid(InstallationError):
+    """Metadata is invalid."""
+
+    def __init__(self, ireq: "InstallRequirement", error: str) -> None:
+        self.ireq = ireq
+        self.error = error
+
+    def __str__(self) -> str:
+        return f"Requested {self.ireq} has invalid metadata: {self.error}"
 
 
 class InstallationSubprocessError(DiagnosticPipError, InstallationError):
@@ -422,7 +431,7 @@ class HashErrors(InstallationError):
     """Multiple HashError instances rolled into one for reporting"""
 
     def __init__(self) -> None:
-        self.errors: List["HashError"] = []
+        self.errors: List[HashError] = []
 
     def append(self, error: "HashError") -> None:
         self.errors.append(error)
@@ -726,3 +735,75 @@ class ExternallyManagedEnvironment(DiagnosticPipError):
             exc_info = logger.isEnabledFor(VERBOSE)
             logger.warning("Failed to read %s", config, exc_info=exc_info)
         return cls(None)
+
+
+class UninstallMissingRecord(DiagnosticPipError):
+    reference = "uninstall-no-record-file"
+
+    def __init__(self, *, distribution: "BaseDistribution") -> None:
+        installer = distribution.installer
+        if not installer or installer == "pip":
+            dep = f"{distribution.raw_name}=={distribution.version}"
+            hint = Text.assemble(
+                "You might be able to recover from this via: ",
+                (f"pip install --force-reinstall --no-deps {dep}", "green"),
+            )
+        else:
+            hint = Text(
+                f"The package was installed by {installer}. "
+                "You should check if it can uninstall the package."
+            )
+
+        super().__init__(
+            message=Text(f"Cannot uninstall {distribution}"),
+            context=(
+                "The package's contents are unknown: "
+                f"no RECORD file was found for {distribution.raw_name}."
+            ),
+            hint_stmt=hint,
+        )
+
+
+class LegacyDistutilsInstall(DiagnosticPipError):
+    reference = "uninstall-distutils-installed-package"
+
+    def __init__(self, *, distribution: "BaseDistribution") -> None:
+        super().__init__(
+            message=Text(f"Cannot uninstall {distribution}"),
+            context=(
+                "It is a distutils installed project and thus we cannot accurately "
+                "determine which files belong to it which would lead to only a partial "
+                "uninstall."
+            ),
+            hint_stmt=None,
+        )
+
+
+class InvalidInstalledPackage(DiagnosticPipError):
+    reference = "invalid-installed-package"
+
+    def __init__(
+        self,
+        *,
+        dist: "BaseDistribution",
+        invalid_exc: Union[InvalidRequirement, InvalidVersion],
+    ) -> None:
+        installed_location = dist.installed_location
+
+        if isinstance(invalid_exc, InvalidRequirement):
+            invalid_type = "requirement"
+        else:
+            invalid_type = "version"
+
+        super().__init__(
+            message=Text(
+                f"Cannot process installed package {dist} "
+                + (f"in {installed_location!r} " if installed_location else "")
+                + f"because it has an invalid {invalid_type}:\n{invalid_exc.args[0]}"
+            ),
+            context=(
+                "Starting with pip 24.1, packages with invalid "
+                f"{invalid_type}s can not be processed."
+            ),
+            hint_stmt="To proceed this package must be uninstalled.",
+        )

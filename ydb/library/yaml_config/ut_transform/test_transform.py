@@ -2,7 +2,6 @@
 #
 import yatest
 import pytest
-from ydb.tests.library.common import yatest_common
 
 import json
 import logging
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def bin_from_env(name):
     if os.getenv(name):
-        return yatest_common.binary_path(os.getenv(name))
+        return yatest.common.binary_path(os.getenv(name))
     raise RuntimeError(f'{name} enviroment variable is not specified')
 
 
@@ -35,7 +34,7 @@ class TestYamlConfigTransformations(object):
     @classmethod
     def execute(cls, binary, stdin=None, args=[]):
         try:
-            execution = yatest_common.execute(
+            execution = yatest.common.execute(
                 [binary] + args,
                 stdin=stdin,
             )
@@ -50,7 +49,7 @@ class TestYamlConfigTransformations(object):
         result_path = os.path.join(out_path, result_filename)
         with open(result_path, "w") as f:
             f.write(output_result)
-        return yatest_common.canonical_file(str(result_path), diff_tool=json_diff_bin(), local=True, universal_lines=True)
+        return yatest.common.canonical_file(str(result_path), diff_tool=json_diff_bin(), local=True, universal_lines=True)
 
     def cleanup_errors(self, errors):
         return re.sub(r'address -> 0x[a-zA-Z0-9]+', 'address -> REDACTED', errors)
@@ -65,7 +64,7 @@ class TestYamlConfigTransformations(object):
                         success, result = self.execute(stdin=f, binary=binary, args=args)
                         if not success:
                             result = json.dumps({"error": True, "stderr": self.cleanup_errors(result)})
-                        results[entry.name] = self.canonical_result(result, entry.name, yatest_common.output_path())
+                        results[entry.name] = self.canonical_result(result, entry.name, yatest.common.output_path())
         return [results[key] for key in sorted(results.keys(), reverse=True)]
 
     @pytest.mark.parametrize('binary', [('dump', dump_bin()), ('dump_ds_init', dump_ds_init_bin())], ids=lambda binary: binary[0])

@@ -63,6 +63,7 @@ struct IIPCBucket
         std::atomic<i64> Demand;
         std::atomic<i64> InFlow;
         std::atomic<i64> OutFlow;
+        std::atomic<i64> GuaranteedQuota;
     };
 
     virtual TBucket* State() = 0;

@@ -116,8 +116,6 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
                 // be visible without any special tx map.
                 return EExecutionStatus::Continue;
             }
-        } else if (!DataShard.IsMvccEnabled()) {
-            Y_ABORT_UNLESS(tx->GetScanSnapshotId(), "Missing snapshot in ReadTable tx");
         }
 
         auto tid = record.GetTableId().GetTableId();
@@ -132,7 +130,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
             // With persistent snapshots we don't need to mark any preceding transactions
             auto readVersion = TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
             options.SetSnapshotRowVersion(readVersion);
-        } else if (DataShard.IsMvccEnabled()) {
+        } else {
             // Note: this mode is only used in legacy tests and may not work with volatile transactions
             // With mvcc we have to mark all preceding transactions as logically complete
             auto readVersion = DataShard.GetReadWriteVersions(tx).ReadVersion;
@@ -141,11 +139,6 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
                 hadWrites |= DataShard.PromoteCompleteEdge(op.Get(), txc);
             }
             options.SetSnapshotRowVersion(readVersion);
-        } else {
-            // Without mvcc transactions are already marked using legacy rules
-            options.SetSnapshotId(tx->GetScanSnapshotId());
-
-            tx->SetScanSnapshotId(0);
         }
 
         // FIXME: we need to tie started scan to a write above being committed

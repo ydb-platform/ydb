@@ -7,8 +7,8 @@
 #include "executor_pool_basic_feature_flags.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
-#include "harmonizer.h"
 #include <memory>
+#include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <ydb/library/actors/actor_type/indexes.h>
 #include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
@@ -231,17 +231,17 @@ namespace NActors {
         ~TBasicExecutorPool();
 
         void Initialize(TWorkerContext& wctx) override;
-        ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
-        ui32 GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingReadCounter);
-        ui32 GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
+        TMailbox* GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
 
-        void ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) override;
-        void ScheduleActivationExCommon(ui32 activation, ui64 revolvingWriteCounter, TAtomic semaphoreValue);
-        void ScheduleActivationExLocalQueue(ui32 activation, ui64 revolvingWriteCounter);
+        void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
+        void ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingWriteCounter, TAtomic semaphoreValue);
+        void ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter);
 
         void SetLocalQueueSize(ui16 size);
 
@@ -251,6 +251,7 @@ namespace NActors {
         void Shutdown() override;
 
         void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override;
+        void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override {
             return PoolName;
         }
@@ -277,8 +278,11 @@ namespace NActors {
         void CalcSpinPerThread(ui64 wakingUpConsumption);
         void ClearWaitingStats() const;
 
-        TSharedExecutorThreadCtx* ReleaseSharedThread();
-        void AddSharedThread(TSharedExecutorThreadCtx* thread);
+        TSharedExecutorThreadCtx* ReleaseSharedThread() override;
+        void AddSharedThread(TSharedExecutorThreadCtx* thread) override;
+        bool IsSharedThreadEnabled() const override {
+            return true;
+        }
 
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);

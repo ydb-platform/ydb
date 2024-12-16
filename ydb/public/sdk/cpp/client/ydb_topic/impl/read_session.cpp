@@ -11,6 +11,13 @@ namespace NYdb::NTopic {
 
 static const TString DRIVER_IS_STOPPING_DESCRIPTION = "Driver is stopping";
 
+void SetReadInTransaction(TReadSessionEvent::TEvent& event)
+{
+    if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
+        e->SetReadInTransaction();
+    }
+}
+
 TReadSession::TReadSession(const TReadSessionSettings& settings,
              std::shared_ptr<TTopicClient::TImpl> client,
              std::shared_ptr<TGRpcConnectionsImpl> connections,
@@ -136,12 +143,10 @@ TVector<TReadSessionEvent::TEvent> TReadSession::GetEvents(const TReadSessionGet
     auto events = GetEvents(settings.Block_, settings.MaxEventsCount_, settings.MaxByteSize_);
     if (!events.empty() && settings.Tx_) {
         auto& tx = settings.Tx_->get();
+        CbContext->TryGet()->CollectOffsets(tx, events, Client);
         for (auto& event : events) {
-            if (auto* dataEvent = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
-                CollectOffsets(tx, *dataEvent);
-            }
+            SetReadInTransaction(event);
         }
-        UpdateOffsets(tx);
     }
     return events;
 }
@@ -157,90 +162,12 @@ TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(bool block, size_t maxB
 TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(const TReadSessionGetEventSettings& settings)
 {
     auto event = GetEvent(settings.Block_, settings.MaxByteSize_);
-    if (event) {
+    if (event && settings.Tx_) {
         auto& tx = settings.Tx_->get();
-        if (auto* dataEvent = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-            CollectOffsets(tx, *dataEvent);
-        }
-        UpdateOffsets(tx);
+        CbContext->TryGet()->CollectOffsets(tx, *event, Client);
+        SetReadInTransaction(*event);
     }
     return event;
-}
-
-void TReadSession::CollectOffsets(NTable::TTransaction& tx,
-                                  const TReadSessionEvent::TDataReceivedEvent& event)
-{
-    const auto& session = *event.GetPartitionSession();
-
-    if (event.HasCompressedMessages()) {
-        for (auto& message : event.GetCompressedMessages()) {
-            CollectOffsets(tx, session.GetTopicPath(), session.GetPartitionId(), message.GetOffset());
-        }
-    } else {
-        for (auto& message : event.GetMessages()) {
-            CollectOffsets(tx, session.GetTopicPath(), session.GetPartitionId(), message.GetOffset());
-        }
-    }
-}
-
-void TReadSession::CollectOffsets(NTable::TTransaction& tx,
-                                  const TString& topicPath, ui32 partitionId, ui64 offset)
-{
-    const TString& sessionId = tx.GetSession().GetId();
-    const TString& txId = tx.GetId();
-    TOffsetRanges& ranges = OffsetRanges[std::make_pair(sessionId, txId)];
-    ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
-}
-
-void TReadSession::UpdateOffsets(const NTable::TTransaction& tx)
-{
-    const TString& sessionId = tx.GetSession().GetId();
-    const TString& txId = tx.GetId();
-
-    auto p = OffsetRanges.find(std::make_pair(sessionId, txId));
-    if (p == OffsetRanges.end()) {
-        return;
-    }
-
-    TVector<TTopicOffsets> topics;
-    for (auto& [path, partitions] : p->second) {
-        TTopicOffsets topic;
-        topic.Path = path;
-
-        topics.push_back(std::move(topic));
-
-        for (auto& [id, ranges] : partitions) {
-            TPartitionOffsets partition;
-            partition.PartitionId = id;
-
-            TTopicOffsets& t = topics.back();
-            t.Partitions.push_back(std::move(partition));
-
-            for (auto& range : ranges) {
-                TPartitionOffsets& p = t.Partitions.back();
-
-                TOffsetsRange r;
-                r.Start = range.first;
-                r.End = range.second;
-
-                p.Offsets.push_back(r);
-            }
-        }
-    }
-
-    Y_ABORT_UNLESS(!topics.empty());
-
-    auto result = Client->UpdateOffsetsInTransaction(tx,
-                                                     topics,
-                                                     Settings.ConsumerName_,
-                                                     {}).GetValueSync();
-    Y_ABORT_UNLESS(!result.IsTransportError());
-
-    if (!result.IsSuccess()) {
-        ythrow yexception() << "error on update offsets: " << result;
-    }
-
-    OffsetRanges.erase(std::make_pair(sessionId, txId));
 }
 
 bool TReadSession::Close(TDuration timeout) {

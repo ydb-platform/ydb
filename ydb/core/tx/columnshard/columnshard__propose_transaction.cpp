@@ -25,13 +25,14 @@ public:
         txc.DB.NoMoreReadsForTx();
         NIceDb::TNiceDb db(txc.DB);
 
-        Self->IncCounter(COUNTER_PREPARE_REQUEST);
+        Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_REQUEST);
 
         auto& record = Proto(Ev->Get());
         const auto txKind = record.GetTxKind();
         const ui64 txId = record.GetTxId();
         const auto& txBody = record.GetTxBody();
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("tx_id", txId)("this", (ui64)this);
+        NActors::TLogContextGuard lGuard =
+            NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("tx_id", txId)("this", (ui64)this);
 
         if (txKind == NKikimrTxColumnShard::TX_KIND_TTL) {
             auto proposeResult = ProposeTtlDeprecated(txBody);
@@ -51,7 +52,7 @@ public:
                 Self->CurrentSchemeShardId = record.GetSchemeShardId();
                 Schema::SaveSpecialValue(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
             } else {
-                Y_ABORT_UNLESS(Self->CurrentSchemeShardId == record.GetSchemeShardId());
+                AFL_VERIFY(Self->CurrentSchemeShardId == record.GetSchemeShardId());
             }
         }
         std::optional<TMessageSeqNo> msgSeqNo;
@@ -79,28 +80,34 @@ public:
         AFL_VERIFY(!!TxOperator);
         AFL_VERIFY(!!TxInfo);
         const ui64 txId = record.GetTxId();
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("request_tx", TxInfo->DebugString())(
-            "this", (ui64)this)("op_tx", TxOperator->GetTxInfo().DebugString());
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())(
+            "request_tx", TxInfo->DebugString())("this", (ui64)this)("op_tx", TxOperator->GetTxInfo().DebugString());
+
+        Self->TryRegisterMediatorTimeCast();
 
         if (TxOperator->IsFail()) {
             TxOperator->SendReply(*Self, ctx);
-        } else {
-            auto internalOp = Self->GetProgressTxController().GetVerifiedTxOperator(TxOperator->GetTxId());
-            NActors::TLogContextGuard lGuardTx = NActors::TLogContextBuilder::Build()("int_op_tx", internalOp->GetTxInfo().DebugString());
-            if (!TxOperator->CheckTxInfoForReply(*TxInfo)) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "deprecated tx operator");
-                return;
-            } else {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "actual tx operator");
-            }
-            if (TxOperator->IsAsync()) {
-                Self->GetProgressTxController().StartProposeOnComplete(txId, ctx);
-            } else {
-                Self->GetProgressTxController().FinishProposeOnComplete(txId, ctx);
-            }
+            return;
+        }
+        auto internalOp = Self->GetProgressTxController().GetTxOperatorOptional(txId);
+        if (!internalOp) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "removed tx operator");
+            return;
+        }
+        NActors::TLogContextGuard lGuardTx =
+            NActors::TLogContextBuilder::Build()("int_op_tx", internalOp->GetTxInfo().DebugString())("int_this", (ui64)internalOp.get());
+        if (!internalOp->CheckTxInfoForReply(*TxInfo)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "deprecated tx operator");
+            return;
         }
 
-        Self->TryRegisterMediatorTimeCast();
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "actual tx operator");
+        if (internalOp->IsAsync()) {
+            Self->GetProgressTxController().StartProposeOnComplete(*internalOp, ctx);
+        } else {
+            Self->GetProgressTxController().FinishProposeOnComplete(*internalOp, ctx);
+        }
+
     }
 
     TTxType GetTxType() const override {
@@ -138,11 +145,14 @@ private:
                 return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No primary index for TTL");
             }
 
-            auto schema = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema()->GetSchema();
-            auto ttlColumn = schema->GetFieldByName(columnName);
-            if (!ttlColumn) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column '" + columnName + "'");
+            auto schemaSnapshot = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema();
+            auto schema = schemaSnapshot->GetSchema();
+            auto index = schemaSnapshot->GetColumnIdOptional(columnName);
+            if (!index) {
+                return TTxController::TProposeResult(
+                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column '" + columnName + "'");
             }
+            auto ttlColumn = schemaSnapshot->GetFieldByColumnIdVerified(*index);
 
             const TInstant now = TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now();
             for (ui64 pathId : ttlBody.GetPathIds()) {
@@ -154,7 +164,7 @@ private:
         if (!Self->SetupTtl(pathTtls)) {
             return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL not started");
         }
-        Self->TablesManager.MutablePrimaryIndex().OnTieringModified(Self->Tiers, Self->TablesManager.GetTtl(), {});
+        Self->TablesManager.MutablePrimaryIndex().OnTieringModified(Self->TablesManager.GetTtl());
 
         return TTxController::TProposeResult();
     }

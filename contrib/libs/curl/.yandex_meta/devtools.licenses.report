@@ -1,0 +1,1070 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     curl AND ISC         0dd775e1c347c7e7274bc5e8a508428e
+BELONGS bin/ya.make ya.make
+    License text:
+         * SPDX-License-Identifier: curl AND ISC
+    Scancode info:
+        Original SPDX id: curl
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://curl.haxx.se/, http://curl.haxx.se/docs/copyright.html, https://spdx.org/licenses/curl
+    Files with this license:
+        lib/curl_path.c [21:21]
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        lib/curl_path.c [21:21]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     Public-Domain        18d8c996d50e6190086b35c34caec698
+BELONGS bin/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 98.04
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        lib/md5.c [252:269]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 98.04
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        lib/md5.c [252:269]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     Public-Domain        18ed429b519e9abeeb3f768979574386
+BELONGS bin/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 97.06
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        lib/md4.c [227:244]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 97.06
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        lib/md4.c [227:244]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     ISC                  42403c461b20603be5f466a4d8f336e4
+BELONGS bin/ya.make ya.make
+    License text:
+         * SPDX-License-Identifier: ISC
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        lib/inet_ntop.c [17:17]
+        lib/inet_pton.c [18:18]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     curl                 6bcdf3225a7cae0be8789b78cf53a201
+BELONGS bin/ya.make ya.make
+    License text:
+         * SPDX-License-Identifier: curl
+    Scancode info:
+        Original SPDX id: curl
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://curl.haxx.se/, http://curl.haxx.se/docs/copyright.html, https://spdx.org/licenses/curl
+    Files with this license:
+        include/curl/curl.h [23:23]
+        include/curl/curlver.h [23:23]
+        include/curl/easy.h [23:23]
+        include/curl/header.h [23:23]
+        include/curl/mprintf.h [23:23]
+        include/curl/multi.h [23:23]
+        include/curl/options.h [23:23]
+        include/curl/stdcheaders.h [23:23]
+        include/curl/system.h [23:23]
+        include/curl/typecheck-gcc.h [23:23]
+        include/curl/urlapi.h [23:23]
+        include/curl/websockets.h [23:23]
+        lib/altsvc.c [21:21]
+        lib/altsvc.h [23:23]
+        lib/amigaos.c [21:21]
+        lib/amigaos.h [23:23]
+        lib/arpa_telnet.h [23:23]
+        lib/asyn-ares.c [21:21]
+        lib/asyn-thread.c [21:21]
+        lib/asyn.h [23:23]
+        lib/base64.c [21:21]
+        lib/bufq.c [21:21]
+        lib/bufq.h [23:23]
+        lib/bufref.c [21:21]
+        lib/bufref.h [23:23]
+        lib/c-hyper.c [21:21]
+        lib/c-hyper.h [23:23]
+        lib/cf-h1-proxy.c [21:21]
+        lib/cf-h1-proxy.h [23:23]
+        lib/cf-h2-proxy.c [21:21]
+        lib/cf-h2-proxy.h [23:23]
+        lib/cf-haproxy.c [21:21]
+        lib/cf-haproxy.h [23:23]
+        lib/cf-https-connect.c [21:21]
+        lib/cf-https-connect.h [23:23]
+        lib/cf-socket.c [21:21]
+        lib/cf-socket.h [23:23]
+        lib/cfilters.c [21:21]
+        lib/cfilters.h [23:23]
+        lib/conncache.c [22:22]
+        lib/conncache.h [24:24]
+        lib/connect.c [21:21]
+        lib/connect.h [23:23]
+        lib/content_encoding.c [21:21]
+        lib/content_encoding.h [23:23]
+        lib/cookie.c [21:21]
+        lib/cookie.h [23:23]
+        lib/curl_addrinfo.c [21:21]
+        lib/curl_addrinfo.h [23:23]
+        lib/curl_base64.h [23:23]
+        lib/curl_ctype.h [23:23]
+        lib/curl_des.c [21:21]
+        lib/curl_des.h [23:23]
+        lib/curl_endian.c [21:21]
+        lib/curl_endian.h [23:23]
+        lib/curl_fnmatch.c [21:21]
+        lib/curl_fnmatch.h [23:23]
+        lib/curl_get_line.c [21:21]
+        lib/curl_get_line.h [23:23]
+        lib/curl_gethostname.c [21:21]
+        lib/curl_gethostname.h [23:23]
+        lib/curl_gssapi.c [21:21]
+        lib/curl_hmac.h [23:23]
+        lib/curl_krb5.h [23:23]
+        lib/curl_ldap.h [23:23]
+        lib/curl_md4.h [23:23]
+        lib/curl_md5.h [23:23]
+        lib/curl_memory.h [23:23]
+        lib/curl_memrchr.c [21:21]
+        lib/curl_memrchr.h [23:23]
+        lib/curl_multibyte.c [21:21]
+        lib/curl_multibyte.h [23:23]
+        lib/curl_ntlm_core.c [21:21]
+        lib/curl_ntlm_core.h [23:23]
+        lib/curl_ntlm_wb.c [21:21]
+        lib/curl_ntlm_wb.h [23:23]
+        lib/curl_printf.h [23:23]
+        lib/curl_range.c [21:21]
+        lib/curl_range.h [23:23]
+        lib/curl_rtmp.c [22:22]
+        lib/curl_rtmp.h [23:23]
+        lib/curl_sasl.c [21:21]
+        lib/curl_sasl.h [23:23]
+        lib/curl_setup.h [23:23]
+        lib/curl_setup_once.h [23:23]
+        lib/curl_sha256.h [24:24]
+        lib/curl_sspi.c [21:21]
+        lib/curl_sspi.h [23:23]
+        lib/curl_threads.c [21:21]
+        lib/curl_threads.h [23:23]
+        lib/curl_trc.c [21:21]
+        lib/curl_trc.h [23:23]
+        lib/curlx.h [23:23]
+        lib/dict.c [21:21]
+        lib/dict.h [23:23]
+        lib/doh.c [21:21]
+        lib/doh.h [23:23]
+        lib/dynbuf.c [21:21]
+        lib/dynbuf.h [23:23]
+        lib/dynhds.c [21:21]
+        lib/dynhds.h [23:23]
+        lib/easy.c [21:21]
+        lib/easy_lock.h [23:23]
+        lib/easygetopt.c [21:21]
+        lib/easyif.h [23:23]
+        lib/easyoptions.c [21:21]
+        lib/easyoptions.h [23:23]
+        lib/escape.c [21:21]
+        lib/escape.h [23:23]
+        lib/file.c [21:21]
+        lib/file.h [23:23]
+        lib/fileinfo.c [21:21]
+        lib/fileinfo.h [23:23]
+        lib/fopen.c [21:21]
+        lib/fopen.h [23:23]
+        lib/formdata.c [21:21]
+        lib/formdata.h [23:23]
+        lib/ftp.c [21:21]
+        lib/ftp.h [23:23]
+        lib/ftplistparser.c [21:21]
+        lib/ftplistparser.h [23:23]
+        lib/functypes.h [23:23]
+        lib/getenv.c [21:21]
+        lib/getinfo.c [21:21]
+        lib/getinfo.h [23:23]
+        lib/gopher.c [21:21]
+        lib/gopher.h [23:23]
+        lib/hash.c [21:21]
+        lib/hash.h [23:23]
+        lib/headers.c [21:21]
+        lib/headers.h [23:23]
+        lib/hmac.c [21:21]
+        lib/hostasyn.c [21:21]
+        lib/hostip.c [21:21]
+        lib/hostip.h [23:23]
+        lib/hostip4.c [21:21]
+        lib/hostip6.c [21:21]
+        lib/hostsyn.c [21:21]
+        lib/hsts.c [21:21]
+        lib/hsts.h [23:23]
+        lib/http.c [21:21]
+        lib/http.h [23:23]
+        lib/http1.c [21:21]
+        lib/http1.h [23:23]
+        lib/http2.c [21:21]
+        lib/http2.h [23:23]
+        lib/http_aws_sigv4.c [21:21]
+        lib/http_aws_sigv4.h [23:23]
+        lib/http_chunks.c [21:21]
+        lib/http_chunks.h [23:23]
+        lib/http_digest.c [21:21]
+        lib/http_digest.h [23:23]
+        lib/http_negotiate.c [21:21]
+        lib/http_negotiate.h [23:23]
+        lib/http_ntlm.c [21:21]
+        lib/http_ntlm.h [23:23]
+        lib/http_proxy.c [21:21]
+        lib/http_proxy.h [23:23]
+        lib/idn.c [21:21]
+        lib/idn.h [23:23]
+        lib/if2ip.c [21:21]
+        lib/if2ip.h [23:23]
+        lib/imap.c [21:21]
+        lib/imap.h [23:23]
+        lib/inet_ntop.h [23:23]
+        lib/inet_pton.h [23:23]
+        lib/ldap.c [21:21]
+        lib/llist.c [21:21]
+        lib/llist.h [23:23]
+        lib/macos.c [21:21]
+        lib/macos.h [23:23]
+        lib/md4.c [21:21]
+        lib/md5.c [21:21]
+        lib/memdebug.c [21:21]
+        lib/memdebug.h [24:24]
+        lib/mime.c [21:21]
+        lib/mime.h [23:23]
+        lib/mprintf.c [21:21]
+        lib/mqtt.c [22:22]
+        lib/mqtt.h [23:23]
+        lib/multi.c [21:21]
+        lib/multihandle.h [23:23]
+        lib/multiif.h [23:23]
+        lib/netrc.c [21:21]
+        lib/netrc.h [23:23]
+        lib/nonblock.c [21:21]
+        lib/nonblock.h [23:23]
+        lib/noproxy.c [21:21]
+        lib/noproxy.h [23:23]
+        lib/openldap.c [22:22]
+        lib/parsedate.c [21:21]
+        lib/parsedate.h [23:23]
+        lib/pingpong.c [21:21]
+        lib/pingpong.h [23:23]
+        lib/pop3.c [21:21]
+        lib/pop3.h [23:23]
+        lib/progress.c [21:21]
+        lib/progress.h [23:23]
+        lib/psl.c [21:21]
+        lib/psl.h [23:23]
+        lib/rand.c [21:21]
+        lib/rand.h [23:23]
+        lib/rename.c [21:21]
+        lib/rename.h [23:23]
+        lib/rtsp.c [21:21]
+        lib/rtsp.h [23:23]
+        lib/select.c [21:21]
+        lib/select.h [23:23]
+        lib/sendf.c [21:21]
+        lib/sendf.h [23:23]
+        lib/setopt.c [21:21]
+        lib/setopt.h [23:23]
+        lib/setup-win32.h [23:23]
+        lib/sha256.c [22:22]
+        lib/share.c [21:21]
+        lib/share.h [23:23]
+        lib/sigpipe.h [23:23]
+        lib/slist.c [21:21]
+        lib/slist.h [23:23]
+        lib/smb.c [22:22]
+        lib/smb.h [24:24]
+        lib/smtp.c [21:21]
+        lib/smtp.h [23:23]
+        lib/sockaddr.h [23:23]
+        lib/socketpair.c [21:21]
+        lib/socketpair.h [23:23]
+        lib/socks.c [21:21]
+        lib/socks.h [23:23]
+        lib/socks_gssapi.c [22:22]
+        lib/socks_sspi.c [22:22]
+        lib/speedcheck.c [21:21]
+        lib/speedcheck.h [23:23]
+        lib/splay.c [21:21]
+        lib/splay.h [23:23]
+        lib/strcase.c [21:21]
+        lib/strcase.h [23:23]
+        lib/strdup.c [21:21]
+        lib/strdup.h [23:23]
+        lib/strerror.c [21:21]
+        lib/strerror.h [23:23]
+        lib/strtok.c [21:21]
+        lib/strtok.h [23:23]
+        lib/strtoofft.c [21:21]
+        lib/strtoofft.h [23:23]
+        lib/system_win32.c [21:21]
+        lib/system_win32.h [23:23]
+        lib/telnet.c [21:21]
+        lib/telnet.h [23:23]
+        lib/tftp.c [21:21]
+        lib/tftp.h [23:23]
+        lib/timediff.c [21:21]
+        lib/timediff.h [23:23]
+        lib/timeval.c [21:21]
+        lib/timeval.h [23:23]
+        lib/transfer.c [21:21]
+        lib/transfer.h [23:23]
+        lib/url.c [21:21]
+        lib/url.h [23:23]
+        lib/urlapi-int.h [23:23]
+        lib/urlapi.c [21:21]
+        lib/urldata.h [23:23]
+        lib/vauth/cleartext.c [21:21]
+        lib/vauth/cram.c [21:21]
+        lib/vauth/digest.c [21:21]
+        lib/vauth/digest.h [23:23]
+        lib/vauth/digest_sspi.c [22:22]
+        lib/vauth/gsasl.c [21:21]
+        lib/vauth/krb5_gssapi.c [22:22]
+        lib/vauth/krb5_sspi.c [21:21]
+        lib/vauth/ntlm.c [21:21]
+        lib/vauth/ntlm.h [23:23]
+        lib/vauth/ntlm_sspi.c [21:21]
+        lib/vauth/oauth2.c [21:21]
+        lib/vauth/spnego_gssapi.c [21:21]
+        lib/vauth/spnego_sspi.c [21:21]
+        lib/vauth/vauth.c [21:21]
+        lib/vauth/vauth.h [23:23]
+        lib/version.c [21:21]
+        lib/version_win32.c [21:21]
+        lib/version_win32.h [23:23]
+        lib/vquic/curl_msh3.c [21:21]
+        lib/vquic/curl_msh3.h [23:23]
+        lib/vquic/curl_ngtcp2.c [21:21]
+        lib/vquic/curl_ngtcp2.h [23:23]
+        lib/vquic/curl_quiche.c [21:21]
+        lib/vquic/curl_quiche.h [23:23]
+        lib/vquic/vquic.c [21:21]
+        lib/vquic/vquic.h [23:23]
+        lib/vquic/vquic_int.h [23:23]
+        lib/vssh/libssh.c [24:24]
+        lib/vssh/libssh2.c [21:21]
+        lib/vssh/ssh.h [23:23]
+        lib/vssh/wolfssh.c [21:21]
+        lib/vtls/bearssl.c [21:21]
+        lib/vtls/bearssl.h [23:23]
+        lib/vtls/gtls.c [21:21]
+        lib/vtls/gtls.h [23:23]
+        lib/vtls/hostcheck.c [21:21]
+        lib/vtls/hostcheck.h [23:23]
+        lib/vtls/keylog.c [21:21]
+        lib/vtls/keylog.h [23:23]
+        lib/vtls/mbedtls.c [22:22]
+        lib/vtls/mbedtls.h [24:24]
+        lib/vtls/mbedtls_threadlock.c [22:22]
+        lib/vtls/openssl.c [21:21]
+        lib/vtls/openssl.h [23:23]
+        lib/vtls/rustls.c [22:22]
+        lib/vtls/rustls.h [22:22]
+        lib/vtls/schannel.c [23:23]
+        lib/vtls/schannel.h [24:24]
+        lib/vtls/schannel_verify.c [23:23]
+        lib/vtls/sectransp.c [22:22]
+        lib/vtls/sectransp.h [24:24]
+        lib/vtls/vtls.c [21:21]
+        lib/vtls/vtls.h [23:23]
+        lib/vtls/vtls_int.h [23:23]
+        lib/vtls/wolfssl.c [21:21]
+        lib/vtls/wolfssl.h [23:23]
+        lib/vtls/x509asn1.c [21:21]
+        lib/vtls/x509asn1.h [24:24]
+        lib/warnless.c [21:21]
+        lib/warnless.h [23:23]
+        lib/ws.c [21:21]
+        lib/ws.h [23:23]
+        src/slist_wc.c [21:21]
+        src/slist_wc.h [23:23]
+        src/tool_binmode.c [21:21]
+        src/tool_binmode.h [23:23]
+        src/tool_bname.c [21:21]
+        src/tool_bname.h [23:23]
+        src/tool_cb_dbg.c [21:21]
+        src/tool_cb_dbg.h [23:23]
+        src/tool_cb_hdr.c [21:21]
+        src/tool_cb_hdr.h [23:23]
+        src/tool_cb_prg.c [21:21]
+        src/tool_cb_prg.h [23:23]
+        src/tool_cb_rea.c [21:21]
+        src/tool_cb_rea.h [23:23]
+        src/tool_cb_see.c [21:21]
+        src/tool_cb_see.h [23:23]
+        src/tool_cb_wrt.c [21:21]
+        src/tool_cb_wrt.h [23:23]
+        src/tool_cfgable.c [21:21]
+        src/tool_cfgable.h [23:23]
+        src/tool_dirhie.c [21:21]
+        src/tool_dirhie.h [23:23]
+        src/tool_doswin.c [21:21]
+        src/tool_doswin.h [23:23]
+        src/tool_easysrc.c [21:21]
+        src/tool_easysrc.h [23:23]
+        src/tool_filetime.c [21:21]
+        src/tool_filetime.h [23:23]
+        src/tool_findfile.c [21:21]
+        src/tool_findfile.h [23:23]
+        src/tool_formparse.c [21:21]
+        src/tool_formparse.h [23:23]
+        src/tool_getparam.c [21:21]
+        src/tool_getparam.h [23:23]
+        src/tool_getpass.c [21:21]
+        src/tool_getpass.h [23:23]
+        src/tool_help.c [21:21]
+        src/tool_help.h [23:23]
+        src/tool_helpers.c [21:21]
+        src/tool_helpers.h [23:23]
+        src/tool_hugehelp.h [23:23]
+        src/tool_ipfs.c [21:21]
+        src/tool_ipfs.h [23:23]
+        src/tool_libinfo.c [21:21]
+        src/tool_libinfo.h [23:23]
+        src/tool_listhelp.c [21:21]
+        src/tool_main.c [21:21]
+        src/tool_main.h [23:23]
+        src/tool_msgs.c [21:21]
+        src/tool_msgs.h [23:23]
+        src/tool_operate.c [21:21]
+        src/tool_operate.h [23:23]
+        src/tool_operhlp.c [21:21]
+        src/tool_operhlp.h [23:23]
+        src/tool_paramhlp.c [21:21]
+        src/tool_paramhlp.h [23:23]
+        src/tool_parsecfg.c [21:21]
+        src/tool_parsecfg.h [23:23]
+        src/tool_progress.c [21:21]
+        src/tool_progress.h [23:23]
+        src/tool_sdecls.h [23:23]
+        src/tool_setopt.c [21:21]
+        src/tool_setopt.h [23:23]
+        src/tool_setup.h [23:23]
+        src/tool_sleep.c [21:21]
+        src/tool_sleep.h [23:23]
+        src/tool_stderr.c [21:21]
+        src/tool_stderr.h [23:23]
+        src/tool_strdup.c [21:21]
+        src/tool_strdup.h [23:23]
+        src/tool_urlglob.c [21:21]
+        src/tool_urlglob.h [23:23]
+        src/tool_util.c [21:21]
+        src/tool_util.h [23:23]
+        src/tool_version.h [23:23]
+        src/tool_vms.c [21:21]
+        src/tool_vms.h [23:23]
+        src/tool_writeout.c [21:21]
+        src/tool_writeout.h [23:23]
+        src/tool_writeout_json.c [21:21]
+        src/tool_writeout_json.h [23:23]
+        src/tool_xattr.c [21:21]
+        src/tool_xattr.h [23:23]
+        src/var.c [21:21]
+        src/var.h [23:23]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     curl                 8d0a9a92c51299f01fc99a8cb1c854ec
+BELONGS bin/ya.make ya.make
+    License text:
+        SPDX-License-Identifier: curl
+    Scancode info:
+        Original SPDX id: curl
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://curl.haxx.se/, http://curl.haxx.se/docs/copyright.html, https://spdx.org/licenses/curl
+    Files with this license:
+        include/README.md [4:4]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     ISC                  a320c8c85dbcdf0a6f3f24f0dc7abbbb
+BELONGS bin/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        lib/inet_ntop.c [4:15]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     ISC                  a33bf68b7a1c6d0ca7948114d5f40d02
+BELONGS bin/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        lib/inet_pton.c [5:16]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     curl                 a3ae8291721a79f582bf5823c43adb47
+BELONGS bin/ya.make ya.make
+FILE_INCLUDE COPYING found in files: include/curl/curl.h at line 12, include/curl/curl.h at line 18, include/curl/curlver.h at line 12, include/curl/curlver.h at line 18, include/curl/easy.h at line 12, include/curl/easy.h at line 18, include/curl/header.h at line 12, include/curl/header.h at line 18, include/curl/mprintf.h at line 12, include/curl/mprintf.h at line 18, include/curl/multi.h at line 12, include/curl/multi.h at line 18, include/curl/options.h at line 12, include/curl/options.h at line 18, include/curl/stdcheaders.h at line 12, include/curl/stdcheaders.h at line 18, include/curl/system.h at line 12, include/curl/system.h at line 18, include/curl/typecheck-gcc.h at line 12, include/curl/typecheck-gcc.h at line 18, include/curl/urlapi.h at line 12, include/curl/urlapi.h at line 18, include/curl/websockets.h at line 12, include/curl/websockets.h at line 18, lib/altsvc.c at line 10, lib/altsvc.c at line 16, lib/altsvc.h at line 12, lib/altsvc.h at line 18, lib/amigaos.c at line 10, lib/amigaos.c at line 16, lib/amigaos.h at line 12, lib/amigaos.h at line 18, lib/arpa_telnet.h at line 12, lib/arpa_telnet.h at line 18, lib/asyn-ares.c at line 10, lib/asyn-ares.c at line 16, lib/asyn-thread.c at line 10, lib/asyn-thread.c at line 16, lib/asyn.h at line 12, lib/asyn.h at line 18, lib/base64.c at line 10, lib/base64.c at line 16, lib/bufq.c at line 10, lib/bufq.c at line 16, lib/bufq.h at line 12, lib/bufq.h at line 18, lib/bufref.c at line 10, lib/bufref.c at line 16, lib/bufref.h at line 12, lib/bufref.h at line 18, lib/cf-h1-proxy.c at line 10, lib/cf-h1-proxy.c at line 16, lib/cf-h1-proxy.h at line 12, lib/cf-h1-proxy.h at line 18, lib/cf-h2-proxy.c at line 10, lib/cf-h2-proxy.c at line 16, lib/cf-h2-proxy.h at line 12, lib/cf-h2-proxy.h at line 18, lib/cf-haproxy.c at line 10, lib/cf-haproxy.c at line 16, lib/cf-haproxy.h at line 12, lib/cf-haproxy.h at line 18, lib/cf-https-connect.c at line 10, lib/cf-https-connect.c at line 16, lib/cf-https-connect.h at line 12, lib/cf-https-connect.h at line 18, lib/cf-socket.c at line 10, lib/cf-socket.c at line 16, lib/cf-socket.h at line 12, lib/cf-socket.h at line 18, lib/cfilters.c at line 10, lib/cfilters.c at line 16, lib/cfilters.h at line 12, lib/cfilters.h at line 18, lib/conncache.c at line 11, lib/conncache.c at line 17, lib/conncache.h at line 13, lib/conncache.h at line 19, lib/connect.c at line 10, lib/connect.c at line 16, lib/connect.h at line 12, lib/connect.h at line 18, lib/content_encoding.c at line 10, lib/content_encoding.c at line 16, lib/content_encoding.h at line 12, lib/content_encoding.h at line 18, lib/cookie.c at line 10, lib/cookie.c at line 16, lib/cookie.h at line 12, lib/cookie.h at line 18, lib/curl_addrinfo.c at line 10, lib/curl_addrinfo.c at line 16, lib/curl_addrinfo.h at line 12, lib/curl_addrinfo.h at line 18, lib/curl_base64.h at line 12, lib/curl_base64.h at line 18, lib/curl_ctype.h at line 12, lib/curl_ctype.h at line 18, lib/curl_des.c at line 10, lib/curl_des.c at line 16, lib/curl_des.h at line 12, lib/curl_des.h at line 18, lib/curl_endian.c at line 10, lib/curl_endian.c at line 16, lib/curl_endian.h at line 12, lib/curl_endian.h at line 18, lib/curl_fnmatch.c at line 10, lib/curl_fnmatch.c at line 16, lib/curl_fnmatch.h at line 12, lib/curl_fnmatch.h at line 18, lib/curl_get_line.c at line 10, lib/curl_get_line.c at line 16, lib/curl_get_line.h at line 12, lib/curl_get_line.h at line 18, lib/curl_gethostname.c at line 10, lib/curl_gethostname.c at line 16, lib/curl_gethostname.h at line 12, lib/curl_gethostname.h at line 18, lib/curl_gssapi.c at line 10, lib/curl_gssapi.c at line 16, lib/curl_hmac.h at line 12, lib/curl_hmac.h at line 18, lib/curl_krb5.h at line 12, lib/curl_krb5.h at line 18, lib/curl_ldap.h at line 12, lib/curl_ldap.h at line 18, lib/curl_md4.h at line 12, lib/curl_md4.h at line 18, lib/curl_md5.h at line 12, lib/curl_md5.h at line 18, lib/curl_memory.h at line 12, lib/curl_memory.h at line 18, lib/curl_memrchr.c at line 10, lib/curl_memrchr.c at line 16, lib/curl_memrchr.h at line 12, lib/curl_memrchr.h at line 18, lib/curl_multibyte.c at line 10, lib/curl_multibyte.c at line 16, lib/curl_multibyte.h at line 12, lib/curl_multibyte.h at line 18, lib/curl_ntlm_core.c at line 10, lib/curl_ntlm_core.c at line 16, lib/curl_ntlm_core.h at line 12, lib/curl_ntlm_core.h at line 18, lib/curl_ntlm_wb.c at line 10, lib/curl_ntlm_wb.c at line 16, lib/curl_ntlm_wb.h at line 12, lib/curl_ntlm_wb.h at line 18, lib/curl_path.c at line 10, lib/curl_path.c at line 16, lib/curl_printf.h at line 12, lib/curl_printf.h at line 18, lib/curl_range.c at line 10, lib/curl_range.c at line 16, lib/curl_range.h at line 12, lib/curl_range.h at line 18, lib/curl_rtmp.c at line 11, lib/curl_rtmp.c at line 17, lib/curl_rtmp.h at line 12, lib/curl_rtmp.h at line 18, lib/curl_sasl.c at line 10, lib/curl_sasl.c at line 16, lib/curl_sasl.h at line 12, lib/curl_sasl.h at line 18, lib/curl_setup.h at line 12, lib/curl_setup.h at line 18, lib/curl_setup_once.h at line 12, lib/curl_setup_once.h at line 18, lib/curl_sha256.h at line 13, lib/curl_sha256.h at line 19, lib/curl_sspi.c at line 10, lib/curl_sspi.c at line 16, lib/curl_sspi.h at line 12, lib/curl_sspi.h at line 18, lib/curl_threads.c at line 10, lib/curl_threads.c at line 16, lib/curl_threads.h at line 12, lib/curl_threads.h at line 18, lib/curl_trc.c at line 10, lib/curl_trc.c at line 16, lib/curl_trc.h at line 12, lib/curl_trc.h at line 18, lib/curlx.h at line 12, lib/curlx.h at line 18, lib/dict.c at line 10, lib/dict.c at line 16, lib/dict.h at line 12, lib/dict.h at line 18, lib/doh.c at line 10, lib/doh.c at line 16, lib/doh.h at line 12, lib/doh.h at line 18, lib/dynbuf.c at line 10, lib/dynbuf.c at line 16, lib/dynbuf.h at line 12, lib/dynbuf.h at line 18, lib/dynhds.c at line 10, lib/dynhds.c at line 16, lib/dynhds.h at line 12, lib/dynhds.h at line 18, lib/easy.c at line 10, lib/easy.c at line 16, lib/easy_lock.h at line 12, lib/easy_lock.h at line 18, lib/easygetopt.c at line 10, lib/easygetopt.c at line 16, lib/easyif.h at line 12, lib/easyif.h at line 18, lib/easyoptions.c at line 10, lib/easyoptions.c at line 16, lib/easyoptions.h at line 12, lib/easyoptions.h at line 18, lib/escape.c at line 10, lib/escape.c at line 16, lib/escape.h at line 12, lib/escape.h at line 18, lib/file.c at line 10, lib/file.c at line 16, lib/file.h at line 12, lib/file.h at line 18, lib/fileinfo.c at line 10, lib/fileinfo.c at line 16, lib/fileinfo.h at line 12, lib/fileinfo.h at line 18, lib/fopen.c at line 10, lib/fopen.c at line 16, lib/fopen.h at line 12, lib/fopen.h at line 18, lib/formdata.c at line 10, lib/formdata.c at line 16, lib/formdata.h at line 12, lib/formdata.h at line 18, lib/ftp.c at line 10, lib/ftp.c at line 16, lib/ftp.h at line 12, lib/ftp.h at line 18, lib/ftplistparser.c at line 10, lib/ftplistparser.c at line 16, lib/ftplistparser.h at line 12, lib/ftplistparser.h at line 18, lib/functypes.h at line 12, lib/functypes.h at line 18, lib/getenv.c at line 10, lib/getenv.c at line 16, lib/getinfo.c at line 10, lib/getinfo.c at line 16, lib/getinfo.h at line 12, lib/getinfo.h at line 18, lib/gopher.c at line 10, lib/gopher.c at line 16, lib/gopher.h at line 12, lib/gopher.h at line 18, lib/hash.c at line 10, lib/hash.c at line 16, lib/hash.h at line 12, lib/hash.h at line 18, lib/headers.c at line 10, lib/headers.c at line 16, lib/headers.h at line 12, lib/headers.h at line 18, lib/hmac.c at line 10, lib/hmac.c at line 16, lib/hostasyn.c at line 10, lib/hostasyn.c at line 16, lib/hostip.c at line 10, lib/hostip.c at line 16, lib/hostip.h at line 12, lib/hostip.h at line 18, lib/hostip4.c at line 10, lib/hostip4.c at line 16, lib/hostip6.c at line 10, lib/hostip6.c at line 16, lib/hostsyn.c at line 10, lib/hostsyn.c at line 16, lib/hsts.c at line 10, lib/hsts.c at line 16, lib/hsts.h at line 12, lib/hsts.h at line 18, lib/http.c at line 10, lib/http.c at line 16, lib/http.h at line 12, lib/http.h at line 18, lib/http1.c at line 10, lib/http1.c at line 16, lib/http1.h at line 12, lib/http1.h at line 18, lib/http2.c at line 10, lib/http2.c at line 16, lib/http2.h at line 12, lib/http2.h at line 18, lib/http_chunks.c at line 10, lib/http_chunks.c at line 16, lib/http_chunks.h at line 12, lib/http_chunks.h at line 18, lib/http_digest.c at line 10, lib/http_digest.c at line 16, lib/http_digest.h at line 12, lib/http_digest.h at line 18, lib/http_negotiate.c at line 10, lib/http_negotiate.c at line 16, lib/http_negotiate.h at line 12, lib/http_negotiate.h at line 18, lib/http_ntlm.c at line 10, lib/http_ntlm.c at line 16, lib/http_ntlm.h at line 12, lib/http_ntlm.h at line 18, lib/http_proxy.c at line 10, lib/http_proxy.c at line 16, lib/http_proxy.h at line 12, lib/http_proxy.h at line 18, lib/idn.c at line 10, lib/idn.c at line 16, lib/idn.h at line 12, lib/idn.h at line 18, lib/if2ip.c at line 10, lib/if2ip.c at line 16, lib/if2ip.h at line 12, lib/if2ip.h at line 18, lib/imap.c at line 10, lib/imap.c at line 16, lib/imap.h at line 12, lib/imap.h at line 18, lib/inet_ntop.h at line 12, lib/inet_ntop.h at line 18, lib/inet_pton.h at line 12, lib/inet_pton.h at line 18, lib/ldap.c at line 10, lib/ldap.c at line 16, lib/llist.c at line 10, lib/llist.c at line 16, lib/llist.h at line 12, lib/llist.h at line 18, lib/macos.c at line 10, lib/macos.c at line 16, lib/macos.h at line 12, lib/macos.h at line 18, lib/md4.c at line 10, lib/md4.c at line 16, lib/md5.c at line 10, lib/md5.c at line 16, lib/memdebug.c at line 10, lib/memdebug.c at line 16, lib/memdebug.h at line 13, lib/memdebug.h at line 19, lib/mime.c at line 10, lib/mime.c at line 16, lib/mime.h at line 12, lib/mime.h at line 18, lib/mprintf.c at line 10, lib/mprintf.c at line 16, lib/mqtt.c at line 11, lib/mqtt.c at line 17, lib/mqtt.h at line 12, lib/mqtt.h at line 18, lib/multi.c at line 10, lib/multi.c at line 16, lib/multihandle.h at line 12, lib/multihandle.h at line 18, lib/multiif.h at line 12, lib/multiif.h at line 18, lib/netrc.c at line 10, lib/netrc.c at line 16, lib/netrc.h at line 12, lib/netrc.h at line 18, lib/nonblock.c at line 10, lib/nonblock.c at line 16, lib/nonblock.h at line 12, lib/nonblock.h at line 18, lib/noproxy.c at line 10, lib/noproxy.c at line 16, lib/noproxy.h at line 12, lib/noproxy.h at line 18, lib/openldap.c at line 11, lib/openldap.c at line 17, lib/parsedate.c at line 10, lib/parsedate.c at line 16, lib/parsedate.h at line 12, lib/parsedate.h at line 18, lib/pingpong.c at line 10, lib/pingpong.c at line 16, lib/pingpong.h at line 12, lib/pingpong.h at line 18, lib/pop3.c at line 10, lib/pop3.c at line 16, lib/pop3.h at line 12, lib/pop3.h at line 18, lib/progress.c at line 10, lib/progress.c at line 16, lib/progress.h at line 12, lib/progress.h at line 18, lib/psl.c at line 10, lib/psl.c at line 16, lib/psl.h at line 12, lib/psl.h at line 18, lib/rand.c at line 10, lib/rand.c at line 16, lib/rand.h at line 12, lib/rand.h at line 18, lib/rename.c at line 10, lib/rename.c at line 16, lib/rename.h at line 12, lib/rename.h at line 18, lib/rtsp.c at line 10, lib/rtsp.c at line 16, lib/rtsp.h at line 12, lib/rtsp.h at line 18, lib/select.c at line 10, lib/select.c at line 16, lib/select.h at line 12, lib/select.h at line 18, lib/sendf.c at line 10, lib/sendf.c at line 16, lib/sendf.h at line 12, lib/sendf.h at line 18, lib/setopt.c at line 10, lib/setopt.c at line 16, lib/setopt.h at line 12, lib/setopt.h at line 18, lib/setup-win32.h at line 12, lib/setup-win32.h at line 18, lib/sha256.c at line 11, lib/sha256.c at line 17, lib/share.c at line 10, lib/share.c at line 16, lib/share.h at line 12, lib/share.h at line 18, lib/sigpipe.h at line 12, lib/sigpipe.h at line 18, lib/slist.c at line 10, lib/slist.c at line 16, lib/slist.h at line 12, lib/slist.h at line 18, lib/smb.c at line 11, lib/smb.c at line 17, lib/smb.h at line 13, lib/smb.h at line 19, lib/smtp.c at line 10, lib/smtp.c at line 16, lib/smtp.h at line 12, lib/smtp.h at line 18, lib/sockaddr.h at line 12, lib/sockaddr.h at line 18, lib/socketpair.c at line 10, lib/socketpair.c at line 16, lib/socketpair.h at line 12, lib/socketpair.h at line 18, lib/socks.c at line 10, lib/socks.c at line 16, lib/socks.h at line 12, lib/socks.h at line 18, lib/socks_gssapi.c at line 11, lib/socks_gssapi.c at line 17, lib/socks_sspi.c at line 11, lib/socks_sspi.c at line 17, lib/speedcheck.c at line 10, lib/speedcheck.c at line 16, lib/speedcheck.h at line 12, lib/speedcheck.h at line 18, lib/splay.c at line 10, lib/splay.c at line 16, lib/splay.h at line 12, lib/splay.h at line 18, lib/strcase.c at line 10, lib/strcase.c at line 16, lib/strcase.h at line 12, lib/strcase.h at line 18, lib/strdup.c at line 10, lib/strdup.c at line 16, lib/strdup.h at line 12, lib/strdup.h at line 18, lib/strerror.c at line 10, lib/strerror.c at line 16, lib/strerror.h at line 12, lib/strerror.h at line 18, lib/strtok.c at line 10, lib/strtok.c at line 16, lib/strtok.h at line 12, lib/strtok.h at line 18, lib/strtoofft.c at line 10, lib/strtoofft.c at line 16, lib/strtoofft.h at line 12, lib/strtoofft.h at line 18, lib/system_win32.c at line 10, lib/system_win32.c at line 16, lib/system_win32.h at line 12, lib/system_win32.h at line 18, lib/telnet.c at line 10, lib/telnet.c at line 16, lib/telnet.h at line 12, lib/telnet.h at line 18, lib/tftp.c at line 10, lib/tftp.c at line 16, lib/tftp.h at line 12, lib/tftp.h at line 18, lib/timediff.c at line 10, lib/timediff.c at line 16, lib/timediff.h at line 12, lib/timediff.h at line 18, lib/timeval.c at line 10, lib/timeval.c at line 16, lib/timeval.h at line 12, lib/timeval.h at line 18, lib/transfer.c at line 10, lib/transfer.c at line 16, lib/transfer.h at line 12, lib/transfer.h at line 18, lib/url.c at line 10, lib/url.c at line 16, lib/url.h at line 12, lib/url.h at line 18, lib/urlapi-int.h at line 12, lib/urlapi-int.h at line 18, lib/urlapi.c at line 10, lib/urlapi.c at line 16, lib/urldata.h at line 12, lib/urldata.h at line 18, lib/vauth/cleartext.c at line 10, lib/vauth/cleartext.c at line 16, lib/vauth/cram.c at line 10, lib/vauth/cram.c at line 16, lib/vauth/digest.c at line 10, lib/vauth/digest.c at line 16, lib/vauth/digest.h at line 12, lib/vauth/digest.h at line 18, lib/vauth/digest_sspi.c at line 11, lib/vauth/digest_sspi.c at line 17, lib/vauth/gsasl.c at line 10, lib/vauth/gsasl.c at line 16, lib/vauth/krb5_gssapi.c at line 11, lib/vauth/krb5_gssapi.c at line 17, lib/vauth/krb5_sspi.c at line 10, lib/vauth/krb5_sspi.c at line 16, lib/vauth/ntlm.c at line 10, lib/vauth/ntlm.c at line 16, lib/vauth/ntlm.h at line 12, lib/vauth/ntlm.h at line 18, lib/vauth/ntlm_sspi.c at line 10, lib/vauth/ntlm_sspi.c at line 16, lib/vauth/oauth2.c at line 10, lib/vauth/oauth2.c at line 16, lib/vauth/spnego_gssapi.c at line 10, lib/vauth/spnego_gssapi.c at line 16, lib/vauth/spnego_sspi.c at line 10, lib/vauth/spnego_sspi.c at line 16, lib/vauth/vauth.c at line 10, lib/vauth/vauth.c at line 16, lib/vauth/vauth.h at line 12, lib/vauth/vauth.h at line 18, lib/version.c at line 10, lib/version.c at line 16, lib/version_win32.c at line 10, lib/version_win32.c at line 16, lib/version_win32.h at line 12, lib/version_win32.h at line 18, lib/vquic/curl_msh3.c at line 10, lib/vquic/curl_msh3.c at line 16, lib/vquic/curl_msh3.h at line 12, lib/vquic/curl_msh3.h at line 18, lib/vquic/curl_ngtcp2.c at line 10, lib/vquic/curl_ngtcp2.c at line 16, lib/vquic/curl_ngtcp2.h at line 12, lib/vquic/curl_ngtcp2.h at line 18, lib/vquic/curl_quiche.c at line 10, lib/vquic/curl_quiche.c at line 16, lib/vquic/curl_quiche.h at line 12, lib/vquic/curl_quiche.h at line 18, lib/vquic/vquic.c at line 10, lib/vquic/vquic.c at line 16, lib/vquic/vquic.h at line 12, lib/vquic/vquic.h at line 18, lib/vquic/vquic_int.h at line 12, lib/vquic/vquic_int.h at line 18, lib/vssh/libssh.c at line 13, lib/vssh/libssh.c at line 19, lib/vssh/libssh2.c at line 10, lib/vssh/libssh2.c at line 16, lib/vssh/ssh.h at line 12, lib/vssh/ssh.h at line 18, lib/vssh/wolfssh.c at line 10, lib/vssh/wolfssh.c at line 16, lib/vtls/bearssl.c at line 10, lib/vtls/bearssl.c at line 16, lib/vtls/bearssl.h at line 12, lib/vtls/bearssl.h at line 18, lib/vtls/gtls.c at line 10, lib/vtls/gtls.c at line 16, lib/vtls/gtls.h at line 12, lib/vtls/gtls.h at line 18, lib/vtls/hostcheck.c at line 10, lib/vtls/hostcheck.c at line 16, lib/vtls/hostcheck.h at line 12, lib/vtls/hostcheck.h at line 18, lib/vtls/keylog.c at line 10, lib/vtls/keylog.c at line 16, lib/vtls/keylog.h at line 12, lib/vtls/keylog.h at line 18, lib/vtls/mbedtls.c at line 11, lib/vtls/mbedtls.c at line 17, lib/vtls/mbedtls.h at line 13, lib/vtls/mbedtls.h at line 19, lib/vtls/mbedtls_threadlock.c at line 11, lib/vtls/mbedtls_threadlock.c at line 17, lib/vtls/openssl.c at line 10, lib/vtls/openssl.c at line 16, lib/vtls/openssl.h at line 12, lib/vtls/openssl.h at line 18, lib/vtls/rustls.c at line 11, lib/vtls/rustls.c at line 17, lib/vtls/rustls.h at line 11, lib/vtls/rustls.h at line 17, lib/vtls/schannel.c at line 12, lib/vtls/schannel.c at line 18, lib/vtls/schannel.h at line 13, lib/vtls/schannel.h at line 19, lib/vtls/schannel_verify.c at line 12, lib/vtls/schannel_verify.c at line 18, lib/vtls/sectransp.c at line 11, lib/vtls/sectransp.c at line 17, lib/vtls/sectransp.h at line 13, lib/vtls/sectransp.h at line 19, lib/vtls/vtls.c at line 10, lib/vtls/vtls.c at line 16, lib/vtls/vtls.h at line 12, lib/vtls/vtls.h at line 18, lib/vtls/vtls_int.h at line 12, lib/vtls/vtls_int.h at line 18, lib/vtls/wolfssl.c at line 10, lib/vtls/wolfssl.c at line 16, lib/vtls/wolfssl.h at line 12, lib/vtls/wolfssl.h at line 18, lib/vtls/x509asn1.c at line 10, lib/vtls/x509asn1.c at line 16, lib/vtls/x509asn1.h at line 13, lib/vtls/x509asn1.h at line 19, lib/warnless.c at line 10, lib/warnless.c at line 16, lib/warnless.h at line 12, lib/warnless.h at line 18, lib/ws.c at line 10, lib/ws.c at line 16, lib/ws.h at line 12, lib/ws.h at line 18, src/slist_wc.c at line 10, src/slist_wc.c at line 16, src/slist_wc.h at line 12, src/slist_wc.h at line 18, src/tool_binmode.c at line 10, src/tool_binmode.c at line 16, src/tool_binmode.h at line 12, src/tool_binmode.h at line 18, src/tool_bname.c at line 10, src/tool_bname.c at line 16, src/tool_bname.h at line 12, src/tool_bname.h at line 18, src/tool_cb_dbg.c at line 10, src/tool_cb_dbg.c at line 16, src/tool_cb_dbg.h at line 12, src/tool_cb_dbg.h at line 18, src/tool_cb_hdr.c at line 10, src/tool_cb_hdr.c at line 16, src/tool_cb_hdr.h at line 12, src/tool_cb_hdr.h at line 18, src/tool_cb_prg.c at line 10, src/tool_cb_prg.c at line 16, src/tool_cb_prg.h at line 12, src/tool_cb_prg.h at line 18, src/tool_cb_rea.c at line 10, src/tool_cb_rea.c at line 16, src/tool_cb_rea.h at line 12, src/tool_cb_rea.h at line 18, src/tool_cb_see.c at line 10, src/tool_cb_see.c at line 16, src/tool_cb_see.h at line 12, src/tool_cb_see.h at line 18, src/tool_cb_wrt.c at line 10, src/tool_cb_wrt.c at line 16, src/tool_cb_wrt.h at line 12, src/tool_cb_wrt.h at line 18, src/tool_cfgable.c at line 10, src/tool_cfgable.c at line 16, src/tool_cfgable.h at line 12, src/tool_cfgable.h at line 18, src/tool_dirhie.c at line 10, src/tool_dirhie.c at line 16, src/tool_dirhie.h at line 12, src/tool_dirhie.h at line 18, src/tool_doswin.c at line 10, src/tool_doswin.c at line 16, src/tool_doswin.h at line 12, src/tool_doswin.h at line 18, src/tool_easysrc.c at line 10, src/tool_easysrc.c at line 16, src/tool_easysrc.h at line 12, src/tool_easysrc.h at line 18, src/tool_filetime.c at line 10, src/tool_filetime.c at line 16, src/tool_filetime.h at line 12, src/tool_filetime.h at line 18, src/tool_findfile.c at line 10, src/tool_findfile.c at line 16, src/tool_findfile.h at line 12, src/tool_findfile.h at line 18, src/tool_formparse.c at line 10, src/tool_formparse.c at line 16, src/tool_formparse.h at line 12, src/tool_formparse.h at line 18, src/tool_getparam.c at line 10, src/tool_getparam.c at line 16, src/tool_getparam.h at line 12, src/tool_getparam.h at line 18, src/tool_getpass.c at line 10, src/tool_getpass.c at line 16, src/tool_getpass.h at line 12, src/tool_getpass.h at line 18, src/tool_help.c at line 10, src/tool_help.c at line 16, src/tool_help.h at line 12, src/tool_help.h at line 18, src/tool_helpers.c at line 10, src/tool_helpers.c at line 16, src/tool_helpers.h at line 12, src/tool_helpers.h at line 18, src/tool_hugehelp.h at line 12, src/tool_hugehelp.h at line 18, src/tool_ipfs.c at line 10, src/tool_ipfs.c at line 16, src/tool_ipfs.h at line 12, src/tool_ipfs.h at line 18, src/tool_libinfo.c at line 10, src/tool_libinfo.c at line 16, src/tool_libinfo.h at line 12, src/tool_libinfo.h at line 18, src/tool_listhelp.c at line 10, src/tool_listhelp.c at line 16, src/tool_main.c at line 10, src/tool_main.c at line 16, src/tool_main.h at line 12, src/tool_main.h at line 18, src/tool_msgs.c at line 10, src/tool_msgs.c at line 16, src/tool_msgs.h at line 12, src/tool_msgs.h at line 18, src/tool_operate.c at line 10, src/tool_operate.c at line 16, src/tool_operate.h at line 12, src/tool_operate.h at line 18, src/tool_operhlp.c at line 10, src/tool_operhlp.c at line 16, src/tool_operhlp.h at line 12, src/tool_operhlp.h at line 18, src/tool_paramhlp.c at line 10, src/tool_paramhlp.c at line 16, src/tool_paramhlp.h at line 12, src/tool_paramhlp.h at line 18, src/tool_parsecfg.c at line 10, src/tool_parsecfg.c at line 16, src/tool_parsecfg.h at line 12, src/tool_parsecfg.h at line 18, src/tool_progress.c at line 10, src/tool_progress.c at line 16, src/tool_progress.h at line 12, src/tool_progress.h at line 18, src/tool_sdecls.h at line 12, src/tool_sdecls.h at line 18, src/tool_setopt.c at line 10, src/tool_setopt.c at line 16, src/tool_setopt.h at line 12, src/tool_setopt.h at line 18, src/tool_setup.h at line 12, src/tool_setup.h at line 18, src/tool_sleep.c at line 10, src/tool_sleep.c at line 16, src/tool_sleep.h at line 12, src/tool_sleep.h at line 18, src/tool_stderr.c at line 10, src/tool_stderr.c at line 16, src/tool_stderr.h at line 12, src/tool_stderr.h at line 18, src/tool_strdup.c at line 10, src/tool_strdup.c at line 16, src/tool_strdup.h at line 12, src/tool_strdup.h at line 18, src/tool_urlglob.c at line 10, src/tool_urlglob.c at line 16, src/tool_urlglob.h at line 12, src/tool_urlglob.h at line 18, src/tool_util.c at line 10, src/tool_util.c at line 16, src/tool_util.h at line 12, src/tool_util.h at line 18, src/tool_version.h at line 12, src/tool_version.h at line 18, src/tool_vms.c at line 10, src/tool_vms.c at line 16, src/tool_vms.h at line 12, src/tool_vms.h at line 18, src/tool_writeout.c at line 10, src/tool_writeout.c at line 16, src/tool_writeout.h at line 12, src/tool_writeout.h at line 18, src/tool_writeout_json.c at line 10, src/tool_writeout_json.c at line 16, src/tool_writeout_json.h at line 12, src/tool_writeout_json.h at line 18, src/tool_xattr.c at line 10, src/tool_xattr.c at line 16, src/tool_xattr.h at line 12, src/tool_xattr.h at line 18, src/var.c at line 10, src/var.c at line 16, src/var.h at line 12, src/var.h at line 18
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: curl
+        Score           : 96.55
+        Match type      : NOTICE
+        Links           : http://curl.haxx.se/, http://curl.haxx.se/docs/copyright.html, https://spdx.org/licenses/curl
+    Files with this license:
+        include/curl/curl.h [12:21]
+        include/curl/curlver.h [12:21]
+        include/curl/easy.h [12:21]
+        include/curl/header.h [12:21]
+        include/curl/mprintf.h [12:21]
+        include/curl/multi.h [12:21]
+        include/curl/options.h [12:21]
+        include/curl/stdcheaders.h [12:21]
+        include/curl/system.h [12:21]
+        include/curl/typecheck-gcc.h [12:21]
+        include/curl/urlapi.h [12:21]
+        include/curl/websockets.h [12:21]
+        lib/altsvc.c [10:19]
+        lib/altsvc.h [12:21]
+        lib/amigaos.c [10:19]
+        lib/amigaos.h [12:21]
+        lib/arpa_telnet.h [12:21]
+        lib/asyn-ares.c [10:19]
+        lib/asyn-thread.c [10:19]
+        lib/asyn.h [12:21]
+        lib/base64.c [10:19]
+        lib/bufq.c [10:19]
+        lib/bufq.h [12:21]
+        lib/bufref.c [10:19]
+        lib/bufref.h [12:21]
+        lib/cf-h1-proxy.c [10:19]
+        lib/cf-h1-proxy.h [12:21]
+        lib/cf-h2-proxy.c [10:19]
+        lib/cf-h2-proxy.h [12:21]
+        lib/cf-haproxy.c [10:19]
+        lib/cf-haproxy.h [12:21]
+        lib/cf-https-connect.c [10:19]
+        lib/cf-https-connect.h [12:21]
+        lib/cf-socket.c [10:19]
+        lib/cf-socket.h [12:21]
+        lib/cfilters.c [10:19]
+        lib/cfilters.h [12:21]
+        lib/conncache.c [11:20]
+        lib/conncache.h [13:22]
+        lib/connect.c [10:19]
+        lib/connect.h [12:21]
+        lib/content_encoding.c [10:19]
+        lib/content_encoding.h [12:21]
+        lib/cookie.c [10:19]
+        lib/cookie.h [12:21]
+        lib/curl_addrinfo.c [10:19]
+        lib/curl_addrinfo.h [12:21]
+        lib/curl_base64.h [12:21]
+        lib/curl_ctype.h [12:21]
+        lib/curl_des.c [10:19]
+        lib/curl_des.h [12:21]
+        lib/curl_endian.c [10:19]
+        lib/curl_endian.h [12:21]
+        lib/curl_fnmatch.c [10:19]
+        lib/curl_fnmatch.h [12:21]
+        lib/curl_get_line.c [10:19]
+        lib/curl_get_line.h [12:21]
+        lib/curl_gethostname.c [10:19]
+        lib/curl_gethostname.h [12:21]
+        lib/curl_gssapi.c [10:19]
+        lib/curl_hmac.h [12:21]
+        lib/curl_krb5.h [12:21]
+        lib/curl_ldap.h [12:21]
+        lib/curl_md4.h [12:21]
+        lib/curl_md5.h [12:21]
+        lib/curl_memory.h [12:21]
+        lib/curl_memrchr.c [10:19]
+        lib/curl_memrchr.h [12:21]
+        lib/curl_multibyte.c [10:19]
+        lib/curl_multibyte.h [12:21]
+        lib/curl_ntlm_core.c [10:19]
+        lib/curl_ntlm_core.h [12:21]
+        lib/curl_ntlm_wb.c [10:19]
+        lib/curl_ntlm_wb.h [12:21]
+        lib/curl_path.c [10:19]
+        lib/curl_printf.h [12:21]
+        lib/curl_range.c [10:19]
+        lib/curl_range.h [12:21]
+        lib/curl_rtmp.c [11:20]
+        lib/curl_rtmp.h [12:21]
+        lib/curl_sasl.c [10:19]
+        lib/curl_sasl.h [12:21]
+        lib/curl_setup.h [12:21]
+        lib/curl_setup_once.h [12:21]
+        lib/curl_sha256.h [13:22]
+        lib/curl_sspi.c [10:19]
+        lib/curl_sspi.h [12:21]
+        lib/curl_threads.c [10:19]
+        lib/curl_threads.h [12:21]
+        lib/curl_trc.c [10:19]
+        lib/curl_trc.h [12:21]
+        lib/curlx.h [12:21]
+        lib/dict.c [10:19]
+        lib/dict.h [12:21]
+        lib/doh.c [10:19]
+        lib/doh.h [12:21]
+        lib/dynbuf.c [10:19]
+        lib/dynbuf.h [12:21]
+        lib/dynhds.c [10:19]
+        lib/dynhds.h [12:21]
+        lib/easy.c [10:19]
+        lib/easy_lock.h [12:21]
+        lib/easygetopt.c [10:19]
+        lib/easyif.h [12:21]
+        lib/easyoptions.c [10:19]
+        lib/easyoptions.h [12:21]
+        lib/escape.c [10:19]
+        lib/escape.h [12:21]
+        lib/file.c [10:19]
+        lib/file.h [12:21]
+        lib/fileinfo.c [10:19]
+        lib/fileinfo.h [12:21]
+        lib/fopen.c [10:19]
+        lib/fopen.h [12:21]
+        lib/formdata.c [10:19]
+        lib/formdata.h [12:21]
+        lib/ftp.c [10:19]
+        lib/ftp.h [12:21]
+        lib/ftplistparser.c [10:19]
+        lib/ftplistparser.h [12:21]
+        lib/functypes.h [12:21]
+        lib/getenv.c [10:19]
+        lib/getinfo.c [10:19]
+        lib/getinfo.h [12:21]
+        lib/gopher.c [10:19]
+        lib/gopher.h [12:21]
+        lib/hash.c [10:19]
+        lib/hash.h [12:21]
+        lib/headers.c [10:19]
+        lib/headers.h [12:21]
+        lib/hmac.c [10:19]
+        lib/hostasyn.c [10:19]
+        lib/hostip.c [10:19]
+        lib/hostip.h [12:21]
+        lib/hostip4.c [10:19]
+        lib/hostip6.c [10:19]
+        lib/hostsyn.c [10:19]
+        lib/hsts.c [10:19]
+        lib/hsts.h [12:21]
+        lib/http.c [10:19]
+        lib/http.h [12:21]
+        lib/http1.c [10:19]
+        lib/http1.h [12:21]
+        lib/http2.c [10:19]
+        lib/http2.h [12:21]
+        lib/http_chunks.c [10:19]
+        lib/http_chunks.h [12:21]
+        lib/http_digest.c [10:19]
+        lib/http_digest.h [12:21]
+        lib/http_negotiate.c [10:19]
+        lib/http_negotiate.h [12:21]
+        lib/http_ntlm.c [10:19]
+        lib/http_ntlm.h [12:21]
+        lib/http_proxy.c [10:19]
+        lib/http_proxy.h [12:21]
+        lib/idn.c [10:19]
+        lib/idn.h [12:21]
+        lib/if2ip.c [10:19]
+        lib/if2ip.h [12:21]
+        lib/imap.c [10:19]
+        lib/imap.h [12:21]
+        lib/inet_ntop.h [12:21]
+        lib/inet_pton.h [12:21]
+        lib/ldap.c [10:19]
+        lib/llist.c [10:19]
+        lib/llist.h [12:21]
+        lib/macos.c [10:19]
+        lib/macos.h [12:21]
+        lib/md4.c [10:19]
+        lib/md5.c [10:19]
+        lib/memdebug.c [10:19]
+        lib/memdebug.h [13:22]
+        lib/mime.c [10:19]
+        lib/mime.h [12:21]
+        lib/mprintf.c [10:19]
+        lib/mqtt.c [11:20]
+        lib/mqtt.h [12:21]
+        lib/multi.c [10:19]
+        lib/multihandle.h [12:21]
+        lib/multiif.h [12:21]
+        lib/netrc.c [10:19]
+        lib/netrc.h [12:21]
+        lib/nonblock.c [10:19]
+        lib/nonblock.h [12:21]
+        lib/noproxy.c [10:19]
+        lib/noproxy.h [12:21]
+        lib/openldap.c [11:20]
+        lib/parsedate.c [10:19]
+        lib/parsedate.h [12:21]
+        lib/pingpong.c [10:19]
+        lib/pingpong.h [12:21]
+        lib/pop3.c [10:19]
+        lib/pop3.h [12:21]
+        lib/progress.c [10:19]
+        lib/progress.h [12:21]
+        lib/psl.c [10:19]
+        lib/psl.h [12:21]
+        lib/rand.c [10:19]
+        lib/rand.h [12:21]
+        lib/rename.c [10:19]
+        lib/rename.h [12:21]
+        lib/rtsp.c [10:19]
+        lib/rtsp.h [12:21]
+        lib/select.c [10:19]
+        lib/select.h [12:21]
+        lib/sendf.c [10:19]
+        lib/sendf.h [12:21]
+        lib/setopt.c [10:19]
+        lib/setopt.h [12:21]
+        lib/setup-win32.h [12:21]
+        lib/sha256.c [11:20]
+        lib/share.c [10:19]
+        lib/share.h [12:21]
+        lib/sigpipe.h [12:21]
+        lib/slist.c [10:19]
+        lib/slist.h [12:21]
+        lib/smb.c [11:20]
+        lib/smb.h [13:22]
+        lib/smtp.c [10:19]
+        lib/smtp.h [12:21]
+        lib/sockaddr.h [12:21]
+        lib/socketpair.c [10:19]
+        lib/socketpair.h [12:21]
+        lib/socks.c [10:19]
+        lib/socks.h [12:21]
+        lib/socks_gssapi.c [11:20]
+        lib/socks_sspi.c [11:20]
+        lib/speedcheck.c [10:19]
+        lib/speedcheck.h [12:21]
+        lib/splay.c [10:19]
+        lib/splay.h [12:21]
+        lib/strcase.c [10:19]
+        lib/strcase.h [12:21]
+        lib/strdup.c [10:19]
+        lib/strdup.h [12:21]
+        lib/strerror.c [10:19]
+        lib/strerror.h [12:21]
+        lib/strtok.c [10:19]
+        lib/strtok.h [12:21]
+        lib/strtoofft.c [10:19]
+        lib/strtoofft.h [12:21]
+        lib/system_win32.c [10:19]
+        lib/system_win32.h [12:21]
+        lib/telnet.c [10:19]
+        lib/telnet.h [12:21]
+        lib/tftp.c [10:19]
+        lib/tftp.h [12:21]
+        lib/timediff.c [10:19]
+        lib/timediff.h [12:21]
+        lib/timeval.c [10:19]
+        lib/timeval.h [12:21]
+        lib/transfer.c [10:19]
+        lib/transfer.h [12:21]
+        lib/url.c [10:19]
+        lib/url.h [12:21]
+        lib/urlapi-int.h [12:21]
+        lib/urlapi.c [10:19]
+        lib/urldata.h [12:21]
+        lib/vauth/cleartext.c [10:19]
+        lib/vauth/cram.c [10:19]
+        lib/vauth/digest.c [10:19]
+        lib/vauth/digest.h [12:21]
+        lib/vauth/digest_sspi.c [11:20]
+        lib/vauth/gsasl.c [10:19]
+        lib/vauth/krb5_gssapi.c [11:20]
+        lib/vauth/krb5_sspi.c [10:19]
+        lib/vauth/ntlm.c [10:19]
+        lib/vauth/ntlm.h [12:21]
+        lib/vauth/ntlm_sspi.c [10:19]
+        lib/vauth/oauth2.c [10:19]
+        lib/vauth/spnego_gssapi.c [10:19]
+        lib/vauth/spnego_sspi.c [10:19]
+        lib/vauth/vauth.c [10:19]
+        lib/vauth/vauth.h [12:21]
+        lib/version.c [10:19]
+        lib/version_win32.c [10:19]
+        lib/version_win32.h [12:21]
+        lib/vquic/curl_msh3.c [10:19]
+        lib/vquic/curl_msh3.h [12:21]
+        lib/vquic/curl_ngtcp2.c [10:19]
+        lib/vquic/curl_ngtcp2.h [12:21]
+        lib/vquic/curl_quiche.c [10:19]
+        lib/vquic/curl_quiche.h [12:21]
+        lib/vquic/vquic.c [10:19]
+        lib/vquic/vquic.h [12:21]
+        lib/vquic/vquic_int.h [12:21]
+        lib/vssh/libssh.c [13:22]
+        lib/vssh/libssh2.c [10:19]
+        lib/vssh/ssh.h [12:21]
+        lib/vssh/wolfssh.c [10:19]
+        lib/vtls/bearssl.c [10:19]
+        lib/vtls/bearssl.h [12:21]
+        lib/vtls/gtls.c [10:19]
+        lib/vtls/gtls.h [12:21]
+        lib/vtls/hostcheck.c [10:19]
+        lib/vtls/hostcheck.h [12:21]
+        lib/vtls/keylog.c [10:19]
+        lib/vtls/keylog.h [12:21]
+        lib/vtls/mbedtls.c [11:20]
+        lib/vtls/mbedtls.h [13:22]
+        lib/vtls/mbedtls_threadlock.c [11:20]
+        lib/vtls/openssl.c [10:19]
+        lib/vtls/openssl.h [12:21]
+        lib/vtls/rustls.c [11:20]
+        lib/vtls/rustls.h [11:20]
+        lib/vtls/schannel.c [12:21]
+        lib/vtls/schannel.h [13:22]
+        lib/vtls/schannel_verify.c [12:21]
+        lib/vtls/sectransp.c [11:20]
+        lib/vtls/sectransp.h [13:22]
+        lib/vtls/vtls.c [10:19]
+        lib/vtls/vtls.h [12:21]
+        lib/vtls/vtls_int.h [12:21]
+        lib/vtls/wolfssl.c [10:19]
+        lib/vtls/wolfssl.h [12:21]
+        lib/vtls/x509asn1.c [10:19]
+        lib/vtls/x509asn1.h [13:22]
+        lib/warnless.c [10:19]
+        lib/warnless.h [12:21]
+        lib/ws.c [10:19]
+        lib/ws.h [12:21]
+        src/slist_wc.c [10:19]
+        src/slist_wc.h [12:21]
+        src/tool_binmode.c [10:19]
+        src/tool_binmode.h [12:21]
+        src/tool_bname.c [10:19]
+        src/tool_bname.h [12:21]
+        src/tool_cb_dbg.c [10:19]
+        src/tool_cb_dbg.h [12:21]
+        src/tool_cb_hdr.c [10:19]
+        src/tool_cb_hdr.h [12:21]
+        src/tool_cb_prg.c [10:19]
+        src/tool_cb_prg.h [12:21]
+        src/tool_cb_rea.c [10:19]
+        src/tool_cb_rea.h [12:21]
+        src/tool_cb_see.c [10:19]
+        src/tool_cb_see.h [12:21]
+        src/tool_cb_wrt.c [10:19]
+        src/tool_cb_wrt.h [12:21]
+        src/tool_cfgable.c [10:19]
+        src/tool_cfgable.h [12:21]
+        src/tool_dirhie.c [10:19]
+        src/tool_dirhie.h [12:21]
+        src/tool_doswin.c [10:19]
+        src/tool_doswin.h [12:21]
+        src/tool_easysrc.c [10:19]
+        src/tool_easysrc.h [12:21]
+        src/tool_filetime.c [10:19]
+        src/tool_filetime.h [12:21]
+        src/tool_findfile.c [10:19]
+        src/tool_findfile.h [12:21]
+        src/tool_formparse.c [10:19]
+        src/tool_formparse.h [12:21]
+        src/tool_getparam.c [10:19]
+        src/tool_getparam.h [12:21]
+        src/tool_getpass.c [10:19]
+        src/tool_getpass.h [12:21]
+        src/tool_help.c [10:19]
+        src/tool_help.h [12:21]
+        src/tool_helpers.c [10:19]
+        src/tool_helpers.h [12:21]
+        src/tool_hugehelp.h [12:21]
+        src/tool_ipfs.c [10:19]
+        src/tool_ipfs.h [12:21]
+        src/tool_libinfo.c [10:19]
+        src/tool_libinfo.h [12:21]
+        src/tool_listhelp.c [10:19]
+        src/tool_main.c [10:19]
+        src/tool_main.h [12:21]
+        src/tool_msgs.c [10:19]
+        src/tool_msgs.h [12:21]
+        src/tool_operate.c [10:19]
+        src/tool_operate.h [12:21]
+        src/tool_operhlp.c [10:19]
+        src/tool_operhlp.h [12:21]
+        src/tool_paramhlp.c [10:19]
+        src/tool_paramhlp.h [12:21]
+        src/tool_parsecfg.c [10:19]
+        src/tool_parsecfg.h [12:21]
+        src/tool_progress.c [10:19]
+        src/tool_progress.h [12:21]
+        src/tool_sdecls.h [12:21]
+        src/tool_setopt.c [10:19]
+        src/tool_setopt.h [12:21]
+        src/tool_setup.h [12:21]
+        src/tool_sleep.c [10:19]
+        src/tool_sleep.h [12:21]
+        src/tool_stderr.c [10:19]
+        src/tool_stderr.h [12:21]
+        src/tool_strdup.c [10:19]
+        src/tool_strdup.h [12:21]
+        src/tool_urlglob.c [10:19]
+        src/tool_urlglob.h [12:21]
+        src/tool_util.c [10:19]
+        src/tool_util.h [12:21]
+        src/tool_version.h [12:21]
+        src/tool_vms.c [10:19]
+        src/tool_vms.h [12:21]
+        src/tool_writeout.c [10:19]
+        src/tool_writeout.h [12:21]
+        src/tool_writeout_json.c [10:19]
+        src/tool_writeout_json.h [12:21]
+        src/tool_xattr.c [10:19]
+        src/tool_xattr.h [12:21]
+        src/var.c [10:19]
+        src/var.h [12:21]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     BSD-3-Clause         bcd96bf495243cd22767952d056c373c
+BELONGS bin/ya.make ya.make
+    License text:
+         * SPDX-License-Identifier: BSD-3-Clause
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        lib/krb5.c [8:8]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     BSD-3-Clause         be4b0ef51fe3fb41b94214ba4614bf94
+BELONGS bin/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        lib/krb5.c [10:35]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     curl                 c608ecbd1721037a900ee5342d8fe6b4
+BELONGS bin/ya.make ya.make
+FILE_INCLUDE COPYING found in files: lib/c-hyper.c at line 10, lib/c-hyper.c at line 16, lib/c-hyper.h at line 12, lib/c-hyper.h at line 18, lib/http_aws_sigv4.c at line 10, lib/http_aws_sigv4.c at line 16, lib/http_aws_sigv4.h at line 12, lib/http_aws_sigv4.h at line 18
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: curl
+        Score           : 98.85
+        Match type      : NOTICE
+        Links           : http://curl.haxx.se/, http://curl.haxx.se/docs/copyright.html, https://spdx.org/licenses/curl
+    Files with this license:
+        lib/c-hyper.c [10:19]
+        lib/c-hyper.h [12:21]
+        lib/http_aws_sigv4.c [10:19]
+        lib/http_aws_sigv4.h [12:21]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     Public-Domain        e1407be30f6023cfd2ef48b215bac4c2
+BELONGS bin/ya.make ya.make
+    License text:
+        /* This is based on SHA256 implementation in LibTomCrypt that was released into
+         * public domain by Tom St Denis. */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        lib/sha256.c [264:265]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     ISC                  e6a382fc7564fdd1a5e46b2d97b3221f
+BELONGS bin/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        lib/curl_path.c [106:116]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     curl                 fd7b0b2c4f7f164b0fa5c2f9cf4ef41a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: curl
+        Score           : 90.06
+        Match type      : TEXT
+        Links           : http://curl.haxx.se/, http://curl.haxx.se/docs/copyright.html, https://spdx.org/licenses/curl
+    Files with this license:
+        COPYING [1:22]

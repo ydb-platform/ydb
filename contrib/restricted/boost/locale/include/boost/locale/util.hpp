@@ -71,7 +71,7 @@ namespace boost { namespace locale {
             /// or an invalid UTF-8 sequence is found
             static constexpr utf::code_point illegal = utf::illegal;
 
-            /// This value is returned in following cases: The of incomplete input sequence was found or
+            /// This value is returned in following cases: An incomplete input sequence was found or
             /// insufficient output buffer was provided so complete output could not be written.
             static constexpr utf::code_point incomplete = utf::incomplete;
 
@@ -114,7 +114,7 @@ namespace boost { namespace locale {
             virtual utf::code_point to_unicode(const char*& begin, const char* end)
             {
                 if(begin == end)
-                    return incomplete;
+                    return incomplete; // LCOV_EXCL_LINE
                 unsigned char cp = *begin;
                 if(cp <= 0x7F) {
                     begin++;
@@ -136,7 +136,7 @@ namespace boost { namespace locale {
             virtual utf::len_or_error from_unicode(utf::code_point u, char* begin, const char* end)
             {
                 if(begin == end)
-                    return incomplete;
+                    return incomplete; // LCOV_EXCL_LINE
                 if(u >= 0x80)
                     return illegal;
                 *begin = static_cast<char>(u);

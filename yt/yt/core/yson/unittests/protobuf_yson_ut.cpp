@@ -22,6 +22,8 @@
 
 #include <google/protobuf/wire_format.h>
 
+#include <util/generic/scope.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1691,7 +1693,7 @@ TEST(TProtobufToYsonTest, Success)
     }
 
     TEST_PROLOGUE()
-    Y_PROTOBUF_SUPPRESS_NODISCARD message.SerializeToCodedStream(&codedStream);
+    Y_UNUSED(message.SerializeToCodedStream(&codedStream));
     TEST_EPILOGUE(TMessage)
 
     auto writtenNode = ConvertToNode(TYsonString(yson));
@@ -1822,9 +1824,10 @@ TEST(TProtobufToYsonTest, Casing)
     message.set_somefield(1);
     message.set_anotherfield123(2);
     message.set_crazy_field(3);
+    message.set_enumfield(NYT::NYson::NProto::TCamelCaseStyleMessage::VALUE_FIRST);
 
     TEST_PROLOGUE()
-    Y_PROTOBUF_SUPPRESS_NODISCARD message.SerializeToCodedStream(&codedStream);
+    Y_UNUSED(message.SerializeToCodedStream(&codedStream));
     TEST_EPILOGUE(TCamelCaseStyleMessage)
 
     auto writtenNode = ConvertToNode(TYsonString(yson));
@@ -1833,6 +1836,7 @@ TEST(TProtobufToYsonTest, Casing)
             .Item("some_field").Value(1)
             .Item("another_field123").Value(2)
             .Item("crazy_field").Value(3)
+            .Item("enum_field").Value("value_first")
         .EndMap();
     EXPECT_TRUE(AreNodesEqual(writtenNode, expectedNode));
 }
@@ -2032,6 +2036,27 @@ TEST(TProtobufToYsonTest, UnknownFields)
             .EndMap();
         EXPECT_TRUE(AreNodesEqual(writtenNode, expectedNode));
     }
+}
+
+TEST(TProtobufToYsonTest, UnknownFieldsNested)
+{
+    TProtobufParserOptions options;
+    options.SkipUnknownFields = true;
+
+    TEST_PROLOGUE()
+    codedStream.WriteTag(WireFormatLite::MakeTag(15 /*nested_message1*/, WireFormatLite::WIRETYPE_LENGTH_DELIMITED));
+    codedStream.WriteVarint64(3);
+    codedStream.WriteTag(WireFormatLite::MakeTag(42 /*unknown*/, WireFormatLite::WIRETYPE_VARINT));
+    codedStream.WriteVarint64(2);
+    TEST_EPILOGUE_WITH_OPTIONS(TMessage, options)
+
+    NProto::TMessage message;
+    TryDeserializeProto(&message, TRef::FromString(protobuf));
+
+    TString newYsonString;
+    TStringOutput newYsonOutputStream(newYsonString);
+    TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
+    WriteProtobufMessage(&ysonWriter, message, options);
 }
 
 TEST(TProtobufToYsonTest, ReservedFields)
@@ -2767,6 +2792,47 @@ TEST(TYsonToProtobufTest, Casing)
 
     EXPECT_EQ(message.somefield(), 1);
     EXPECT_EQ(message.anotherfield123(), 2);
+}
+
+TEST(TYsonToProtobufTest, ForceSnakeCaseNames)
+{
+    auto oldConfig = GetProtobufInteropConfig();
+    Y_DEFER {
+        SetProtobufInteropConfig(oldConfig);
+    };
+
+    auto newConfig = CloneYsonStruct(oldConfig);
+    newConfig->ForceSnakeCaseNames = true;
+    SetProtobufInteropConfig(newConfig);
+
+    auto ysonNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("some_field").Value(1)
+            .Item("another_field123").Value(2)
+        .EndMap();
+    auto ysonString = ConvertToYsonString(ysonNode);
+
+    NProto::TOtherExternalProtobuf message;
+    message.ParseFromStringOrThrow(NYson::YsonStringToProto(
+        ysonString,
+        NYson::ReflectProtobufMessageType<NProto::TOtherExternalProtobuf>(),
+        TProtobufWriterOptions()));
+
+    EXPECT_EQ(message.somefield(), 1);
+    EXPECT_EQ(message.anotherfield123(), 2);
+    {
+        TString newYsonString;
+        TStringOutput newYsonOutputStream(newYsonString);
+        TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
+        WriteProtobufMessage(&ysonWriter, message);
+
+        auto originalNode = NYTree::ConvertToNode(ysonString, NYTree::GetEphemeralNodeFactory());
+        auto newNode = NYTree::ConvertToNode(TYsonStringBuf(newYsonString), NYTree::GetEphemeralNodeFactory());
+
+        EXPECT_TRUE(NYTree::AreNodesEqual(originalNode, newNode))
+            << "Expected: " << ysonString.AsStringBuf() << "\n\n"
+            << "Actual: " << newYsonString << "\n\n";
+    }
 }
 
 } // namespace

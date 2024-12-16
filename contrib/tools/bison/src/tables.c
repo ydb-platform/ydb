@@ -1,7 +1,7 @@
 /* Output the generated parsing program for Bison.
 
-   Copyright (C) 1984, 1986, 1989, 1992, 2000-2006, 2009-2013 Free
-   Software Foundation, Inc.
+   Copyright (C) 1984, 1986, 1989, 1992, 2000-2006, 2009-2015, 2018-2021
+   Free Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -16,11 +16,12 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include <config.h>
 #include "system.h"
 
+#include <bitset.h>
 #include <bitsetv.h>
 
 #include "complain.h"
@@ -83,7 +84,7 @@ int nvectors;
 
 static base_number **froms;
 static base_number **tos;
-static unsigned int **conflict_tos;
+static int **conflict_tos;
 static size_t *tally;
 static base_number *width;
 
@@ -110,11 +111,17 @@ base_number *base = NULL;
    computation equals to BASE_MINIMUM, later mapped to BASE_NINF to
    keep parser tables small.  */
 base_number base_ninf = 0;
-static base_number *pos = NULL;
 
-static unsigned int *conflrow;
-unsigned int *conflict_table;
-unsigned int *conflict_list;
+/* Bitset representing an integer set in the range
+   POS_SET_OFFSET..(POS_SET_OFFSET + SIZE).  POS_SET_OFFSET is
+   nonpositive. */
+static bitset pos_set = NULL;
+/* The integer denoted by bitno 0 in pos_set.  */
+static int pos_set_base = 0;
+
+static int *conflrow;
+int *conflict_table;
+int *conflict_list;
 int conflict_list_cnt;
 static int conflict_list_free;
 
@@ -135,6 +142,76 @@ int high;
 state_number *yydefgoto;
 rule_number *yydefact;
 
+
+/*----------.
+| pos_set.  |
+`----------*/
+
+#if 0
+static void
+pos_set_dump (void)
+{
+  fprintf (stderr, "pos_set (%ld, %d) =", bitset_size (pos_set), pos_set_base);
+  bitset_iterator biter;
+  int i;
+  BITSET_FOR_EACH (biter, pos_set, i, 0)
+    fprintf (stderr, " %d", i + pos_set_base);
+  putc ('\n', stderr);
+}
+#endif
+
+
+/* The size and base of POS_SET are not known, we need to be able to
+   move the base farther "on the left", and grow "on the right".
+
+   It would be nice to be able to predict the base accurately, but it
+   seems difficult (-nstates seems to work most of the time, except
+   when there are useless tokens).
+
+   FIXME: The current approach is correct, but with poor performances.
+   Bitsets need to support 'assign' and 'shift'.  And instead of
+   extending POS_SET just for the out-of-range new values, we need
+   something like doubling the size.
+  */
+
+static void
+pos_set_set (int pos)
+{
+  int bitno = pos - pos_set_base;
+  if (bitno < 0)
+    {
+      // Need more room on the left.
+      // DELTA is positive.  Run 'pos_set >> delta'.
+      const int delta = pos_set_base - pos;
+      const int old_size = bitset_size (pos_set);
+      const int new_size = old_size + delta;
+      bitset_resize (pos_set, new_size);
+      // Right-shift all the bits by DELTA.  Be sure to reset the new
+      // bits on the left.
+      //
+      // FIXME: add bitset_assign, and bitset_shift?
+      for (int i = new_size - 1; 0 <= i ; --i)
+        if (delta <= i && bitset_test (pos_set, i - delta))
+          bitset_set (pos_set, i);
+        else
+          bitset_reset (pos_set, i);
+      pos_set_base = pos;
+      bitno = 0;
+    }
+  else if (bitset_size (pos_set) <= bitno)
+    // Need more room on the right.
+    bitset_resize (pos_set, bitno + 1);
+  bitset_set (pos_set, bitno);
+}
+
+static bool
+pos_set_test (int pos)
+{
+  const int bitno = pos - pos_set_base;
+  return bitset_test (pos_set, bitno);
+}
+
+
 /*-------------------------------------------------------------------.
 | If TABLE, CONFLICT_TABLE, and CHECK are too small to be addressed  |
 | at DESIRED, grow them.  TABLE[DESIRED] can be used, so the desired |
@@ -150,20 +227,21 @@ table_grow (int desired)
     table_size *= 2;
 
   if (trace_flag & trace_resource)
-    fprintf (stderr, "growing table and check from: %d to %d\n",
+    fprintf (stderr, "growing tables from %d to %d\n",
              old_size, table_size);
 
   table = xnrealloc (table, table_size, sizeof *table);
+  memset (table + old_size, 0,
+          sizeof *table * (table_size - old_size));
+
   conflict_table = xnrealloc (conflict_table, table_size,
                               sizeof *conflict_table);
-  check = xnrealloc (check, table_size, sizeof *check);
+  memset (conflict_table + old_size, 0,
+          sizeof *conflict_table * (table_size - old_size));
 
-  for (/* Nothing. */; old_size < table_size; ++old_size)
-    {
-      table[old_size] = 0;
-      conflict_table[old_size] = 0;
-      check[old_size] = -1;
-    }
+  check = xnrealloc (check, table_size, sizeof *check);
+  for (int i = old_size; i < table_size; ++i)
+    check[i] = -1;
 }
 
 
@@ -182,21 +260,19 @@ table_grow (int desired)
 static void
 conflict_row (state *s)
 {
-  int i, j;
-  reductions *reds = s->reductions;
-
   if (!nondeterministic_parser)
     return;
 
-  for (j = 0; j < ntokens; j += 1)
+  const reductions *reds = s->reductions;
+  for (state_number j = 0; j < ntokens; j += 1)
     if (conflrow[j])
       {
         conflrow[j] = conflict_list_cnt;
 
         /* Find all reductions for token J, and record all that do not
            match ACTROW[J].  */
-        for (i = 0; i < reds->num; i += 1)
-          if (bitset_test (reds->lookahead_tokens[i], j)
+        for (int i = 0; i < reds->num; i += 1)
+          if (bitset_test (reds->lookaheads[i], j)
               && (actrow[j]
                   != rule_number_as_item_number (reds->rules[i]->number)))
             {
@@ -238,73 +314,73 @@ conflict_row (state *s)
 static rule *
 action_row (state *s)
 {
-  int i;
-  rule *default_reduction = NULL;
-  reductions *reds = s->reductions;
-  transitions *trans = s->transitions;
-  errs *errp = s->errs;
-  /* Set to nonzero to inhibit having any default reduction.  */
-  bool nodefault = false;
-  bool conflicted = false;
-
-  for (i = 0; i < ntokens; i++)
+  for (state_number i = 0; i < ntokens; i++)
     actrow[i] = conflrow[i] = 0;
 
-  if (reds->lookahead_tokens)
-    {
-      int j;
-      bitset_iterator biter;
-      /* loop over all the rules available here which require
-         lookahead (in reverse order to give precedence to the first
-         rule) */
-      for (i = reds->num - 1; i >= 0; --i)
-        /* and find each token which the rule finds acceptable
-           to come next */
-        BITSET_FOR_EACH (biter, reds->lookahead_tokens[i], j, 0)
-        {
-          /* and record this rule as the rule to use if that
-             token follows.  */
-          if (actrow[j] != 0)
-            {
-              conflicted = true;
-              conflrow[j] = 1;
-            }
-          actrow[j] = rule_number_as_item_number (reds->rules[i]->number);
-        }
-    }
+  reductions *reds = s->reductions;
+  bool conflicted = false;
+  if (reds->lookaheads)
+    /* loop over all the rules available here which require
+       lookahead (in reverse order to give precedence to the first
+       rule) */
+    for (int i = reds->num - 1; 0 <= i; --i)
+      /* and find each token which the rule finds acceptable
+         to come next */
+      {
+        bitset_iterator biter;
+        int j;
+        BITSET_FOR_EACH (biter, reds->lookaheads[i], j, 0)
+          {
+            /* and record this rule as the rule to use if that
+               token follows.  */
+            if (actrow[j] != 0)
+              {
+                conflicted = true;
+                conflrow[j] = 1;
+              }
+            actrow[j] = rule_number_as_item_number (reds->rules[i]->number);
+          }
+      }
 
   /* Now see which tokens are allowed for shifts in this state.  For
      them, record the shift as the thing to do.  So shift is preferred
      to reduce.  */
-  FOR_EACH_SHIFT (trans, i)
-    {
-      symbol_number sym = TRANSITION_SYMBOL (trans, i);
-      state *shift_state = trans->states[i];
+  transitions *trans = s->transitions;
+  /* Set to nonzero to inhibit having any default reduction.  */
+  bool nodefault = false;
+  {
+    int i;
+    FOR_EACH_SHIFT (trans, i)
+      {
+        symbol_number sym = TRANSITION_SYMBOL (trans, i);
+        state *shift_state = trans->states[i];
 
-      if (actrow[sym] != 0)
-        {
-          conflicted = true;
-          conflrow[sym] = 1;
-        }
-      actrow[sym] = state_number_as_int (shift_state->number);
+        if (actrow[sym] != 0)
+          {
+            conflicted = true;
+            conflrow[sym] = 1;
+          }
+        actrow[sym] = state_number_as_int (shift_state->number);
 
-      /* Do not use any default reduction if there is a shift for
-         error */
-      if (sym == errtoken->number)
-        nodefault = true;
-    }
+        /* Do not use any default reduction if there is a shift for
+           error */
+        if (sym == errtoken->content->number)
+          nodefault = true;
+      }
+  }
 
   /* See which tokens are an explicit error in this state (due to
      %nonassoc).  For them, record ACTION_NUMBER_MINIMUM as the
      action.  */
-  for (i = 0; i < errp->num; i++)
+  errs *errp = s->errs;
+  for (int i = 0; i < errp->num; i++)
     {
       symbol *sym = errp->symbols[i];
-      actrow[sym->number] = ACTION_NUMBER_MINIMUM;
+      actrow[sym->content->number] = ACTION_NUMBER_MINIMUM;
     }
 
   /* Turn off default reductions where requested by the user.  See
-     state_lookahead_tokens_count in lalr.c to understand when states are
+     state_lookaheads_count in lalr.c to understand when states are
      labeled as consistent.  */
   {
     char *default_reductions =
@@ -316,7 +392,7 @@ action_row (state *s)
 
   /* Now find the most common reduction and make it the default action
      for this state.  */
-
+  rule *default_reduction = NULL;
   if (reds->num >= 1 && !nodefault)
     {
       if (s->consistent)
@@ -324,13 +400,11 @@ action_row (state *s)
       else
         {
           int max = 0;
-          for (i = 0; i < reds->num; i++)
+          for (int i = 0; i < reds->num; i++)
             {
               int count = 0;
               rule *r = reds->rules[i];
-              symbol_number j;
-
-              for (j = 0; j < ntokens; j++)
+              for (symbol_number j = 0; j < ntokens; j++)
                 if (actrow[j] == rule_number_as_item_number (r->number))
                   count++;
 
@@ -347,15 +421,12 @@ action_row (state *s)
              actions that match the default are replaced with zero,
              which means "use the default". */
 
-          if (max > 0)
-            {
-              int j;
-              for (j = 0; j < ntokens; j++)
-                if (actrow[j]
-                    == rule_number_as_item_number (default_reduction->number)
-                    && ! (nondeterministic_parser && conflrow[j]))
-                  actrow[j] = 0;
-            }
+          if (0 < max)
+            for (symbol_number j = 0; j < ntokens; j++)
+              if (actrow[j]
+                  == rule_number_as_item_number (default_reduction->number)
+                  && ! (nondeterministic_parser && conflrow[j]))
+                actrow[j] = 0;
         }
     }
 
@@ -363,7 +434,7 @@ action_row (state *s)
      So replace any action which says "error" with "use default".  */
 
   if (!default_reduction)
-    for (i = 0; i < ntokens; i++)
+    for (symbol_number i = 0; i < ntokens; i++)
       if (actrow[i] == ACTION_NUMBER_MINIMUM)
         actrow[i] = 0;
 
@@ -381,11 +452,9 @@ action_row (state *s)
 static void
 save_row (state_number s)
 {
-  symbol_number i;
-
   /* Number of non default actions in S.  */
   size_t count = 0;
-  for (i = 0; i < ntokens; i++)
+  for (symbol_number i = 0; i < ntokens; i++)
     if (actrow[i] != 0)
       count++;
 
@@ -394,11 +463,11 @@ save_row (state_number s)
       /* Allocate non defaulted actions.  */
       base_number *sp1 = froms[s] = xnmalloc (count, sizeof *sp1);
       base_number *sp2 = tos[s] = xnmalloc (count, sizeof *sp2);
-      unsigned int *sp3 = conflict_tos[s] =
+      int *sp3 = conflict_tos[s] =
         nondeterministic_parser ? xnmalloc (count, sizeof *sp3) : NULL;
 
       /* Store non defaulted actions.  */
-      for (i = 0; i < ntokens; i++)
+      for (symbol_number i = 0; i < ntokens; i++)
         if (actrow[i] != 0)
           {
             *sp1++ = i;
@@ -415,7 +484,7 @@ save_row (state_number s)
 
 /*------------------------------------------------------------------.
 | Figure out the actions for the specified state, indexed by        |
-| lookahead token type.                                             |
+| lookahead token kind.                                             |
 |                                                                   |
 | The YYDEFACT table is output now.  The detailed info is saved for |
 | putting into YYTABLE later.                                       |
@@ -437,34 +506,27 @@ token_actions (void)
 
   /* Find the rules which are reduced.  */
   if (!nondeterministic_parser)
+    for (rule_number r = 0; r < nrules; ++r)
+      rules[r].useful = false;
+
+  for (state_number i = 0; i < nstates; ++i)
     {
-      rule_number r;
-      for (r = 0; r < nrules; ++r)
-        rules[r].useful = false;
+      rule *default_reduction = action_row (states[i]);
+      yydefact[i] = default_reduction ? default_reduction->number + 1 : 0;
+      save_row (i);
+
+      /* Now that the parser was computed, we can find which rules are
+         really reduced, and which are not because of SR or RR
+         conflicts.  */
+      if (!nondeterministic_parser)
+        {
+          for (symbol_number j = 0; j < ntokens; ++j)
+            if (actrow[j] < 0 && actrow[j] != ACTION_NUMBER_MINIMUM)
+              rules[item_number_as_rule_number (actrow[j])].useful = true;
+          if (yydefact[i])
+            rules[yydefact[i] - 1].useful = true;
+        }
     }
-
-  {
-    state_number i;
-    for (i = 0; i < nstates; ++i)
-      {
-        rule *default_reduction = action_row (states[i]);
-        yydefact[i] = default_reduction ? default_reduction->number + 1 : 0;
-        save_row (i);
-
-        /* Now that the parser was computed, we can find which rules are
-           really reduced, and which are not because of SR or RR
-           conflicts.  */
-        if (!nondeterministic_parser)
-          {
-            symbol_number j;
-            for (j = 0; j < ntokens; ++j)
-              if (actrow[j] < 0 && actrow[j] != ACTION_NUMBER_MINIMUM)
-                rules[item_number_as_rule_number (actrow[j])].useful = true;
-            if (yydefact[i])
-              rules[yydefact[i] - 1].useful = true;
-          }
-      }
-  }
   free (actrow);
   free (conflrow);
 }
@@ -482,13 +544,12 @@ token_actions (void)
 static void
 save_column (symbol_number sym, state_number default_state)
 {
-  goto_number i;
-  goto_number begin = goto_map[sym - ntokens];
-  goto_number end = goto_map[sym - ntokens + 1];
+  const goto_number begin = goto_map[sym - ntokens];
+  const goto_number end = goto_map[sym - ntokens + 1];
 
   /* Number of non default GOTO.  */
   size_t count = 0;
-  for (i = begin; i < end; i++)
+  for (goto_number i = begin; i < end; i++)
     if (to_state[i] != default_state)
       count++;
 
@@ -500,7 +561,7 @@ save_column (symbol_number sym, state_number default_state)
       base_number *sp2 = tos[symno] = xnmalloc (count, sizeof *sp2);
 
       /* Store the state numbers of the non defaulted gotos.  */
-      for (i = begin; i < end; i++)
+      for (goto_number i = begin; i < end; i++)
         if (to_state[i] != default_state)
           {
             *sp1++ = from_state[i];
@@ -521,23 +582,27 @@ save_column (symbol_number sym, state_number default_state)
 static state_number
 default_goto (symbol_number sym, size_t state_count[])
 {
-  goto_number begin = goto_map[sym - ntokens];
-  goto_number end = goto_map[sym - ntokens + 1];
-  state_number res = -1;
+  const goto_number begin = goto_map[sym - ntokens];
+  const goto_number end = goto_map[sym - ntokens + 1];
+
+  /* In the case this symbol is never reduced to ($accept), use state
+     0.  We used to use -1, but as a result the yydefgoto table must
+     be signed, which (1) might trigger compiler warnings when storing
+     a value from yydefgoto into a state number (nonnegative), and (2)
+     wastes bits which might result in using a int16 where a uint8
+     suffices. */
+  state_number res = 0;
 
   if (begin != end)
     {
-      size_t max = 0;
-      goto_number i;
-      state_number s;
-
-      for (s = 0; s < nstates; s++)
+      for (state_number s = 0; s < nstates; s++)
         state_count[s] = 0;
 
-      for (i = begin; i < end; i++)
+      for (goto_number i = begin; i < end; i++)
         state_count[to_state[i]]++;
 
-      for (s = 0; s < nstates; s++)
+      size_t max = 0;
+      for (state_number s = 0; s < nstates; s++)
         if (max < state_count[s])
           {
             max = state_count[s];
@@ -560,13 +625,12 @@ default_goto (symbol_number sym, size_t state_count[])
 static void
 goto_actions (void)
 {
-  symbol_number i;
   size_t *state_count = xnmalloc (nstates, sizeof *state_count);
-  yydefgoto = xnmalloc (nvars, sizeof *yydefgoto);
+  yydefgoto = xnmalloc (nnterms, sizeof *yydefgoto);
 
   /* For a given nterm I, STATE_COUNT[S] is the number of times there
      is a GOTO to S on I.  */
-  for (i = ntokens; i < nsyms; ++i)
+  for (symbol_number i = ntokens; i < nsyms; ++i)
     {
       state_number default_state = default_goto (i, state_count);
       save_column (i, default_state);
@@ -584,16 +648,13 @@ goto_actions (void)
 static void
 sort_actions (void)
 {
-  int i;
-
   nentries = 0;
 
-  for (i = 0; i < nvectors; i++)
+  for (int i = 0; i < nvectors; i++)
     if (0 < tally[i])
       {
-        int k;
-        size_t t = tally[i];
-        int w = width[i];
+        const size_t t = tally[i];
+        const int w = width[i];
         int j = nentries - 1;
 
         while (0 <= j && width[order[j]] < w)
@@ -602,7 +663,7 @@ sort_actions (void)
         while (0 <= j && width[order[j]] == w && tally[order[j]] < t)
           j--;
 
-        for (k = nentries - 1; k > j; k--)
+        for (int k = nentries - 1; k > j; k--)
           order[k + 1] = order[k];
 
         order[j + 1] = i;
@@ -626,18 +687,14 @@ matching_state (vector_number vector)
     {
       size_t t = tally[i];
       int w = width[i];
-      int prev;
 
       /* If VECTOR has GLR conflicts, return -1 */
       if (conflict_tos[i] != NULL)
-        {
-          int j;
-          for (j = 0; j < t; j += 1)
-            if (conflict_tos[i][j] != 0)
-              return -1;
-        }
+        for (int j = 0; j < t; j += 1)
+          if (conflict_tos[i][j] != 0)
+            return -1;
 
-      for (prev = vector - 1; 0 <= prev; prev--)
+      for (int prev = vector - 1; 0 <= prev; prev--)
         {
           vector_number j = order[prev];
           /* Given how ORDER was computed, if the WIDTH or TALLY is
@@ -647,8 +704,7 @@ matching_state (vector_number vector)
           else
             {
               bool match = true;
-              int k;
-              for (k = 0; match && k < t; k++)
+              for (int k = 0; match && k < t; k++)
                 if (tos[j][k] != tos[i][k]
                     || froms[j][k] != froms[i][k]
                     || (conflict_tos[j] != NULL && conflict_tos[j][k] != 0))
@@ -665,22 +721,20 @@ matching_state (vector_number vector)
 static base_number
 pack_vector (vector_number vector)
 {
-  base_number res;
   vector_number i = order[vector];
   size_t t = tally[i];
   base_number *from = froms[i];
   base_number *to = tos[i];
-  unsigned int *conflict_to = conflict_tos[i];
+  int *conflict_to = conflict_tos[i];
 
   aver (t != 0);
 
-  for (res = lowzero - from[0]; ; res++)
+  for (base_number res = lowzero - from[0]; ; res++)
     {
       bool ok = true;
       aver (res < table_size);
       {
-        int k;
-        for (k = 0; ok && k < t; k++)
+        for (int k = 0; ok && k < t; k++)
           {
             int loc = res + state_number_as_int (from[k]);
             if (table_size <= loc)
@@ -690,17 +744,14 @@ pack_vector (vector_number vector)
               ok = false;
           }
 
-        if (ok)
-          for (k = 0; k < vector; k++)
-            if (pos[k] == res)
-              ok = false;
+        if (ok && pos_set_test (res))
+          ok = false;
       }
 
       if (ok)
         {
-          int loc;
-          int k;
-          for (k = 0; k < t; k++)
+          int loc PACIFY_CC (= -1);
+          for (int k = 0; k < t; k++)
             {
               loc = res + state_number_as_int (from[k]);
               table[loc] = to[k];
@@ -734,15 +785,14 @@ static base_number
 table_ninf_remap (base_number tab[], int size, base_number ninf)
 {
   base_number res = 0;
-  int i;
 
-  for (i = 0; i < size; i++)
+  for (int i = 0; i < size; i++)
     if (tab[i] < res && tab[i] != ninf)
       res = tab[i];
 
   --res;
 
-  for (i = 0; i < size; i++)
+  for (int i = 0; i < size; i++)
     if (tab[i] == ninf)
       tab[i] = res;
 
@@ -752,10 +802,9 @@ table_ninf_remap (base_number tab[], int size, base_number ninf)
 static void
 pack_table (void)
 {
-  int i;
-
   base = xnmalloc (nvectors, sizeof *base);
-  pos = xnmalloc (nentries, sizeof *pos);
+  pos_set = bitset_create (table_size + nstates, BITSET_FRUGAL);
+  pos_set_base = -nstates;
   table = xcalloc (table_size, sizeof *table);
   conflict_table = xcalloc (table_size, sizeof *conflict_table);
   check = xnmalloc (table_size, sizeof *check);
@@ -763,13 +812,13 @@ pack_table (void)
   lowzero = 0;
   high = 0;
 
-  for (i = 0; i < nvectors; i++)
+  for (int i = 0; i < nvectors; i++)
     base[i] = BASE_MINIMUM;
 
-  for (i = 0; i < table_size; i++)
+  for (int i = 0; i < table_size; i++)
     check[i] = -1;
 
-  for (i = 0; i < nentries; i++)
+  for (int i = 0; i < nentries; i++)
     {
       state_number s = matching_state (i);
       base_number place;
@@ -781,7 +830,7 @@ pack_table (void)
         /* Action of I were already coded for S.  */
         place = base[s];
 
-      pos[i] = place;
+      pos_set_set (place);
       base[order[i]] = place;
     }
 
@@ -789,7 +838,7 @@ pack_table (void)
   base_ninf = table_ninf_remap (base, nvectors, BASE_MINIMUM);
   table_ninf = table_ninf_remap (table, high + 1, ACTION_NUMBER_MINIMUM);
 
-  free (pos);
+  bitset_free (pos_set);
 }
 
 
@@ -802,15 +851,13 @@ pack_table (void)
 void
 tables_generate (void)
 {
-  int i;
-
   /* This is a poor way to make sure the sizes are properly
      correlated.  In particular the signedness is not taken into
      account.  But it's not useless.  */
-  verify (sizeof nstates <= sizeof nvectors
-          && sizeof nvars <= sizeof nvectors);
+  verify (sizeof nstates <= sizeof nvectors);
+  verify (sizeof nnterms <= sizeof nvectors);
 
-  nvectors = state_number_as_int (nstates) + nvars;
+  nvectors = state_number_as_int (nstates) + nnterms;
 
   froms = xcalloc (nvectors, sizeof *froms);
   tos = xcalloc (nvectors, sizeof *tos);
@@ -833,7 +880,7 @@ tables_generate (void)
   free (tally);
   free (width);
 
-  for (i = 0; i < nvectors; i++)
+  for (int i = 0; i < nvectors; i++)
     {
       free (froms[i]);
       free (tos[i]);

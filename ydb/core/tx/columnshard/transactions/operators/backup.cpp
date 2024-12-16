@@ -59,11 +59,12 @@ void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*
     }
 }
 
-bool TBackupTransactionOperator::ExecuteOnProgress(TColumnShard& /*owner*/, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
+bool TBackupTransactionOperator::ProgressOnExecute(
+    TColumnShard& /*owner*/, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
     return true;
 }
 
-bool TBackupTransactionOperator::CompleteOnProgress(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
+bool TBackupTransactionOperator::ProgressOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
     return true;
 }
 

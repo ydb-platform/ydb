@@ -76,7 +76,7 @@ namespace NPrivate {
             return s;
         }
     };
-}
+} // namespace NPrivate
 
 /*
  * some clever implementations...
@@ -199,7 +199,7 @@ namespace NPrivate {
             return FromString<T, TChar>(Data, Len);
         }
     };
-}
+} // namespace NPrivate
 
 template <typename TChar>
 inline ::NPrivate::TFromString<TChar> FromString(const TChar* data, size_t len) {
@@ -217,6 +217,7 @@ inline ::NPrivate::TFromString<typename T::TChar> FromString(const T& s) {
 }
 
 // Conversion exception free versions
+// But can throw other exceptions, e.g. std::bad_alloc when allocating memory for the new 'result' value.
 template <typename T, typename TChar>
 bool TryFromStringImpl(const TChar* data, size_t len, T& result);
 

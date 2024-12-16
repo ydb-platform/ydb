@@ -14,13 +14,12 @@
 #include <random>
 
 namespace NYT::NTableClient {
-
-////////////////////////////////////////////////////////////////////////////////
-
 namespace {
 
 using namespace NYson;
 using namespace NYTree;
+
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -397,7 +396,7 @@ TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
 {
     NProto::TColumnSchema columnSchemaProto;
     columnSchemaProto.set_name("foo");
-    columnSchemaProto.set_type(static_cast<int>(EValueType::Uint64));
+    columnSchemaProto.set_type(ToProto(EValueType::Uint64));
 
     TColumnSchema columnSchema;
     FromProto(&columnSchema, columnSchemaProto);
@@ -407,7 +406,7 @@ TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
     EXPECT_EQ(columnSchema.Name(), "foo");
     EXPECT_EQ(columnSchema.StableName().Underlying(), "foo");
 
-    columnSchemaProto.set_simple_logical_type(static_cast<int>(ESimpleLogicalValueType::Uint32));
+    columnSchemaProto.set_simple_logical_type(ToProto(ESimpleLogicalValueType::Uint32));
     columnSchemaProto.set_name("foo");
     columnSchemaProto.set_stable_name("foo_stable");
     FromProto(&columnSchema, columnSchemaProto);
@@ -435,6 +434,106 @@ TEST(TTableSchemaTest, EqualIgnoringRequiredness)
     EXPECT_TRUE(schema1 != schema2);
     EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema2));
     EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema3));
+}
+
+TEST(TTableSchemaTest, ValidateTableSchemaNestedColumns)
+{
+    auto expectGood = [] (std::vector<TColumnSchema> columns) {
+        columns.insert(columns.begin(), {
+            TColumnSchema("k", EValueType::Int64, ESortOrder::Ascending),
+            TColumnSchema("v", EValueType::Int64),
+        });
+        EXPECT_NO_THROW(ValidateTableSchema(TTableSchema(columns, true, true), true));
+    };
+
+    auto expectBad = [] (std::vector<TColumnSchema> columns) {
+        columns.insert(columns.begin(), {
+            TColumnSchema("k", EValueType::Int64, ESortOrder::Ascending),
+            TColumnSchema("v", EValueType::Int64),
+        });
+        EXPECT_THROW(ValidateTableSchema(TTableSchema(columns, true, true), true), std::exception);
+    };
+
+    expectGood({
+        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_key(n)"),
+    });
+
+    // Invalid nested key description.
+    expectBad({
+        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_key()"),
+    });
+
+    expectGood({
+        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_key(n)"),
+        TColumnSchema("nv", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_value(n)")
+    });
+
+    expectGood({
+        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_key(n)"),
+        TColumnSchema("nv", OptionalLogicalType(ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))))
+            .SetAggregate("nested_value(n)")
+    });
+
+    // Invalid nested value description.
+    expectBad({
+        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_key(n)"),
+        TColumnSchema("nv", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_value()"),
+    });
+
+    // No nested key column.
+    expectBad({
+        TColumnSchema("nv", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_value(n)"),
+    });
+
+    // No corresponding nested key column for nested value column.
+    expectBad({
+        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_key(n)"),
+        TColumnSchema("nv", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_value(m)"),
+    });
+
+    // Invalid aggregate.
+    expectBad({
+        TColumnSchema("a", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_()")
+    });
+
+    // Bad type of columns nv.
+    expectBad({
+        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_key(n)"),
+        TColumnSchema("nv", SimpleLogicalType(ESimpleLogicalValueType::Int64))
+            .SetAggregate("nested_value(n)")
+    });
+
+    expectGood({
+        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_key(n)"),
+        TColumnSchema("nv1", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_value(n, sum)"),
+        TColumnSchema("nv2", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String)))
+            .SetAggregate("nested_value(n)"),
+    });
+
+    expectGood({
+        TColumnSchema("nk1", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_key(n)"),
+        TColumnSchema("nk2", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_key(n)"),
+        TColumnSchema("nv1", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+            .SetAggregate("nested_value(n, sum)"),
+        TColumnSchema("nv2", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String)))
+            .SetAggregate("nested_value(n)"),
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

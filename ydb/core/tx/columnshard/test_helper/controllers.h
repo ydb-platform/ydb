@@ -10,9 +10,12 @@ private:
     TAtomicCounter ExportsFinishedCount = 0;
     NMetadata::NFetcher::ISnapshot::TPtr CurrentConfig;
     ui32 TiersModificationsCount = 0;
+    YDB_READONLY(TAtomicCounter, TieringMetadataActualizationCount, 0);
     YDB_READONLY(TAtomicCounter, StatisticsUsageCount, 0);
     YDB_READONLY(TAtomicCounter, MaxValueUsageCount, 0);
     YDB_ACCESSOR_DEF(std::optional<ui64>, SmallSizeDetector);
+    YDB_ACCESSOR(bool, SkipSpecialCheckForEvict, false);
+
 protected:
     virtual void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override;
     virtual void OnExportFinished() override {
@@ -21,31 +24,40 @@ protected:
     virtual bool NeedForceCompactionBacketsConstruction() const override {
         return true;
     }
-    virtual ui64 GetSmallPortionSizeDetector(const ui64 /*def*/) const override {
+    virtual ui64 DoGetSmallPortionSizeDetector(const ui64 /*def*/) const override {
         return SmallSizeDetector.value_or(0);
     }
-    virtual TDuration GetOptimizerFreshnessCheckDuration(const TDuration /*defaultValue*/) const override {
+    virtual TDuration DoGetOptimizerFreshnessCheckDuration(const TDuration /*defaultValue*/) const override {
         return TDuration::Zero();
     }
-    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
+    virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
-    virtual TDuration GetCompactionActualizationLag(const TDuration /*def*/) const override {
+    virtual TDuration DoGetCompactionActualizationLag(const TDuration /*def*/) const override {
         return TDuration::Zero();
-    }
-    virtual TDuration GetTTLDefaultWaitingDuration(const TDuration /*defaultValue*/) const override {
-        return TDuration::Seconds(1);
     }
 public:
+    virtual bool CheckPortionForEvict(const TPortionInfo& portion) const override {
+        if (SkipSpecialCheckForEvict) {
+            return true;
+        } else {
+            return TBase::CheckPortionForEvict(portion);
+        }
+    }
+
+
     TWaitCompactionController() {
-        SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
     }
 
     ui32 GetFinishedExportsCount() const {
         return ExportsFinishedCount.Val();
     }
 
-    virtual void OnStatisticsUsage(const NKikimr::NOlap::NStatistics::TOperatorContainer& /*statOperator*/) override {
+    virtual void OnTieringMetadataActualized() override {
+        TieringMetadataActualizationCount.Inc();
+    }
+    virtual void OnStatisticsUsage(const NKikimr::NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) override {
         StatisticsUsageCount.Inc();
     }
     virtual void OnMaxValueUsage() override {

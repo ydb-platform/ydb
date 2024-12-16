@@ -51,6 +51,7 @@ struct TEvYdbProxy {
         EvTopicReaderGone,
         EV_REQUEST_RESPONSE(ReadTopic),
         EV_REQUEST_RESPONSE(CommitOffset),
+        EvTopicEndPartition,
 
         EvEnd,
     };
@@ -130,6 +131,12 @@ struct TEvYdbProxy {
         using TSelf = TTopicReaderSettings;
         using TBase = NYdb::NTopic::TReadSessionSettings;
 
+        TTopicReaderSettings()
+            : TBase()
+        {
+            AutoPartitioningSupport(true);
+        }
+
         const TBase& GetBase() const {
             return *this;
         }
@@ -208,6 +215,24 @@ struct TEvYdbProxy {
         TVector<TMessage> Messages;
     };
 
+    struct TEndTopicPartitionResult {
+        explicit TEndTopicPartitionResult(const NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event)
+            : PartitionId(event.GetPartitionSession()->GetPartitionId())
+            , AdjacentPartitionsIds(event.GetAdjacentPartitionIds().begin(), event.GetAdjacentPartitionIds().end())
+            , ChildPartitionsIds(event.GetChildPartitionIds().begin(), event.GetChildPartitionIds().end()) {
+        }
+
+        void Out(IOutputStream& out) const;
+
+        ui64 PartitionId;
+        TVector<ui64> AdjacentPartitionsIds;
+        TVector<ui64> ChildPartitionsIds;
+    };
+
+    struct TEvTopicEndPartition: public TGenericResponse<TEvTopicEndPartition, EvTopicEndPartition, TEndTopicPartitionResult> {
+        using TBase::TBase;
+    };
+
     #define DEFINE_GENERIC_REQUEST(name, ...) \
         struct TEv##name##Request: public TGenericRequest<TEv##name##Request, Ev##name##Request, __VA_ARGS__> { \
             using TBase::TBase; \
@@ -255,9 +280,9 @@ struct TEvYdbProxy {
 
 #pragma pop_macro("RemoveDirectory")
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, const TString& token);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database,
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& token);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl,
     const NKikimrReplication::TStaticCredentials& credentials);
 
 }

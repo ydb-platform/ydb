@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -38,16 +39,13 @@ public:
 
         TUserTable::TPtr tableInfo;
         if (params.HasIndexPathId()) {
+            const auto indexPathId = PathIdFromPathId(params.GetIndexPathId());
+
             const auto& userTables = DataShard.GetUserTables();
             Y_ABORT_UNLESS(userTables.contains(pathId.LocalPathId));
-            const auto& indexes = userTables.at(pathId.LocalPathId)->Indexes;
-
-            const auto indexPathId = PathIdFromPathId(params.GetIndexPathId());
-            auto it = indexes.find(indexPathId);
-
-            if (it != indexes.end() && it->second.Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
+            userTables.at(pathId.LocalPathId)->ForAsyncIndex(indexPathId, [&](const auto&) {
                 RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(indexPathId));
-            }
+            });
 
             tableInfo = DataShard.AlterTableDropIndex(ctx, txc, pathId, version, indexPathId);
         } else {
@@ -55,7 +53,8 @@ public:
         }
 
         Y_ABORT_UNLESS(tableInfo);
-        DataShard.AddUserTable(pathId, tableInfo);
+        TDataShardLocksDb locksDb(DataShard, txc);
+        DataShard.AddUserTable(pathId, tableInfo, &locksDb);
 
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);

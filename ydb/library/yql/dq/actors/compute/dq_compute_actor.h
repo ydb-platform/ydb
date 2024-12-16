@@ -8,8 +8,8 @@
 #include <ydb/library/yql/dq/runtime/dq_async_stats.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -331,6 +331,10 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         return MaxMemorySize;
     };
 
+    TString MemoryConsumptionDetails() const override {
+        return TString();
+    }
+
     virtual bool AllocateExtraQuota(ui64) {
         return false;
     }
@@ -372,6 +376,7 @@ struct TComputeMemoryLimits {
     ui64 MinMemAllocSize = 30_MB;
     ui64 MinMemFreeSize = 30_MB;
     ui64 OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
+    TMaybe<ui8> ArrayBufferMinFillPercentage; // Used by DqOutputHashPartitionConsumer
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
 };

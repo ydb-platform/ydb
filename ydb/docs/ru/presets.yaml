@@ -1,6 +1,8 @@
 default:
   lang: ru
   pub-cover-size: 700x400
+  yandex_docs: https://cloud.yandex/ru/docs
+  azure_docs: https://learn.microsoft.com/ru-ru
   team:
     babich:
       name: Михаил Бабич
@@ -106,14 +108,14 @@ default:
       name: Егор Тарасов
       position: DevOps инженер
       profile: https://www.linkedin.com/in/jorres-tarasov/
-    zivaykin:
+    zevaykin:
       name: Александр Зевайкин
       position: Технический лидер
-      profile:   
+      profile: https://www.linkedin.com/in/alexander-zevaykin-6bb8162bb/   
     zverev:
       name: Евгений Зверев
       position: Разработчик
-      profile:     
+      profile:  
     zinal:
       name: Максим Зиналь
       profile: https://www.linkedin.com/in/maxzinal

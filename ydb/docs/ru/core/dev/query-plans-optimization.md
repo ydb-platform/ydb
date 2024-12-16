@@ -4,32 +4,34 @@
 
 Рассмотрим следующий запрос, выполняющий поиск серии по названию:
 
-``` sql
-SELECT season_id, episode_id 
-  FROM episodes 
+```yql
+SELECT season_id, episode_id
+  FROM episodes
   WHERE title = 'The Work Outing'
 ```
 
-Схема таблицы `episodes`:
+Схема строковой таблицы `episodes`:
 
 ![episodes](../_assets/episodes_scheme.png)
 
 Построим план для данного запроса, в {{ ydb-short-name }} это можно сделать двумя способами:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - {{ ydb-short-name }} CLI
 
   Получить план запроса через {{ ydb-short-name }} [CLI](../reference/ydb-cli/_includes/index.md) можно с помощью следующей команды:
-  ```
+
+  ```bash
   ydb -p <profile_name> table query explain \
-    -q "SELECT season_id, episode_id 
-    FROM episodes 
+    -q "SELECT season_id, episode_id
+    FROM episodes
     WHERE title = 'The Work Outing'"
   ```
 
   Результат:
-  ```
+
+  ```text
   Query Plan:
   ResultSet
   └──Limit (Limit: 1001)
@@ -52,11 +54,11 @@ SELECT season_id, episode_id
 
 {% endlist %}
 
-И в визуальном и в текстовом представлении видно, что в корне этого плана возвращение данных на клиент, в листьях работа с таблицами, а на промежуточных узлах — преобразования данных. Важно обратить внимание на узел, показывающий обращение к таблице `episodes`. В данном случае это  `TableFullScan`, который означает выполнение полного сканирования таблицы. А полное сканирование таблицы потребляет времени и ресурсов пропорционально её размеру, из-за чего по возможности их стараются избегать в таблицах, которые имеют тенденцию расти с течением времени или просто большие.
+И в визуальном и в текстовом представлении видно, что в корне этого плана возвращение данных на клиент, в листьях работа со строковыми таблицами, а на промежуточных узлах — преобразования данных. Важно обратить внимание на узел, показывающий обращение к строковой таблице `episodes`. В данном случае это  `TableFullScan`, который означает выполнение полного сканирования строковой таблицы. А полное сканирование таблицы потребляет времени и ресурсов пропорционально её размеру, из-за чего по возможности их стараются избегать в таблицах, которые имеют тенденцию расти с течением времени или просто большие.
 
-Одним из типовых способов избежать полного сканирования таблицы является добавление [вторичного индекса](secondary-indexes.md). В данном случае имеет смысл добавить вторичный индекс для колонки `title`, для этого воспользуемся запросом:
+Одним из типовых способов избежать полного сканирования строковой таблицы является добавление [вторичного индекса](secondary-indexes.md). В данном случае имеет смысл добавить вторичный индекс для колонки `title`, для этого воспользуемся запросом:
 
-``` sql
+```yql
 ALTER TABLE episodes
   ADD INDEX title_index GLOBAL ON (title)
 ```
@@ -65,20 +67,22 @@ ALTER TABLE episodes
 
 Построим план того же запроса с использованием вторичного индекса `title_index`. Обратите внимание, что вторичный индекс надо явно указать в запросе через конструкцию `VIEW`.
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - {{ ydb-short-name }} CLI
 
   Команда:
-  ```
+
+  ```bash
   ydb -p <profile_name> table query explain \
-    -q "SELECT season_id, episode_id 
+    -q "SELECT season_id, episode_id
     FROM episodes VIEW title_index
     WHERE title = 'The Work Outing'"
   ```
-  
+
   Результат:
-  ```
+
+  ```text
   Query Plan:
   ResultSet
   └──Limit (Limit: 1001)
@@ -88,6 +92,7 @@ ALTER TABLE episodes
         └──TablePointLookup (ReadRange: ["title (The Work Outing)","series_id (-∞, +∞)","season_id (-∞, +∞)","episode_id (-∞, +∞)"], ReadLimit: 1001, ReadColumns: ["episode_id","season_id","title"], Table: episodes/title_index/indexImplTable)
            Tables: ["episodes/title_index/indexImplTable"]
   ```
+
 - Embedded UI
 
   ![explain_ui](../_assets/explain_with_index_ui.png)
@@ -98,4 +103,4 @@ ALTER TABLE episodes
 
 {% endlist %}
 
-С использованием вторичного индекса запрос выполняется без полного сканирования основной таблицы. Вместо `TableFullScan` появился `TablePointLookup` - чтение индексной таблицы по ключу, а основную таблицу мы теперь совсем не читаем, так как все нужные нам колонки содержатся в индексной таблице. 
+С использованием вторичного индекса запрос выполняется без полного сканирования основной таблицы. Вместо `TableFullScan` появился `TablePointLookup` - чтение индексной таблицы по ключу, а основную таблицу мы теперь совсем не читаем, так как все нужные нам колонки содержатся в индексной таблице.

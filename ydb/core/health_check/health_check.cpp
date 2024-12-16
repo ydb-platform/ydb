@@ -1,7 +1,7 @@
 #include "health_check.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -14,6 +14,7 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/nameservice.h>
@@ -27,45 +28,46 @@
 #include <ydb/core/util/tuples.h>
 
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
-#include <ydb/core/protos/sys_view.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 #include <regex>
+
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 static decltype(auto) make_vslot_tuple(const NKikimrBlobStorage::TVSlotId& id) {
     return std::make_tuple(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId());
 }
 
-namespace std {
-
 template <>
-struct equal_to<NKikimrBlobStorage::TVSlotId> {
+struct std::equal_to<NKikimrBlobStorage::TVSlotId> {
     bool operator ()(const NKikimrBlobStorage::TVSlotId& a, const NKikimrBlobStorage::TVSlotId& b) const {
         return make_vslot_tuple(a) == make_vslot_tuple(b);
     }
 };
 
 template <>
-struct hash<NKikimrBlobStorage::TVSlotId> {
+struct std::hash<NKikimrBlobStorage::TVSlotId> {
     size_t operator ()(const NKikimrBlobStorage::TVSlotId& a) const {
         auto tp = make_vslot_tuple(a);
-        return hash<decltype(tp)>()(tp);
+        return std::hash<decltype(tp)>()(tp);
     }
 };
 
-}
-
 #define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
+#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
 
-namespace NKikimr {
-
-using NNodeWhiteboard::TNodeId;
-using NNodeWhiteboard::TTabletId;
-
-namespace NHealthCheck {
+namespace NKikimr::NHealthCheck {
 
 using namespace NActors;
 using namespace Ydb;
+using namespace NSchemeCache;
+using namespace NSchemeShard;
+using namespace NSysView;
+using namespace NConsole;
+using namespace NNodeWhiteboard;
+using NNodeWhiteboard::TTabletId;
 
 void RemoveUnrequestedEntries(Ydb::Monitoring::SelfCheckResult& result, const Ydb::Monitoring::SelfCheckRequest& request) {
     if (!request.return_verbose_status()) {
@@ -117,11 +119,13 @@ public:
     TActorId Sender;
     THolder<TEvSelfCheckRequest> Request;
     ui64 Cookie;
+    NWilson::TSpan Span;
 
-    TSelfCheckRequest(const TActorId& sender, THolder<TEvSelfCheckRequest> request, ui64 cookie)
+    TSelfCheckRequest(const TActorId& sender, THolder<TEvSelfCheckRequest> request, ui64 cookie, NWilson::TTraceId&& traceId)
         : Sender(sender)
         , Request(std::move(request))
         , Cookie(cookie)
+        , Span(TComponentTracingLevels::TTablet::Basic, std::move(traceId), "health_check", NWilson::EFlags::AUTO_END)
     {}
 
     using TGroupId = ui32;
@@ -162,7 +166,6 @@ public:
             ui32 MaxRestartsPerPeriod = 30; // per hour
             ui32 MaxTabletIdsStored = 10;
             bool ReportGoodTabletsIds = false;
-            bool IsHiveSynchronizationPeriod = false;
         };
 
         enum class ETabletState {
@@ -179,21 +182,34 @@ public:
             int Count = 1;
             TStackVec<TString> Identifiers;
 
-            TNodeTabletStateCount(const NKikimrHive::TTabletInfo& info, const TTabletStateSettings& settings) {
-                Type = info.tablettype();
-                Leader = info.followerid() == 0;
+            static ETabletState GetState(const NKikimrHive::TTabletInfo& info, const TTabletStateSettings& settings) {
                 if (info.volatilestate() == NKikimrHive::TABLET_VOLATILE_STATE_STOPPED) {
-                    State = ETabletState::Stopped;
-                } else if (!settings.IsHiveSynchronizationPeriod
-                            && info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_RUNNING
-                            && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier
-                            && info.tabletbootmode() == NKikimrHive::TABLET_BOOT_MODE_DEFAULT) {
-                    State = ETabletState::Dead;
-                } else if (info.restartsperperiod() >= settings.MaxRestartsPerPeriod) {
-                    State = ETabletState::RestartsTooOften;
-                } else {
-                    State = ETabletState::Good;
+                    return ETabletState::Stopped;
                 }
+                ETabletState state = (info.restartsperperiod() >= settings.MaxRestartsPerPeriod) ? ETabletState::RestartsTooOften : ETabletState::Good;
+                if (info.volatilestate() == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING) {
+                    return state;
+                }
+                if (info.tabletbootmode() != NKikimrHive::TABLET_BOOT_MODE_DEFAULT) {
+                    return state;
+                }
+                if (info.lastalivetimestamp() != 0 && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier) {
+                    // Tablet is not alive for a long time
+                    // We should report it as dead unless it's just waiting to be created
+                    if (info.generation() == 0 && info.volatilestate() == NKikimrHive::TABLET_VOLATILE_STATE_BOOTING && !info.inwaitqueue()) {
+                        return state;
+                    }
+                    return ETabletState::Dead;
+                }
+                return state;
+
+            }
+
+            TNodeTabletStateCount(const NKikimrHive::TTabletInfo& info, const TTabletStateSettings& settings)
+                : Type(info.tablettype())
+                , State(GetState(info, settings))
+                , Leader(info.followerid() == 0)
+            {
             }
 
             bool operator ==(const TNodeTabletStateCount& o) const {
@@ -236,18 +252,20 @@ public:
         TVector<TNodeId> ComputeNodeIds;
         THashSet<ui64> StoragePools;        // BSConfig case
         THashSet<TString> StoragePoolNames; // no BSConfig case
-        THashMap<std::pair<TTabletId, NNodeWhiteboard::TFollowerId>, const NKikimrHive::TTabletInfo*> MergedTabletState;
+        THashMap<std::pair<TTabletId, TFollowerId>, const NKikimrHive::TTabletInfo*> MergedTabletState;
         THashMap<TNodeId, TNodeTabletState> MergedNodeTabletState;
         THashMap<TNodeId, ui32> NodeRestartsPerPeriod;
         ui64 StorageQuota = 0;
         ui64 StorageUsage = 0;
         TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+        TNodeId MaxTimeDifferenceNodeId = 0;
         TString Path;
     };
 
     struct TGroupState {
         TString ErasureSpecies;
         std::vector<const NKikimrSysView::TVSlotEntry*> VSlots;
+        ui32 Generation;
     };
 
     struct TSelfCheckResult {
@@ -437,6 +455,172 @@ public:
         }
     };
 
+    template<typename T>
+    struct TRequestResponse {
+        std::variant<std::monostate, std::unique_ptr<T>, TString> Response;
+        NWilson::TSpan Span;
+
+        TRequestResponse() = default;
+        TRequestResponse(NWilson::TSpan&& span)
+            : Span(std::move(span))
+        {}
+
+        TRequestResponse(const TRequestResponse&) = delete;
+        TRequestResponse(TRequestResponse&&) = default;
+        TRequestResponse& operator =(const TRequestResponse&) = delete;
+        TRequestResponse& operator =(TRequestResponse&&) = default;
+
+        void Set(std::unique_ptr<T>&& response) {
+            constexpr bool hasErrorCheck = requires(const std::unique_ptr<T>& r) {TSelfCheckRequest::IsSuccess(r);};
+            if constexpr (hasErrorCheck) {
+                if (!TSelfCheckRequest::IsSuccess(response)) {
+                    Error(TSelfCheckRequest::GetError(response));
+                    return;
+                }
+            }
+            if (!IsDone()) {
+                Span.EndOk();
+            }
+            Response = std::move(response);
+        }
+
+        void Set(TAutoPtr<TEventHandle<T>>&& response) {
+            Set(std::unique_ptr<T>(response->Release().Release()));
+        }
+
+        bool Error(const TString& error) {
+            if (!IsDone()) {
+                Span.EndError(error);
+                Response = error;
+                return true;
+            }
+            return false;
+        }
+
+        bool IsOk() const {
+            return std::holds_alternative<std::unique_ptr<T>>(Response);
+        }
+
+        bool IsError() const {
+            return std::holds_alternative<TString>(Response);
+        }
+
+        bool IsDone() const {
+            return Response.index() != 0;
+        }
+
+        explicit operator bool() const {
+            return IsOk();
+        }
+
+        T* Get() {
+            return std::get<std::unique_ptr<T>>(Response).get();
+        }
+
+        const T* Get() const {
+            return std::get<std::unique_ptr<T>>(Response).get();
+        }
+
+        T& GetRef() {
+            return *Get();
+        }
+
+        const T& GetRef() const {
+            return *Get();
+        }
+
+        T* operator ->() {
+            return Get();
+        }
+
+        const T* operator ->() const {
+            return Get();
+        }
+
+        T& operator *() {
+            return GetRef();
+        }
+
+        const T& operator *() const {
+            return GetRef();
+        }
+
+        TString GetError() const {
+            return std::get<TString>(Response);
+        }
+
+        void Event(const TString& name) {
+            if (Span) {
+                Span.Event(name);
+            }
+        }
+    };
+
+    static bool IsSuccess(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev) {
+        return (ev->Request->ResultSet.size() > 0) && (std::find_if(ev->Request->ResultSet.begin(), ev->Request->ResultSet.end(),
+            [](const auto& entry) {
+                return entry.Status == TSchemeCacheNavigate::EStatus::Ok;
+            }) != ev->Request->ResultSet.end());
+    }
+
+    static TString GetError(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev) {
+        if (ev->Request->ResultSet.size() == 0) {
+            return "empty response";
+        }
+        for (const auto& entry : ev->Request->ResultSet) {
+            if (entry.Status != TSchemeCacheNavigate::EStatus::Ok) {
+                switch (entry.Status) {
+                    case TSchemeCacheNavigate::EStatus::Ok:
+                        return "Ok";
+                    case TSchemeCacheNavigate::EStatus::Unknown:
+                        return "Unknown";
+                    case TSchemeCacheNavigate::EStatus::RootUnknown:
+                        return "RootUnknown";
+                    case TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+                        return "PathErrorUnknown";
+                    case TSchemeCacheNavigate::EStatus::PathNotTable:
+                        return "PathNotTable";
+                    case TSchemeCacheNavigate::EStatus::PathNotPath:
+                        return "PathNotPath";
+                    case TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
+                        return "TableCreationNotComplete";
+                    case TSchemeCacheNavigate::EStatus::LookupError:
+                        return "LookupError";
+                    case TSchemeCacheNavigate::EStatus::RedirectLookupError:
+                        return "RedirectLookupError";
+                    case TSchemeCacheNavigate::EStatus::AccessDenied:
+                        return "AccessDenied";
+                    default:
+                        return ::ToString(static_cast<int>(entry.Status));
+                }
+            }
+        }
+        return "no error";
+    }
+
+    static bool IsSuccess(const std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
+        return ev->GetRecord().status() == NKikimrScheme::StatusSuccess;
+    }
+
+    static TString GetError(const std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
+        return NKikimrScheme::EStatus_Name(ev->GetRecord().status());
+    }
+
+    static bool IsSuccess(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev) {
+        return ev->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok;
+    }
+
+    static TString GetError(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev) {
+        switch (ev->Status) {
+            case TEvStateStorage::TEvBoardInfo::EStatus::Ok:
+                return "Ok";
+            case TEvStateStorage::TEvBoardInfo::EStatus::Unknown:
+                return "Unknown";
+            case TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable:
+                return "NotAvailable";
+        }
+    }
+
     TString FilterDatabase;
     THashMap<TSubDomainKey, TString> FilterDomainKey;
     TVector<TActorId> PipeClients;
@@ -446,35 +630,34 @@ public:
     TTabletId BsControllerId;
     TTabletId RootSchemeShardId;
     TTabletId RootHiveId;
-    THashMap<TString, TTenantInfo> TenantByPath;
-    THashMap<TString, THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeByPath;
+    THashMap<TString, TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult>> DescribeByPath;
     THashMap<TString, THashSet<TString>> PathsByPoolName;
-    THashMap<TString, Ydb::Cms::GetDatabaseStatusResult> DatabaseStatusByPath;
     THashMap<TString, THolder<NTenantSlotBroker::TEvTenantSlotBroker::TEvTenantState>> TenantStateByPath;
-    THashMap<TString, THolder<NSchemeCache::TSchemeCacheNavigate>> NavigateResult;
-    THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
-    THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
-    THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveInfo>> HiveInfo;
-    THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
+    THashMap<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
+    THashMap<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveInfo>> HiveInfo;
+    ui64 HiveNodeStatsToGo = 0;
+    std::optional<TRequestResponse<TEvConsole::TEvListTenantsResponse>> ListTenants;
+    std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfo;
     THashMap<TNodeId, const TEvInterconnect::TNodeInfo*> MergedNodeInfo;
-    std::optional<NKikimrSysView::TEvGetStoragePoolsResponse> StoragePools;
-    std::optional<NKikimrSysView::TEvGetGroupsResponse> Groups;
-    std::optional<NKikimrSysView::TEvGetVSlotsResponse> VSlots;
-    std::optional<NKikimrSysView::TEvGetPDisksResponse> PDisks;
-    bool RequestedStorageConfig = false;
+    std::optional<TRequestResponse<TEvSysView::TEvGetStoragePoolsResponse>> StoragePools;
+    std::optional<TRequestResponse<TEvSysView::TEvGetGroupsResponse>> Groups;
+    std::optional<TRequestResponse<TEvSysView::TEvGetVSlotsResponse>> VSlots;
+    std::optional<TRequestResponse<TEvSysView::TEvGetPDisksResponse>> PDisks;
+    std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfig;
+    std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfo;
     THashSet<TNodeId> UnknownStaticGroups;
 
-    THashSet<TNodeId> NodeIds;
+    std::vector<TNodeId> SubscribedNodeIds;
     THashSet<TNodeId> StorageNodeIds;
     THashSet<TNodeId> ComputeNodeIds;
     std::unordered_map<std::pair<TNodeId, int>, ui32> NodeRetries;
-    ui32 MaxRetries = 20;
-    TDuration RetryDelay = TDuration::MilliSeconds(250);
+    ui32 MaxRetries = 2;
+    TDuration RetryDelay = TDuration::MilliSeconds(500);
 
     THashMap<TString, TDatabaseState> DatabaseState;
     THashMap<TPathId, TString> SharedDatabases;
 
-    THashMap<TNodeId, THolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse>> NodeSystemState;
+    THashMap<TNodeId, TRequestResponse<TEvWhiteboard::TEvSystemStateResponse>> NodeSystemState;
     THashMap<TNodeId, const NKikimrWhiteboard::TSystemStateInfo*> MergedNodeSystemState;
 
     std::unordered_map<TString, const NKikimrSysView::TPDiskEntry*> PDisksMap;
@@ -491,15 +674,15 @@ public:
     THashSet<TNodeId> UnavailableStorageNodes;
     THashSet<TNodeId> UnavailableComputeNodes;
 
-    THashMap<TNodeId, THolder<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse>> NodeVDiskState;
+    THashMap<TNodeId, TRequestResponse<TEvWhiteboard::TEvVDiskStateResponse>> NodeVDiskState;
     TList<NKikimrWhiteboard::TVDiskStateInfo> VDisksAppended;
     std::unordered_map<TString, const NKikimrWhiteboard::TVDiskStateInfo*> MergedVDiskState;
 
-    THashMap<TNodeId, THolder<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse>> NodePDiskState;
+    THashMap<TNodeId, TRequestResponse<TEvWhiteboard::TEvPDiskStateResponse>> NodePDiskState;
     TList<NKikimrWhiteboard::TPDiskStateInfo> PDisksAppended;
     std::unordered_map<TString, const NKikimrWhiteboard::TPDiskStateInfo*> MergedPDiskState;
 
-    THashMap<TNodeId, THolder<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse>> NodeBSGroupState;
+    THashMap<TNodeId, TRequestResponse<TEvWhiteboard::TEvBSGroupStateResponse>> NodeBSGroupState;
     TList<NKikimrWhiteboard::TBSGroupStateInfo> BSGroupAppended;
     std::unordered_map<TGroupId, const NKikimrWhiteboard::TBSGroupStateInfo*> MergedBSGroupState;
 
@@ -566,20 +749,6 @@ public:
         return FilterDatabase && FilterDatabase != DomainPath;
     }
 
-    bool IsTimeDifferenceCheckNode(const TNodeId nodeId) const {
-        if (!IsSpecificDatabaseFilter()) {
-            return true;
-        }
-
-        auto it = DatabaseState.find(FilterDatabase);
-        if (it == DatabaseState.end()) {
-            return false;
-        }
-        auto& computeNodeIds = it->second.ComputeNodeIds;
-
-        return std::find(computeNodeIds.begin(), computeNodeIds.end(), nodeId) != computeNodeIds.end();
-    }
-
     void Bootstrap() {
         FilterDatabase = Request->Database;
         if (Request->Request.operation_params().has_operation_timeout()) {
@@ -597,31 +766,16 @@ public:
             TabletRequests.TabletStates[ConsoleId].Database = DomainPath;
             TabletRequests.TabletStates[ConsoleId].Type = TTabletTypes::Console;
             if (!FilterDatabase) {
-                TTenantInfo& tenant = TenantByPath[DomainPath];
-                tenant.Name = DomainPath;
-                RequestSchemeCacheNavigate(DomainPath);
-                RequestListTenants();
-            } else if (FilterDatabase != DomainPath) {
-                RequestTenantStatus(FilterDatabase);
+                ListTenants = RequestListTenants();
             } else {
-                TTenantInfo& tenant = TenantByPath[DomainPath];
-                tenant.Name = DomainPath;
-                RequestSchemeCacheNavigate(DomainPath);
+                RequestSchemeCacheNavigate(FilterDatabase);
             }
-        }
-
-        if (RootHiveId) {
-            TabletRequests.TabletStates[RootHiveId].Database = DomainPath;
-            TabletRequests.TabletStates[RootHiveId].Type = TTabletTypes::Hive;
-            //RequestHiveDomainStats(RootHiveId);
-            RequestHiveNodeStats(RootHiveId);
-            RequestHiveInfo(RootHiveId);
         }
 
         if (RootSchemeShardId && !IsSpecificDatabaseFilter()) {
             TabletRequests.TabletStates[RootSchemeShardId].Database = DomainPath;
             TabletRequests.TabletStates[RootSchemeShardId].Type = TTabletTypes::SchemeShard;
-            RequestDescribe(RootSchemeShardId, DomainPath);
+            DescribeByPath[DomainPath] = RequestDescribe(RootSchemeShardId, DomainPath);
         }
 
         if (BsControllerId) {
@@ -630,7 +784,9 @@ public:
             RequestBsController();
         }
 
-        Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+
+        NodesInfo = TRequestResponse<TEvInterconnect::TEvNodesInfo>(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, "TEvInterconnect::TEvListNodes"));
+        Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(), 0/*flags*/, 0/*cookie*/, Span.GetTraceId());
         ++Requests;
 
         Become(&TThis::StateWait);
@@ -639,15 +795,16 @@ public:
     }
 
     bool HaveAllBSControllerInfo() {
-        return StoragePools && Groups && VSlots && PDisks;
+        return StoragePools && StoragePools->IsOk() && Groups && Groups->IsOk() && VSlots && VSlots->IsOk() && PDisks && PDisks->IsOk();
     }
 
     bool NeedWhiteboardInfoForGroup(TGroupId groupId) {
-        return !HaveAllBSControllerInfo() && IsStaticGroup(groupId);
+        return UnknownStaticGroups.contains(groupId) || (!HaveAllBSControllerInfo() && IsStaticGroup(groupId));
     }
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
-        if (const NKikimrBlobStorage::TStorageConfig& config = *ev->Get()->Config; config.HasBlobStorageConfig()) {
+        NodeWardenStorageConfig->Set(std::move(ev));
+        if (const NKikimrBlobStorage::TStorageConfig& config = *NodeWardenStorageConfig->Get()->Config; config.HasBlobStorageConfig()) {
             if (const auto& bsConfig = config.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
                 const auto& staticConfig = bsConfig.GetServiceSet();
                 for (const NKikimrBlobStorage::TNodeWardenServiceSet_TPDisk& pDisk : staticConfig.pdisks()) {
@@ -678,6 +835,7 @@ public:
 
                     auto groupId = vDisk.GetVDiskID().GetGroupID();
                     if (NeedWhiteboardInfoForGroup(groupId)) {
+                        BLOG_D("Requesting whiteboard for group " << groupId);
                         RequestStorageNode(vDisk.GetVDiskLocation().GetNodeID());
                     }
                 }
@@ -703,25 +861,24 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
-            hFunc(NConsole::TEvConsole::TEvGetTenantStatusResponse, Handle);
-            hFunc(TEvHive::TEvResponseHiveDomainStats, Handle);
+            hFunc(TEvConsole::TEvListTenantsResponse, Handle);
             hFunc(TEvHive::TEvResponseHiveNodeStats, Handle);
             hFunc(TEvHive::TEvResponseHiveInfo, Handle);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle)
-            hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
-            hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
-            hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
-            hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, Handle);
-            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
-            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse, Handle);
-            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse, Handle);
-            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse, Handle);
+            hFunc(TEvSysView::TEvGetStoragePoolsResponse, Handle);
+            hFunc(TEvSysView::TEvGetGroupsResponse, Handle);
+            hFunc(TEvSysView::TEvGetVSlotsResponse, Handle);
+            hFunc(TEvSysView::TEvGetPDisksResponse, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskStateResponse, Handle);
+            hFunc(TEvWhiteboard::TEvPDiskStateResponse, Handle);
+            hFunc(TEvWhiteboard::TEvBSGroupStateResponse, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvPrivate::TEvRetryNodeWhiteboard, Handle);
+            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvents::TEvWakeup, HandleTimeout);
             hFunc(TEvNodeWardenStorageConfig, Handle);
         }
@@ -737,10 +894,21 @@ public:
         }
     }
 
-    void RequestTabletPipe(TTabletId tabletId,
-                           const TString& key,
-                           IEventBase* payload,
-                           std::optional<TTabletRequestsState::ERequestId> requestId = std::nullopt) {
+    NTabletPipe::TClientRetryPolicy GetPipeRetryPolicy() const {
+        return {
+            .RetryLimitCount = 4,
+            .MinRetryTime = TDuration::MilliSeconds(10),
+            .MaxRetryTime = TDuration::Seconds(1),
+            .BackoffMultiplier = 2,
+            .DoFirstRetryInstantly = true,
+        };
+    }
+
+    template<typename ResponseType>
+    [[nodiscard]] TRequestResponse<ResponseType> RequestTabletPipe(TTabletId tabletId,
+                                                                   IEventBase* payload,
+                                                                   std::optional<TTabletRequestsState::ERequestId> requestId = std::nullopt) {
+        TString key = TypeName(*payload);
         ui64 cookie;
         if (requestId) {
             cookie = *requestId;
@@ -748,101 +916,137 @@ public:
         } else {
             cookie = TabletRequests.MakeRequest(tabletId, key);
         }
+        TRequestResponse<ResponseType> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, key));
+        if (Span) {
+            response.Span.Attribute("tablet_id", ::ToString(tabletId));
+        }
         TTabletRequestsState::TTabletState& requestState(TabletRequests.TabletStates[tabletId]);
         if (!requestState.TabletPipe) {
             requestState.TabletPipe = RegisterWithSameMailbox(NTabletPipe::CreateClient(
                 SelfId(),
                 tabletId,
-                NTabletPipe::TClientRetryPolicy::WithRetries()));
+                GetPipeRetryPolicy()));
             PipeClients.emplace_back(requestState.TabletPipe);
         }
-        NTabletPipe::SendData(SelfId(), requestState.TabletPipe, payload, cookie);
+        NTabletPipe::SendData(SelfId(), requestState.TabletPipe, payload, cookie, response.Span.GetTraceId());
         ++Requests;
+        return response;
     }
 
-    void RequestDescribe(TTabletId schemeShardId, const TString& path) {
-        THolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>();
+    std::unordered_map<TTabletId, std::vector<TString>> TabletToDescribePath;
+
+    [[nodiscard]] TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult> RequestDescribe(TTabletId schemeShardId, const TString& path) {
+        THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();
         NKikimrSchemeOp::TDescribePath& record = request->Record;
         record.SetPath(path);
         record.MutableOptions()->SetReturnPartitioningInfo(false);
         record.MutableOptions()->SetReturnPartitionConfig(false);
         record.MutableOptions()->SetReturnChildren(false);
-        RequestTabletPipe(schemeShardId, "TEvDescribeScheme:" + path, request.Release());
+        auto response = RequestTabletPipe<TEvSchemeShard::TEvDescribeSchemeResult>(schemeShardId, request.Release());
+        if (response.Span) {
+            response.Span.Attribute("path", path);
+        }
+        TabletToDescribePath[schemeShardId].emplace_back(path);
+        return response;
     }
 
-    void RequestHiveInfo(TTabletId hiveId) {
+    [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveInfo> RequestHiveInfo(TTabletId hiveId) {
         THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
         request->Record.SetReturnFollowers(true);
-        RequestTabletPipe(hiveId, "TEvRequestHiveInfo", request.Release());
+        return RequestTabletPipe<TEvHive::TEvResponseHiveInfo>(hiveId, request.Release());
     }
 
-    void RequestHiveDomainStats(TTabletId hiveId) {
-        THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
-        request->Record.SetReturnFollowers(true);
-        request->Record.SetReturnMetrics(true);
-        RequestTabletPipe(hiveId, "TEvRequestHiveDomainStats", request.Release());
-    }
-
-    void RequestHiveNodeStats(TTabletId hiveId) {
+    [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveNodeStats> RequestHiveNodeStats(TTabletId hiveId) {
         THolder<TEvHive::TEvRequestHiveNodeStats> request = MakeHolder<TEvHive::TEvRequestHiveNodeStats>();
-        RequestTabletPipe(hiveId, "TEvRequestHiveNodeStats", request.Release());
+        return RequestTabletPipe<TEvHive::TEvResponseHiveNodeStats>(hiveId, request.Release());
     }
 
-    void RequestTenantStatus(const TString& path) {
-        THolder<NConsole::TEvConsole::TEvGetTenantStatusRequest> request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
-        request->Record.MutableRequest()->set_path(path);
-        RequestTabletPipe(ConsoleId, "TEvGetTenantStatusRequest:" + path, request.Release());
-    }
-
-    void RequestListTenants() {
-        THolder<NConsole::TEvConsole::TEvListTenantsRequest> request = MakeHolder<NConsole::TEvConsole::TEvListTenantsRequest>();
-        RequestTabletPipe(ConsoleId, "TEvListTenantsRequest", request.Release());
+    [[nodiscard]] TRequestResponse<TEvConsole::TEvListTenantsResponse> RequestListTenants() {
+        THolder<TEvConsole::TEvListTenantsRequest> request = MakeHolder<TEvConsole::TEvListTenantsRequest>();
+        return RequestTabletPipe<TEvConsole::TEvListTenantsResponse>(ConsoleId, request.Release());
     }
 
     void RequestBsController() {
-        THolder<NSysView::TEvSysView::TEvGetStoragePoolsRequest> requestPools = MakeHolder<NSysView::TEvSysView::TEvGetStoragePoolsRequest>();
-        RequestTabletPipe(BsControllerId, "TEvGetStoragePoolsRequest", requestPools.Release(), TTabletRequestsState::RequestStoragePools);
-        THolder<NSysView::TEvSysView::TEvGetGroupsRequest> requestGroups = MakeHolder<NSysView::TEvSysView::TEvGetGroupsRequest>();
-        RequestTabletPipe(BsControllerId, "TEvGetGroupsRequest", requestGroups.Release(), TTabletRequestsState::RequestGroups);
-        THolder<NSysView::TEvSysView::TEvGetVSlotsRequest> requestVSlots = MakeHolder<NSysView::TEvSysView::TEvGetVSlotsRequest>();
-        RequestTabletPipe(BsControllerId, "TEvGetVSlotsRequest", requestVSlots.Release(), TTabletRequestsState::RequestVSlots);
-        THolder<NSysView::TEvSysView::TEvGetPDisksRequest> requestPDisks = MakeHolder<NSysView::TEvSysView::TEvGetPDisksRequest>();
-        RequestTabletPipe(BsControllerId, "TEvGetPDisksRequest", requestPDisks.Release(), TTabletRequestsState::RequestPDisks);
+        THolder<TEvSysView::TEvGetStoragePoolsRequest> requestPools = MakeHolder<TEvSysView::TEvGetStoragePoolsRequest>();
+        StoragePools = RequestTabletPipe<TEvSysView::TEvGetStoragePoolsResponse>(BsControllerId, requestPools.Release(), TTabletRequestsState::RequestStoragePools);
+        THolder<TEvSysView::TEvGetGroupsRequest> requestGroups = MakeHolder<TEvSysView::TEvGetGroupsRequest>();
+        Groups = RequestTabletPipe<TEvSysView::TEvGetGroupsResponse>(BsControllerId, requestGroups.Release(), TTabletRequestsState::RequestGroups);
+        THolder<TEvSysView::TEvGetVSlotsRequest> requestVSlots = MakeHolder<TEvSysView::TEvGetVSlotsRequest>();
+        VSlots = RequestTabletPipe<TEvSysView::TEvGetVSlotsResponse>(BsControllerId, requestVSlots.Release(), TTabletRequestsState::RequestVSlots);
+        THolder<TEvSysView::TEvGetPDisksRequest> requestPDisks = MakeHolder<TEvSysView::TEvGetPDisksRequest>();
+        PDisks = RequestTabletPipe<TEvSysView::TEvGetPDisksResponse>(BsControllerId, requestPDisks.Release(), TTabletRequestsState::RequestPDisks);
     }
 
+    THashMap<ui64, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateKeySet;
+    ui64 NavigateToGo = 0;
+
     void RequestSchemeCacheNavigate(const TString& path) {
-        THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        ui64 cookie = NavigateKeySet.size();
+        THolder<TSchemeCacheNavigate> request = MakeHolder<TSchemeCacheNavigate>();
+        request->Cookie = cookie;
+        TSchemeCacheNavigate::TEntry& entry = request->ResultSet.emplace_back();
         entry.Path = NKikimr::SplitPath(path);
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
-        request->ResultSet.emplace_back(entry);
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+        entry.Operation = TSchemeCacheNavigate::EOp::OpPath;
+        TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
+        if (Span) {
+            response.Span.Attribute("path", path);
+        }
+        NavigateKeySet.emplace(cookie, std::move(response));
+        ++NavigateToGo;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0/*flags*/, 0/*cookie*/, response.Span.GetTraceId());
         ++Requests;
     }
 
     void RequestSchemeCacheNavigate(const TPathId& pathId) {
-        THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        ui64 cookie = NavigateKeySet.size();
+        THolder<TSchemeCacheNavigate> request = MakeHolder<TSchemeCacheNavigate>();
+        request->Cookie = cookie;
+        TSchemeCacheNavigate::TEntry& entry = request->ResultSet.emplace_back();
         entry.TableId.PathId = pathId;
-        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+        entry.RequestType = TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
         entry.RedirectRequired = false;
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
-        request->ResultSet.emplace_back(entry);
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+        entry.Operation = TSchemeCacheNavigate::EOp::OpPath;
+        TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
+        if (Span) {
+            response.Span.Attribute("path_id", pathId.ToString());
+        }
+        NavigateKeySet.emplace(cookie, std::move(response));
+        ++NavigateToGo;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0/*flags*/, 0/*cookie*/, response.Span.GetTraceId());
         ++Requests;
     }
 
+    TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0) {
+        TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, "BoardLookupActor"));
+        RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
+                                                    SelfId(),
+                                                    EBoardLookupMode::Second, {}, cookie));
+        if (response.Span) {
+            response.Span.Attribute("path", path);
+        }
+        ++Requests;
+        return response;
+    }
+
     template<typename TEvent>
-    void RequestNodeWhiteboard(TNodeId nodeId) {
-        TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
+    [[nodiscard]] TRequestResponse<typename WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId, std::initializer_list<int> fields = {}) {
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         auto request = MakeHolder<TEvent>();
-        Send(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery, nodeId);
+        for (int field : fields) {
+            request->Record.AddFieldsRequired(field);
+        }
+        TRequestResponse<typename WhiteboardResponse<TEvent>::Type> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
+        if (response.Span) {
+            response.Span.Attribute("target_node_id", nodeId);
+        }
+        SubscribedNodeIds.push_back(nodeId);
+        Send(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId, response.Span.GetTraceId());
+        return response;
     }
 
     void RequestGenericNode(TNodeId nodeId) {
-        if (NodeIds.emplace(nodeId).second) {
-            Send(TlsActivationContext->ActorSystem()->InterconnectProxy(nodeId), new TEvents::TEvSubscribe());
-            RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>(nodeId);
+        if (NodeSystemState.count(nodeId) == 0) {
+            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1}));
             ++Requests;
         }
     }
@@ -856,36 +1060,62 @@ public:
     void RequestStorageNode(TNodeId nodeId) {
         if (StorageNodeIds.emplace(nodeId).second) {
             RequestGenericNode(nodeId);
-            RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
-            ++Requests;
-            RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
-            ++Requests;
-            RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
-            ++Requests;
+            if (NodeVDiskState.count(nodeId) == 0) {
+                NodeVDiskState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId));
+                ++Requests;
+            }
+            if (NodePDiskState.count(nodeId) == 0) {
+                NodePDiskState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId));
+                ++Requests;
+            }
+            if (NodeBSGroupState.count(nodeId) == 0) {
+                NodeBSGroupState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId));
+                ++Requests;
+            }
         }
     }
 
-    void RequestStorageConfig() {
-        if (!RequestedStorageConfig) {
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false));
-            RequestedStorageConfig = true;
-            ++Requests;
+    [[nodiscard]] TRequestResponse<TEvNodeWardenStorageConfig> RequestStorageConfig() {
+        TRequestResponse<TEvNodeWardenStorageConfig> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName<TEvNodeWardenQueryStorageConfig>()));
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false), 0/*flags*/, 0/*cookie*/, response.Span.GetTraceId());
+        ++Requests;
+        return response;
+    }
+
+    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        DatabaseBoardInfo->Set(std::move(ev));
+        if (DatabaseBoardInfo->IsOk()) {
+            TDatabaseState& database = DatabaseState[FilterDatabase];
+            for (const auto& entry : DatabaseBoardInfo->Get()->InfoEntries) {
+                if (!entry.second.Dropped) {
+                    TNodeId nodeId = entry.first.NodeId();
+                    RequestComputeNode(nodeId);
+                    database.ComputeNodeIds.push_back(nodeId);
+                }
+            }
         }
+        RequestDone("TEvStateStorage::TEvBoardInfo");
     }
 
     void Handle(TEvPrivate::TEvRetryNodeWhiteboard::TPtr& ev) {
-        switch (ev->Get()->EventId) {
-            case NNodeWhiteboard::TEvWhiteboard::EvSystemStateRequest:
-                RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>(ev->Get()->NodeId);
+        auto eventId = ev->Get()->EventId;
+        auto nodeId = ev->Get()->NodeId;
+        switch (eventId) {
+            case TEvWhiteboard::EvSystemStateRequest:
+                NodeSystemState.erase(nodeId);
+                NodeSystemState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId);
                 break;
-            case NNodeWhiteboard::TEvWhiteboard::EvVDiskStateRequest:
-                RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest>(ev->Get()->NodeId);
+            case TEvWhiteboard::EvVDiskStateRequest:
+                NodeVDiskState.erase(nodeId);
+                NodeVDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
                 break;
-            case NNodeWhiteboard::TEvWhiteboard::EvPDiskStateRequest:
-                RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>(ev->Get()->NodeId);
+            case TEvWhiteboard::EvPDiskStateRequest:
+                NodePDiskState.erase(nodeId);
+                NodePDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
                 break;
-            case NNodeWhiteboard::TEvWhiteboard::EvBSGroupStateRequest:
-                RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateRequest>(ev->Get()->NodeId);
+            case TEvWhiteboard::EvBSGroupStateRequest:
+                NodeBSGroupState.erase(nodeId);
+                NodeBSGroupState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
                 break;
             default:
                 RequestDone("unsupported event scheduled");
@@ -904,37 +1134,34 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
-        if (ev->Get()->SourceType == NNodeWhiteboard::TEvWhiteboard::EvSystemStateRequest) {
-            if (NodeIds.count(nodeId) != 0 && NodeSystemState.count(nodeId) == 0) {
-                if (!RetryRequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>(nodeId)) {
-                    NodeSystemState.emplace(nodeId, nullptr);
+        TString error = "Undelivered";
+        if (ev->Get()->SourceType == TEvWhiteboard::EvSystemStateRequest) {
+            if (NodeSystemState.count(nodeId) && NodeSystemState[nodeId].Error(error)) {
+                if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId)) {
                     RequestDone("undelivered of TEvSystemStateRequest");
                     UnavailableComputeNodes.insert(nodeId);
                 }
             }
         }
-        if (ev->Get()->SourceType == NNodeWhiteboard::TEvWhiteboard::EvVDiskStateRequest) {
-            if (StorageNodeIds.count(nodeId) != 0 && NodeVDiskState.count(nodeId) == 0) {
-                if (!RetryRequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest>(nodeId)) {
-                    NodeVDiskState.emplace(nodeId, nullptr);
+        if (ev->Get()->SourceType == TEvWhiteboard::EvVDiskStateRequest) {
+            if (NodeVDiskState.count(nodeId) && NodeVDiskState[nodeId].Error(error)) {
+                if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId)) {
                     RequestDone("undelivered of TEvVDiskStateRequest");
                     UnavailableStorageNodes.insert(nodeId);
                 }
             }
         }
-        if (ev->Get()->SourceType == NNodeWhiteboard::TEvWhiteboard::EvPDiskStateRequest) {
-            if (StorageNodeIds.count(nodeId) != 0 && NodePDiskState.count(nodeId) == 0) {
-                if (!RetryRequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>(nodeId)) {
-                    NodePDiskState.emplace(nodeId, nullptr);
+        if (ev->Get()->SourceType == TEvWhiteboard::EvPDiskStateRequest) {
+            if (NodePDiskState.count(nodeId) && NodePDiskState[nodeId].Error(error)) {
+                if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId)) {
                     RequestDone("undelivered of TEvPDiskStateRequest");
                     UnavailableStorageNodes.insert(nodeId);
                 }
             }
         }
-        if (ev->Get()->SourceType == NNodeWhiteboard::TEvWhiteboard::EvBSGroupStateRequest) {
-            if (StorageNodeIds.count(nodeId) != 0 && NodeBSGroupState.count(nodeId) == 0) {
-                if (!RetryRequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateRequest>(nodeId)) {
-                    NodeBSGroupState.emplace(nodeId, nullptr);
+        if (ev->Get()->SourceType == TEvWhiteboard::EvBSGroupStateRequest) {
+            if (NodeBSGroupState.count(nodeId) && NodeBSGroupState[nodeId].Error(error)) {
+                if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId)) {
                     RequestDone("undelivered of TEvBSGroupStateRequest");
                 }
             }
@@ -943,30 +1170,27 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         ui32 nodeId = ev->Get()->NodeId;
-        if (NodeIds.count(nodeId) != 0 && NodeSystemState.count(nodeId) == 0) {
-            if (!RetryRequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>(nodeId)) {
-                NodeSystemState.emplace(nodeId, nullptr);
+        TString error = "NodeDisconnected";
+        if (NodeSystemState.count(nodeId) && NodeSystemState[nodeId].Error(error)) {
+            if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId)) {
                 RequestDone("node disconnected with TEvSystemStateRequest");
                 UnavailableComputeNodes.insert(nodeId);
             }
         }
-        if (StorageNodeIds.count(nodeId) != 0 && NodeVDiskState.count(nodeId) == 0) {
-            if (!RetryRequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest>(nodeId)) {
-                NodeVDiskState.emplace(nodeId, nullptr);
+        if (NodeVDiskState.count(nodeId) && NodeVDiskState[nodeId].Error(error)) {
+            if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId)) {
                 RequestDone("node disconnected with TEvVDiskStateRequest");
                 UnavailableStorageNodes.insert(nodeId);
             }
         }
-        if (StorageNodeIds.count(nodeId) != 0 && NodePDiskState.count(nodeId) == 0) {
-            if (!RetryRequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>(nodeId)) {
-                NodePDiskState.emplace(nodeId, nullptr);
+        if (NodePDiskState.count(nodeId) && NodePDiskState[nodeId].Error(error)) {
+            if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId)) {
                 RequestDone("node disconnected with TEvPDiskStateRequest");
                 UnavailableStorageNodes.insert(nodeId);
             }
         }
-        if (StorageNodeIds.count(nodeId) != 0 && NodeBSGroupState.count(nodeId) == 0) {
-            if (!RetryRequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateRequest>(nodeId)) {
-                NodeBSGroupState.emplace(nodeId, nullptr);
+        if (NodeBSGroupState.count(nodeId) && NodeBSGroupState[nodeId].Error(error)) {
+            if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId)) {
                 RequestDone("node disconnected with TEvBSGroupStateRequest");
             }
         }
@@ -978,6 +1202,45 @@ public:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             TTabletId tabletId = ev->Get()->TabletId;
+            TString error = "Can't connect pipe";
+            if (HiveNodeStats.count(tabletId) != 0) {
+                if (HiveNodeStats[tabletId].Error(error)) {
+                    if (FilterDatabase) {
+                        DatabaseBoardInfo = MakeRequestStateStorageEndpointsLookup(FilterDatabase);
+                    }
+                }
+            }
+            if (HiveInfo.count(tabletId) != 0) {
+                HiveInfo[tabletId].Error(error);
+            }
+            if (tabletId == ConsoleId && ListTenants) {
+                ListTenants->Error(error);
+            }
+            if (tabletId == BsControllerId) {
+                if (StoragePools) {
+                    StoragePools->Error(error);
+                }
+                if (Groups) {
+                    Groups->Error(error);
+                }
+                if (VSlots) {
+                    VSlots->Error(error);
+                }
+                if (PDisks) {
+                    PDisks->Error(error);
+                }
+                if (FilterDatabase.empty() || FilterDatabase == DomainPath) {
+                    if (!NodeWardenStorageConfig) {
+                        NodeWardenStorageConfig = RequestStorageConfig();
+                    }
+                }
+            }
+            for (const TString& path : TabletToDescribePath[tabletId]) {
+                if (DescribeByPath.count(path) != 0) {
+                    DescribeByPath[path].Error(error);
+                }
+            }
+            TabletRequests.TabletStates[tabletId].IsUnresponsive = true;
             for (const auto& [requestId, requestState] : TabletRequests.RequestsInFlight) {
                 if (requestState.TabletId == tabletId) {
                     RequestDone("unsuccessful TEvClientConnected");
@@ -989,11 +1252,30 @@ public:
     void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
         switch (ev->Get()->Tag) {
             case TimeoutBSC:
+                Span.Event("TimeoutBSC");
                 if (!HaveAllBSControllerInfo()) {
-                    RequestStorageConfig();
+                    if (FilterDatabase.empty() || FilterDatabase == DomainPath) {
+                        if (!NodeWardenStorageConfig) {
+                            NodeWardenStorageConfig = RequestStorageConfig();
+                        }
+                    }
+                    TString error = "Timeout";
+                    if (StoragePools && StoragePools->Error(error)) {
+                        RequestDone("TEvGetStoragePoolsRequest");
+                    }
+                    if (Groups && Groups->Error(error)) {
+                        RequestDone("TEvGetGroupsRequest");
+                    }
+                    if (VSlots && VSlots->Error(error)) {
+                        RequestDone("TEvGetVSlotsRequest");
+                    }
+                    if (PDisks && PDisks->Error(error)) {
+                        RequestDone("TEvGetPDisksRequest");
+                    }
                 }
                 break;
             case TimeoutFinal:
+                Span.Event("TimeoutFinal");
                 ReplyAndPassAway();
                 break;
         }
@@ -1010,8 +1292,8 @@ public:
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
         bool needComputeFromStaticNodes = !IsSpecificDatabaseFilter();
-        NodesInfo = ev->Release();
-        for (const auto& ni : NodesInfo->Nodes) {
+        NodesInfo->Set(std::move(ev));
+        for (const auto& ni : NodesInfo->Get()->Nodes) {
             MergedNodeInfo[ni.NodeId] = &ni;
             if (IsStaticNode(ni.NodeId) && needComputeFromStaticNodes) {
                 DatabaseState[DomainPath].ComputeNodeIds.push_back(ni.NodeId);
@@ -1026,44 +1308,46 @@ public:
     }
 
     bool NeedWhiteboardForStaticGroupsWithUnknownStatus() {
-        return RequestedStorageConfig && !IsSpecificDatabaseFilter();
+        return NodeWardenStorageConfig && !IsSpecificDatabaseFilter();
     }
 
-    void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
+    void Handle(TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestStoragePools);
-        StoragePools = std::move(ev->Get()->Record);
+        StoragePools->Set(std::move(ev));
         AggregateBSControllerState();
         RequestDone("TEvGetStoragePoolsRequest");
     }
 
-    void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
+    void Handle(TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestGroups);
-        Groups = std::move(ev->Get()->Record);
+        Groups->Set(std::move(ev));
         AggregateBSControllerState();
         RequestDone("TEvGetGroupsRequest");
     }
 
-    void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
+    void Handle(TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestVSlots);
-        VSlots = std::move(ev->Get()->Record);
+        VSlots->Set(std::move(ev));
         AggregateBSControllerState();
         RequestDone("TEvGetVSlotsRequest");
     }
 
-    void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
+    void Handle(TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestPDisks);
-        PDisks = std::move(ev->Get()->Record);
+        PDisks->Set(std::move(ev));
         AggregateBSControllerState();
         RequestDone("TEvGetPDisksRequest");
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         TabletRequests.CompleteRequest(ev->Cookie);
-        if (ev->Get()->GetRecord().status() == NKikimrScheme::StatusSuccess) {
-            TString path = ev->Get()->GetRecord().path();
+        TString path = ev->Get()->GetRecord().path();
+        auto& response = DescribeByPath[path];
+        response.Set(std::move(ev));
+        if (response.IsOk()) {
             TDatabaseState& state(DatabaseState[path]);
             state.Path = path;
-            for (const auto& storagePool : ev->Get()->GetRecord().pathdescription().domaindescription().storagepools()) {
+            for (const auto& storagePool : response.Get()->GetRecord().pathdescription().domaindescription().storagepools()) {
                 TString storagePoolName = storagePool.name();
                 state.StoragePoolNames.emplace(storagePoolName);
                 PathsByPoolName[storagePoolName].emplace(path); // no poolId in TEvDescribeSchemeResult, so it's neccesary to keep poolNames instead
@@ -1073,18 +1357,35 @@ public:
                 state.StoragePools.emplace(0); // static group has poolId = 0
                 StoragePoolState[0].Name = STATIC_STORAGE_POOL_NAME;
             }
-            state.StorageUsage = ev->Get()->GetRecord().pathdescription().domaindescription().diskspaceusage().tables().totalsize();
-            state.StorageQuota = ev->Get()->GetRecord().pathdescription().domaindescription().databasequotas().data_size_hard_quota();
-
-            DescribeByPath[path] = ev->Release();
+            state.StorageUsage = response.Get()->GetRecord().pathdescription().domaindescription().diskspaceusage().tables().totalsize();
+            state.StorageQuota = response.Get()->GetRecord().pathdescription().domaindescription().databasequotas().data_size_hard_quota();
         }
         RequestDone("TEvDescribeSchemeResult");
     }
 
+    bool NeedToAskHive(TTabletId hiveId) const {
+        return HiveNodeStats.count(hiveId) == 0 || HiveInfo.count(hiveId) == 0;
+    }
+
+    void AskHive(const TString& database, TTabletId hiveId) {
+        TabletRequests.TabletStates[hiveId].Database = database;
+        TabletRequests.TabletStates[hiveId].Type = TTabletTypes::Hive;
+        if (HiveNodeStats.count(hiveId) == 0) {
+            HiveNodeStats[hiveId] = RequestHiveNodeStats(hiveId);
+            ++HiveNodeStatsToGo;
+        }
+        if (HiveInfo.count(hiveId) == 0) {
+            HiveInfo[hiveId] = RequestHiveInfo(hiveId);
+        }
+    }
+
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        if (ev->Get()->Request->ResultSet.size() == 1 && ev->Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            auto domainInfo = ev->Get()->Request->ResultSet.begin()->DomainInfo;
-            TString path = CanonizePath(ev->Get()->Request->ResultSet.begin()->Path);
+        TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& response = NavigateKeySet[ev->Get()->Request->Cookie];
+        response.Set(std::move(ev));
+        --NavigateToGo;
+        if (response.IsOk()) {
+            auto domainInfo = response.Get()->Request->ResultSet.begin()->DomainInfo;
+            TString path = CanonizePath(response.Get()->Request->ResultSet.begin()->Path);
             if (domainInfo->IsServerless()) {
                 if (NeedHealthCheckForServerless(domainInfo)) {
                     if (SharedDatabases.emplace(domainInfo->ResourcesDomainKey, path).second) {
@@ -1094,22 +1395,21 @@ public:
                     DatabaseState[path].ServerlessComputeResourcesMode = domainInfo->ServerlessComputeResourcesMode;
                 } else {
                     DatabaseState.erase(path);
-                    DatabaseStatusByPath.erase(path);
                     RequestDone("TEvNavigateKeySetResult");
                     return;
                 }
             }
-            TTabletId hiveId = domainInfo->Params.GetHive();
-            if (hiveId) {
-                DatabaseState[path].HiveId = hiveId;
-                TabletRequests.TabletStates[hiveId].Database = path;
-                TabletRequests.TabletStates[hiveId].Type = TTabletTypes::Hive;
-                //RequestHiveDomainStats(hiveId);
-                RequestHiveNodeStats(hiveId);
-                RequestHiveInfo(hiveId);
-            }
+
             FilterDomainKey[TSubDomainKey(domainInfo->DomainKey.OwnerId, domainInfo->DomainKey.LocalPathId)] = path;
-            NavigateResult[path] = std::move(ev->Get()->Request);
+
+            TTabletId hiveId = domainInfo->Params.GetHive();
+            if (hiveId && NeedToAskHive(hiveId)) {
+                DatabaseState[path].HiveId = hiveId;
+                AskHive(path, hiveId);
+            } else if (RootHiveId && NeedToAskHive(RootHiveId)) {
+                AskHive(DomainPath, RootHiveId);
+            }
+
             TTabletId schemeShardId = domainInfo->Params.GetSchemeShard();
             if (!schemeShardId) {
                 schemeShardId = RootSchemeShardId;
@@ -1117,95 +1417,93 @@ public:
                 TabletRequests.TabletStates[schemeShardId].Database = path;
                 TabletRequests.TabletStates[schemeShardId].Type = TTabletTypes::SchemeShard;
             }
-            RequestDescribe(schemeShardId, path);
+            if (DescribeByPath.count(path) == 0) {
+                DescribeByPath[path] = RequestDescribe(schemeShardId, path);
+            }
         }
         RequestDone("TEvNavigateKeySetResult");
     }
 
-    bool NeedHealthCheckForServerless(TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) const {
+    bool NeedHealthCheckForServerless(TIntrusivePtr<TDomainInfo> domainInfo) const {
         return IsSpecificDatabaseFilter()
             || domainInfo->ServerlessComputeResourcesMode == NKikimrSubDomains::EServerlessComputeResourcesModeExclusive;
-    }
-
-    void Handle(TEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
-        TTabletId hiveId = TabletRequests.CompleteRequest(ev->Cookie);
-        for (const NKikimrHive::THiveDomainStats& hiveStat : ev->Get()->Record.GetDomainStats()) {
-            for (TNodeId nodeId : hiveStat.GetNodeIds()) {
-                RequestComputeNode(nodeId);
-            }
-        }
-        HiveDomainStats[hiveId] = std::move(ev->Release());
-        RequestDone("TEvResponseHiveDomainStats");
     }
 
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
         TTabletId hiveId = TabletRequests.CompleteRequest(ev->Cookie);
         TInstant aliveBarrier = TInstant::Now() - TDuration::Minutes(5);
-        for (const NKikimrHive::THiveNodeStats& hiveStat : ev->Get()->Record.GetNodeStats()) {
-            if (!hiveStat.HasLastAliveTimestamp() || TInstant::MilliSeconds(hiveStat.GetLastAliveTimestamp()) > aliveBarrier) {
-                RequestComputeNode(hiveStat.GetNodeId());
+        {
+            auto& response = HiveNodeStats[hiveId];
+            response.Set(std::move(ev));
+            if (hiveId != RootHiveId) {
+                for (const NKikimrHive::THiveNodeStats& hiveStat : response.Get()->Record.GetNodeStats()) {
+                    if (hiveStat.HasNodeDomain()) {
+                        TSubDomainKey domainKey(hiveStat.GetNodeDomain());
+                        auto itFilterDomainKey = FilterDomainKey.find(domainKey);
+                        if (itFilterDomainKey != FilterDomainKey.end()) {
+                            if (!hiveStat.HasLastAliveTimestamp() || TInstant::MilliSeconds(hiveStat.GetLastAliveTimestamp()) > aliveBarrier) {
+                                RequestComputeNode(hiveStat.GetNodeId());
+                            }
+                        }
+                    }
+                }
             }
         }
-        HiveNodeStats[hiveId] = std::move(ev->Release());
+        --HiveNodeStatsToGo;
+        if (HiveNodeStatsToGo == 0) {
+            if (HiveNodeStats.count(RootHiveId) != 0 && HiveNodeStats[RootHiveId].IsOk()) {
+                const auto& rootResponse(HiveNodeStats[RootHiveId]);
+                for (const NKikimrHive::THiveNodeStats& hiveStat : rootResponse.Get()->Record.GetNodeStats()) {
+                    if (hiveStat.HasNodeDomain()) {
+                        TSubDomainKey domainKey(hiveStat.GetNodeDomain());
+                        auto itFilterDomainKey = FilterDomainKey.find(domainKey);
+                        if (itFilterDomainKey != FilterDomainKey.end()) {
+                            if (!hiveStat.HasLastAliveTimestamp() || TInstant::MilliSeconds(hiveStat.GetLastAliveTimestamp()) > aliveBarrier) {
+                                RequestComputeNode(hiveStat.GetNodeId());
+                            }
+                        }
+                    }
+                }
+            }
+        }
         RequestDone("TEvResponseHiveNodeStats");
     }
 
     void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev) {
         TTabletId hiveId = TabletRequests.CompleteRequest(ev->Cookie);
-        HiveInfo[hiveId] = std::move(ev->Release());
+        HiveInfo[hiveId].Set(std::move(ev));
         RequestDone("TEvResponseHiveInfo");
     }
 
-    void Handle(NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
+    void Handle(TEvConsole::TEvListTenantsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(ev->Cookie);
-        auto& operation(ev->Get()->Record.GetResponse().operation());
-        if (operation.ready() && operation.status() == Ydb::StatusIds::SUCCESS) {
-            Ydb::Cms::GetDatabaseStatusResult getTenantStatusResult;
-            operation.result().UnpackTo(&getTenantStatusResult);
-            TString path = getTenantStatusResult.path();
-            DatabaseStatusByPath[path] = std::move(getTenantStatusResult);
+        ListTenants->Set(std::move(ev));
+        RequestSchemeCacheNavigate(DomainPath);
+        Ydb::Cms::ListDatabasesResult listTenantsResult;
+        ListTenants->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+        for (const TString& path : listTenantsResult.paths()) {
             DatabaseState[path];
             RequestSchemeCacheNavigate(path);
-        }
-        RequestDone("TEvGetTenantStatusResponse");
-    }
-
-    void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
-        TabletRequests.CompleteRequest(ev->Cookie);
-        Ydb::Cms::ListDatabasesResult listTenantsResult;
-        ev->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
-        for (const TString& path : listTenantsResult.paths()) {
-            RequestTenantStatus(path);
-            DatabaseState[path];
         }
         RequestDone("TEvListTenantsResponse");
     }
 
-    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
+    void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
-        if (NodeSystemState.count(nodeId) == 0) {
-            auto& nodeSystemState(NodeSystemState[nodeId]);
-            nodeSystemState = ev->Release();
-            for (NKikimrWhiteboard::TSystemStateInfo& state : *nodeSystemState->Record.MutableSystemStateInfo()) {
-                state.set_nodeid(nodeId);
-                MergedNodeSystemState[nodeId] = &state;
-            }
-            RequestDone("TEvSystemStateResponse");
+        auto& nodeSystemState(NodeSystemState[nodeId]);
+        nodeSystemState.Set(std::move(ev));
+        for (NKikimrWhiteboard::TSystemStateInfo& state : *nodeSystemState->Record.MutableSystemStateInfo()) {
+            state.set_nodeid(nodeId);
+            MergedNodeSystemState[nodeId] = &state;
         }
-    }
-
-    static const int HIVE_SYNCHRONIZATION_PERIOD_MS = 10000;
-
-    bool IsHiveSynchronizationPeriod(NKikimrHive::TEvResponseHiveInfo& hiveInfo) {
-        return hiveInfo.GetResponseTimestamp() < hiveInfo.GetStartTimeTimestamp() + HIVE_SYNCHRONIZATION_PERIOD_MS;
+        RequestDone("TEvSystemStateResponse");
     }
 
     void AggregateHiveInfo() {
         TNodeTabletState::TTabletStateSettings settings;
-        settings.AliveBarrier = TInstant::Now() - TDuration::Minutes(5);
         for (const auto& [hiveId, hiveResponse] : HiveInfo) {
-            if (hiveResponse) {
-                settings.IsHiveSynchronizationPeriod = IsHiveSynchronizationPeriod(hiveResponse->Record);
+            if (hiveResponse.IsOk()) {
+                settings.AliveBarrier = TInstant::MilliSeconds(hiveResponse->Record.GetResponseTimestamp()) - TDuration::Minutes(5);
                 for (const NKikimrHive::TTabletInfo& hiveTablet : hiveResponse->Record.GetTablets()) {
                     TSubDomainKey tenantId = TSubDomainKey(hiveTablet.GetObjectDomain());
                     auto itDomain = FilterDomainKey.find(tenantId);
@@ -1234,27 +1532,9 @@ public:
         }
     }
 
-    void AggregateHiveDomainStats() {
-        for (const auto& [hiveId, hiveResponse] : HiveDomainStats) {
-            if (hiveResponse) {
-                for (const NKikimrHive::THiveDomainStats& hiveStat : hiveResponse->Record.GetDomainStats()) {
-                    TSubDomainKey domainKey({hiveStat.GetShardId(), hiveStat.GetPathId()});
-                    auto itFilterDomainKey = FilterDomainKey.find(domainKey);
-                    if (itFilterDomainKey != FilterDomainKey.end()) {
-                        TString path(itFilterDomainKey->second);
-                        TDatabaseState& state(DatabaseState[path]);
-                        for (TNodeId nodeId : hiveStat.GetNodeIds()) {
-                            state.ComputeNodeIds.emplace_back(nodeId);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     void AggregateHiveNodeStats() {
         for (const auto& [hiveId, hiveResponse] : HiveNodeStats) {
-            if (hiveResponse) {
+            if (hiveResponse.IsOk()) {
                 for (const NKikimrHive::THiveNodeStats& hiveStat : hiveResponse->Record.GetNodeStats()) {
                     if (hiveStat.HasNodeDomain()) {
                         TSubDomainKey domainKey(hiveStat.GetNodeDomain());
@@ -1283,34 +1563,29 @@ public:
         if (!HaveAllBSControllerInfo()) {
             return;
         }
-        for (const auto& group : Groups->GetEntries()) {
+        for (const auto& group : Groups->Get()->Record.GetEntries()) {
             auto groupId = group.GetKey().GetGroupId();
             auto poolId = group.GetInfo().GetStoragePoolId();
-            GroupState[groupId].ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
+            auto& groupState = GroupState[groupId];
+            groupState.ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
+            groupState.Generation = group.GetInfo().GetGeneration();
             StoragePoolState[poolId].Groups.emplace(groupId);
         }
-        for (const auto& vSlot : VSlots->GetEntries()) {
+        for (const auto& vSlot : VSlots->Get()->Record.GetEntries()) {
             auto vSlotId = GetVSlotId(vSlot.GetKey());
-            GroupState[vSlot.GetInfo().GetGroupId()].VSlots.push_back(&vSlot);
+            auto groupStateIt = GroupState.find(vSlot.GetInfo().GetGroupId());
+            if (groupStateIt != GroupState.end() && vSlot.GetInfo().GetGroupGeneration() == groupStateIt->second.Generation) {
+                groupStateIt->second.VSlots.push_back(&vSlot);
+            }
         }
-        for (const auto& pool : StoragePools->GetEntries()) { // there is no specific pool for static group here
+        for (const auto& pool : StoragePools->Get()->Record.GetEntries()) { // there is no specific pool for static group here
             ui64 poolId = pool.GetKey().GetStoragePoolId();
             TString storagePoolName = pool.GetInfo().GetName();
             StoragePoolState[poolId].Name = storagePoolName;
         }
-        for (const auto& pDisk : PDisks->GetEntries()) {
+        for (const auto& pDisk : PDisks->Get()->Record.GetEntries()) {
             auto pDiskId = GetPDiskId(pDisk.GetKey());
             PDisksMap.emplace(pDiskId, &pDisk);
-        }
-
-        // BSC itself works on the static group
-        // So if it is alive and answering that static group is not working,
-        // it should not be trusted
-        Ydb::Monitoring::StorageGroupStatus staticGroupStatus;
-        FillGroupStatus(0, staticGroupStatus, {nullptr});
-        if (staticGroupStatus.overall() != Ydb::Monitoring::StatusFlag::GREEN) {
-            UnknownStaticGroups.emplace(0);
-            RequestStorageConfig();
         }
     }
 
@@ -1329,15 +1604,15 @@ public:
     static void Check(TSelfCheckContext& context, const NKikimrWhiteboard::TSystemStateInfo::TPoolStats& poolStats) {
         if (poolStats.name() == "System" || poolStats.name() == "IC" || poolStats.name() == "IO") {
             if (poolStats.usage() >= 0.99) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage is over than 99%", ETags::OverloadState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage is over 99%", ETags::OverloadState);
             } else if (poolStats.usage() >= 0.95) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over than 95%", ETags::OverloadState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over 95%", ETags::OverloadState);
             } else {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
         } else {
             if (poolStats.usage() >= 0.99) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over than 99%", ETags::OverloadState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over 99%", ETags::OverloadState);
             } else {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
@@ -1450,7 +1725,7 @@ public:
         }
     }
 
-    void FillComputeNodeStatus(TDatabaseState& databaseState, TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context, bool reportTimeDifference) {
+    void FillComputeNodeStatus(TDatabaseState& databaseState, TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
         TSelfCheckContext rrContext(&context, "NODE_UPTIME");
@@ -1502,17 +1777,15 @@ public:
                     status = Ydb::Monitoring::StatusFlag::GREEN;
                 }
 
-                computeNodeStatus.mutable_max_time_difference()->set_peer(ToString(peerId));
-                computeNodeStatus.mutable_max_time_difference()->set_difference_ms(timeDifferenceDuration.MilliSeconds());
-                computeNodeStatus.set_overall(status);
-
-                if (reportTimeDifference) {
+                if (databaseState.MaxTimeDifferenceNodeId == nodeId) {
                     TSelfCheckContext tdContext(&context, "NODES_TIME_DIFFERENCE");
-                    FillNodeInfo(peerId, tdContext.Location.mutable_compute()->mutable_peer());
                     if (status == Ydb::Monitoring::StatusFlag::GREEN) {
                         tdContext.ReportStatus(status);
                     } else {
-                        tdContext.ReportStatus(status, TStringBuilder() << "The nodes have a time difference of " << timeDifferenceDuration.MilliSeconds() << " ms", ETags::SyncState);
+                        tdContext.ReportStatus(status, TStringBuilder() << "Node is  "
+                                                                        << timeDifferenceDuration.MilliSeconds() << " ms "
+                                                                        << (timeDifferenceUs > 0 ? "behind " : "ahead of ")
+                                                                        << "peer [" << peerId << "]", ETags::SyncState);
                     }
                 }
             }
@@ -1527,7 +1800,7 @@ public:
 
     void FillComputeDatabaseStatus(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
         auto itDescribe = DescribeByPath.find(databaseState.Path);
-        if (itDescribe != DescribeByPath.end()) {
+        if (itDescribe != DescribeByPath.end() && itDescribe->second.IsOk()) {
             const auto& domain(itDescribe->second->GetRecord().GetPathDescription().GetDomainDescription());
             if (domain.GetPathsLimit() > 0) {
                 float usage = (float)domain.GetPathsInside() / domain.GetPathsLimit();
@@ -1535,9 +1808,9 @@ public:
                 if (static_cast<i64>(domain.GetPathsLimit()) - static_cast<i64>(domain.GetPathsInside()) <= 1) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Paths quota exhausted", ETags::QuotaUsage);
                 } else if (usage >= 0.99) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Paths quota usage is over than 99%", ETags::QuotaUsage);
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Paths quota usage is over 99%", ETags::QuotaUsage);
                 } else if (usage >= 0.90) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Paths quota usage is over than 90%", ETags::QuotaUsage);
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Paths quota usage is over 90%", ETags::QuotaUsage);
                 } else {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 }
@@ -1548,9 +1821,9 @@ public:
                 if (static_cast<i64>(domain.GetShardsLimit()) - static_cast<i64>(domain.GetShardsInside()) <= 1) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Shards quota exhausted", ETags::QuotaUsage);
                 } else if (usage >= 0.99) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Shards quota usage is over than 99%", ETags::QuotaUsage);
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Shards quota usage is over 99%", ETags::QuotaUsage);
                 } else if (usage >= 0.90) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Shards quota usage is over than 90%", ETags::QuotaUsage);
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Shards quota usage is over 90%", ETags::QuotaUsage);
                 } else {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 }
@@ -1570,45 +1843,43 @@ public:
                 computeNodeIds = &sharedDatabase.ComputeNodeIds;
             }
         }
-
         std::sort(computeNodeIds->begin(), computeNodeIds->end());
         computeNodeIds->erase(std::unique(computeNodeIds->begin(), computeNodeIds->end()), computeNodeIds->end());
         if (computeNodeIds->empty()) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes", ETags::ComputeState);
         } else {
-            Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets(databaseState, {&context, "SYSTEM_TABLET"});
-            if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
-                context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
-            }
-            long maxClockSkewUs = 0;
-            TNodeId maxClockSkewNodeId = 0;
+            long maxTimeDifferenceUs = 0;
             for (TNodeId nodeId : *computeNodeIds) {
                 auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
                 if (itNodeSystemState != MergedNodeSystemState.end()) {
                     if (std::count(computeNodeIds->begin(), computeNodeIds->end(), itNodeSystemState->second->GetMaxClockSkewPeerId()) > 0
-                            && abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
-                        maxClockSkewUs = abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs());
-                        maxClockSkewNodeId = nodeId;
+                            && abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs()) > maxTimeDifferenceUs) {
+                        maxTimeDifferenceUs = abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs());
+                        databaseState.MaxTimeDifferenceNodeId = nodeId;
                     }
                 }
             }
             for (TNodeId nodeId : *computeNodeIds) {
                 auto& computeNode = *computeStatus.add_nodes();
-                FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"}, maxClockSkewNodeId == nodeId);
+                FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
             }
-            FillComputeDatabaseStatus(databaseState, computeStatus, {&context, "COMPUTE_QUOTA"});
-            context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::Uptime});
-            context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
-            context.ReportWithMaxChildStatus("Compute quota usage", ETags::ComputeState, {ETags::QuotaUsage});
-            context.ReportWithMaxChildStatus("Database has time difference between nodes", ETags::ComputeState, {ETags::SyncState});
-            Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
-            computeNodeIds->push_back(0); // for tablets without node
-            for (TNodeId nodeId : *computeNodeIds) {
-                tabletsStatus = MaxStatus(tabletsStatus, FillTablets(databaseState, nodeId, *computeStatus.mutable_tablets(), context));
-            }
-            if (tabletsStatus != Ydb::Monitoring::StatusFlag::GREEN) {
-                context.ReportStatus(tabletsStatus, "Compute has issues with tablets", ETags::ComputeState, {ETags::TabletState});
-            }
+        }
+        Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets(databaseState, {&context, "SYSTEM_TABLET"});
+        if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
+            context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
+        }
+        FillComputeDatabaseStatus(databaseState, computeStatus, {&context, "COMPUTE_QUOTA"});
+        context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::Uptime});
+        context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
+        context.ReportWithMaxChildStatus("Compute quota usage", ETags::ComputeState, {ETags::QuotaUsage});
+        context.ReportWithMaxChildStatus("Database has time difference between nodes", ETags::ComputeState, {ETags::SyncState});
+        Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
+        computeNodeIds->push_back(0); // for tablets without node
+        for (TNodeId nodeId : *computeNodeIds) {
+            tabletsStatus = MaxStatus(tabletsStatus, FillTablets(databaseState, nodeId, *computeStatus.mutable_tablets(), context));
+        }
+        if (tabletsStatus != Ydb::Monitoring::StatusFlag::GREEN) {
+            context.ReportStatus(tabletsStatus, "Compute has issues with tablets", ETags::ComputeState, {ETags::TabletState});
         }
         computeStatus.set_overall(context.GetOverallStatus());
     }
@@ -1712,12 +1983,9 @@ public:
                                  ETags::PDiskState);
         }
         switch (status->number()) {
-            case NKikimrBlobStorage::ACTIVE: {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-                break;
-            }
+            case NKikimrBlobStorage::ACTIVE:
             case NKikimrBlobStorage::INACTIVE: {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "PDisk is inactive", ETags::PDiskState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
             }
             case NKikimrBlobStorage::FAULTY:
@@ -1741,6 +2009,8 @@ public:
             }
         }
 
+        // do not propagate RED status to vdisk - so that vdisk is not considered down when computing group status
+        context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::ORANGE);
         storagePDiskStatus.set_overall(context.GetOverallStatus());
     }
 
@@ -1797,6 +2067,13 @@ public:
 
         storageVDiskStatus.set_id(GetVSlotId(vSlot->GetKey()));
 
+        if (!vSlot->GetInfo().HasStatusV2()) {
+            // this should mean that BSC recently restarted and does not have accurate data yet - we should not report to avoid false positives
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+            storageVDiskStatus.set_overall(context.GetOverallStatus());
+            return;
+        }
+
         const auto *descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
         auto status = descriptor->FindValueByName(vSlot->GetInfo().GetStatusV2());
         if (!status) { // this case is not expected because becouse bsc assignes status according EVDiskStatus enum
@@ -1816,16 +2093,12 @@ public:
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
                 return;
             }
-            case NKikimrBlobStorage::INIT_PENDING: { // initialization in process
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "VDisk is being initialized", ETags::VDiskState);
-                storageVDiskStatus.set_overall(context.GetOverallStatus());
-                return;
-            }
             case NKikimrBlobStorage::REPLICATING: { // the disk accepts queries, but not all the data was replicated
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, TStringBuilder() << "Replication in progress", ETags::VDiskState);
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
                 return;
             }
+            case NKikimrBlobStorage::INIT_PENDING:
             case NKikimrBlobStorage::READY: { // the disk is fully operational and does not affect group fault tolerance
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
@@ -1837,55 +2110,49 @@ public:
         storageVDiskStatus.set_overall(context.GetOverallStatus());
     }
 
-    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
+    void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
-        if (NodeVDiskState.count(nodeId) == 0) {
-            auto& nodeVDiskState(NodeVDiskState[nodeId]);
-            nodeVDiskState = ev->Release();
-            for (NKikimrWhiteboard::TVDiskStateInfo& state : *nodeVDiskState->Record.MutableVDiskStateInfo()) {
-                state.set_nodeid(nodeId);
-                auto id = GetVDiskId(state.vdiskid());
-                MergedVDiskState[id] = &state;
-            }
-            RequestDone("TEvVDiskStateResponse");
+        auto& nodeVDiskState(NodeVDiskState[nodeId]);
+        nodeVDiskState.Set(std::move(ev));
+        for (NKikimrWhiteboard::TVDiskStateInfo& state : *nodeVDiskState->Record.MutableVDiskStateInfo()) {
+            state.set_nodeid(nodeId);
+            auto id = GetVDiskId(state.vdiskid());
+            MergedVDiskState[id] = &state;
         }
+        RequestDone("TEvVDiskStateResponse");
     }
 
-    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
+    void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
-        if (NodePDiskState.count(nodeId) == 0) {
-            auto& nodePDiskState(NodePDiskState[nodeId]);
-            nodePDiskState = ev->Release();
-            for (NKikimrWhiteboard::TPDiskStateInfo& state : *nodePDiskState->Record.MutablePDiskStateInfo()) {
-                state.set_nodeid(nodeId);
-                auto id = GetPDiskId(state);
-                MergedPDiskState[id] = &state;
-            }
-            RequestDone("TEvPDiskStateResponse");
+        auto& nodePDiskState(NodePDiskState[nodeId]);
+        nodePDiskState.Set(std::move(ev));
+        for (NKikimrWhiteboard::TPDiskStateInfo& state : *nodePDiskState->Record.MutablePDiskStateInfo()) {
+            state.set_nodeid(nodeId);
+            auto id = GetPDiskId(state);
+            MergedPDiskState[id] = &state;
         }
+        RequestDone("TEvPDiskStateResponse");
     }
 
-    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev) {
+    void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        if (NodeBSGroupState.count(nodeId) == 0) {
-            auto& nodeBSGroupState(NodeBSGroupState[nodeId]);
-            nodeBSGroupState = ev->Release();
-            for (NKikimrWhiteboard::TBSGroupStateInfo& state : *nodeBSGroupState->Record.MutableBSGroupStateInfo()) {
-                state.set_nodeid(nodeId);
-                TString storagePoolName = state.storagepoolname();
-                TGroupID groupId(state.groupid());
-                const NKikimrWhiteboard::TBSGroupStateInfo*& current(MergedBSGroupState[state.groupid()]);
-                if (current == nullptr || current->GetGroupGeneration() < state.GetGroupGeneration()) {
-                    current = &state;
-                }
-                if (storagePoolName.empty() && groupId.ConfigurationType() != EGroupConfigurationType::Static) {
-                    continue;
-                }
-                StoragePoolStateByName[storagePoolName].Groups.emplace(state.groupid());
-                StoragePoolStateByName[storagePoolName].Name = storagePoolName;
+        auto& nodeBSGroupState(NodeBSGroupState[nodeId]);
+        nodeBSGroupState.Set(std::move(ev));
+        for (NKikimrWhiteboard::TBSGroupStateInfo& state : *nodeBSGroupState->Record.MutableBSGroupStateInfo()) {
+            state.set_nodeid(nodeId);
+            TString storagePoolName = state.storagepoolname();
+            TGroupID groupId(state.groupid());
+            const NKikimrWhiteboard::TBSGroupStateInfo*& current(MergedBSGroupState[state.groupid()]);
+            if (current == nullptr || current->GetGroupGeneration() < state.GetGroupGeneration()) {
+                current = &state;
             }
-            RequestDone("TEvBSGroupStateResponse");
+            if (storagePoolName.empty() && groupId.ConfigurationType() != EGroupConfigurationType::Static) {
+                continue;
+            }
+            StoragePoolStateByName[storagePoolName].Groups.emplace(state.groupid());
+            StoragePoolStateByName[storagePoolName].Name = storagePoolName;
         }
+        RequestDone("TEvBSGroupStateResponse");
     }
 
     void FillPDiskStatusWithWhiteboard(const TString& pDiskId, const NKikimrWhiteboard::TPDiskStateInfo& pDiskInfo, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
@@ -1999,9 +2266,9 @@ public:
 
         switch (vDiskInfo.GetVDiskState()) {
             case NKikimrWhiteboard::EVDiskState::OK:
+            case NKikimrWhiteboard::EVDiskState::Initial:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
-            case NKikimrWhiteboard::EVDiskState::Initial:
             case NKikimrWhiteboard::EVDiskState::SyncGuidRecovery:
                 context.IssueRecords.clear();
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
@@ -2081,7 +2348,7 @@ public:
             ++DisksColors[status];
             switch (status) {
                 case Ydb::Monitoring::StatusFlag::BLUE: // disk is good, but not available
-                case Ydb::Monitoring::StatusFlag::YELLOW: // disk is initializing, not currently available
+                // No yellow or orange status here - this is intentional - they are used when a disk is running out of space, but is currently available
                 case Ydb::Monitoring::StatusFlag::RED: // disk is bad, probably not available
                 case Ydb::Monitoring::StatusFlag::GREY: // the status is absent, the disk is not available
                     IncrementFor(realm);
@@ -2097,7 +2364,7 @@ public:
             if (ErasureSpecies == NONE) {
                 if (FailedDisks > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             } else if (ErasureSpecies == BLOCK_4_2) {
@@ -2111,7 +2378,7 @@ public:
                     } else {
                         context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                     }
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             } else if (ErasureSpecies == MIRROR_3_DC) {
@@ -2125,7 +2392,7 @@ public:
                     } else {
                         context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                     }
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             }
@@ -2169,7 +2436,7 @@ public:
         context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::YELLOW);
         checker.ReportStatus(context);
 
-
+        BLOG_D("Group " << groupId << " has status " << context.GetOverallStatus());
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
 
@@ -2247,15 +2514,15 @@ public:
                             break;
                         }
                         case ETags::VDiskState: {
-                            message = std::regex_replace(message.c_str(), std::regex("^VDisk has "), "VDisk have ");
+                            message = std::regex_replace(message.c_str(), std::regex("^VDisk has "), "VDisks have ");
                             message = std::regex_replace(message.c_str(), std::regex("^VDisk is "), "VDisks are ");
-                            message = std::regex_replace(message.c_str(), std::regex("^VDisk "), "VDisk ");
+                            message = std::regex_replace(message.c_str(), std::regex("^VDisk "), "VDisks ");
                             break;
                         }
                         case ETags::PDiskState: {
-                            message = std::regex_replace(message.c_str(), std::regex("^PDisk has "), "PDisk have ");
+                            message = std::regex_replace(message.c_str(), std::regex("^PDisk has "), "PDisks have ");
                             message = std::regex_replace(message.c_str(), std::regex("^PDisk is "), "PDisks are ");
-                            message = std::regex_replace(message.c_str(), std::regex("^PDisk "), "PDisk ");
+                            message = std::regex_replace(message.c_str(), std::regex("^PDisk "), "PDisks ");
                             break;
                         }
                         default:
@@ -2727,6 +2994,7 @@ public:
     }
 
     void ReplyAndPassAway() {
+        Span.Event("ReplyAndPassAway");
         THolder<TEvSelfCheckResult> response = MakeHolder<TEvSelfCheckResult>();
         Ydb::Monitoring::SelfCheckResult& result = response->Result;
 
@@ -2768,14 +3036,13 @@ public:
             issue->set_id(id.Str());
         }
 
+        Send(Sender, response.Release(), 0, Cookie);
+
         for (TActorId pipe : PipeClients) {
             NTabletPipe::CloseClient(SelfId(), pipe);
         }
-
-        Send(Sender, response.Release(), 0, Cookie);
-
-        for (TNodeId nodeId : NodeIds) {
-            Send(TlsActivationContext->ActorSystem()->InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
+        for (TNodeId nodeId : SubscribedNodeIds) {
+            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
         }
         PassAway();
     }
@@ -2840,7 +3107,7 @@ public:
         issue->set_message(message);
     }
 
-    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
+    void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         NYdbGrpc::TGRpcClientConfig config;
         for (const auto& systemStateInfo : ev->Get()->Record.GetSystemStateInfo()) {
             for (const auto& endpoint : systemStateInfo.GetEndpoints()) {
@@ -2903,7 +3170,7 @@ public:
 
     void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvPrivate::TEvResult, Handle);
             hFunc(TEvPrivate::TEvError, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
@@ -2958,8 +3225,8 @@ void TNodeCheckRequest<TEvNodeCheckRequest>::Bootstrap() {
 
 template<>
 void TNodeCheckRequest<NMon::TEvHttpInfo>::Bootstrap() {
-    TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(TBase::SelfId().NodeId());
-    TBase::Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest());
+    TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(TBase::SelfId().NodeId());
+    TBase::Send(whiteboardServiceId, new TEvWhiteboard::TEvSystemStateRequest());
     const auto& params(Request->Request.GetParams());
     Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), Timeout.MilliSeconds()));
     TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
@@ -2987,7 +3254,7 @@ public:
     }
 
     void Handle(TEvSelfCheckRequest::TPtr& ev) {
-        Register(new TSelfCheckRequest(ev->Sender, ev.Get()->Release(), ev->Cookie));
+        Register(new TSelfCheckRequest(ev->Sender, ev.Get()->Release(), ev->Cookie, std::move(ev->TraceId)));
     }
 
     std::shared_ptr<NYdbGrpc::TGRpcClientLow> GRpcClientLow;
@@ -3024,5 +3291,4 @@ IActor* CreateHealthCheckService() {
     return new THealthCheckService();
 }
 
-} // namespace NHealthCheck
-} // namespace NKikimr
+}

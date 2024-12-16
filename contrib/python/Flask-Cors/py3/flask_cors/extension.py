@@ -138,6 +138,22 @@ class CORS(object):
 
         Default : True
     :type vary_header: bool
+
+    :param allow_private_network:
+        If True, the response header `Access-Control-Allow-Private-Network`
+        will be set with the value 'true' whenever the request header
+        `Access-Control-Request-Private-Network` has a value 'true'.
+
+        If False, the reponse header `Access-Control-Allow-Private-Network`
+        will be set with the value 'false' whenever the request header
+        `Access-Control-Request-Private-Network` has a value of 'true'.
+
+        If the request header `Access-Control-Request-Private-Network` is
+        not present or has a value other than 'true', the response header
+        `Access-Control-Allow-Private-Network` will not be set.
+
+        Default : True
+    :type allow_private_network: bool
     """
 
     def __init__(self, app=None, **kwargs):

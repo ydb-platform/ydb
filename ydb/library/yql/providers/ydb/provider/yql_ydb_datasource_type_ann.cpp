@@ -1,13 +1,13 @@
 #include "yql_ydb_provider_impl.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -29,7 +29,11 @@ public:
 
     TStatus HandleYdbSourceSettings(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 3U, ctx)) {
+        if (!EnsureArgsCount(*input, 4, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureWorldType(*input->Child(TYdbSourceSettings::idx_World), ctx)) {
             return TStatus::Error;
         }
 
@@ -124,7 +128,7 @@ public:
             ctx.MakeType<TListExprType>(itemType)
         }));
 
-        return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
+        return State_->Types->SetColumnOrder(*input, TColumnOrder(columnOrder), ctx);
     }
 
     TStatus HandleReadTableScheme(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

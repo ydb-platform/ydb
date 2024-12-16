@@ -9,6 +9,7 @@
 
 - includes:
   - cudnn.h:         contrib/libs/nvidia/cudnn/cudnn.h
+  - uuid/uuid.h:     contrib/libs/uuid/include/uuid/uuid.h
 
 # _cgo_export.h is generated into build dir of go package which uses cgo
 # and we are unable to resolve it correctly to whcih build dir to resolve
@@ -45,6 +46,14 @@
     - complex.h:     contrib/libs/libm/include/complex.h
     - math.h:        contrib/libs/libm/include/math.h
 
+- source_filter: "^contrib/libs/jemalloc/"
+  includes:
+    - unwind.h:       contrib/libs/libunwind/include/unwind.h
+
+- source_filter: "^contrib/libs/libunwind/"
+  includes:
+    - unwind.h:       contrib/libs/libunwind/include/unwind.h
+
 - source_filter: "^contrib/tools/bison/"
   includes:
     - error.h:       contrib/tools/bison/lib/error.h
@@ -59,8 +68,7 @@
 - source_filter: "^contrib/tools/m4/"
   includes:
     - error.h:       contrib/tools/m4/lib/error.h
-    - fcntl.h:       contrib/tools/m4/lib/platform/posix/fcntl.h
-    - getopt.h:      contrib/tools/m4/lib/platform/posix/getopt.h
+    - fcntl.h:       contrib/tools/m4/lib/fcntl.h
     - obstack.h:     contrib/tools/m4/lib/obstack.h
     - regex.h:       contrib/tools/m4/lib/regex.h
     - system.h
@@ -86,11 +94,6 @@
 - source_filter: "^contrib/libs/llvm"
   includes:
     - plugin-api.h # GNU linker plugin API.
-
-- source_filter: "^contrib/libs/musl"
-  includes:
-    - atomic.h:      contrib/libs/musl/src/internal/atomic.h
-    - bits/fenv.h:   contrib/libs/musl/arch/x86_64/bits/fenv.h
 
 - source_filter: "^contrib/libs/zbar"
   includes:
@@ -154,10 +157,22 @@
   includes:
     - mkl.h:         contrib/libs/intel/mkl/include/mkl.h
 
-# deprecated contrib with ADDINCL to libintl
-- source_filter: "^contrib/(deprecated/glib/glib|libs/gdk-pixbuf)"
+# Use gettext-stub which has a permissive license
+- source_filter: "^contrib/libs/gdk-pixbuf"
   includes:
-    - libintl.h:     contrib/deprecated/libintl/libintl.h
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
+
+- source_filter: "^contrib/restricted/glib"
+  includes:
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
+
+- source_filter: "^contrib/restricted/gst-plugins-base"
+  includes:
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
+
+- source_filter: "^contrib/restricted/gstreamer"
+  includes:
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
 
 - source_filter: "^contrib/libs/poco/Data/ODBC"
   includes:
@@ -214,15 +229,6 @@
     - sqltypes.h
     - sqlucode.h
 
-- source_filter: "^contrib/libs/(apache/apr|httpd|llvm)"
-  includes:
-    - uuid.h
-    - uuid/uuid.h
-
-- source_filter: "^contrib/deprecated/glib"
-  includes:
-    - configmake.h
-
 - source_filter: "^contrib/libs/authparser"
   includes:
     - settings.h
@@ -231,29 +237,17 @@
   includes:
     - tbb/tbb_stddef.h
 
-- source_filter: "^contrib/libs/deprecated"
-  includes:
-    - hdf5.h
-
 - source_filter: "^contrib/libs/freetype"
   includes:
     - hb-ot.h
     - hb-ft.h
     - hb.h
 
-- source_filter: "^contrib/libs/httpd"
-  includes:
-    - nginx.h
-    - ngx_config.h
-    - ngx_core.h
-    - ngx_http.h
-    - ngx_log.h
-
 - source_filter: "^contrib/libs/libpcap"
   includes:
     - strerror.h
 
-- source_filter: "^contrib/libs/(apache/apr|httpd|openssl)"
+- source_filter: "^contrib/libs/(apache/apr|openssl)"
   includes:
     - netinet/sctp.h
 
@@ -261,12 +255,6 @@
   includes:
     - magic.h
     - xmlparse.h
-
-- source_filter: "^contrib/python/uWSGI"
-  includes:
-    - libxml/parser.h
-    - libxml/tree.h
-    - uuid/uuid.h
 
 - source_filter: "^contrib/tools/python"
   includes:
@@ -502,6 +490,10 @@
     - tls.h: contrib/libs/glibcasm/glibc/sysdeps/x86_64/nptl/tls.h
     - unistd.h: contrib/libs/glibcasm/glibc/include/unistd.h
     - unwind.h: contrib/libs/glibcasm/glibc/sysdeps/generic/unwind.h
+    # These are stubs for actual resolving into system
+    - stdc-predef.h: contrib/libs/glibcasm/glibc/include/stdc-predef.h
+    - gnu/stubs.h: contrib/libs/glibcasm/glibc/include/gnu/stubs.h
+
 
 - source_filter: "^contrib/libs/libunwind/include/unwind.h"
   includes:
@@ -515,9 +507,25 @@
         - contrib/libs/glibcasm/glibc/include/stdint.h
         - contrib/libs/cxxsupp/libcxx/include/stdint.h
 
+# protoc uses raw string literals with #include statements, which drive our include parser crazy
+- source_filter: "^contrib/libs/protoc"
+  includes:
+    - "$base$google/protobuf/$path$"
+    - "google/protobuf/$path$"
+    - "$fwd_to$.$fwd_to_suffix$.h"
+    - "$fwd_to$.proto.h"
+    - "$name$.proto.h"
+    - "$path$"
+    - "$h_include$"
+
 - source_filter: "^contrib/tools/bison/data"
   includes:
-    - position.hh
+    - "]b4_location_include["
+
+- source_filter: "^contrib/libs/libheif"
+  includes:
+    - error.h:  contrib/libs/libheif/libheif/error.h
+    - file.h:   contrib/libs/libheif/libheif/file.h
 
 - source_filter: "^vendor/github.com/NVIDIA"
   includes:
@@ -533,3 +541,7 @@
     - netdb.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/netdb.h
     - signal.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/wpa_supplicant_2_9/bk_patch/signal.h
     - check_config.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/mbedtls/mbedtls-2.27.0/include/mbedtls/check_config.h
+
+- source_filter: "^sdg/sdc"
+  includes:
+    - uuid/uuid.h: sdg/sdc/contrib/uuid/uuid/uuid.h

@@ -29,13 +29,17 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static NLogging::TLogger WithCommandTag(
+namespace {
+
+NLogging::TLogger WithCommandTag(
     const NLogging::TLogger& logger,
     const ICommandContextPtr& context)
 {
     return logger.WithTag("Command: %v",
         context->Request().CommandName);
 }
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -159,6 +163,11 @@ void TPullQueueCommand::Register(TRegistrar registrar)
 
 void TPullQueueCommand::DoExecute(ICommandContextPtr context)
 {
+    YT_LOG_DEBUG("Executing \"pull_queue\" command (QueuePath: %v, Offset: %v, PartitionIndex: %v)",
+        QueuePath,
+        Offset,
+        PartitionIndex);
+
     auto client = context->GetClient();
 
     auto result = WaitFor(client->PullQueue(
@@ -222,6 +231,12 @@ void TPullQueueConsumerCommand::Register(TRegistrar registrar)
 
 void TPullQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 {
+    YT_LOG_DEBUG("Executing \"pull_queue_consumer\" command (ConsumerPath: %v, QueuePath: %v, Offset: %v, PartitionIndex: %v)",
+        ConsumerPath,
+        QueuePath,
+        Offset,
+        PartitionIndex);
+
     auto client = context->GetClient();
 
     auto result = WaitFor(client->PullQueueConsumer(
@@ -259,6 +274,13 @@ void TAdvanceQueueConsumerCommand::Register(TRegistrar registrar)
 
 void TAdvanceQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 {
+    YT_LOG_DEBUG("Executing \"advance_queue_consumer\" command (ConsumerPath: %v, QueuePath: %v, PartitionIndex: %v, OldOffset: %v, NewOffset: %v)",
+        ConsumerPath,
+        QueuePath,
+        PartitionIndex,
+        OldOffset,
+        NewOffset);
+
     auto transaction = GetTransaction(context);
 
     if (ClientSide.value_or(false)) {
@@ -293,6 +315,11 @@ void TCreateQueueProducerSessionCommand::Register(TRegistrar registrar)
 
 void TCreateQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
 {
+    YT_LOG_DEBUG("Executing \"create_queue_producer_session\" command (ProducerPath: %v, QueuePath: %v, SessionId: %v)",
+        ProducerPath,
+        QueuePath,
+        SessionId);
+
     auto client = context->GetClient();
 
     auto result = WaitFor(client->CreateQueueProducerSession(
@@ -323,6 +350,11 @@ void TRemoveQueueProducerSessionCommand::Register(TRegistrar registrar)
 
 void TRemoveQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
 {
+    YT_LOG_DEBUG("Executing \"remove_queue_producer_session\" command (ProducerPath: %v, QueuePath: %v, SessionId: %v)",
+        ProducerPath,
+        QueuePath,
+        SessionId);
+
     auto client = context->GetClient();
 
     WaitFor(client->RemoveQueueProducerSession(
@@ -362,15 +394,23 @@ void TPushQueueProducerCommand::Register(TRegistrar registrar)
 
 void TPushQueueProducerCommand::DoExecute(ICommandContextPtr context)
 {
+    YT_LOG_DEBUG("Executing \"push_queue_producer\" command (ProducerPath: %v, QueuePath: %v, SessionId: %v, Epoch: %v)",
+        ProducerPath,
+        QueuePath,
+        SessionId,
+        Epoch);
+
     auto tableMountCache = context->GetClient()->GetTableMountCache();
 
     auto queueTableInfoFuture = tableMountCache->GetTableInfo(QueuePath.GetPath());
     auto producerTableInfoFuture = tableMountCache->GetTableInfo(ProducerPath.GetPath());
 
-    auto queueTableInfo = WaitFor(queueTableInfoFuture).ValueOrThrow("Path %v is not valid queue", QueuePath);
+    auto queueTableInfo = WaitFor(queueTableInfoFuture)
+        .ValueOrThrow("Path %v does not point to a valid queue", QueuePath);
     queueTableInfo->ValidateOrdered();
 
-    auto producerTableInfo = WaitFor(producerTableInfoFuture).ValueOrThrow("Path %v is not valid producer", ProducerPath);
+    auto producerTableInfo = WaitFor(producerTableInfoFuture)
+        .ValueOrThrow("Path %v does not point to a valid producer", ProducerPath);
     producerTableInfo->ValidateSorted();
 
     struct TPushQueueProducerBufferTag

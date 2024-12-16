@@ -52,7 +52,8 @@ public:
         , Size(size)
     {}
 
-    struct TDataPortion: public TAtomicRefCount<TDataPortion>, TMoveOnly {
+    class TDataPortion: public TAtomicRefCount<TDataPortion>, TMoveOnly {
+    public:
         struct TCsv {
             TCsv(TString&& data, const TString& formatString = TString())
                 : Data(std::move(data))
@@ -71,16 +72,29 @@ public:
             TString Schema;
         };
 
+        struct TSkip {
+        };
+
+        using TDataType = std::variant<NYdb::TValue, TCsv, TArrow, TSkip>;
+
         template<class T>
         TDataPortion(const TString& table, T&& data, ui64 size)
             : Table(table)
-            , Data(std::move(data))
             , Size(size)
+            , Data(std::move(data))
         {}
 
-        TString Table;
-        std::variant<NYdb::TValue, TCsv, TArrow> Data;
-        ui64 Size;
+        virtual ~TDataPortion() = default;
+        virtual void SetSendResult(const NYdb::TStatus& status) {
+            Y_UNUSED(status);
+        }
+        TDataType& MutableData() {
+            return Data;
+        }
+        YDB_READONLY_DEF(TString, Table);
+        YDB_READONLY(ui64, Size, 0);
+    private:
+        TDataType Data;
     };
 
     using TDataPortionPtr = TIntrusivePtr<TDataPortion>;
@@ -88,7 +102,7 @@ public:
 
     virtual TDataPortions GenerateDataPortion() = 0;
     YDB_READONLY_DEF(std::string, Name);
-    YDB_READONLY(ui64, Size, 0);
+    YDB_READONLY_PROTECT(ui64, Size, 0);
 };
 
 using TBulkDataGeneratorList = std::vector<std::shared_ptr<IBulkDataGenerator>>;

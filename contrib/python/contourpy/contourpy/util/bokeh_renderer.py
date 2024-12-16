@@ -38,9 +38,8 @@ class BokehRenderer(Renderer):
             ``False``.
 
     Warning:
-        :class:`~contourpy.util.bokeh_renderer.BokehRenderer`, unlike
-        :class:`~contourpy.util.mpl_renderer.MplRenderer`, needs to be told in advance if output to
-        SVG format will be required later, otherwise it will assume PNG output.
+        :class:`~.BokehRenderer`, unlike :class:`~.MplRenderer`, needs to be told in advance if
+        output to SVG format will be required later, otherwise it will assume PNG output.
     """
     _figures: list[figure]
     _layout: GridPlot
@@ -99,9 +98,9 @@ class BokehRenderer(Renderer):
 
         Args:
             filled (sequence of arrays): Filled contour data as returned by
-                :func:`~contourpy.ContourGenerator.filled`.
-            fill_type (FillType or str): Type of ``filled`` data as returned by
-                :attr:`~contourpy.ContourGenerator.fill_type`, or a string equivalent.
+                :meth:`~.ContourGenerator.filled`.
+            fill_type (FillType or str): Type of :meth:`~.ContourGenerator.filled` data as returned
+                by :attr:`~.ContourGenerator.fill_type`, or a string equivalent.
             ax (int or Bokeh Figure, optional): Which plot to use, default ``0``.
             color (str, optional): Color to plot with. May be a string color or the letter ``"C"``
                 followed by an integer in the range ``"C0"`` to ``"C9"`` to use a color from the
@@ -163,8 +162,9 @@ class BokehRenderer(Renderer):
                 list(np.stack((y[:-1, 1:].ravel(), ymid, y[1:, :-1].ravel()), axis=1)),
                 **kwargs)
         if point_color is not None:
-            fig.circle(
-                x=x.ravel(), y=y.ravel(), fill_color=color, line_color=None, alpha=alpha, size=8)
+            fig.scatter(
+                x=x.ravel(), y=y.ravel(), fill_color=color, line_color=None, alpha=alpha,
+                marker="circle", size=8)
 
     def lines(
         self,
@@ -179,9 +179,9 @@ class BokehRenderer(Renderer):
 
         Args:
             lines (sequence of arrays): Contour line data as returned by
-                :func:`~contourpy.ContourGenerator.lines`.
-            line_type (LineType or str): Type of ``lines`` data as returned by
-                :attr:`~contourpy.ContourGenerator.line_type`, or a string equivalent.
+                :meth:`~.ContourGenerator.lines`.
+            line_type (LineType or str): Type of :meth:`~.ContourGenerator.lines` data as returned
+                by :attr:`~.ContourGenerator.line_type`, or a string equivalent.
             ax (int or Bokeh Figure, optional): Which plot to use, default ``0``.
             color (str, optional): Color to plot lines. May be a string color or the letter ``"C"``
                 followed by an integer in the range ``"C0"`` to ``"C9"`` to use a color from the
@@ -222,7 +222,7 @@ class BokehRenderer(Renderer):
         fig = self._get_figure(ax)
         color = self._convert_color(color)
         x, y = self._grid_as_2d(x, y)
-        fig.circle(x[mask], y[mask], fill_color=color, size=10)
+        fig.scatter(x[mask], y[mask], fill_color=color, marker="circle", size=10)
 
     def save(
         self,

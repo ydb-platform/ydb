@@ -12,10 +12,6 @@ TConclusionStatus TUpsertIndexOperation::DoDeserialize(NYql::TObjectSettingsImpl
         }
         IndexName = *fValue;
     }
-    StorageId = features.Extract("STORAGE_ID");
-    if (StorageId && !*StorageId) {
-        return TConclusionStatus::Fail("STORAGE_ID cannot be empty string");
-    }
     TString indexType;
     {
         auto fValue = features.Extract("TYPE");
@@ -46,9 +42,6 @@ TConclusionStatus TUpsertIndexOperation::DoDeserialize(NYql::TObjectSettingsImpl
 
 void TUpsertIndexOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const {
     auto* indexProto = schemaData.AddUpsertIndexes();
-    if (StorageId) {
-        indexProto->SetStorageId(*StorageId);
-    }
     indexProto->SetName(IndexName);
     IndexMetaConstructor.SerializeToProto(*indexProto);
 }

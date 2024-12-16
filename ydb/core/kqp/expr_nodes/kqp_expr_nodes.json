@@ -186,7 +186,7 @@
             "Base": "TKqlLookupTableBase",
             "Match": {"Type": "Callable", "Name": "KqlStreamLookupTable"},
             "Children": [
-                {"Index": 3, "Name": "LookupStrategy", "Type": "TCoAtom"}
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -209,7 +209,10 @@
         {
             "Name": "TKqlStreamLookupIndex",
             "Base": "TKqlLookupIndexBase",
-            "Match": {"Type": "Callable", "Name": "KqlStreamLookupIndex"}
+            "Match": {"Type": "Callable", "Name": "KqlStreamLookupIndex"},
+            "Children": [
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
         },
         {
             "Name": "TKqlEffectBase",
@@ -464,7 +467,7 @@
                 {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 3, "Name": "InputType", "Type": "TExprBase"},
-                {"Index": 4, "Name": "LookupStrategy", "Type": "TCoAtom"}
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -543,10 +546,11 @@
             "Match": {"Type": "Callable", "Name": "KqpTableSinkSettings"},
             "Children": [
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
-                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 2, "Name": "InconsistentWrite", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Mode", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 1, "Name": "InconsistentWrite", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Mode", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Priority", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "TableType", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {

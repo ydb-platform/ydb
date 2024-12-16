@@ -29,6 +29,10 @@ bool ShouldThrow(EUnrecognizedStrategy strategy)
 
 void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target) const
 {
+    if (auto* bitmap = target->GetSetFieldsBitmap()) {
+        bitmap->Initialize(ssize(Parameters_));
+    }
+
     for (const auto& [_, parameter] : SortedParameters_) {
         parameter->SetDefaultsInitialized(target);
     }
@@ -273,7 +277,11 @@ void TYsonStructMeta::LoadStruct(
         pendingParameters.erase(parameter);
     });
 
-    for (const auto parameter : pendingParameters) {
+    auto sortedPendingParameters = std::vector(pendingParameters.begin(), pendingParameters.end());
+    Sort(sortedPendingParameters, [] (const auto* lhs, const auto* rhs) {
+        return lhs->GetKey() < rhs->GetKey();
+    });
+    for (const auto parameter : sortedPendingParameters) {
         parameter->Load(target, /*cursor*/ nullptr, createLoadOptions(parameter->GetKey()));
     }
 
@@ -355,6 +363,31 @@ void TYsonStructMeta::FinishInitialization(const std::type_info& structType)
         [] (const auto& lhs, const auto& rhs) {
             return lhs.first < rhs.first;
         });
+}
+
+bool TYsonStructMeta::CompareStructs(
+    const TYsonStructBase* lhs,
+    const TYsonStructBase* rhs) const
+{
+    YT_VERIFY(lhs->Meta_ == this);
+
+    if (lhs == rhs) {
+        return true;
+    }
+
+    if (rhs->Meta_ != lhs->Meta_) {
+        return false;
+    }
+
+    // Equal Meta implies equal struct types.
+    // Thus structs must be instances of the same class.
+    for (const auto& [_, parameter] : SortedParameters_) {
+        if (!parameter->CompareParameter(lhs, rhs)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -587,7 +587,9 @@ public:
         ExternalTable,
         ExternalDataSource,
         View,
-        ResourcePool
+        ResourcePool,
+        BackupCollection,
+        Transfer
     };
 
     TSchemaObject(TSchemaObject&&) = default;

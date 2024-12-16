@@ -17,6 +17,7 @@ using namespace NConcurrency;
 using namespace NTransactionClient;
 using namespace NYPath;
 using namespace NProfiling;
+using namespace NCrypto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -70,6 +71,11 @@ public:
         return Writer_->GetNameTable();
     }
 
+    std::optional<TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
+    }
+
 private:
     const IUnversionedWriterPtr Writer_;
     const TSchemalessBufferedDynamicTableWriterConfigPtr Config_;
@@ -77,10 +83,11 @@ private:
 
     TBackoffStrategy RetryBackoffStrategy_;
 
-    TPromise<void> ClosePromise_ = NewPromise<void>();
+    const TPromise<void> ClosePromise_ = NewPromise<void>();
     std::atomic<bool> Closed_ = false;
 
-    void Loop() {
+    void Loop()
+    {
         while (!Closed_) {
             auto asyncBatch = Batcher_->DequeueBatch();
             auto batch = WaitForUnique(asyncBatch)

@@ -56,7 +56,7 @@ inline Ydb::StatusIds::StatusCode ConvertToYdbStatus(NKikimrTxColumnShard::EResu
 }
 }
 
-struct TEvColumnShard {
+namespace TEvColumnShard {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_COLUMNSHARD),
         EvCancelTransactionProposal,
@@ -98,6 +98,7 @@ struct TEvColumnShard {
     struct TEvInternalScan: public TEventLocal<TEvInternalScan, EvInternalScan> {
     private:
         YDB_READONLY(ui64, PathId, 0);
+        YDB_READONLY_DEF(std::optional<ui64>, LockId);
         YDB_ACCESSOR(bool, Reverse, false);
         YDB_ACCESSOR(ui32, ItemsLimit, 0);
         YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
@@ -116,8 +117,9 @@ struct TEvColumnShard {
             ColumnNames.emplace_back(columnName);
         }
 
-        TEvInternalScan(const ui64 pathId)
+        TEvInternalScan(const ui64 pathId, const std::optional<ui64> lockId)
             : PathId(pathId)
+            , LockId(lockId)
         {
 
         }

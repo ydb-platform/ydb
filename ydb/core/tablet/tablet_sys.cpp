@@ -1,7 +1,6 @@
 #include "tablet_sys.h"
 #include "tablet_tracing_signals.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/services/services.pb.h>
@@ -818,6 +817,7 @@ void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) 
             return PromoteToCandidate(0);
         }
     case NKikimrProto::ERROR:
+    case NKikimrProto::NODATA:
     case NKikimrProto::RACE:
     case NKikimrProto::TIMEOUT:
         return LockedInitializationPath();
@@ -849,6 +849,7 @@ void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
         }
         return;
     case NKikimrProto::ERROR:
+    case NKikimrProto::NODATA:
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootSSError);
     case NKikimrProto::TIMEOUT:
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootSSTimeout);
@@ -885,6 +886,7 @@ void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) 
             return TabletBlockBlobStorage();
         }
     case NKikimrProto::ERROR:
+    case NKikimrProto::NODATA:
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootSSError);
     case NKikimrProto::TIMEOUT:
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootSSTimeout);
@@ -1003,7 +1005,8 @@ void TTablet::Handle(TEvTablet::TEvPing::TPtr &ev) {
 }
 
 void TTablet::HandleByLeader(TEvTablet::TEvTabletActive::TPtr &ev) {
-    Y_UNUSED(ev);
+    auto *msg = ev->Get();
+    TabletVersionInfo = std::move(msg->VersionInfo);
     ReportTabletStateChange(TTabletStateInfo::Active);
     Send(Launcher, new TEvTablet::TEvReady(TabletID(), StateStorageInfo.KnownGeneration, UserTablet));
     ActivateTime = AppData()->TimeProvider->Now();
@@ -1011,14 +1014,15 @@ void TTablet::HandleByLeader(TEvTablet::TEvTabletActive::TPtr &ev) {
             <<  ", Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)
             <<  " started in " << (ActivateTime-BoostrapTime).MilliSeconds() << "msec", "TSYS24");
 
-    PipeConnectAcceptor->Activate(SelfId(), UserTablet, true, StateStorageInfo.KnownGeneration);
+    PipeConnectAcceptor->Activate(SelfId(), UserTablet, true, StateStorageInfo.KnownGeneration, TabletVersionInfo);
 }
 
 void TTablet::HandleByFollower(TEvTablet::TEvTabletActive::TPtr &ev) {
-    Y_UNUSED(ev);
+    auto *msg = ev->Get();
+    TabletVersionInfo = std::move(msg->VersionInfo);
     BLOG_D("Follower TabletStateActive", "TSYS25");
 
-    PipeConnectAcceptor->Activate(SelfId(), UserTablet, false, StateStorageInfo.KnownGeneration);
+    PipeConnectAcceptor->Activate(SelfId(), UserTablet, false, StateStorageInfo.KnownGeneration, TabletVersionInfo);
 
     Send(FollowerStStGuardian, new TEvTablet::TEvFollowerUpdateState(false, SelfId(), UserTablet));
     ReportTabletStateChange(TTabletStateInfo::Active);
@@ -1237,6 +1241,7 @@ void TTablet::CheckEntry(TGraph::TIndex::iterator it) {
                     entry->ConfirmedOnSend,
                     std::move(entry->YellowMoveChannels),
                     std::move(entry->YellowStopChannels),
+                    std::move(entry->ApproximateFreeSpaceShareByChannel),
                     std::move(entry->GroupWrittenBytes),
                     std::move(entry->GroupWrittenOps)),
                 0, entry->SourceCookie);
@@ -1507,7 +1512,7 @@ void TTablet::Handle(TEvTabletPipe::TEvConnect::TPtr& ev) {
     if (PipeConnectAcceptor->IsStopped()) {
         PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, Leader);
     } else if (PipeConnectAcceptor->IsActive()) {
-        PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, Leader, StateStorageInfo.KnownGeneration);
+        PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, Leader, StateStorageInfo.KnownGeneration, TabletVersionInfo);
     } else {
         PipeConnectAcceptor->Enqueue(ev, SelfId());
     }
@@ -1529,7 +1534,7 @@ void TTablet::HandleQueued(TEvTabletPipe::TEvConnect::TPtr& ev) {
 void TTablet::HandleByFollower(TEvTabletPipe::TEvConnect::TPtr &ev) {
     Y_DEBUG_ABORT_UNLESS(!Leader);
     if (PipeConnectAcceptor->IsActive() && !PipeConnectAcceptor->IsStopped()) {
-        PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, false, StateStorageInfo.KnownGeneration);
+        PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, false, StateStorageInfo.KnownGeneration, TabletVersionInfo);
     } else {
         PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, false);
     }
@@ -1556,6 +1561,7 @@ void TTablet::Handle(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
             entry->BlobStorageConfirmed = true;
             entry->YellowMoveChannels = std::move(msg->YellowMoveChannels);
             entry->YellowStopChannels = std::move(msg->YellowStopChannels);
+            entry->ApproximateFreeSpaceShareByChannel = std::move(msg->ApproximateFreeSpaceShareByChannel);
             entry->GroupWrittenBytes = std::move(msg->GroupWrittenBytes);
             entry->GroupWrittenOps = std::move(msg->GroupWrittenOps);
 

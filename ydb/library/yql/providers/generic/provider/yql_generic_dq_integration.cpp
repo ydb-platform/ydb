@@ -3,16 +3,16 @@
 #include "yql_generic_mkql_compiler.h"
 #include "yql_generic_predicate_pushdown.h"
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/proto/range.pb.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 
 namespace NYql {
@@ -21,20 +21,24 @@ namespace NYql {
 
     namespace {
 
-        TString GetSourceType(NYql::NConnector::NApi::TDataSourceInstance dsi) {
+        TString GetSourceType(NYql::TGenericDataSourceInstance dsi) {
             switch (dsi.kind()) {
-                case NYql::NConnector::NApi::CLICKHOUSE:
+                case NYql::EGenericDataSourceKind::CLICKHOUSE:
                     return "ClickHouseGeneric";
-                case NYql::NConnector::NApi::POSTGRESQL:
+                case NYql::EGenericDataSourceKind::POSTGRESQL:
                     return "PostgreSqlGeneric";
-                case NYql::NConnector::NApi::MYSQL:
+                case NYql::EGenericDataSourceKind::MYSQL:
                     return "MySqlGeneric";
-                case NYql::NConnector::NApi::YDB:
+                case NYql::EGenericDataSourceKind::YDB:
                     return "YdbGeneric";
-                case NYql::NConnector::NApi::GREENPLUM:
+                case NYql::EGenericDataSourceKind::GREENPLUM:
                     return "GreenplumGeneric";
-                case NYql::NConnector::NApi::MS_SQL_SERVER:
+                case NYql::EGenericDataSourceKind::MS_SQL_SERVER:
                     return "MsSQLServerGeneric";
+                case NYql::EGenericDataSourceKind::ORACLE:
+                    return "OracleGeneric";
+                case NYql::EGenericDataSourceKind::LOGGING:
+                    return "LoggingGeneric";
                 default:
                     ythrow yexception() << "Data source kind is unknown or not specified";
             }
@@ -59,7 +63,7 @@ namespace NYql {
                 return Nothing();
             }
 
-            TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
@@ -85,6 +89,7 @@ namespace NYql {
                     // clang-format off
                     return Build<TDqSourceWrap>(ctx, read->Pos())
                         .Input<TGenSourceSettings>()
+                            .World(genReadTable.World())
                             .Cluster(genReadTable.DataSource().Cluster())
                             .Table(genReadTable.Table())
                             .Token<TCoSecureParam>()
@@ -101,8 +106,7 @@ namespace NYql {
                 return read;
             }
 
-            ui64 Partition(const TDqSettings&, size_t, const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&,
-                           bool) override {
+            ui64 Partition(const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
                 partitions.clear();
                 Generic::TRange range;
                 partitions.emplace_back();
@@ -112,7 +116,7 @@ namespace NYql {
             }
 
             void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings,
-                                    TString& sourceType, size_t) override {
+                                    TString& sourceType, size_t, TExprContext&) override {
                 const TDqSource source(&node);
                 if (const auto maybeSettings = source.Settings().Maybe<TGenSourceSettings>()) {
                     const auto settings = maybeSettings.Cast();
@@ -160,10 +164,10 @@ namespace NYql {
                         }
                     }
 
-                    // Managed YDB supports access via IAM token.
+                    // Managed YDB (including YDB underlying Logging) supports access via IAM token.
                     // If exist, copy service account creds to obtain tokens during request execution phase.
                     // If exists, copy previously created token.
-                    if (clusterConfig.kind() == NConnector::NApi::EDataSourceKind::YDB) {
+                    if (IsIn({NYql::EGenericDataSourceKind::YDB, NYql::EGenericDataSourceKind::LOGGING}, clusterConfig.kind())) {
                         source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                         source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
                         source.SetToken(State_->Types->Credentials->FindCredentialContent(
@@ -194,30 +198,36 @@ namespace NYql {
                 properties["Table"] = table;
                 auto [tableMeta, issue] = State_->GetTable(clusterName, table);
                 if (!issue) {
-                    const NConnector::NApi::TDataSourceInstance& dataSourceInstance = tableMeta.value()->DataSourceInstance;
+                    const NYql::TGenericDataSourceInstance& dataSourceInstance = tableMeta.value()->DataSourceInstance;
                     switch (dataSourceInstance.kind()) {
-                        case NConnector::NApi::CLICKHOUSE:
+                        case NYql::EGenericDataSourceKind::CLICKHOUSE:
                             properties["SourceType"] = "ClickHouse";
                             break;
-                        case NConnector::NApi::POSTGRESQL:
+                        case NYql::EGenericDataSourceKind::POSTGRESQL:
                             properties["SourceType"] = "PostgreSql";
                             break;
-                        case NConnector::NApi::MYSQL:
+                        case NYql::EGenericDataSourceKind::MYSQL:
                             properties["SourceType"] = "MySql";
                             break;
-                        case NConnector::NApi::YDB:
+                        case NYql::EGenericDataSourceKind::YDB:
                             properties["SourceType"] = "Ydb";
                             break;
-                        case NConnector::NApi::GREENPLUM:
+                        case NYql::EGenericDataSourceKind::GREENPLUM:
                             properties["SourceType"] = "Greenplum";
                             break;
-                        case NConnector::NApi::MS_SQL_SERVER:
+                        case NYql::EGenericDataSourceKind::MS_SQL_SERVER:
                             properties["SourceType"] = "MsSQLServer";
                             break;
-                        case NConnector::NApi::DATA_SOURCE_KIND_UNSPECIFIED:
+                        case NYql::EGenericDataSourceKind::ORACLE:
+                            properties["SourceType"] = "Oracle";
+                            break;
+                        case NYql::EGenericDataSourceKind::LOGGING:
+                            properties["SourceType"] = "Logging";
+                            break;
+                        case NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;
                         default:
-                            properties["SourceType"] = NConnector::NApi::EDataSourceKind_Name(dataSourceInstance.kind());
+                            properties["SourceType"] = NYql::EGenericDataSourceKind_Name(dataSourceInstance.kind());
                             break;
                     }
 
@@ -226,16 +236,15 @@ namespace NYql {
                     }
 
                     switch (dataSourceInstance.protocol()) {
-                        case NConnector::NApi::NATIVE:
+                        case NYql::EGenericProtocol::NATIVE:
                             properties["Protocol"] = "Native";
                             break;
-                        case NConnector::NApi::HTTP:
+                        case NYql::EGenericProtocol::HTTP:
                             properties["Protocol"] = "Http";
                             break;
-                        case NConnector::NApi::PROTOCOL_UNSPECIFIED:
-                            break;
+                        case NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED:
                         default:
-                            properties["Protocol"] = NConnector::NApi::EProtocol_Name(dataSourceInstance.protocol());
+                            properties["Protocol"] = NYql::EGenericProtocol_Name(dataSourceInstance.protocol());
                             break;
                     }
                 }
@@ -264,13 +273,6 @@ namespace NYql {
                 const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                 const auto& endpoint = clusterConfig.endpoint();
 
-                // for backward compability full path can be used (cluster_name.`db_name.table`)
-                // TODO: simplify during https://st.yandex-team.ru/YQ-2494
-                TStringBuf db, dbTable;
-                if (!TStringBuf(table).TrySplit('.', db, dbTable)) {
-                    dbTable = table;
-                }
-
                 YQL_CLOG(INFO, ProviderGeneric)
                     << "Filling lookup source settings"
                     << ": cluster: " << clusterName
@@ -283,13 +285,13 @@ namespace NYql {
                 }
 
                 Generic::TLookupSource source;
-                source.set_table(TString(dbTable));
+                source.set_table(table);
                 *source.mutable_data_source_instance() = tableMeta.value()->DataSourceInstance;
 
                 // Managed YDB supports access via IAM token.
                 // If exist, copy service account creds to obtain tokens during request execution phase.
                 // If exists, copy previously created token.
-                if (clusterConfig.kind() == NConnector::NApi::EDataSourceKind::YDB) {
+                if (clusterConfig.kind() == NYql::EGenericDataSourceKind::YDB) {
                     source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                     source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
                     source.SetToken(State_->Types->Credentials->FindCredentialContent(
@@ -307,10 +309,10 @@ namespace NYql {
             const TGenericState::TPtr State_;
         };
 
-    }
+    } // namespace
 
     THolder<IDqIntegration> CreateGenericDqIntegration(TGenericState::TPtr state) {
         return MakeHolder<TGenericDqIntegration>(state);
     }
 
-}
+} // namespace NYql

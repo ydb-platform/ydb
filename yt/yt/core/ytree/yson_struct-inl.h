@@ -15,7 +15,6 @@
 
 #include <yt/yt/core/misc/guid.h>
 #include <yt/yt/core/misc/serialize.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/core/ypath/token.h>
 
@@ -182,7 +181,8 @@ template <class TBase, class TValue>
 TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::BaseClassParameter(const TString& key, TValue(TBase::*field))
 {
     static_assert(std::derived_from<TStruct, TBase>);
-    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TYsonFieldAccessor<TBase, TValue>>(field));
+    int fieldIndex = ssize(Meta_->GetParameterMap());
+    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TYsonFieldAccessor<TBase, TValue>>(field), fieldIndex);
     Meta_->RegisterParameter(key, parameter);
     return *parameter;
 }
@@ -191,7 +191,8 @@ template <class TStruct>
 template <class TValue>
 TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ParameterWithUniversalAccessor(const TString& key, std::function<TValue&(TStruct*)> accessor)
 {
-    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TUniversalYsonParameterAccessor<TStruct, TValue>>(std::move(accessor)));
+    int fieldIndex = ssize(Meta_->GetParameterMap());
+    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TUniversalYsonParameterAccessor<TStruct, TValue>>(std::move(accessor)), fieldIndex);
     Meta_->RegisterParameter(key, parameter);
     return *parameter;
 }
@@ -249,6 +250,19 @@ void TYsonStructRegistrar<TStruct>::ExternalPostprocessor(TExternalPostprocessor
 }
 
 template <class TStruct>
+template <class TBase, class TValue>
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalBaseClassParameter(const TString& key, TValue(TBase::*field))
+{
+    static_assert(std::derived_from<TStruct, TExternalizedYsonStruct>);
+    static_assert(std::derived_from<typename TStruct::TExternal, TBase>);
+    auto universalAccessor = [field] (TStruct* serializer) -> auto& {
+        return serializer->That_->*field;
+    };
+
+    return ParameterWithUniversalAccessor<TValue>(key, universalAccessor);
+}
+
+template <class TStruct>
 void TYsonStructRegistrar<TStruct>::UnrecognizedStrategy(EUnrecognizedStrategy strategy)
 {
     Meta_->SetUnrecognizedStrategy(strategy);
@@ -273,27 +287,37 @@ void Serialize(const T& value, NYson::IYsonConsumer* consumer)
 }
 
 template <CExternallySerializable T, CYsonStructSource TSource>
-void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults)
+void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults, std::optional<EUnrecognizedStrategy> strategy)
 {
     using TTraits = TGetExternalizedYsonStructTraits<T>;
     using TSerializer = typename TTraits::TExternalSerializer;
     auto serializer = TSerializer::template CreateWritable<T, TSerializer>(value, setDefaults);
+    if (strategy) {
+        serializer.SetUnrecognizedStrategy(*strategy);
+    }
     serializer.Load(std::move(source), postprocess, setDefaults);
 }
 
 template <class T>
-TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj)
+TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj, bool postprocess, bool setDefaults)
 {
     if (!obj) {
         return nullptr;
     }
-    return ConvertTo<TIntrusivePtr<T>>(NYson::ConvertToYsonString(*obj));
+    if constexpr(std::derived_from<T, TYsonStructBase>) {
+        auto node = ConvertToNode(NYson::ConvertToYsonString(*obj));
+        auto cloneObj = New<T>();
+        cloneObj->Load(node, postprocess, setDefaults);
+        return cloneObj;
+    } else {
+        return ConvertTo<TIntrusivePtr<T>>(NYson::ConvertToYsonString(*obj));
+    }
 }
 
 template <class T>
-TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj)
+TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj, bool postprocess, bool setDefaults)
 {
-    return CloneYsonStruct(ConstPointerCast<const T>(obj));
+    return CloneYsonStruct(ConstPointerCast<const T>(obj), postprocess, setDefaults);
 }
 
 template <class T>
@@ -394,6 +418,13 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
     if (src) {
         dst = src;
     }
+}
+
+template <CYsonStructDerived T, CYsonStructDerived U>
+    requires std::same_as<T, U>
+bool operator==(const T& lhs, const U& rhs)
+{
+    return static_cast<const TYsonStructBase&>(lhs).IsEqual(static_cast<const TYsonStructBase&>(rhs));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

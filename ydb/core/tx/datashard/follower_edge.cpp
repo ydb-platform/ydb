@@ -4,7 +4,6 @@ namespace NKikimr::NDataShard {
 
 std::tuple<TRowVersion, bool, ui64> TDataShard::CalculateFollowerReadEdge() const {
     Y_ABORT_UNLESS(!IsFollower());
-    Y_DEBUG_ABORT_UNLESS(IsMvccEnabled());
 
     TRowVersion volatileUncertain = VolatileTxManager.GetMinUncertainVersion();
 
@@ -50,7 +49,7 @@ std::tuple<TRowVersion, bool, ui64> TDataShard::CalculateFollowerReadEdge() cons
 bool TDataShard::PromoteFollowerReadEdge(TTransactionContext& txc) {
     Y_ABORT_UNLESS(!IsFollower());
 
-    if (IsMvccEnabled() && HasFollowers()) {
+    if (HasFollowers()) {
         auto [version, repeatable, waitStep] = CalculateFollowerReadEdge();
 
         if (waitStep) {
@@ -88,7 +87,7 @@ public:
 bool TDataShard::PromoteFollowerReadEdge() {
     Y_ABORT_UNLESS(!IsFollower());
 
-    if (IsMvccEnabled() && HasFollowers()) {
+    if (HasFollowers()) {
         auto [currentEdge, currentRepeatable] = SnapshotManager.GetFollowerReadEdge();
         auto [nextEdge, nextRepeatable, waitStep] = CalculateFollowerReadEdge();
 

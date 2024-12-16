@@ -1,6 +1,6 @@
 # Анонимная аутентификация
 
-{% include [work in progress message](_includes/addition.md) %}
+<!-- markdownlint-disable blanks-around-fences -->
 
 Ниже приведены примеры кода анонимной аутентификации в разных {{ ydb-short-name }} SDK.
 
@@ -10,6 +10,7 @@
 
   Анонимная аутентификация является аутентификацией по умолчанию.
   Явным образом анонимную аутентификацию можно включить так:
+
   ```go
   package main
 
@@ -38,6 +39,7 @@
 
   Анонимная аутентификация является аутентификацией по умолчанию.
   Явным образом анонимную аутентификацию можно включить так:
+
   ```go
   package main
 
@@ -143,7 +145,7 @@
           'insecure' => true,
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new AnonymousAuthentication()
   ];
 

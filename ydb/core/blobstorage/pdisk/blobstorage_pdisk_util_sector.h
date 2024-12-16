@@ -21,11 +21,11 @@ public:
     {}
 
     ui8* Begin() {
-        return (ui8*)Buf.Data();
+        return (ui8*)Buf.data();
     }
 
     const ui8* Begin() const {
-        return (const ui8*)Buf.Data();
+        return (const ui8*)Buf.data();
     }
 
     ui8* End() {
@@ -45,7 +45,7 @@ public:
     }
 
     size_t Size() const {
-        return Buf.Size();
+        return Buf.size();
     }
 
     TDataSectorFooter *GetDataFooter() {
@@ -120,11 +120,11 @@ public:
     }
 
     TSector operator[](ui32 idx) {
-        return {Buf.Data() + idx * SectorSize, SectorSize};
+        return {Buf.data() + idx * SectorSize, SectorSize};
     }
 
     const TSector operator[](ui32 idx) const {
-        return {Buf.Data() + idx * SectorSize, SectorSize};
+        return {Buf.data() + idx * SectorSize, SectorSize};
     }
 };
 

@@ -5,16 +5,16 @@ package NYql.NConnector.NApi;
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
-import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
+import "yql/essentials/providers/common/proto/gateways_config.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos";
+option go_package = "a.yandex-team.ru/contrib/ydb/library/yql/providers/generic/connector/libgo/service/protos";
 
 // ---------- API Requests ----------
 
 // TListTablesRequest requests the list of tables in a particular database of the data source
 message TListTablesRequest {
     // Data source instance to connect
-    TDataSourceInstance data_source_instance = 1;
+    NYql.TGenericDataSourceInstance data_source_instance = 1;
 
     // There may be a huge number of tables in the data source,
     // and here are ways to extract only necessary ones:
@@ -36,7 +36,7 @@ message TListTablesResponse {
 // TDescribeTableRequest requests table metadata
 message TDescribeTableRequest {
     // Data source instance to connect
-    TDataSourceInstance data_source_instance = 1;
+    NYql.TGenericDataSourceInstance data_source_instance = 1;
     // Table to describe
     string table = 2;
     // Rules for type mapping
@@ -115,7 +115,7 @@ message TListSplitsResponse {
 // TODO: support JOIN, ORDER BY, GROUP BY
 message TSelect {
     // Data source instance to connect
-    TDataSourceInstance data_source_instance = 1;
+    NYql.TGenericDataSourceInstance data_source_instance = 1;
 
     // Describes what particularly to get from the data source
     message TWhat {
@@ -200,7 +200,7 @@ message TReadSplitsRequest {
     // Data source instance to connect.
     // Deprecated field: server implementations must rely on
     // TDataSourceInstance provided in each TSelect.
-    TDataSourceInstance data_source_instance = 1 [deprecated = true];
+    NYql.TGenericDataSourceInstance data_source_instance = 1 [deprecated = true];
 
     // Splits that YQ engine would like to read.
     repeated TSplit splits = 2;
@@ -234,6 +234,22 @@ message TReadSplitsRequest {
     // instead of reading the split from scratch.
     // If empty, the connector will return the split data from the very beginning.
     TContinuation continuation = 6;
+
+    enum EFiltering {
+        FILTERING_UNSPECIFIED = 0;
+        // If Connector cannot push down the predicate to the data source completely
+        // (due to the lack of data type support, for example), it doesn't apply filter at all
+        // and returns the full result of `SELECT columns FROM table` (no WHERE clause).
+        // It's YDB's duty to filter the output on its own side. 
+        FILTERING_OPTIONAL = 1;
+        // If Connector cannot push down the predicate to the data source completely,
+        // it terminates the request and returns an error.
+        FILTERING_MANDATORY = 2;
+    }
+
+    // Determines various modes of server behavior in the context of predicate pushdown.
+    // If not set, the default value is `FILTERING_OPTIONAL`. 
+    EFiltering filtering = 7;
 
     reserved 5;
 }
@@ -300,7 +316,7 @@ message TContinuation {
 
 // ---------- Filters ----------
 
-// Expression with value
+// Expression with value (value can be expression of any type)
 // Can be a column, a constant or a result of, for example,
 // some arithmetical operation
 message TExpression {
@@ -311,14 +327,35 @@ message TExpression {
             MUL = 1; // left_value * right_value
             ADD = 2; // left_value + right_value
             SUB = 3; // left_value - right_value
+            DIV = 7; // left_value / right_value
+            MOD = 8; // left_value % right_value
             BIT_AND = 4; // left_value & right_value
             BIT_OR = 5; // left_value | right_value
             BIT_XOR = 6; // left_value ^ right_value
-            // TODO: support `/` and `%`
         }
         EOperation operation = 1;
         TExpression left_value = 2;
         TExpression right_value = 3;
+    }
+
+    // "COALESCE($expression_1, $expression_2, ..., $expression_n)"
+    message TCoalesce {
+        repeated TExpression operands = 1;
+    }
+
+    // "IF($predicate, $then_expression, $else_expression)"
+    // Example predicate:
+    // WHERE IF($A IS NOT NULL, $A, $B) + $B = 0
+    message TIf {
+        TPredicate predicate = 1;
+        TExpression then_expression = 2;
+        TExpression else_expression = 3;
+    }
+
+    // CAST($value AS $type)
+    message TCast {
+        TExpression value = 1;
+        Ydb.Type type = 2;
     }
 
     message TNull {
@@ -333,10 +370,16 @@ message TExpression {
         TArithmeticalExpression arithmetical_expression = 3;
 
         TNull null = 4;
+
+        TCoalesce coalesce = 5;
+
+        TIf if = 6;
+
+        TCast cast = 7;
     }
 }
 
-// Predicate
+// Predicate (use this types only for bool expressions)
 message TPredicate {
     // NOT
     message TNegation {
@@ -351,6 +394,20 @@ message TPredicate {
     // OR
     message TDisjunction {
         repeated TPredicate operands = 1;
+    }
+
+    // "COALESCE($predicate_1, $predicate_2, ..., $predicate_n)"
+    message TCoalesce {
+        repeated TPredicate operands = 1;
+    }
+
+    // "IF($predicate, $then_predicate, $else_predicate)"
+    // Example predicate:
+    // WHERE IF($A IS NOT NULL, $A + $B = 0, $B = 0)
+    message TIf {
+        TPredicate predicate = 1;
+        TPredicate then_predicate = 2;
+        TPredicate else_predicate = 3;
     }
 
     // "$column BETWEEN $least AND $greatest"
@@ -394,11 +451,19 @@ message TPredicate {
             NE = 4; // "$column != value"
             GE = 5; // "$column >= value"
             G = 6;  // "$column > value"
+            IND = 7;// "$column IS NOT DISTINCT value"
+            ID = 8; // "$column IS DISTINCT value"
         }
 
         EOperation operation = 1;
         TExpression left_value = 2;
         TExpression right_value = 3;
+    }
+
+    // "$column REGEXP $pattern"
+    message TRegexp {
+        TExpression value = 1;
+        TExpression pattern = 2;
     }
 
     oneof payload {
@@ -411,6 +476,9 @@ message TPredicate {
         TIsNotNull is_not_null = 7;
         TComparison comparison = 8;
         TBoolExpression bool_expression = 9;
+        TCoalesce coalesce = 10;
+        TIf if = 11;
+        TRegexp regexp = 12;
     }
 }
 

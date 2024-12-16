@@ -46,10 +46,8 @@ bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) {
         return false;
     }
 
-    if (self->IsMvccEnabled()) {
-        // Note: we always wait for completion, so we can ignore the result
-        self->PromoteImmediatePostExecuteEdges(writeVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
-    }
+    // Note: we always wait for completion, so we can ignore the result
+    self->PromoteImmediatePostExecuteEdges(writeVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
 
     return true;
 }

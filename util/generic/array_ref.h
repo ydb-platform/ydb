@@ -41,19 +41,19 @@ public:
     {
     }
 
-    constexpr inline TArrayRef(T* data, size_t len) noexcept
+    constexpr inline TArrayRef(T* data Y_LIFETIME_BOUND, size_t len) noexcept
         : T_(data)
         , S_(len)
     {
     }
 
-    constexpr inline TArrayRef(T* begin, T* end) noexcept
+    constexpr inline TArrayRef(T* begin Y_LIFETIME_BOUND, T* end Y_LIFETIME_BOUND) noexcept
         : T_(begin)
         , S_(end - begin)
     {
     }
 
-    constexpr inline TArrayRef(std::initializer_list<T> list) noexcept
+    constexpr inline TArrayRef(std::initializer_list<T> list Y_LIFETIME_BOUND) noexcept
         : T_(list.begin())
         , S_(list.size())
     {
@@ -70,14 +70,14 @@ public:
     }
 
     template <size_t N>
-    constexpr inline TArrayRef(T (&array)[N]) noexcept
+    constexpr inline TArrayRef(T (&array)[N] Y_LIFETIME_BOUND) noexcept
         : T_(array)
         , S_(N)
     {
     }
 
     template <class TT, typename = std::enable_if_t<std::is_same<std::remove_const_t<T>, std::remove_const_t<TT>>::value>>
-    bool operator==(const TArrayRef<TT>& other) const noexcept {
+    bool operator==(const TArrayRef<TT>& other) const {
         return (S_ == other.size()) && std::equal(begin(), end(), other.begin());
     }
 
@@ -130,6 +130,8 @@ public:
     }
 
     constexpr inline reference front() const noexcept {
+        Y_ASSERT(S_ > 0);
+
         return *T_;
     }
 
@@ -207,7 +209,7 @@ public:
      *
      * DEPRECATED. DO NOT USE.
      */
-    TArrayRef SubRegion(size_t offset, size_t size) const {
+    TArrayRef SubRegion(size_t offset, size_t size) const noexcept {
         if (size == 0 || offset >= S_) {
             return TArrayRef();
         }
@@ -234,7 +236,7 @@ private:
  * Named as its std counterparts, std::as_bytes.
  */
 template <typename T>
-TArrayRef<const char> as_bytes(TArrayRef<T> arrayRef) noexcept {
+TArrayRef<const char> as_bytes(TArrayRef<T> arrayRef Y_LIFETIME_BOUND) noexcept {
     return TArrayRef<const char>(
         reinterpret_cast<const char*>(arrayRef.data()),
         arrayRef.size_bytes());
@@ -246,38 +248,38 @@ TArrayRef<const char> as_bytes(TArrayRef<T> arrayRef) noexcept {
  * Named as its std counterparts, std::as_writable_bytes.
  */
 template <typename T>
-TArrayRef<char> as_writable_bytes(TArrayRef<T> arrayRef) noexcept {
+TArrayRef<char> as_writable_bytes(TArrayRef<T> arrayRef Y_LIFETIME_BOUND) noexcept {
     return TArrayRef<char>(
         reinterpret_cast<char*>(arrayRef.data()),
         arrayRef.size_bytes());
 }
 
 template <class Range>
-constexpr TArrayRef<const typename Range::value_type> MakeArrayRef(const Range& range) {
+constexpr TArrayRef<const typename Range::value_type> MakeArrayRef(const Range& range) noexcept {
     return TArrayRef<const typename Range::value_type>(range);
 }
 
 template <class Range>
-constexpr TArrayRef<typename Range::value_type> MakeArrayRef(Range& range) {
+constexpr TArrayRef<typename Range::value_type> MakeArrayRef(Range& range) noexcept {
     return TArrayRef<typename Range::value_type>(range);
 }
 
 template <class Range>
-constexpr TArrayRef<const typename Range::value_type> MakeConstArrayRef(const Range& range) {
+constexpr TArrayRef<const typename Range::value_type> MakeConstArrayRef(const Range& range) noexcept {
     return TArrayRef<const typename Range::value_type>(range);
 }
 
 template <class Range>
-constexpr TArrayRef<const typename Range::value_type> MakeConstArrayRef(Range& range) {
+constexpr TArrayRef<const typename Range::value_type> MakeConstArrayRef(Range& range) noexcept {
     return TArrayRef<const typename Range::value_type>(range);
 }
 
 template <class T>
-constexpr TArrayRef<T> MakeArrayRef(T* data, size_t size) {
+constexpr TArrayRef<T> MakeArrayRef(T* data Y_LIFETIME_BOUND, size_t size) noexcept {
     return TArrayRef<T>(data, size);
 }
 
 template <class T>
-constexpr TArrayRef<T> MakeArrayRef(T* begin, T* end) {
+constexpr TArrayRef<T> MakeArrayRef(T* begin Y_LIFETIME_BOUND, T* end Y_LIFETIME_BOUND) noexcept {
     return TArrayRef<T>(begin, end);
 }

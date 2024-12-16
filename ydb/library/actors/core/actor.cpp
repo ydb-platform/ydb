@@ -134,15 +134,15 @@ namespace NActors {
     TActorId TActivationContext::RegisterWithSameMailbox(IActor* actor, TActorId parentId) {
         Y_DEBUG_ABORT_UNLESS(parentId);
         auto& ctx = *TlsActivationContext;
-        return ctx.ExecutorThread.RegisterActor(actor, &ctx.Mailbox, parentId.Hint(), parentId);
+        return ctx.ExecutorThread.RegisterActor(actor, &ctx.Mailbox, parentId);
     }
 
     TActorId TActorContext::RegisterWithSameMailbox(IActor* actor) const {
-        return ExecutorThread.RegisterActor(actor, &Mailbox, SelfID.Hint(), SelfID);
+        return ExecutorThread.RegisterActor(actor, &Mailbox, SelfID);
     }
 
     TActorId IActor::RegisterWithSameMailbox(IActor* actor) const noexcept {
-        return TlsActivationContext->ExecutorThread.RegisterActor(actor, &TlsActivationContext->Mailbox, SelfActorId.Hint(), SelfActorId);
+        return TlsActivationContext->ExecutorThread.RegisterActor(actor, &TlsActivationContext->Mailbox, SelfActorId);
     }
 
     TActorId TActivationContext::InterconnectProxy(ui32 destinationNodeId) {
@@ -159,6 +159,10 @@ namespace NActors {
 
     double TActivationContext::GetCurrentEventTicksAsSeconds() {
         return NHPTimer::GetSeconds(GetCurrentEventTicks());
+    }
+
+    void TActivationContext::EnableMailboxStats() {
+        TlsActivationContext->Mailbox.EnableStats();
     }
 
     TActorId IActor::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept {
@@ -316,22 +320,22 @@ namespace NActors {
         }
     }
 
-    template TActorId TGenericExecutorThread::RegisterActor<ESendingType::Common>(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId);
-    template TActorId TGenericExecutorThread::RegisterActor<ESendingType::Lazy>(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId);
-    template TActorId TGenericExecutorThread::RegisterActor<ESendingType::Tail>(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId);
+    template TActorId TGenericExecutorThread::RegisterActor<ESendingType::Common>(IActor* actor, TMailbox* mailbox, TActorId parentId);
+    template TActorId TGenericExecutorThread::RegisterActor<ESendingType::Lazy>(IActor* actor, TMailbox* mailbox, TActorId parentId);
+    template TActorId TGenericExecutorThread::RegisterActor<ESendingType::Tail>(IActor* actor, TMailbox* mailbox, TActorId parentId);
 
     template <ESendingType SendingType>
-    TActorId TGenericExecutorThread::RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId) {
+    TActorId TGenericExecutorThread::RegisterActor(IActor* actor, TMailbox* mailbox, TActorId parentId) {
         if (!parentId) {
             parentId = CurrentRecipient;
         }
         if constexpr (SendingType == ESendingType::Common) {
-            return Ctx.Executor->Register(actor, mailbox, hint, parentId);
+            return Ctx.Executor->Register(actor, mailbox, parentId);
         } else if (!TlsActivationContext) {
-            return Ctx.Executor->Register(actor, mailbox, hint, parentId);
+            return Ctx.Executor->Register(actor, mailbox, parentId);
         } else {
             ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
-            TActorId id = Ctx.Executor->Register(actor, mailbox, hint, parentId);
+            TActorId id = Ctx.Executor->Register(actor, mailbox, parentId);
             TlsThreadContext->SendingType = previousType;
             return id;
         }

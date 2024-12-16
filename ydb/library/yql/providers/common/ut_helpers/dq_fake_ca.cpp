@@ -1,8 +1,8 @@
 #include "dq_fake_ca.h"
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <ydb/core/testlib/basics/appdata.h>
 
@@ -55,7 +55,7 @@ void TFakeActor::InitAsyncInput(IDqComputeActorAsyncInput* dqAsyncInput, IActor*
     DqAsyncInputAsActor = dqAsyncInputAsActor;
 }
 
-void TFakeActor::Terminate() {
+void TFakeActor::Terminate(std::shared_ptr<std::atomic<bool>> done) {
     if (DqAsyncInputActorId) {
         DqAsyncInput->PassAway();
 
@@ -71,6 +71,7 @@ void TFakeActor::Terminate() {
         DqAsyncOutput = nullptr;
         DqAsyncOutputAsActor = nullptr;
     }
+    done->store(true);
 }
 
 TFakeActor::TAsyncOutputCallbacks& TFakeActor::GetAsyncOutputCallbacks() {
@@ -101,9 +102,14 @@ TFakeCASetup::TFakeCASetup()
 }
 
 TFakeCASetup::~TFakeCASetup() {
-    Execute([](TFakeActor& actor) {
-        actor.Terminate();
+    auto shouldStop = std::make_shared<std::atomic<bool>>(); 
+    Execute([shouldStop](TFakeActor& actor) {
+        actor.Terminate(shouldStop);
     });
+
+    while (!*shouldStop) {
+        Sleep(TDuration::MilliSeconds(200));
+    }
 }
 
 void TFakeCASetup::AsyncOutputWrite(const TWriteValueProducer valueProducer, TMaybe<NDqProto::TCheckpoint> checkpoint, bool finish) {

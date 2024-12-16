@@ -1,6 +1,6 @@
 # Anonymous authentication
 
-{% include [work in progress message](_includes/addition.md) %}
+<!-- markdownlint-disable blanks-around-fences -->
 
 Below are examples of the code for anonymous authentication in different {{ ydb-short-name }} SDKs.
 
@@ -10,12 +10,13 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
 
   By default, anonymous authentication is used.
   You can explicitly enable anonymous authentication as follows:
+
   ```go
   package main
 
   import (
     "context"
-      
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
 
@@ -38,6 +39,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
 
   By default, anonymous authentication is used.
   You can explicitly enable anonymous authentication as follows:
+
   ```go
   package main
 
@@ -45,7 +47,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
     "context"
     "database/sql"
     "os"
-    
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
 
@@ -59,7 +61,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
     if err != nil {
       panic(err)
     }
-    defer nativeDriver.Close(ctx) 
+    defer nativeDriver.Close(ctx)
     connector, err := ydb.Connector(nativeDriver)
     if err != nil {
       panic(err)
@@ -143,7 +145,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
           'insecure' => true,
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new AnonymousAuthentication()
   ];
 

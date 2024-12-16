@@ -14,9 +14,10 @@ TStoragePoolInfo::TStoragePoolInfo(const TString& name, THiveSharedSettings* hiv
 }
 
 TStorageGroupInfo& TStoragePoolInfo::GetStorageGroup(TStorageGroupId groupId) {
-    auto it = Groups.find(groupId);
+    decltype(Groups)::insert_ctx ctx;
+    auto it = Groups.find(groupId, ctx);
     if (it == Groups.end()) {
-        it = Groups.emplace(std::piecewise_construct, std::tuple<TStorageGroupId>(groupId), std::tuple<const TStoragePoolInfo&, TStorageGroupId>(*this, groupId)).first;
+        it = Groups.emplace_direct(ctx, std::piecewise_construct, std::tuple<TStorageGroupId>(groupId), std::tuple<const TStoragePoolInfo&, TStorageGroupId>(*this, groupId));
     }
     return it->second;
 }

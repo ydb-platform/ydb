@@ -6,7 +6,7 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
@@ -42,12 +42,12 @@ TQueryBase::TTxControl TQueryBase::TTxControl::CommitTx() {
     return TTxControl().Commit(true);
 }
 
-TQueryBase::TTxControl TQueryBase::TTxControl::BeginTx() {
-    return TTxControl().Begin(true);
+TQueryBase::TTxControl TQueryBase::TTxControl::BeginTx(bool snapshotRead) {
+    return TTxControl().Begin(true).SnapshotRead(snapshotRead);
 }
 
-TQueryBase::TTxControl TQueryBase::TTxControl::BeginAndCommitTx() {
-    return BeginTx().Commit(true);
+TQueryBase::TTxControl TQueryBase::TTxControl::BeginAndCommitTx(bool snapshotRead) {
+    return BeginTx(snapshotRead).Commit(true);
 }
 
 TQueryBase::TTxControl TQueryBase::TTxControl::ContinueTx() {
@@ -99,10 +99,11 @@ TQueryBase::TEvQueryBasePrivate::TEvCommitTransactionResponse::TEvCommitTransact
 
 //// TQueryBase
 
-TQueryBase::TQueryBase(ui64 logComponent, TString sessionId, TString database)
+TQueryBase::TQueryBase(ui64 logComponent, TString sessionId, TString database, bool isSystemUser)
     : LogComponent(logComponent)
     , Database(std::move(database))
     , SessionId(std::move(sessionId))
+    , IsSystemUser(isSystemUser)
 {}
 
 void TQueryBase::Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) {
@@ -206,7 +207,12 @@ void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, 
 
     auto txControlProto = request.mutable_tx_control();
     if (txControl.Begin_) {
-        txControlProto->mutable_begin_tx()->mutable_serializable_read_write();
+        auto& beginTx = *txControlProto->mutable_begin_tx();
+        if (txControl.SnapshotRead_) {
+            beginTx.mutable_snapshot_read_only();
+        } else {
+            beginTx.mutable_serializable_read_write();
+        }
     } else if (txControl.Continue_) {
         Y_ABORT_UNLESS(TxId);
         txControlProto->set_tx_id(TxId);
@@ -216,7 +222,13 @@ void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, 
         txControlProto->set_commit_tx(true);
     }
 
-    Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(DoLocalRpc<TExecuteDataQueryRequest>(std::move(request), Database, Nothing(), TActivationContext::ActorSystem(), true));
+    TMaybe<TString> token = Nothing();
+    if (IsSystemUser) {
+        token = NACLib::TSystemUsers::Metadata().SerializeAsString();
+    }
+
+    Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(
+        DoLocalRpc<TExecuteDataQueryRequest>(std::move(request), Database, token, TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
@@ -264,8 +276,7 @@ void TQueryBase::RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params
         *request.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(params->Build());
     }
 
-    auto facilityProvider = CreateFacilityProviderSameMailbox(ActorContext(), channelBufferSize);
-    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, Nothing(), facilityProvider, &DoExecuteScanQueryRequest, true);
+    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, Nothing(), ActorContext(), true, channelBufferSize);
     ReadNextStreamPart();
 }
 

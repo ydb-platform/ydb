@@ -5,10 +5,12 @@
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 
+#include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
 
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
+
 
 namespace NKqpRun {
 
@@ -60,6 +62,68 @@ private:
     TString YqlToken_;
 };
 
+
+class TSessionState {
+public:
+    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId)
+        : Runtime_(runtime)
+        , TargetNodeIndex_(targetNodeIndex)
+    {
+        auto event = std::make_unique<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest>();
+        event->Record.SetTraceId(traceId);
+        event->Record.SetApplicationName("kqprun");
+        event->Record.MutableRequest()->SetDatabase(database);
+
+        auto openPromise = NThreading::NewPromise<TString>();
+        auto closePromise = NThreading::NewPromise<void>();
+        SessionHolderActor_ = Runtime_->Register(CreateSessionHolderActor(TCreateSessionRequest{
+            .Event = std::move(event),
+            .TargetNode = Runtime_->GetNodeId(targetNodeIndex)
+        }, openPromise, closePromise));
+
+        SessionId_ = openPromise.GetFuture().GetValueSync();
+        CloseFuture_ = closePromise.GetFuture();
+    }
+
+    TString GetSessionId() const {
+        CheckSession("execute request");
+        return SessionId_;
+    }
+
+    void CloseSession() const {
+        CheckSession("close session");
+        Runtime_->Send(SessionHolderActor_, Runtime_->AllocateEdgeActor(TargetNodeIndex_), new NActors::TEvents::TEvPoison(), TargetNodeIndex_);
+        CloseFuture_.GetValueSync();
+    }
+
+private:
+    void CheckSession(const TString& action) const {
+        if (CloseFuture_.HasException()) {
+            CloseFuture_.TryRethrow();
+        }
+        if (CloseFuture_.HasValue()) {
+            ythrow yexception() << "Failed to " << action << ", session unexpectedly closed\n";
+        }
+    }
+
+private:
+    NActors::TTestActorRuntime* Runtime_;
+    ui32 TargetNodeIndex_ = 0;
+
+    NThreading::TFuture<void> CloseFuture_;
+    NActors::TActorId SessionHolderActor_;
+    TString SessionId_;
+};
+
+
+void FillQueryMeta(TQueryMeta& meta, const NKikimrKqp::TQueryResponse& response) {
+    meta.Ast = response.GetQueryAst();
+    if (const auto& plan = response.GetQueryPlan()) {
+        meta.Plan = plan;
+    }
+    meta.TotalDuration = TDuration::MicroSeconds(response.GetQueryStats().GetDurationUs());
+}
+
 }  // anonymous namespace
 
 
@@ -93,10 +157,11 @@ private:
 
                 runtime.SetLogPriority(service, NActors::NLog::EPriority(setting.GetLevel()));
             }
+
+            runtime.SetLogBackendFactory([this]() { return CreateLogBackend(); });
         };
 
         serverSettings.SetLoggerInitializer(loggerInitializer);
-        serverSettings.SetLogBackend(CreateLogBackend());
     }
 
     void SetFunctionRegistry(NKikimr::Tests::TServerSettings& serverSettings) const {
@@ -111,8 +176,20 @@ private:
         serverSettings.SetFrFactory(functionRegistryFactory);
     }
 
-    NKikimr::Tests::TServerSettings GetServerSettings() {
-        ui32 msgBusPort = PortManager_.GetPort();
+    void SetStorageSettings(NKikimr::Tests::TServerSettings& serverSettings) const {
+        const NKikimr::NFake::TStorage storage = {
+            .UseDisk = Settings_.UseRealPDisks,
+            .SectorSize = NKikimr::TTestStorageFactory::SECTOR_SIZE,
+            .ChunkSize = Settings_.UseRealPDisks ? NKikimr::TTestStorageFactory::CHUNK_SIZE : NKikimr::TTestStorageFactory::MEM_CHUNK_SIZE,
+            .DiskSize = Settings_.DiskSize
+        };
+
+        serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.UseRealPDisks);
+        serverSettings.SetCustomDiskParams(storage);
+    }
+
+    NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
+        const ui32 msgBusPort = PortManager_.GetPort();
 
         NKikimr::Tests::TServerSettings serverSettings(msgBusPort, Settings_.AppConfig.GetAuthConfig(), Settings_.AppConfig.GetPQConfig());
         serverSettings.SetNodeCount(Settings_.NodeCount);
@@ -133,26 +210,104 @@ private:
         serverSettings.SetYtGateway(Settings_.YtGateway);
         serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         serverSettings.SetInitializeFederatedQuerySetupFactory(true);
+        serverSettings.SetVerbose(false);
 
         SetLoggerSettings(serverSettings);
         SetFunctionRegistry(serverSettings);
+        SetStorageSettings(serverSettings);
 
         if (Settings_.MonitoringEnabled) {
             serverSettings.InitKikimrRunConfig();
-            serverSettings.SetMonitoringPortOffset(Settings_.MonitoringPortOffset);
+            serverSettings.SetMonitoringPortOffset(Settings_.MonitoringPortOffset, true);
+            serverSettings.SetNeedStatsCollectors(true);
+        }
+
+        if (Settings_.GrpcEnabled) {
+            serverSettings.SetGrpcPort(grpcPort);
+        }
+
+        if (!Settings_.SharedTenants.empty() || !Settings_.DedicatedTenants.empty()) {
+            serverSettings.SetDynamicNodeCount(Settings_.SharedTenants.size() + Settings_.DedicatedTenants.size());
+            for (const TString& dedicatedTenant : Settings_.DedicatedTenants) {
+                serverSettings.AddStoragePoolType(dedicatedTenant);
+            }
+            for (const auto& sharedTenant : Settings_.SharedTenants) {
+                serverSettings.AddStoragePoolType(sharedTenant);
+            }
         }
 
         return serverSettings;
     }
 
-    void InitializeServer() {
-        NKikimr::Tests::TServerSettings serverSettings = GetServerSettings();
+    void CreateTenant(Ydb::Cms::CreateDatabaseRequest&& request, const TString& type) const {
+        const auto path = request.path();
+        Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating " << type << " tenant " << path << "..." << CoutColors_.Default() << Endl;
+        Tenants_->CreateTenant(std::move(request));
 
-        Server_ = MakeHolder<NKikimr::Tests::TServer>(serverSettings);
+        if (Settings_.MonitoringEnabled) {
+            ui32 nodeIndex = GetNodeIndexForDatabase(path);
+            NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
+            GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(path), "", edgeActor, 0, true), nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
+        }
+    }
+
+    static void AddTenantStoragePool(Ydb::Cms::StorageUnits* storage, const TString& name) {
+        storage->set_unit_kind(name);
+        storage->set_count(1);
+    }
+
+    void CreateTenants() {
+        for (const TString& dedicatedTenant : Settings_.DedicatedTenants) {
+            Ydb::Cms::CreateDatabaseRequest request;
+            request.set_path(GetTenantPath(dedicatedTenant));
+            AddTenantStoragePool(request.mutable_resources()->add_storage_units(), dedicatedTenant);
+            CreateTenant(std::move(request), "dedicated");
+        }
+
+        for (const TString& sharedTenant : Settings_.SharedTenants) {
+            Ydb::Cms::CreateDatabaseRequest request;
+            request.set_path(GetTenantPath(sharedTenant));
+            AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), sharedTenant);
+            CreateTenant(std::move(request), "shared");
+        }
+
+        ServerlessToShared_.reserve(Settings_.ServerlessTenants.size());
+        for (const TString& serverlessTenant : Settings_.ServerlessTenants) {
+            Ydb::Cms::CreateDatabaseRequest request;
+            if (serverlessTenant.Contains('@')) {
+                TStringBuf serverless;
+                TStringBuf shared;
+                TStringBuf(serverlessTenant).Split('@', serverless, shared);
+
+                request.set_path(GetTenantPath(TString(serverless)));
+                request.mutable_serverless_resources()->set_shared_database_path(GetTenantPath(TString(shared)));
+            } else if (!Settings_.SharedTenants.empty()) {
+                request.set_path(GetTenantPath(serverlessTenant));
+                request.mutable_serverless_resources()->set_shared_database_path(GetTenantPath(*Settings_.SharedTenants.begin()));
+            } else {
+                ythrow yexception() << "Can not create serverless tenant " << serverlessTenant << ", there is no shared tenants";
+            }
+            ServerlessToShared_[request.path()] = request.serverless_resources().shared_database_path();
+
+            CreateTenant(std::move(request), "serverless");
+        }
+    }
+
+    void InitializeServer(ui32 grpcPort) {
+        NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(grpcPort);
+
+        Server_ = MakeIntrusive<NKikimr::Tests::TServer>(serverSettings);
         Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
+
+        if (Settings_.GrpcEnabled) {
+            Server_->EnableGRpc(grpcPort);
+        }
 
         Client_ = MakeHolder<NKikimr::Tests::TClient>(serverSettings);
         Client_->InitRootScheme();
+
+        Tenants_ = MakeHolder<NKikimr::Tests::TTenants>(Server_);
+        CreateTenants();
     }
 
     void InitializeYqlLogger() {
@@ -180,7 +335,7 @@ private:
 
     void WaitResourcesPublishing() const {
         auto promise = NThreading::NewPromise();
-        GetRuntime()->Register(CreateResourcesWaiterActor(promise, Settings_.NodeCount));
+        GetRuntime()->Register(CreateResourcesWaiterActor(promise, Settings_.NodeCount), 0, GetRuntime()->GetAppData().SystemPoolId);
 
         try {
             promise.GetFuture().GetValue(Settings_.InitializationTimeout);
@@ -194,8 +349,10 @@ public:
         : Settings_(settings)
         , CoutColors_(NColorizer::AutoColors(Cout))
     {
+        const ui32 grpcPort = Settings_.GrpcPort ? Settings_.GrpcPort : PortManager_.GetPort();
+
         InitializeYqlLogger();
-        InitializeServer();
+        InitializeServer(grpcPort);
         WaitResourcesPublishing();
 
         if (Settings_.MonitoringEnabled) {
@@ -203,70 +360,85 @@ public:
                 Cout << CoutColors_.Cyan() << "Monitoring port" << (Settings_.NodeCount > 1 ? TStringBuilder() << " for node " << nodeIndex + 1 : TString()) << ": " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(nodeIndex) << Endl;
             }
         }
+
+        if (Settings_.GrpcEnabled) {
+            Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << grpcPort << Endl;
+        }
     }
 
-    NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr SchemeQueryRequest(const TString& query, const TString& traceId) const {
+    NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr SchemeQueryRequest(const TRequestOptions& query) {
+        ui32 nodeIndex = GetNodeIndexForDatabase(query.Database);
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
-        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_DDL, NKikimrKqp::QUERY_ACTION_EXECUTE, traceId, event->Record);
+        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_DDL, nodeIndex, event->Record);
 
-        return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event));
+        return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event), nodeIndex);
     }
 
-    NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr ScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) const {
+    NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr ScriptRequest(const TRequestOptions& script) {
+        ui32 nodeIndex = GetNodeIndexForDatabase(script.Database);
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvScriptRequest>();
-        FillScriptRequest(script, action, traceId, event->Record);
+        FillQueryRequest(script, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, nodeIndex, event->Record);
 
-        return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvScriptRequest, NKikimr::NKqp::TEvKqp::TEvScriptResponse>(std::move(event));
+        return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvScriptRequest, NKikimr::NKqp::TEvKqp::TEvScriptResponse>(std::move(event), nodeIndex);
     }
 
-    TQueryResponse QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TProgressCallback progressCallback) const {
-        auto request = GetQueryRequest(query, action, traceId);
+    TQueryResponse QueryRequest(const TRequestOptions& query, TProgressCallback progressCallback) {
+        auto request = GetQueryRequest(query);
         auto promise = NThreading::NewPromise<TQueryResponse>();
-        GetRuntime()->Register(CreateRunScriptActorMock(std::move(request), promise, progressCallback));
+        GetRuntime()->Register(CreateRunScriptActorMock(std::move(request), promise, progressCallback), request.TargetNode - GetRuntime()->GetFirstNodeId(), GetRuntime()->GetAppData().UserPoolId);
 
         return promise.GetFuture().GetValueSync();
     }
 
-    NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr YqlScriptRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
+    NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr YqlScriptRequest(const TRequestOptions& query) {
+        ui32 nodeIndex = GetNodeIndexForDatabase(query.Database);
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
-        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_SCRIPT, action, traceId, event->Record);
+        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_SCRIPT, nodeIndex, event->Record);
 
-        return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event));
+        return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event), nodeIndex);
     }
 
-    NKikimr::NKqp::TEvGetScriptExecutionOperationResponse::TPtr GetScriptExecutionOperationRequest(const TString& operation) const {
+    NKikimr::NKqp::TEvGetScriptExecutionOperationResponse::TPtr GetScriptExecutionOperationRequest(const TString& database, const TString& operation) const {
         NKikimr::NOperationId::TOperationId operationId(operation);
-        auto event = MakeHolder<NKikimr::NKqp::TEvGetScriptExecutionOperation>(Settings_.DomainName, operationId);
+        auto event = MakeHolder<NKikimr::NKqp::TEvGetScriptExecutionOperation>(GetDatabasePath(database), operationId);
 
-        return RunKqpProxyRequest<NKikimr::NKqp::TEvGetScriptExecutionOperation, NKikimr::NKqp::TEvGetScriptExecutionOperationResponse>(std::move(event));
+        return RunKqpProxyRequest<NKikimr::NKqp::TEvGetScriptExecutionOperation, NKikimr::NKqp::TEvGetScriptExecutionOperationResponse>(std::move(event), database);
     }
 
-    NKikimr::NKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId) const {
+    NKikimr::NKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, i32 resultSetId) const {
         TString executionId = *NKikimr::NKqp::ScriptExecutionIdFromOperation(operation);
 
-        NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
+        ui32 nodeIndex = GetNodeIndexForDatabase(database);
+        NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
         auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
         auto sizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit();
-        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, Settings_.DomainName, executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
+        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, GetDatabasePath(database), executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
 
-        GetRuntime()->Register(fetchActor, RandomNumber(Settings_.NodeCount));
+        GetRuntime()->Register(fetchActor, nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
 
         return GetRuntime()->GrabEdgeEvent<NKikimr::NKqp::TEvFetchScriptResultsResponse>(edgeActor);
     }
 
-    NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse::TPtr ForgetScriptExecutionOperationRequest(const TString& operation) const {
+    NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse::TPtr ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation) const {
         NKikimr::NOperationId::TOperationId operationId(operation);
-        auto event = MakeHolder<NKikimr::NKqp::TEvForgetScriptExecutionOperation>(Settings_.DomainName, operationId);
+        auto event = MakeHolder<NKikimr::NKqp::TEvForgetScriptExecutionOperation>(GetDatabasePath(database), operationId);
 
-        return RunKqpProxyRequest<NKikimr::NKqp::TEvForgetScriptExecutionOperation, NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse>(std::move(event));
+        return RunKqpProxyRequest<NKikimr::NKqp::TEvForgetScriptExecutionOperation, NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse>(std::move(event), database);
     }
 
-    void QueryRequestAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) {
+    NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse::TPtr CancelScriptExecutionOperationRequest(const TString& database, const TString& operation) const {
+        NKikimr::NOperationId::TOperationId operationId(operation);
+        auto event = MakeHolder<NKikimr::NKqp::TEvCancelScriptExecutionOperation>(GetDatabasePath(database), operationId);
+
+        return RunKqpProxyRequest<NKikimr::NKqp::TEvCancelScriptExecutionOperation, NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse>(std::move(event), database);
+    }
+
+    void QueryRequestAsync(const TRequestOptions& query) {
         if (!AsyncQueryRunnerActorId_) {
-            AsyncQueryRunnerActorId_ = GetRuntime()->Register(CreateAsyncQueryRunnerActor(Settings_.InFlightLimit));
+            AsyncQueryRunnerActorId_ = GetRuntime()->Register(CreateAsyncQueryRunnerActor(Settings_.AsyncQueriesSettings), 0, GetRuntime()->GetAppData().UserPoolId);
         }
 
-        auto request = GetQueryRequest(query, action, traceId);
+        auto request = GetQueryRequest(query);
         auto startPromise = NThreading::NewPromise();
         GetRuntime()->Send(*AsyncQueryRunnerActorId_, GetRuntime()->AllocateEdgeActor(), new TEvPrivate::TEvStartAsyncQuery(std::move(request), startPromise));
 
@@ -282,6 +454,14 @@ public:
         GetRuntime()->Send(*AsyncQueryRunnerActorId_, GetRuntime()->AllocateEdgeActor(), new TEvPrivate::TEvFinalizeAsyncQueryRunner(finalizePromise));
 
         return finalizePromise.GetFuture().GetValueSync();
+    }
+
+    void CloseSessions() const {
+        if (!SessionState_) {
+            return;
+        }
+
+        SessionState_->CloseSession();
     }
 
     void StartTraceOpt() const {
@@ -302,42 +482,50 @@ private:
     }
 
     template <typename TRequest, typename TResponse>
-    typename TResponse::TPtr RunKqpProxyRequest(THolder<TRequest> event) const {
-        NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
-        NActors::TActorId kqpProxy = NKikimr::NKqp::MakeKqpProxyID(GetRuntime()->GetNodeId(RandomNumber(Settings_.NodeCount)));
+    typename TResponse::TPtr RunKqpProxyRequest(THolder<TRequest> event, const TString& database) const {
+        return RunKqpProxyRequest<TRequest, TResponse>(std::move(event), GetNodeIndexForDatabase(database));
+    }
 
-        GetRuntime()->Send(kqpProxy, edgeActor, event.Release());
+    template <typename TRequest, typename TResponse>
+    typename TResponse::TPtr RunKqpProxyRequest(THolder<TRequest> event, ui32 nodeIndex) const {
+        NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
+        NActors::TActorId kqpProxy = NKikimr::NKqp::MakeKqpProxyID(GetRuntime()->GetNodeId(nodeIndex));
+
+        GetRuntime()->Send(kqpProxy, edgeActor, event.Release(), nodeIndex);
 
         return GetRuntime()->GrabEdgeEvent<TResponse>(edgeActor);
     }
 
 private:
-    void FillQueryRequest(const TString& query, NKikimrKqp::EQueryType type, NKikimrKqp::EQueryAction action, const TString& traceId, NKikimrKqp::TEvQueryRequest& event) const {
-        event.SetTraceId(traceId);
-        event.SetUserToken(NACLib::TUserToken(Settings_.YqlToken, BUILTIN_ACL_ROOT, {}).SerializeAsString());
+    void FillQueryRequest(const TRequestOptions& query, NKikimrKqp::EQueryType type, ui32 targetNodeIndex, NKikimrKqp::TEvQueryRequest& event) {
+        event.SetTraceId(query.TraceId);
+        event.SetUserToken(NACLib::TUserToken(Settings_.YqlToken, query.UserSID, {}).SerializeAsString());
 
+        const auto& database = GetDatabasePath(query.Database);
         auto request = event.MutableRequest();
-        request->SetQuery(query);
+        request->SetQuery(query.Query);
         request->SetType(type);
-        request->SetAction(action);
+        request->SetAction(query.Action);
         request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
-        request->SetDatabase(Settings_.DomainName);
-        request->SetPoolId(Settings_.DefaultPoolId);
-    }
+        request->SetDatabase(database);
+        request->SetPoolId(query.PoolId);
 
-    void FillScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, NKikimrKqp::TEvQueryRequest& event) const {
-        FillQueryRequest(script, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, action, traceId, event);
+        if (query.Timeout) {
+            request->SetTimeoutMs(query.Timeout.MilliSeconds());
+        }
 
-        auto request = event.MutableRequest();
-        if (action == NKikimrKqp::QUERY_ACTION_EXECUTE) {
-            request->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-            request->MutableTxControl()->set_commit_tx(true);
+        if (Settings_.SameSession) {
+            if (!SessionState_) {
+                SessionState_ = TSessionState(GetRuntime(), targetNodeIndex, database, query.TraceId);
+            }
+            request->SetSessionId(SessionState_->GetSessionId());
         }
     }
 
-    TQueryRequest GetQueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
+    TQueryRequest GetQueryRequest(const TRequestOptions& query) {
+        ui32 targetNodeIndex = GetNodeIndexForDatabase(query.Database);
         auto event = std::make_unique<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
-        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, action, traceId, event->Record);
+        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, targetNodeIndex, event->Record);
 
         if (auto progressStatsPeriodMs = Settings_.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
             event->SetProgressStatsPeriod(TDuration::MilliSeconds(progressStatsPeriodMs));
@@ -345,21 +533,49 @@ private:
 
         return {
             .Event = std::move(event),
-            .TargetNode = GetRuntime()->GetNodeId(RandomNumber(Settings_.NodeCount)),
+            .TargetNode = GetRuntime()->GetNodeId(targetNodeIndex),
             .ResultRowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit(),
             .ResultSizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit()
         };
+    }
+
+    TString GetTenantPath(const TString& tenantName) const {
+        return TStringBuilder() << NKikimr::CanonizePath(Settings_.DomainName) << NKikimr::CanonizePath(tenantName);
+    }
+
+    TString GetDatabasePath(const TString& database) const {
+        return NKikimr::CanonizePath(database ? database : Settings_.DomainName);
+    }
+
+    ui32 GetNodeIndexForDatabase(const TString& path) const {
+        auto canonizedPath = NKikimr::CanonizePath(path);
+        if (canonizedPath.empty() || canonizedPath == NKikimr::CanonizePath(Settings_.DomainName)) {
+            return RandomNumber(Settings_.NodeCount);
+        }
+
+        if (const auto it = ServerlessToShared_.find(canonizedPath); it != ServerlessToShared_.end()) {
+            canonizedPath = it->second;
+        }
+
+        if (const ui32 tenantSize = Tenants_->Size(canonizedPath)) {
+            return Tenants_->List(canonizedPath)[RandomNumber(tenantSize)];
+        }
+
+        ythrow yexception() << "Unknown tenant '" << canonizedPath << "'";
     }
 
 private:
     TYdbSetupSettings Settings_;
     NColorizer::TColors CoutColors_;
 
-    THolder<NKikimr::Tests::TServer> Server_;
+    NKikimr::Tests::TServer::TPtr Server_;
     THolder<NKikimr::Tests::TClient> Client_;
+    THolder<NKikimr::Tests::TTenants> Tenants_;
     TPortManager PortManager_;
 
+    std::unordered_map<TString, TString> ServerlessToShared_;
     std::optional<NActors::TActorId> AsyncQueryRunnerActorId_;
+    std::optional<TSessionState> SessionState_;
 };
 
 
@@ -395,8 +611,8 @@ TYdbSetup::TYdbSetup(const TYdbSetupSettings& settings)
     : Impl_(new TImpl(settings))
 {}
 
-TRequestResult TYdbSetup::SchemeQueryRequest(const TString& query, const TString& traceId, TSchemeMeta& meta) const {
-    auto schemeQueryOperationResponse = Impl_->SchemeQueryRequest(query, traceId)->Get()->Record.GetRef();
+TRequestResult TYdbSetup::SchemeQueryRequest(const TRequestOptions& query, TSchemeMeta& meta) const {
+    auto schemeQueryOperationResponse = Impl_->SchemeQueryRequest(query)->Get()->Record;
     const auto& responseRecord = schemeQueryOperationResponse.GetResponse();
 
     meta.Ast = responseRecord.GetQueryAst();
@@ -404,50 +620,45 @@ TRequestResult TYdbSetup::SchemeQueryRequest(const TString& query, const TString
     return TRequestResult(schemeQueryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
 }
 
-TRequestResult TYdbSetup::ScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const {
-    auto scriptExecutionOperation = Impl_->ScriptRequest(script, action, traceId);
+TRequestResult TYdbSetup::ScriptRequest(const TRequestOptions& script, TString& operation) const {
+    auto scriptExecutionOperation = Impl_->ScriptRequest(script);
 
     operation = scriptExecutionOperation->Get()->OperationId;
 
     return TRequestResult(scriptExecutionOperation->Get()->Status, scriptExecutionOperation->Get()->Issues);
 }
 
-TRequestResult TYdbSetup::QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const {
+TRequestResult TYdbSetup::QueryRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const {
     resultSets.clear();
 
-    TQueryResponse queryResponse = Impl_->QueryRequest(query, action, traceId, progressCallback);
-    const auto& queryOperationResponse = queryResponse.Response->Get()->Record.GetRef();
+    TQueryResponse queryResponse = Impl_->QueryRequest(query, progressCallback);
+    const auto& queryOperationResponse = queryResponse.Response->Get()->Record;
     const auto& responseRecord = queryOperationResponse.GetResponse();
 
     resultSets = std::move(queryResponse.ResultSets);
-    meta.Ast = responseRecord.GetQueryAst();
-    if (const auto& plan = responseRecord.GetQueryPlan()) {
-        meta.Plan = plan;
-    }
+    FillQueryMeta(meta, responseRecord);
 
     return TRequestResult(queryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
 }
 
-TRequestResult TYdbSetup::YqlScriptRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const {
+TRequestResult TYdbSetup::YqlScriptRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const {
     resultSets.clear();
 
-    auto yqlQueryOperationResponse = Impl_->YqlScriptRequest(query, action, traceId)->Get()->Record.GetRef();
+    auto yqlQueryOperationResponse = Impl_->YqlScriptRequest(query)->Get()->Record;
     const auto& responseRecord = yqlQueryOperationResponse.GetResponse();
 
-    meta.Ast = responseRecord.GetQueryAst();
-    meta.Plan = responseRecord.GetQueryPlan();
+    FillQueryMeta(meta, responseRecord);
 
-    resultSets.reserve(responseRecord.results_size());
-    for (const auto& result : responseRecord.results()) {
-        resultSets.emplace_back();
-        NKikimr::NKqp::ConvertKqpQueryResultToDbResult(result, &resultSets.back());
+    resultSets.reserve(responseRecord.ydbresults_size());
+    for (const auto& result : responseRecord.ydbresults()) {
+        resultSets.emplace_back(result);
     }
 
     return TRequestResult(yqlQueryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
 }
 
-TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const {
-    auto scriptExecutionOperation = Impl_->GetScriptExecutionOperationRequest(operation);
+TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& database, const TString& operation, TExecutionMeta& meta) const {
+    auto scriptExecutionOperation = Impl_->GetScriptExecutionOperationRequest(database, operation);
 
     meta.Ready = scriptExecutionOperation->Get()->Ready;
 
@@ -462,31 +673,42 @@ TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& oper
         if (deserializedMeta.exec_stats().query_plan() != "{}") {
             meta.Plan = deserializedMeta.exec_stats().query_plan();
         }
+        meta.TotalDuration = TDuration::MicroSeconds(deserializedMeta.exec_stats().total_duration_us());
     }
 
     return TRequestResult(scriptExecutionOperation->Get()->Status, scriptExecutionOperation->Get()->Issues);
 }
 
-TRequestResult TYdbSetup::FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const {
-    auto scriptExecutionResults = Impl_->FetchScriptExecutionResultsRequest(operation, resultSetId);
+TRequestResult TYdbSetup::FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const {
+    auto scriptExecutionResults = Impl_->FetchScriptExecutionResultsRequest(database, operation, resultSetId);
 
     resultSet = scriptExecutionResults->Get()->ResultSet.value_or(Ydb::ResultSet());
 
     return TRequestResult(scriptExecutionResults->Get()->Status, scriptExecutionResults->Get()->Issues);
 }
 
-TRequestResult TYdbSetup::ForgetScriptExecutionOperationRequest(const TString& operation) const {
-    auto forgetScriptExecutionOperationResponse = Impl_->ForgetScriptExecutionOperationRequest(operation);
+TRequestResult TYdbSetup::ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation) const {
+    auto forgetScriptExecutionOperationResponse = Impl_->ForgetScriptExecutionOperationRequest(database, operation);
 
     return TRequestResult(forgetScriptExecutionOperationResponse->Get()->Status, forgetScriptExecutionOperationResponse->Get()->Issues);
 }
 
-void TYdbSetup::QueryRequestAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
-    Impl_->QueryRequestAsync(query, action, traceId);
+TRequestResult TYdbSetup::CancelScriptExecutionOperationRequest(const TString& database, const TString& operation) const {
+    auto cancelScriptExecutionOperationResponse = Impl_->CancelScriptExecutionOperationRequest(database, operation);
+
+    return TRequestResult(cancelScriptExecutionOperationResponse->Get()->Status, cancelScriptExecutionOperationResponse->Get()->Issues);
+}
+
+void TYdbSetup::QueryRequestAsync(const TRequestOptions& query) const {
+    Impl_->QueryRequestAsync(query);
 }
 
 void TYdbSetup::WaitAsyncQueries() const {
     Impl_->WaitAsyncQueries();
+}
+
+void TYdbSetup::CloseSessions() const {
+    Impl_->CloseSessions();
 }
 
 void TYdbSetup::StartTraceOpt() const {

@@ -14,11 +14,11 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/kqp/common
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/s3/events
-    ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
+    yql/essentials/public/issue
+    yql/essentials/public/issue/protos
+    yql/essentials/ast
 )
 
 IF (CLANG AND NOT WITH_VALGRIND)
@@ -34,3 +34,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
 ENDIF()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

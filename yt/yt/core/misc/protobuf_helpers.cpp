@@ -1,8 +1,6 @@
 #include "protobuf_helpers.h"
 #include "mpl.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/compression/codec.h>
 
 #include <yt/yt/core/logging/log.h>
@@ -27,7 +25,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Serialize");
+[[maybe_unused]] static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Serialize");
 
 struct TSerializedMessageTag
 { };
@@ -112,7 +110,7 @@ TSharedRef SerializeProtoToRefWithEnvelope(
 {
     NYT::NProto::TSerializedMessageEnvelope envelope;
     if (codecId != NCompression::ECodec::None) {
-        envelope.set_codec(static_cast<int>(codecId));
+        envelope.set_codec(ToProto(codecId));
     }
 
     auto serializedMessage = SerializeProtoToRef(message, partial);
@@ -195,8 +193,8 @@ bool TryDeserializeProtoWithEnvelope(
         return false;
     }
 
-    NCompression::ECodec codecId;
-    if (!TryEnumCast(envelope.codec(), &codecId)) {
+    auto codecId = TryCheckedEnumCast<NCompression::ECodec>(envelope.codec());
+    if (!codecId) {
         return false;
     }
 
@@ -206,12 +204,12 @@ bool TryDeserializeProtoWithEnvelope(
 
     auto compressedMessage = TSharedRef(sourceMessage, fixedHeader->MessageSize, nullptr);
 
-    auto* codec = NCompression::GetCodec(codecId);
+    auto* codec = NCompression::GetCodec(*codecId);
     try {
         auto serializedMessage = codec->Decompress(compressedMessage);
 
         return TryDeserializeProto(message, serializedMessage);
-    } catch (const std::exception& ex) {
+    } catch (const std::exception&) {
         return false;
     }
 }
@@ -286,7 +284,7 @@ TSharedRef PushEnvelope(const TSharedRef& data)
 TSharedRef PushEnvelope(const TSharedRef& data, NCompression::ECodec codec)
 {
     NYT::NProto::TSerializedMessageEnvelope envelope;
-    envelope.set_codec(static_cast<int>(codec));
+    envelope.set_codec(ToProto(codec));
 
     TEnvelopeFixedHeader header;
     header.EnvelopeSize = CheckedCastToI32(envelope.ByteSizeLong());
@@ -418,7 +416,7 @@ void ToProto(NYT::NProto::TExtensionSet* protoExtensionSet, const TExtensionSet&
     }
 }
 
-void Serialize(const TExtensionSet& extensionSet, NYson::IYsonConsumer* consumer)
+void Serialize(const TExtensionSet& extensionSet, NYson::IYsonConsumer* consumer, const TProtobufParserOptions& parserOptions = {})
 {
     BuildYsonFluently(consumer)
         .DoMapFor(extensionSet.Extensions, [&] (TFluentMap fluent, const TExtension& extension) {
@@ -433,7 +431,8 @@ void Serialize(const TExtensionSet& extensionSet, NYson::IYsonConsumer* consumer
                     ParseProtobuf(
                         fluent.GetConsumer(),
                         &inputStream,
-                        ReflectProtobufMessageType(extensionDescriptor->MessageDescriptor));
+                        ReflectProtobufMessageType(extensionDescriptor->MessageDescriptor),
+                        parserOptions);
                 });
         });
 }
@@ -442,7 +441,8 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
 {
     auto mapNode = node->AsMap();
     for (const auto& [name, value] : mapNode->GetChildren()) {
-        const auto* extensionDescriptor = IProtobufExtensionRegistry::Get()->FindDescriptorByName(name);
+        // TODO(babenko): migrate to std::string
+        const auto* extensionDescriptor = IProtobufExtensionRegistry::Get()->FindDescriptorByName(TString(name));
         // Do not parse unknown extensions.
         if (!extensionDescriptor) {
             continue;
@@ -462,7 +462,7 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
     }
 }
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(NYT::NProto::TExtensionSet, TExtensionSet)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(NYT::NProto::TExtensionSet, TExtensionSet)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -614,6 +614,46 @@ TProtobufOutputStreamAdaptor::TProtobufOutputStreamAdaptor(IOutputStream* stream
     : TProtobufOutputStream(stream)
     , CopyingOutputStreamAdaptor(this)
 { }
+
+TProtobufZeroCopyOutputStream::TProtobufZeroCopyOutputStream(IZeroCopyOutput* stream)
+    : Stream_(stream)
+{ }
+
+bool TProtobufZeroCopyOutputStream::Next(void** data, int* size)
+{
+    try {
+        size_t sizetSize = Stream_->Next(data);
+        constexpr int maxSize = std::numeric_limits<int>::max();
+        if (sizetSize > maxSize) {
+            Stream_->Undo(sizetSize - maxSize);
+            sizetSize = maxSize;
+        }
+        *size = sizetSize;
+    } catch (const std::exception&) {
+        Error_ = std::current_exception();
+        return false;
+    }
+    ByteCount_ += *size;
+    return true;
+}
+
+void TProtobufZeroCopyOutputStream::BackUp(int count)
+{
+    ByteCount_ -= count;
+    Stream_->Undo(count);
+}
+
+int64_t TProtobufZeroCopyOutputStream::ByteCount() const
+{
+    return ByteCount_;
+}
+
+void TProtobufZeroCopyOutputStream::ThrowOnError() const
+{
+    if (Error_) {
+        std::rethrow_exception(Error_);
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

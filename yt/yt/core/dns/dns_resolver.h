@@ -24,7 +24,7 @@ struct IDnsResolver
     : public TRefCounted
 {
     virtual TFuture<NNet::TNetworkAddress> Resolve(
-        const TString& hostName,
+        const std::string& hostName,
         const TDnsResolveOptions& options) = 0;
 };
 

@@ -130,7 +130,8 @@ public:
     NTable::TDatabase* DB;
     IDbWrapper& DBWrapper;
     TColumnEngineForLogs& EngineLogs;
-    TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs);
+    const TSnapshot Snapshot;
+    TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot);
 };
 
 class TChangesFinishContext {
@@ -155,13 +156,15 @@ public:
     const ui64 BytesWritten;
     const TDuration Duration;
     TColumnEngineForLogs& EngineLogs;
-    TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten
-        , const TDuration d, TColumnEngineForLogs& engineLogs)
+    const TSnapshot Snapshot;
+    TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten, const TDuration d,
+        TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot)
         : ActorContext(actorContext)
         , BlobsWritten(blobsWritten)
         , BytesWritten(bytesWritten)
         , Duration(d)
         , EngineLogs(engineLogs)
+        , Snapshot(snapshot)
     {
 
     }
@@ -184,6 +187,17 @@ public:
 
 class TGranuleMeta;
 
+class TDataAccessorsInitializationContext {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TVersionedIndex>, VersionedIndex);
+
+public:
+    TDataAccessorsInitializationContext(const std::shared_ptr<TVersionedIndex>& versionedIndex)
+        : VersionedIndex(versionedIndex) {
+        AFL_VERIFY(VersionedIndex);
+    }
+};
+
 class TColumnEngineChanges {
 public:
     enum class EStage: ui32 {
@@ -199,8 +213,11 @@ private:
     EStage Stage = EStage::Created;
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
     TString AbortedReason;
+    const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
 
 protected:
+    std::optional<TDataAccessorsResult> FetchedDataAccessors;
+    virtual NDataLocks::ELockCategory GetLockCategory() const = 0;
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
     virtual void DoOnAfterCompile() {}
@@ -210,7 +227,7 @@ protected:
     virtual bool NeedConstruction() const {
         return true;
     }
-    virtual void DoStart(NColumnShard::TColumnShard& self) = 0;
+    virtual void DoStart(NColumnShard::TColumnShard& context) = 0;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept = 0;
     virtual void OnAbortEmergency() {
     }
@@ -219,17 +236,44 @@ protected:
 
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const = 0;
 
-    const TString TaskIdentifier = TGUID::Create().AsGuidString();
     virtual ui64 DoCalcMemoryForUsage() const = 0;
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const = 0;
     std::shared_ptr<NDataLocks::ILock> BuildDataLock() const {
         return DoBuildDataLock();
     }
 
+    std::shared_ptr<TDataAccessorsRequest> PortionsToAccess = std::make_shared<TDataAccessorsRequest>(TaskIdentifier);
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) = 0;
+
 public:
+    std::shared_ptr<TDataAccessorsRequest> ExtractDataAccessorsRequest() const {
+        AFL_VERIFY(!!PortionsToAccess);
+        return std::move(PortionsToAccess);
+    }
+
+    const TPortionDataAccessor& GetPortionDataAccessor(const ui64 portionId) const {
+        AFL_VERIFY(FetchedDataAccessors);
+        return FetchedDataAccessors->GetPortionAccessorVerified(portionId);
+    }
+
+    std::vector<TPortionDataAccessor> GetPortionDataAccessors(const std::vector<TPortionInfo::TConstPtr>& portions) const {
+        AFL_VERIFY(FetchedDataAccessors);
+        std::vector<TPortionDataAccessor> result;
+        for (auto&& i : portions) {
+            result.emplace_back(GetPortionDataAccessor(i->GetPortionId()));
+        }
+        return result;
+    }
+
+    void SetFetchedDataAccessors(TDataAccessorsResult&& result, const TDataAccessorsInitializationContext& context) {
+        AFL_VERIFY(!FetchedDataAccessors);
+        FetchedDataAccessors = std::move(result);
+        OnDataAccessorsInitialized(context);
+    }
+
     class IMemoryPredictor {
     public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) = 0;
+        virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) = 0;
         virtual ~IMemoryPredictor() = default;
     };
 
@@ -275,7 +319,7 @@ public:
     void Start(NColumnShard::TColumnShard& self);
 
     virtual ui32 GetWritePortionsCount() const = 0;
-    virtual TWritePortionInfoWithBlobs* GetWritePortionInfo(const ui32 index) = 0;
+    virtual TWritePortionInfoWithBlobsResult* GetWritePortionInfo(const ui32 index) = 0;
     virtual bool NeedWritePortion(const ui32 index) const = 0;
 
     void WriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context);
@@ -288,7 +332,7 @@ public:
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
         auto result = BlobsAction.GetReadingActions();
-        Y_ABORT_UNLESS(result.size());
+//        Y_ABORT_UNLESS(result.size());
         return result;
     }
     virtual TString TypeString() const = 0;

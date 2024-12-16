@@ -52,6 +52,20 @@ void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consume
     Server.WaitInit(path);
 }
 
+TTopicDescription TTopicSdkTestSetup::DescribeTopic(const TString& path)
+{
+    TTopicClient client(MakeDriver());
+
+    TDescribeTopicSettings settings;
+    settings.IncludeStats(true);
+    settings.IncludeLocation(true);
+
+    auto status = client.DescribeTopic(path, settings).GetValueSync();
+    UNIT_ASSERT(status.IsSuccess());
+
+    return status.GetTopicDescription();
+}
+
 TString TTopicSdkTestSetup::GetEndpoint() const {
     return "localhost:" + ToString(Server.GrpcPort);
 }
@@ -123,4 +137,10 @@ TDriver TTopicSdkTestSetup::MakeDriver(const TDriverConfig& config) const
 TTopicClient TTopicSdkTestSetup::MakeClient() const
 {
     return TTopicClient(MakeDriver());
+}
+
+NYdb::NTable::TTableClient TTopicSdkTestSetup::MakeTableClient() const
+{
+    return NYdb::NTable::TTableClient(MakeDriver(), NYdb::NTable::TClientSettings()
+            .UseQueryCache(false));
 }

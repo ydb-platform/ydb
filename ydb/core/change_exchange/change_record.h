@@ -1,22 +1,12 @@
 #pragma once
 
+#include <ydb/core/change_exchange/visitor.h>
+
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/stream/output.h>
 
-namespace NKikimr {
-
-template <class TChangeRecord>
-struct TChangeRecordBuilderTrait;
-
-template <class TChangeRecord>
-struct TChangeRecordBuilderContextTrait {};
-
-} // namespace NKikimr
-
 namespace NKikimr::NChangeExchange {
-
-class IChangeSenderResolver;
 
 class IChangeRecord: public TThrRefBase {
 public:
@@ -31,6 +21,7 @@ public:
         AsyncIndex,
         CdcDataChange,
         CdcHeartbeat,
+        IncrementalRestore,
     };
 
 public:
@@ -41,24 +32,33 @@ public:
     virtual EKind GetKind() const = 0;
     virtual const TString& GetBody() const = 0;
     virtual ESource GetSource() const = 0;
+    virtual const TString& GetSourceId() const = 0;
     virtual bool IsBroadcast() const = 0;
+
+    virtual void Accept(IVisitor& visitor) const = 0;
+
+    virtual void RewriteTxId(ui64 value) = 0;
 
     virtual TString ToString() const = 0;
     virtual void Out(IOutputStream& out) const = 0;
 
-    virtual ui64 ResolvePartitionId(IChangeSenderResolver* const resolver) const = 0;
 }; // IChangeRecord
 
-template <typename T, typename TDerived> class TChangeRecordBuilder;
+template <typename T, typename TDerived>
+class TChangeRecordBuilder;
 
 class TChangeRecordBase: public IChangeRecord {
-    template <typename T, typename TDerived> friend class TChangeRecordBuilder;
+    template <typename T, typename TDerived>
+    friend class TChangeRecordBuilder;
 
 public:
     ui64 GetOrder() const override { return Order; }
     const TString& GetBody() const override { return Body; }
     ESource GetSource() const override { return Source; }
+    const TString& GetSourceId() const override { return SourceId; }
     bool IsBroadcast() const override { return false; }
+
+    void RewriteTxId(ui64) override { Y_ABORT("not implemented"); }
 
     TString ToString() const override;
     void Out(IOutputStream& out) const override;
@@ -67,6 +67,7 @@ protected:
     ui64 Order = Max<ui64>();
     TString Body;
     ESource Source = ESource::Unspecified;
+    TString SourceId;
 
 }; // TChangeRecordBase
 

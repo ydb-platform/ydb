@@ -12,6 +12,45 @@ namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TLogWriterConfig
+    : public NYTree::TYsonStruct
+{
+public:
+    TString Type;
+
+    ELogFormat Format;
+
+    std::optional<i64> RateLimit;
+
+    //! Common formatter options.
+    //! Enabled only for format = plain_text by default.
+    std::optional<bool> EnableSystemMessages;
+    //! Controls how system messages are formed.
+    //! This is useful when writing family = plain_text logs
+    //! with a structured formatter (i.e. format = yson/json).
+    std::optional<ELogFamily> SystemMessageFamily;
+
+    //! Plain text formatter options.
+    bool EnableSourceLocation;
+
+    //! Structured formatter options.
+    bool EnableSystemFields;
+    bool EnableHostField;
+    THashMap<TString, NYTree::INodePtr> CommonFields;
+    NJson::TJsonFormatConfigPtr JsonFormat;
+
+    bool AreSystemMessagesEnabled() const;
+    ELogFamily GetSystemMessageFamily() const;
+
+    REGISTER_YSON_STRUCT(TLogWriterConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TLogWriterConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TRotationPolicyConfig
     : public NYTree::TYsonStruct
 {
@@ -35,14 +74,18 @@ DEFINE_REFCOUNTED_TYPE(TRotationPolicyConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TFileLogWriterConfig
-    : public NYTree::TYsonStruct
+    : public TLogWriterConfig
 {
 public:
-    static constexpr const TStringBuf Type = "file";
+    static constexpr const TStringBuf WriterType = "file";
 
     TString FileName;
+    //! If `true` add `timestamp` to all log files including active one.
     bool UseTimestampSuffix;
+    //! If `true` add `timestamp` only to old versions of log files and  use format `%Y%m%d-%H%M%S` for timestamp.
+    bool UseLogrotateCompatibleTimestampSuffix;
     bool EnableCompression;
+    bool EnableNoReuse;
     ECompressionMethod CompressionMethod;
     int CompressionLevel;
 
@@ -58,54 +101,17 @@ DEFINE_REFCOUNTED_TYPE(TFileLogWriterConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TStderrLogWriterConfig
-    : public NYTree::TYsonStruct
+    : public TLogWriterConfig
 {
 public:
-    static constexpr TStringBuf Type = "stderr";
+    static constexpr TStringBuf WriterType = "stderr";
 
     REGISTER_YSON_STRUCT(TStderrLogWriterConfig);
 
-    static void Register(TRegistrar)
-    { }
+    static void Register(TRegistrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TStderrLogWriterConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TLogWriterConfig
-    : public NYTree::TYsonStruct
-{
-public:
-    TString Type;
-
-    ELogFormat Format;
-
-    std::optional<i64> RateLimit;
-
-    //! Common formatter options.
-    std::optional<bool> EnableSystemMessages;
-
-    //! Plain text formatter options.
-    bool EnableSourceLocation;
-
-    //! Structured formatter options.
-    bool EnableSystemFields;
-    THashMap<TString, NYTree::INodePtr> CommonFields;
-    NJson::TJsonFormatConfigPtr JsonFormat;
-
-    bool AreSystemMessagesEnabled() const;
-
-    //! Constructs a full config by combining parameters from this one and #typedConfig.
-    template <class TTypedConfigPtr>
-    NYTree::IMapNodePtr BuildFullConfig(const TTypedConfigPtr& typedConfig);
-
-    REGISTER_YSON_STRUCT(TLogWriterConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TLogWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -150,11 +156,19 @@ public:
     int LowBacklogWatermark;
 
     TDuration ShutdownGraceTimeout;
+    //! Log manager will busy sleep unconditionally for this duration on
+    //! shutdown to wait for asynchronous logger flushes.
+    //! Disabled (zero) by default.
+    TDuration ShutdownBusyTimeout;
 
     std::vector<TRuleConfigPtr> Rules;
     THashMap<TString, NYTree::IMapNodePtr> Writers;
-    std::vector<TString> SuppressedMessages;
     THashMap<TString, i64> CategoryRateLimits;
+
+    //! Messages with these prefixes will not be logged regardless of the configured levels.
+    std::vector<TString> SuppressedMessages;
+    //! Overrides levels of messages with a matching prefix .
+    THashMap<TString, ELogLevel> MessageLevelOverrides;
 
     TDuration RequestSuppressionTimeout;
 
@@ -170,7 +184,7 @@ public:
     TLogManagerConfigPtr ApplyDynamic(const TLogManagerDynamicConfigPtr& dynamicConfig) const;
 
     static TLogManagerConfigPtr CreateStderrLogger(ELogLevel logLevel);
-    static TLogManagerConfigPtr CreateLogFile(const TString& path);
+    static TLogManagerConfigPtr CreateLogFile(const TString& path, ELogLevel logLevel = ELogLevel::Trace);
     static TLogManagerConfigPtr CreateDefault();
     static TLogManagerConfigPtr CreateQuiet();
     static TLogManagerConfigPtr CreateSilent();
@@ -208,8 +222,10 @@ public:
     std::optional<int> LowBacklogWatermark;
 
     std::optional<std::vector<TRuleConfigPtr>> Rules;
-    std::optional<std::vector<TString>> SuppressedMessages;
     std::optional<THashMap<TString, i64>> CategoryRateLimits;
+
+    std::optional<std::vector<TString>> SuppressedMessages;
+    THashMap<TString, ELogLevel> MessageLevelOverrides;
 
     std::optional<TDuration> RequestSuppressionTimeout;
 
@@ -232,7 +248,3 @@ DEFINE_REFCOUNTED_TYPE(TLogManagerDynamicConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NLogging
-
-#define CONFIG_INL_H_
-#include "config-inl.h"
-#undef CONFIG_INL_H_

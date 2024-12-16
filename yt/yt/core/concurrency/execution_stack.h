@@ -77,13 +77,4 @@ std::shared_ptr<TExecutionStack> CreateExecutionStack(EExecutionStackKind kind);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Returns the current global limit for the number of pooled fiber stacks of a given size.
-int GetFiberStackPoolSize(EExecutionStackKind stackKind);
-
-//! Sets the global limit for the number of pooled fiber stacks of a given size.
-void SetFiberStackPoolSize(EExecutionStackKind stackKind, int poolSize);
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NTY::NConcurrency
-

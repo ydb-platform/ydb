@@ -1,7 +1,11 @@
 #pragma once
+#include "committed.h"
+#include "inserted.h"
+
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
+
 #include <util/generic/noncopyable.h>
-#include "data.h"
+#include <util/generic/set.h>
 
 namespace NKikimr::NOlap {
 class TInsertionSummary;
@@ -17,12 +21,11 @@ public:
 private:
     YDB_READONLY(EIndexationPriority, Category, EIndexationPriority::NoPriority);
     const ui32 Weight;
+
 public:
     TPathInfoIndexPriority(const EIndexationPriority category, const ui32 weight)
         : Category(category)
-        , Weight(weight)
-    {
-
+        , Weight(weight) {
     }
 
     bool operator!() const {
@@ -37,7 +40,7 @@ public:
 class TPathInfo: public TMoveOnly {
 private:
     const ui64 PathId = 0;
-    TSet<TInsertedData> Committed;
+    TSet<TCommittedData> Committed;
     YDB_READONLY(i64, CommittedSize, 0);
     YDB_READONLY(i64, InsertedSize, 0);
     bool CommittedOverload = false;
@@ -51,6 +54,10 @@ private:
     void AddCommittedSize(const i64 size, const ui64 overloadLimit);
 
 public:
+    bool IsEmpty() const {
+        return Committed.empty() && !InsertedSize;
+    }
+
     void AddInsertedSize(const i64 size, const ui64 overloadLimit);
 
     explicit TPathInfo(TInsertionSummary& summary, const ui64 pathId);
@@ -61,18 +68,18 @@ public:
 
     TPathInfoIndexPriority GetIndexationPriority() const;
 
-    bool EraseCommitted(const TInsertedData& data);
-    bool HasCommitted(const TInsertedData& data);
+    bool EraseCommitted(const TCommittedData& data);
+    bool HasCommitted(const TCommittedData& data);
 
-    const TSet<TInsertedData>& GetCommitted() const {
+    const TSet<TCommittedData>& GetCommitted() const {
         return Committed;
     }
 
-    bool AddCommitted(TInsertedData&& data, const bool load = false);
+    bool AddCommitted(TCommittedData&& data, const bool load = false);
 
     bool IsOverloaded() const {
         return CommittedOverload || InsertedOverload;
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

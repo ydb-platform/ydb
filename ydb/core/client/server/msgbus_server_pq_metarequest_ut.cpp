@@ -169,7 +169,7 @@ protected:
         static int version = 0;
         ++version;
 
-        THolder<TEvPersQueue::TEvUpdateConfig> request(new TEvPersQueue::TEvUpdateConfig());
+        auto request = MakeHolder<TEvPersQueue::TEvUpdateConfigBuilder>();
         for (size_t i : partitions) {
             request->Record.MutableTabletConfig()->AddPartitionIds(i);
         }

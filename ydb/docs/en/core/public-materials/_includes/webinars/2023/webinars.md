@@ -1,4 +1,4 @@
-### {{ ydb-short-name }} — a Distributed SQL Database {2023-webinar-dist-sql}
+## {{ ydb-short-name }} — a Distributed SQL Database {2023-webinar-dist-sql}
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 

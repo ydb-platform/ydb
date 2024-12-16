@@ -1,23 +1,18 @@
 #include "restore.h"
-#include <ydb/core/tx/columnshard/operations/slice_builder/builder.h>
+
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/operations/slice_builder/builder.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
 namespace NKikimr::NOlap {
 
 std::unique_ptr<NKikimr::TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBuildRequestInitiator() const {
-    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId);
+    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId, WriteData.GetWriteMeta().GetLockIdOptional());
     request->ReadToSnapshot = Snapshot;
-    request->RangesFilter = std::make_shared<TPKRangesFilter>(false);
-    auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData, ActualSchema->GetPKColumnNames());
-    for (ui32 i = 0; i < pkData->num_rows(); ++i) {
-        auto batch = pkData->Slice(i, 1);
-        auto pFrom = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::GreaterEqual, batch);
-        auto pTo = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::LessEqual, batch);
-        AFL_VERIFY(request->RangesFilter->Add(pFrom, pTo, &ActualSchema->GetIndexInfo()));
-    }
-    for (auto&& i : ActualSchema->GetIndexInfo().GetColumnIds(false)) {
-        request->AddColumn(i, ActualSchema->GetIndexInfo().GetColumnName(i));
+    auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData, Context.GetActualSchema()->GetPKColumnNames());
+    request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData, false);
+    for (auto&& i : Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false)) {
+        request->AddColumn(i, Context.GetActualSchema()->GetIndexInfo().GetColumnName(i));
     }
     return request;
 }
@@ -25,15 +20,17 @@ std::unique_ptr<NKikimr::TEvColumnShard::TEvInternalScan> TModificationRestoreTa
 NKikimr::TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) {
     auto result = Merger->AddExistsDataOrdered(data);
     if (result.IsFail()) {
-        auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "restore_data_problems")
-            ("write_id", WriteData.GetWriteMeta().GetWriteId())("tablet_id", TabletId)("message", result.GetErrorMessage());
-        TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(writeDataPtr) });
-        auto evResult = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED,
-            std::move(buffer), result.GetErrorMessage());
-        TActorContext::AsActorContext().Send(ParentActorId, evResult.release());
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "merge_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
+            "tablet_id", GetTabletId())("message", result.GetErrorMessage());
+        SendErrorMessage(result.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
     }
     return result;
+}
+
+void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "restore_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
+        "tablet_id", GetTabletId())("message", errorMessage);
+    SendErrorMessage(errorMessage, NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
 }
 
 NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
@@ -45,24 +42,32 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
     }
 
     auto batchResult = Merger->BuildResultBatch();
-    std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(
-        TabletId, ParentActorId, BufferActorId, std::move(WriteData), batchResult, ActualSchema);
+    std::shared_ptr<NConveyor::ITask> task =
+        std::make_shared<NOlap::TBuildSlicesTask>(BufferActorId, std::move(WriteData), batchResult, Context);
     NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
     return TConclusionStatus::Success();
 }
 
-TModificationRestoreTask::TModificationRestoreTask(const ui64 tabletId, const NActors::TActorId parentActorId, const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger, const std::shared_ptr<ISnapshotSchema>& actualSchema, const TSnapshot actualSnapshot, const std::shared_ptr<arrow::RecordBatch>& incomingData)
-    : TBase(tabletId, parentActorId)
+TModificationRestoreTask::TModificationRestoreTask(const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData,
+    const std::shared_ptr<IMerger>& merger, const TSnapshot actualSnapshot, const std::shared_ptr<arrow::RecordBatch>& incomingData,
+    const TWritingContext& context)
+    : TBase(context.GetTabletId(), context.GetTabletActorId())
     , WriteData(std::move(writeData))
-    , TabletId(tabletId)
-    , ParentActorId(parentActorId)
     , BufferActorId(bufferActorId)
     , Merger(merger)
-    , ActualSchema(actualSchema)
     , LocalPathId(WriteData.GetWriteMeta().GetTableId())
     , Snapshot(actualSnapshot)
-    , IncomingData(incomingData) {
-
+    , IncomingData(incomingData)
+    , Context(context) {
 }
 
+void TModificationRestoreTask::SendErrorMessage(
+    const TString& errorMessage, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass) {
+    auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
+    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
+    auto evResult =
+        NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), errorMessage, errorClass);
+    TActorContext::AsActorContext().Send(Context.GetTabletActorId(), evResult.release());
 }
+
+}   // namespace NKikimr::NOlap

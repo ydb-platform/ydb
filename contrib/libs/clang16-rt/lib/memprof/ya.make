@@ -15,6 +15,8 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 SUBSCRIBER(g:cpp-contrib)
 
+VERSION(16.0.6)
+
 ADDINCL(
     contrib/libs/clang16-rt/include
     contrib/libs/clang16-rt/lib

@@ -1,6 +1,7 @@
 #include "schemeshard__operation_common_resource_pool.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 
 namespace NKikimr::NSchemeShard {
@@ -155,6 +156,13 @@ public:
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            if (!context.SS->EnableResourcePoolsOnServerless) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it");
+                return result;
+            }
+        }
+
         const TPath& parentPath = TPath::Resolve(parentPathStr, context.SS);
         RETURN_RESULT_UNLESS(NResourcePool::IsParentPathValid(result, parentPath));
 
@@ -166,6 +174,7 @@ public:
 
         const TResourcePoolInfo::TPtr resourcePoolInfo = NResourcePool::CreateResourcePool(resourcePoolDescription, 1);
         Y_ABORT_UNLESS(resourcePoolInfo);
+        RETURN_RESULT_UNLESS(NResourcePool::IsResourcePoolInfoValid(result, resourcePoolInfo));
 
         AddPathInSchemeShard(result, dstPath, owner);
         const TPathElement::TPtr resourcePool = CreateResourcePoolPathElement(dstPath);
@@ -196,6 +205,30 @@ public:
 };
 
 }  // anonymous namespace
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateResourcePool().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateResourcePool()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewResourcePool(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateResourcePool>(id, tx);

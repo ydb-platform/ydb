@@ -17,6 +17,7 @@ PEERDIR(
 )
 
 SRCS(
+    base_table_writer.cpp
     json_change_record.cpp
     service.cpp
     table_writer.cpp
@@ -37,6 +38,7 @@ ENDIF()
 END()
 
 RECURSE_FOR_TESTS(
+    ut_json_change_record
     ut_table_writer
     ut_topic_reader
     ut_worker
@@ -46,4 +48,4 @@ IF (!OS_WINDOWS)
     RECURSE_FOR_TESTS(
         ut_s3_writer
     )
-END()
+ENDIF()

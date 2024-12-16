@@ -5,7 +5,7 @@
 
 namespace NYT::NDetail::NRawClient {
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 TNode SerializeParamsForCreate(
     const TTransactionId& transactionId,
@@ -126,6 +126,10 @@ TNode SerializeParamsForListJobs(
     const TOperationId& operationId,
     const TListJobsOptions& options);
 
+TNode SerializeParamsForGetJobTrace(
+    const TOperationId& operationId,
+    const TGetJobTraceOptions& options);
+
 TNode SerializeParametersForInsertRows(
     const TString& pathPrefix,
     const TYPath& path,
@@ -224,6 +228,6 @@ TNode SerializeParamsForStartTransaction(
     TDuration txTimeout,
     const TStartTransactionOptions& options);
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDetail::NRawClient

@@ -103,7 +103,7 @@
  %define return rax
  %define return.w eax
 
- %define func(x) x:
+ %define func(x) x: endbranch
  %define FUNC_SAVE
  %define FUNC_RESTORE
 %endif
@@ -166,13 +166,8 @@ section .text
 %define xd5     ymm9
 
 align 16
-global gf_5vect_mad_avx2:ISAL_SYM_TYPE_FUNCTION
+global gf_5vect_mad_avx2, function
 func(gf_5vect_mad_avx2)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_5vect_mad_avx2:ISAL_SYM_TYPE_FUNCTION
-func(_gf_5vect_mad_avx2)
-%endif
-
 	FUNC_SAVE
 	sub	len, 32
 	jl	.return_fail
@@ -363,6 +358,3 @@ align 32
 constip32:
 	dq 0xf8f9fafbfcfdfeff, 0xf0f1f2f3f4f5f6f7
 	dq 0xe8e9eaebecedeeef, 0xe0e1e2e3e4e5e6e7
-
-;;;       func             core, ver, snum
-slversion gf_5vect_mad_avx2, 04,  01,  020e

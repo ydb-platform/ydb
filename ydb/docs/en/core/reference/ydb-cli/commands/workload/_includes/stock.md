@@ -5,15 +5,17 @@ Simulates a warehouse of an online store: creates multi-product orders, gets a l
 ## Types of load {#workload_types}
 
 This load test runs 5 types of load:
-* [user-hist](#getCustomerHistory): Reads the specified number of orders made by the customer with id = 10000. This creates a workload to read the same rows from different threads.
-* [rand-user-hist](#getRandomCustomerHistory): Reads the specified number of orders made by a randomly selected customer. A load that reads data from different threads is created.
-* [add-rand-order](#insertRandomOrder): Generates an order at random. For example, a customer has created an order of 2 products, but hasn't yet paid for it, hence the quantities in stock aren't decreased for the products. The database writes the data about the order and products. The read/write load is created (the INSERT checks for an existing entry before inserting the data).
-* [put-rand-order](#submitRandomOrder): Generates an order at random and processes it. For example, a customer has created and paid an order of 2 products. The data about the order and products is written to the database, product availability is checked and quantities in stock are decreased. A mixed data load is created.
-* [put-same-order](#submitSameOrder): Creates orders with the same set of products. For example, all customers buy the same set of products (a newly released phone and a charger). This creates a workload of competing updates of the same rows in the table.
+
+* [user-hist](#get-customer-history): Reads the specified number of orders made by the customer with id = 10000. This creates a workload to read the same rows from different threads.
+* [rand-user-hist](#get-random-customer-history): Reads the specified number of orders made by a randomly selected customer. A load that reads data from different threads is created.
+* [add-rand-order](#insert-random-order): Generates an order at random. For example, a customer has created an order of 2 products, but hasn't yet paid for it, hence the quantities in stock aren't decreased for the products. The database writes the data about the order and products. The read/write load is created (the INSERT checks for an existing entry before inserting the data).
+* [put-rand-order](#submit-random-order): Generates an order at random and processes it. For example, a customer has created and paid an order of 2 products. The data about the order and products is written to the database, product availability is checked and quantities in stock are decreased. A mixed data load is created.
+* [put-same-order](#submit-same-order): Creates orders with the same set of products. For example, all customers buy the same set of products (a newly released phone and a charger). This creates a workload of competing updates of the same rows in the table.
 
 ## Load test initialization {#init}
 
 To get started, create tables and populate them with data:
+
 ```bash
 {{ ydb-cli }} workload stock init [init options...]
 ```
@@ -37,7 +39,8 @@ See the description of the command to init the data load:
 | `--auto-partition <value>` | - | Enabling/disabling auto-sharding. Possible values: 0 or 1. Default: 1. |
 
 3 tables are created using the following DDL statements:
-```sql
+
+```yql
 CREATE TABLE `stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>);
 CREATE TABLE `orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created)) WITH (READ_REPLICAS_SETTINGS = "per_az:1", AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>, UNIFORM_PARTITIONS = <min-partitions>, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000);
 CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>, UNIFORM_PARTITIONS = <min-partitions>, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000);
@@ -52,6 +55,7 @@ Creating a database with 1000 products, 10000 items of each product, and no orde
 ```
 
 Creating a database with 10 products, 100 items of each product, 10 orders, and a minimum number of shards equal 100:
+
 ```bash
 {{ ydb-cli }} workload stock init -p 10 -q 100 -o 10 --min-partitions 100
 ```
@@ -59,9 +63,11 @@ Creating a database with 10 products, 100 items of each product, 10 orders, and 
 ## Running a load test {#run}
 
 To run the load, execute the command:
+
 ```bash
 {{ ydb-cli }} workload stock run [workload type...] [global workload options...] [specific workload options...]
 ```
+
 During this test, workload statistics for each time window are displayed on the screen.
 
 * `workload type`: The [types of workload](#workload_types).
@@ -89,12 +95,13 @@ See the description of the command to run the data load:
 | `--window` | - | Statistics collection window in seconds. Default: 1. |
 
 
-## The user-hist workload {#getCustomerHistory}
+## The user-hist workload {#get-customer-history}
 
 This type of load reads the specified number of orders for the customer with id = 10000.
 
 YQL query:
-```sql
+
+```yql
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
@@ -105,6 +112,7 @@ SELECT id, customer, created FROM orders view ix_cust
 ```
 
 To run this type of load, execute the command:
+
 ```bash
 {{ ydb-cli }} workload stock run user-hist [global workload options...] [specific workload options...]
 ```
@@ -113,16 +121,18 @@ To run this type of load, execute the command:
 * `specific workload options`: [Options of a specific load type](#customer_history_options).
 
 ### Parameters for user-hist {#customer_history_options}
+
 | Parameter name | Short name | Parameter description |
 ---|---|---
 | `--limit <value>` | `-l <value>` | The required number of orders. Default: 10. |
 
-## The rand-user-hist workload {#getRandomCustomerHistory}
+## The rand-user-hist workload {#get-random-customer-history}
 
 This type of load reads the specified number of orders from randomly selected customers.
 
 YQL query:
-```sql
+
+```yql
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
@@ -133,6 +143,7 @@ SELECT id, customer, created FROM orders view ix_cust
 ```
 
 To run this type of load, execute the command:
+
 ```bash
 {{ ydb-cli }} workload stock run rand-user-hist [global workload options...] [specific workload options...]
 ```
@@ -141,16 +152,18 @@ To run this type of load, execute the command:
 * `specific workload options`: [Options of a specific load type](#random_customer_history_options).
 
 ### Parameters for rand-user-hist {#random_customer_history_options}
+
 | Parameter name | Short name | Parameter description |
 ---|---|---
 | `--limit <value>` | `-l <value>` | The required number of orders. Default: 10. |
 
-## The add-rand-order workload {#insertRandomOrder}
+## The add-rand-order workload {#insert-random-order}
 
 This type of load creates a randomly generated order. The order includes several different products, 1 item per product. The number of products in the order is generated randomly based on an exponential distribution.
 
 YQL query:
-```sql
+
+```yql
 DECLARE $ido AS UInt64;
 DECLARE $cust AS Utf8;
 DECLARE $lines AS List<Struct<product:Utf8,quantity:Int64>>;
@@ -163,6 +176,7 @@ UPSERT INTO `orderLines`(id_order, product, quantity)
 ```
 
 To run this type of load, execute the command:
+
 ```bash
 {{ ydb-cli }} workload stock run add-rand-order [global workload options...] [specific workload options...]
 ```
@@ -171,16 +185,18 @@ To run this type of load, execute the command:
 * `specific workload options`: [Options of a specific load type](#insert_random_order_options).
 
 ### Parameters for add-rand-order {#insert_random_order_options}
+
 | Parameter name | Short name | Parameter description |
 ---|---|---
 | `--products <value>` | `-p <value>` | Number of products in the test. Default: 100. |
 
-## The put-rand-order workload {#submitRandomOrder}
+## The put-rand-order workload {#submit-random-order}
 
 This type of load creates a randomly generated order and processes it. The order includes several different products, 1 item per product. The number of products in the order is generated randomly based on an exponential distribution. Order processing consists in decreasing the number of ordered products in stock.
 
 YQL query:
-```sql
+
+```yql
 DECLARE $ido AS UInt64;
 DECLARE $cust AS Utf8;
 DECLARE $lines AS List<Struct<product:Utf8,quantity:Int64>>;
@@ -217,6 +233,7 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 ```
 
 To run this type of load, execute the command:
+
 ```bash
 {{ ydb-cli }} workload stock run put-rand-order [global workload options...] [specific workload options...]
 ```
@@ -225,16 +242,18 @@ To run this type of load, execute the command:
 * `specific workload options`: [Options of a specific load type](#submit_random_order_options).
 
 ### Parameters for put-rand-order {#submit_random_order_options}
+
 | Parameter name | Short name | Parameter description |
 ---|---|---
 | `--products <value>` | `-p <value>` | Number of products in the test. Default: 100. |
 
-## The put-same-order workload {#submitSameOrder}
+## The put-same-order workload {#submit-same-order}
 
 This type of load creates an order with the same set of products and processes it. Order processing consists in decreasing the number of ordered products in stock.
 
 YQL query:
-```sql
+
+```yql
 DECLARE $ido AS UInt64;
 DECLARE $cust AS Utf8;
 DECLARE $lines AS List<Struct<product:Utf8,quantity:Int64>>;
@@ -271,6 +290,7 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 ```
 
 To run this type of load, execute the command:
+
 ```bash
 {{ ydb-cli }} workload stock run put-same-order [global workload options...] [specific workload options...]
 ```
@@ -279,6 +299,7 @@ To run this type of load, execute the command:
 * `specific workload options`: [Options of a specific load type](#submit_same_order_options).
 
 ### Parameters for put-same-order {#submit_same_order_options}
+
 | Parameter name | Short name | Parameter description |
 ---|---|---
 | `--products <value>` | `-p <value>` | Number of products per order. Default: 100. |
@@ -286,10 +307,13 @@ To run this type of load, execute the command:
 ## Examples of running the loads
 
 * Run the `add-rand-order` workload for 5 seconds across 10 threads with 1000 products.
+
 ```bash
 {{ ydb-cli }} workload stock run add-rand-order -s 5 -t 10 -p 1000
 ```
+
 Possible result:
+
 ```text
 Elapsed Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 1           132 0       0       69      108     132     157
@@ -303,20 +327,26 @@ Txs     Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 ```
 
 * Run the `put-same-order` workload for 5 seconds across 5 threads with 2 products per order, printing out only final results.
+
 ```bash
 {{ ydb-cli }} workload stock run put-same-order -s 5 -t 5 -p 1000 --quiet
 ```
+
 Possible result:
+
 ```text
 Txs     Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 16          3.2 67      3       855     1407    1799    1799
 ```
 
 * Run the `rand-user-hist` workload for 5 seconds across 100 threads, printing out time for each time window.
+
 ```bash
 {{ ydb-cli }} workload stock run rand-user-hist -s 5 -t 10 --print-timestamp
 ```
+
 Possible result:
+
 ```text
 Elapsed Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)        Timestamp
 1          1046 0       0       7       16      25      50      2022-02-08T17:47:26Z
@@ -330,6 +360,7 @@ Txs     Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 ```
 
 ## Interpretation of results
+
 * `Elapsed`: Time window ID. By default, a time window is 1 second.
 * `Txs/sec`: Number of successful load transactions in the time window.
 * `Retries`: The number of repeat attempts to execute the transaction by the client in the time window.

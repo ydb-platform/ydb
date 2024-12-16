@@ -36,6 +36,8 @@ message ConnectionParams {
 
     string endpoint = 1;
     string database = 2;
+    bool enable_ssl = 5;
+    string connection_string = 6;
 
     oneof credentials {
         StaticCredentials static_credentials = 3;

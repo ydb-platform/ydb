@@ -290,11 +290,50 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 #define BENCHMARK_OVERRIDE
 #endif
 
+#if defined(__GNUC__)
+// Determine the cacheline size based on architecture
+#if defined(__i386__) || defined(__x86_64__)
+#define BENCHMARK_INTERNAL_CACHELINE_SIZE 64
+#elif defined(__powerpc64__)
+#define BENCHMARK_INTERNAL_CACHELINE_SIZE 128
+#elif defined(__aarch64__)
+#define BENCHMARK_INTERNAL_CACHELINE_SIZE 64
+#elif defined(__arm__)
+// Cache line sizes for ARM: These values are not strictly correct since
+// cache line sizes depend on implementations, not architectures.  There
+// are even implementations with cache line sizes configurable at boot
+// time.
+#if defined(__ARM_ARCH_5T__)
+#define BENCHMARK_INTERNAL_CACHELINE_SIZE 32
+#elif defined(__ARM_ARCH_7A__)
+#define BENCHMARK_INTERNAL_CACHELINE_SIZE 64
+#endif  // ARM_ARCH
+#endif  // arches
+#endif  // __GNUC__
+
+#ifndef BENCHMARK_INTERNAL_CACHELINE_SIZE
+// A reasonable default guess.  Note that overestimates tend to waste more
+// space, while underestimates tend to waste more time.
+#define BENCHMARK_INTERNAL_CACHELINE_SIZE 64
+#endif
+
+#if defined(__GNUC__)
+// Indicates that the declared object be cache aligned using
+// `BENCHMARK_INTERNAL_CACHELINE_SIZE` (see above).
+#define BENCHMARK_INTERNAL_CACHELINE_ALIGNED \
+  __attribute__((aligned(BENCHMARK_INTERNAL_CACHELINE_SIZE)))
+#elif defined(_MSC_VER)
+#define BENCHMARK_INTERNAL_CACHELINE_ALIGNED \
+  __declspec(align(BENCHMARK_INTERNAL_CACHELINE_SIZE))
+#else
+#define BENCHMARK_INTERNAL_CACHELINE_ALIGNED
+#endif
+
 #if defined(_MSC_VER)
 #pragma warning(push)
 // C4251: <symbol> needs to have dll-interface to be used by clients of class
 #pragma warning(disable : 4251)
-#endif
+#endif  // _MSC_VER_
 
 namespace benchmark {
 class BenchmarkReporter;
@@ -415,6 +454,26 @@ class MemoryManager {
 // allocation measurements for benchmark runs.
 BENCHMARK_EXPORT
 void RegisterMemoryManager(MemoryManager* memory_manager);
+
+// If a ProfilerManager is registered (via RegisterProfilerManager()), the
+// benchmark will be run an additional time under the profiler to collect and
+// report profile metrics for the run of the benchmark.
+class ProfilerManager {
+ public:
+  virtual ~ProfilerManager() {}
+
+  // This is called after `Setup()` code and right before the benchmark is run.
+  virtual void AfterSetupStart() = 0;
+
+  // This is called before `Teardown()` code and right after the benchmark
+  // completes.
+  virtual void BeforeTeardownStop() = 0;
+};
+
+// Register a ProfilerManager instance that will be used to collect and report
+// profile measurements for benchmark runs.
+BENCHMARK_EXPORT
+void RegisterProfilerManager(ProfilerManager* profiler_manager);
 
 // Add a key-value pair to output as part of the context stanza in the report.
 BENCHMARK_EXPORT
@@ -737,9 +796,14 @@ enum Skipped
 
 }  // namespace internal
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+// C4324: 'benchmark::State': structure was padded due to alignment specifier
+#pragma warning(disable : 4324)
+#endif  // _MSC_VER_
 // State is passed to a running Benchmark and contains state for the
 // benchmark to use.
-class BENCHMARK_EXPORT State {
+class BENCHMARK_EXPORT BENCHMARK_INTERNAL_CACHELINE_ALIGNED State {
  public:
   struct StateIterator;
   friend struct StateIterator;
@@ -984,7 +1048,8 @@ class BENCHMARK_EXPORT State {
   State(std::string name, IterationCount max_iters,
         const std::vector<int64_t>& ranges, int thread_i, int n_threads,
         internal::ThreadTimer* timer, internal::ThreadManager* manager,
-        internal::PerfCountersMeasurement* perf_counters_measurement);
+        internal::PerfCountersMeasurement* perf_counters_measurement,
+        ProfilerManager* profiler_manager);
 
   void StartKeepRunning();
   // Implementation of KeepRunning() and KeepRunningBatch().
@@ -999,9 +1064,13 @@ class BENCHMARK_EXPORT State {
   internal::ThreadTimer* const timer_;
   internal::ThreadManager* const manager_;
   internal::PerfCountersMeasurement* const perf_counters_measurement_;
+  ProfilerManager* const profiler_manager_;
 
   friend class internal::BenchmarkInstance;
 };
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif  // _MSC_VER_
 
 inline BENCHMARK_ALWAYS_INLINE bool State::KeepRunning() {
   return KeepRunningInternal(1, /*is_batch=*/false);
@@ -1485,6 +1554,7 @@ class Fixture : public internal::Benchmark {
   BaseClass##_##Method##_Benchmark
 
 #define BENCHMARK_PRIVATE_DECLARE(n)                                 \
+  /* NOLINTNEXTLINE(misc-use-anonymous-namespace) */                 \
   static ::benchmark::internal::Benchmark* BENCHMARK_PRIVATE_NAME(n) \
       BENCHMARK_UNUSED
 
@@ -1812,14 +1882,11 @@ class BENCHMARK_EXPORT BenchmarkReporter {
     internal::Skipped skipped;
     std::string skip_message;
 
-    // Total iterations across all threads.
     IterationCount iterations;
     int64_t threads;
     int64_t repetition_index;
     int64_t repetitions;
     TimeUnit time_unit;
-
-    // Total time across all threads.
     double real_accumulated_time;
     double cpu_accumulated_time;
 

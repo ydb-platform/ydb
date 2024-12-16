@@ -1,9 +1,11 @@
 #pragma once
 
-#include "defs.h"
 #include "bind_queue.h"
 #include "node_warden.h"
 #include "node_warden_events.h"
+
+#include <util/generic/hash_multi_map.h>
+#include <ydb/core/mind/bscontroller/group_mapper.h>
 
 namespace NKikimr::NStorage {
 
@@ -238,9 +240,23 @@ namespace NKikimr::NStorage {
         std::optional<NKikimrBlobStorage::TStorageConfig> CurrentProposedStorageConfig;
         std::shared_ptr<TScepter> Scepter;
         TString ErrorReason;
+        std::optional<TString> CurrentSelfAssemblyUUID;
 
         // subscribed IC sessions
-        THashMap<ui32, TActorId> SubscribedSessions;
+        struct TSessionSubscription {
+            TActorId SessionId;
+            ui64 SubscriptionCookie = 0; // when nonzero, we didn't have TEvNodeConnected yet
+
+            TSessionSubscription(TActorId sessionId) : SessionId(sessionId) {}
+
+            TString ToString() const {
+                return TStringBuilder() << "{SessionId# " << SessionId << " SubscriptionCookie# " << SubscriptionCookie << "}";
+            }
+        };
+        THashMap<ui32, TSessionSubscription> SubscribedSessions;
+        ui64 NextSubscribeCookie = 1;
+        THashMap<ui64, ui32> SubscriptionCookieMap;
+        THashSet<ui32> UnsubscribeQueue;
 
         // child actors
         THashSet<TActorId> ChildActors;
@@ -265,15 +281,10 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
 
-        static void ReadConfig(TActorSystem *actorSystem, TActorId selfId, const std::vector<TString>& drives,
-            const TIntrusivePtr<TNodeWardenConfig>& cfg, ui64 cookie);
-
-        static void WriteConfig(TActorSystem *actorSystem, TActorId selfId, const std::vector<TString>& drives,
-            const TIntrusivePtr<TNodeWardenConfig>& cfg, const NKikimrBlobStorage::TPDiskMetadataRecord& record);
-
+        void ReadConfig(ui64 cookie = 0);
+        void WriteConfig(std::vector<TString> drives, NKikimrBlobStorage::TPDiskMetadataRecord record);
         void PersistConfig(TPersistCallback callback);
         void Handle(TEvPrivate::TEvStorageConfigStored::TPtr ev);
-
         void Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev);
 
         static TString CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
@@ -292,12 +303,13 @@ namespace NKikimr::NStorage {
         void BindToSession(TActorId sessionId);
         void Handle(TEvInterconnect::TEvNodeConnected::TPtr ev);
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev);
-        void Handle(TEvents::TEvUndelivered::TPtr ev);
+        void HandleDisconnect(ui32 nodeId, TActorId sessionId);
         void UnsubscribeInterconnect(ui32 nodeId);
+        TActorId SubscribeToPeerNode(ui32 nodeId, TActorId sessionId);
         void AbortBinding(const char *reason, bool sendUnbindMessage = true);
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
-        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config);
+        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config, bool recurseConfigUpdate = false);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes
@@ -314,15 +326,20 @@ namespace NKikimr::NStorage {
         // Root node operation
 
         void CheckRootNodeStatus();
+        void BecomeRoot();
+        void UnbecomeRoot();
         void HandleErrorTimeout();
         void ProcessGather(TEvGather *res);
         bool HasQuorum() const;
         void ProcessCollectConfigs(TEvGather::TCollectConfigs *res);
+
+        using TProcessCollectConfigsResult = std::variant<std::monostate, TString, NKikimrBlobStorage::TStorageConfig>;
+        TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res, const TString *selfAssemblyUUID);
         std::optional<TString> ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 
         struct TExConfigError : yexception {};
 
-        bool GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config);
+        void GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
 
         void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId, ui32 groupGeneration,
             TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
@@ -354,7 +371,7 @@ namespace NKikimr::NStorage {
         void IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task);
         void CompleteScatterTask(TScatterTask& task);
         void AbortScatterTask(ui64 cookie, ui32 nodeId);
-        void AbortAllScatterTasks(const TBinding& binding);
+        void AbortAllScatterTasks(const std::optional<TBinding>& binding);
         void Handle(TEvNodeConfigScatter::TPtr ev);
         void Handle(TEvNodeConfigGather::TPtr ev);
 
@@ -540,7 +557,11 @@ namespace NKikimr::NStorage {
         }
 
         // process responses
+        std::set<TNodeIdentifier> seen;
         generateSuccessful([&](const TNodeIdentifier& node) {
+            const auto& [_, inserted] = seen.insert(node);
+            Y_ABORT_UNLESS(inserted);
+
             const auto it = nodeMap.find(node.NodeId());
             if (it == nodeMap.end() || TNodeIdentifier(*it->second) != node) { // unexpected node answers
                 return;

@@ -40,6 +40,22 @@ namespace NActors {
         ui64 Buckets[65];
     };
 
+    struct TExecutorPoolState {
+        float ElapsedCpu = 0;
+        float CurrentLimit = 0;
+        float PossibleMaxLimit = 0;
+        float MaxLimit = 0;
+        float MinLimit = 0;
+
+        void Aggregate(const TExecutorPoolState& other) {
+            ElapsedCpu += other.ElapsedCpu;
+            CurrentLimit += other.CurrentLimit;
+            PossibleMaxLimit += other.PossibleMaxLimit;
+            MaxLimit += other.MaxLimit;
+            MinLimit += other.MinLimit;
+        }
+    };
+
     struct TExecutorPoolStats {
         ui64 MaxUtilizationTime = 0;
         ui64 IncreasingThreadsByNeedyState = 0;
@@ -47,10 +63,6 @@ namespace NActors {
         ui64 DecreasingThreadsByStarvedState = 0;
         ui64 DecreasingThreadsByHoggishState = 0;
         ui64 DecreasingThreadsByExchange = 0;
-        i64 MaxConsumedCpuUs = 0;
-        i64 MinConsumedCpuUs = 0;
-        i64 MaxBookedCpuUs = 0;
-        i64 MinBookedCpuUs = 0;
         double SpinningTimeUs = 0;
         double SpinThresholdUs = 0;
         i16 WrongWakenedThreadCount = 0;

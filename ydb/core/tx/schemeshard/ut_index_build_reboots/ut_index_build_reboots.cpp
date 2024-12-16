@@ -450,4 +450,75 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
         });
     }
+
+    Y_UNIT_TEST(IndexPartitioning) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: [ "key" ]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            Ydb::Table::GlobalIndexSettings settings;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                partition_at_keys {
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "alice" } }
+                    }
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "bob" } }
+                    }
+                }
+                partitioning_settings {
+                    min_partitions_count: 3
+                    max_partitions_count: 3
+                }
+            )", &settings));
+
+            const ui64 buildIndexId = ++t.TxId;
+            AsyncBuildIndex(runtime, buildIndexId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+                "Index", NKikimrSchemeOp::EIndexTypeGlobal, { "value" }, {},
+                { NYdb::NTable::TGlobalIndexSettings::FromProto(settings) }
+            });
+
+            {
+                auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+                UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_PREPARING);
+            }
+
+            t.TestEnv->TestWaitNotification(runtime, buildIndexId);
+
+            {
+                auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+                UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+            }
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+                NLs::IsTable,
+                NLs::IndexesCount(1)
+            });
+
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index"), {
+                NLs::PathExist,
+                NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)
+            });
+
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable", true, true), {
+                NLs::IsTable,
+                NLs::PartitionCount(3),
+                NLs::MinPartitionsCountEqual(3),
+                NLs::MaxPartitionsCountEqual(3),
+                NLs::PartitionKeys({"alice", "bob", ""})
+            });
+        });
+    }
 }

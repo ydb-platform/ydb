@@ -4,11 +4,11 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -178,7 +178,7 @@ public:
             Become(&TS3FileWriteActor::StateFuncWrapper<&TS3FileWriteActor::MultipartInitialStateFunc>);
             Gateway->Upload(Url + "?uploads",
                 IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
-                0,
+                "",
                 std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, RequestId, std::placeholders::_1),
                 false,
                 RetryPolicy);
@@ -578,7 +578,7 @@ private:
                 Gateway,
                 Credentials,
                 key,
-                UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension, true),
+                NS3Util::UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension),
                 Compression,
                 RetryPolicy, DirtyWrite, Token);
             keyIt->second.emplace_back(fileWrite.get());

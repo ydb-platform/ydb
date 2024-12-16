@@ -455,14 +455,15 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(!futureWrite.HasValue());
         Cerr << ">>>TEST: future write has no value " << Endl;
-        RunTasks(stepByStepExecutor, {0});
+        RunTasks(stepByStepExecutor, {0});  // Run compression task.
+        RunTasks(stepByStepExecutor, {1});  // Run send task.
         futureWrite.GetValueSync();
         UNIT_ASSERT(futureWrite.HasValue());
         Cerr << ">>>TEST: future write has value " << Endl;
 
         UNIT_ASSERT(!futureRead.HasValue());
         Cerr << ">>>TEST: future read has no value " << Endl;
-        RunTasks(stepByStepExecutor, {1});
+        RunTasks(stepByStepExecutor, {2});  // Run decompression task.
         futureRead.GetValueSync();
         UNIT_ASSERT(futureRead.HasValue());
         Cerr << ">>>TEST: future read has value " << Endl;
@@ -621,7 +622,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             bool res = session->Write(message);
             UNIT_ASSERT(res);
         }
-        bool res = session->Close(TDuration::Seconds(10));
+        bool res = session->Close(TDuration::Seconds(30));
         UNIT_ASSERT(res);
 
         std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
@@ -656,8 +657,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         Cerr << ">>> TEST: Session gracefully closed" << Endl;
 
         Sleep(TDuration::Seconds(5));
-
-        // UNIT_ASSERT(false);
     }
 
     Y_UNIT_TEST(ConflictingWrites) {

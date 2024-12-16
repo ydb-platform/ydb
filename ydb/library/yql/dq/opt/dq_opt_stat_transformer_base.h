@@ -1,14 +1,14 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql::NDq {
 
 class TDqStatisticsTransformerBase : public TSyncTransformerBase {
 public:
-    TDqStatisticsTransformerBase(TTypeAnnotationContext* typeCtx, const IProviderContext& ctx);
+    TDqStatisticsTransformerBase(TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints = {});
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
     void Rewind() override;
@@ -23,6 +23,7 @@ protected:
 
     TTypeAnnotationContext* TypeCtx;
     const IProviderContext& Pctx;
+    TCardinalityHints CardinalityHints = {};
 };
 
 } // namespace NYql::NDq

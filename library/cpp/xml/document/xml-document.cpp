@@ -304,6 +304,7 @@ namespace NXml {
         xmlNode* nodePtr = GetPtr();
         xmlUnlinkNode(nodePtr);
         xmlFreeNode(nodePtr);
+        NodePointer = nullptr;
     }
 
     static int XmlWriteToOstream(void* context, const char* buffer, int len) {

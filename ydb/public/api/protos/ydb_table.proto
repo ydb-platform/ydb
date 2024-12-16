@@ -14,6 +14,7 @@ import "ydb/public/api/protos/ydb_formats.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 package Ydb.Table;
@@ -59,6 +60,39 @@ message GlobalIndexSettings {
     PartitioningSettings partitioning_settings = 3;
 }
 
+message VectorIndexSettings {
+    enum Metric {
+        METRIC_UNSPECIFIED = 0;
+        SIMILARITY_INNER_PRODUCT = 1;
+        SIMILARITY_COSINE = 2;
+        DISTANCE_COSINE = 3;
+        DISTANCE_MANHATTAN = 4;
+        DISTANCE_EUCLIDEAN = 5;
+    }
+
+    enum VectorType {
+        VECTOR_TYPE_UNSPECIFIED = 0;
+        VECTOR_TYPE_FLOAT = 1;
+        VECTOR_TYPE_UINT8 = 2;
+        VECTOR_TYPE_INT8 = 3;
+        VECTOR_TYPE_BIT = 4;
+    }
+
+    Metric metric = 1;
+
+    VectorType vector_type = 2;
+
+    uint32 vector_dimension = 3;
+}
+
+message KMeansTreeSettings {
+    VectorIndexSettings settings = 1;
+    // average count of clusters on each level of tree, 0 -- means auto
+    uint32 clusters = 2;
+    // average count of levels in the tree, 0 -- means auto
+    uint32 levels = 3;
+}
+
 message GlobalIndex {
     GlobalIndexSettings settings = 1;
 }
@@ -69,6 +103,12 @@ message GlobalAsyncIndex {
 
 message GlobalUniqueIndex {
     GlobalIndexSettings settings = 1;
+}
+
+message GlobalVectorKMeansTreeIndex {
+    GlobalIndexSettings level_table_settings = 1;
+    GlobalIndexSettings posting_table_settings = 2;
+    KMeansTreeSettings vector_settings = 3;
 }
 
 // Represent secondary index
@@ -82,6 +122,7 @@ message TableIndex {
        GlobalIndex global_index = 3;
        GlobalAsyncIndex global_async_index = 4;
        GlobalUniqueIndex global_unique_index = 6;
+       GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 7;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -105,6 +146,7 @@ message TableIndexDescription {
        GlobalIndex global_index = 3;
        GlobalAsyncIndex global_async_index = 5;
        GlobalUniqueIndex global_unique_index = 8;
+       GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 9;
     }
     Status status = 4;
     // list of columns content to be copied in to index table
@@ -287,6 +329,8 @@ message PartitionStats {
     uint64 rows_estimate = 1;
     // Approximate size of shard (bytes)
     uint64 store_size = 2;
+    // id of node that serve shard key range
+    uint32 leader_node_id = 3;
 }
 
 message TableStats {
@@ -369,6 +413,7 @@ message SequenceDescription {
     optional sint64 increment = 6; // increment at each call, defaults to 1
     optional bool cycle = 7; // true when cycle on overflow is allowed
     optional SetVal set_val = 8; // set_val(next_value, next_used) is executed atomically when creating
+    optional Type data_type = 9; // data type of the sequence
 }
 
 message ColumnMeta {
@@ -384,11 +429,50 @@ message ColumnMeta {
     oneof default_value {
         TypedValue from_literal = 5;
         SequenceDescription from_sequence = 6;
+        google.protobuf.NullValue empty_default = 7;
     }
 }
 
+message EvictionToExternalStorageSettings {
+    // Path to external data source
+    string storage_name = 1;
+}
+
+message TtlTier {
+    uint32 apply_after_seconds = 1;
+
+    oneof action {
+        google.protobuf.Empty delete = 2;
+        EvictionToExternalStorageSettings evict_to_external_storage = 3;
+    }
+}
+
+message DateTypeColumnModeSettingsV1 {
+    // The row will be assigned a tier at the moment of time, when the value
+    // stored in <column_name> is less than or equal to the current time (in epoch
+    // time format), and <tier.apply_after_seconds> has passed since that moment;
+    // i.e. the eviction threshold is the value of <column_name> plus <tier.apply_after_seconds>.
+
+    // The column type must be a date type
+    string column_name = 1;
+}
+
+message ValueSinceUnixEpochModeSettingsV1 {
+    // Same as DateTypeColumnModeSettings (above), but useful when type of the
+    // value stored in <column_name> is not a date type.
+
+    // The column type must be one of:
+    // - Uint32
+    // - Uint64
+    // - DyNumber
+    string column_name = 1;
+
+    // Interpretation of the value stored in <column_name>
+    ValueSinceUnixEpochModeSettings.Unit column_unit = 2;
+}
+
 message DateTypeColumnModeSettings {
-    // The row will be considered as expired at the moment of time, when the value
+    // The row will be assigned a tier at the moment of time, when the value
     // stored in <column_name> is less than or equal to the current time (in epoch
     // time format), and <expire_after_seconds> has passed since that moment;
     // i.e. the expiration threshold is the value of <column_name> plus <expire_after_seconds>.
@@ -427,8 +511,10 @@ message ValueSinceUnixEpochModeSettings {
 
 message TtlSettings {
     oneof mode {
-        DateTypeColumnModeSettings date_type_column = 1;
-        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2;
+        DateTypeColumnModeSettings date_type_column = 1 [deprecated = true];
+        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2 [deprecated = true];
+        DateTypeColumnModeSettingsV1 date_type_column_v1 = 4;
+        ValueSinceUnixEpochModeSettingsV1 value_since_unix_epoch_v1 = 5;
     }
 
     // There is no guarantee that expired row will be deleted immediately upon
@@ -444,6 +530,8 @@ message TtlSettings {
     // How often to run BRO on the same partition.
     // BRO will not be started more often, but may be started less often.
     uint32 run_interval_seconds = 3;
+
+    repeated TtlTier tiers = 6;
 }
 
 message StorageSettings {
@@ -472,6 +560,7 @@ message ColumnFamily {
         COMPRESSION_UNSPECIFIED = 0;
         COMPRESSION_NONE = 1;
         COMPRESSION_LZ4 = 2;
+        COMPRESSION_ZSTD = 3;
     }
 
     // Name of the column family, the name "default" must be used for the
@@ -487,6 +576,10 @@ message ColumnFamily {
     // When enabled table data will be kept in memory
     // WARNING: DO NOT USE
     Ydb.FeatureFlag.Status keep_in_memory = 4;
+
+    // Not all compression algorithms support
+    // Set if want to change default value
+    optional int32 compression_level = 5;
 }
 
 message PartitioningSettings {
@@ -574,8 +667,7 @@ message CreateTableRequest {
     Ydb.FeatureFlag.Status key_bloom_filter = 16;
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 17;
-    // Tiering rules name. It specifies how data migrates from one tier (logical storage) to another.
-    string tiering = 18;
+    reserved 18;
     // Is temporary table
     bool temporary = 19;
     // Is table column or row oriented
@@ -654,11 +746,7 @@ message AlterTableRequest {
     repeated string drop_changefeeds = 20;
     // Rename existed index
     repeated RenameIndexItem rename_indexes = 21;
-    // Setup or remove tiering
-    oneof tiering_action {
-        string set_tiering = 22;
-        google.protobuf.Empty drop_tiering = 23;
-    }
+    reserved 22, 23;
 }
 
 message AlterTableResponse {
@@ -737,6 +825,10 @@ message DescribeTableRequest {
     bool include_table_stats = 6;
     // Includes partition statistics (required include_table_statistics)
     bool include_partition_stats = 7;
+    // Includes set_val settings for sequences
+    bool include_set_val = 8;
+    // Includes shard -> node id maping (required include_partition_stats)
+    bool include_shard_nodes_info = 9;
 }
 
 message DescribeTableResponse {

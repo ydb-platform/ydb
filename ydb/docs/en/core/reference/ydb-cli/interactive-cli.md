@@ -36,7 +36,7 @@ Internal variables determine the behavior of commands and are set using the [spe
 
 Variable | Description
 ---|---
-| `stats` | The statistics collection mode for subsequent queries.<br>Acceptable values:<ul><li>`none` (default): Do not collect.</li><li>`basic`: Collect statistics.</li><li>`full`: Collect statistics and query plan.</li></ul> |
+| `stats` | The statistics collection mode for subsequent queries.<br/>Acceptable values:<ul><li>`none` (default): Do not collect.</li><li>`basic`: Collect statistics.</li><li>`full`: Collect statistics and query plan.</li></ul> |
 
 ## Examples {#examples}
 

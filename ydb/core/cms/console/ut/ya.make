@@ -2,9 +2,7 @@ UNITTEST_FOR(ydb/core/cms/console)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
 SIZE(MEDIUM)
-REQUIREMENTS(ram:16)
 
 PEERDIR(
     library/cpp/getopt
@@ -21,6 +19,7 @@ SRCS(
     configs_dispatcher_ut.cpp
     console_ut_tenants.cpp
     console_ut_configs.cpp
+    feature_flags_configurator_ut.cpp
     immediate_controls_configurator_ut.cpp
     log_settings_configurator_ut.cpp
     modifications_validator_ut.cpp

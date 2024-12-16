@@ -21,24 +21,29 @@ public:
         : Request(request)
     {}
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap() {
         //TODO: Do we realy realy need to make call to the ticket parser here???
         //we have done it already in grpc_request_proxy
         auto req = dynamic_cast<TEvWhoAmIRequest*>(Request.get());
         Y_ABORT_UNLESS(req, "Unexpected request type for TWhoAmIRPC");
-        TMaybe<TString> authToken = req->GetYdbToken();
-        if (authToken) {
-            TMaybe<TString> database = Request->GetDatabaseName();
-            ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-                .Database = database ? database.GetRef() : TString(),
-                .Ticket = authToken.GetRef(),
-                .PeerName = Request->GetPeerName()
-            }));
-            Become(&TThis::StateWaitForTicket);
+        TString ticket;
+        if (TMaybe<TString> authToken = req->GetYdbToken()) {
+            ticket = authToken.GetRef();
+        } else if (TVector<TStringBuf> clientCert = Request->FindClientCert(); !clientCert.empty()) {
+            ticket = TString(clientCert.front());
         } else {
             ReplyError("No token provided");
             PassAway();
+            return;
         }
+
+        TMaybe<TString> database = Request->GetDatabaseName();
+        Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Database = database ? database.GetRef() : TString(),
+            .Ticket = ticket,
+            .PeerName = Request->GetPeerName()
+        }));
+        Become(&TThis::StateWaitForTicket);
     }
 
     STFUNC(StateWaitForTicket) {

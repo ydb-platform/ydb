@@ -16,14 +16,14 @@ ansible-playbook ydb_platform.ydb.update_config
 
 Задачи в playbook `ydb_platform.ydb.update_config` помечены типами узлов, поэтому вы можете использовать функциональность тегов Ansible для фильтрации узлов по их типу.
 
-Эти две команды эквивалентны и изменят конфигурацию всех узлов хранения:
+Эти две команды эквивалентны и изменят конфигурацию всех [узлов хранения](../../concepts/glossary.md#storage-node):
 
 ```bash
 ansible-playbook ydb_platform.ydb.update_config --tags storage
 ansible-playbook ydb_platform.ydb.update_config --tags static
 ```
 
-Эти две команды эквивалентны и изменят конфигурацию всех узлов баз данных:
+Эти две команды эквивалентны и изменят конфигурацию всех [узлов баз данных](../../concepts/glossary.md#database-node):
 
 ```bash
 ansible-playbook ydb_platform.ydb.update_config --tags database

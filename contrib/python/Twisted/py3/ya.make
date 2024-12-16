@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(24.3.0)
+VERSION(24.10.0)
 
 LICENSE(MIT)
 
@@ -35,6 +35,7 @@ PY_SRCS(
     twisted/_threads/_threadworker.py
     twisted/_version.py
     twisted/application/__init__.py
+    twisted/application/_client_service.py
     twisted/application/app.py
     twisted/application/internet.py
     twisted/application/reactors.py
@@ -388,6 +389,7 @@ PY_SRCS(
     twisted/trial/unittest.py
     twisted/trial/util.py
     twisted/web/__init__.py
+    twisted/web/_abnf.py
     twisted/web/_auth/__init__.py
     twisted/web/_auth/basic.py
     twisted/web/_auth/digest.py
@@ -416,7 +418,6 @@ PY_SRCS(
     twisted/web/rewrite.py
     twisted/web/script.py
     twisted/web/server.py
-    twisted/web/soap.py
     twisted/web/static.py
     twisted/web/sux.py
     twisted/web/tap.py

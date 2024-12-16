@@ -59,6 +59,7 @@ const NKikimrReplication::TRunWorkerCommand* TWorkerInfo::GetCommand() const {
 
 void TWorkerInfo::AttachSession(ui32 nodeId) {
     Session = nodeId;
+    DataEnded = false;
 }
 
 void TWorkerInfo::ClearSession() {
@@ -72,6 +73,27 @@ bool TWorkerInfo::HasSession() const {
 ui32 TWorkerInfo::GetSession() const {
     Y_ABORT_UNLESS(Session.Defined());
     return *Session;
+}
+
+bool TWorkerInfo::IsDataEnded() const {
+    return DataEnded;
+}
+
+void TWorkerInfo::SetDataEnded(bool value) {
+    DataEnded = value;
+}
+
+void TWorkerInfo::SetHeartbeat(const TRowVersion& value) {
+    Heartbeat = value;
+}
+
+bool TWorkerInfo::HasHeartbeat() const {
+    return Heartbeat.Defined();
+}
+
+const TRowVersion& TWorkerInfo::GetHeartbeat() const {
+    Y_ABORT_UNLESS(Heartbeat.Defined());
+    return *Heartbeat;
 }
 
 }

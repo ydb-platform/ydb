@@ -325,9 +325,9 @@ namespace NKikimr {
         IMPL_REQUEST(BlobStorageConfig, TBlobStorageConfigRequest, TResponse)
         IMPL_REQUEST(ResolveNode, TResolveNodeRequest, TResponse)
         IMPL_REQUEST(HiveCreateTablet, THiveCreateTablet, TResponse)
+        IMPL_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse)
         IMPL_REQUEST(LocalEnumerateTablets, TLocalEnumerateTablets, TResponse)
         IMPL_REQUEST(KeyValue, TKeyValueRequest, TResponse)
-        IMPL_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse)
         IMPL_REQUEST(CmsRequest, TCmsRequest, TCmsResponse)
         IMPL_REQUEST(SqsRequest, TSqsRequest, TSqsResponse)
         IMPL_REQUEST(LocalMKQL, TLocalMKQL, TResponse)
@@ -339,7 +339,6 @@ namespace NKikimr {
         IMPL_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse)
         IMPL_REQUEST(FillNode, TFillNodeRequest, TResponse)
         IMPL_REQUEST(DrainNode, TDrainNodeRequest, TResponse)
-        IMPL_REQUEST(LoginRequest, TLoginRequest, TResponse)
 
         } // NGRpcProxy
 } // NKikimr

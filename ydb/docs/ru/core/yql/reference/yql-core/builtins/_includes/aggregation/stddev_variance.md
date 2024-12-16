@@ -1,7 +1,8 @@
 ## STDDEV и VARIANCE {#stddev-variance}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 STDDEV(Double?)->Double?
 STDDEV_POPULATION(Double?)->Double?
 POPULATION_STDDEV(Double?)->Double?
@@ -26,8 +27,9 @@ VARIANCE_SAMPLE(Double?)->Double?
 
 Если все переданные значения — `NULL`, возвращает `NULL`.
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT
   STDDEV(numeric_column),
   VARIANCE(numeric_column)

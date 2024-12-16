@@ -2,16 +2,15 @@
 
 #include <ydb/core/base/events.h>
 
+#include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
-
-#include <ydb/core/kqp/common/kqp_tx.h>
 
 #include <arrow/api.h>
 
@@ -48,6 +47,10 @@ struct TEvS3Provider {
         EvCachePutRequest,
         EvCacheNotification,
         EvCacheSourceFinish,
+        // Decompressor events
+        EvDecompressDataRequest,
+        EvDecompressDataResult,
+        EvDecompressDataFinish,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_PROVIDER), "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_PROVIDER)");
@@ -95,9 +98,10 @@ struct TEvS3Provider {
 
         TEvObjectPathReadError() = default;
 
-        TEvObjectPathReadError(TIssues issues, const NDqProto::TMessageTransportMeta& transportMeta) {
+        TEvObjectPathReadError(TIssues issues, NYql::NDqProto::StatusIds::StatusCode code, const NDqProto::TMessageTransportMeta& transportMeta) {
             NYql::IssuesToMessage(issues, Record.MutableIssues());
             Record.MutableTransportMeta()->CopyFrom(transportMeta);
+            Record.SetFatalCode(code);
         }
     };
 
@@ -196,6 +200,35 @@ struct TEvS3Provider {
     struct TEvContinue : public NActors::TEventLocal<TEvContinue, EvContinue> {
     };
 
+    struct TEvDecompressDataRequest : public NActors::TEventLocal<TEvDecompressDataRequest, EvDecompressDataRequest> {
+        TEvDecompressDataRequest(TString&& data) : Data(std::move(data)) {}
+        TString Data;
+    };
+
+    struct TEvDecompressDataResult : public NActors::TEventLocal<TEvDecompressDataResult, EvDecompressDataResult> {
+        TEvDecompressDataResult(TString&& data, const TDuration& cpuTime) 
+            : Data(std::move(data))
+            , CpuTime(cpuTime)
+        {}
+
+        TEvDecompressDataResult(std::exception_ptr exception, const TDuration& cpuTime) 
+            : Exception(exception)
+            , CpuTime(cpuTime)
+        {}
+
+        TString Data;
+        std::exception_ptr Exception;
+        TDuration CpuTime;
+    };
+
+    struct TEvDecompressDataFinish : public NActors::TEventLocal<TEvDecompressDataFinish, EvDecompressDataFinish> {
+        TEvDecompressDataFinish(const TDuration& cpuTime)
+            : CpuTime(cpuTime)
+        {}
+
+        TDuration CpuTime;
+    };
+
     struct TReadRange {
         int64_t Offset;
         int64_t Length;
@@ -208,17 +241,6 @@ struct TEvS3Provider {
         const bool Failure;
         IHTTPGateway::TContent Result;
         const TIssues Issues;
-    };
-
-    struct TEvCacheSourceStart : public NActors::TEventLocal<TEvCacheSourceStart, EvCacheSourceStart> {
-
-        TEvCacheSourceStart(NActors::TActorId sourceId, const TTxId& txId, std::shared_ptr<arrow::Schema> schema)
-            : SourceId(sourceId), TxId(txId), Schema(schema) {
-        }
- 
-        NActors::TActorId SourceId;
-        TTxId TxId;
-        std::shared_ptr<arrow::Schema> Schema;
     };
 
     struct TEvCacheCheckRequest : public NActors::TEventLocal<TEvCacheCheckRequest, EvCacheCheckRequest> {

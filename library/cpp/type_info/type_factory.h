@@ -439,7 +439,7 @@ namespace NTi {
 
         /// Reclaim a chunk of memory memory that was allocated via the `AllocateString` function.
         virtual void FreeString(TStringBuf str) noexcept {
-            Free(const_cast<char*>(str.Data()));
+            Free(const_cast<char*>(str.data()));
         }
 
         /// Like `AllocateString`, but works with `TMaybe<TStringBuf>`.

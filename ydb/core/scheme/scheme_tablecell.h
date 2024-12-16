@@ -169,6 +169,32 @@ public:
 static_assert(sizeof(TCell) == 12, "TCell must be 12 bytes");
 using TCellsRef = TConstArrayRef<const TCell>;
 
+inline size_t EstimateSize(TCellsRef cells) {
+    size_t cellsSize = cells.size();
+
+    size_t size = sizeof(TCell) * cellsSize;
+    for (auto& cell : cells) {
+        if (!cell.IsNull() && !cell.IsInline()) {
+            const size_t cellSize = cell.Size();
+            size += AlignUp(cellSize);
+        }
+    }
+
+    return size;
+}
+
+struct TCellVectorsHash {
+    using is_transparent = void;
+
+    size_t operator()(TConstArrayRef<TCell> key) const;
+};
+
+struct TCellVectorsEquals {
+    using is_transparent = void;
+
+    bool operator()(TConstArrayRef<TCell> a, TConstArrayRef<TCell> b) const;
+};
+
 inline int CompareCellsAsByteString(const TCell& a, const TCell& b, bool isDescending) {
     const char* pa = (const char*)a.Data();
     const char* pb = (const char*)b.Data();
@@ -182,7 +208,7 @@ inline int CompareCellsAsByteString(const TCell& a, const TCell& b, bool isDesce
 
 // NULL is considered equal to another NULL and less than non-NULL
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
-inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoOrder type) {
+inline int CompareTypedCells(const TCell& a, const TCell& b, const NScheme::TTypeInfoOrder& type) {
     using TPair = std::pair<ui64, ui64>;
     if (a.IsNull())
         return b.IsNull() ? 0 : -1;
@@ -257,7 +283,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
 
     case NKikimr::NScheme::NTypeIds::Pg:
     {
-        auto typeDesc = type.GetTypeDesc();
+        auto typeDesc = type.GetPgTypeDesc();
         Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
         int result = NPg::PgNativeBinaryCompare(a.Data(), a.Size(), b.Data(), b.Size(), typeDesc);
         return type.IsDescending() ? -result : result;
@@ -358,7 +384,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
     }
 
     if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
-        auto typeDesc = info.GetTypeDesc();
+        auto typeDesc = info.GetPgTypeDesc();
         Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
     }
@@ -541,9 +567,19 @@ public:
         return Cells;
     }
 
+    explicit operator bool() const
+    {
+        return !Cells.empty();
+    }
+
+    // read headers, assuming the buf is correct and append additional cells at the end
+    static bool UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec);
+
     static void Serialize(TString& res, TConstArrayRef<TCell> cells);
 
     static TString Serialize(TConstArrayRef<TCell> cells);
+
+    static size_t SerializedSize(TConstArrayRef<TCell> cells);
 
     const TString &GetBuffer() const { return Buf; }
 
@@ -653,29 +689,6 @@ private:
     ui16 ColCount;
 };
 
-class TCellsBatcher {
-public:
-    explicit TCellsBatcher(ui16 colCount, ui64 maxBytesPerBatch);
-
-    bool IsEmpty() const;
-
-    struct TBatch {
-        ui64 Memory = 0;
-        ui64 MemorySerialized = 0;
-        TVector<TCell> Data;
-    };
-
-    TBatch Flush(bool force);
-
-    ui64 AddRow(TArrayRef<TCell> cells);
-
-private:
-    std::deque<TBatch> Batches;
-
-    ui16 ColCount;
-    ui64 MaxBytesPerBatch;
-};
-
 class TCellsStorage
 {
 public:
@@ -759,5 +772,8 @@ private:
 void DbgPrintValue(TString&, const TCell&, NScheme::TTypeInfo typeInfo);
 TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry& typeRegistry);
 TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry);
+
+size_t GetCellMatrixHeaderSize();
+size_t GetCellHeaderSize();
 
 }

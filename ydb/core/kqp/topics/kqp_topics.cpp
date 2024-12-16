@@ -4,6 +4,8 @@
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/set.h>
+
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 
 namespace NKikimr::NKqp::NTopic {
@@ -105,15 +107,15 @@ void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partitio
     HasWriteOperations_ = true;
 }
 
-void TTopicPartitionOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTransaction> &txs)
+void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 {
     Y_ABORT_UNLESS(TabletId_.Defined());
     Y_ABORT_UNLESS(Partition_.Defined());
 
-    auto& tx = txs[*TabletId_];
+    auto& t = txs[*TabletId_];
 
     for (auto& [consumer, operations] : Operations_) {
-        NKikimrPQ::TPartitionOperation* o = tx.MutableOperations()->Add();
+        NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
         o->SetPartitionId(*Partition_);
         auto [begin, end] = operations.GetRange();
         o->SetBegin(begin);
@@ -123,12 +125,13 @@ void TTopicPartitionOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTra
     }
 
     if (HasWriteOperations_) {
-        NKikimrPQ::TPartitionOperation* o = tx.MutableOperations()->Add();
+        NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
         o->SetPartitionId(*Partition_);
         o->SetPath(*Topic_);
         if (SupportivePartition_.Defined()) {
             o->SetSupportivePartition(*SupportivePartition_);
         }
+        t.hasWrite = true;
     }
 }
 
@@ -165,6 +168,11 @@ void TTopicPartitionOperations::SetTabletId(ui64 value)
     Y_ABORT_UNLESS(TabletId_.Empty());
 
     TabletId_ = value;
+}
+
+TMaybe<TString> TTopicPartitionOperations::GetTopicName() const
+{
+    return Topic_;
 }
 
 bool TTopicPartitionOperations::HasReadOperations() const
@@ -355,7 +363,7 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
     return true;
 }
 
-void TTopicOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTransaction> &txs)
+void TTopicOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 {
     for (auto& [_, operations] : Operations_) {
         operations.BuildTopicTxs(txs);
@@ -388,6 +396,17 @@ TSet<ui64> TTopicOperations::GetSendingTabletIds() const
         ids.insert(operations.GetTabletId());
     }
     return ids;
+}
+
+TMaybe<TString> TTopicOperations::GetTabletName(ui64 tabletId) const {
+    TMaybe<TString> topic;
+    for (auto& [_, operations] : Operations_) {
+        if (operations.GetTabletId() == tabletId) {
+            topic = operations.GetTopicName();
+            break;
+        }
+    }
+    return topic;
 }
 
 size_t TTopicOperations::GetSize() const

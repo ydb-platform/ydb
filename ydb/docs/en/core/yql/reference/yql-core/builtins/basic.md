@@ -21,6 +21,8 @@
 
 {% include [x](_includes/basic/current_tz.md) %}
 
+{% include [x](_includes/basic/version.md) %}
+
 {% include [x](_includes/basic/max_min.md) %}
 
 {% include [x](_includes/basic/as_container.md) %}

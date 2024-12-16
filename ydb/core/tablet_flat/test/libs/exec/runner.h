@@ -52,13 +52,7 @@ namespace NFake {
 
             Leader = Env.Register(new NFake::TLeader(8, Stopped), 0);
 
-            NFake::TConf conf;
-
-            conf.Shared = 8 * (1 << 20);
-            conf.ScanQueue = 256 * 1024;
-            conf.AsyncQueue = 256 * 1024;
-
-            SetupModelServices(conf);
+            SetupModelServices();
         }
 
         TTestActorRuntime* operator->() noexcept
@@ -172,7 +166,7 @@ namespace NFake {
             }
         }
 
-        void SetupModelServices(NFake::TConf conf)
+        void SetupModelServices()
         {
             { /*_ Blob storage proxies mock factory */
                 auto *actor = new NFake::TWarden(4);
@@ -181,16 +175,14 @@ namespace NFake {
             }
 
             { /*_ Shared page collection cache service, used by executor */
-                auto config = MakeHolder<TSharedPageCacheConfig>();
+                NSharedCache::TSharedCacheConfig config;
+                config.SetMemoryLimit(8_MB);
+                config.SetScanQueueInFlyLimit(256_KB);
+                config.SetAsyncQueueInFlyLimit(256_KB);
 
-                config->CacheConfig = new TCacheCacheConfig(conf.Shared, nullptr, nullptr, nullptr);
-                config->TotalAsyncQueueInFlyLimit = conf.AsyncQueue;
-                config->TotalScanQueueInFlyLimit = conf.ScanQueue;
-                config->Counters = MakeIntrusive<TSharedPageCacheCounters>(Env.GetDynamicCounters());
+                auto *actor = NSharedCache::CreateSharedPageCache(config, Env.GetDynamicCounters());
 
-                auto *actor = CreateSharedPageCache(std::move(config), Env.GetMemObserver());
-
-                RunOn(3, MakeSharedPageCacheId(0), actor, EMail::ReadAsFilled);
+                RunOn(3, NSharedCache::MakeSharedPageCacheId(0), actor, EMail::ReadAsFilled);
             }
         }
 

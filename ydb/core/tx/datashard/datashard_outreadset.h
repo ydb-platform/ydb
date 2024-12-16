@@ -45,6 +45,7 @@ struct TReadSetKey {
 struct TReadSetInfo : TReadSetKey {
     ui64 Step = 0;
     bool OnHold = false;
+    std::optional<TString> Body;
 
     TReadSetInfo() = default;
 
@@ -74,7 +75,7 @@ public:
 
     bool Empty() const { return CurrentReadSets.empty() && Expectations.empty(); }
     bool HasAcks() const { return ! ReadSetAcks.empty(); }
-    bool Has(const TReadSetKey& rsKey) const { return CurrentReadSetInfos.contains(rsKey); }
+    bool Has(const TReadSetKey& rsKey) const { return CurrentReadSetKeys.contains(rsKey); }
 
     ui64 CountReadSets() const { return CurrentReadSets.size(); }
     ui64 CountAcks() const { return ReadSetAcks.size(); }
@@ -109,8 +110,7 @@ private:
 private:
     TDataShard * Self;
     THashMap<ui64, TReadSetInfo> CurrentReadSets;     // SeqNo -> Info
-    THashMap<TReadSetKey, ui64> CurrentReadSetInfos;  // Info -> SeqNo
-    THashSet<ui64> AckedSeqno;
+    THashMap<TReadSetKey, ui64> CurrentReadSetKeys;   // Key -> SeqNo
     TVector<TIntrusivePtr<TEvTxProcessing::TEvReadSetAck>> ReadSetAcks;
     // Target -> TxId -> Step
     THashMap<ui64, THashMap<ui64, ui64>> Expectations;

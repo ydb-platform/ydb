@@ -6,6 +6,6 @@
 
 {% if feature_mapreduce %}
 
-  {% include [x](_includes/action/evaluate.md) %}
+{% include [x](_includes/action/evaluate.md) %}
 
 {% endif %}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -10,6 +11,14 @@
 
 #include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/library/actors/core/actorid.h>
+
+namespace NKikimr::NKqp::NComputeActor {
+    struct IKqpNodeComputeActorFactory;
+}
+
+namespace NKikimr::NKqp::NRm {
+    class IKqpResourceManager;
+}
 
 namespace NKikimr::NKqp {
 
@@ -48,7 +57,13 @@ struct TKqpWorkerSettings {
     }
 };
 
-IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
+class TKqpQueryCache;
+
+IActor* CreateKqpSessionActor(const TActorId& owner,
+    TIntrusivePtr<TKqpQueryCache> queryCache,
+    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager_,
+    std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory_,
+    const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,

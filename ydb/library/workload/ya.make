@@ -10,3 +10,14 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    abstract
+    benchmark_base
+    clickbench
+    kv
+    stock
+    tpc_base
+    tpcds
+    tpch
+)

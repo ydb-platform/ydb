@@ -15,7 +15,6 @@
 #include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
 #include <ydb/core/base/blobstorage_common.h>
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
@@ -637,16 +636,12 @@ namespace NKikimr {
         void StorePayload(TRope&& buffer);
 
         ui64 GetBufferBytes() const {
-            if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
-                ui64 sizeBytes = 0;
-                const ui32 size = GetPayloadCount();
-                for (ui32 i = 0; i < size; ++i) {
-                    sizeBytes += GetPayload(i).GetSize();
-                }
-                return sizeBytes;
-            } else {
-                return Record.GetBuffer().size();
+            ui64 sizeBytes = 0;
+            const ui32 size = GetPayloadCount();
+            for (ui32 i = 0; i < size; ++i) {
+                sizeBytes += GetPayload(i).GetSize();
             }
+            return sizeBytes;
         }
 
         bool Validate(TString& errorReason) {
@@ -708,8 +703,8 @@ namespace NKikimr {
                 if (costSettings.HasWriteBlockSize()) {
                     str << " WriteBlockSize# " << costSettings.GetWriteBlockSize();
                 }
-                if (costSettings.HasMinREALHugeBlobInBytes()) {
-                    str << " MinREALHugeBlobInBytes# " << costSettings.GetMinREALHugeBlobInBytes();
+                if (costSettings.HasMinHugeBlobInBytes()) {
+                    str << " MinHugeBlobInBytes# " << costSettings.GetMinHugeBlobInBytes();
                 }
                 str << "}";
             }
@@ -865,24 +860,14 @@ namespace NKikimr {
 
         ui64 GetBufferBytes(ui64 idx) const {
             Y_DEBUG_ABORT_UNLESS(idx < Record.ItemsSize());
-            if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
-                return GetPayload(idx).GetSize();
-            } else {
-                return Record.GetItems(idx).GetBuffer().size();
-            }
+            return GetPayload(idx).GetSize();
         }
 
         ui64 GetBufferBytes() const {
             ui64 bytes = 0;
-            if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
-                ui32 size = GetPayloadCount();
-                for (ui32 i = 0; i < size; ++i) {
-                    bytes += GetPayload(i).GetSize();
-                }
-            } else {
-                for (const auto &item : Record.GetItems()) {
-                    bytes += item.GetBuffer().size();
-                }
+            ui32 size = GetPayloadCount();
+            for (ui32 i = 0; i < size; ++i) {
+                bytes += GetPayload(i).GetSize();
             }
             return bytes;
         }
@@ -896,7 +881,7 @@ namespace NKikimr {
             return sum;
         }
 
-        void StorePayload(NKikimrBlobStorage::TVMultiPutItem &item, const TRcBuf &buffer);
+        void StorePayload(const TRcBuf &buffer);
 
 
         TRope GetItemBuffer(ui64 itemIdx) const;
@@ -906,7 +891,7 @@ namespace NKikimr {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
             item->SetFullDataSize(logoBlobId.BlobSize());
-            StorePayload(*item, buffer);
+            StorePayload(buffer);
             item->SetFullDataSize(logoBlobId.BlobSize());
             if (cookie) {
                 item->SetCookie(*cookie);
@@ -1267,6 +1252,7 @@ namespace NKikimr {
             if (record.GetIndexOnly())
                 str << " IndexOnly";
             if (record.HasMsgQoS()) {
+                str << ' ';
                 TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
             }
             str << " Notify# " << record.GetNotifyIfNotReady()
@@ -1585,7 +1571,7 @@ namespace NKikimr {
             if (deadline != TInstant::Max()) {
                 this->Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds());
             }
-            this->Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(NKikimrBlobStorage::AsyncBlob));
+            this->Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::PutAsyncBlob);
         }
 
         bool GetIgnoreBlock() const {
@@ -1965,6 +1951,25 @@ namespace NKikimr {
             }
             Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::GetFastRead);
         }
+
+        TString ToString() const {
+            return ToString(this->Record);
+        }
+
+        static TString ToString(const NKikimrBlobStorage::TEvVPatchStart &record) {
+            TStringStream str;
+            TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
+            TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
+            str << "{TEvVPatchStart";
+            str << " OriginalBlobId# " << originalId.ToString();
+            str << " PatchedBlobId# " << patchedId.ToString();
+            if (record.HasMsgQoS()) {
+                str << " ";
+                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
+            }
+            str << "}";
+            return str.Str();
+        }
     };
 
     struct TEvBlobStorage::TEvVPatchFoundParts
@@ -2008,6 +2013,25 @@ namespace NKikimr {
 
         void SetStatus(NKikimrProto::EReplyStatus status) {
             Record.SetStatus(status);
+        }
+
+        TString ToString() const {
+            return ToString(this->Record);
+        }
+
+        static TString ToString(const NKikimrBlobStorage::TEvVPatchFoundParts &record) {
+            TStringStream str;
+            TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
+            TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
+            str << "{TEvVPatchFoundParts";
+            str << " OriginalBlobId# " << originalId.ToString();
+            str << " PatchedBlobId# " << patchedId.ToString();
+            if (record.HasMsgQoS()) {
+                str << " ";
+                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
+            }
+            str << "}";
+            return str.Str();
         }
 
         void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason,
@@ -2099,6 +2123,25 @@ namespace NKikimr {
             }
             return result;
         }
+
+        TString ToString() const {
+            return ToString(this->Record);
+        }
+
+        static TString ToString(const NKikimrBlobStorage::TEvVPatchDiff &record) {
+            TStringStream str;
+            TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalPartBlobId());
+            TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedPartBlobId());
+            str << "{TEvVPatchDiff";
+            str << " OriginalBlobId# " << originalId.ToString();
+            str << " PatchedBlobId# " << patchedId.ToString();
+            if (record.HasMsgQoS()) {
+                str << " ";
+                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
+            }
+            str << "}";
+            return str.Str();
+        }
     };
 
 
@@ -2143,6 +2186,25 @@ namespace NKikimr {
                 result += diff.GetBuffer().size();
             }
             return result;
+        }
+
+        TString ToString() const {
+            return ToString(this->Record);
+        }
+
+        static TString ToString(const NKikimrBlobStorage::TEvVPatchXorDiff &record) {
+            TStringStream str;
+            TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalPartBlobId());
+            TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedPartBlobId());
+            str << "{TEvVPatchXorDiff";
+            str << " OriginalBlobId# " << originalId.ToString();
+            str << " PatchedBlobId# " << patchedId.ToString();
+            if (record.HasMsgQoS()) {
+                str << " ";
+                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
+            }
+            str << "}";
+            return str.Str();
         }
     };
 
@@ -3011,6 +3073,15 @@ namespace NKikimr {
             TLogoBlobID BlobId; // for HugeBlob/InplaceBlob
             ui64 SstId; // for IndexRecord
             ui32 Level; // for IndexRecord
+
+            TString ToString() const {
+                return TStringBuilder() << "{Location# " << Location.ToString()
+                    << " Database# " << (int)Database
+                    << " RecordType# " << (int)RecordType
+                    << " BlobId# " << BlobId.ToString()
+                    << " SstId# " << SstId
+                    << " Level# " << Level << '}';
+            }
         };
 
         std::vector<TLayoutRecord> Layout;
@@ -3128,9 +3199,9 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TEvMinHugeBlobSizeUpdate : public TEventLocal<TEvMinHugeBlobSizeUpdate, TEvBlobStorage::EvMinHugeBlobSizeUpdate> {
     public:
-        ui32 MinREALHugeBlobInBytes;
+        ui32 MinHugeBlobInBytes;
 
-        TEvMinHugeBlobSizeUpdate(ui32 minREALHugeBlobInBytes) : MinREALHugeBlobInBytes(minREALHugeBlobInBytes) {  
+        TEvMinHugeBlobSizeUpdate(ui32 minHugeBlobInBytes) : MinHugeBlobInBytes(minHugeBlobInBytes) {  
         };
     };
 } // NKikimr

@@ -14,7 +14,6 @@
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydb_impl.h>
@@ -43,7 +42,6 @@ public:
     TDuration DatabaseRequestRetryDelta = TDuration::MilliSeconds(50);
     TString ControlPlaneName;
     TString MvpTokenName;
-    bool Light = false;
 
     THandlerActorMetaCpDatabasesGET(
             const NActors::TActorId& httpProxyId,
@@ -60,7 +58,7 @@ public:
         NActors::TActorId actorId = ctx.SelfID;
 
         {
-            Location.GetTableClient(Request, NYdb::NTable::TClientSettings().Database(Location.RootDomain)).CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
+            Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location)).CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
                 NYdb::NTable::TAsyncCreateSessionResult res(result);
                 actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));
             });
@@ -146,11 +144,20 @@ public:
                 }
                 if (balancer) {
                     TString balancerEndpoint;
-                    if (Request.Parameters["light"] == "1") {
-                        balancerEndpoint = GetApiUrl(balancer, "/tenantinfo?tablets=0&offload_merge=1&storage=1&nodes=0&users=0&timeout=55000");
+                    TStringBuilder balancerEndpointBuilder;
+                    balancerEndpointBuilder << "/tenantinfo";
+                    if (Request.Parameters["light"] == "0") {
+                        balancerEndpointBuilder << "?tablets=1";
                     } else {
-                        balancerEndpoint = GetApiUrl(balancer, "/tenantinfo?tablets=1&offload_merge=1&storage=1&nodes=1&users=1&timeout=55000");
+                        balancerEndpointBuilder << "?tablets=0"; // default
                     }
+                    if (Request.Parameters["offload"] == "1") {
+                        balancerEndpointBuilder << "&offload_merge=1";
+                    } else {
+                        balancerEndpointBuilder << "&offload_merge=0"; // default
+                    }
+                    balancerEndpointBuilder << "&storage=1&nodes=0&users=0&timeout=55000";
+                    balancerEndpoint = GetApiUrl(balancer, balancerEndpointBuilder);
                     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(balancerEndpoint);
                     TString authHeaderValue = GetAuthHeaderValue(apiUserTokenName);
                     if (balancerEndpoint.StartsWith("https") && !authHeaderValue.empty()) {
@@ -196,9 +203,17 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-        TStringBuf status = event->Get()->Response->Status;
-        if (event->Get()->Error.empty() && status == "200") {
+        if (event->Get()->Error.empty() && event->Get()->Response && event->Get()->Response->Status == "200") {
             NJson::ReadJsonTree(event->Get()->Response->Body, &JsonReaderConfig, &TenantInfo);
+        } else {
+            if (event->Get()->Response && event->Get()->Response->Status.size() == 3) {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(event->Get()->Response->Reverse(Request.Request)));
+            } else if (!event->Get()->Error.empty()) {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request.Request->CreateResponseServiceUnavailable(event->Get()->Error, "text/plain")));
+            } else {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request.Request->CreateResponseServiceUnavailable("Endpoint returned unknown status", "text/plain")));
+            }
+            return Die(ctx);
         }
         if (--Requests == 0) {
             ReplyAndDie(ctx);

@@ -1,11 +1,14 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/mind/hive/hive.h>
+
+#include "checks.h"
 
 using namespace NKikimr;
 using namespace NKikimr::NSchemeShard;
@@ -41,7 +44,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateOlapStore TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -122,7 +125,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateOlapStore TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -207,7 +210,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateOlapStore TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -327,12 +330,10 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
-            if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "OLAP schema operations are not supported");
-                return result;
-            }
+        if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->OlapStores.empty()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "OLAP schema operations are not supported");
+            return result;
         }
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
@@ -396,9 +397,17 @@ public:
             return result;
         }
 
+        auto domainInfo = parentPath.DomainInfo();
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+
         TProposeErrorCollector errors(*result);
         TOlapStoreInfo::TPtr storeInfo = std::make_shared<TOlapStoreInfo>();
         if (!storeInfo->ParseFromRequest(createDescription, errors)) {
+            return result;
+        }
+
+        if (!NKikimr::NSchemeShard::NOlap::CheckLimits(limits, storeInfo, errStr)) {
+            result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
         }
 
@@ -518,6 +527,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateColumnStore().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateColumnStore()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateOlapStore>(id, tx);

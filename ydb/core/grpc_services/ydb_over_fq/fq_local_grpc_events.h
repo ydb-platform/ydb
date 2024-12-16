@@ -27,6 +27,11 @@ public:
 
         return TBase::GetPeerMetaValues(key);
     }
+
+    TString GetPeer() const override {
+        return TBase::GetBaseRequest().GetPeerName();
+    }
+
 private:
     TString Scope_;
 };

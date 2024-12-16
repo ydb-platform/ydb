@@ -6,18 +6,18 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
-#include <ydb/library/yql/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/url_builder.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/url_builder.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -69,25 +69,15 @@ struct TDqSolomonReadParams {
     NSo::NProto::TDqSolomonSource Source;
 };
 
-TString GetReadSolomonUrl(const TString& endpoint, bool useSsl, const TString& project, const ::NYql::NSo::NProto::ESolomonClusterType& type) {
+TString GetReadSolomonUrl(const TString& endpoint, bool useSsl, const TString& project) {
     TUrlBuilder builder((useSsl ? "https://" : "http://") + endpoint);
 
-    switch (type) {
-        case NSo::NProto::ESolomonClusterType::CT_SOLOMON: {
-            builder.AddPathComponent("api");
-            builder.AddPathComponent("v2");
-            builder.AddPathComponent("projects");
-            builder.AddPathComponent(project);
-            builder.AddPathComponent("sensors");
-            builder.AddPathComponent("data");
-            break;
-        }
-        case NSo::NProto::ESolomonClusterType::CT_MONITORING: {
-            [[fallthrough]];
-        }
-        default:
-            Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(type));
-    }
+    builder.AddPathComponent("api");
+    builder.AddPathComponent("v2");
+    builder.AddPathComponent("projects");
+    builder.AddPathComponent(project);
+    builder.AddPathComponent("sensors");
+    builder.AddPathComponent("data");
 
     return builder.Build();
 }
@@ -260,13 +250,13 @@ private:
     TString GetUrl() const {
         return GetReadSolomonUrl(ReadParams.Source.GetEndpoint(),
                 ReadParams.Source.GetUseSsl(),
-                ReadParams.Source.GetProject(),
-                ReadParams.Source.GetClusterType());
+                ReadParams.Source.GetProject());
     }
 
     NHttp::THttpOutgoingRequestPtr BuildSolomonRequest(TStringBuf data) {
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Url);
         FillAuth(httpRequest);
+        httpRequest->Set("x-client-id", "yql");
         httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/json");
         httpRequest->Set<&NHttp::THttpRequest::Body>(data);
         return httpRequest;
@@ -367,6 +357,12 @@ private:
             TIssues issues { TIssue(TStringBuilder() << "Failed to parse response from monitoring: " << e.what()) };
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
             return;
+        }
+
+        if (json.IsMap() && !json.GetMapSafe().count("vector")) {
+            NJson::TJsonValue newJson;
+            newJson["vector"sv].AppendValue(std::move(json));
+            json = std::move(newJson);
         }
 
         Batch.push_back(json);

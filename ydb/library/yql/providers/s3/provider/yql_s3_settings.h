@@ -1,9 +1,10 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/config/yql_dispatch.h>
-#include <ydb/library/yql/providers/common/config/yql_setting.h>
+#include <yql/essentials/providers/common/config/yql_dispatch.h>
+#include <yql/essentials/providers/common/config/yql_setting.h>
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 namespace NYql {
 
@@ -30,6 +31,7 @@ struct TS3Settings {
     NCommon::TConfSetting<ui64, false> FileQueuePrefetchSize;
     NCommon::TConfSetting<bool, false> AsyncDecoding;  // Parse and decode input data at separate mailbox/thread of TaskRunner
     NCommon::TConfSetting<bool, false> UsePredicatePushdown;
+    NCommon::TConfSetting<bool, false> AsyncDecompressing;  // Decompression and parsing input data in different mailbox/thread
 };
 
 struct TS3ClusterSettings {
@@ -57,7 +59,6 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     ui64 MaxDiscoveryFilesPerQuery = 0;
     ui64 MaxDirectoriesAndFilesPerQuery = 0;
     ui64 MinDesiredDirectoriesOfFilesPerQuery = 0;
-    ui64 MaxReadSizePerQuery = 0;
     ui64 MaxInflightListsPerQuery = 0;
     ui64 ListingCallbackThreadCount = 0;
     ui64 ListingCallbackPerThreadQueueSize = 0;
@@ -68,6 +69,7 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     bool WriteThroughDqIntegration = false;
     ui64 MaxListingResultSizePerPhysicalPartition;
     bool AllowAtomicUploadCommit = true;
+    NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
 };
 
 } // NYql

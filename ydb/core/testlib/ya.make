@@ -84,11 +84,12 @@ PEERDIR(
     ydb/library/mkql_proto/protos
     ydb/library/persqueue/topic_parser
     ydb/library/security
-    ydb/library/yql/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm14
     ydb/library/yql/providers/s3/actors_factory
-    ydb/library/yql/providers/yt/codec/codegen
-    ydb/library/yql/providers/yt/comp_nodes/llvm14
-    ydb/library/yql/public/udf/service/exception_policy
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/llvm14
+    yql/essentials/public/udf/service/exception_policy
+    ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/client/ydb_driver
@@ -100,7 +101,10 @@ PEERDIR(
     ydb/services/datastreams
     ydb/services/discovery
     ydb/services/ext_index/service
+    ydb/services/ymq
     ydb/core/tx/conveyor/service
+    ydb/core/tx/priorities/service
+    ydb/core/tx/limiter/grouped_memory/usage
     ydb/services/fq
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery
@@ -109,6 +113,7 @@ PEERDIR(
     ydb/services/replication
     ydb/services/monitoring
     ydb/services/metadata/ds_table
+    ydb/services/tablet
     ydb/services/ydb
 
     ydb/core/http_proxy

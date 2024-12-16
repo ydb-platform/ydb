@@ -81,6 +81,13 @@ struct TEvPDiskFormattingFinished : public TEventLocal<TEvPDiskFormattingFinishe
     }
 };
 
+struct TEvPDiskMetadataLoaded : public TEventLocal<TEvPDiskMetadataLoaded, TEvBlobStorage::EvPDiskMetadataLoaded> {
+    std::optional<TRcBuf> Metadata;
+
+    TEvPDiskMetadataLoaded(std::optional<TRcBuf> metadata)
+        : Metadata(std::move(metadata))
+    {}
+};
 
 ////////////////////////////////////////////////////////////////////////////
 // This event is used for continuing log reading if it is not possible

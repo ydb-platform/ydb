@@ -43,11 +43,6 @@ public:
         return LoggingTag_;
     }
 
-    EPollablePriority GetPriority() const override
-    {
-        return EPollablePriority::Normal;
-    }
-
     void OnEvent(EPollControl control) override
     {
         // NB: Retry is the only event we trigger in this unittest via |IPoller::Retry|.
@@ -132,7 +127,7 @@ TEST_F(TThreadPoolPollerTest, SimpleReconfigure)
     auto pollable = New<TPollableMock>();
     EXPECT_TRUE(Poller->TryRegister(pollable));
 
-    Poller->Reconfigure(InitialThreadCount * 2);
+    Poller->SetThreadCount(InitialThreadCount * 2);
 
     std::vector<TFuture<void>> futures{
         Poller->Unregister(pollable),
@@ -189,7 +184,7 @@ TEST_F(TThreadPoolPollerTest, Stress)
     auxThreads.emplace_back([&] {
         for (int j = 0; j < 10; ++j) {
             for (int i = 1, sign = -1; i < 10; ++i, sign *= -1) {
-                Poller->Reconfigure(InitialThreadCount + sign * i);
+                Poller->SetThreadCount(InitialThreadCount + sign * i);
             }
             std::this_thread::yield();
         }

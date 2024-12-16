@@ -3,10 +3,10 @@
 #include <yt/yt/core/ytree/yson_struct.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/yql/core/file_storage/file_storage.h>
+#include <yql/essentials/core/file_storage/file_storage.h>
 #include <ydb/library/yql/providers/dq/global_worker_manager/coordination_helper.h>
 #include <ydb/library/yql/providers/dq/service/service_node.h>
-#include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
+#include <yql/essentials/providers/common/metrics/metrics_registry.h>
 
 #include <library/cpp/yt/yson_string/string.h>
 #include <library/cpp/yt/memory/ref_counted.h>
@@ -31,6 +31,7 @@ struct TDqManagerConfig
     NYTree::INodePtr YtCoordinator;
     NYTree::INodePtr Scheduler;
     NYTree::INodePtr ICSettings;
+    NYTree::INodePtr AddressResolver;
 
     TMap<TString, TString> UdfsWithMd5; // autofilled by yql_plugin
     NYql::TFileStoragePtr FileStorage; // autofilled by yql_plugin

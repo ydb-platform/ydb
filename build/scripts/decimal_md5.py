@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
 import hashlib
 import struct
 import sys
@@ -20,9 +21,9 @@ def ensure_paths_exist(paths):
         if not os.path.exists(path)
     )
     if bad_paths:
-        print >> sys.stderr, "decimal_md5 inputs do not exist:"
+        print("decimal_md5 inputs do not exist:", file=sys.stderr)
         for path in bad_paths:
-            print >> sys.stderr, path
+            print(path, file=sys.stderr)
         sys.exit(1)
 
 

@@ -284,10 +284,13 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakC
 
                         if (deletePredicate(it->second.get(), sessions.size())) {
                             sessionsToDelete.emplace_back(std::move(it->second));
-                        } else {
+                            sessions.erase(it++);
+                        } else if (cmd) {
                             sessionsToTouch.emplace_back(std::move(it->second));
+                            sessions.erase(it++);
+                        } else {
+                            it++;
                         }
-                        sessions.erase(it++);
                     }
                 }
 

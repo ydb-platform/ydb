@@ -4,11 +4,11 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
-#include <ydb/core/fq/libs/exceptions/exceptions.h>
+#include <yql/essentials/utils/exceptions.h>
 
 namespace NFq {
 

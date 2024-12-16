@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/core/protos/kqp.pb.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -63,6 +63,7 @@ public:
     virtual void ResetRowsProcessing(ui64 readId, ui32 firstUnprocessedQuery, TMaybe<TOwnedCellVec> lastProcessedKey) = 0;
 
 protected:
+    const NKikimrKqp::TKqpStreamLookupSettings Settings;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
     const NYql::NDqProto::TTaskInput& InputDesc;

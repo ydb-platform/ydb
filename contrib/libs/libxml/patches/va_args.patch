@@ -1,0 +1,27 @@
+--- a/xmlwriter.c	2014-10-03 15:28:06.000000000 +0400
++++ b/xmlwriter.c	2014-11-19 21:21:29.817274759 +0300
+@@ -35,19 +35,13 @@
+  * be sufficient for libxml2.
+  */
+ #ifndef VA_COPY
+-  #ifdef HAVE_VA_COPY
++  #ifndef _WIN32
++    #ifndef va_copy
++        #define va_copy __va_copy
++    #endif
+     #define VA_COPY(dest, src) va_copy(dest, src)
+   #else
+-    #ifdef HAVE___VA_COPY
+-      #define VA_COPY(dest,src) __va_copy(dest, src)
+-    #else
+-      #ifndef VA_LIST_IS_ARRAY
+-        #define VA_COPY(dest,src) (dest) = (src)
+-      #else
+-        #include <string.h>
+-        #define VA_COPY(dest,src) memcpy((char *)(dest),(char *)(src),sizeof(va_list))
+-      #endif
+-    #endif
++    #define VA_COPY(dest,src) (dest) = (src)
+   #endif
+ #endif
+ 

@@ -13,12 +13,13 @@ namespace NYT::NRpc {
 struct TAuthenticationIdentity
 {
     TAuthenticationIdentity() = default;
-    explicit TAuthenticationIdentity(TString user, TString userTag = {});
+    explicit TAuthenticationIdentity(const std::string& user, const std::string& userTag = {});
 
     bool operator==(const TAuthenticationIdentity& other) const = default;
 
-    TString User;
-    TString UserTag;
+    // TODO(babenko): consider wrapping with std::optional
+    std::string User;
+    std::string UserTag;
 };
 
 //! Returns the current identity.

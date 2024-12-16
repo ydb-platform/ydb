@@ -4,8 +4,8 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/grpc/draft/ydb_replication_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -19,6 +19,7 @@ namespace NReplication {
 TConnectionParams::TConnectionParams(const Ydb::Replication::ConnectionParams& params) {
     DiscoveryEndpoint(params.endpoint());
     Database(params.database());
+    SslCredentials(params.enable_ssl());
 
     switch (params.credentials_case()) {
     case Ydb::Replication::ConnectionParams::kStaticCredentials:
@@ -45,6 +46,10 @@ const TString& TConnectionParams::GetDiscoveryEndpoint() const {
 
 const TString& TConnectionParams::GetDatabase() const {
     return *Database_;
+}
+
+bool TConnectionParams::GetEnableSsl() const {
+    return SslCredentials_->IsEnabled;
 }
 
 TConnectionParams::ECredentials TConnectionParams::GetCredentials() const {

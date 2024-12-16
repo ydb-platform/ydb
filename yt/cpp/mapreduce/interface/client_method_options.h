@@ -37,6 +37,7 @@ enum ENodeType : int
     NT_LINK                 /* "link" */,
     NT_GROUP                /* "group" */,
     NT_PORTAL               /* "portal_entrance" */,
+    NT_CHAOS_TABLE_REPLICA  /* "chaos_table_replica" */,
 };
 
 ///
@@ -1483,6 +1484,9 @@ struct TSkyShareTableOptions
 
     /// @brief Allow skynet manager to return fastbone links to skynet. See YT-11437
     FLUENT_FIELD_OPTION(bool, EnableFastbone);
+
+    /// @brief Custom pool.
+    FLUENT_FIELD_OPTION(TString, Pool);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

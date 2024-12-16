@@ -58,7 +58,7 @@ from zope.interface.interface import _wire
 _wire()
 del _wire
 
-from zope.interface.declarations import Declaration
+from zope.interface.declarations import Declaration  # isort: skip
 # The following are to make spec pickles cleaner
 from zope.interface.declarations import Provides
 from zope.interface.declarations import alsoProvides

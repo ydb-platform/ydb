@@ -353,6 +353,12 @@ std::vector<CPUInfo::CacheInfo> GetCacheSizesWindows() {
     C.size = static_cast<int>(cache.Size);
     C.type = "Unknown";
     switch (cache.Type) {
+// Windows SDK version >= 10.0.26100.0
+// 0x0A000010 is the value of NTDDI_WIN11_GE
+#if NTDDI_VERSION >= 0x0A000010
+      case CacheUnknown:
+        break;
+#endif
       case CacheUnified:
         C.type = "Unified";
         break;
@@ -508,7 +514,8 @@ int GetNumCPUsImpl() {
   int max_id = -1;
   std::ifstream f("/proc/cpuinfo");
   if (!f.is_open()) {
-    PrintErrorAndDie("Failed to open /proc/cpuinfo");
+    std::cerr << "Failed to open /proc/cpuinfo\n";
+    return -1;
   }
 #if defined(__alpha__)
   const std::string Key = "cpus detected";
@@ -557,9 +564,8 @@ int GetNumCPUsImpl() {
 int GetNumCPUs() {
   const int num_cpus = GetNumCPUsImpl();
   if (num_cpus < 1) {
-    PrintErrorAndDie(
-        "Unable to extract number of CPUs.  If your platform uses "
-        "/proc/cpuinfo, custom support may need to be added.");
+    std::cerr << "Unable to extract number of CPUs.  If your platform uses "
+                 "/proc/cpuinfo, custom support may need to be added.\n";
   }
   return num_cpus;
 }

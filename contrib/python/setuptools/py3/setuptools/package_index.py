@@ -627,7 +627,7 @@ class PackageIndex(Environment):
         """
         # process a Requirement
         self.info("Searching for %s", requirement)
-        skipped = {}
+        skipped = set()
         dist = None
 
         def find(req, env=None):
@@ -642,7 +642,7 @@ class PackageIndex(Environment):
                             "Skipping development or system egg: %s",
                             dist,
                         )
-                        skipped[dist] = 1
+                        skipped.add(dist)
                     continue
 
                 test = dist in req and (dist.precedence <= SOURCE_DIST or not source)
@@ -856,7 +856,7 @@ class PackageIndex(Environment):
     def _download_vcs(self, url, spec_filename):
         vcs = self._resolve_vcs(url)
         if not vcs:
-            return
+            return None
         if vcs == 'svn':
             raise DistutilsError(
                 f"Invalid config, SVN download is not supported: {url}"
@@ -1136,9 +1136,7 @@ def local_open(url):
                 f += '/'
             files.append('<a href="{name}">{name}</a>'.format(name=f))
         else:
-            tmpl = (
-                "<html><head><title>{url}</title>" "</head><body>{files}</body></html>"
-            )
+            tmpl = "<html><head><title>{url}</title></head><body>{files}</body></html>"
             body = tmpl.format(url=url, files='\n'.join(files))
         status, message = 200, "OK"
     else:

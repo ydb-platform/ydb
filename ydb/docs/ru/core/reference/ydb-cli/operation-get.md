@@ -22,7 +22,7 @@
 
 Имя | Описание
 ---|---
-`--format` | Формат вывода.<br>Значение по умолчанию — `pretty`.<br>Возможные значения:<ul><li>`pretty` — человекочитаемый формат;</li><li>`proto-json-base64` — вывод Protobuf в формате [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}, бинарные строки закодированы в [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}.</li></ul>
+`--format` | Формат вывода.<br/>Значение по умолчанию — `pretty`.<br/>Возможные значения:<ul><li>`pretty` — человекочитаемый формат;</li><li>`proto-json-base64` — вывод Protobuf в формате [JSON](https://ru.wikipedia.org/wiki/JSON), бинарные строки закодированы в [Base64](https://ru.wikipedia.org/wiki/Base64).</li></ul>
 
 ## Примеры {examples}
 
@@ -31,7 +31,7 @@
 Получите статус фоновой операции с идентификатором `ydb://buildindex/7?id=281489389055514`:
 
 ```bash
-ydb -p quickstart operation get \
+{{ ydb-cli }} -p quickstart operation get \
   'ydb://buildindex/7?id=281489389055514'
 ```
 

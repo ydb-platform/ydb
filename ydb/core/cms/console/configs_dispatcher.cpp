@@ -66,6 +66,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::TracingConfigItem,
     (ui32)NKikimrConsole::TConfigItem::BlobStorageConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MetadataCacheConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::MemoryControllerConfigItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -300,7 +301,13 @@ void TConfigsDispatcher::Bootstrap()
         CurrentConfig,
         0,
         true,
-        1);
+        1,
+        {},
+        {},
+        TNodeInfo{
+            .Tenant = Labels.contains("tenant") ? Labels.at("tenant") : TString(""),
+            .NodeType = Labels.contains("node_type") ? Labels.at("node_type") : TString(""),
+        });
     CommonSubscriptionClient = RegisterWithSameMailbox(commonClient);
 
     Become(&TThis::StateInit);
@@ -927,7 +934,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         if (subscription->Yaml && YamlConfigEnabled) {
             ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(subscription->Kinds), BaseConfig);
         } else {
-            Y_FOR_EACH_BIT(kind, kinds) {
+            Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 if (affectedKinds.contains(kind)) {
                     hasAffectedKinds = true;
                 }
@@ -941,15 +948,15 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             ReplaceConfigItems(ev->Get()->Record.GetConfig(), trunc, FilterKinds(kinds), BaseConfig);
         }
 
-        if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc) || CurrentStateFunc() == &TThis::StateInit) {
+        if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc, FilterKinds(kinds)) || CurrentStateFunc() == &TThis::StateInit) {
             subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
             subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
             subscription->UpdateInProcess->Record.SetLocal(true);
-            Y_FOR_EACH_BIT(kind, kinds) {
+            Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
-            subscription->UpdateInProcessConfigVersion = FilterVersion(ev->Get()->Record.GetConfig().GetVersion(), kinds);
+            subscription->UpdateInProcessConfigVersion = FilterVersion(ev->Get()->Record.GetConfig().GetVersion(), FilterKinds(kinds));
 
             if (YamlConfigEnabled) {
                 UpdateYamlVersion(subscription);
@@ -1046,6 +1053,12 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
         "SetConfigSubscriptionRequest handler");
     Y_UNUSED(nonYamlKinds);
     auto kinds = KindsToBitMap(ev->Get()->ConfigItemKinds);
+
+    auto truncKinds = FilterKinds(kinds);
+    if (truncKinds.Empty() && !kinds.Empty()) {
+        return;
+    }
+
     auto subscriberActor = ev->Get()->Subscriber ? ev->Get()->Subscriber : ev->Sender;
 
     auto subscription = FindSubscription(kinds);

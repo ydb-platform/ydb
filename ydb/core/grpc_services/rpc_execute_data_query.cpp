@@ -1,5 +1,6 @@
 #include "service_table.h"
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include "rpc_kqp_base.h"
 #include "rpc_common/rpc_common.h"
 #include "service_table.h"
@@ -15,7 +16,7 @@
 
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -59,6 +60,7 @@ public:
         const auto requestType = Request_->GetRequestType();
 
         AuditContextAppend(Request_.get(), *req);
+        NDataIntegrity::LogIntegrityTrails(traceId, *req, ctx);
 
         if (!CheckSession(req->session_id(), Request_.get())) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
@@ -169,25 +171,22 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& record = ev->Get()->Record.GetRef();
+        NDataIntegrity::LogIntegrityTrails(Request_->GetTraceId(), *GetProtoRequest(), ev, ctx);
+
+        auto& record = ev->Get()->Record;
         SetCost(record.GetConsumedRu());
         AddServerHintsIfAny(record);
 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             const auto& kqpResponse = record.GetResponse();
             const auto& issueMessage = kqpResponse.GetQueryIssues();
-            auto queryResult = TEvExecuteDataQueryRequest::AllocateResult<Ydb::Table::ExecuteQueryResult>(Request_);
+            auto queryResult = ev->Get()->Arena->Allocate<Ydb::Table::ExecuteQueryResult>();
 
             try {
                 if (kqpResponse.GetYdbResults().size()) {
-                    Y_DEBUG_ABORT_UNLESS(!kqpResponse.GetYdbResults().GetArena() ||
-                        queryResult->mutable_result_sets()->GetArena() == kqpResponse.GetYdbResults().GetArena());
-                    // https://protobuf.dev/reference/cpp/arenas/#swap
-                    // Actualy will be copy in case pf remote execution
                     queryResult->mutable_result_sets()->Swap(record.MutableResponse()->MutableYdbResults());
-                } else {
-                    NKqp::ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
                 }
+
                 ConvertQueryStats(kqpResponse, queryResult);
                 if (kqpResponse.HasTxMeta()) {
                     queryResult->mutable_tx_meta()->CopyFrom(kqpResponse.GetTxMeta());

@@ -68,6 +68,13 @@ def main():
     b = Builder()
     b.add_link("bindings.json", f"bindings_{args.variant}_{args.syntax}.json")
     b.add_vars({"data": f"{args.variant}/{args.dataset_size}", "cluster_name": args.cluster_name, "table_path_prefix": table_path_prefix})
+    if args.decimal:
+        if args.variant == "h":
+            b.add_vars({"numeric": '"Decimal", "12", "2"'})
+        else:
+            b.add_vars({"numeric": '"Decimal", "7", "2"'})
+    else:
+        b.add_vars({"numeric": '"Double"'})
     b.add("custom_pragmas", custom_pragmas)
     if p.pragmas:
         b.add_link("pragmas.sql", p.pragmas)

@@ -17,6 +17,7 @@ struct TGrpcEndpointDescription : public TThrRefBase {
 
     TVector<TString> ServedServices;
     TVector<TString> ServedDatabases;
+    TString EndpointId;
 };
 
 IActor* CreateGrpcEndpointPublishActor(TGrpcEndpointDescription *description);

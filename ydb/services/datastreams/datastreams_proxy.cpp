@@ -63,6 +63,78 @@ namespace NKikimr::NDataStreams::V1 {
             }
             return true;
         }
+
+        TString ValidatePartitioningSettings(const ::Ydb::DataStreams::V1::PartitioningSettings& s) {
+            if (s.auto_partitioning_settings().strategy() == ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP
+                || s.auto_partitioning_settings().strategy() == ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN
+                || s.auto_partitioning_settings().strategy() == ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED) {
+
+                if (s.min_active_partitions() < 0) {
+                    return "min_active_partitions must be great than 0";
+                }
+
+                if (s.max_active_partitions() < 0) {
+                    return "max_active_partitions must be great than 0";
+                }
+
+                if (s.min_active_partitions() > s.max_active_partitions()) {
+                    return TStringBuilder() << "max_active_partitions must be great or equals than min_active_partitions but "
+                        << s.max_active_partitions() << " less then  " << s.min_active_partitions();
+                }
+
+                auto& ws = s.auto_partitioning_settings().partition_write_speed();
+
+                if (ws.up_utilization_percent() && (ws.up_utilization_percent() < 0 || ws.up_utilization_percent() > 100)) {
+                    return "up_utilization_percent must be between 0 and 100";
+                }
+                if (ws.down_utilization_percent() && (ws.down_utilization_percent() < 0 || ws.down_utilization_percent() > 100)) {
+                    return "down_utilization_percent must be between 0 and 100";
+                }
+            }
+
+            return {};
+        }
+
+        void SetShardProperties(::Ydb::DataStreams::V1::Shard* shard,
+                                const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartition& partition,
+                                const bool autoPartitioningEnabled,
+                                const size_t allShardsCount,
+                                const std::map<ui64, std::pair<ui64, ui64>>& offsets) {
+            shard->set_shard_id(GetShardName(partition.GetPartitionId()));
+
+
+            const auto& parents = partition.GetParentPartitionIds();
+            if (parents.size() > 0) {
+                shard->set_parent_shard_id(GetShardName(parents[0]));
+            }
+            if (parents.size() > 1) {
+                shard->set_adjacent_parent_shard_id(GetShardName(parents[1]));
+            }
+
+            auto* rangeProto = shard->mutable_hash_key_range();
+            if (autoPartitioningEnabled) {
+                NYql::NDecimal::TUint128 from = partition.HasKeyRange() && partition.GetKeyRange().HasFromBound()
+                        ? NPQ::AsInt<NYql::NDecimal::TUint128>(partition.GetKeyRange().GetFromBound()) + 1: 0;
+                NYql::NDecimal::TUint128 to = partition.HasKeyRange() && partition.GetKeyRange().HasToBound()
+                        ? NPQ::AsInt<NYql::NDecimal::TUint128>(partition.GetKeyRange().GetToBound()): -1;
+                rangeProto->set_starting_hash_key(Uint128ToDecimalString(from));
+                rangeProto->set_ending_hash_key(Uint128ToDecimalString(to));
+            } else {
+                auto range = RangeFromShardNumber(partition.GetPartitionId(), allShardsCount);
+                rangeProto->set_starting_hash_key(Uint128ToDecimalString(range.Start));
+                rangeProto->set_ending_hash_key(Uint128ToDecimalString(range.End));
+            }
+
+            auto it = offsets.find(partition.GetPartitionId());
+            if (it != offsets.end()) {
+                auto* rangeProto = shard->mutable_sequence_number_range();
+                rangeProto->set_starting_sequence_number(TStringBuilder() << it->second.first);
+
+                if (::NKikimrPQ::ETopicPartitionStatus::Active != partition.GetStatus()) {
+                    rangeProto->set_ending_sequence_number(TStringBuilder() << it->second.second);
+                }
+            }
+        }
     }
 
 
@@ -139,13 +211,39 @@ namespace NKikimr::NDataStreams::V1 {
                         break;
                     default:
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
-                                      "streams can't be created with unknown metering mode", ctx);
+                                      "streams can't be created with unknown metering mode");
                 }
             }
         } else {
             if (GetProtoRequest()->has_stream_mode_details()) {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
-                              "streams can't be created with metering mode", ctx);
+                              "streams can't be created with metering mode");
+            }
+        }
+
+        if (GetProtoRequest()->has_partitioning_settings()) {
+            auto r = ValidatePartitioningSettings(GetProtoRequest()->partitioning_settings());
+            if (!r.empty()) {
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT), r);
+            }
+
+            auto& s = GetProtoRequest()->partitioning_settings();
+            auto& as = s.auto_partitioning_settings();
+
+            auto* t = topicRequest.mutable_partitioning_settings();
+            auto* at = t->mutable_auto_partitioning_settings();
+
+            at->set_strategy(static_cast<::Ydb::Topic::AutoPartitioningStrategy>(as.strategy()));
+            if (at->strategy() != ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) {
+                t->set_min_active_partitions(s.min_active_partitions());
+                t->set_max_active_partitions(s.max_active_partitions());
+
+                auto& ws = as.partition_write_speed();
+                auto* wt = at->mutable_partition_write_speed();
+
+                wt->mutable_stabilization_window()->CopyFrom(ws.stabilization_window());
+                wt->set_up_utilization_percent(ws.up_utilization_percent());
+                wt->set_down_utilization_percent(ws.down_utilization_percent());
             }
         }
 
@@ -160,10 +258,10 @@ namespace NKikimr::NDataStreams::V1 {
 
         pqDescr->SetPartitionPerTablet(1);
         TString error;
-        TYdbPqCodes codes = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(name, topicRequest, modifyScheme, ctx, error,
+        TYdbPqCodes codes = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(name, topicRequest, modifyScheme, AppData(ctx), error,
                                                                       workingDir, proposal.Record.GetDatabaseName());
         if (codes.YdbCode != Ydb::StatusIds::SUCCESS) {
-            return ReplyWithError(codes.YdbCode, codes.PQCode, error, ctx);
+            return ReplyWithError(codes.YdbCode, codes.PQCode, error);
         }
     }
 
@@ -175,8 +273,7 @@ namespace NKikimr::NDataStreams::V1 {
         {
             return ReplyWithError(Ydb::StatusIds::ALREADY_EXISTS,
                                   static_cast<size_t>(NYds::EErrorCodes::IN_USE),
-                                  TStringBuilder() << "Stream with name " << GetProtoRequest()->stream_name() << " already exists",
-                                  ctx);
+                                  TStringBuilder() << "Stream with name " << GetProtoRequest()->stream_name() << " already exists");
         }
         return TBase::TBase::Handle(ev, ctx);
     }
@@ -243,7 +340,7 @@ namespace NKikimr::NDataStreams::V1 {
         if (NPQ::ConsumerCount(pqGroupDescription.GetPQTabletConfig()) > 0 && EnforceDeletion == false) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::IN_USE),
                                   TStringBuilder() << "Stream has registered consumers" <<
-                                  "and EnforceConsumerDeletion flag is false", ActorContext());
+                                  "and EnforceConsumerDeletion flag is false");
         }
 
         SendProposeRequest(ActorContext());
@@ -260,10 +357,10 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         void Bootstrap(const TActorContext& ctx);
-        void ModifyPersqueueConfig(const TActorContext& ctx,
+        void ModifyPersqueueConfig(TAppData* appData,
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                                   const NKikimrSchemeOp::TDirEntry& selfInfo);
+                                   const NKikimrSchemeOp::TDirEntry& selfInfo) override;
     };
 
     void TUpdateShardCountActor::Bootstrap(const TActorContext& ctx) {
@@ -273,16 +370,17 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TUpdateShardCountActor::ModifyPersqueueConfig(
-        const TActorContext& ctx,
+        TAppData* appData,
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
         Y_UNUSED(selfInfo);
+        Y_UNUSED(appData);
 
         TString error;
         if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error)) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT), error, ctx);
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT), error);
         }
 
         groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
@@ -300,10 +398,10 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         void Bootstrap(const TActorContext& ctx);
-        void ModifyPersqueueConfig(const TActorContext& ctx,
+        void ModifyPersqueueConfig(TAppData* appData,
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                                   const NKikimrSchemeOp::TDirEntry& selfInfo);
+                                   const NKikimrSchemeOp::TDirEntry& selfInfo) override;
     };
 
     void TUpdateStreamModeActor::Bootstrap(const TActorContext& ctx) {
@@ -313,16 +411,16 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TUpdateStreamModeActor::ModifyPersqueueConfig(
-        const TActorContext& ctx,
+        TAppData* appData,
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
         Y_UNUSED(selfInfo);
         Y_UNUSED(pqGroupDescription);
-        if (!AppData(ctx)->PQConfig.GetBillingMeteringConfig().GetEnabled()) {
+        if (!appData->PQConfig.GetBillingMeteringConfig().GetEnabled()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
-                      "streams can't be created with metering mode", ctx);
+                      "streams can't be created with metering mode");
         }
 
         switch(GetProtoRequest()->stream_mode_details().stream_mode()) {
@@ -334,7 +432,7 @@ namespace NKikimr::NDataStreams::V1 {
                 break;
             default:
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
-                              "streams can't be created with unknown metering mode", ctx);
+                              "streams can't be created with unknown metering mode");
         }
     }
 
@@ -352,7 +450,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         void Bootstrap(const TActorContext& ctx);
-        void ModifyPersqueueConfig(const TActorContext& ctx,
+        void ModifyPersqueueConfig(TAppData* appData,
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo);
@@ -365,7 +463,7 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TUpdateStreamActor::ModifyPersqueueConfig(
-        const TActorContext& ctx,
+        TAppData* appData,
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
@@ -373,12 +471,7 @@ namespace NKikimr::NDataStreams::V1 {
         Y_UNUSED(selfInfo);
 
         TString error;
-        if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
-        {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::BAD_REQUEST), error, ctx);
-        }
 
-        groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
         switch (GetProtoRequest()->retention_case()) {
             case Ydb::DataStreams::V1::UpdateStreamRequest::RetentionCase::kRetentionPeriodHours:
                 groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(
@@ -395,15 +488,16 @@ namespace NKikimr::NDataStreams::V1 {
             default: {}
         }
 
-        auto* pqConfig = groupConfig.MutablePQTabletConfig();
+        auto* tabletConfig = groupConfig.MutablePQTabletConfig();
 
-        pqConfig->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(
+        tabletConfig->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(
                     PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec()));
 
+        const auto& pqConfig = appData->PQConfig;
         if (GetProtoRequest()->has_stream_mode_details()) {
-            if (!AppData(ctx)->PQConfig.GetBillingMeteringConfig().GetEnabled()) {
+            if (!pqConfig.GetBillingMeteringConfig().GetEnabled()) {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
-                      "streams can't be created with metering mode", ctx);
+                      "streams can't be created with metering mode");
             }
 
             switch(GetProtoRequest()->stream_mode_details().stream_mode()) {
@@ -415,16 +509,75 @@ namespace NKikimr::NDataStreams::V1 {
                     break;
                 default:
                     return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
-                                  "streams can't be created with unknown metering mode", ctx);
+                                  "streams can't be created with unknown metering mode");
             }
         }
 
-        auto serviceTypes = GetSupportedClientServiceTypes(ctx);
-        auto status = CheckConfig(*pqConfig, serviceTypes, error, ctx, Ydb::StatusIds::ALREADY_EXISTS);
+        if (!GetProtoRequest()->has_partitioning_settings() ||
+            (GetProtoRequest()->partitioning_settings().has_auto_partitioning_settings() &&
+            (GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() == Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) ||
+            (GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() == Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED))) {
+
+            if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
+            {
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::BAD_REQUEST), error);
+            }
+
+            groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
+
+        } else {
+            auto r = ValidatePartitioningSettings(GetProtoRequest()->partitioning_settings());
+            if (!r.empty()) {
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT), r);
+            }
+
+            auto& s = GetProtoRequest()->partitioning_settings();
+            auto* t = groupConfig.MutablePQTabletConfig()->MutablePartitionStrategy();
+
+            auto& as = s.auto_partitioning_settings();
+            switch(as.strategy()) {
+                case Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED:
+                case Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED:
+                case Ydb::DataStreams::V1::AutoPartitioningStrategy::AutoPartitioningStrategy_INT_MAX_SENTINEL_DO_NOT_USE_:
+                case Ydb::DataStreams::V1::AutoPartitioningStrategy::AutoPartitioningStrategy_INT_MIN_SENTINEL_DO_NOT_USE_:
+                    t->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+                    break;
+
+                case  Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP:
+                    t->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+                    break;
+
+                case  Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN:
+                    t->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+                    break;
+
+                case  Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED:
+                    t->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED);
+                    break;
+            }
+
+            if (t->GetPartitionStrategyType() != NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
+                t->SetMinPartitionCount(s.min_active_partitions() ? s.min_active_partitions() : 1);
+                if (!s.max_active_partitions() && t->GetPartitionStrategyType() != NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
+                    t->SetMaxPartitionCount(1);
+                } else {
+                    t->SetMaxPartitionCount(s.max_active_partitions());
+                }
+
+                auto& ws = as.partition_write_speed();
+                t->SetScaleThresholdSeconds(ws.stabilization_window().seconds() ? ws.stabilization_window().seconds() : 300);
+                t->SetScaleUpPartitionWriteSpeedThresholdPercent(ws.up_utilization_percent() ? ws.up_utilization_percent() : 90);
+                t->SetScaleDownPartitionWriteSpeedThresholdPercent(ws.down_utilization_percent() ? ws.down_utilization_percent() : 30);
+            }
+        }
+
+        auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
+        auto status = CheckConfig(*tabletConfig, serviceTypes, error, pqConfig,
+                                  Ydb::StatusIds::ALREADY_EXISTS);
         if (status != Ydb::StatusIds::SUCCESS) {
             return ReplyWithError(status, status == Ydb::StatusIds::ALREADY_EXISTS ? static_cast<size_t>(NYds::EErrorCodes::IN_USE) :
                                                                                     static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR),
-                                                                                    error, ctx);
+                                                                                    error);
         }
     }
 
@@ -441,7 +594,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         void Bootstrap(const TActorContext& ctx);
-        void ModifyPersqueueConfig(const TActorContext& ctx,
+        void ModifyPersqueueConfig(TAppData* appData,
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo);
@@ -454,7 +607,7 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TSetWriteQuotaActor::ModifyPersqueueConfig(
-        const TActorContext& ctx,
+        TAppData* appData,
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
@@ -464,17 +617,18 @@ namespace NKikimr::NDataStreams::V1 {
 
         TString error;
 
-        auto* pqConfig = groupConfig.MutablePQTabletConfig();
+        auto* tabletConfig = groupConfig.MutablePQTabletConfig();
 
-        pqConfig->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(GetProtoRequest()->write_quota_kb_per_sec() * 1_KB);
-        pqConfig->MutablePartitionConfig()->SetBurstSize(GetProtoRequest()->write_quota_kb_per_sec() * 1_KB);
+        tabletConfig->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(GetProtoRequest()->write_quota_kb_per_sec() * 1_KB);
+        tabletConfig->MutablePartitionConfig()->SetBurstSize(GetProtoRequest()->write_quota_kb_per_sec() * 1_KB);
 
-        auto serviceTypes = GetSupportedClientServiceTypes(ctx);
-        auto status = CheckConfig(*pqConfig, serviceTypes, error, ctx, Ydb::StatusIds::ALREADY_EXISTS);
+        const auto& pqConfig = appData->PQConfig;
+        auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
+        auto status = CheckConfig(*tabletConfig, serviceTypes, error, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
         if (status != Ydb::StatusIds::SUCCESS) {
             return ReplyWithError(status, status == Ydb::StatusIds::ALREADY_EXISTS? static_cast<size_t>(NYds::EErrorCodes::IN_USE) :
                                                                                     static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR),
-                                                                                    error, ctx);
+                                                                                    error);
         }
 
     }
@@ -500,7 +654,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         void ModifyPersqueueConfig(
-            const TActorContext& ctx,
+            TAppData* appData,
             NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
             const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
             const NKikimrSchemeOp::TDirEntry& selfInfo
@@ -511,9 +665,9 @@ namespace NKikimr::NDataStreams::V1 {
             TString error;
             Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS;
 
-            auto* pqConfig = groupConfig.MutablePQTabletConfig();
+            auto* tabletConfig = groupConfig.MutablePQTabletConfig();
 
-            ui32 currentLifetime = pqConfig->GetPartitionConfig().GetLifetimeSeconds();
+            ui32 currentLifetime = tabletConfig->GetPartitionConfig().GetLifetimeSeconds();
             ui32 newLifetime = TInstant::Hours(this->GetProtoRequest()->retention_period_hours()).Seconds();
             if (ShouldIncrease) {
                 if (newLifetime <= currentLifetime) {
@@ -528,16 +682,18 @@ namespace NKikimr::NDataStreams::V1 {
                     status = Ydb::StatusIds::BAD_REQUEST;
                 }
             }
+            const auto& pqConfig = appData->PQConfig;
             if (status == Ydb::StatusIds::SUCCESS) {
-                pqConfig->MutablePartitionConfig()->SetLifetimeSeconds(newLifetime);
+                tabletConfig->MutablePartitionConfig()->SetLifetimeSeconds(newLifetime);
 
-                auto serviceTypes = GetSupportedClientServiceTypes(ctx);
-                status = CheckConfig(*pqConfig, serviceTypes, error, ctx, Ydb::StatusIds::ALREADY_EXISTS);
+                auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
+                status = CheckConfig(*tabletConfig, serviceTypes, error,
+                                     pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
             }
 
             if (status != Ydb::StatusIds::SUCCESS) {
                 return TBase::ReplyWithError(status, status == Ydb::StatusIds::ALREADY_EXISTS ? static_cast<size_t>(NYds::EErrorCodes::IN_USE) :
-                                                                                                static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR), error, ctx);
+                                                                                                static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR), error);
             }
         }
 
@@ -562,16 +718,16 @@ namespace NKikimr::NDataStreams::V1 {
         void StateWork(TAutoPtr<IEventHandle>& ev);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
-        void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+        void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {
             if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
                 ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
-                                          TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
+                                          TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
             }
         }
 
-        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&) {
             ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
-                                          TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
+                                          TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
         }
 
         void Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
@@ -689,6 +845,32 @@ namespace NKikimr::NDataStreams::V1 {
                 );
         }
 
+        auto& ps = pqConfig.GetPartitionStrategy();
+        auto* pt = description.mutable_partitioning_settings();
+        if (ps.GetPartitionStrategyType() != NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
+            pt->set_min_active_partitions(ps.GetMinPartitionCount());
+            pt->set_max_active_partitions(ps.GetMaxPartitionCount());
+
+            if (ps.GetPartitionStrategyType() == NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT) {
+                pt->mutable_auto_partitioning_settings()->set_strategy(::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+            } else if (ps.GetPartitionStrategyType() == NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE) {
+                pt->mutable_auto_partitioning_settings()->set_strategy(::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+            } else {
+                pt->mutable_auto_partitioning_settings()->set_strategy(::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED);
+            }
+
+            pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(ps.GetScaleThresholdSeconds());
+            pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(ps.GetScaleUpPartitionWriteSpeedThresholdPercent());
+            pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(ps.GetScaleDownPartitionWriteSpeedThresholdPercent());
+        } else {
+            pt->set_min_active_partitions(PQGroup.GetPartitions().size());
+            pt->set_max_active_partitions(PQGroup.GetPartitions().size());
+            pt->mutable_auto_partitioning_settings()->set_strategy(::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED);
+            pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(300);
+            pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(90);
+            pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(30);
+        }
+
         bool startShardFound = GetProtoRequest()->exclusive_start_shard_id().empty();
         description.set_has_more_shards(false);
 
@@ -709,38 +891,13 @@ namespace NKikimr::NDataStreams::V1 {
                     break;
                 } else {
                     auto* shard = description.add_shards();
-                    shard->set_shard_id(shardName);
-
-                    const auto& parents = partition.GetParentPartitionIds();
-                    if (parents.size() > 0) {
-                        shard->set_parent_shard_id(GetShardName(parents[0]));
-                    }
-                    if (parents.size() > 1) {
-                        shard->set_adjacent_parent_shard_id(GetShardName(parents[1]));
-                    }
-
-                    auto* rangeProto = shard->mutable_hash_key_range();
-                    if (NPQ::SplitMergeEnabled(pqConfig)) {
-                        NYql::NDecimal::TUint128 from = partition.HasKeyRange() && partition.GetKeyRange().HasFromBound() ? NPQ::AsInt<NYql::NDecimal::TUint128>(partition.GetKeyRange().GetFromBound()) + 1: 0;
-                        NYql::NDecimal::TUint128 to = partition.HasKeyRange() && partition.GetKeyRange().HasToBound() ? NPQ::AsInt<NYql::NDecimal::TUint128>(partition.GetKeyRange().GetToBound()): -1;
-                        rangeProto->set_starting_hash_key(Uint128ToDecimalString(from));
-                        rangeProto->set_ending_hash_key(Uint128ToDecimalString(to));
-                    } else {
-                        auto range = RangeFromShardNumber(partitionId, PQGroup.GetPartitions().size());
-                        rangeProto->set_starting_hash_key(Uint128ToDecimalString(range.Start));
-                        rangeProto->set_ending_hash_key(Uint128ToDecimalString(range.End));
-                    }
-                    auto it = StartEndOffsetsPerPartition.find(partitionId);
-                    if (it != StartEndOffsetsPerPartition.end()) {
-                        auto* rangeProto = shard->mutable_sequence_number_range();
-                        rangeProto->set_starting_sequence_number(TStringBuilder() << it->second.first);
-                    }
+                    SetShardProperties(shard, partition, NPQ::SplitMergeEnabled(pqConfig), PQGroup.GetPartitions().size(), StartEndOffsetsPerPartition);
                 }
             }
         }
         if (!startShardFound) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                                  TStringBuilder() << "Bad shard id " << GetProtoRequest()->exclusive_start_shard_id(), ctx);
+                                  TStringBuilder() << "Bad shard id " << GetProtoRequest()->exclusive_start_shard_id());
         }
         return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
     }
@@ -958,15 +1115,15 @@ namespace NKikimr::NDataStreams::V1 {
 
         if (!GetProtoRequest()->next_token().empty() && !GetProtoRequest()->stream_arn().empty()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_PARAMETER_COMBINATION),
-                                  TStringBuilder() << "StreamArn and NextToken can not be provided together", ctx);
+                                  TStringBuilder() << "StreamArn and NextToken can not be provided together");
         }
         if (NextToken.IsExpired()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::EXPIRED_TOKEN),
-                                  TStringBuilder() << "Provided NextToken is expired", ctx);
+                                  TStringBuilder() << "Provided NextToken is expired");
         }
         if (!NextToken.IsValid()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
-                                  TStringBuilder() << "Provided NextToken is malformed", ctx);
+                                  TStringBuilder() << "Provided NextToken is malformed");
         }
 
         auto maxResultsInRange = MIN_MAX_RESULTS <= MaxResults && MaxResults <= MAX_MAX_RESULTS;
@@ -974,7 +1131,7 @@ namespace NKikimr::NDataStreams::V1 {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR),
                                   TStringBuilder() << "Requested max_result value '" << MaxResults <<
                                   "' is out of range [" << MIN_MAX_RESULTS << ", " << MAX_MAX_RESULTS <<
-                                  "]", ctx);
+                                  "]");
         }
         SendDescribeProposeRequest(ctx);
         Become(&TListStreamConsumersActor::StateWork);
@@ -1006,7 +1163,7 @@ namespace NKikimr::NDataStreams::V1 {
         if (alreadyRead > consumerCount) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
                                   TStringBuilder() << "Provided next_token is malformed - " <<
-                                  "everything is already read", ActorContext());
+                                  "everything is already read");
         }
 
         const auto rulesToRead = std::min(consumerCount - alreadyRead, MaxResults);
@@ -1054,10 +1211,10 @@ namespace NKikimr::NDataStreams::V1 {
         ~TRegisterStreamConsumerActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx);
-        void ModifyPersqueueConfig(const TActorContext& ctx,
+        void ModifyPersqueueConfig(TAppData* appData,
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                                   const NKikimrSchemeOp::TDirEntry& selfInfo);
+                                   const NKikimrSchemeOp::TDirEntry& selfInfo) override;
         void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override;
 
     private:
@@ -1076,14 +1233,14 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TRegisterStreamConsumerActor::ModifyPersqueueConfig(
-        const TActorContext& ctx,
+        TAppData* appData,
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
         Y_UNUSED(pqGroupDescription);
 
-        auto* pqConfig = groupConfig.MutablePQTabletConfig();
+        auto* tabletConfig = groupConfig.MutablePQTabletConfig();
         Ydb::PersQueue::V1::TopicSettings::ReadRule readRule;
         readRule.set_consumer_name(ConsumerName);
         readRule.set_supported_format(Ydb::PersQueue::V1::TopicSettings_Format_FORMAT_BASE);
@@ -1094,14 +1251,15 @@ namespace NKikimr::NDataStreams::V1 {
         if (readRule.version() == 0) {
             readRule.set_version(selfInfo.GetVersion().GetPQVersion());
         }
-        auto serviceTypes = GetSupportedClientServiceTypes(ctx);
 
-        auto messageAndCode = AddReadRuleToConfig(pqConfig, readRule, serviceTypes, ctx);
+        const auto& pqConfig = appData->PQConfig;
+        auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
+
+        auto messageAndCode = AddReadRuleToConfig(tabletConfig, readRule, serviceTypes, pqConfig);
         size_t issueCode = static_cast<size_t>(messageAndCode.PQCode);
-
         Ydb::StatusIds::StatusCode status;
         if (messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK) {
-            status = CheckConfig(*pqConfig, serviceTypes, messageAndCode.Message, ctx, Ydb::StatusIds::ALREADY_EXISTS);
+            status = CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
             if (status == Ydb::StatusIds::ALREADY_EXISTS) {
                 issueCode = static_cast<size_t>(NYds::EErrorCodes::IN_USE);
             }
@@ -1110,7 +1268,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         if (status != Ydb::StatusIds::SUCCESS) {
-            return ReplyWithError(status, issueCode, messageAndCode.Message, ctx);
+            return ReplyWithError(status, issueCode, messageAndCode.Message);
         }
     }
 
@@ -1139,10 +1297,10 @@ namespace NKikimr::NDataStreams::V1 {
         ~TDeregisterStreamConsumerActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx);
-        void ModifyPersqueueConfig(const TActorContext& ctx,
+        void ModifyPersqueueConfig(TAppData* appData,
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                                   const NKikimrSchemeOp::TDirEntry& selfInfo);
+                                   const NKikimrSchemeOp::TDirEntry& selfInfo) override;
 
     private:
         TString ConsumerName;
@@ -1160,7 +1318,7 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TDeregisterStreamConsumerActor::ModifyPersqueueConfig(
-        const TActorContext& ctx,
+        TAppData* appData,
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
@@ -1170,10 +1328,10 @@ namespace NKikimr::NDataStreams::V1 {
             groupConfig.MutablePQTabletConfig(),
             pqGroupDescription.GetPQTabletConfig(),
             GetProtoRequest()->consumer_name(),
-            ctx
+            appData->PQConfig
         );
-        if (!error.Empty()) {
-            return ReplyWithError(Ydb::StatusIds::NOT_FOUND, static_cast<size_t>(NYds::EErrorCodes::NOT_FOUND), error, ctx);
+        if (!error.empty()) {
+            return ReplyWithError(Ydb::StatusIds::NOT_FOUND, static_cast<size_t>(NYds::EErrorCodes::NOT_FOUND), error);
         }
     }
 
@@ -1226,7 +1384,7 @@ namespace NKikimr::NDataStreams::V1 {
             auto sn = SequenceNumberToInt(GetProtoRequest()->starting_sequence_number());
             if (!sn) {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
-                                      TStringBuilder() << "Malformed sequence number", ctx);
+                                      TStringBuilder() << "Malformed sequence number");
             }
             SequenceNumber = sn.value() + (IteratorType == TIteratorType::AFTER_SEQUENCE_NUMBER ? 1u : 0u);
             }
@@ -1235,13 +1393,13 @@ namespace NKikimr::NDataStreams::V1 {
             if (GetProtoRequest()->timestamp() == 0) {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
                                       TStringBuilder() << "Shard iterator type is AT_TIMESTAMP, " <<
-                                      "but a timestamp is missed", ctx);
+                                      "but a timestamp is missed");
 
             }
             if (GetProtoRequest()->timestamp() > static_cast<i64>(TInstant::Now().MilliSeconds()) + TIMESTAMP_DELTA_ALLOWED_MS) {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
                                       TStringBuilder() << "Shard iterator type is AT_TIMESTAMP, " <<
-                                      "but a timestamp is in the future", ctx);
+                                      "but a timestamp is in the future");
             }
             ReadTimestampMs = GetProtoRequest()->timestamp();
             break;
@@ -1254,7 +1412,7 @@ namespace NKikimr::NDataStreams::V1 {
         default:
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
                                   TStringBuilder() << "Shard iterator type '" <<
-                                  (ui32)IteratorType << "' is not known", ctx);
+                                  (ui32)IteratorType << "' is not known");
 
         }
 
@@ -1286,7 +1444,7 @@ namespace NKikimr::NDataStreams::V1 {
                                             TStringBuilder() << "Access to stream "
                                             << this->GetProtoRequest()->stream_name()
                                             << " is denied for subject "
-                                            << token.GetUserSID(), ActorContext());
+                                            << token.GetUserSID());
             }
         }
 
@@ -1307,7 +1465,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::NOT_FOUND),
-                       TStringBuilder() << "No such shard: " << ShardId, ActorContext());
+                       TStringBuilder() << "No such shard: " << ShardId);
     }
 
     void TGetShardIteratorActor::SendResponse(const TActorContext& ctx, const TShardIterator& shardIt) {
@@ -1381,17 +1539,17 @@ namespace NKikimr::NDataStreams::V1 {
 
         if (ShardIterator.IsExpired()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::EXPIRED_ITERATOR),
-                                  TStringBuilder() << "Provided shard iterator is expired", ctx);
+                                  TStringBuilder() << "Provided shard iterator is expired");
         }
         if (!ShardIterator.IsValid()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
-                                  TStringBuilder() << "Provided shard iterator is malformed", ctx);
+                                  TStringBuilder() << "Provided shard iterator is malformed");
         }
 
         Limit = Limit == 0 ? MAX_LIMIT : Limit;
         if (Limit < 1 || Limit > MAX_LIMIT) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR),
-                                  TStringBuilder() << "Limit '" << Limit << "' is out of bounds [1; " << MAX_LIMIT << "]", ctx);
+                                  TStringBuilder() << "Limit '" << Limit << "' is out of bounds [1; " << MAX_LIMIT << "]");
         }
 
         SendDescribeProposeRequest(ctx, ShardIterator.IsCdcTopic());
@@ -1453,7 +1611,7 @@ namespace NKikimr::NDataStreams::V1 {
                                       TStringBuilder() << "Access to stream "
                                       << ShardIterator.GetStreamName()
                                       << " is denied for subject "
-                                      << token.GetUserSID(), ActorContext());
+                                      << token.GetUserSID());
             }
         }
 
@@ -1471,7 +1629,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::NOT_FOUND),
-                       TStringBuilder() << "No such shard: " << ShardIterator.GetShardId(), ActorContext());
+                       TStringBuilder() << "No such shard: " << ShardIterator.GetShardId());
     }
 
     void TGetRecordsActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -1493,7 +1651,7 @@ namespace NKikimr::NDataStreams::V1 {
                     default:
                         return ReplyWithError(ConvertPersQueueInternalCodeToStatus(record.GetErrorCode()),
                                               ConvertOldCode(record.GetErrorCode()),
-                                              record.GetErrorReason(), ctx);
+                                              record.GetErrorReason());
                 }
                 break;
             default: {}
@@ -1502,7 +1660,14 @@ namespace NKikimr::NDataStreams::V1 {
         TShardIterator shardIterator(ShardIterator);
         const auto& response = record.GetPartitionResponse();
         if (response.HasCmdReadResult()) {
-            const auto& results = response.GetCmdReadResult().GetResult();
+            const auto& readResult = response.GetCmdReadResult();
+            if (readResult.GetReadingFinished()) {
+                return ReplyWithError(Ydb::StatusIds::StatusCode::StatusIds_StatusCode_NOT_FOUND,
+                        Ydb::PersQueue::ErrorCode::ErrorCode::WRONG_PARTITION_NUMBER,
+                        "Partition ended");
+            }
+
+            const auto& results = readResult.GetResult();
             for (auto& r : results) {
                 auto proto(NKikimr::GetDeserializedData(r.GetData()));
                 auto record = Result.add_records();
@@ -1535,16 +1700,16 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+    void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
             ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
-                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
+                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
         }
     }
 
-    void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+    void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&) {
         ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
-                       TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
+                       TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
     }
 
     void TGetRecordsActor::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
@@ -1617,6 +1782,7 @@ namespace NKikimr::NDataStreams::V1 {
         std::vector<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition> Shards;
         ui32 LeftToRead = 0;
         ui32 AllShardsCount = 0;
+        bool AutoPartitioningEnabled = false;
         std::atomic<ui32> GotOffsetResponds;
         std::vector<TActorId> Pipes;
     };
@@ -1643,21 +1809,21 @@ namespace NKikimr::NDataStreams::V1 {
 
         if (!GetProtoRequest()->next_token().empty() && !GetProtoRequest()->stream_name().empty()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_PARAMETER_COMBINATION),
-                                  TStringBuilder() << "StreamName and NextToken can not be provided together", ctx);
+                                  TStringBuilder() << "StreamName and NextToken can not be provided together");
         }
         if (NextToken.IsExpired()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::EXPIRED_TOKEN),
-                                  TStringBuilder() << "Provided next token is expired", ctx);
+                                  TStringBuilder() << "Provided next token is expired");
         }
         if (!NextToken.IsValid()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
-                                  TStringBuilder() << "Provided next token is malformed", ctx);
+                                  TStringBuilder() << "Provided next token is malformed");
         }
 
         if (!TShardFilter::ShardFilterType_IsValid(ShardFilter.type())) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
                                   TStringBuilder() << "Shard filter '" <<
-                                  (ui32)ShardFilter.type() << "' is not known", ctx);
+                                  (ui32)ShardFilter.type() << "' is not known");
         }
 
         MaxResults = MaxResults == 0 ? DEFAULT_MAX_RESULTS : MaxResults;
@@ -1665,13 +1831,13 @@ namespace NKikimr::NDataStreams::V1 {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR),
                                   TStringBuilder() << "Max results '" << MaxResults <<
                                   "' is out of bound [" << MIN_MAX_RESULTS << "; " <<
-                                  MAX_MAX_RESULTS << "]", ctx);
+                                  MAX_MAX_RESULTS << "]");
         }
 
         if (ShardFilter.type() == TShardFilter::AFTER_SHARD_ID && ShardFilter.shard_id() == "") {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::MISSING_PARAMETER),
                                   TStringBuilder() << "Shard filter type is AFTER_SHARD_ID," <<
-                                  " but no ShardId provided", ctx);
+                                  " but no ShardId provided");
         }
 
         SendDescribeProposeRequest(ctx);
@@ -1705,12 +1871,13 @@ namespace NKikimr::NDataStreams::V1 {
                                             TStringBuilder() << "Access to stream "
                                             << this->GetProtoRequest()->stream_name()
                                             << " is denied for subject "
-                                            << token.GetUserSID(), ActorContext());
+                                            << token.GetUserSID());
             }
         }
 
         using TPartition = NKikimrSchemeOp::TPersQueueGroupDescription::TPartition;
-        const auto& partitions = topicInfo.PQGroupInfo->Description.GetPartitions();
+        const auto& description = topicInfo.PQGroupInfo->Description;
+        const auto& partitions = description.GetPartitions();
         TString startingShardId = this->GetProtoRequest()->Getexclusive_start_shard_id();
         ui64 startingTimepoint{0};
         bool onlyOpenShards{true};
@@ -1758,11 +1925,13 @@ namespace NKikimr::NDataStreams::V1 {
             }}
         };
 
+        AutoPartitioningEnabled = NPQ::SplitMergeEnabled(description.GetPQTabletConfig());
+
         const auto alreadyRead = NextToken.GetAlreadyRead();
         if (alreadyRead > (ui32)partitions.size()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
                                   TStringBuilder() << "Provided next_token is malformed - "
-                                  "everything is already read", ctx);
+                                  "everything is already read");
         }
 
         const auto shardsToGet = std::min(partitions.size() - alreadyRead, MaxResults);
@@ -1818,36 +1987,22 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TListShardsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+    void TListShardsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
             ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
-                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
+                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
         }
     }
 
-    void TListShardsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+    void TListShardsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&) {
         ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
-                       TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
+                       TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
     }
 
     void TListShardsActor::SendResponse(const TActorContext& ctx) {
         Ydb::DataStreams::V1::ListShardsResult result;
         for (auto& shard : Shards) {
-            auto awsShard = result.Addshards();
-            // TODO:
-            // awsShard->set_parent_shard_id("");
-            // awsShard->set_adjacent_parent_shard_id(prevShardName);
-            auto range = RangeFromShardNumber(shard.GetPartitionId(), AllShardsCount);
-            awsShard->mutable_hash_key_range()->set_starting_hash_key(
-                Uint128ToDecimalString(range.Start));
-            awsShard->mutable_hash_key_range()->set_ending_hash_key(
-                Uint128ToDecimalString(range.End));
-            awsShard->mutable_sequence_number_range()->set_starting_sequence_number(
-                std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].first));
-            //TODO: fill it only for closed partitions
-            //awsShard->mutable_sequence_number_range()->set_ending_sequence_number(
-            //    std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].second));
-            awsShard->set_shard_id(GetShardName(shard.GetPartitionId()));
+            SetShardProperties(result.Addshards(), shard, AutoPartitioningEnabled, AllShardsCount, StartEndOffsetsPerPartition);
         }
         if (LeftToRead > 0) {
             TNextToken token(StreamName, NextToken.GetAlreadyRead() + Shards.size(), MaxResults, TInstant::Now().MilliSeconds());

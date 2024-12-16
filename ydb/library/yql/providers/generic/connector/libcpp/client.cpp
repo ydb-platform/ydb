@@ -1,5 +1,5 @@
 #include <util/stream/file.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include "client.h"
 
@@ -141,4 +141,4 @@ namespace NYql::NConnector {
     IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& cfg) {
         return std::make_shared<TClientGRPC>(cfg);
     }
-}
+} // namespace NYql::NConnector

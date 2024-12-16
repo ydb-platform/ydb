@@ -4,8 +4,6 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
-TIMEOUT(600)
-
 SRCS(
     datastreams_ut.cpp
 )
@@ -25,7 +23,5 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
-
-REQUIREMENTS(ram:11)
 
 END()

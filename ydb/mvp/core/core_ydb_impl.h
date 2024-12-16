@@ -7,17 +7,22 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include "appdata.h"
 #include "merger.h"
 #include "core_ydb.h"
@@ -79,6 +84,9 @@ struct THandlerActorYdb {
             EvExplainYqlResponse,
             EvDescribeTopicResult,
             EvDescribeConsumerResult,
+            EvDescribeReplicationResult,
+            EvExecuteQueryIterator,
+            EvExecuteQueryPart,
             EvEnd
         };
 
@@ -132,6 +140,14 @@ struct THandlerActorYdb {
             TEvListDirectoryResult(NYdb::NScheme::TListDirectoryResult&& result)
                 : Result(std::move(result))
             {}
+        };
+
+        struct TEvDescribeReplicationResult : NActors::TEventLocal<TEvDescribeReplicationResult, EvDescribeReplicationResult> {
+            NYdb::NReplication::TDescribeReplicationResult Result;
+
+            TEvDescribeReplicationResult(NYdb::NReplication::TDescribeReplicationResult&& result)
+                : Result(std::move(result)) {
+            }
         };
 
         struct TEvDataStreamsListResponse : NActors::TEventLocal<TEvDataStreamsListResponse, EvDataStreamsListResponse> {
@@ -447,6 +463,24 @@ struct THandlerActorYdb {
         struct TEvRetryRequest : NActors::TEventLocal<TEvRetryRequest, EvRetryRequest> {
         };
 
+        struct TEvExecuteQueryIterator : NActors::TEventLocal<TEvExecuteQueryIterator, EvExecuteQueryIterator> {
+            NYdb::NQuery::TExecuteQueryIterator Iterator;
+
+            TEvExecuteQueryIterator() = delete;
+            TEvExecuteQueryIterator(NYdb::NQuery::TExecuteQueryIterator&& iterator)
+                : Iterator(std::move(iterator))
+            {}
+        };
+
+        struct TEvExecuteQueryPart : NActors::TEventLocal<TEvExecuteQueryPart, EvExecuteQueryPart> {
+            NYdb::NQuery::TExecuteQueryPart Part;
+
+            TEvExecuteQueryPart() = delete;
+            TEvExecuteQueryPart(NYdb::NQuery::TExecuteQueryPart&& part)
+                : Part(std::move(part))
+            {}
+        };
+
         struct TEvErrorResponse : NActors::TEventLocal<TEvErrorResponse, EvErrorResponse> {
             TString Status;
             TString Message;
@@ -519,7 +553,8 @@ struct THandlerActorYdb {
             {"CoordinationNode", "coordination"},
             {"ColumnStore", "column-store"},
             {"ExternalTable", "external-table"},
-            {"ExternalDataSource", "external-data-source"}
+            {"ExternalDataSource", "external-data-source"},
+            {"ResourcePool", "resource-pool"}
         };
         if (const auto* mapping = specialCases.FindPtr(schemeEntry)) {
             return *mapping;
@@ -606,6 +641,48 @@ struct THandlerActorYdb {
             if (itKey != columnsKeysMeta.end()) {
                 column["key"] = true;
                 column["keyOrder"] = itKey - columnsKeysMeta.begin();
+            }
+        }
+    }
+
+    static NJson::TJsonValue TypedValueToJsonValue(const Ydb::TypedValue& typedValue) {
+        NYdb::TType type(typedValue.type());
+        NYdb::TValue value(type, typedValue.value());
+        NYdb::TValueParser parser(value);
+        return ColumnValueToJsonValue(parser);
+    }
+
+    static void WriteColumns(NJson::TJsonValue& columns,
+                             const NYdb::NTable::TTableDescription& tableDescription,
+                             const std::function<void(NJson::TJsonValue&, NYdb::TType)>& columnTypeFormatter = ColumnTypeToString) {
+        auto columnsMeta = tableDescription.GetColumns();
+        auto columnsKeysMeta = tableDescription.GetPrimaryKeyColumns();
+        auto proto = NYdb::TProtoAccessor::GetProto(tableDescription);
+        int columnsSize = std::min<int>(proto.columns_size(), columnsMeta.size());
+        for (int columnNum = 0; columnNum < columnsSize; ++columnNum) {
+            const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
+            const Ydb::Table::ColumnMeta& columnProto = proto.columns(columnNum);
+            NJson::TJsonValue& column = columns.AppendValue(NJson::TJsonValue());
+            column["name"] = columnMeta.Name;
+            columnTypeFormatter(column["type"], columnMeta.Type);
+            auto itKey = Find(columnsKeysMeta, columnMeta.Name);
+            if (itKey != columnsKeysMeta.end()) {
+                column["key"] = true;
+                column["keyOrder"] = itKey - columnsKeysMeta.begin();
+            }
+            if (columnProto.not_null()) {
+                column["not_null"] = true;
+            }
+            switch (columnProto.default_value_case()) {
+                case Ydb::Table::ColumnMeta::DEFAULT_VALUE_NOT_SET:
+                case Ydb::Table::ColumnMeta::kEmptyDefault:
+                    break;
+                case Ydb::Table::ColumnMeta::kFromLiteral:
+                    column["defaultValue"] = TypedValueToJsonValue(columnProto.from_literal());
+                    break;
+                case Ydb::Table::ColumnMeta::kFromSequence:
+                    column["defaultSequence"] = columnProto.from_sequence().name();
+                    break;
             }
         }
     }
@@ -706,6 +783,27 @@ struct THandlerActorYdb {
         }
     }
 
+    static TString BlackBoxTokenFromSessionId(TStringBuf sessionId, TStringBuf userIp = NKikimr::NSecurity::DefaultUserIp()) {
+        return NKikimr::NSecurity::BlackBoxTokenFromSessionId(sessionId, userIp);
+    }
+
+    static TString GetAuthToken(NHttp::THttpIncomingRequestPtr request) {
+        NHttp::THeaders headers(request->Headers);
+        NHttp::TCookies cookies(headers["Cookie"]);
+        TStringBuf sessionId = cookies["Session_id"];
+        if (!sessionId.empty()) {
+            return BlackBoxTokenFromSessionId(sessionId);
+        }
+        TStringBuf authorization = headers["Authorization"];
+        if (!authorization.empty()) {
+            TStringBuf scheme = authorization.NextTok(' ');
+            if (scheme == "OAuth" || scheme == "Bearer") {
+                return TString(authorization);
+            }
+        }
+        return TString();
+    }
+
     static void CopyHeader(const NHttp::THeaders& request, NHttp::THeadersBuilder& headers, TStringBuf header) {
         if (request.Has(header)) {
             headers.Set(header, request[header]);
@@ -762,6 +860,65 @@ struct THandlerActorYdb {
         return false;
     }
 
+    static NHttp::THttpOutgoingResponsePtr CreateStatusResponseForQuery(NHttp::THttpIncomingRequestPtr request, const NYdb::TStatus& status, const TJsonSettings& jsonSettings = TJsonSettings()) {
+        Ydb::Operations::Operation operation;
+        operation.set_status(static_cast<Ydb::StatusIds_StatusCode>(status.GetStatus()));
+        IssuesToMessage(status.GetIssues(), operation.mutable_issues());
+        return CreateStatusResponseForQuery(request, operation, jsonSettings);
+    }
+
+    static NHttp::THttpOutgoingResponsePtr CreateStatusResponseForQuery(NHttp::THttpIncomingRequestPtr request, const Ydb::Operations::Operation& operation, const TJsonSettings& jsonSettings = TJsonSettings()) {
+        TStringBuf status = "503";
+        TStringBuf message = "Service Unavailable";
+        switch ((int)operation.status()) {
+        case Ydb::StatusIds::SUCCESS:
+        case Ydb::StatusIds::SCHEME_ERROR:
+        case Ydb::StatusIds::GENERIC_ERROR:
+        case Ydb::StatusIds::TIMEOUT:
+        case (int)NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
+            status = "200";
+            message = "OK";
+            break;
+        case Ydb::StatusIds::UNAUTHORIZED:
+        case (int)NYdb::EStatus::CLIENT_UNAUTHENTICATED:
+            status = "401";
+            message = "Unauthorized";
+            break;
+        case Ydb::StatusIds::BAD_REQUEST:
+        case Ydb::StatusIds::BAD_SESSION:
+        case Ydb::StatusIds::PRECONDITION_FAILED:
+        case Ydb::StatusIds::ALREADY_EXISTS:
+        case Ydb::StatusIds::SESSION_EXPIRED:
+        case Ydb::StatusIds::UNDETERMINED:
+        case Ydb::StatusIds::ABORTED:
+        case Ydb::StatusIds::UNSUPPORTED:
+            status = "400";
+            message = "Bad Request";
+            break;
+        case Ydb::StatusIds::NOT_FOUND:
+            status = "404";
+            message = "Not Found";
+            break;
+        case Ydb::StatusIds::OVERLOADED:
+            status = "429";
+            message = "Overloaded";
+            break;
+        case Ydb::StatusIds::INTERNAL_ERROR:
+            status = "500";
+            message = "Internal Server Error";
+            break;
+        case Ydb::StatusIds::UNAVAILABLE:
+            status = "503";
+            message = "Service Unavailable";
+            break;
+        default:
+            break;
+        }
+        TStringStream stream;
+        TProtoToJson::ProtoToJson(stream, operation, jsonSettings);
+        return request->CreateResponse(status, message, "application/json", stream.Str());
+    }
+
     static NHttp::THttpOutgoingResponsePtr CreateStatusResponse(NHttp::THttpIncomingRequestPtr request, const NYdb::TStatus& status, const TJsonSettings& jsonSettings = TJsonSettings()) {
         Ydb::Operations::Operation operation;
         operation.set_status(static_cast<Ydb::StatusIds_StatusCode>(status.GetStatus()));
@@ -812,6 +969,7 @@ struct THandlerActorYdb {
             message = "Service Unavailable";
             break;
         case Ydb::StatusIds::TIMEOUT:
+        case (int)NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
             status = "504";
             message = "Gateway Time-out";
             break;

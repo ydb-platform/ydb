@@ -2,13 +2,13 @@
 #include "yql_ydb_mkql_compiler.h"
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h>
 #include <ydb/library/yql/providers/ydb/proto/range.pb.h>
 #include <ydb/library/yql/providers/ydb/proto/source.pb.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -23,8 +23,7 @@ public:
     {
     }
 
-    ui64 Partition(const TDqSettings& settings, size_t maxPartitions, const TExprNode& node,
-        TVector<TString>& partitions, TString*, TExprContext&, bool) override {
+    ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         TString cluster, table;
         if (const TMaybeNode<TDqSource> source = &node) {
             cluster = source.Cast().DataSource().Cast<TYdbDataSource>().Cluster().Value();
@@ -35,9 +34,10 @@ public:
         }
 
         auto& meta = State_->Tables[std::make_pair(cluster, table)];
-        meta.ReadAsync = settings.EnableComputeActor.Get().GetOrElse(false); // TODO: Use special method for get settings.
+        meta.ReadAsync = settings.EnableComputeActor.GetOrElse(false); // TODO: Use special method for get settings.
         auto parts = meta.Partitions;
 
+        auto maxPartitions = settings.MaxPartitions;
         if (maxPartitions && parts.size() > maxPartitions) {
             if (const auto extraParts = parts.size() - maxPartitions; extraParts > maxPartitions) {
                 const auto dropsPerTask = (parts.size() - 1ULL) / maxPartitions;
@@ -80,7 +80,7 @@ public:
         return Nothing();
     }
 
-    TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
         if (const auto& maybeYdbReadTable = TMaybeNode<TYdbReadTable>(read)) {
             const auto& ydbReadTable = maybeYdbReadTable.Cast();
             YQL_ENSURE(ydbReadTable.Ref().GetTypeAnn(), "No type annotation for node " << ydbReadTable.Ref().Content());
@@ -101,6 +101,7 @@ public:
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TYdbSourceSettings>()
+                    .World(ydbReadTable.World())
                     .Table(ydbReadTable.Table())
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
@@ -114,7 +115,7 @@ public:
         return read;
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext&) override {
         const TDqSource source(&node);
         if (const auto maySettings = source.Settings().Maybe<TYdbSourceSettings>()) {
             const auto settings = maySettings.Cast();

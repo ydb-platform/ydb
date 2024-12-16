@@ -33,14 +33,31 @@ class Walker:
                     continue
                 final_name += c
         if final_name not in self.stats:
-            self.stats[final_name] = [0,0,set()]
-        self.stats[final_name][0] += node["size"]
-        self.stats[final_name][1] += 1
-        self.stats[final_name][2].add(self.current_file)
+            self.stats[final_name] = [0,0,set(),None,None,None]
+        p = self.stats[final_name]
+        p[0] += node["size"]
+        p[1] += 1
+        p[2].add(self.current_file)
+        if not p[3]:
+            p[3] = node["size"]
+        else:
+            p[3] = min(p[3],node["size"])
+        if not p[4]:
+            p[4] = node["size"]
+            p[5] = name
+        else:
+            if node["size"] > p[4]:
+                p[5] = name
+            p[4] = max(p[4],node["size"])
 
-def print_stat(f, p):
-    print("{} size={} count={}".format(p[0],p[1][0],p[1][1]), file=f)
-    for s in sorted(p[1][2]):
+def print_stat(f, d):
+    p=d[1]
+    print("group_name: "+d[0],file=f)
+    print("    size={} count={} avg={:.2f} min={} max={}".format(p[0],p[1],p[0]/p[1],p[3],p[4]), file=f)
+    if p[1] > 1:
+        print("    name_for_max: " + p[5], file=f)
+    print("    files:",file=f)
+    for s in sorted(p[2]):
         print("    " + s, file=f)
 
 def main():

@@ -1,12 +1,12 @@
 #ifndef STRING_BUILDER_INL_H_
-#error "Direct inclusion of this file is not allowed, include string.h"
+#error "Direct inclusion of this file is not allowed, include string_builder.h"
 // For the sake of sane code completion.
 #include "string_builder.h"
 #endif
 
-#include <library/cpp/yt/assert/assert.h>
+#include "format_string.h"
 
-#include <util/stream/str.h>
+#include <library/cpp/yt/assert/assert.h>
 
 namespace NYT {
 
@@ -118,70 +118,4 @@ inline void TStringBuilder::DoReserve(size_t newLength)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline void FormatValue(TStringBuilderBase* builder, const TStringBuilder& value, TStringBuf /*spec*/)
-{
-    builder->AppendString(value.GetBuffer());
-}
-
-template <class T>
-TString ToStringViaBuilder(const T& value, TStringBuf spec)
-{
-    TStringBuilder builder;
-    FormatValue(&builder, value, spec);
-    return builder.Flush();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Compatibility for users of NYT::ToString(nyt_type).
-template <CFormattable T>
-TString ToString(const T& t)
-{
-    return ToStringViaBuilder(t);
-}
-
-// Sometime we want to implement
-// FormatValue using util's ToString
-// However, if we inside the FormatValue
-// we cannot just call the ToString since
-// in this scope T is already CFormattable
-// and ToString will call the very
-// FormatValue we are implementing,
-// causing an infinite recursion loop.
-// This method is basically a call to
-// util's ToString default implementation.
-template <class T>
-TString ToStringIgnoringFormatValue(const T& t)
-{
-    TString s;
-    ::TStringOutput o(s);
-    o << t;
-    return s;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT
-
-#include <util/string/cast.h>
-
-// util/string/cast.h extension for yt and std types only
-// TODO(arkady-e1ppa): Abolish ::ToString in
-// favour of either NYT::ToString or
-// automatic formatting wherever it is needed.
-namespace NPrivate {
-
-template <class T>
-    requires (
-        (NYT::NDetail::IsNYTName<T>() ||
-        NYT::NDetail::IsStdName<T>()) &&
-        NYT::CFormattable<T>)
-struct TToString<T, false>
-{
-    static TString Cvt(const T& t)
-    {
-        return NYT::ToStringViaBuilder(t);
-    }
-};
-
-} // namespace NPrivate

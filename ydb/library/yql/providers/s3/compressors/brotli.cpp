@@ -2,8 +2,10 @@
 #include "output_queue_impl.h"
 
 #include <util/generic/size_literals.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/exceptions.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <contrib/libs/brotli/include/brotli/encode.h>
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 
 namespace NYql {
 
@@ -71,10 +73,10 @@ bool TReadBuffer::nextImpl() {
                 SubstreamFinished_ = true;
                 break;
             case BROTLI_DECODER_RESULT_ERROR:
-                ythrow yexception() << "Brotli decoder failed to decompress buffer: "
+                ythrow TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Brotli decoder failed to decompress buffer: "
                                     << BrotliDecoderErrorString(BrotliDecoderGetErrorCode(DecoderState_));
             case BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT:
-                YQL_ENSURE(availableOut != OutBuffer.size(), "Buffer passed to read in Brotli decoder is too small");
+                YQL_ENSURE_CODELINE(availableOut != OutBuffer.size(), NYql::NDqProto::StatusIds::BAD_REQUEST, "Buffer passed to read in Brotli decoder is too small");
                 break;
             default:
                 break;
@@ -83,7 +85,7 @@ bool TReadBuffer::nextImpl() {
     } while (!decompressedSize && result == BROTLI_DECODER_RESULT_NEEDS_MORE_INPUT && !InputExhausted_);
 
     if (!SubstreamFinished_ && !decompressedSize) {
-        ythrow yexception() << "Input stream is incomplete";
+        ythrow TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Input stream is incomplete";
     }
 
     if (decompressedSize > 0)
@@ -97,7 +99,7 @@ bool TReadBuffer::nextImpl() {
 void TReadBuffer::InitDecoder() {
     DecoderState_ = BrotliDecoderCreateInstance(&TAllocator::Allocate, &TAllocator::Deallocate, nullptr);
     if (!DecoderState_) {
-        ythrow yexception() << "Brotli decoder initialization failed";
+        ythrow TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Brotli decoder initialization failed";
     }
 }
 

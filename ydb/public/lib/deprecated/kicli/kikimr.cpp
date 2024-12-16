@@ -2,6 +2,7 @@
 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <util/string/builder.h>
 
 namespace NKikimr {
@@ -276,8 +277,6 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusDrainNode, NMsgBusProxy::TBusResponse>(&NGRpcProxy::TGRpcClient::DrainNode, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_FILL_NODE:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusFillNode, NMsgBusProxy::TBusResponse>(&NGRpcProxy::TGRpcClient::FillNode, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_LOGIN_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusLoginRequest, NMsgBusProxy::TBusResponse>(&NGRpcProxy::TGRpcClient::LoginRequest, promise, request);
         default:
             Y_ABORT("%s", (TStringBuilder() << "unexpected message type# " << type).data());
         }

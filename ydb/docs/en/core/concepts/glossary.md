@@ -26,7 +26,7 @@ Given {{ ydb-short-name }} follows the approach of separated storage and compute
 
 #### Database node {#database-node}
 
-**Database nodes** (also known as **tenant nodes**) serve user queries addressed to a specific logical [database](#database). Their state is only in memory and can be recovered from the [Distributed Storage](#distributed-storage). All database nodes of a given [{{ ydb-short-name }} cluster](cluster/index.md) can be considered its compute layer. Thus, adding database nodes and allocating extra CPU and RAM to them are the main ways to increase the database's compute resources.
+**Database nodes** (also known as **tenant nodes** or **compute nodes**) serve user queries addressed to a specific logical [database](#database). Their state is only in memory and can be recovered from the [Distributed Storage](#distributed-storage). All database nodes of a given [{{ ydb-short-name }} cluster](topology.md) can be considered its compute layer. Thus, adding database nodes and allocating extra CPU and RAM to them are the main ways to increase the database's compute resources.
 
 The main role of database nodes is to run various [tablets](#tablet) and [actors](#actor), as well as accept incoming requests via various endpoints.
 
@@ -68,6 +68,10 @@ A static group might require special attention during major maintenance, such as
 
 Regular storage groups that are not [static](#static-group) are called **dynamic groups**. They are called dynamic because they can be created and decommissioned on the fly during [cluster](#cluster) operation.
 
+### Storage pool {#storage-pool}
+
+**Storage pool** is a collection of data storage devices with similar characteristics. Each storage pool is assigned a unique name within a {{ ydb-short-name }} cluster. Technically, each storage pool consists of multiple [PDisks](#pdisk). Each [storage group](#storage-group) is created in a particular storage pool, which determines the performance characteristics of the storage group through the selection of appropriate storage devices. It is typical to have separate storage pools for NVMe, SSD, and HDD devices or particular models of those devices with different capacities and speeds.
+
 ### Actor {#actor}
 
 The [actor model](https://en.wikipedia.org/wiki/Actor_model) is one of the main approaches for concurrent programming, which is employed by {{ ydb-short-name }}. In this model, **actors** are lightweight user-space processes that may have and modify their private state but can only affect each other indirectly through message passing. {{ ydb-short-name }} has its own implementation of this model, which is covered [below](#actor-implementation).
@@ -78,11 +82,11 @@ In {{ ydb-short-name }}, actors with the reliably persisted state are called [ta
 
 A **tablet** is one of {{ ydb-short-name }}'s primary building blocks and abstractions. It is an entity responsible for a relatively small segment of user or system data. Typically, a tablet manages up to single-digit gigabytes of data, but some kinds of tablets can handle more.
 
-For example, a [row-oriented user table](#row-oriented-table) is managed by one or more [DataShard](#datashard) tablets, with each tablet responsible for a continuous range of [primary keys](#primary-key) and the corresponding data.
+For example, a [row-oriented user table](#row-oriented-table) is managed by one or more [DataShard](#data-shard) tablets, with each tablet responsible for a continuous range of [primary keys](#primary-key) and the corresponding data.
 
 End users sending queries to a {{ ydb-short-name }} cluster aren't expected to know much about tablets, their kinds, or how they work, but it might still be helpful, for example, for performance optimizations.
 
-Technically, tablets are [actors](#actors) with a persistent state reliably saved in [Distributed Storage](#distributed-storage). This state allows the tablet to continue operating on a different [database node](#database-node) if the previous one is down or overloaded.
+Technically, tablets are [actors](#actor) with a persistent state reliably saved in [Distributed Storage](#distributed-storage). This state allows the tablet to continue operating on a different [database node](#database-node) if the previous one is down or overloaded.
 
 [Tablet implementation details](#tablet-implementation) and related terms, as well as [main tablet types](#tablet-types), are covered below in the advanced section.
 
@@ -95,7 +99,17 @@ Technically, tablets are [actors](#actors) with a persistent state reliably save
 
 Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
-The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transactions-implementation).
+The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transaction-implementation).
+
+### Interactive transactions {#interactive-transaction}
+
+The term **interactive transactions** refers to transactions that are split into multiple queries and involve data processing by an application between these queries. For example:
+
+1. Select some data.
+1. Process the selected data in the application.
+1. Update some data in the database.
+1. Commit the transaction in a separate query.
+
 
 ### Multi-version concurrency control {#mvcc}
 
@@ -131,7 +145,7 @@ There are two main approaches to representing tabular data in RAM or on disk dri
 
 #### Primary key {#primary-key}
 
-A **primary key** is an ordered list of columns, the values of which uniquely identify rows. It is used to build the [table's primary index](#primary-index). It is provided by the {{ ydb-short-name }} user during [table creation](../yql/reference/syntax/create_table.md) and dramatically impacts the performance of workloads interacting with that table.
+A **primary key** is an ordered list of columns, the values of which uniquely identify rows. It is used to build the [table's primary index](#primary-index). It is provided by the {{ ydb-short-name }} user during [table creation](../yql/reference/syntax/create_table/index.md) and dramatically impacts the performance of workloads interacting with that table.
 
 The guidelines on choosing primary keys are provided in [{#T}](../dev/primary-key/index.md).
 
@@ -177,7 +191,31 @@ A **consumer** is an entity that reads messages from a topic.
 
 ### Change data capture {#cdc}
 
-**Change data capture** or **CDC** is a mechanism that allows subscribing to a stream of changes to a given [table](#table). Technically, it is implemented on top of [topics](#topic). It is described in more detail in a separate article [{#T}](cdc.md).
+**Change data capture** or **CDC** is a mechanism that allows subscribing to a **stream of changes** to a given [table](#table). Technically, it is implemented on top of [topics](#topic). It is described in more detail in a separate article [{#T}](cdc.md).
+
+#### Changefeed {#changefeed}
+
+**Changefeed** or **stream of changes** is an ordered list of changes in a given [table](#table) published via a [topic](#topic).
+
+### Asynchronous replication instance {#async-replication-instance}
+
+**Asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replicated objects, etc.) It can also be used to retrieve the status of asynchronous replication, such as the [initial synchronization process](async-replication.md#initial-scan), [replication lag](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), and more.
+
+#### Replicated object {#replicated-object}
+
+**Replicated object** is an object, for example, a table, that is asynchronously replicated to the target database.
+
+#### Replica object {#replica-object}
+
+**Replica object** is a mirror copy of the replicated object, automatically created by an [asynchronous replication instance](#async-replication-instance). Replica objects are typically read-only.
+
+### Coordination node {#coordination-node}
+
+A **coordination node** is a schema object that allows client applications to create semaphores for coordinating their actions. Learn more about [coordination nodes](./datamodel/coordination-node.md).
+
+#### Semaphore {#semaphore}
+
+A **semaphore** is an object within a [coordination node](#coordination-node) that provides a synchronization mechanism for distributed applications. Semaphores can be persistent or ephemeral and support operations like creation, acquisition, release, and monitoring. Learn more about [semaphores in {{ ydb-short-name }}](./datamodel/coordination-node.md#semaphore).
 
 ### YQL {#yql}
 
@@ -205,6 +243,10 @@ A **secret** is a sensitive piece of metadata that requires special handling. Fo
 
 Like in filesystems, a **folder** or **directory** is a container for other entities. In the case of {{ ydb-short-name }}, these entities can be [tables](#table) (including [external tables](#external-table)), [topics](#topic), other folders, etc.
 
+### Query optimizer {#optimizer}
+
+[**Query optimizer**](https://en.wikipedia.org/wiki/Query_optimization) is a {{ ydb-short-name }} component that takes a logical plan as input and produces the most efficient physical plan with the lowest estimated resource consumption among the alternatives. The {{ ydb-short-name }} query optimizer is described in the [{#T}](optimizer.md) section.
+
 ## Advanced terminology {#advanced-terminology}
 
 This section explains terms that are useful to [{{ ydb-short-name }} contributors](../contributor/index.md) and users who want to get a deeper understanding of what's going on inside the system.
@@ -217,7 +259,7 @@ An **actor system** is a C++ library with {{ ydb-short-name }}'s [implementation
 
 #### Actor service {#actor-service}
 
-An **actor service** is an actor that has a well-known name and is usually run in a single instance on a [node](#node).
+An **actor service** is an [actor](#actor) that has a well-known name and is usually run in a single instance on a [node](#node).
 
 #### ActorId {#actorid}
 
@@ -230,6 +272,20 @@ The **actor system interconnect** or **interconnect** is the [cluster's](#cluste
 #### Local {#local}
 
 A **Local** is an [actor service](#actor-service) running on each [node](#node). It directly manages the [tablets](#tablet) on its node and interacts with [Hive](#hive). It registers with Hive and receives commands to launch tablets.
+
+#### Actor system pool {#actor-system-pool}
+
+The **actor system pool** is a [thread pool](https://en.wikipedia.org/wiki/Thread_pool) used to run [actors](#actor). Each [node](#node) operates multiple pools to coarsely separate resources between different types of activities. A typical set of pools includes:
+
+- **System**: A pool that handles internal operations within {{ ydb-short-name }} node. It serves system [tablets](#tablet), [state storage](#state-storage), [distributed storage](#distributed-storage) I/O, and so on.
+
+- **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [KQP](#kqp).
+
+- **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [KQP](#kqp) background operations like backups, data compaction, and garbage collection.
+
+- **IO**: A pool for tasks involving blocking operations, such as authentication or writing logs to files.
+
+- **IC**: A pool for [interconnect](#actor-system-interconnect), responsible for system calls related to data transfers across the network, data serialization, message splitting and merging.
 
 ### Tablet implementation {#tablet-implementation}
 
@@ -272,6 +328,20 @@ A **tablet generation** is a number identifying the reincarnation of the tablet 
 
 A **tablet local database** or **local database** is a set of data structures and related code that manages the tablet's state and the data it stores. Logically, the local database state is represented by a set of tables very similar to relational tables. Modification of the state of the local database is performed by local tablet transactions generated by the tablet's user actor.
 
+Each local database table is stored using the [LSM tree](#lsm-tree) data structure.
+
+#### Log-structured merge-tree {#lsm-tree}
+
+A **[log-structured merge-tree](https://en.wikipedia.org/wiki/Log-structured_merge-tree)** or **LSM tree**, is a data structure designed to optimize write and read performance in storage systems. It is used in {{ ydb-short-name }} for storing [local database](#local-database) tables and [VDisks](#vdisk) data.
+
+#### MemTable {#memtable}
+
+All data written to a [local database](#local-database) tables is initially stored in an in-memory data structure called a **MemTable**. When the MemTable reaches a predefined size, it is flushed to disk as an immutable [SST](#sst).
+
+#### Sorted string table {#sst}
+
+A **sorted string table** or **SST** is an immutable data structure that stores table rows sorted by key, facilitating efficient key lookups and range queries. Each SST is composed of a contiguous series of small data pages, typically around 7 KiB in size each, which further optimizes the process of reading data from disk. An SST typically represents a part of [LSM tree](#lsm-tree).
+
 #### Tablet pipe {#tablet-pipe}
 
 A **Tablet pipe** or **TabletPipe** is a virtual connection that can be established with a tablet. It includes resolving the [tablet leader](#tablet-leader) by [TabletID](#tabletid). It is the recommended way to work with the tablet. The term **open a pipe to a tablet** describes the process of resolving (searching) a tablet in a cluster and establishing a virtual communication channel with it.
@@ -283,6 +353,14 @@ A **TabletID** is a cluster-wide unique [tablet](#tablet) identifier.
 #### Bootstrapper {#bootstrapper}
 
 The **bootstrapper** is the primary mechanism for launching tablets, used for service tablets (for example, for [Hive](#hive), [DS controller](#ds-controller), root [SchemeShard](#scheme-shard)). The [Hive](#hive) tablet initializes the rest of the tablets.
+
+### Shared cache {#shared-cache}
+
+A **shared cache** is an [actor](#actor) that stores data pages recently accessed and read from [distributed storage](#distributed-storage). Caching these pages reduces disk I/O operations and accelerates data retrieval, enhancing overall system performance.
+
+### Memory controller {#memory-controller}
+
+A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../reference/configuration/index.md#memory-controller).
 
 ### Tablet types {#tablet-types}
 
@@ -312,7 +390,7 @@ A **PQ Tablet** or **persistent queue tablet** is a tablet that implements the c
 
 #### TxAllocator {#txallocator}
 
-A **TxAllocator** or **transaction allocator** is a system tablet that allocates unique transaction identifiers ([TxID](#txid)) within the cluster. Typically, a cluster has several such tablets, from which [transaction proxy](##transaction-proxy) pre-allocates and caches ranges for local issuance within a single process.
+A **TxAllocator** or **transaction allocator** is a system tablet that allocates unique transaction identifiers ([TxID](#txid)) within the cluster. Typically, a cluster has several such tablets, from which [transaction proxy](#transaction-proxy) pre-allocates and caches ranges for local issuance within a single process.
 
 #### Coordinator {#coordinator}
 
@@ -335,7 +413,7 @@ The **cluster management system** or **CMS** is a system tablet responsible for 
 A **slot** in {{ ydb-short-name }} can be used in two contexts:
 
 * **Slot** is a portion of a server's resources allocated to running a single {{ ydb-short-name }} [node](#node). A common slot size is 10 CPU cores and 50 GB of RAM. Slots are used if a {{ ydb-short-name }} cluster is deployed on servers or virtual machines with sufficient resources to host multiple slots.
-* [VDisk](#slot) **slot** or **VSlot** is a fraction of PDisk that can be allocated to one of the [VDisks](#vdisk).
+* [VDisk](#slot) **slot** or **VSlot** is a fraction of [PDisk](#pdisk) that can be allocated to one of the [VDisks](#vdisk).
 
 ### State storage {#state-storage}
 
@@ -353,11 +431,11 @@ Due to its nature, the state storage service operates in a best-effort manner. F
 
 #### Compaction {#compaction}
 
-**Compaction** is the internal background process of rebuilding [LSM tree](https://en.wikipedia.org/wiki/Log-structured_merge-tree) data. The data in [VDisks](#vdisk) and [local databases](#local-database) are organized in the form of an LSM tree. Therefore, there is a distinction between **VDisk compaction** and **Tablet compaction**. The compaction process is usually quite resource-intensive, so efforts are made to minimize the overhead associated with it, for example, by limiting the number of concurrent compactions.
+**Compaction** is the internal background process of rebuilding [LSM tree](#lsm-tree) data. The data in [VDisks](#vdisk) and [local databases](#local-database) are organized in the form of an LSM tree. Therefore, there is a distinction between **VDisk compaction** and **Tablet compaction**. The compaction process is usually quite resource-intensive, so efforts are made to minimize the overhead associated with it, for example, by limiting the number of concurrent compactions.
 
 #### gRPC proxy {#grpc-proxy}
 
-A **gRPC Proxy** is the client proxy system for external user requests. Client requests enter the system via the [gRPC](https://grpc.io) protocol, then the proxy component translates them into internal calls for executing these requests, passed around via [Interconnect](#interconnect). This proxy provides an interface for both request-response and bidirectional streaming.
+A **gRPC Proxy** is the client proxy system for external user requests. Client requests enter the system via the [gRPC](https://grpc.io) protocol, then the proxy component translates them into internal calls for executing these requests, passed around via [Interconnect](#actor-system-interconnect). This proxy provides an interface for both request-response and bidirectional streaming.
 
 ### Distributed storage implementation {#distributed-storage-implementation}
 
@@ -372,7 +450,7 @@ A **LogoBlob** is a piece of binary immutable data identified by [LogoBlobID](#l
 #### LogoBlobID {#logoblobid}
 
 A **LogoBlobID** is the [LogoBlob](#logoblob) identifier in the [Distributed storage](#distributed-storage). It has a structure of the form `[TabletID, Generation, Step, Channel, Cookie, BlobSize, PartID]`. The key elements of LogoBlobID are:
-  
+
 * `TabletID` is an [ID](#tabletid) of the tablet that the LogoBlob belongs to.
 * `Generation` is the generation of the tablet in which the blob was recorded.
 * `Channel` is the tablet [channel](#channel) where the LogoBlob is recorded.
@@ -394,7 +472,7 @@ A **LogoBlobID** is the [LogoBlob](#logoblob) identifier in the [Distributed sto
 **PDisk** or **Physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files simulating a block device for testing purposes). PDisk provides data integrity controls (including [erasure encoding](#erasure-coding) of sector groups for data recovery on single bad sectors, integrity control with checksums), transparent data-at-rest encryption of all disk data, and transactional guarantees of disk operations (write confirmation strictly after `fsync`).
 
 PDisk contains a scheduler that provides device bandwidth sharing between several clients ([VDisks](#vdisk)). PDisk divides a block device into chunks called [slots](#slot) (about 128 megabytes in size; smaller chunks are allowed). No more than 1 VDisk can own each slot at a time. PDisk also supports a recovery log shared between PDisk service records and all VDisks.
-  
+
 #### VDisk {#vdisk}
 
 **VDisk** or **Virtual disk** is a component that implements the persistence of [distributed storage](#distributed-storage) [LogoBlobs](#logoblob) on [PDisks](#pdisk). VDisk stores all its data on PDisks. One VDisk corresponds to one PDisk, but usually, several VDisks are linked to one PDisk. Unlike PDisk, which hides chunks and logs behind it, VDisk provides an interface at the LogoBlob and [LogoBlobID](#logoblobid) level, like writing LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlob using a special command. VDisk is a member of a [storage group](#storage-group). VDisk itself is local, but many VDisks in a given group provide reliable data storage. The VDisks in a group synchronize the data with each other and replicate the data in case of loss. A set of VDisks in a storage group forms a distributed RAID.
@@ -405,7 +483,7 @@ PDisk contains a scheduler that provides device bandwidth sharing between severa
 
 #### Skeleton {#skeleton}
 
-A **Skeleton** is an actor that provides an interface to a [VDisk](#vdisk).
+A **Skeleton** is an [actor](#actor) that provides an interface to a [VDisk](#vdisk).
 
 #### SkeletonFront {#skeletonfront}
 
@@ -417,32 +495,38 @@ The **distributed storage controller** or **DS controller** manages the dynamic 
 
 #### Proxy {#ds-proxy}
 
-The **distributed storage proxy**, **DS proxy**, or **BS proxy** plays the role of a client library for performing operations with [Distributed storage](#distributed-storage). DS Proxy users are [tablets](#tablets) that write to and read from Distributed storage. DS Proxy hides the distributed nature of Distributed storage from the user. The task of DS Proxy is to write to the quorum of the [VDisks](#vdisk), make retries if necessary, and control the write/read flow to avoid overloading VDisks.
+The **distributed storage proxy**, **DS proxy**, or **BS proxy** plays the role of a client library for performing operations with [Distributed storage](#distributed-storage). DS Proxy users are [tablets](#tablet) that write to and read from Distributed storage. DS Proxy hides the distributed nature of Distributed storage from the user. The task of DS Proxy is to write to the quorum of the [VDisks](#vdisk), make retries if necessary, and control the write/read flow to avoid overloading VDisks.
 
 Technically, DS Proxy is implemented as an [actor service](#actor-service) launched by the [node warden](#node-warden) on each node for each storage group, processing all requests to the group (writing, reading, and deleting [LogoBlobs](#logoblob), blocking the group). When writing data, DS proxy performs [erasure encoding](#erasure-coding) of data by dividing LogoBlobs into parts, which are then sent to the corresponding VDisks. DS Proxy performs the reverse process when reading, receiving parts from VDisks, and restoring LogoBlobs from them.
 
 #### Node warden {#node-warden}
 
-**Node warden** or `BS_NODE` is an [actor service](#actor-service) on each node of the cluster, launching [PDisks](#pdisk), [VDisks](#vdisk), and [DS proxies](#proxy) of [static storage groups](#static-group) at the node start. Also, it interacts with the [DS controller](#ds-controller) to launch PDisk, VDisk, and DS proxies of [dynamic groups](#dynamic-group). The DS proxy of dynamic groups is launched on request: node warden processes "undelivered" messages to the DS proxy, launching the corresponding DS proxies and receiving the group configuration from the DS controller.
+**Node warden** or `BS_NODE` is an [actor service](#actor-service) on each node of the cluster, launching [PDisks](#pdisk), [VDisks](#vdisk), and [DS proxies](#ds-proxy) of [static storage groups](#static-group) at the node start. Also, it interacts with the [DS controller](#ds-controller) to launch PDisk, VDisk, and DS proxies of [dynamic groups](#dynamic-group). The DS proxy of dynamic groups is launched on request: node warden processes "undelivered" messages to the DS proxy, launching the corresponding DS proxies and receiving the group configuration from the DS controller.
 
 #### Fail realm {#fail-realm}
 
-A [storage group](#storage-group) is a set of [VDisks](#vdisk) combined into one or more **Fail realms**. A Fail realm contains one or more [Fail domains](#fail-domain). The correlated failure of two VDisks within the same Fail realm is more likely than that of two VDisks from different Fail realms. A Fail realm usually corresponds to the physical concept of a data center or Availability Zone (AZ).
+A **fail realm** is a set of [fail domains](#fail-domain) that are likely to fail simultaneously. The correlated failure of two [VDisks](#vdisk) within the same fail realm is more probable than that of two VDisks from different fail realms.
+
+An example of a fail realm is a set of hardware located in the same [data center or availability zone](#regions-az) that can all fail together due to a natural disaster, major power outage, or similar event.
 
 #### Fail domain {#fail-domain}
 
-A [Fail realm](#fail-realm) contains one or more **Fail domains**. The correlated failure of two [VDisks](#vdisk) within the same Fail domain is more likely than that of two VDisks from different Fail domains. A Fail domain usually corresponds to a [server rack](#rack) concept.
+A **fail domain** is a set of hardware that may fail simultaneously. The correlated failure of two [VDisks](#vdisk) within the same fail domain is more probable than the failure of two VDisks from different fail domains. In the case of different fail domains, this probability is also affected by whether these domains belong to the same [fail realm](#fail-realm) or not.
+
+For example, a fail domain includes disks on the same server, as all server disks may become unavailable if the server's PSU or network controller fails. A fail domain also typically includes servers located in the same server rack, as all the hardware in the rack may become unavailable if there is a power outage or an issue with the network hardware in the same rack. Thus, the typical fail domain corresponds to a server rack if the [cluster](#cluster) is configured to be rack-aware, or to a server otherwise.
+
+Domain failures are handled automatically by {{ ydb-short-name }} without shutting down the cluster.
 
 #### Distributed storage channel {#channel}
 
 A **channel** is a logical connection between a [tablet](#tablet) and [Distributed storage](#distributed-storage) group. The tablet can write data to different channels, and each channel is mapped to a specific [storage group](#storage-group). Having multiple channels allows the tablet to:
 
 * Record more data than one storage group can contain.
-* Store different [LogoBlobs](#logoblobs) on different storage groups, with different properties like erasure encoding or on different storage media (HDD, SSD, NVMe).
+* Store different [LogoBlobs](#logoblob) on different storage groups, with different properties like erasure encoding or on different storage media (HDD, SSD, NVMe).
 
 ### Distributed transactions implementation {#distributed-transaction-implementation}
 
-Terms related to the implementation of [distributed transactions](#distributed-transactions) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
+Terms related to the implementation of [distributed transactions](#distributed-transaction) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
 
 #### Deterministic transactions {#deterministic-transactions}
 
@@ -468,7 +552,7 @@ In the case of read-only transactions, similar to "read uncommitted" in other da
 
 #### Read-write set {#rw-set}
 
-The **read-write set** or **RW set** is a set of data that will participate in executing a [distributed transaction](#distributed-transactions). It combines the read set, the data that will be read, and the write set, the data modifications to be carried out.
+The **read-write set** or **RW set** is a set of data that will participate in executing a [distributed transaction](#distributed-transaction). It combines the read set, the data that will be read, and the write set, the data modifications to be carried out.
 
 #### Read set {#read-set}
 
@@ -476,7 +560,7 @@ The **read set** or **ReadSet data** is what participating shards forward during
 
 #### Transaction proxy {#transaction-proxy}
 
-The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#distributed-transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
+The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#distributed-transaction): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
 
 #### Transaction flags {#txflags}
 
@@ -501,12 +585,12 @@ During the distributed query execution, **mediator time** is the logical time be
 #### MiniKQL {#minikql}
 
 **MiniKQL** is a language that allows the expression of a single [deterministic transaction](#deterministic-transactions) in the system. It is a functional, strongly typed language. Conceptually, the language describes a graph of reading from the database, performing calculations on the read data, and writing the results to the database and/or to a special document representing the query result (shown to the user). The MiniKQL transaction must explicitly set its read set (readable data) and assume a deterministic selection of execution branches (for example, there is no random).
-  
+
 MiniKQL is a low-level language. The system's end users only see queries in the [YQL](#yql) language, which relies on MiniKQL in its implementation.
 
 #### KQP {#kqp}
 
-**KQP** is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
+**KQP** or **Query Processor** is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
 
 ### Global schema {#global-schema}
 

@@ -323,11 +323,13 @@ struct TNodeFilter {
     TSubDomainKey ObjectDomain;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
 
-    const THive& Hive;
+    const THive* Hive;
 
     explicit TNodeFilter(const THive& hive);
 
     TArrayRef<const TSubDomainKey> GetEffectiveAllowedDomains() const;
+
+    bool IsAllowedDataCenter(TDataCenterId dc) const;
 };
 
 } // NHive

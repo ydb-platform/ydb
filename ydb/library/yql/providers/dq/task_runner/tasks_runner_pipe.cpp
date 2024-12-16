@@ -2,16 +2,15 @@
 
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/rope_over_buffer.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -67,27 +66,32 @@ void Load(IInputStream& input, void* buf, size_t size) {
 
 } // namespace {
 
-i64 SaveRopeToPipe(IOutputStream& output, const TRope& rope) {
+i64 SaveRopeToPipe(IOutputStream& output, const TChunkedBuffer& rope) {
+    // TODO: can this function recieve rope by rvalue?
+    TChunkedBuffer toSave(rope);
     i64 total = 0;
-    for (const auto& [data, size] : rope) {
+    while (!toSave.Empty()) {
+        TStringBuf buf = toSave.Front().Buf;
+        size_t size = buf.size();
         output.Write(&size, sizeof(size_t));
         YQL_ENSURE(size != 0);
-        output.Write(data, size);
+        output.Write(buf.data(), size);
         total += size;
+        toSave.Erase(size);
     }
     size_t zero = 0;
     output.Write(&zero, sizeof(size_t));
     return total;
 }
 
-void LoadRopeFromPipe(IInputStream& input, TRope& rope) {
+void LoadRopeFromPipe(IInputStream& input, TChunkedBuffer& rope) {
     size_t size;
     do {
         Load(input, &size, sizeof(size_t));
         if (size) {
             auto buffer = std::shared_ptr<char[]>(new char[size]);
-            Load(input, buffer.get(), size);            
-            rope.Insert(rope.End(), NYql::MakeReadOnlyRope(buffer, buffer.get(), size));
+            Load(input, buffer.get(), size);
+            rope.Append(TStringBuf(buffer.get(), size), buffer);
         }
     } while (size != 0);
 }

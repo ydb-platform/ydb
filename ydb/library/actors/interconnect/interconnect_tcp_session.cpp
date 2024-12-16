@@ -39,6 +39,7 @@ namespace NActors {
         , OutputCounter(0ULL)
     {
         Proxy->Metrics->SetConnected(0);
+        PartUpdateTimestamp = GetCycleCountFast();
         ReceiveContext.Reset(new TReceiveContext);
     }
 
@@ -83,6 +84,7 @@ namespace NActors {
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
         ShutdownSocket(std::move(reason));
 
+        ReceiveContext->Terminated = true; // prevent further message generation by receiving actor
         for (const auto& kv : Subscribers) {
             Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second);
         }
@@ -143,6 +145,9 @@ namespace NActors {
 
         SetOutputStuckFlag(true);
         ++NumEventsInQueue;
+        if (State == EState::Idle) {
+            UpdateState(EState::Utilized);
+        }
         RearmCloseOnIdle();
 
         LWTRACK(EnqueueEvent, event->Orbit, Proxy->PeerNodeId, NumEventsInQueue, GetWriteBlockedTotal(), evChannel, oChannel.GetQueueSize(), oChannel.GetBufferedAmountOfData());
@@ -313,6 +318,8 @@ namespace NActors {
         LastHandshakeDone = TActivationContext::Now();
 
         GenerateTraffic();
+
+        SendUpdateToWhiteboard(true, false);
     }
 
     void TInterconnectSessionTCP::Handle(TEvUpdateFromInputSession::TPtr& ev) {
@@ -353,28 +360,10 @@ namespace NActors {
 
             GenerateTraffic();
 
-            for (;;) {
-                switch (EUpdateState state = ReceiveContext->UpdateState) {
-                    case EUpdateState::NONE:
-                    case EUpdateState::CONFIRMING:
-                        Y_ABORT("unexpected state");
-
-                    case EUpdateState::INFLIGHT:
-                        // this message we are processing was the only one in flight, so we can reset state to NONE here
-                        if (ReceiveContext->UpdateState.compare_exchange_weak(state, EUpdateState::NONE)) {
-                            return;
-                        }
-                        break;
-
-                    case EUpdateState::INFLIGHT_AND_PENDING:
-                        // there is more messages pending from the input session actor, so we have to inform it to release
-                        // that message
-                        if (ReceiveContext->UpdateState.compare_exchange_weak(state, EUpdateState::CONFIRMING)) {
-                            Send(ev->Sender, new TEvConfirmUpdate);
-                            return;
-                        }
-                        break;
-                }
+            Y_ABORT_UNLESS(ReceiveContext->UpdateInFlight);
+            ReceiveContext->UpdateInFlight = false;
+            if (ReceiveContext->NextUpdatePending) {
+                Send(ev->Sender, new TEvConfirmUpdate);
             }
         }
     }
@@ -408,8 +397,14 @@ namespace NActors {
             TimeLimit.emplace(GetMaxCyclesPerEvent());
         }
 
+        if (NumEventsInQueue || OutgoingStream || OutOfBandStream || XdcStream) {
+            UpdateState(EState::Utilized);
+        }
+
         // generate ping request, if needed
         IssuePingRequest();
+
+        bool notEnoughCpu = false;
 
         while (Socket) {
             ProducePackets();
@@ -438,6 +433,7 @@ namespace NActors {
             } else if (TimeLimit->CheckExceeded()) {
                 SetEnoughCpu(++StarvingInRow < StarvingInRowForNotEnoughCpu);
                 IssueRam(false);
+                notEnoughCpu = true;
                 break;
             }
         }
@@ -449,6 +445,10 @@ namespace NActors {
 
         // equalize channel weights
         EqualizeCounter += ChannelScheduler->Equalize();
+
+        // update state
+        const bool finished = !NumEventsInQueue && !OutgoingStream && !OutOfBandStream && !XdcStream;
+        UpdateState(finished ? EState::Idle : notEnoughCpu ? EState::WaitingCpu : EState::Utilized);
     }
 
     void TInterconnectSessionTCP::ProducePackets() {
@@ -527,12 +527,15 @@ namespace NActors {
             CloseOnIdleWatchdog.Disarm();
             LostConnectionWatchdog.Rearm(SelfId());
             Proxy->Metrics->SetConnected(0);
+            Proxy->RegisterDisconnect();
             LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] disconnected", Proxy->PeerNodeId);
         }
         if (XdcSocket) {
             XdcSocket->Shutdown(SHUT_RDWR);
             XdcSocket.Reset();
         }
+        UpdateState(EState::Idle);
+        SendUpdateToWhiteboard(true, false);
     }
 
     void TInterconnectSessionTCP::ReestablishConnectionExecute() {
@@ -996,16 +999,11 @@ namespace NActors {
         return sumBusy * 1000000 / sumPeriod;
     }
 
-    void TInterconnectSessionTCP::SendUpdateToWhiteboard(bool connected) {
+    void TInterconnectSessionTCP::SendUpdateToWhiteboard(bool connected, bool reschedule) {
+        using EFlag = TWhiteboardSessionStatus::EFlag;
         const ui32 utilization = Socket ? CalculateQueueUtilization() : 0;
 
         if (const auto& callback = Proxy->Common->UpdateWhiteboard) {
-            enum class EFlag {
-                GREEN,
-                YELLOW,
-                ORANGE,
-                RED,
-            };
             EFlag flagState = EFlag::RED;
 
             if (Socket) {
@@ -1034,19 +1032,26 @@ namespace NActors {
             // they have one scope in this case
             bool reportClockSkew = Proxy->Common->LocalScopeId.first != 0 && Proxy->Common->LocalScopeId == Params.PeerScopeId;
 
-            callback({TlsActivationContext->ExecutorThread.ActorSystem,
-                     Proxy->PeerNodeId,
-                     Proxy->Metrics->GetHumanFriendlyPeerHostName(),
-                     connected,
-                     flagState == EFlag::GREEN,
-                     flagState == EFlag::YELLOW,
-                     flagState == EFlag::ORANGE,
-                     flagState == EFlag::RED,
-                     ReceiveContext->ClockSkew_us.load(),
-                     reportClockSkew});
+            callback({
+                .ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem,
+                .PeerNodeId = Proxy->PeerNodeId,
+                .PeerName = Proxy->Metrics->GetHumanFriendlyPeerHostName(),
+                .Connected = connected,
+                .SessionClosed = !connected,
+                .SessionPendingConnection = connected && !Socket,
+                .SessionConnected = connected && Socket,
+                .ConnectStatus = flagState,
+                .ClockSkewUs = ReceiveContext->ClockSkew_us,
+                .ReportClockSkew = reportClockSkew,
+                .PingTimeUs = ReceiveContext->PingRTT_us,
+                .ScopeId = Params.PeerScopeId,
+                .Utilization = Utilized,
+                .ConnectTime = LastHandshakeDone.MilliSeconds(),
+                .BytesWrittenToSocket = BytesWrittenToSocket,
+            });
         }
 
-        if (connected) {
+        if (connected && reschedule) {
             Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
         }
     }
@@ -1120,6 +1125,10 @@ namespace NActors {
         }
     }
 
+    void TInterconnectSessionTCP::UpdateUtilization() {
+        Proxy->Metrics->SetUtilization(1'000'000 * Utilized, 1'000'000 * Starving);
+    }
+
     void TInterconnectSessionTCP::GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) {
         TStringStream str;
         ev->Get()->Output(str);
@@ -1181,6 +1190,14 @@ namespace NActors {
                                     }
                                     TABLED() {
                                         str << x->GetPeerCommonName();
+                                    }
+                                }
+                                TABLER() {
+                                    TABLED() {
+                                        str << "Signature algorithm";
+                                    }
+                                    TABLED() {
+                                        str << x->GetSignatureAlgorithm();
                                     }
                                 }
                             }
@@ -1323,6 +1340,15 @@ namespace NActors {
 
                             MON_VAR(CpuStarvationEvents)
                             MON_VAR(CpuStarvationEventsOnWriteData)
+
+                            UpdateState();
+
+                            TABLER() {
+                                TABLED() { str << "Utilization"; }
+                                TABLED() {
+                                    str << Sprintf("%.1f%%", 100 * Utilized) << " / " << Sprintf("%.1f%%", Starving);
+                                }
+                            }
 
                             TString clockSkew;
                             i64 x = GetClockSkew();

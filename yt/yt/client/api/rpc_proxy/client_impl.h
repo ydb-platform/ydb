@@ -129,6 +129,11 @@ public:
         NChaosClient::TReplicationCardId replicationCardId,
         const TAlterReplicationCardOptions& options = {}) override;
 
+    // Distributed table client
+    TFuture<ITableWriterPtr> CreateFragmentTableWriter(
+        const TFragmentWriteCookiePtr& cookie,
+        const TFragmentTableWriterOptions& options) override;
+
     // Queues.
     TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
         const NYPath::TRichYPath& queuePath,
@@ -195,13 +200,13 @@ public:
         const NApi::TRemoveMemberOptions& options) override;
 
     TFuture<TCheckPermissionResponse> CheckPermission(
-        const TString& user,
+        const std::string& user,
         const NYPath::TYPath& path,
         NYTree::EPermission permission,
         const NApi::TCheckPermissionOptions& options) override;
 
     TFuture<TCheckPermissionByAclResult> CheckPermissionByAcl(
-        const std::optional<TString>& user,
+        const std::optional<std::string>& user,
         NYTree::EPermission permission,
         NYTree::INodePtr acl,
         const NApi::TCheckPermissionByAclOptions& options) override;
@@ -268,10 +273,14 @@ public:
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobSpecOptions& options) override;
 
-    TFuture<TSharedRef> GetJobStderr(
+    TFuture<TGetJobStderrResponse> GetJobStderr(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobStderrOptions& options) override;
+
+    TFuture<std::vector<TJobTraceEvent>> GetJobTrace(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NApi::TGetJobTraceOptions& options) override;
 
     TFuture<TSharedRef> GetJobFailContext(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -357,7 +366,7 @@ public:
 
     TFuture<void> SwitchLeader(
         NHydra::TCellId cellId,
-        const TString& newLeaderAddress,
+        const std::string& newLeaderAddress,
         const TSwitchLeaderOptions& options) override;
 
     TFuture<void> ResetStateHash(
@@ -368,15 +377,15 @@ public:
         const NApi::TGCCollectOptions& options) override;
 
     TFuture<void> KillProcess(
-        const TString& address,
+        const std::string& address,
         const NApi::TKillProcessOptions& options) override;
 
     TFuture<TString> WriteCoreDump(
-        const TString& address,
+        const std::string& address,
         const NApi::TWriteCoreDumpOptions& options) override;
 
     TFuture<TGuid> WriteLogBarrier(
-        const TString& address,
+        const std::string& address,
         const TWriteLogBarrierOptions& options) override;
 
     TFuture<TString> WriteOperationControllerCoreDump(
@@ -384,7 +393,7 @@ public:
         const NApi::TWriteOperationControllerCoreDumpOptions& options) override;
 
     TFuture<void> HealExecNode(
-        const TString& address,
+        const std::string& address,
         const THealExecNodeOptions& options) override;
 
     TFuture<void> SuspendCoordinator(
@@ -417,35 +426,35 @@ public:
 
     TFuture<TMaintenanceIdPerTarget> AddMaintenance(
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         EMaintenanceType type,
         const TString& comment,
         const TAddMaintenanceOptions& options) override;
 
     TFuture<TMaintenanceCountsPerTarget> RemoveMaintenance(
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         const TMaintenanceFilter& filter,
         const TRemoveMaintenanceOptions& options) override;
 
     TFuture<TDisableChunkLocationsResult> DisableChunkLocations(
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TDisableChunkLocationsOptions& options) override;
 
     TFuture<TDestroyChunkLocationsResult> DestroyChunkLocations(
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options) override;
 
     TFuture<TResurrectChunkLocationsResult> ResurrectChunkLocations(
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TResurrectChunkLocationsOptions& options) override;
 
     TFuture<TRequestRestartResult> RequestRestart(
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const TRequestRestartOptions& options) override;
 
     // Query tracker
@@ -486,24 +495,24 @@ public:
     // Authentication
 
     virtual TFuture<void> SetUserPassword(
-        const TString& user,
+        const std::string& user,
         const TString& currentPasswordSha256,
         const TString& newPasswordSha256,
         const TSetUserPasswordOptions& options) override;
 
     TFuture<TIssueTokenResult> IssueToken(
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TIssueTokenOptions& options) override;
 
     TFuture<void> RevokeToken(
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TString& tokenSha256,
         const TRevokeTokenOptions& options) override;
 
     TFuture<TListUserTokensResult> ListUserTokens(
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TListUserTokensOptions& options) override;
 
@@ -559,6 +568,23 @@ public:
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options) override;
 
+    // Shuffle service client
+    TFuture<TShuffleHandlePtr> StartShuffle(
+        const std::string& account,
+        int partitionCount,
+        NObjectClient::TTransactionId parentTransactionId,
+        const TStartShuffleOptions& options) override;
+
+    TFuture<IRowBatchReaderPtr> CreateShuffleReader(
+        const TShuffleHandlePtr& shuffleHandle,
+        int partitionIndex,
+        const NTableClient::TTableReaderConfigPtr& config) override;
+
+    TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
+        const TShuffleHandlePtr& shuffleHandle,
+        const std::string& partitionColumn,
+        const NTableClient::TTableWriterConfigPtr& config) override;
+
 private:
     const TConnectionPtr Connection_;
     const NRpc::TDynamicChannelPoolPtr ChannelPool_;
@@ -574,7 +600,7 @@ private:
     NRpc::IChannelPtr CreateSequoiaAwareRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const;
     // Returns an RPC channel to use for API calls to the particular address (e.g.: AttachTransaction).
     // The channel is non-retrying, so should be wrapped into retrying channel on demand.
-    NRpc::IChannelPtr CreateNonRetryingChannelByAddress(const TString& address) const;
+    NRpc::IChannelPtr CreateNonRetryingChannelByAddress(const std::string& address) const;
 
     TConnectionPtr GetRpcProxyConnection() override;
     TClientPtr GetRpcProxyClient() override;

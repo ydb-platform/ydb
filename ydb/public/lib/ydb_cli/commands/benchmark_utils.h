@@ -5,6 +5,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/library/accessor/accessor.h>
 
+#include <util/generic/map.h>
 #include <vector>
 
 namespace NYdb::NConsoleClient::BenchmarkUtils {
@@ -30,65 +31,60 @@ struct TTestInfo {
     void operator /=(const ui32 count);
 };
 
-class TQueryResultInfo {
-protected:
-    std::vector<std::vector<NYdb::TValue>> Result;
-    TVector<NYdb::TColumn> Columns;
-public:
-    std::map<TString, ui32> GetColumnsRemap() const {
-        std::map<TString, ui32> result;
-        ui32 idx = 0;
-        for (auto&& i : Columns) {
-            result.emplace(i.Name, idx++);
-        }
-        return result;
-    }
-
-    const std::vector<std::vector<NYdb::TValue>>& GetResult() const {
-        return Result;
-    }
-    const TVector<NYdb::TColumn>& GetColumns() const {
-        return Columns;
-    }
-    bool IsExpected(std::string_view expected) const;
-};
-
 class TQueryBenchmarkResult {
+public:
+    using TRawResults = TMap<ui64, TVector<NYdb::TResultSet>>;
+
 private:
     YDB_READONLY_DEF(TString, ErrorInfo);
-    YDB_READONLY_DEF(TString, YSONResult);
-    YDB_READONLY_DEF(TQueryResultInfo, QueryResult);
+    YDB_READONLY_DEF(TRawResults, RawResults);
     YDB_READONLY_DEF(TDuration, ServerTiming);
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
     TQueryBenchmarkResult() = default;
 public:
-    static TQueryBenchmarkResult Result(const TString& yson, const TQueryResultInfo& queryResult,
+    static TQueryBenchmarkResult Result(TRawResults&& rawResults,
         const TDuration& serverTiming, const TString& queryPlan, const TString& planAst)
     {
         TQueryBenchmarkResult result;
-        result.YSONResult = yson;
-        result.QueryResult = queryResult;
+        result.RawResults = std::move(rawResults);
         result.ServerTiming = serverTiming;
         result.QueryPlan = queryPlan;
         result.PlanAst = planAst;
         return result;
     }
-    static TQueryBenchmarkResult Error(const TString& error) {
+
+    static TQueryBenchmarkResult Error(const TString& error, const TString& queryPlan, const TString& planAst) {
         TQueryBenchmarkResult result;
         result.ErrorInfo = error;
+        result.QueryPlan = queryPlan;
+        result.PlanAst = planAst;
         return result;
     }
+
+    bool IsExpected(std::string_view expected) const;
+    TString CalcHash() const;
+
     operator bool() const {
         return !ErrorInfo;
     }
+
+private:
+    bool IsExpected(TStringBuf expected, size_t resultSetIndex) const;
+};
+
+struct TQueryBenchmarkDeadline {
+    TInstant Deadline = TInstant::Max();
+    TString Name;
 };
 
 TString FullTablePath(const TString& database, const TString& table);
 void ThrowOnError(const TStatus& status);
 bool HasCharsInString(const TString& str);
-TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & client);
-TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client);
+TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkDeadline& deadline);
+TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkDeadline& deadline);
+TQueryBenchmarkResult Explain(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkDeadline& deadline);
+TQueryBenchmarkResult Explain(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkDeadline& deadline);
 NJson::TJsonValue GetQueryLabels(ui32 queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, ui32 queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 queryId);

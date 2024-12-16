@@ -18,10 +18,12 @@
 #include <ydb/core/protos/tenant_pool.pb.h>
 #include <ydb/core/protos/compile_service_config.pb.h>
 #include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
 #include <google/protobuf/text_format.h>
@@ -233,7 +235,7 @@ public:
         const auto* curOpt = parser->CurOpt();
         TStringBuf val(parser->CurValStr());
         try {
-            if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().Data()) {
+            if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().data()) {
                 Target->Value = FromString<typename TType::TWrappedType>(curOpt->GetDefaultValue());
                 Target->Default = true;
                 return;
@@ -260,7 +262,7 @@ public:
     void HandleOpt(const NLastGetopt::TOptsParser* parser) override {
         const auto* curOpt = parser->CurOpt();
         TStringBuf val(parser->CurValStr());
-        if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().Data()) {
+        if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().data()) {
             Target->Value = curOpt->GetDefaultValue();
             Target->Default = true;
             return;
@@ -287,6 +289,7 @@ struct TCommonAppOptions {
     ui32 MonitoringPort = 0;
     TString MonitoringAddress;
     ui32 MonitoringThreads = 10;
+    ui32 MonitoringMaxRequestsPerSecond = 0;
     TString MonitoringCertificateFile;
     TString RestartsCountFile = "";
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService
@@ -315,6 +318,8 @@ struct TCommonAppOptions {
     TString GRpcPublicHost = "";
     ui32 GRpcPublicPort = 0;
     ui32 GRpcsPublicPort = 0;
+    TString PGWireAddress = "";
+    ui32 PGWirePort = 0;
     TVector<TString> GRpcPublicAddressesV4;
     TVector<TString> GRpcPublicAddressesV6;
     TString GRpcPublicTargetNameOverride = "";
@@ -326,7 +331,7 @@ struct TCommonAppOptions {
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
-    EWorkload Workload = EWorkload::Hybrid; 
+    EWorkload Workload = EWorkload::Hybrid;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -383,6 +388,8 @@ struct TCommonAppOptions {
         opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
         opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
+        opts.AddLongOption("pgwire-address", "set host for listen postgres protocol").RequiredArgument("ADDR").StoreResult(&PGWireAddress);
+        opts.AddLongOption("pgwire-port", "set port for listen postgres protocol").OptionalArgument("PORT").StoreResult(&PGWirePort);
         opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4);
         opts.AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV6);
         opts.AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicTargetNameOverride);
@@ -429,17 +436,17 @@ struct TCommonAppOptions {
         }
 
         // apply certificates, if any
-        if (!PathToInterconnectCertFile.Empty()) {
+        if (!PathToInterconnectCertFile.empty()) {
             appConfig.MutableInterconnectConfig()->SetPathToCertificateFile(PathToInterconnectCertFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!PathToInterconnectPrivateKeyFile.Empty()) {
+        if (!PathToInterconnectPrivateKeyFile.empty()) {
             appConfig.MutableInterconnectConfig()->SetPathToPrivateKeyFile(PathToInterconnectPrivateKeyFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!PathToInterconnectCaFile.Empty()) {
+        if (!PathToInterconnectCaFile.empty()) {
             appConfig.MutableInterconnectConfig()->SetPathToCaFile(PathToInterconnectCaFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
@@ -449,7 +456,7 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!GrpcSslSettings.PathToGrpcCertFile.Empty()) {
+        if (!GrpcSslSettings.PathToGrpcCertFile.empty()) {
             appConfig.MutableGRpcConfig()->SetPathToCertificateFile(GrpcSslSettings.PathToGrpcCertFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
@@ -459,7 +466,7 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!GrpcSslSettings.PathToGrpcPrivateKeyFile.Empty()) {
+        if (!GrpcSslSettings.PathToGrpcPrivateKeyFile.empty()) {
             appConfig.MutableGRpcConfig()->SetPathToPrivateKeyFile(GrpcSslSettings.PathToGrpcPrivateKeyFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
@@ -469,7 +476,7 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!GrpcSslSettings.PathToGrpcCaFile.Empty()) {
+        if (!GrpcSslSettings.PathToGrpcCaFile.empty()) {
             appConfig.MutableGRpcConfig()->SetPathToCaFile(GrpcSslSettings.PathToGrpcCaFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
@@ -496,9 +503,9 @@ struct TCommonAppOptions {
             if (offset) {
                 connectorConfig.MutableEndpoint()->Setport(InterconnectPort + offset) ;
 
-                // Assign default hostname 'localhost', because 
+                // Assign default hostname 'localhost', because
                 // connector is usually deployed to the same host as the dynamic node.
-                if (connectorConfig.GetEndpoint().host().Empty()) {
+                if (connectorConfig.GetEndpoint().host().empty()) {
                     connectorConfig.MutableEndpoint()->Sethost("localhost");
                 }
             }
@@ -597,6 +604,12 @@ struct TCommonAppOptions {
             }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
+        if (PGWireAddress) {
+            appConfig.MutableLocalPgWireConfig()->SetAddress(PGWireAddress);
+        }
+        if (PGWirePort) {
+            appConfig.MutableLocalPgWireConfig()->SetListeningPort(PGWirePort);
+        }
         for (const auto& addr : GRpcPublicAddressesV4) {
             appConfig.MutableGRpcConfig()->AddPublicAddressesV4(addr);
         }
@@ -658,7 +671,7 @@ struct TCommonAppOptions {
                     ApplyDontStartGrpcProxy(*appConfig.MutableGRpcConfig(), ConfigUpdateTracer);
                     break;
                 case EWorkload::Hybrid:
-                    // default, do nothing 
+                    // default, do nothing
                     break;
             }
         }
@@ -1009,6 +1022,7 @@ class TInitialConfiguratorImpl
     TKikimrScopeId ScopeId;
     TString TenantName;
     TString ClusterName;
+    TString NodeName;
 
     TMap<TString, TString> Labels;
 
@@ -1113,13 +1127,19 @@ public:
 
         TenantName = FillTenantPoolConfig(CommonAppOptions);
 
+        std::vector<TString> errors;
+        EValidationResult result = ValidateConfig(AppConfig, errors);
+        if (result == EValidationResult::Error) {
+            ythrow yexception() << errors.front();
+        }
+
         Logger.Out() << "configured" << Endl;
 
         FillData(CommonAppOptions);
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {
-        if (cf.TenantName && ScopeId.IsEmpty()) {
+        if (!cf.TenantName && ScopeId.IsEmpty()) {
             const TString myDomain = DeduceNodeDomain(cf, AppConfig);
             for (const auto& domain : AppConfig.GetDomainsConfig().GetDomain()) {
                 if (domain.GetName() == myDomain) {
@@ -1247,11 +1267,12 @@ public:
             cf.FixedNodeID,
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
+            AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);
 
-        result->Apply(AppConfig, NodeId, ScopeId);
+        result->Apply(AppConfig, NodeId, ScopeId, NodeName);
     }
 
     void ApplyConfigForNode(NKikimrConfig::TAppConfig &appConfig) {
@@ -1280,6 +1301,11 @@ public:
 
         Labels["node_id"] = ToString(NodeId);
         AddLabelToAppConfig("node_id", Labels["node_id"]);
+
+        if (!NodeName.empty()) {
+            Labels["node_name"] = NodeName;
+            AddLabelToAppConfig("node_name", Labels["node_name"]);
+        }
 
         if (CommonAppOptions.IgnoreCmsConfigs) {
             return;

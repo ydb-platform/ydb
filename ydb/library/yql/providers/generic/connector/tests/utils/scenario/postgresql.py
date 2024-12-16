@@ -1,6 +1,6 @@
 from typing import Sequence
 
-import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
+import yql.essentials.providers.common.proto.gateways_config_pb2 as data_source_pb2
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
 from ydb.library.yql.providers.generic.connector.tests.utils.comparator import assert_data_outs_equal
@@ -94,7 +94,7 @@ def select_positive(
         test_name=test_name,
         client=client,
         database=test_case.database,
-        table_name=test_case.sql_table_name,
+        table_name=test_case.table_name,
         schema=test_case.schema,
         data_in=test_case.data_in,
     )
@@ -104,12 +104,12 @@ def select_positive(
     if test_case.select_where is not None:
         where_statement = "WHERE " + test_case.select_where.render(
             cluster_name=settings.postgresql.cluster_name,
-            table_name=test_case.qualified_table_name,
+            table_name=test_case.table_name,
         )
     yql_script = f"""
         {test_case.pragmas_sql_string}
         SELECT {test_case.select_what.yql_select_names}
-        FROM {settings.postgresql.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.postgresql.cluster_name}.{test_case.table_name}
         {where_statement}
     """
     result = runner.run(
@@ -139,7 +139,7 @@ def select_missing_database(
 
     yql_script = f"""
         SELECT *
-        FROM {settings.postgresql.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.postgresql.cluster_name}.{test_case.table_name}
     """
     result = runner.run(
         test_name=test_name,
@@ -175,7 +175,7 @@ def select_missing_table(
     # read data
     yql_script = f"""
         SELECT *
-        FROM {settings.postgresql.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.postgresql.cluster_name}.{test_case.table_name}
     """
     result = runner.run(
         test_name=test_name,
@@ -197,7 +197,7 @@ def select_pg_schema(
         test_name=test_name,
         client=client,
         database=test_case.database,
-        table_name=test_case.sql_table_name,
+        table_name=test_case.table_name,
         schema=test_case.schema,
         data_in=test_case.data_in,
         pg_schema=test_case.pg_schema,
@@ -206,7 +206,7 @@ def select_pg_schema(
     # read data
     yql_script = f"""
         SELECT {test_case.select_what.yql_select_names}
-        FROM {settings.postgresql.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.postgresql.cluster_name}.{test_case.table_name}
     """
     result = runner.run(
         test_name=test_name,

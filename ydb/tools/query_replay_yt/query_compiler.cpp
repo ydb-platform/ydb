@@ -225,7 +225,7 @@ public:
 class TReplayCompileActor: public TActorBootstrapped<TReplayCompileActor> {
 public:
     TReplayCompileActor(TIntrusivePtr<TModuleResolverState> moduleResolverState, const NMiniKQL::IFunctionRegistry* functionRegistry,
-        NYql::IHTTPGateway::TPtr httpGateway)
+        NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser)
         : ModuleResolverState(moduleResolverState)
         , KqpSettings()
         , Config(MakeIntrusive<TKikimrConfiguration>())
@@ -233,8 +233,8 @@ public:
         , HttpGateway(std::move(httpGateway))
     {
         Config->EnableKqpScanQueryStreamLookup = true;
-        Config->PredicateExtract20 = true;
         Config->EnablePreparedDdl = true;
+        Config->EnableAntlr4Parser = enableAntlr4Parser;
     }
 
     void Bootstrap() {
@@ -588,10 +588,14 @@ private:
             }
         }
 
+        QueryId = ReplayDetails["query_id"].GetStringSafe();
+
         TKqpQuerySettings settings(queryType);
+        const auto& database = ReplayDetails["query_database"].GetStringSafe();
         Query = std::make_unique<NKikimr::NKqp::TKqpQueryId>(
             ReplayDetails["query_cluster"].GetStringSafe(),
-            ReplayDetails["query_database"].GetStringSafe(),
+            database,
+            database,
             queryText,
             settings,
             !queryParameterTypes.empty()
@@ -621,11 +625,11 @@ private:
         counters->Counters = new TKqpCounters(c);
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
 
-        Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, std::move(loader),
+        Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, Query->DatabaseId, std::move(loader),
             TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
-        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr});
+        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr, {}});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
-            federatedQuerySetup, nullptr, GUCSettings, Nothing(), FunctionRegistry, false);
+            federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 
         StartCompilation();
         Continue();
@@ -661,6 +665,7 @@ private:
 private:
     TActorId Owner;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
+    TString QueryId;
     std::unique_ptr<TKqpQueryId> Query;
     TGUCSettings::TPtr GUCSettings = std::make_shared<TGUCSettings>();
     TKqpSettings KqpSettings;
@@ -677,7 +682,7 @@ private:
 };
 
 IActor* CreateQueryCompiler(TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway)
+    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser)
 {
-    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway);
+    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway, enableAntlr4Parser);
 }

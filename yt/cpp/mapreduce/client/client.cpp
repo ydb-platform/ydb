@@ -6,6 +6,7 @@
 #include "file_reader.h"
 #include "file_writer.h"
 #include "format_hints.h"
+#include "init.h"
 #include "lock.h"
 #include "operation.h"
 #include "retry_transaction.h"
@@ -41,6 +42,7 @@
 
 #include <yt/cpp/mapreduce/library/table_schema/protobuf.h>
 
+#include <yt/cpp/mapreduce/raw_client/raw_client.h>
 #include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 #include <yt/cpp/mapreduce/raw_client/rpc_parameters_serialization.h>
 
@@ -89,10 +91,12 @@ void ApplyProxyUrlAliasingRules(TString& url)
 ////////////////////////////////////////////////////////////////////////////////
 
 TClientBase::TClientBase(
+    IRawClientPtr rawClient,
     const TClientContext& context,
     const TTransactionId& transactionId,
     IClientRetryPolicyPtr retryPolicy)
-    : Context_(context)
+    : RawClient_(std::move(rawClient))
+    , Context_(context)
     , TransactionId_(transactionId)
     , ClientRetryPolicy_(std::move(retryPolicy))
 { }
@@ -100,7 +104,7 @@ TClientBase::TClientBase(
 ITransactionPtr TClientBase::StartTransaction(
     const TStartTransactionOptions& options)
 {
-    return MakeIntrusive<TTransaction>(GetParentClientImpl(), Context_, TransactionId_, options);
+    return MakeIntrusive<TTransaction>(RawClient_, GetParentClientImpl(), Context_, TransactionId_, options);
 }
 
 TNodeId TClientBase::Create(
@@ -137,7 +141,11 @@ void TClientBase::Set(
     const TNode& value,
     const TSetOptions& options)
 {
-    NRawClient::Set(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_, path, value, options);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &value, &options] (TMutationId& mutationId) {
+            RawClient_->Set(mutationId, TransactionId_, path, value, options);
+        });
 }
 
 void TClientBase::MultisetAttributes(
@@ -825,6 +833,11 @@ IClientPtr TClientBase::GetParentClient()
     return GetParentClientImpl();
 }
 
+IRawClientPtr TClientBase::GetRawClient() const
+{
+    return RawClient_;
+}
+
 const TClientContext& TClientBase::GetContext() const
 {
     return Context_;
@@ -838,11 +851,12 @@ const IClientRetryPolicyPtr& TClientBase::GetRetryPolicy() const
 ////////////////////////////////////////////////////////////////////////////////
 
 TTransaction::TTransaction(
+    IRawClientPtr rawClient,
     TClientPtr parentClient,
     const TClientContext& context,
     const TTransactionId& parentTransactionId,
     const TStartTransactionOptions& options)
-    : TClientBase(context, parentTransactionId, parentClient->GetRetryPolicy())
+    : TClientBase(std::move(rawClient), context, parentTransactionId, parentClient->GetRetryPolicy())
     , TransactionPinger_(parentClient->GetTransactionPinger())
     , PingableTx_(
         MakeHolder<TPingableTransaction>(
@@ -857,11 +871,12 @@ TTransaction::TTransaction(
 }
 
 TTransaction::TTransaction(
+    IRawClientPtr rawClient,
     TClientPtr parentClient,
     const TClientContext& context,
     const TTransactionId& transactionId,
     const TAttachTransactionOptions& options)
-    : TClientBase(context, transactionId, parentClient->GetRetryPolicy())
+    : TClientBase(std::move(rawClient), context, transactionId, parentClient->GetRetryPolicy())
     , TransactionPinger_(parentClient->GetTransactionPinger())
     , PingableTx_(
         new TPingableTransaction(
@@ -927,10 +942,11 @@ TClientPtr TTransaction::GetParentClientImpl()
 ////////////////////////////////////////////////////////////////////////////////
 
 TClient::TClient(
+    IRawClientPtr rawClient,
     const TClientContext& context,
     const TTransactionId& globalId,
     IClientRetryPolicyPtr retryPolicy)
-    : TClientBase(context, globalId, retryPolicy)
+    : TClientBase(std::move(rawClient), context, globalId, retryPolicy)
     , TransactionPinger_(nullptr)
 { }
 
@@ -942,7 +958,7 @@ ITransactionPtr TClient::AttachTransaction(
 {
     CheckShutdown();
 
-    return MakeIntrusive<TTransaction>(this, Context_, transactionId, options);
+    return MakeIntrusive<TTransaction>(RawClient_, this, Context_, transactionId, options);
 }
 
 void TClient::MountTable(
@@ -1243,6 +1259,14 @@ IFileReaderPtr TClient::GetJobStderr(
     return NRawClient::GetJobStderr(Context_, operationId, jobId, options);
 }
 
+std::vector<TJobTraceEvent> TClient::GetJobTrace(
+    const TOperationId& operationId,
+    const TGetJobTraceOptions& options)
+{
+    CheckShutdown();
+    return NRawClient::GetJobTrace(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
+}
+
 TNode::TListType TClient::SkyShareTable(
     const std::vector<TYPath>& tablePaths,
     const TSkyShareTableOptions& options)
@@ -1425,7 +1449,16 @@ TClientPtr CreateClientImpl(
     if (!retryConfigProvider) {
         retryConfigProvider = CreateDefaultRetryConfigProvider();
     }
-    return new NDetail::TClient(context, globalTxId, CreateDefaultClientRetryPolicy(retryConfigProvider, context.Config));
+
+    auto rawClient = MakeIntrusive<THttpRawClient>(context);
+
+    EnsureInitialized();
+
+    return new TClient(
+        std::move(rawClient),
+        context,
+        globalTxId,
+        CreateDefaultClientRetryPolicy(retryConfigProvider, context.Config));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1433,6 +1466,7 @@ TClientPtr CreateClientImpl(
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
+
 
 IClientPtr CreateClient(
     const TString& serverName,
@@ -1447,9 +1481,8 @@ IClientPtr CreateClientFromEnv(const TCreateClientOptions& options)
     if (!serverName) {
         ythrow yexception() << "YT_PROXY is not set";
     }
-    return NDetail::CreateClientImpl(serverName, options);
+    return CreateClient(serverName, options);
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 

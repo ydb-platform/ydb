@@ -3,7 +3,8 @@
 A table is a relational [table](https://en.wikipedia.org/wiki/Table_(database)) containing a set of related data, composed of rows and columns. Tables represent entities. For instance, a blog article can be represented by a table named article with columns: `id`, `date_create`, `title`, `author`, `body` and so on.
 
 Rows in the table hold the data, while columns define the data types. For example, the id column cannot be empty (`NOT NULL`) and should contain only unique integer values. A record in YQL might look like this:
-```sql
+
+```yql
 CREATE TABLE article (
     id Int64 NOT NULL,
     date_create Date,
@@ -16,7 +17,7 @@ CREATE TABLE article (
 
 Please note that currently, the `NOT NULL` constraint can only be applied to columns that are part of the primary key.
 
-YDB supports the creation of both row-oriented and column-oriented tables. The primary difference between them lies in their use-cases and how data is stored on the disk drive. In row-oriented tables, data is stored sequentially in the form of rows, while in column-oriented tables, data is stored in the form of columns. Each table type has its own specific purpose.
+{{ ydb-short-name }} supports the creation of both row-oriented and column-oriented tables. The primary difference between them lies in their use-cases and how data is stored on the disk drive. In row-oriented tables, data is stored sequentially in the form of rows, while in column-oriented tables, data is stored in the form of columns. Each table type has its own specific purpose.
 
 ## Row-oriented tables {#row-oriented-tables}
 
@@ -26,7 +27,7 @@ An index is a data structure that improves the speed of data retrieval operation
 
 Searching using an index allows you to swiftly locate the required rows without scanning through all the data. For instance, if you have an index on the “author” column and you're looking for articles written by “Gray”, the DBMS leverages this index to quickly identify all rows associated with that surname.
 
-You can create a row-oriented table through the YDB web interface, CLI, or SDK. Regardless of the method you choose to interact with YDB, it's important to keep in mind the following rule: the table must have at least one primary key column, and it's permissible to create a table consisting solely of primary key columns.
+You can create a row-oriented table through the {{ ydb-short-name }} web interface, CLI, or SDK. Regardless of the method you choose to interact with {{ ydb-short-name }}, it's important to keep in mind the following rule: the table must have at least one primary key column, and it's permissible to create a table consisting solely of primary key columns.
 
 By default, when creating a row-oriented table, all columns are optional and can have `NULL` values. This behavior can be modified by setting the `NOT NULL` conditions for key columns that are part of the primary key. Primary keys are unique, and row-oriented tables are always sorted by this key. This means that point reads by the key, as well as range queries by key or key prefix, are efficiently executed (essentially using an index). It's permissible to create a table consisting solely of key columns. When choosing a key, it's crucial to be careful, so we recommend reviewing the article: ["Choosing a Primary Key for Maximum Performance"](../../../dev/primary-key/row-oriented.md).
 
@@ -69,7 +70,9 @@ When choosing the minimum number of partitions, it makes sense to consider that 
 * Type: `Uint64`.
 * Default value: `2000 MB` ( `2 GB` ).
 
-Partition size threshold in MB. If exceeded, a shard splits. Takes effect when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
+The desired partition size threshold in megabytes. Recommended values range from `10 MB` to `2000 MB`. If this threshold is exceeded, a shard may split. This setting takes effect when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
+
+This value serves as a recommendation for partitioning. Partitioning may sometimes not occur even if the configured size is exceeded.
 
 #### AUTO_PARTITIONING_MIN_PARTITIONS_COUNT {#auto_partitioning_min_partitions_count}
 
@@ -134,10 +137,11 @@ If there are multiple followers, their delay from the leader may vary: although 
 | `TTL` | Expression | `Interval("<literal>") ON <column> [AS <unit>]` | Yes | Yes |
 
 Where `<unit>` is a unit of measurement, specified only for column with a [numeric type](../../../concepts/ttl.md#restrictions):
-* `SECONDS`;
-* `MILLISECONDS`;
-* `MICROSECONDS`;
-* `NANOSECONDS`.
+
+* `SECONDS`
+* `MILLISECONDS`
+* `MICROSECONDS`
+* `NANOSECONDS`
 
 For more information about deleting expired data, see [Time to Live (TTL)](../../../concepts/ttl.md).
 
@@ -149,7 +153,7 @@ Operations are performed in isolation, the external process sees only two states
 
 The speed of renaming is determined by the type of data transactions currently running against the table and doesn't depend on the table size.
 
-* [Renaming a table in YQL](../../../yql/reference/syntax/alter_table.md#rename)
+* [Renaming a table in YQL](../../../yql/reference/syntax/alter_table/rename.md)
 * [Renaming a table via the CLI](../../../reference/ydb-cli/commands/tools/rename.md)
 
 ### Bloom filter {#bloom-filter}
@@ -161,25 +165,29 @@ Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) lets you more
 | `KEY_BLOOM_FILTER` | Enum | `ENABLED`, `DISABLED` | Yes | No |
 
 ## Column-oriented tables {#column-oriented-tables}
+
 {% note warning %}
 
 Column-oriented {{ ydb-short-name }} tables are in the Preview mode.
 
 {% endnote %}
 
-YDB's column-oriented tables store data of each column separately (independently) from each other. This data storage principle is optimized for handling Online Analytical Processing (OLAP) workloads, as only the columns directly involved in the query are read during its execution. One of the key advantages of this approach is the high data compression ratios since columns often contain repetitive or similar data. A downside, however, is that operations on whole rows become more resource-intensive.
+{{ ydb-short-name }}'s column-oriented tables store data of each column separately (independently) from each other. This data storage principle is optimized for handling Online Analytical Processing (OLAP) workloads, as only the columns directly involved in the query are read during its execution. One of the key advantages of this approach is the high data compression ratios since columns often contain repetitive or similar data. A downside, however, is that operations on whole rows become more resource-intensive.
 
-At the moment, the main use case for YDB column-oriented tables is writing data with an increasing primary key (for example, event time), analyzing this data, and deleting outdated data based on TTL. The optimal way to add data to YDB column-oriented tables is [batch upload](../../../dev/batch-upload.md), performed in MB-sized blocks. Data packet insertion is atomic: data will be written either to all partitions or none.
+At the moment, the main use case for {{ ydb-short-name }} column-oriented tables is writing data with an increasing primary key (for example, event time), analyzing this data, and deleting outdated data based on TTL. The optimal way to add data to {{ ydb-short-name }} column-oriented tables is [batch upload](../../../dev/batch-upload.md), performed in MB-sized blocks. Data packet insertion is atomic: data will be written either to all partitions or none.
 
-In most cases, working with YDB column-oriented tables is similar to working with row tables, but there are differences:
+In most cases, working with {{ ydb-short-name }} column-oriented tables is similar to working with row tables, but there are differences:
+
 * Only `NOT NULL` columns can be used as the primary key.
 * Data is partitioned not by the primary key, but by the hash of the partitioning columns, to evenly distribute the data across the hosts.
 * Column-oriented tables support a limited set of data types:
-    + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
-    + Available only in columns not included in the primary key: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
+
+  + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
+  + Available only in columns not included in the primary key: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
 
 Let's recreate the "article" table, this time in column-oriented format, using the following YQL command:
-```sql
+
+```yql
 CREATE TABLE article_column_table (
     id Int64 NOT NULL,
     author String,
@@ -189,6 +197,7 @@ CREATE TABLE article_column_table (
 )
 WITH (STORE = COLUMN);
 ```
+
 At the moment, not all functionality of column-oriented tables is implemented. The following features are not currently supported:
 
 * Reading from replicas.
@@ -206,7 +215,8 @@ At the moment, not all functionality of column-oriented tables is implemented. T
 Unlike row-oriented {{ ydb-short-name }} tables, you cannot partition column-oriented tables by primary keys but only by specially designated partitioning keys. Partitioning keys constitute a subset of the table's primary keys.
 
 Example of column-oriented partitioning:
-```sql
+
+```yql
 CREATE TABLE article_column_table (
     id Int64 NOT NULL,
     author String,
@@ -219,7 +229,6 @@ WITH (STORE = COLUMN);
 ```
 
 Unlike data partitioning in row-oriented {{ ydb-short-name }} tables, key values are not used to partition data in column-oriented tables. This way, you can uniformly distribute data across all your existing partitions. This kind of partitioning enables you to avoid hotspots at data inserta and speeding up analytical queries that process (that is, read) large amounts of data.
-
 
 How you select partitioning keys substantially affects the performance of queries to your column-oriented tables. Learn more in [{#T}](../../../dev/primary-key/column-oriented.md).
 

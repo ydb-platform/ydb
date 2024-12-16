@@ -1,0 +1,13 @@
+--- contrib/python/requests-mock/py3/tests/base.py	(index)
++++ contrib/python/requests-mock/py3/tests/base.py	(working tree)
+@@ -10,8 +10,8 @@
+ # License for the specific language governing permissions and limitations
+ # under the License.
+ 
+-import testtools
++import unittest
+ 
+ 
+-class TestCase(testtools.TestCase):
++class TestCase(unittest.TestCase):
+     pass

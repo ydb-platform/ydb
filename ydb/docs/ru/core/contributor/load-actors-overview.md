@@ -9,11 +9,7 @@
 
 Нагружающие акторы позволяют тестировать как систему в целом, так отдельные ее компоненты:
 
-<center>
-
 ![load-actors](../_assets/load-actors.svg)
-
-</center>
 
 Например, вы можете подать [нагрузку на Distributed Storage](load-actors-storage.md) без задействования слоев таблеток и Query Processor. Таким образом можно изолированно тестировать отдельные слои системы и эффективно находить узкие места. Комбинация акторов разных типов позволяет запускать множество видов нагрузки.
 
@@ -42,94 +38,80 @@
 
 В качестве примера рассмотрим создание и запуск актора KqpLoad. Актор обращается к БД `/slice/db` как к key-value хранилищу в 64 потока, длительность нагрузки — 30 секунд. Перед началом работы актор создает необходимые таблицы, после окончания удаляет их. При создании актору будет автоматически присвоен тег. Этот же тег будет присвоен и результату теста.
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Embedded UI
 
-  1. Откройте страницу управления нагружающими акторами на узле (например, `http://<address>:8765/actors/load`, где `address` — адрес узла кластера, на котором нужно запустить нагрузку).
-  1. В поле ввода/вывода вставьте конфигурацию актора:
+    1. Откройте страницу управления нагружающими акторами на узле (например, `http://<address>:8765/actors/load`, где `address` — адрес узла кластера, на котором нужно запустить нагрузку).
+    2. В поле ввода/вывода вставьте конфигурацию актора:
 
-      ```proto
-      KqpLoad: {
-          DurationSeconds: 30
-          WindowDuration: 1
-          WorkingDir: "/slice/db"
-          NumOfSessions: 64
-          UniformPartitionsCount: 1000
-          DeleteTableOnFinish: 1
-          WorkloadType: 0
-          Kv: {
-              InitRowCount: 1000
-              PartitionsByLoad: true
-              MaxFirstKey: 18446744073709551615
-              StringLen: 8
-              ColumnsCnt: 2
-              RowsCnt: 1
-          }
-      }
-      ```
+    ```proto
+    KqpLoad: {
+        DurationSeconds: 30
+        WindowDuration: 1
+        WorkingDir: "/slice/db"
+        NumOfSessions: 64
+        UniformPartitionsCount: 1000
+        DeleteTableOnFinish: 1
+        WorkloadType: 0
+        Kv: {
+            InitRowCount: 1000
+            PartitionsByLoad: true
+            MaxFirstKey: 18446744073709551615
+            StringLen: 8
+            ColumnsCnt: 2
+            RowsCnt: 1
+        }
+    }
+    ```
 
-  1. Чтобы создать и запустить актор, нажмите кнопку:
-      * **Start new load on current node** — нагрузка будет запущена на текущем узле.
-      * **Start new load on all tenant nodes** — нагрузка будет запущена на всех узлах тенанта.
-  
-  В поле ввода/вывода появится следующее сообщение:
+    3. Чтобы создать и запустить актор, нажмите кнопку:
 
-  ```text
-  {"status":"OK","tag":1}
-  ```
+        * **Start new load on current node** — нагрузка будет запущена на текущем узле.
+        * **Start new load on all tenant nodes** — нагрузка будет запущена на всех узлах тенанта.
 
-  * `status` — статус запуска нагрузки;
-  * `tag` — тег, который был присвоен нагрузке.
+    В поле ввода/вывода появится следующее сообщение:
+
+    ```text
+    {"status":"OK","tag":1}
+    ```
+
+    * `status` — статус запуска нагрузки;
+    * `tag` — тег, который был присвоен нагрузке.
 
 - CLI
 
-  1. Создайте файл с конфигурацией актора:
+    1. Создайте файл с конфигурацией актора:
 
-      ```proto
-      NodeId: 1
-      Event: {
-          KqpLoad: {
-              DurationSeconds: 30
-              WindowDuration: 1
-              WorkingDir: "/slice/db"
-              NumOfSessions: 64
-              UniformPartitionsCount: 1000
-              DeleteTableOnFinish: 1
-              WorkloadType: 0
-              Kv: {
-                  InitRowCount: 1000
-                  PartitionsByLoad: true
-                  MaxFirstKey: 18446744073709551615
-                  StringLen: 8
-                  ColumnsCnt: 2
-                  RowsCnt: 1
-              }
-          }
-      }
-      ```
+    ```proto
+    KqpLoad: {
+        DurationSeconds: 30
+        WindowDuration: 1
+        WorkingDir: "/slice/db"
+        NumOfSessions: 64
+        UniformPartitionsCount: 1000
+        DeleteTableOnFinish: 1
+        WorkloadType: 0
+        Kv: {
+            InitRowCount: 1000
+            PartitionsByLoad: true
+            MaxFirstKey: 18446744073709551615
+            StringLen: 8
+            ColumnsCnt: 2
+            RowsCnt: 1
+        }
+    }
+    ```
 
-      * `NodeId` — идентификатор узла, на котором нужно запустить актор. Чтобы указать несколько узлов, перечислите их в отдельных строках:
+    2. Запустите актор:
 
-        ```proto
-        NodeId: 1
-        NodeId: 2
-        ...
-        NodeId: N
-        Event: {
-        ...
-        ```
+    ```bash
+    curl <endpoint>/actors/load -H "Content-Type: application/x-protobuf-text" --data mode=start --data all_nodes=<start_on_all_nodes> --data config="$(cat proto_file)"
+    ```
 
-      * `Event` — конфигурация актора.
-
-  1. Запустите актор:
-
-      ```bash
-      ydbd load-test --server <endpoint> --protobuf "$(cat <proto_file>)"
-      ```
-
-      * `endpoint` — grpc-эндпоит узла (например, `grpc://<address>:<port>`, где `address` — адрес узла, `port` — grpc-порт узла).
-      * `proto_file` — путь к файлу с конфигурацией актора.
+    * `endpoint` — http-эндпоит узла (например, `http://<address>:<port>`, где `address` — адрес узла, `port` — http-порт узла).
+    * `proto_file` — путь к файлу с конфигурацией актора.
+    * `start_on_all_nodes` – `true`, чтобы запустить нагрузку на всех узлах тенанта, `false`, чтобы запустить нагрузку только на узле с данным `endpoint`.
 
 {% endlist %}
 
@@ -137,15 +119,15 @@
 
 Результаты тестирования можно просмотреть с помощью Embedded UI. Описание выводимых параметров смотрите в документации соответствующего актора.
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Embedded UI
 
-  1. Откройте страницу управления нагружающими акторами на узле (например, `http://<address>:<port>/actors/load`, где `address` — адрес узла, `port` — http-порт мониторинга узла, на котором была запущена нагрузка).
-  1. Нажмите кнопку **Results**.
+    1. Откройте страницу управления нагружающими акторами на узле (например, `http://<address>:<port>/actors/load`, где `address` — адрес узла, `port` — http-порт мониторинга узла, на котором была запущена нагрузка).
+    2. Нажмите кнопку **Results**.
 
-      Будут отображены результаты завершенных тестирований. Найдите результат с соответствующим тегом.
+        Будут отображены результаты завершенных тестирований. Найдите результат с соответствующим тегом.
 
-      ![load-actors-finished-tests](../_assets/load-actors-finished-tests.png)
+        ![load-actors-finished-tests](../_assets/load-actors-finished-tests.png)
 
 {% endlist %}

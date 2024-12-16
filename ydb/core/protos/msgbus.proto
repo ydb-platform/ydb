@@ -3,7 +3,6 @@ import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/core/protos/console_base.proto";
 import "ydb/core/protos/console_config.proto";
 import "ydb/core/protos/console_tenant.proto";
-import "ydb/core/protos/datashard_load.proto";
 import "ydb/core/protos/tablet_counters.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/tx_proxy.proto";
@@ -13,7 +12,6 @@ import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/msgbus_pq.proto";
 import "ydb/core/protos/scheme_log.proto";
-import "ydb/core/protos/base.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/node_broker.proto";
@@ -21,7 +19,6 @@ import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/sqs.proto";
 import "ydb/core/protos/query_stats.proto";
 import "ydb/core/protos/subdomains.proto";
-import "ydb/core/protos/load_test.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
@@ -244,9 +241,6 @@ message TResponse {
     // TChooseProxyRequest
     optional string ProxyName = 1050;
     optional uint64 ProxyCookie = 1051;
-
-    // Login
-    optional string UserToken = 1102;
 }
 
 message TFakeConfigDummy {
@@ -720,10 +714,3 @@ message TTestShardControlRequest {
 
 message TTestShardControlResponse {
 }
-
-message TLoginRequest {
-    optional string Database = 1;
-    optional string User = 2;
-    optional string Password = 3;
-};
-

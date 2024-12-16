@@ -19,7 +19,7 @@ namespace NTL {
     struct TGetImpl<0u, TL> {
         using type = typename TL::THead;
     };
-}
+} // namespace NTL
 
 template <>
 struct TTypeList<> {
@@ -55,7 +55,7 @@ struct TTypeList<H, R...> {
     };
 };
 
-//FIXME: temporary to check overall build
+// FIXME: temporary to check overall build
 template <class T>
 struct TTypeList<T, TNone>: public TTypeList<T> {
 };
@@ -93,7 +93,7 @@ namespace NTL {
 
     using T1 = TTypeSelector<char, TCommonSignedInts, TCommonUnsignedInts>;
     using T2 = TTypeSelector<wchar_t, T1::TSignedInts, T1::TUnsignedInts>;
-}
+} // namespace NTL
 
 using TSignedInts = NTL::T2::TSignedInts;
 using TUnsignedInts = NTL::T2::TUnsignedInts;

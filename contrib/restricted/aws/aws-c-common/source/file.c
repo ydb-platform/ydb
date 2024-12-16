@@ -87,6 +87,19 @@ bool aws_is_any_directory_separator(char value) {
     return value == '\\' || value == '/';
 }
 
+void aws_normalize_directory_separator(struct aws_byte_buf *path) {
+    AWS_PRECONDITION(aws_byte_buf_is_valid(path));
+
+    const char local_platform_separator = aws_get_platform_directory_separator();
+    for (size_t i = 0; i < path->len; ++i) {
+        if (aws_is_any_directory_separator((char)path->buffer[i])) {
+            path->buffer[i] = local_platform_separator;
+        }
+    }
+
+    AWS_POSTCONDITION(aws_byte_buf_is_valid(path));
+}
+
 struct aws_directory_iterator {
     struct aws_linked_list list_data;
     struct aws_allocator *allocator;

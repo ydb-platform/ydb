@@ -14,7 +14,7 @@ join
 on
     n.n_nationkey = s.s_nationkey
 where
-    n.n_name = 'CANADA'
+    n.n_name = 'GERMANY'
 );
 
 $j2 = (
@@ -32,7 +32,7 @@ on
 
 $threshold = (
 select
-    sum(ps_supplycost * ps_availqty) * 0.0001000000 as threshold
+    sum(ps_supplycost * ps_availqty) * $z0_0001_35 / $scale_factor as threshold
 from
     $j2
 );

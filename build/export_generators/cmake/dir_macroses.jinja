@@ -1,4 +1,4 @@
-{%- if dir_macroses is defined -%}
+{%- if dir_macroses|length -%}
 {%-     for dir_macros in dir_macroses -%}
 {%-         if dir_macros.macro == "set_vars" -%}
 {%-             for set_var in dir_macros.args %}

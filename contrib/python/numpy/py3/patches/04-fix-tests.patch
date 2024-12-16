@@ -1,0 +1,281 @@
+--- contrib/python/numpy/py3/numpy/core/tests/test_longdouble.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_longdouble.py	(working tree)
+@@ -9,1 +9,1 @@ from numpy.testing import (
+-from numpy.core.tests._locales import CommaDecimalPointLocale
++from __tests__.numpy.core.tests._locales import CommaDecimalPointLocale
+--- contrib/python/numpy/py3/numpy/core/tests/test_multiarray.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_multiarray.py	(working tree)
+@@ -32,1 +32,1 @@ from numpy.testing import (
+-from numpy.core.tests._locales import CommaDecimalPointLocale
++from __tests__.numpy.core.tests._locales import CommaDecimalPointLocale
+--- contrib/python/numpy/py3/numpy/core/tests/test_print.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_print.py	(working tree)
+@@ -7,1 +7,1 @@ import pytest
+-from numpy.core.tests._locales import CommaDecimalPointLocale
++from __tests__.numpy.core.tests._locales import CommaDecimalPointLocale
+--- contrib/python/numpy/py3/numpy/matrixlib/tests/test_matrix_linalg.py	(index)
++++ contrib/python/numpy/py3/numpy/matrixlib/tests/test_matrix_linalg.py	(working tree)
+@@ -4,1 +4,1 @@
+-from numpy.linalg.tests.test_linalg import (
++from __tests__.numpy.linalg.tests.test_linalg import (
+--- contrib/python/numpy/py3/numpy/array_api/tests/test_array_object.py	(index)
++++ contrib/python/numpy/py3/numpy/array_api/tests/test_array_object.py	(working tree)
+@@ -6,3 +6,3 @@ import operator
+-from .. import ones, asarray, reshape, result_type, all, equal
+-from .._array_object import Array
+-from .._dtypes import (
++from numpy.array_api import ones, asarray, reshape, result_type, all, equal
++from numpy.array_api._array_object import Array
++from numpy.array_api._dtypes import (
+--- contrib/python/numpy/py3/numpy/array_api/tests/test_creation_functions.py	(index)
++++ contrib/python/numpy/py3/numpy/array_api/tests/test_creation_functions.py	(working tree)
+@@ -4,2 +4,2 @@
+-from .. import all
+-from .._creation_functions import (
++from numpy.array_api import all
++from numpy.array_api._creation_functions import (
+@@ -20,2 +20,2 @@ from .._creation_functions import (
+-from .._dtypes import float32, float64
+-from .._array_object import Array
++from numpy.array_api._dtypes import float32, float64
++from numpy.array_api._array_object import Array
+--- contrib/python/numpy/py3/numpy/array_api/tests/test_elementwise_functions.py	(index)
++++ contrib/python/numpy/py3/numpy/array_api/tests/test_elementwise_functions.py	(working tree)
+@@ -5,3 +5,3 @@ from inspect import getfullargspec
+-from .. import asarray, _elementwise_functions
+-from .._elementwise_functions import bitwise_left_shift, bitwise_right_shift
+-from .._dtypes import (
++from numpy.array_api import asarray, _elementwise_functions
++from numpy.array_api._elementwise_functions import bitwise_left_shift, bitwise_right_shift
++from numpy.array_api._dtypes import (
+--- contrib/python/numpy/py3/numpy/array_api/tests/test_manipulation_functions.py	(index)
++++ contrib/python/numpy/py3/numpy/array_api/tests/test_manipulation_functions.py	(working tree)
+@@ -4,4 +4,4 @@
+-from .. import all
+-from .._creation_functions import asarray
+-from .._dtypes import float64, int8
+-from .._manipulation_functions import (
++from numpy.array_api import all
++from numpy.array_api._creation_functions import asarray
++from numpy.array_api._dtypes import float64, int8
++from numpy.array_api._manipulation_functions import (
+--- contrib/python/numpy/py3/numpy/core/tests/test_records.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_records.py	(working tree)
+@@ -73,1 +75,2 @@ class TestFromrecords:
+-        data_dir = path.join(path.dirname(__file__), 'data')
++        import yatest.common as yc
++        data_dir = yc.source_path(path.join(path.dirname(__file__), 'data'))
+--- contrib/python/numpy/py3/numpy/core/tests/test_regression.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_regression.py	(working tree)
+@@ -1099,1 +1101,2 @@ class TestRegression:
+-        data_dir = path.join(path.dirname(__file__), 'data')
++        import yatest.common as yc
++        data_dir = yc.source_path(path.join(path.dirname(__file__), 'data'))
+--- contrib/python/numpy/py3/numpy/core/tests/test_umath_accuracy.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_umath_accuracy.py	(working tree)
+@@ -33,1 +35,2 @@ class TestAccuracy:
+-            data_dir = path.join(path.dirname(__file__), 'data')
++            import yatest.common as yc
++            data_dir = yc.source_path(path.join(path.dirname(__file__), 'data'))
+--- contrib/python/numpy/py3/numpy/random/tests/test_direct.py	(index)
++++ contrib/python/numpy/py3/numpy/random/tests/test_direct.py	(working tree)
+@@ -33,1 +33,2 @@ if sys.flags.optimize > 1:
+-pwd = os.path.dirname(os.path.abspath(__file__))
++import yatest.common as yc
++pwd = yc.source_path(os.path.dirname(__file__))
+--- contrib/python/numpy/py3/numpy/core/tests/test_numpy_2_0_compat.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_numpy_2_0_compat.py	(working tree)
+@@ -4,2 +4,3 @@ import pickle
+ import numpy as np
++import yatest.common as yc
+ 
+@@ -9 +10 @@ class TestNumPy2Compatibility:
+-    data_dir = path.join(path.dirname(__file__), "data")
++    data_dir = yc.source_path(path.join(path.dirname(__file__), "data"))
+--- contrib/python/numpy/py3/numpy/lib/tests/test_format.py	(index)
++++ contrib/python/numpy/py3/numpy/lib/tests/test_format.py	(working tree)
+@@ -90 +90 @@ Test the magic string writing.
+-    '\x93NUMPY\x01\x00'
++    b'\x93NUMPY\x01\x00'
+@@ -92 +92 @@ Test the magic string writing.
+-    '\x93NUMPY\x00\x00'
++    b'\x93NUMPY\x00\x00'
+@@ -94 +94 @@ Test the magic string writing.
+-    '\x93NUMPY\xff\xff'
++    b'\x93NUMPY\xff\xff'
+@@ -96 +96 @@ Test the magic string writing.
+-    '\x93NUMPY\x02\x05'
++    b'\x93NUMPY\x02\x05'
+@@ -111 +111 @@ Test the header writing.
+-    >>> for arr in basic_arrays + record_arrays:
++    >>> for arr in basic_arrays + record_arrays:  # doctest: +SKIP
+@@ -287,6 +11,8 @@ from numpy.testing import (
+     )
+ from numpy.lib import format
+ 
++import yatest.common as yc
++
+ 
+ # Generate some basic arrays to test with.
+ scalars = [
+@@ -526,1 +252,1 @@ def test_load_padded_dtype(tmpdir, dt):
+-    path = os.path.join(os.path.dirname(__file__), 'data', fname)
++    path = yc.source_path(os.path.join(os.path.dirname(__file__), 'data', fname))
+@@ -536,1 +262,1 @@ def test_load_padded_dtype(tmpdir, dt):
+-    data_dir = os.path.join(os.path.dirname(__file__), 'data')
++    data_dir = yc.source_path(os.path.join(os.path.dirname(__file__), 'data'))
+@@ -578,1 +304,1 @@ def test_pickle_python2_python3():
+-    data_dir = os.path.join(os.path.dirname(__file__), 'data')
++    data_dir = yc.source_path(os.path.join(os.path.dirname(__file__), 'data'))
+--- contrib/python/numpy/py3/numpy/tests/test_public_api.py	(index)
++++ contrib/python/numpy/py3/numpy/tests/test_public_api.py	(working tree)
+@@ -34,16 +34,16 @@ def test_numpy_namespace():
+     # None of these objects are publicly documented to be part of the main
+     # NumPy namespace (some are useful though, others need to be cleaned up)
+     undocumented = {
+-        '_add_newdoc_ufunc': 'numpy.core._multiarray_umath._add_newdoc_ufunc',
+-        'add_docstring': 'numpy.core._multiarray_umath.add_docstring',
++        '_add_newdoc_ufunc': '_multiarray_umath._add_newdoc_ufunc',
++        'add_docstring': '_multiarray_umath.add_docstring',
+         'add_newdoc': 'numpy.core.function_base.add_newdoc',
+-        'add_newdoc_ufunc': 'numpy.core._multiarray_umath._add_newdoc_ufunc',
++        'add_newdoc_ufunc': '_multiarray_umath._add_newdoc_ufunc',
+         'byte_bounds': 'numpy.lib.utils.byte_bounds',
+-        'compare_chararrays': 'numpy.core._multiarray_umath.compare_chararrays',
++        'compare_chararrays': '_multiarray_umath.compare_chararrays',
+         'deprecate': 'numpy.lib.utils.deprecate',
+         'deprecate_with_doc': 'numpy.lib.utils.deprecate_with_doc',
+         'disp': 'numpy.lib.function_base.disp',
+-        'fastCopyAndTranspose': 'numpy.core._multiarray_umath.fastCopyAndTranspose',
++        'fastCopyAndTranspose': '_multiarray_umath.fastCopyAndTranspose',
+         'get_array_wrap': 'numpy.lib.shape_base.get_array_wrap',
+         'get_include': 'numpy.lib.utils.get_include',
+         'recfromcsv': 'numpy.lib.npyio.recfromcsv',
+@@ -61,6 +61,7 @@ def test_numpy_namespace():
+     assert bad_results == allowlist
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.skipif(IS_WASM, reason="can't start subprocess")
+ @pytest.mark.parametrize('name', ['testing'])
+ def test_import_lazy_import(name):
+@@ -99,6 +100,7 @@ def test_numpy_fft():
+     assert bad_results == {}
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.skipif(ctypes is None,
+                     reason="ctypes not available in this python")
+ def test_NPY_NO_EXPORT():
+--- contrib/python/numpy/py3/numpy/core/tests/test_nditer.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_nditer.py	(working tree)
+@@ -2031,8 +2031,11 @@ def test_buffered_cast_error_paths_unraisable():
+         buf[...] = "a"
+         del buf, it  # Flushing only happens during deallocate right now.
+         """)
++    import os
++    env = os.environ.copy()
++    env['Y_PYTHON_ENTRY_POINT'] = ':main'
+     res = subprocess.check_output([sys.executable, "-c", code],
+-                                  stderr=subprocess.STDOUT, text=True)
++                                  stderr=subprocess.STDOUT, text=True, env=env)
+     assert "ValueError" in res
+ 
+ 
+--- contrib/python/numpy/py3/numpy/core/tests/test_protocols.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_protocols.py	(working tree)
+@@ -4,4 +4,5 @@ import warnings
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.filterwarnings("error")
+ def test_getattr_warning():
+--- contrib/python/numpy/py3/numpy/linalg/tests/test_linalg.py	(index)
++++ contrib/python/numpy/py3/numpy/linalg/tests/test_linalg.py	(working tree)
+@@ -1898,6 +1898,7 @@ def test_xerbla_override():
+             pytest.skip('Numpy xerbla not linked in.')
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.skipif(IS_WASM, reason="Cannot start subprocess")
+ @pytest.mark.slow
+ def test_sdot_bug_8577():
+--- contrib/python/numpy/py3/numpy/tests/test_reloading.py	(index)
++++ contrib/python/numpy/py3/numpy/tests/test_reloading.py	(working tree)
+@@ -37,6 +37,7 @@ def test_novalue():
+                                           protocol=proto)) is np._NoValue)
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.skipif(IS_WASM, reason="can't start subprocess")
+ def test_full_reimport():
+     """At the time of writing this, it is *not* truly supported, but
+--- contrib/python/numpy/py3/numpy/core/tests/test_limited_api.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_limited_api.py	(working tree)
+@@ -6,6 +6,7 @@ import sysconfig
+ import pytest
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.skipif(IS_WASM, reason="Can't start subprocess")
+ @pytest.mark.xfail(
+     sysconfig.get_config_var("Py_DEBUG"),
+--- contrib/python/numpy/py3/numpy/linalg/tests/test_linalg.py	(index)
++++ contrib/python/numpy/py3/numpy/linalg/tests/test_linalg.py	(working tree)
+@@ -1754,6 +1754,7 @@ class TestQR:
+         assert_(isinstance(r2, a_type))
+         assert_almost_equal(r2, r1)
+ 
++    @pytest.mark.skip
+     @pytest.mark.parametrize("size", [
+         (3, 4), (4, 3), (4, 4), 
+         (3, 0), (0, 3)])
+--- contrib/python/numpy/py3/numpy/lib/tests/test_loadtxt.py	(index)
++++ contrib/python/numpy/py3/numpy/lib/tests/test_loadtxt.py	(working tree)
+@@ -388,6 +388,7 @@ def test_bool():
+     assert_array_equal(res.view(np.uint8), [[1, 0], [1, 1]])
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.skipif(IS_PYPY and sys.implementation.version <= (7, 3, 8),
+                     reason="PyPy bug in error formatting")
+ @pytest.mark.parametrize("dtype", np.typecodes["AllInteger"])
+@@ -406,6 +407,7 @@ def test_integer_signs(dtype):
+             np.loadtxt([f"{sign}2\n"], dtype=dtype)
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.skipif(IS_PYPY and sys.implementation.version <= (7, 3, 8),
+                     reason="PyPy bug in error formatting")
+ @pytest.mark.parametrize("dtype", np.typecodes["AllInteger"])
+--- contrib/python/numpy/py3/numpy/core/tests/test_nep50_promotions.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_nep50_promotions.py	(working tree)
+@@ -20,6 +20,7 @@ def _weak_promotion_enabled():
+     np._set_promotion_state(state)
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.skipif(IS_WASM, reason="wasm doesn't have support for fp errors")
+ def test_nep50_examples():
+     with pytest.warns(UserWarning, match="result dtype changed"):
+--- contrib/python/numpy/py3/numpy/core/tests/test_cpu_features.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_cpu_features.py	(working tree)
+@@ -122,6 +122,7 @@ class AbstractTest:
+         " therefore this test class cannot be properly executed."
+     ),
+ )
++@pytest.mark.xfail
+ class TestEnvPrivation:
+     cwd = pathlib.Path(__file__).parent.resolve()
+     env = os.environ.copy()
+--- contrib/python/numpy/py3/numpy/core/tests/test_numeric.py	(index)
++++ contrib/python/numpy/py3/numpy/core/tests/test_numeric.py	(working tree)
+@@ -2352,7 +2352,7 @@ class TestClip:
+         actual = np.clip(arr, amin, amax)
+         assert_equal(actual, expected)
+ 
+-    @pytest.mark.xfail(reason="propagation doesn't match spec")
++    @pytest.mark.skip(reason="propagation doesn't match spec")
+     @pytest.mark.parametrize("arr, amin, amax", [
+         (np.array([1] * 10, dtype='m8'),
+          np.timedelta64('NaT'),

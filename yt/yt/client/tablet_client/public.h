@@ -91,6 +91,8 @@ YT_DEFINE_ERROR_ENUM(
     ((CellHasNoAssignedPeers)                 (1737))
     ((TableSchemaIncompatible)                (1738))
     ((BundleIsBanned)                         (1739))
+    ((TabletServantIsNotActive)               (1740))
+    ((UniqueIndexConflict)                    (1741))
 );
 
 DEFINE_ENUM(EInMemoryMode,
@@ -218,18 +220,25 @@ DEFINE_ENUM(ETabletServiceFeatures,
     ((SharedWriteLocks)         (1))
 );
 
-DEFINE_ENUM(ESecondaryIndexKind,
-    ((FullSync)                 (0))
-    ((Unfolding)                (1))
-);
-
 DEFINE_ENUM(ERowMergerType,
     ((Legacy)               (0))
     ((Watermark)            (1))
+    ((New)                  (2))
 );
 
+extern const TString CustomRuntimeDataWatermarkKey;
 struct TWatermarkRuntimeDataConfig;
 struct TWatermarkRuntimeData;
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_ENUM(ESecondaryIndexKind,
+    ((FullSync)                 (0))
+    ((Unfolding)                (1))
+    ((Unique)                   (2))
+);
+
+struct TIndexInfo;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -238,6 +247,7 @@ DECLARE_REFCOUNTED_CLASS(TTableMountCacheDynamicConfig)
 DECLARE_REFCOUNTED_CLASS(TRemoteDynamicStoreReaderConfig)
 DECLARE_REFCOUNTED_CLASS(TRetryingRemoteDynamicStoreReaderConfig)
 DECLARE_REFCOUNTED_CLASS(TReplicatedTableOptions)
+DECLARE_REFCOUNTED_CLASS(TReplicationCollocationOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TTableMountInfo)
 DECLARE_REFCOUNTED_STRUCT(TTabletInfo)

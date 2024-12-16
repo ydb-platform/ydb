@@ -1,0 +1,40 @@
+diff --git a/include/map b/include/map
+index 82a296f..74ad674 100644
+--- a/include/map
++++ b/include/map
+@@ -1457,6 +1457,7 @@ public:
+     _LIBCPP_HIDE_FROM_ABI
+     iterator  erase(const_iterator __f, const_iterator __l)
+         {return __tree_.erase(__f.__i_, __l.__i_);}
++    _LIBCPP_REINITIALIZES_OBJECT
+     _LIBCPP_HIDE_FROM_ABI
+     void clear() _NOEXCEPT {__tree_.clear();}
+ 
+@@ -2256,6 +2257,7 @@ public:
+     }
+ #endif
+ 
++    _LIBCPP_REINITIALIZES_OBJECT
+     _LIBCPP_HIDE_FROM_ABI
+     void clear() _NOEXCEPT {__tree_.clear();}
+ 
+diff --git a/include/set b/include/set
+index b2d87b9..ed38319 100644
+--- a/include/set
++++ b/include/set
+@@ -839,6 +839,7 @@ public:
+     _LIBCPP_HIDE_FROM_ABI
+     iterator  erase(const_iterator __f, const_iterator __l)
+         {return __tree_.erase(__f, __l);}
++    _LIBCPP_REINITIALIZES_OBJECT
+     _LIBCPP_HIDE_FROM_ABI
+     void clear() _NOEXCEPT {__tree_.clear();}
+ 
+@@ -1429,6 +1430,7 @@ public:
+     _LIBCPP_HIDE_FROM_ABI
+     iterator  erase(const_iterator __f, const_iterator __l)
+         {return __tree_.erase(__f, __l);}
++    _LIBCPP_REINITIALIZES_OBJECT
+     _LIBCPP_HIDE_FROM_ABI
+     void clear() _NOEXCEPT {__tree_.clear();}
+ 

@@ -1,4 +1,4 @@
-### {{ ydb-short-name }} — an open-source distributed SQL database {#2023-conf-fos-ydb}
+## {{ ydb-short-name }} — an open-source distributed SQL database {#2023-conf-fos-ydb}
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 

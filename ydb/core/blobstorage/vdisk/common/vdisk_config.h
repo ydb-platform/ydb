@@ -6,9 +6,10 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/repl/repl_quoter.h>
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
 
@@ -119,7 +120,6 @@ namespace NKikimr {
         ui32 HullSstSizeInChunksLevel;
         ui32 HugeBlobsFreeChunkReservation;
         ui32 MinHugeBlobInBytes;
-        ui32 OldMinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;
         ui32 HugeBlobOverhead;
         ui32 HullCompLevel0MaxSstsAtOnce;
@@ -127,6 +127,7 @@ namespace NKikimr {
         double HullCompLevelRateThreshold;
         double HullCompFreeSpaceThreshold;
         ui32 FreshCompMaxInFlightWrites;
+        ui32 FreshCompMaxInFlightReads;
         ui32 HullCompMaxInFlightWrites;
         ui32 HullCompMaxInFlightReads;
         double HullCompReadBatchEfficiencyThreshold;
@@ -218,6 +219,24 @@ namespace NKikimr {
         TDuration WhiteboardUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
+        TControlWrapper DefaultHugeGarbagePerMille;
+        TControlWrapper HugeDefragFreeSpaceBorderPerMille;
+        bool UseActorSystemTimeInBSQueue = false;
+
+        ///////////// BALANCING SETTINGS ////////////////////
+        bool BalancingEnableSend;
+        bool BalancingEnableDelete;
+        TDuration BalancingJobGranularity;
+        bool BalancingBalanceOnlyHugeBlobs;
+        ui64 BalancingBatchSize;
+        ui64 BalancingMaxToSendPerEpoch;
+        ui64 BalancingMaxToDeletePerEpoch;
+        TDuration BalancingReadBatchTimeout;
+        TDuration BalancingSendBatchTimeout;
+        TDuration BalancingRequestBlobsOnMainTimeout;
+        TDuration BalancingDeleteBatchTimeout;
+        TDuration BalancingEpochTimeout;
+        TDuration BalancingTimeToSleepIfNothingToDo;
 
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;

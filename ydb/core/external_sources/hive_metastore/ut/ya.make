@@ -29,13 +29,19 @@ IF (AUTOCHECK)
     )
 ENDIF()
 
+ENV(COMPOSE_HTTP_TIMEOUT=1200)  # during parallel tests execution there could be huge disk io, which triggers timeouts in docker-compose 
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 IF (OPENSOURCE)
-    # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
-    # which makes it impossible to run them during precommit checks on Github CI. 
-    # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
-    SIZE(MEDIUM)
+    IF (SANITIZER_TYPE)
+        # Too huge for precommit check with sanitizers
+        SIZE(LARGE)
+    ELSE()
+        # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
+        # which makes it impossible to run them during precommit checks on Github CI. 
+        # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
+        SIZE(MEDIUM)
+    ENDIF()
     SET(TEST_TAGS_VALUE)
     SET(TEST_REQUIREMENTS_VALUE)
 
@@ -58,9 +64,9 @@ PEERDIR(
     ydb/core/testlib
     ydb/core/testlib/actors
     ydb/core/testlib/basics
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/minikql/comp_nodes/llvm14
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/sql/pg_dummy
 )
 
 DEPENDS(

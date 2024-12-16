@@ -4,6 +4,8 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
@@ -66,6 +68,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         if (descr.HasServerlessComputeResourcesMode()) {
             ServerlessComputeResourcesMode = descr.GetServerlessComputeResourcesMode();
         }
+
+        if (descr.HasSharedHive()) {
+            SharedHiveId = descr.GetSharedHive();
+        }
     }
 
     inline ui64 GetVersion() const {
@@ -80,6 +86,14 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         }
     }
 
+    inline ui64 ExtractHive() const {
+        if (IsServerless()) {
+            return SharedHiveId;
+        } else {
+            return Params.GetHive();
+        }
+    }
+
     inline bool IsServerless() const {
         return DomainKey != ResourcesDomainKey;
     }
@@ -89,6 +103,7 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     NKikimrSubDomains::TProcessingParams Params;
     TCoordinators Coordinators;
     TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+    ui64 SharedHiveId = 0;
 
     TString ToString() const;
 
@@ -144,6 +159,8 @@ struct TSchemeCacheNavigate {
         KindFileStore = 20,
         KindView = 21,
         KindResourcePool = 22,
+        KindBackupCollection = 23,
+        KindTransfer = 24,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -177,6 +194,10 @@ struct TSchemeCacheNavigate {
     struct TPQGroupInfo : public TAtomicRefCount<TPQGroupInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TPersQueueGroupDescription Description;
+        TVector<NScheme::TTypeInfo> Schema;
+        TVector<NKikimr::TKeyDesc::TPartitionInfo> Partitioning;
+        std::shared_ptr<NPQ::IPartitionChooser> PartitionChooser;
+        std::shared_ptr<NPQ::TPartitionGraph> PartitionGraph;
     };
 
     struct TRtmrVolumeInfo : public TAtomicRefCount<TRtmrVolumeInfo> {
@@ -256,6 +277,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TResourcePoolDescription Description;
     };
 
+    struct TBackupCollectionInfo : public TAtomicRefCount<TBackupCollectionInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TBackupCollectionDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
@@ -289,6 +315,7 @@ struct TSchemeCacheNavigate {
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
+        TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
 
         // other
         TIntrusiveConstPtr<TDomainDescription> DomainDescription;
@@ -308,6 +335,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TFileStoreInfo> FileStoreInfo;
         TIntrusiveConstPtr<TViewInfo> ViewInfo;
         TIntrusiveConstPtr<TResourcePoolInfo> ResourcePoolInfo;
+        TIntrusiveConstPtr<TBackupCollectionInfo> BackupCollectionInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
@@ -359,7 +387,8 @@ struct TSchemeCacheRequest {
         KindUnknown = 0,
         KindRegularTable = 1,
         KindSyncIndexTable = 2,
-        KindAsyncIndexTable= 3,
+        KindAsyncIndexTable = 3,
+        KindVectorIndexTable = 4,
     };
 
     struct TEntry {

@@ -41,11 +41,12 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "GenSourceSettings"},
             "Children": [
-                {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Table", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "Token", "Type": "TCoSecureParam"},
-                {"Index": 3, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 4, "Name": "FilterPredicate", "Type": "TCoLambda"}
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Token", "Type": "TCoSecureParam"},
+                {"Index": 4, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "FilterPredicate", "Type": "TCoLambda"}
             ]
         }
     ]

@@ -2,11 +2,45 @@
 
 ## Unreleased
 
-Full list of differences found in [this compare](https://github.com/open-telemetry/opentelemetry-proto/compare/v1.1.0...main).
+The full list of changes can be found in the compare view for the respective release at <https://github.com/open-telemetry/opentelemetry-proto/releases>.
+
+## 1.3.3. - 2024-11-19
 
 ### Added
 
+* metrics: Add resource attributes and scope to metrics proto diagram. [#519](https://github.com/open-telemetry/opentelemetry-proto/pull/519)
+* metrics: Added json example for exponential histogram. [#580](https://github.com/open-telemetry/opentelemetry-proto/pull/580)
+
 ### Changed
+
+* metrics: Clarify aggregation temporality for Summary metric type. [#591](https://github.com/open-telemetry/opentelemetry-proto/pull/591)
+* docs: Remove HTTP 1.1 restriction from Protocol Details [#571](https://github.com/open-telemetry/opentelemetry-proto/pull/571)
+* docs: Update specification to include development profiles [#582](https://github.com/open-telemetry/opentelemetry-proto/pull/582)
+* docs: update references to logging exporter [#581](https://github.com/open-telemetry/opentelemetry-proto/pull/581)
+* Makefile: exclude Profiles protocol from breaking-changes [#576](https://github.com/open-telemetry/opentelemetry-proto/pull/576)
+* Makefile: exclude Profiles service from breaking changes too [#586](https://github.com/open-telemetry/opentelemetry-proto/pull/586/)
+* profiles: align type of index into string table [#557](https://github.com/open-telemetry/opentelemetry-proto/pull/557)
+* profiles: drop Sample.stacktrace_id_index [#575](https://github.com/open-telemetry/opentelemetry-proto/pull/575)
+* profiles: drop BuildIdKind [#584](https://github.com/open-telemetry/opentelemetry-proto/pull/584)
+* profiles: drop Sample.label [#583](https://github.com/open-telemetry/opentelemetry-proto/pull/583)
+* profiles: drop Location.type_index [#578](https://github.com/open-telemetry/opentelemetry-proto/pull/578)
+* profiles: Rename profiles v1experimental to v1development [#585](https://github.com/open-telemetry/opentelemetry-proto/pull/585)
+* profiles: Make mapping in Profile optional [#556](https://github.com/open-telemetry/opentelemetry-proto/pull/556)
+* profiles: Fold the content of pprofextended.proto into profiles.proto, removing ProfileContainer. [#590](https://github.com/open-telemetry/opentelemetry-proto/pull/590)
+* profiles: Improve lookup table pattern use in profiles. [#592](https://github.com/open-telemetry/opentelemetry-proto/pull/592)
+* profiles: Renovations to experimental profiling schema. [#596](https://github.com/open-telemetry/opentelemetry-proto/pull/596)
+
+## 1.3.2 - 2024-06-28
+
+### Changed
+
+* profiles: add missing java_package option to pprofextended. [#558](https://github.com/open-telemetry/opentelemetry-proto/pull/558)
+
+## 1.3.1 - 2024-05-07
+
+### Changed
+
+* profiles: fix versioning in selector. [#551](https://github.com/open-telemetry/opentelemetry-proto/pull/551)
 
 ## 1.3.0 - 2024-04-24
 
@@ -23,6 +57,7 @@ Full list of differences found in [this compare](https://github.com/open-telemet
   [#484](https://github.com/open-telemetry/opentelemetry-proto/pull/484)
 * Add metric.metadata for supporting additional metadata on metrics
   [#514](https://github.com/open-telemetry/opentelemetry-proto/pull/514)
+* Add example of an Event [#538](https://github.com/open-telemetry/opentelemetry-proto/pull/538)
 
 ### Changed
 

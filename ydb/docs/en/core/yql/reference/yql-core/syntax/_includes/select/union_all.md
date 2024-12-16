@@ -20,7 +20,7 @@ In the "by position" mode, the output of the resulting data schema uses the foll
 
 The order of the output columns in this mode is the same as the order of columns in the first input.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT 1 AS x

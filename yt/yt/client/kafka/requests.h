@@ -143,7 +143,7 @@ struct TRspApiKey
 
 struct TRspApiVersions
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     std::vector<TRspApiKey> ApiKeys;
     i32 ThrottleTimeMs = 0;
     std::vector<TTaggedField> TagBuffer;
@@ -188,7 +188,7 @@ struct TRspMetadataBroker
 
 struct TRspMetadataTopicPartition
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
 
     i32 PartitionIndex = 0;
     i32 LeaderId = 0;
@@ -203,7 +203,7 @@ struct TRspMetadataTopicPartition
 
 struct TRspMetadataTopic
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     TString Name;
     TGuid TopicId;
     bool IsInternal = false;
@@ -239,7 +239,7 @@ struct TReqFindCoordinator
 
 struct TRspFindCoordinator
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     i32 NodeId = 0;
     TString Host;
     i32 Port = 0;
@@ -280,7 +280,7 @@ struct TRspJoinGroupMember
 
 struct TRspJoinGroup
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     i32 GenerationId = 0;
     TString ProtocolName;
     TString Leader;
@@ -322,7 +322,7 @@ struct TRspSyncGroupAssignment
 
 struct TRspSyncGroup
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     std::vector<TRspSyncGroupAssignment> Assignments;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
@@ -343,7 +343,7 @@ struct TReqHeartbeat
 
 struct TRspHeartbeat
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
 };
@@ -380,7 +380,7 @@ struct TReqOffsetCommit
 struct TRspOffsetCommitTopicPartition
 {
     i32 PartitionIndex = 0;
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
 };
@@ -396,6 +396,7 @@ struct TRspOffsetCommitTopic
 struct TRspOffsetCommit
 {
     std::vector<TRspOffsetCommitTopic> Topics;
+
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
 };
 
@@ -424,7 +425,7 @@ struct TRspOffsetFetchTopicPartition
     i32 PartitionIndex = 0;
     i64 CommittedOffset = 0;
     std::optional<TString> Metadata;
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
 };
@@ -478,7 +479,7 @@ struct TReqFetch
 struct TRspFetchResponsePartition
 {
     i32 PartitionIndex = 0;
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     i64 HighWatermark = 0;
     std::optional<std::vector<TRecord>> Records;
 
@@ -513,7 +514,7 @@ struct TReqSaslHandshake
 
 struct TRspSaslHandshake
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     std::vector<TString> Mechanisms;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
@@ -532,7 +533,7 @@ struct TReqSaslAuthenticate
 
 struct TRspSaslAuthenticate
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     std::optional<TString> ErrorMessage;
     TString AuthBytes;
 
@@ -584,7 +585,7 @@ struct TRspProduceResponsePartitionResponseRecordError
 struct TRspProduceResponsePartitionResponse
 {
     i32 Index = 0;
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     i64 BaseOffset = 0;
     i64 LogAppendTimeMs = 0;
     i64 LogStartOffset = 0;

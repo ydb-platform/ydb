@@ -659,7 +659,9 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
                                  NKikimrTxDataShard::TEvCompactTableResult::OK
         );
         // we wait for at least 1 part count, because it signals that the stats have been recalculated after compaction
-        WaitTableStats(runtime, datashard, 1, rowsCount).GetTableStats();
+        WaitTableStats(runtime, datashard, [](const NKikimrTableStats::TTableStats& stats) {
+            return stats.GetPartCount() >= 1;
+        });
 
         auto checkUsage = [&poolsKinds](ui64 totalUsage, const auto& poolUsage) {
             if (IsIn(poolsKinds, poolUsage.GetPoolKind())) {

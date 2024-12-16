@@ -14,7 +14,12 @@ from typing import List, Optional, Union
 
 import attr
 
-from hypothesis.errors import Flaky, HypothesisException, StopTest
+from hypothesis.errors import (
+    FlakyReplay,
+    FlakyStrategyDefinition,
+    HypothesisException,
+    StopTest,
+)
 from hypothesis.internal import floats as flt
 from hypothesis.internal.compat import int_to_bytes
 from hypothesis.internal.conjecture.data import (
@@ -24,7 +29,6 @@ from hypothesis.internal.conjecture.data import (
     DataObserver,
     FloatKWargs,
     IntegerKWargs,
-    InvalidAt,
     IRKWargsType,
     IRType,
     IRTypeName,
@@ -45,7 +49,7 @@ class PreviouslyUnseenBehaviour(HypothesisException):
 
 
 def inconsistent_generation():
-    raise Flaky(
+    raise FlakyStrategyDefinition(
         "Inconsistent data generation! Data generation behaved differently "
         "between different runs. Is your data generation depending on external "
         "state?"
@@ -142,9 +146,31 @@ class Conclusion:
 MAX_CHILDREN_EFFECTIVELY_INFINITE = 100_000
 
 
-def compute_max_children(ir_type, kwargs):
-    from hypothesis.internal.conjecture.data import DRAW_STRING_DEFAULT_MAX_SIZE
+def _count_distinct_strings(*, alphabet_size, min_size, max_size):
+    # We want to estimate if we're going to have more children than
+    # MAX_CHILDREN_EFFECTIVELY_INFINITE, without computing a potentially
+    # extremely expensive pow. We'll check if the number of strings in
+    # the largest string size alone is enough to put us over this limit.
+    # We'll also employ a trick of estimating against log, which is cheaper
+    # than computing a pow.
+    #
+    # x = max_size
+    # y = alphabet_size
+    # n = MAX_CHILDREN_EFFECTIVELY_INFINITE
+    #
+    #     x**y > n
+    # <=> log(x**y)  > log(n)
+    # <=> y * log(x) > log(n)
+    definitely_too_large = max_size * math.log(alphabet_size) > math.log(
+        MAX_CHILDREN_EFFECTIVELY_INFINITE
+    )
+    if definitely_too_large:
+        return MAX_CHILDREN_EFFECTIVELY_INFINITE
 
+    return sum(alphabet_size**k for k in range(min_size, max_size + 1))
+
+
+def compute_max_children(ir_type, kwargs):
     if ir_type == "integer":
         min_value = kwargs["min_value"]
         max_value = kwargs["max_value"]
@@ -174,50 +200,27 @@ def compute_max_children(ir_type, kwargs):
             return 1
         return 2
     elif ir_type == "bytes":
-        return 2 ** (8 * kwargs["size"])
+        return _count_distinct_strings(
+            alphabet_size=2**8, min_size=kwargs["min_size"], max_size=kwargs["max_size"]
+        )
     elif ir_type == "string":
         min_size = kwargs["min_size"]
         max_size = kwargs["max_size"]
         intervals = kwargs["intervals"]
-
-        if max_size is None:
-            max_size = DRAW_STRING_DEFAULT_MAX_SIZE
 
         if len(intervals) == 0:
             # Special-case the empty alphabet to avoid an error in math.log(0).
             # Only possibility is the empty string.
             return 1
 
-        # We want to estimate if we're going to have more children than
-        # MAX_CHILDREN_EFFECTIVELY_INFINITE, without computing a potentially
-        # extremely expensive pow. We'll check if the number of strings in
-        # the largest string size alone is enough to put us over this limit.
-        # We'll also employ a trick of estimating against log, which is cheaper
-        # than computing a pow.
-        #
-        # x = max_size
-        # y = len(intervals)
-        # n = MAX_CHILDREN_EFFECTIVELY_INFINITE
-        #
-        #     x**y > n
-        # <=> log(x**y)  > log(n)
-        # <=> y * log(x) > log(n)
-
-        # avoid math.log(1) == 0 and incorrectly failing the below estimate,
-        # even when we definitely are too large.
-        if len(intervals) == 1:
-            definitely_too_large = max_size > MAX_CHILDREN_EFFECTIVELY_INFINITE
-        else:
-            definitely_too_large = max_size * math.log(len(intervals)) > math.log(
-                MAX_CHILDREN_EFFECTIVELY_INFINITE
-            )
-
-        if definitely_too_large:
+        # avoid math.log(1) == 0 and incorrectly failing our effectively_infinite
+        # estimate, even when we definitely are too large.
+        if len(intervals) == 1 and max_size > MAX_CHILDREN_EFFECTIVELY_INFINITE:
             return MAX_CHILDREN_EFFECTIVELY_INFINITE
 
-        # number of strings of length k, for each k in [min_size, max_size].
-        return sum(len(intervals) ** k for k in range(min_size, max_size + 1))
-
+        return _count_distinct_strings(
+            alphabet_size=len(intervals), min_size=min_size, max_size=max_size
+        )
     elif ir_type == "float":
         min_value = kwargs["min_value"]
         max_value = kwargs["max_value"]
@@ -280,22 +283,18 @@ def all_children(ir_type, kwargs):
                         continue
                     yield n
         else:
-            # hard case: only one bound was specified. Here we probe either upwards
-            # or downwards with our full 128 bit generation, but only half of these
-            # (plus one for the case of generating zero) result in a probe in the
-            # direction we want. ((2**128 - 1) // 2) + 1 == a range of 2 ** 127.
-            #
-            # strictly speaking, I think this is not actually true: if
-            # max_value > shrink_towards then our range is ((-2**127) + 1, max_value),
-            # and it only narrows when max_value < shrink_towards. But it
-            # really doesn't matter for this case because (even half) unbounded
-            # integers generation is hit extremely rarely.
             assert (min_value is None) ^ (max_value is None)
+            # hard case: only one bound was specified. Here we probe in 128 bits
+            # around shrink_towards, and discard those above max_value or below
+            # min_value respectively.
+            shrink_towards = kwargs["shrink_towards"]
             if min_value is None:
-                yield from range(max_value - (2**127) + 1, max_value)
+                shrink_towards = min(max_value, shrink_towards)
+                yield from range(shrink_towards - (2**127) + 1, max_value)
             else:
                 assert max_value is None
-                yield from range(min_value, min_value + (2**127) - 1)
+                shrink_towards = max(min_value, shrink_towards)
+                yield from range(min_value, shrink_towards + (2**127) - 1)
 
     if ir_type == "boolean":
         p = kwargs["p"]
@@ -306,8 +305,8 @@ def all_children(ir_type, kwargs):
         else:
             yield from [False, True]
     if ir_type == "bytes":
-        size = kwargs["size"]
-        yield from (int_to_bytes(i, size) for i in range(2 ** (8 * size)))
+        for size in range(kwargs["min_size"], kwargs["max_size"] + 1):
+            yield from (int_to_bytes(i, size) for i in range(2 ** (8 * size)))
     if ir_type == "string":
         min_size = kwargs["min_size"]
         max_size = kwargs["max_size"]
@@ -440,8 +439,6 @@ class TreeNode:
     #   be explored when generating novel prefixes)
     transition: Union[None, Branch, Conclusion, Killed] = attr.ib(default=None)
 
-    invalid_at: Optional[InvalidAt] = attr.ib(default=None)
-
     # A tree node is exhausted if every possible sequence of draws below it has
     # been explored. We only update this when performing operations that could
     # change the answer.
@@ -469,7 +466,7 @@ class TreeNode:
         Splits the tree so that it can incorporate a decision at the draw call
         corresponding to the node at position i.
 
-        Raises Flaky if node i was forced.
+        Raises FlakyStrategyDefinition if node i was forced.
         """
 
         if i in self.forced:
@@ -495,8 +492,6 @@ class TreeNode:
         del self.ir_types[i:]
         del self.values[i:]
         del self.kwargs[i:]
-        # we have a transition now, so we don't need to carry around invalid_at.
-        self.invalid_at = None
         assert len(self.values) == len(self.kwargs) == len(self.ir_types) == i
 
     def check_exhausted(self):
@@ -865,13 +860,6 @@ class DataTree:
                     t = node.transition
                     data.conclude_test(t.status, t.interesting_origin)
                 elif node.transition is None:
-                    if node.invalid_at is not None:
-                        (ir_type, kwargs, forced) = node.invalid_at
-                        try:
-                            draw(ir_type, kwargs, forced=forced, convert_forced=False)
-                        except StopTest:
-                            if data.invalid_at is not None:
-                                raise
                     raise PreviouslyUnseenBehaviour
                 elif isinstance(node.transition, Branch):
                     v = draw(node.transition.ir_type, node.transition.kwargs)
@@ -890,16 +878,9 @@ class DataTree:
         return TreeRecordingObserver(self)
 
     def _draw(self, ir_type, kwargs, *, random, forced=None):
-        # we should possibly pull out BUFFER_SIZE to a common file to avoid this
-        # circular import.
-        from hypothesis.internal.conjecture.engine import BUFFER_SIZE
+        from hypothesis.internal.conjecture.data import ir_to_buffer
 
-        cd = ConjectureData(max_length=BUFFER_SIZE, prefix=b"", random=random)
-        draw_func = getattr(cd, f"draw_{ir_type}")
-
-        value = draw_func(**kwargs, forced=forced)
-        buf = cd.buffer
-
+        (value, buf) = ir_to_buffer(ir_type, kwargs, forced=forced, random=random)
         # using floats as keys into branch.children breaks things, because
         # e.g. hash(0.0) == hash(-0.0) would collide as keys when they are
         # in fact distinct child branches.
@@ -1016,10 +997,6 @@ class TreeRecordingObserver(DataObserver):
         self, value: bool, *, was_forced: bool, kwargs: BooleanKWargs
     ) -> None:
         self.draw_value("boolean", value, was_forced=was_forced, kwargs=kwargs)
-
-    def mark_invalid(self, invalid_at: InvalidAt) -> None:
-        if self.__current_node.transition is None:
-            self.__current_node.invalid_at = invalid_at
 
     def draw_value(
         self,
@@ -1142,10 +1119,13 @@ class TreeRecordingObserver(DataObserver):
                 node.transition.status != Status.INTERESTING
                 or new_transition.status != Status.VALID
             ):
-                raise Flaky(
+                old_origin = node.transition.interesting_origin
+                new_origin = new_transition.interesting_origin
+                raise FlakyReplay(
                     f"Inconsistent results from replaying a test case!\n"
-                    f"  last: {node.transition.status.name} from {node.transition.interesting_origin}\n"
-                    f"  this: {new_transition.status.name} from {new_transition.interesting_origin}"
+                    f"  last: {node.transition.status.name} from {old_origin}\n"
+                    f"  this: {new_transition.status.name} from {new_origin}",
+                    (old_origin, new_origin),
                 )
         else:
             node.transition = new_transition

@@ -5,8 +5,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/core
-    ydb/library/actors/http
     ydb/core/base
     ydb/core/fq/libs/actors
     ydb/core/fq/libs/audit
@@ -24,20 +22,22 @@ PEERDIR(
     ydb/core/fq/libs/quota_manager
     ydb/core/fq/libs/rate_limiter/control_plane_service
     ydb/core/fq/libs/rate_limiter/quoter_service
+    ydb/core/fq/libs/row_dispatcher
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/test_connection
     ydb/core/protos
+    ydb/library/actors/core
+    ydb/library/actors/http
     ydb/library/folder_service
     ydb/library/folder_service/proto
     ydb/library/security
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/utils/actor_log
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/actors/input_transforms
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/transform
-    ydb/library/yql/providers/common/comp_nodes
-    ydb/library/yql/providers/common/metrics
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/providers/common/comp_nodes
+    yql/essentials/providers/common/metrics
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/provider
@@ -56,9 +56,7 @@ PEERDIR(
     ydb/library/yql/providers/solomon/gateway
     ydb/library/yql/providers/solomon/proto
     ydb/library/yql/providers/solomon/provider
-    ydb/library/yql/providers/ydb/actors
-    ydb/library/yql/providers/ydb/comp_nodes
-    ydb/library/yql/providers/ydb/provider
+    ydb/library/yql/utils/actor_log
 )
 
 YQL_LAST_ABI_VERSION()

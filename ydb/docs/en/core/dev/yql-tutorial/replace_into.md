@@ -4,7 +4,7 @@ Add data to the table using [REPLACE INTO](../../yql/reference/syntax/replace_in
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 REPLACE INTO episodes
 (
     series_id,

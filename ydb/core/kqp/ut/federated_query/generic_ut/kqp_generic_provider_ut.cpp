@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/database_resolver_mock.h>
@@ -35,7 +35,7 @@ namespace NKikimr::NKqp {
         Ydb,
     };
 
-    NApi::TDataSourceInstance MakeDataSourceInstance(EProviderType providerType) {
+    NYql::TGenericDataSourceInstance MakeDataSourceInstance(EProviderType providerType) {
         switch (providerType) {
             case EProviderType::PostgreSQL:
                 return TConnectorClientMock::TPostgreSQLDataSourceInstanceBuilder<>().GetResult();
@@ -96,7 +96,7 @@ namespace NKikimr::NKqp {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
-            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
 
             // step 1: DescribeTable
             // clang-format off
@@ -125,6 +125,7 @@ namespace NKikimr::NKqp {
             // step 3: ReadSplits
             std::vector<ui16> colData = {10, 20, 30, 40, 50};
             clientMock->ExpectReadSplits()
+                .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -191,7 +192,7 @@ namespace NKikimr::NKqp {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
-            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
 
             constexpr size_t ROWS_COUNT = 5;
 
@@ -221,6 +222,7 @@ namespace NKikimr::NKqp {
 
             // step 3: ReadSplits
             clientMock->ExpectReadSplits()
+                .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -283,7 +285,7 @@ namespace NKikimr::NKqp {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
-            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
 
             constexpr size_t ROWS_COUNT = 5;
 
@@ -313,6 +315,7 @@ namespace NKikimr::NKqp {
 
             // step 3: ReadSplits
             clientMock->ExpectReadSplits()
+                .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -371,7 +374,7 @@ namespace NKikimr::NKqp {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
-            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
             // clang-format off
             const NApi::TSelect select = TConnectorClientMock::TSelectBuilder<>()
                 .DataSourceInstance(dataSourceInstance)
@@ -418,6 +421,7 @@ namespace NKikimr::NKqp {
             std::vector<i32> filterColumnData = {42, 24};
             // clang-format off
             clientMock->ExpectReadSplits()
+                .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
                     .Select(select)

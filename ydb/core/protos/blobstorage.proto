@@ -25,7 +25,7 @@ message TVDiskCostSettings {
     optional uint64 WriteSpeedBps = 3;
     optional uint64 ReadBlockSize = 4;
     optional uint64 WriteBlockSize = 5;
-    optional uint32 MinREALHugeBlobInBytes = 6;
+    optional uint32 MinHugeBlobInBytes = 6;
 };
 
 message TWindowFeedback {
@@ -880,6 +880,7 @@ message TEvVStatusResult {
     optional bool JoinedGroup = 10;
     optional bool Replicated = 11 [default = false];
     optional float ApproximateFreeSpaceShare = 12; // must contain valid value if set
+    optional bool IsReadOnly = 13 [default = false];
     optional fixed64 IncarnationGuid = 30;
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
 }

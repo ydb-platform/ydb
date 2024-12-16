@@ -142,9 +142,10 @@ struct IYPathService
         IInvokerPtr workerInvoker,
         const NProfiling::TProfiler& profiler = {});
 
+    using TPermissionValidator = TCallback<void(const std::string& user, EPermission permission)>;
     //! Creates a wrapper that calls given callback on each invocation
     //! in order to validate user permission to query the ypath service.
-    IYPathServicePtr WithPermissionValidator(TCallback<void(const TString&, EPermission)> validationCallback);
+    IYPathServicePtr WithPermissionValidator(TPermissionValidator validator);
 
 protected:
     //! Implementation method for WriteAttributesFragment.

@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 import sys
 import threading
@@ -49,5 +50,5 @@ if __name__ == '__main__':
     result = process.wait(timeout=timeout)
 
     if result != 0:
-        print >> sys.stderr, 'Yndexing process finished with code', result
+        print('Yndexing process finished with code', result, file=sys.stderr)
         touch(output_file)

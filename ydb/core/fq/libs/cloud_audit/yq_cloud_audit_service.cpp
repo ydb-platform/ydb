@@ -65,7 +65,13 @@ std::string MapConnectionType(const FederatedQuery::ConnectionSetting::Connectio
         return "Monitoring";
     case FederatedQuery::ConnectionSetting::ConnectionCase::kPostgresqlCluster:
         return "PostgreSQLCluster";
-    default:
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kGreenplumCluster:
+        return "GreenplumCluster";
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kMysqlCluster:
+        return "MySQLCluster";
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kLogging:
+        return "Logging";
+    case FederatedQuery::ConnectionSetting::ConnectionCase::CONNECTION_NOT_SET:
         Y_ENSURE(false, "Invalid connection case " << i32(connectionCase));
     }
 }
@@ -76,8 +82,8 @@ std::string MapBindingType(const FederatedQuery::BindingSetting::BindingCase& bi
         return "YdbDataStreams";
     case FederatedQuery::BindingSetting::BindingSetting::kObjectStorage:
         return "ObjectStorage";
-    default:
-        Y_ENSURE(false, "Invalid connection case " << i32(bindingCase));
+    case FederatedQuery::BindingSetting::BindingSetting::BINDING_NOT_SET:
+        Y_ENSURE(false, "Invalid binding case " << i32(bindingCase));
     }
 }
 
@@ -381,7 +387,7 @@ public:
         clientParameters.SetLog(*SdkLogger);
 
         const auto& sharedKey = Config.GetUAConfig().GetSharedSecretKey();
-        if (!sharedKey.Empty()) {
+        if (!sharedKey.empty()) {
             clientParameters.SetSharedSecretKey(sharedKey);
         }
         auto clientPtr = NUnifiedAgent::MakeClient(clientParameters);

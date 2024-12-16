@@ -1,14 +1,16 @@
 #include "crash_handler.h"
-#include "signal_registry.h"
 
 #include <yt/yt/core/logging/log_manager.h>
 
+#include <yt/yt/core/misc/codicil.h>
 #include <yt/yt/core/misc/proc.h>
 
 #include <yt/yt/core/concurrency/fls.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/library/undumpable/undumpable.h>
+
+#include <library/cpp/yt/system/exit.h>
 
 #include <library/cpp/yt/assert/assert.h>
 
@@ -83,7 +85,7 @@ Y_NO_INLINE TStackTrace GetStackTrace(TStackTraceBuffer* buffer)
 #endif
     return NBacktrace::GetBacktrace(
         &cursor,
-        MakeMutableRange(*buffer),
+        TMutableRange(*buffer),
         /*framesToSkip*/ 2);
 }
 
@@ -130,32 +132,27 @@ void DumpTimeInfo()
     formatter.AppendNumber(timeSinceEpoch);
     formatter.AppendString(" (Unix time); Try \"date -d @");
     formatter.AppendNumber(timeSinceEpoch, 10);
-    formatter.AppendString("\" if you are using GNU date ***\n");
+    formatter.AppendString("\" if you are using GNU date\n");
     WriteToStderr(formatter);
 }
 
-using TCodicilStack = std::vector<TString>;
-
-NConcurrency::TFlsSlot<TCodicilStack>& CodicilStackSlot()
-{
-    static NConcurrency::TFlsSlot<TCodicilStack> Slot;
-    return Slot;
-}
-
-//! Dump codicils.
+//! Dumps codicils.
 void DumpCodicils()
 {
-    // NB: Avoid constructing FLS slot to avoid allocations; these may lead to deadlocks if the
-    // program crashes during an allocation itself.
-    if (CodicilStackSlot().IsInitialized() && !CodicilStackSlot()->empty()) {
-        WriteToStderr("*** Begin codicils ***\n");
-        for (const auto& data : *CodicilStackSlot()) {
-            TFormatter formatter;
-            formatter.AppendString(data.c_str());
-            formatter.AppendString("\n");
+    auto builders = GetCodicilBuilders();
+    if (!builders.empty()) {
+        WriteToStderr("*** Begin codicils\n");
+        TCodicilFormatter formatter;
+        for (const auto& builder : builders) {
+            formatter.Reset();
+            builder(&formatter);
             WriteToStderr(formatter);
+            if (formatter.GetBytesRemaining() == 0) {
+                WriteToStderr(" (truncated)");
+            }
+            WriteToStderr("\n");
         }
-        WriteToStderr("*** End codicils ***\n");
+        WriteToStderr("*** End codicils\n");
     }
 }
 
@@ -462,8 +459,9 @@ void DumpSigcontext(void* uc)
 
 void CrashTimeoutHandler(int /*signal*/)
 {
-    WriteToStderr("*** Process hung during crash ***\n");
-    _exit(1);
+    AbortProcessDramatically(
+        EProcessExitCode::GenericError,
+        "Process hung during crash");
 }
 
 void DumpUndumpableBlocksInfo()
@@ -474,7 +472,7 @@ void DumpUndumpableBlocksInfo()
         TFormatter formatter;
         formatter.AppendString("*** Marked memory regions of total size ");
         formatter.AppendNumber(cutInfo.MarkedSize / 1_MB);
-        formatter.AppendString(" MB as undumpable ***\n");
+        formatter.AppendString(" MB as undumpable\n");
         WriteToStderr(formatter);
     }
 
@@ -488,7 +486,7 @@ void DumpUndumpableBlocksInfo()
         formatter.AppendNumber(record.Size / 1_MB);
         formatter.AppendString(" MB with error code ");
         formatter.AppendNumber(record.ErrorCode);
-        formatter.AppendString(" ***\n");
+        formatter.AppendString("\n");
         WriteToStderr(formatter);
     }
 }
@@ -516,7 +514,7 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
     {
         std::array<const void*, 1> frames{NDetail::GetPC(uc)};
         NBacktrace::SymbolizeBacktrace(
-            MakeRange(frames),
+            TRange(frames),
             [] (TStringBuf info) {
                 info.SkipPrefix(" 1. ");
                 WriteToStderr(info);
@@ -532,7 +530,7 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
 
     NDetail::DumpUndumpableBlocksInfo();
 
-    WriteToStderr("*** Waiting for logger to shut down ***\n");
+    WriteToStderr("*** Waiting for logger to shut down\n");
 
     // Actually, it is not okay to hang.
     ::signal(SIGALRM, NDetail::CrashTimeoutHandler);
@@ -540,7 +538,7 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
 
     NLogging::TLogManager::Get()->Shutdown();
 
-    WriteToStderr("*** Terminating ***\n");
+    WriteToStderr("*** Terminating\n");
 }
 
 #else
@@ -549,73 +547,6 @@ void CrashSignalHandler(int /*signal*/)
 { }
 
 #endif
-
-////////////////////////////////////////////////////////////////////////////////
-
-void PushCodicil(const TString& data)
-{
-#ifdef _unix_
-    NDetail::CodicilStackSlot()->push_back(data);
-#else
-    Y_UNUSED(data);
-#endif
-}
-
-void PopCodicil()
-{
-#ifdef _unix_
-    YT_VERIFY(!NDetail::CodicilStackSlot()->empty());
-    NDetail::CodicilStackSlot()->pop_back();
-#endif
-}
-
-std::vector<TString> GetCodicils()
-{
-#ifdef _unix_
-    return *NDetail::CodicilStackSlot();
-#else
-    return {};
-#endif
-}
-
-TCodicilGuard::TCodicilGuard()
-    : Active_(false)
-{ }
-
-TCodicilGuard::TCodicilGuard(const TString& data)
-    : Active_(true)
-{
-    PushCodicil(data);
-}
-
-TCodicilGuard::~TCodicilGuard()
-{
-    Release();
-}
-
-TCodicilGuard::TCodicilGuard(TCodicilGuard&& other)
-    : Active_(other.Active_)
-{
-    other.Active_ = false;
-}
-
-TCodicilGuard& TCodicilGuard::operator=(TCodicilGuard&& other)
-{
-    if (this != &other) {
-        Release();
-        Active_ = other.Active_;
-        other.Active_ = false;
-    }
-    return *this;
-}
-
-void TCodicilGuard::Release()
-{
-    if (Active_) {
-        PopCodicil();
-        Active_ = false;
-    }
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 

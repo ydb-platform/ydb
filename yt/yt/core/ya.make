@@ -12,7 +12,9 @@ ENDIF()
 NO_LTO()
 
 SRCS(
+    actions/cancelation_token.cpp
     actions/cancelable_context.cpp
+    actions/codicil_guarded_invoker.cpp
     actions/current_invoker.cpp
     actions/future.cpp
     actions/invoker_detail.cpp
@@ -45,6 +47,7 @@ SRCS(
 
     concurrency/action_queue.cpp
     concurrency/async_barrier.cpp
+    concurrency/async_looper.cpp
     concurrency/async_rw_lock.cpp
     concurrency/async_semaphore.cpp
     concurrency/async_stream_pipe.cpp
@@ -61,6 +64,7 @@ SRCS(
     concurrency/fair_throttler.cpp
     concurrency/fiber_scheduler_thread.cpp
     concurrency/fiber.cpp
+    concurrency/fiber_manager.cpp
     concurrency/fls.cpp
     concurrency/invoker_alarm.cpp
     concurrency/invoker_queue.cpp
@@ -103,6 +107,7 @@ SRCS(
     logging/log_writer_detail.cpp
     logging/file_log_writer.cpp
     logging/stream_log_writer.cpp
+    logging/system_log_event_provider.cpp
     logging/random_access_gzip.cpp
     logging/zstd_compression.cpp
 
@@ -115,13 +120,13 @@ SRCS(
     misc/blob_output.cpp
     misc/bloom_filter.cpp
     misc/checksum.cpp
+    misc/codicil.cpp
     misc/config.cpp
     misc/coro_pipe.cpp
     misc/crash_handler.cpp
     misc/digest.cpp
     misc/error.cpp
     misc/error_code.cpp
-    misc/ema_counter.cpp
     misc/fs.cpp
     # NB: it is necessary to prevent linker optimization of
     # REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION macros for TGuid.
@@ -134,6 +139,7 @@ SRCS(
     misc/linear_probe.cpp
     misc/memory_usage_tracker.cpp
     misc/relaxed_mpsc_queue.cpp
+    misc/origin_attributes.cpp
     misc/parser_helpers.cpp
     misc/pattern_formatter.cpp
     misc/phoenix.cpp
@@ -151,8 +157,10 @@ SRCS(
     misc/shutdown.cpp
     misc/signal_registry.cpp
     misc/slab_allocator.cpp
+    misc/statistic_path.cpp
     misc/statistics.cpp
     misc/string_helpers.cpp
+    misc/stripped_error.cpp
     misc/cache_config.cpp
     misc/utf8_decoder.cpp
     misc/zerocopy_output_writer.cpp
@@ -197,7 +205,7 @@ SRCS(
     rpc/message_format.cpp
     rpc/null_channel.cpp
     rpc/peer_discovery.cpp
-    rpc/per_user_request_queue_provider.cpp
+    rpc/per_key_request_queue_provider.cpp
     rpc/protocol_version.cpp
     rpc/public.cpp
     rpc/request_queue_provider.cpp
@@ -221,9 +229,7 @@ SRCS(
     threading/spin_wait_slow_path_logger.cpp
     threading/thread.cpp
 
-    GLOBAL tracing/allocation_hooks.cpp
     tracing/allocation_tags.cpp
-    tracing/config.cpp
     tracing/public.cpp
     GLOBAL tracing/trace_context.cpp
 
@@ -251,6 +257,7 @@ SRCS(
     yson/pull_parser_deserialize.cpp
     yson/stream.cpp
     yson/string.cpp
+    yson/string_builder_stream.cpp
     yson/string_filter.cpp
     yson/syntax_checker.cpp
     yson/token.cpp
@@ -303,6 +310,12 @@ SRCS(
     ytalloc/statistics_producer.cpp
 )
 
+IF (OS_LINUX)
+    SRCS(
+        GLOBAL tracing/allocation_tags_hooks.cpp
+    )
+ENDIF()
+
 IF (OS_LINUX OR OS_FREEBSD)
     EXTRALIBS(-lutil)
 ENDIF()
@@ -325,6 +338,8 @@ PEERDIR(
     library/cpp/streams/brotli
     library/cpp/yt/assert
     library/cpp/yt/containers
+    library/cpp/yt/global
+    library/cpp/yt/error
     library/cpp/yt/logging
     library/cpp/yt/logging/plain_text_formatter
     library/cpp/yt/misc
@@ -375,7 +390,7 @@ RECURSE(
     test_framework
 )
 
-IF (NOT OPENSOURCE)
+IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         benchmarks
         bus/benchmarks

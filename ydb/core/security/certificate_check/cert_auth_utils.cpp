@@ -17,7 +17,7 @@
 
 namespace NKikimr {
 
-std::vector<TCertificateAuthorizationParams> GetCertificateAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization &clientCertificateAuth) {
+std::vector<TCertificateAuthorizationParams> GetCertificateAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization& clientCertificateAuth) {
     std::vector<TCertificateAuthorizationParams> certAuthParams;
     certAuthParams.reserve(clientCertificateAuth.ClientCertificateDefinitionsSize());
 
@@ -33,9 +33,19 @@ std::vector<TCertificateAuthorizationParams> GetCertificateAuthorizationParams(c
             }
             dn.AddRDN(std::move(rdn));
         }
-        if (dn) {
+        std::optional<TCertificateAuthorizationParams::TRDN> subjectDns;
+        if (const auto& subjectDnsCfg = clientCertificateDefinition.GetSubjectDns(); subjectDnsCfg.ValuesSize() || subjectDnsCfg.SuffixesSize()) {
+            TCertificateAuthorizationParams::TRDN& dns = subjectDns.emplace(TString());
+            for (const auto& value: subjectDnsCfg.GetValues()) {
+                dns.AddValue(value);
+            }
+            for (const auto& suffix: subjectDnsCfg.GetSuffixes()) {
+                dns.AddSuffix(suffix);
+            }
+        }
+        if (dn || subjectDns) {
             std::vector<TString> groups(clientCertificateDefinition.GetMemberGroups().cbegin(), clientCertificateDefinition.GetMemberGroups().cend());
-            certAuthParams.emplace_back(std::move(dn), clientCertificateDefinition.GetRequireSameIssuer(), std::move(groups));
+            certAuthParams.emplace_back(std::move(dn), std::move(subjectDns), clientCertificateDefinition.GetRequireSameIssuer(), std::move(groups));
         }
     }
 
@@ -130,8 +140,8 @@ int FillNameFromProps(X509_NAME* name, const TProps& props) {
         return 1;
     }
 
-    if (!props.Coutry.empty()) {
-        X509_NAME_add_entry_by_txt(name, SN_countryName, MBSTRING_ASC, (const unsigned char*)props.Coutry.c_str(), -1, -1, 0);
+    if (!props.Country.empty()) {
+        X509_NAME_add_entry_by_txt(name, SN_countryName, MBSTRING_ASC, (const unsigned char*)props.Country.c_str(), -1, -1, 0);
     }
 
     if (!props.State.empty()) {
@@ -377,7 +387,7 @@ X509REQPtr GenerateRequest(PKeyPtr& pkey, const TProps& props) {
     return std::move(request);
 }
 
-X509Ptr SingRequest(X509REQPtr& request, X509Ptr& rootCert, PKeyPtr& rootKey, const TProps& props) {
+X509Ptr SignRequest(X509REQPtr& request, X509Ptr& rootCert, PKeyPtr& rootKey, const TProps& props) {
     auto* pktmp = X509_REQ_get0_pubkey(request.get()); // X509_REQ_get0_pubkey returns the key, that shouldn't freed
     CHECK(pktmp, "Error unpacking public key from request.");
 
@@ -455,7 +465,7 @@ TCertAndKey GenerateSignedCert(const TCertAndKey& rootCA, const TProps& props) {
 
     auto rootCert = ReadCertAsPEM(rootCA.Certificate);
     auto rootKey = ReadPrivateKeyAsPEM(rootCA.PrivateKey);
-    auto cert = SingRequest(request, rootCert, rootKey, props); // NID_authority_key_identifier must see ca
+    auto cert = SignRequest(request, rootCert, rootKey, props); // NID_authority_key_identifier must see ca
 
     TCertAndKey result;
     result.Certificate = WriteAsPEM(cert);
@@ -475,7 +485,7 @@ TProps TProps::AsCA() {
     TProps props;
 
     props.SecondsValid = 3*365 * 24 * 60 *60; // 3 years
-    props.Coutry = "RU";
+    props.Country = "RU";
     props.State = "MSK";
     props.Location = "MSK";
     props.Organization = "YA";

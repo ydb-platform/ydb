@@ -1,7 +1,6 @@
 PY3TEST()
 
 FORK_TEST_FILES()
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
@@ -31,6 +30,8 @@ PEERDIR(
     ydb/public/sdk/python
 )
 
-REQUIREMENTS(ram:10)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:10)
+ENDIF()
 
 END()

@@ -7,6 +7,7 @@ from typing import Sequence, MutableSequence, Dict, Optional, Union, Generator
 from clickhouse_connect.driver.exceptions import ProgrammingError, StreamClosedError, DataError
 from clickhouse_connect.driver.types import Closable
 
+
 # pylint: disable=invalid-name
 must_swap = sys.byteorder == 'big'
 int_size = array.array('i').itemsize
@@ -38,24 +39,23 @@ def array_type(size: int, signed: bool):
     return code if signed else code.upper()
 
 
-def write_array(code: str, column: Sequence, dest: MutableSequence):
+def write_array(code: str, column: Sequence, dest: MutableSequence, col_name: Optional[str]=None):
     """
     Write a column of native Python data matching the array.array code
     :param code: Python array.array code matching the column data type
     :param column: Column of native Python values
     :param dest: Destination byte buffer
+    :param col_name: Optional column name for error tracking
     """
-    if len(column) and not isinstance(column[0], (int, float)):
-        if code in ('f', 'F', 'd', 'D'):
-            column = [float(x) for x in column]
-        else:
-            column = [int(x) for x in column]
     try:
         buff = struct.Struct(f'<{len(column)}{code}')
         dest += buff.pack(*column)
     except (TypeError, OverflowError, struct.error) as ex:
-        raise DataError('Unable to create Python array.  This is usually caused by trying to insert None ' +
-                        'values into a ClickHouse column that is not Nullable') from ex
+        col_msg = ''
+        if col_name:
+            col_msg = f' for source column `{col_name}`'
+        raise DataError(f'Unable to create Python array{col_msg}.  This is usually caused by trying to insert None ' +
+                                  'values into a ClickHouse column that is not Nullable') from ex
 
 
 def write_uint64(value: int, dest: MutableSequence):
@@ -112,6 +112,12 @@ def dict_copy(source: Dict = None, update: Optional[Dict] = None) -> Dict:
     return copy
 
 
+def dict_add(source: Dict, key: str, value: any) -> Dict:
+    if value is not None:
+        source[key] = value
+    return source
+
+
 def empty_gen():
     yield from ()
 
@@ -126,6 +132,14 @@ def coerce_bool(val: Optional[Union[str, bool]]):
     if not val:
         return False
     return val is True or (isinstance(val, str) and val.lower() in ('true', '1', 'y', 'yes'))
+
+
+def first_value(column: Sequence, nullable:bool = True):
+    if nullable:
+        return next((x for x in column if x is not None), None)
+    if len(column):
+        return column[0]
+    return None
 
 
 class SliceView(Sequence):

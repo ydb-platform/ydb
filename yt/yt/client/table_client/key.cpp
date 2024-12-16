@@ -1,5 +1,6 @@
 #include "key.h"
 
+#include "private.h"
 #include "serialize.h"
 
 #include <yt/yt/core/ytree/fluent.h>
@@ -12,8 +13,8 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Used only for YT_LOG_FATAL below.
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "TableClientKey");
+//! Used only for YT_LOG_FATAL below in debug mode.
+[[maybe_unused]] static constexpr auto& Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -138,7 +139,7 @@ void Serialize(const TKey& key, IYsonConsumer* consumer)
 {
     if (key) {
         BuildYsonFluently(consumer)
-            .DoListFor(MakeRange(key.Begin(), key.End()), [&] (TFluentList fluent, const TUnversionedValue& value) {
+            .DoListFor(TRange(key.Begin(), key.End()), [&] (TFluentList fluent, const TUnversionedValue& value) {
                 fluent
                     .Item()
                     .Value(value);

@@ -52,6 +52,7 @@ struct TEvHttpProxy {
         EvResolveHostRequest,
         EvResolveHostResponse,
         EvReportSensors,
+        EvHttpOutgoingDataChunk,
         EvEnd
     };
 
@@ -66,8 +67,9 @@ struct TEvHttpProxy {
         TString PrivateKeyFile;
         TString SslCertificatePem;
         std::vector<TString> CompressContentTypes;
-
+        ui32 MaxRequestsPerSecond = 0;
         ui32 MaxRecycledRequestsCount = DEFAULT_MAX_RECYCLED_REQUESTS_COUNT;
+        TDuration InactivityTimeout = TDuration::Minutes(2);
 
         TEvAddListeningPort() = default;
 
@@ -162,6 +164,14 @@ struct TEvHttpProxy {
         {}
     };
 
+    struct TEvHttpOutgoingDataChunk : NActors::TEventLocal<TEvHttpOutgoingDataChunk, EvHttpOutgoingDataChunk> {
+        THttpOutgoingDataChunkPtr DataChunk;
+
+        TEvHttpOutgoingDataChunk(THttpOutgoingDataChunkPtr dataChunk)
+            : DataChunk(std::move(dataChunk))
+        {}
+    };
+
     struct TEvHttpConnectionOpened : NActors::TEventLocal<TEvHttpConnectionOpened, EvHttpConnectionOpened> {
         TString PeerAddress;
         TActorId ConnectionID;
@@ -226,10 +236,32 @@ struct TEvHttpProxy {
     };
 };
 
+struct TRateLimiter {
+    TDuration Period = TDuration::Seconds(1);
+    ui32 Limit = 0;
+    std::atomic<ui32> Count = 0;
+    std::atomic<TInstant::TValue> LastReset = 0;
+
+    bool Check(TInstant now) {
+        if (Limit == 0) {
+            return true;
+        }
+        TInstant::TValue lastResetValue = LastReset;
+        if (now - TInstant::FromValue(lastResetValue) >= Period) {
+            if (LastReset.compare_exchange_strong(lastResetValue, now.GetValue())) {
+                Count = 0;
+            }
+        }
+        return Count++ < Limit;
+    }
+};
+
 struct TPrivateEndpointInfo : THttpEndpointInfo {
     TActorId Proxy;
     TActorId Owner;
     TSslHelpers::TSslHolder<SSL_CTX> SecureContext;
+    TRateLimiter RateLimiter;
+    TDuration InactivityTimeout;
 
     TPrivateEndpointInfo(const std::vector<TString>& compressContentTypes)
         : THttpEndpointInfo(compressContentTypes)

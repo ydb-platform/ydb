@@ -25,7 +25,9 @@ TFuture<TTimestamp> TTimestampProviderBase::GenerateTimestamps(int count, TCellT
 {
     VERIFY_THREAD_AFFINITY_ANY();
 
-    YT_LOG_DEBUG("Generating fresh timestamps (Count: %v)", count);
+    YT_LOG_DEBUG("Generating fresh timestamps (Count: %v, ClockClusterTag: %v)",
+        count,
+        clockClusterTag);
 
     return DoGenerateTimestamps(count, clockClusterTag).Apply(BIND(
         &TTimestampProviderBase::OnGenerateTimestamps,
@@ -76,9 +78,10 @@ TFuture<TTimestamp> TTimestampProviderBase::OnGenerateTimestamps(
     auto firstTimestamp = timestampOrError.Value();
     auto lastTimestamp = firstTimestamp + count - 1;
 
-    YT_LOG_DEBUG("Fresh timestamps generated (Timestamps: %v-%v)",
+    YT_LOG_DEBUG("Fresh timestamps generated (Timestamps: %v-%v, ClockClusterTag: %v)",
         firstTimestamp,
-        lastTimestamp);
+        lastTimestamp,
+        clockClusterTag);
 
     auto& latestTimestamp = GetLatestTimestampReferenceByTag(clockClusterTag);
     auto latestTimestampValue = latestTimestamp.load(std::memory_order::relaxed);

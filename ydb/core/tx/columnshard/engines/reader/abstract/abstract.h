@@ -13,7 +13,7 @@ protected:
 public:
     virtual ~TScanIteratorBase() = default;
 
-    virtual void Apply(IDataTasksProcessor::ITask::TPtr /*processor*/) {
+    virtual void Apply(const std::shared_ptr<IApplyAction>& /*task*/) {
 
     }
 
@@ -31,7 +31,7 @@ public:
         return {};
     }
     virtual bool Finished() const = 0;
-    virtual TConclusion<std::optional<TPartialReadResult>> GetBatch() = 0;
+    virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() = 0;
     virtual void PrepareResults() {
 
     }

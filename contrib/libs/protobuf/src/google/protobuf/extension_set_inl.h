@@ -31,9 +31,9 @@
 #ifndef GOOGLE_PROTOBUF_EXTENSION_SET_INL_H__
 #define GOOGLE_PROTOBUF_EXTENSION_SET_INL_H__
 
-#include <google/protobuf/extension_set.h>
-#include <google/protobuf/metadata_lite.h>
-#include <google/protobuf/parse_context.h>
+#include "google/protobuf/extension_set.h"
+#include "google/protobuf/metadata_lite.h"
+#include "google/protobuf/parse_context.h"
 
 namespace google {
 namespace protobuf {
@@ -76,7 +76,7 @@ const char* ExtensionSet::ParseFieldWithExtensionInfo(
       case WireFormatLite::TYPE_BYTES:
       case WireFormatLite::TYPE_GROUP:
       case WireFormatLite::TYPE_MESSAGE:
-        GOOGLE_LOG(FATAL) << "Non-primitive types can't be packed.";
+        Y_ABSL_LOG(FATAL) << "Non-primitive types can't be packed.";
         break;
     }
   } else {
@@ -206,7 +206,7 @@ const char* ExtensionSet::ParseMessageSetItemTmpl(
     const char* ptr, const Msg* extendee, internal::InternalMetadata* metadata,
     internal::ParseContext* ctx) {
   TProtoStringType payload;
-  arc_ui32 type_id;
+  arc_ui32 type_id = 0;
   enum class State { kNoTag, kHasType, kHasPayload, kDone };
   State state = State::kNoTag;
 

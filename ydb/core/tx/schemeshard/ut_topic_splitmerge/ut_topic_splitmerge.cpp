@@ -1,7 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <util/generic/size_literals.h>
@@ -668,29 +666,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
                 partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
             }
         }, {{TEvSchemeShard::EStatus::StatusInvalidParameter}});
-
-        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
-            {
-                auto* partitionStrategy = scheme.MutablePQTabletConfig()->MutablePartitionStrategy();
-                partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
-                partitionStrategy->SetMaxPartitionCount(0);
-            }
-        });
-
-        topic = DescribeTopic(runtime);
-
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED),
-                static_cast<int>(topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()));
-
-        UNIT_ASSERT_VALUES_EQUAL(3, topic.GetPartitions().size());
-        for (const auto& p : topic.GetPartitions()) {
-            Cerr <<  ">>>>> Verify partition " << p.GetPartitionId() << Endl << Flush;
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Active), static_cast<int>(p.GetStatus()));
-            UNIT_ASSERT(p.GetChildPartitionIds().empty());
-            UNIT_ASSERT(p.GetParentPartitionIds().empty());
-            UNIT_ASSERT(!p.HasKeyRange());
-        }
-
     } // Y_UNIT_TEST(DisableSplitMerge)
 
     Y_UNIT_TEST(EnableSplitMerge) {

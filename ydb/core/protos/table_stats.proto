@@ -66,4 +66,14 @@ message TTableStats {
     repeated TChannelStats Channels = 30;
 
     optional TStoragePoolsStats StoragePools = 31;
+
+    optional uint64 ByKeyFilterSize = 32;
+
+    // denotes that datashard should be background compacted 
+    // even if it is single parted
+    optional bool HasSchemaChanges = 33;
+
+    optional uint64 LocksAcquired = 34;
+    optional uint64 LocksWholeShard = 35;
+    optional uint64 LocksBroken = 36;
 }

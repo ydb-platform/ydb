@@ -92,6 +92,11 @@ BM_DEFINE_double(benchmark_min_warmup_time, 0.0);
 // standard deviation of the runs will be reported.
 BM_DEFINE_int32(benchmark_repetitions, 1);
 
+// If enabled, forces each benchmark to execute exactly one iteration and one
+// repetition, bypassing any configured
+// MinTime()/MinWarmUpTime()/Iterations()/Repetitions()
+BM_DEFINE_bool(benchmark_dry_run, false);
+
 // If set, enable random interleaving of repetitions of all benchmarks.
 // See http://github.com/google/benchmark/issues/1051 for details.
 BM_DEFINE_bool(benchmark_enable_random_interleaving, false);
@@ -168,7 +173,8 @@ void UseCharPointer(char const volatile* const v) {
 State::State(std::string name, IterationCount max_iters,
              const std::vector<int64_t>& ranges, int thread_i, int n_threads,
              internal::ThreadTimer* timer, internal::ThreadManager* manager,
-             internal::PerfCountersMeasurement* perf_counters_measurement)
+             internal::PerfCountersMeasurement* perf_counters_measurement,
+             ProfilerManager* profiler_manager)
     : total_iterations_(0),
       batch_leftover_(0),
       max_iterations(max_iters),
@@ -182,7 +188,8 @@ State::State(std::string name, IterationCount max_iters,
       threads_(n_threads),
       timer_(timer),
       manager_(manager),
-      perf_counters_measurement_(perf_counters_measurement) {
+      perf_counters_measurement_(perf_counters_measurement),
+      profiler_manager_(profiler_manager) {
   BM_CHECK(max_iterations != 0) << "At least one iteration must be run";
   BM_CHECK_LT(thread_index_, threads_)
       << "thread_index must be less than threads";
@@ -207,7 +214,7 @@ State::State(std::string name, IterationCount max_iters,
 #if defined(__INTEL_COMPILER)
 #pragma warning push
 #pragma warning(disable : 1875)
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
 #endif
@@ -225,7 +232,7 @@ State::State(std::string name, IterationCount max_iters,
       offsetof(State, skipped_) <= (cache_line_size - sizeof(skipped_)), "");
 #if defined(__INTEL_COMPILER)
 #pragma warning pop
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
 #if defined(__NVCC__)
@@ -302,6 +309,8 @@ void State::StartKeepRunning() {
   BM_CHECK(!started_ && !finished_);
   started_ = true;
   total_iterations_ = skipped() ? 0 : max_iterations;
+  if (BENCHMARK_BUILTIN_EXPECT(profiler_manager_ != nullptr, false))
+    profiler_manager_->AfterSetupStart();
   manager_->StartStopBarrier();
   if (!skipped()) ResumeTiming();
 }
@@ -315,6 +324,8 @@ void State::FinishKeepRunning() {
   total_iterations_ = 0;
   finished_ = true;
   manager_->StartStopBarrier();
+  if (BENCHMARK_BUILTIN_EXPECT(profiler_manager_ != nullptr, false))
+    profiler_manager_->BeforeTeardownStop();
 }
 
 namespace internal {
@@ -656,6 +667,14 @@ void RegisterMemoryManager(MemoryManager* manager) {
   internal::memory_manager = manager;
 }
 
+void RegisterProfilerManager(ProfilerManager* manager) {
+  // Don't allow overwriting an existing manager.
+  if (manager != nullptr) {
+    BM_CHECK_EQ(internal::profiler_manager, nullptr);
+  }
+  internal::profiler_manager = manager;
+}
+
 void AddCustomContext(const std::string& key, const std::string& value) {
   if (internal::global_context == nullptr) {
     internal::global_context = new std::map<std::string, std::string>();
@@ -707,6 +726,7 @@ void ParseCommandLineFlags(int* argc, char** argv) {
                         &FLAGS_benchmark_min_warmup_time) ||
         ParseInt32Flag(argv[i], "benchmark_repetitions",
                        &FLAGS_benchmark_repetitions) ||
+        ParseBoolFlag(argv[i], "benchmark_dry_run", &FLAGS_benchmark_dry_run) ||
         ParseBoolFlag(argv[i], "benchmark_enable_random_interleaving",
                       &FLAGS_benchmark_enable_random_interleaving) ||
         ParseBoolFlag(argv[i], "benchmark_report_aggregates_only",
@@ -745,6 +765,9 @@ void ParseCommandLineFlags(int* argc, char** argv) {
   if (FLAGS_benchmark_color.empty()) {
     PrintUsageAndExit();
   }
+  if (FLAGS_benchmark_dry_run) {
+    AddCustomContext("dry_run", "true");
+  }
   for (const auto& kv : FLAGS_benchmark_context) {
     AddCustomContext(kv.first, kv.second);
   }
@@ -773,6 +796,7 @@ void PrintDefaultHelp() {
           "          [--benchmark_min_time=`<integer>x` OR `<float>s` ]\n"
           "          [--benchmark_min_warmup_time=<min_warmup_time>]\n"
           "          [--benchmark_repetitions=<num_repetitions>]\n"
+          "          [--benchmark_dry_run={true|false}]\n"
           "          [--benchmark_enable_random_interleaving={true|false}]\n"
           "          [--benchmark_report_aggregates_only={true|false}]\n"
           "          [--benchmark_display_aggregates_only={true|false}]\n"

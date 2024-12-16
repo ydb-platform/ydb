@@ -14,6 +14,9 @@ PEERDIR(
     ydb/public/lib/ydb_cli/common
     ydb/public/sdk/cpp/client/resources
     ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/client/ydb_types/credentials
+    ydb/public/lib/ydb_cli/commands/sdk_core_access
     ydb/public/lib/ydb_cli/commands/ydb_discovery
 )
 

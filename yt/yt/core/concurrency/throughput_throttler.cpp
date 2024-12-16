@@ -3,11 +3,11 @@
 
 #include <yt/yt/core/concurrency/thread_affinity.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <queue>
 
@@ -17,20 +17,43 @@ using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+bool WillOverflowMul(i64 lhs, i64 rhs)
+{
+    i64 result;
+    return __builtin_mul_overflow(lhs, rhs, &result);
+}
+
+i64 ClampingAdd(i64 lhs, i64 rhs, i64 max)
+{
+    i64 result;
+    if (__builtin_add_overflow(lhs, rhs, &result) || result > max) {
+        return max;
+    }
+    return result;
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 DECLARE_REFCOUNTED_STRUCT(TThrottlerRequest)
 
-struct TThrottlerRequest
-    : public TRefCounted
+struct TThrottlerRequest final
 {
-    explicit TThrottlerRequest(i64 amount)
+    TThrottlerRequest(
+        i64 amount,
+        NTracing::TTraceContextPtr traceContext)
         : Amount(amount)
+        , TraceContext(std::move(traceContext))
     { }
 
-    i64 Amount;
-    TPromise<void> Promise;
-    std::atomic_flag Set = ATOMIC_FLAG_INIT;
-    NProfiling::TCpuInstant StartTime = NProfiling::GetCpuInstant();
-    NTracing::TTraceContextPtr TraceContext;
+    const NProfiling::TCpuInstant StartTime = NProfiling::GetCpuInstant();
+    const TPromise<void> Promise = NewPromise<void>();
+    const i64 Amount;
+    const NTracing::TTraceContextPtr TraceContext;
+    std::atomic<bool> Set = false;
 };
 
 DEFINE_REFCOUNTED_TYPE(TThrottlerRequest)
@@ -85,11 +108,12 @@ public:
             return true;
         }
 
-        if (Limit_.load() >= 0) {
+        auto limit = Limit_.load();
+        if (limit >= 0) {
             while (true) {
                 TryUpdateAvailable();
                 auto available = Available_.load();
-                if (available < 0) {
+                if ((limit > 0 && available < 0) || (limit == 0 && available <= 0)) {
                     return false;
                 }
                 if (Available_.compare_exchange_weak(available, available - amount)) {
@@ -190,6 +214,18 @@ public:
         DoReconfigure(limit, Period_);
     }
 
+    std::optional<double> GetLimit() const override
+    {
+        VERIFY_THREAD_AFFINITY_ANY();
+
+        auto limit = Limit_.load();
+        if (limit == -1) {
+            return std::nullopt;
+        }
+
+        return limit;
+    }
+
     i64 GetQueueTotalAmount() const override
     {
         VERIFY_THREAD_AFFINITY_ANY();
@@ -285,24 +321,50 @@ private:
         }
 
         // Enqueue request to be executed later.
-        YT_LOG_DEBUG("Started waiting for throttler (Amount: %v)", amount);
-        auto promise = NewPromise<void>();
-        auto request = New<TThrottlerRequest>(amount);
-        request->TraceContext = NTracing::CreateTraceContextFromCurrent("Throttler");
-        promise.OnCanceled(BIND([weakRequest = MakeWeak(request), amount, this, this_ = MakeStrong(this)] (const TError& error) {
+        auto request = New<TThrottlerRequest>(
+            amount,
+            NTracing::CreateTraceContextFromCurrent("Throttler"));
+
+        {
+            // Just install this trace context as the current, don't finish it.
+            NTracing::TCurrentTraceContextGuard traceContextGuard(request->TraceContext);
+            YT_LOG_DEBUG(
+                "Started waiting for throttler (Amount: %v)",
+                amount);
+        }
+
+        request->Promise.OnCanceled(BIND_NO_PROPAGATE([weakRequest = MakeWeak(request), amount, this, weakThis = MakeWeak(this)] (const TError& error) {
             auto request = weakRequest.Lock();
-            if (request && !request->Set.test_and_set()) {
-                NTracing::TTraceContextFinishGuard guard(std::move(request->TraceContext));
-                YT_LOG_DEBUG("Canceled waiting for throttler (Amount: %v)",
-                    amount);
-                request->Promise.Set(TError(NYT::EErrorCode::Canceled, "Throttled request canceled")
-                    << error);
-                QueueTotalAmount_ -= amount;
-                QueueSizeGauge_.Update(QueueTotalAmount_);
+            if (!request) {
+                return;
             }
+            if (request->Set.exchange(true)) {
+                return;
+            }
+
+            // Install the trace context as the current and also finish it.
+            NTracing::TTraceContextGuard traceContextGuard(request->TraceContext);
+
+            request->Promise.Set(TError(NYT::EErrorCode::Canceled, "Throttled request canceled")
+                << error);
+
+            // NB(coteeq): Weak ref will break cycle "promise -> this -> request -> promise"
+            auto this_ = weakThis.Lock();
+            if (!this_) {
+                return;
+            }
+
+            // NB: Cannot log any earlier, need this_ for this.
+            YT_LOG_DEBUG(
+                error,
+                "Canceled waiting for throttler (Amount: %v)",
+                amount);
+
+            QueueTotalAmount_ -= amount;
+            QueueSizeGauge_.Update(QueueTotalAmount_);
         }));
-        request->Promise = std::move(promise);
         Requests_.push(request);
+
         QueueTotalAmount_ += amount;
         QueueSizeGauge_.Update(QueueTotalAmount_);
 
@@ -311,13 +373,19 @@ private:
         return request->Promise;
     }
 
-    static i64 GetDeltaAvailable(TInstant current, TInstant lastUpdated, TDuration period, double limit)
+    static i64 GetDeltaAvailable(TInstant current, TInstant lastUpdated, double limit)
     {
         auto timePassed = current - lastUpdated;
 
-        if (limit * period.SecondsFloat() > 1) {
-            // Preventing arithmetic overflows by reducing time interval.
-            timePassed = std::min(period, timePassed);
+        if (limit > 1) {
+            constexpr auto maxRepresentableMilliSeconds = static_cast<double>(TDuration::Max().MilliSeconds());
+            auto maxValidMilliSecondsPassed = maxRepresentableMilliSeconds / limit;
+
+            if (timePassed.MilliSeconds() > maxValidMilliSecondsPassed) {
+                // NB(coteeq): Actual timePassed will overflow multiplication below,
+                // so we have nothing better than to just shrink this duration.
+                timePassed = TDuration::MilliSeconds(maxValidMilliSecondsPassed);
+            }
         }
 
         auto deltaAvailable = static_cast<i64>(timePassed.MilliSeconds() * limit / 1000);
@@ -340,19 +408,20 @@ private:
         TDelayedExecutor::CancelAndClear(UpdateCookie_);
         auto now = GetInstant();
         if (limit && *limit > 0) {
+            YT_VERIFY(!WillOverflowMul(period.MilliSeconds(), *limit));
             auto lastUpdated = LastUpdated_.load();
-            auto maxAvailable = static_cast<i64>(Period_.load().SecondsFloat()) * *limit;
+            auto maxAvailable = period.MilliSeconds() * *limit / 1000;
 
             if (lastUpdated == TInstant::Zero()) {
                 Available_ = maxAvailable;
                 LastUpdated_ = now;
             } else {
-                auto deltaAvailable = GetDeltaAvailable(now, lastUpdated, period, *limit);
+                auto deltaAvailable = GetDeltaAvailable(now, lastUpdated, *limit);
 
-                auto newAvailable = Available_.load() + deltaAvailable;
-                if (newAvailable > maxAvailable) {
+                auto newAvailable = ClampingAdd(Available_.load(), deltaAvailable, maxAvailable);
+                YT_VERIFY(newAvailable <= maxAvailable);
+                if (newAvailable == maxAvailable) {
                     LastUpdated_ = now;
-                    newAvailable = maxAvailable;
                 } else {
                     LastUpdated_ = lastUpdated + TDuration::MilliSeconds(deltaAvailable * 1000 / *limit);
                     // Just in case.
@@ -378,10 +447,12 @@ private:
         auto limit = Limit_.load();
         YT_VERIFY(limit >= 0);
 
-        auto delay = Max<i64>(0, -Available_ * 1000 / limit);
+        // Reconfigure clears the update cookie, so infinity is fine.
+        auto delay = limit ? TDuration::MilliSeconds(Max<i64>(0, -Available_ * 1000 / limit)) : TDuration::Max();
+
         UpdateCookie_ = TDelayedExecutor::Submit(
             BIND_NO_PROPAGATE(&TReconfigurableThroughputThrottler::Update, MakeWeak(this)),
-            TDuration::MilliSeconds(delay));
+            delay);
     }
 
     void TryUpdateAvailable()
@@ -395,11 +466,13 @@ private:
         auto current = GetInstant();
         auto lastUpdated = LastUpdated_.load();
 
-        auto deltaAvailable = GetDeltaAvailable(current, lastUpdated, period, limit);
+        auto deltaAvailable = GetDeltaAvailable(current, lastUpdated, limit);
 
         if (deltaAvailable == 0) {
             return;
         }
+        // The delta computed above is zero if the limit is zero.
+        YT_VERIFY(limit > 0);
 
         current = lastUpdated + TDuration::MilliSeconds(deltaAvailable * 1000 / limit);
 
@@ -408,10 +481,7 @@ private:
             auto throughputPerPeriod = static_cast<i64>(period.SecondsFloat() * limit);
 
             while (true) {
-                auto newAvailable = available + deltaAvailable;
-                if (newAvailable > throughputPerPeriod) {
-                    newAvailable = throughputPerPeriod;
-                }
+                auto newAvailable = ClampingAdd(available, deltaAvailable, /*max*/ throughputPerPeriod);
                 if (Available_.compare_exchange_weak(available, newAvailable)) {
                     break;
                 }
@@ -434,28 +504,44 @@ private:
     {
         VERIFY_SPINLOCK_AFFINITY(SpinLock_);
 
-        std::vector<TThrottlerRequestPtr> readyList;
+        std::vector<TThrottlerRequestPtr> readyRequests;
 
         auto limit = Limit_.load();
-        while (!Requests_.empty() && (limit < 0 || Available_ >= 0)) {
-            const auto& request = Requests_.front();
-            if (!request->Set.test_and_set()) {
-                NTracing::TTraceContextGuard traceGuard(std::move(request->TraceContext));
+        auto canSpend = [&] {
+            auto available = Available_.load();
+            return
+                limit < 0 ||
+                // NB(coteeq): Do not spend tokens if limit is zero.
+                limit == 0 && available > 0 ||
+                limit > 0 && available >= 0;
+        };
 
-                auto waitTime = NProfiling::CpuDurationToDuration(NProfiling::GetCpuInstant() - request->StartTime);
-                YT_LOG_DEBUG("Finished waiting for throttler (Amount: %v, WaitTime: %v)",
-                    request->Amount,
-                    waitTime);
-
-                if (limit) {
-                    Available_ -= request->Amount;
-                }
-                readyList.push_back(request);
-                QueueTotalAmount_ -= request->Amount;
-                QueueSizeGauge_.Update(QueueTotalAmount_);
-                WaitTimer_.Record(waitTime);
-            }
+        while (!Requests_.empty() && canSpend()) {
+            auto request = std::move(Requests_.front());
             Requests_.pop();
+
+            if (request->Set.exchange(true)) {
+                continue;
+            }
+
+            // Install the trace context as the current and also finish it.
+            NTracing::TTraceContextGuard traceGuard(request->TraceContext);
+
+            auto waitTime = NProfiling::CpuDurationToDuration(NProfiling::GetCpuInstant() - request->StartTime);
+            YT_LOG_DEBUG(
+                "Finished waiting for throttler (Amount: %v, WaitTime: %v)",
+                request->Amount,
+                waitTime);
+
+            if (limit >= 0) {
+                Available_ -= request->Amount;
+            }
+            QueueTotalAmount_ -= request->Amount;
+
+            QueueSizeGauge_.Update(QueueTotalAmount_);
+            WaitTimer_.Record(waitTime);
+
+            readyRequests.push_back(std::move(request));
         }
 
         if (!Requests_.empty()) {
@@ -464,7 +550,7 @@ private:
 
         guard.Release();
 
-        for (const auto& request : readyList) {
+        for (const auto& request : readyRequests) {
             request->Promise.Set();
         }
     }
@@ -579,6 +665,13 @@ public:
     void SetLimit(std::optional<double> /*limit*/) override
     {
         VERIFY_THREAD_AFFINITY_ANY();
+    }
+
+    std::optional<double> GetLimit() const override
+    {
+        VERIFY_THREAD_AFFINITY_ANY();
+
+        return std::nullopt;
     }
 
     TFuture<void> GetAvailableFuture() override
@@ -843,7 +936,8 @@ public:
             IncomingRequests_.emplace_back(TIncomingRequest{amount, promise, incomingRequestId});
         }
 
-        YT_LOG_DEBUG("Enqueued a request to the prefetching throttler (Id: %v, Amount: %v)",
+        YT_LOG_DEBUG(
+            "Enqueued a request to the prefetching throttler (Id: %v, Amount: %v)",
             incomingRequestId,
             amount);
 
@@ -927,7 +1021,8 @@ public:
             Available_ += amount;
         }
 
-        YT_LOG_DEBUG("Released from prefetching throttler (Amount: %v)",
+        YT_LOG_DEBUG(
+            "Released from prefetching throttler (Amount: %v)",
             amount);
     }
 
@@ -1113,7 +1208,8 @@ private:
             prefetchAmount = PrefetchAmount_;
         }
 
-        YT_LOG_DEBUG("Request to the underlying throttler (Id: %v, UnderlyingAmount: %v, Balance: %v, Prefetch: %v, IncomingRps: %v, UnderlyingRps: %v)",
+        YT_LOG_DEBUG(
+            "Request to the underlying throttler (Id: %v, UnderlyingAmount: %v, Balance: %v, Prefetch: %v, IncomingRps: %v, UnderlyingRps: %v)",
             underlyingRequestId,
             underlyingAmount,
             balance,
@@ -1155,7 +1251,8 @@ private:
         }
         PrefetchAmount_ = std::clamp(PrefetchAmount_, Config_->MinPrefetchAmount, Config_->MaxPrefetchAmount);
 
-        YT_LOG_DEBUG("Recalculate the amount to prefetch from the underlying throttler (RequestsInWindow: %v, Window: %v, UnderlyingRps: %v, TargetRps: %v, PrefetchAmount: %v)",
+        YT_LOG_DEBUG(
+            "Recalculate the amount to prefetch from the underlying throttler (RequestsInWindow: %v, Window: %v, UnderlyingRps: %v, TargetRps: %v, PrefetchAmount: %v)",
             UnderlyingRequests_.size(),
             Config_->Window,
             underlyingRps,
@@ -1166,7 +1263,8 @@ private:
     //! Handles a response from the underlying throttler.
     void OnThrottlingResponse(i64 available, i64 id, const TError& error)
     {
-        YT_LOG_DEBUG("Response from the underlying throttler (Id: %v, Amount: %v, Result: %v)",
+        YT_LOG_DEBUG(
+            "Response from the underlying throttler (Id: %v, Amount: %v, Result: %v)",
             id,
             available,
             error.IsOK());
@@ -1212,7 +1310,8 @@ private:
             // a recursive call to #SatisfyIncomingRequests when the corresponding #promise is set.
             // So that #promise should be set without holding the #Lock_.
             auto result = request.Promise.TrySet();
-            YT_LOG_DEBUG("Sent the response for the incoming request (Id: %v, Amount: %v, Result: %v)",
+            YT_LOG_DEBUG(
+                "Sent the response for the incoming request (Id: %v, Amount: %v, Result: %v)",
                 request.Id,
                 request.Amount,
                 result);
@@ -1240,7 +1339,8 @@ private:
 
         for (auto& request : fulfilled) {
             request.Promise.Set(error);
-            YT_LOG_DEBUG("Dropped the incoming request (Id: %v, Amount: %v)",
+            YT_LOG_DEBUG(
+                "Dropped the incoming request (Id: %v, Amount: %v)",
                 request.Id,
                 request.Amount);
         }

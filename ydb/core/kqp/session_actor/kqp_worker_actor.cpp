@@ -44,6 +44,12 @@ namespace {
 
 using TQueryResult = IKqpHost::TQueryResult;
 
+enum EReplyFlags : ui32 {
+    QUERY_REPLY_FLAG_RESULTS = 1,
+    QUERY_REPLY_FLAG_PLAN = 2,
+    QUERY_REPLY_FLAG_AST = 4,
+};
+
 struct TKqpQueryState {
     TActorId Sender;
     ui64 ProxyRequestId = 0;
@@ -182,22 +188,23 @@ public:
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
             Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr);
-        Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, std::move(loader),
+        Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, QueryState->RequestEv->GetDatabaseId(), std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, FederatedQuerySetup,
-            QueryState->RequestEv->GetUserToken(), GUCSettings, Settings.ApplicationName, AppData(ctx)->FunctionRegistry, !Settings.LongSession, false);
+            QueryState->RequestEv->GetUserToken(), GUCSettings, QueryServiceConfig, Settings.ApplicationName, AppData(ctx)->FunctionRegistry,
+            !Settings.LongSession, false, nullptr, nullptr, nullptr, QueryState->RequestEv->GetUserRequestContext());
 
         auto& queryRequest = QueryState->RequestEv;
         QueryState->ProxyRequestId = proxyRequestId;
         QueryState->KeepSession = Settings.LongSession || queryRequest->GetKeepSession();
         QueryState->StartTime = now;
-        QueryState->ReplyFlags = queryRequest->Record.GetRequest().GetReplyFlags();
+        QueryState->ReplyFlags = EReplyFlags::QUERY_REPLY_FLAG_RESULTS;
 
         if (GetStatsMode(QueryState->RequestEv.get(), EKikimrStatsMode::None) > EKikimrStatsMode::Basic) {
-            QueryState->ReplyFlags |= NKikimrKqp::QUERY_REPLY_FLAG_AST;
+            QueryState->ReplyFlags |= EReplyFlags::QUERY_REPLY_FLAG_AST;
         }
 
         NCpuTime::TCpuTimer timer;
@@ -332,11 +339,7 @@ public:
         if (CleanupState->Final) {
             ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, "Session is being closed");
         } else {
-            auto busyStatus = Settings.TableService.GetUseSessionBusyStatus()
-                ? Ydb::StatusIds::SESSION_BUSY
-                : Ydb::StatusIds::PRECONDITION_FAILED;
-
-            ReplyProcessError(ev->Sender, proxyRequestId, busyStatus, "Pending previous query completion");
+            ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::SESSION_BUSY, "Pending previous query completion");
         }
     }
 
@@ -481,7 +484,7 @@ private:
 
             case NKikimrKqp::QUERY_ACTION_EXPLAIN: {
                 // Force reply flags
-                QueryState->ReplyFlags |= NKikimrKqp::QUERY_REPLY_FLAG_PLAN | NKikimrKqp::QUERY_REPLY_FLAG_AST;
+                QueryState->ReplyFlags |= EReplyFlags::QUERY_REPLY_FLAG_PLAN | EReplyFlags::QUERY_REPLY_FLAG_AST;
                 if (!ExplainQuery(ctx, QueryState->RequestEv->GetQuery(), queryType)) {
                     onBadRequest(QueryState->Error);
                     return;
@@ -741,7 +744,7 @@ private:
     bool Reply(THolder<TEvKqp::TEvQueryResponse>&& responseEv, const TActorContext &ctx) {
         Y_ABORT_UNLESS(QueryState);
 
-        auto& record = responseEv->Record.GetRef();
+        auto& record = responseEv->Record;
         auto& response = *record.MutableResponse();
         const auto& status = record.GetYdbStatus();
 
@@ -750,7 +753,7 @@ private:
             response.SetSessionId(SessionId);
         }
 
-        ctx.Send(QueryState->Sender, responseEv.Release(), 0, QueryState->ProxyRequestId);
+        ctx.Send<ESendingType::Tail>(QueryState->Sender, responseEv.Release(), 0, QueryState->ProxyRequestId);
         LOG_D("Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId
             << ", proxyId: " << QueryState->Sender.ToString());
 
@@ -788,10 +791,10 @@ private:
         Y_ABORT_UNLESS(QueryState);
         auto& queryResult = QueryState->QueryResult;
 
-        auto responseEv = MakeHolder<TEvKqp::TEvQueryResponse>();
+        auto responseEv = MakeHolder<TEvKqp::TEvQueryResponse>(QueryState->QueryResult.ProtobufArenaPtr);
         FillResponse(responseEv->Record);
 
-        auto& record = responseEv->Record.GetRef();
+        auto& record = responseEv->Record;
         auto status = record.GetYdbStatus();
 
         auto now = TAppData::TimeProvider->Now();
@@ -849,7 +852,7 @@ private:
             record.MutableResponse()->SetQueryPlan(queryResult.QueryPlan);
         }
 
-        AddTrailingInfo(responseEv->Record.GetRef());
+        AddTrailingInfo(responseEv->Record);
         return Reply(std::move(responseEv), ctx);
     }
 
@@ -866,12 +869,12 @@ private:
     {
         LOG_W(message);
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
-        response->Record.GetRef().SetYdbStatus(ydbStatus);
+        response->Record.SetYdbStatus(ydbStatus);
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
         NYql::TIssues issues;
         issues.AddIssue(issue);
-        NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
-        AddTrailingInfo(response->Record.GetRef());
+        NYql::IssuesToMessage(issues, response->Record.MutableResponse()->MutableQueryIssues());
+        AddTrailingInfo(response->Record);
         return Send(sender, response.release(), 0, proxyRequestId);
     }
 
@@ -893,11 +896,7 @@ private:
             return;
         }
 
-        auto busyStatus = Settings.TableService.GetUseSessionBusyStatus()
-            ? Ydb::StatusIds::SESSION_BUSY
-            : Ydb::StatusIds::PRECONDITION_FAILED;
-
-        ReplyProcessError(ev->Sender, proxyRequestId, busyStatus,
+        ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::SESSION_BUSY,
             "Pending previous query completion");
     }
 
@@ -929,24 +928,20 @@ private:
         return QueryState->RequestEv->GetQuery();
     }
 
-    void FillResponse(TEvKqp::TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>& record) {
+    void FillResponse(NKikimrKqp::TEvQueryResponse& record) {
         Y_ABORT_UNLESS(QueryState);
 
         auto& queryResult = QueryState->QueryResult;
-        auto arena = queryResult.ProtobufArenaPtr;
-        if (arena) {
-            record.Realloc(arena);
-        }
-        auto& ev = record.GetRef();
+        auto& ev = record;
 
         bool replyResults = IsExecuteAction(QueryState->RequestEv->GetAction());
         bool replyPlan = true;
         bool replyAst = true;
 
         // TODO: Handle in KQP to avoid generation of redundant data
-        replyResults = replyResults && (QueryState->ReplyFlags & NKikimrKqp::QUERY_REPLY_FLAG_RESULTS);
-        replyPlan = replyPlan && (QueryState->ReplyFlags & NKikimrKqp::QUERY_REPLY_FLAG_PLAN);
-        replyAst = replyAst && (QueryState->ReplyFlags & NKikimrKqp::QUERY_REPLY_FLAG_AST);
+        replyResults = replyResults && (QueryState->ReplyFlags & EReplyFlags::QUERY_REPLY_FLAG_RESULTS);
+        replyPlan = replyPlan && (QueryState->ReplyFlags & EReplyFlags::QUERY_REPLY_FLAG_PLAN);
+        replyAst = replyAst && (QueryState->ReplyFlags & EReplyFlags::QUERY_REPLY_FLAG_AST);
 
         auto ydbStatus = GetYdbStatus(queryResult);
         auto issues = queryResult.Issues();
@@ -957,10 +952,9 @@ private:
         if (replyResults) {
             auto resp = ev.MutableResponse();
             for (auto& result : queryResult.Results) {
-                // If we have result it must be allocated on protobuf arena
-                Y_ASSERT(result->GetArena());
-                Y_ASSERT(resp->GetArena() == result->GetArena());
-                resp->AddResults()->Swap(result);
+                YQL_ENSURE(result->GetArena());
+                YQL_ENSURE(result->GetArena() == resp->GetArena());
+                resp->AddYdbResults()->Swap(result);
             }
         } else {
             auto resp = ev.MutableResponse();

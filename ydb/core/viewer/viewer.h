@@ -1,20 +1,14 @@
 #pragma once
-
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/core/viewer/yaml/yaml.h>
-
-#include <ydb/core/tablet/defs.h>
-#include <ydb/library/actors/core/defs.h>
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/event.h>
-#include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/driver_lib/run/config.h>
+#include <ydb/core/tablet/defs.h>
+#include <ydb/core/viewer/json/json.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
-#include <ydb/public/api/protos/ydb_monitoring.pb.h>
-#include <util/system/hostname.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/defs.h>
+#include <ydb/library/actors/core/event.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 inline TActorId MakeViewerID(ui32 node) {
     char x[12] = {'v','i','e','w','e','r'};
@@ -54,7 +48,7 @@ struct TRequestSettings {
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
     TString Format;
     std::optional<bool> StaticNodesOnly;
-    bool DistributedMerge = false;
+    std::vector<i32> FieldsRequired;
 
     bool Followers = true; // hive tablet info
     bool Metrics = true; // hive tablet info
@@ -194,7 +188,7 @@ public:
 
     virtual TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPBADREQUEST(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
-    virtual TString GetHTTPFORBIDDEN(const TRequestState& request) = 0;
+    virtual TString GetHTTPFORBIDDEN(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPNOTFOUND(const TRequestState& request) = 0;
     virtual TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPFORWARD(const TRequestState& request, const TString& location) = 0;
@@ -205,37 +199,14 @@ public:
     virtual void AddRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
     virtual void EndRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
     virtual TActorId FindRunningQuery(const TString& queryId) = 0;
+
+    virtual NJson::TJsonValue GetCapabilities() = 0;
+    virtual int GetCapabilityVersion(const TString& name) = 0;
 };
 
 void SetupPQVirtualHandlers(IViewer* viewer);
 void SetupDBVirtualHandlers(IViewer* viewer);
 void SetupKqpContentHandler(IViewer* viewer);
-
-template <typename RequestType>
-struct TJsonRequestSchema {
-    static YAML::Node GetSchema() { return {}; }
-};
-
-template <typename RequestType>
-struct TJsonRequestSummary {
-    static TString GetSummary() { return {}; }
-};
-
-template <typename RequestType>
-struct TJsonRequestDescription {
-    static TString GetDescription() { return {}; }
-};
-
-template <typename RequestType>
-struct TJsonRequestParameters {
-    static YAML::Node GetParameters() { return {}; }
-};
-
-template <typename RequestType>
-struct TJsonRequestSwagger {
-    static YAML::Node GetSwagger() { return {}; }
-};
-
 
 template <typename ValueType, typename OutputIteratorType>
 void GenericSplitIds(TStringBuf source, char delim, OutputIteratorType it) {
@@ -295,8 +266,5 @@ NKikimrViewer::EFlag GetFlagFromUsage(double usage);
 
 NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag);
 NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag);
-NKikimrViewer::EFlag GetViewerFlag(Ydb::Monitoring::StatusFlag::Status flag);
 
-
-} // NViewer
-} // NKikimr
+}

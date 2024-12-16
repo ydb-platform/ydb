@@ -7,10 +7,8 @@ SPLIT_FACTOR(40)
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
-    TIMEOUT(3000)
 ELSE()
     SIZE(MEDIUM)
-    TIMEOUT(600)
 ENDIF()
 
 PEERDIR(
@@ -45,6 +43,7 @@ SRCS(
     pqrb_describes_ut.cpp
     microseconds_sliding_window_ut.cpp
     fetch_request_ut.cpp
+    utils_ut.cpp
 )
 
 RESOURCE(

@@ -2,10 +2,6 @@ GTEST(unittester-core-misc)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-IF (NOT OS_WINDOWS AND NOT ARCH_AARCH64)
-    ALLOCATOR(YT)
-ENDIF()
-
 PROTO_NAMESPACE(yt)
 
 SRCS(
@@ -17,6 +13,7 @@ SRCS(
     async_slru_cache_ut.cpp
     backoff_strategy_ut.cpp
     bit_packed_integer_vector_ut.cpp
+    bitmap_ut.cpp
     boolean_formula_ut.cpp
     callback_ut.cpp
     checksum_ut.cpp
@@ -45,7 +42,6 @@ SRCS(
     lock_free_hash_table_ut.cpp
     lru_cache_ut.cpp
     maybe_inf_ut.cpp
-    memory_tag_ut.cpp
     moving_average_ut.cpp
     mpsc_fair_share_queue_ut.cpp
     mpsc_stack_ut.cpp
@@ -55,6 +51,7 @@ SRCS(
     pattern_formatter_ut.cpp
     persistent_queue_ut.cpp
     phoenix_ut.cpp
+    phoenix_compatibility_ut.cpp
     pool_allocator_ut.cpp
     proc_ut.cpp
     random_ut.cpp
@@ -65,8 +62,8 @@ SRCS(
     sliding_window_ut.cpp
     sync_cache_ut.cpp
     spsc_queue_ut.cpp
+    statistic_path_ut.cpp
     statistics_ut.cpp
-    string_ut.cpp
     sync_expiring_cache_ut.cpp
     time_formula_ut.cpp
     tls_destructor_ut.cpp

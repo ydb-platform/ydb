@@ -2,6 +2,7 @@
 
 #include "public.h"
 #include "row_base.h"
+#include "serialize.h"
 #include "unversioned_value.h"
 
 #include <yt/yt/core/logging/log.h>
@@ -537,14 +538,14 @@ const TLegacyOwningKey& ChooseMaxKey(const TLegacyOwningKey& a, const TLegacyOwn
 TString SerializeToString(TUnversionedRow row);
 TString SerializeToString(TUnversionedValueRange range);
 
-void ToProto(TProtoStringType* protoRow, TUnversionedRow row);
-void ToProto(TProtoStringType* protoRow, const TUnversionedOwningRow& row);
-void ToProto(TProtoStringType* protoRow, TUnversionedValueRange range);
-void ToProto(TProtoStringType* protoRow, const TRange<TUnversionedOwningValue>& values);
+void ToProto(TProtobufString* protoRow, TUnversionedRow row);
+void ToProto(TProtobufString* protoRow, const TUnversionedOwningRow& row);
+void ToProto(TProtobufString* protoRow, TUnversionedValueRange range);
+void ToProto(TProtobufString* protoRow, const TRange<TUnversionedOwningValue>& values);
 
-void FromProto(TUnversionedOwningRow* row, const TProtoStringType& protoRow, std::optional<int> nullPaddingWidth = {});
-void FromProto(TUnversionedRow* row, const TProtoStringType& protoRow, const TRowBufferPtr& rowBuffer);
-void FromProto(std::vector<TUnversionedOwningValue>* values, const TProtoStringType& protoRow);
+void FromProto(TUnversionedOwningRow* row, const TProtobufString& protoRow, std::optional<int> nullPaddingWidth = {});
+void FromProto(TUnversionedRow* row, const TProtobufString& protoRow, const TRowBufferPtr& rowBuffer);
+void FromProto(std::vector<TUnversionedOwningValue>* values, const TProtobufString& protoRow);
 
 void ToBytes(TString* bytes, const TUnversionedOwningRow& row);
 
@@ -920,6 +921,7 @@ TKeyRef ToKeyRef(TUnversionedRow row, int prefixLength);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void FormatValue(TStringBuilderBase* builder, TUnversionedValueRange values, TStringBuf format);
 void FormatValue(TStringBuilderBase* builder, TUnversionedRow row, TStringBuf format);
 void FormatValue(TStringBuilderBase* builder, TMutableUnversionedRow row, TStringBuf format);
 void FormatValue(TStringBuilderBase* builder, const TUnversionedOwningRow& row, TStringBuf format);
@@ -964,6 +966,7 @@ struct TBitwiseUnversionedValueRangeHash
 struct TBitwiseUnversionedValueRangeEqual
 {
     bool operator()(TUnversionedValueRange lhs, TUnversionedValueRange rhs) const;
+    static void FormatDiff(TStringBuilderBase* builder, TUnversionedValueRange lhs, TUnversionedValueRange rhs);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -976,6 +979,7 @@ struct TBitwiseUnversionedRowHash
 struct TBitwiseUnversionedRowEqual
 {
     bool operator()(TUnversionedRow lhs, TUnversionedRow rhs) const;
+    static void FormatDiff(TStringBuilderBase* builder, TUnversionedRow lhs, TUnversionedRow rhs);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -994,6 +998,15 @@ struct THash<NYT::NTableClient::TUnversionedRow>
 
 template <class T>
     requires std::derived_from<std::remove_cvref_t<T>, NYT::NTableClient::TUnversionedRow>
+struct NYT::TFormatArg<T>
+    : public NYT::TFormatArgBase
+{
+    static constexpr auto FlagSpecifiers
+        = TFormatArgBase::ExtendFlags</*Hot*/ true, 1, std::array{'k'}>();
+};
+
+template <class T>
+    requires std::derived_from<std::remove_cvref_t<T>, NYT::NTableClient::TUnversionedValueRange>
 struct NYT::TFormatArg<T>
     : public NYT::TFormatArgBase
 {

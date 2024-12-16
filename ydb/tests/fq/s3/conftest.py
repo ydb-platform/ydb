@@ -8,9 +8,10 @@ import yatest.common
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.fq_runner.custom_hooks import *  # noqa: F401,F403 Adding custom hooks for YQv2 support
-from ydb.tests.tools.fq_runner.kikimr_utils import AddInflightExtension
+from ydb.tests.tools.fq_runner.kikimr_utils import AddAllowConcurrentListingsExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import AddDataInflightExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import AddFormatSizeLimitExtension
+from ydb.tests.tools.fq_runner.kikimr_utils import AddInflightExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import DefaultConfigExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import YQv2Extension
 from ydb.tests.tools.fq_runner.kikimr_utils import ComputeExtension
@@ -35,9 +36,10 @@ class TestCounter:
 
     def on_test_start(self):
         self.number_tests += 1
-        assert self.number_tests <= self.tests_count_limit, \
-            f"{self.error_string} exceeded limit {self.number_tests} vs {self.tests_count_limit}, " \
+        assert self.number_tests <= self.tests_count_limit, (
+            f"{self.error_string} exceeded limit {self.number_tests} vs {self.tests_count_limit}, "
             "this may lead timeouts on CI, please split this file"
+        )
 
 
 @pytest.fixture(scope="module")
@@ -86,9 +88,10 @@ def kikimr_params(request: pytest.FixtureRequest):
 
 def get_kikimr_extensions(s3: S3, yq_version: str, kikimr_settings, mvp_external_ydb_endpoint):
     return [
-        AddInflightExtension(),
-        AddDataInflightExtension(),
         AddFormatSizeLimitExtension(),
+        AddInflightExtension(),
+        AddAllowConcurrentListingsExtension(),
+        AddDataInflightExtension(),
         DefaultConfigExtension(s3.s3_url),
         YQv2Extension(yq_version, kikimr_settings.get("is_replace_if_exists", False)),
         ComputeExtension(),
@@ -104,7 +107,9 @@ def kikimr_starts_counter():
 
 
 @pytest.fixture(scope="module")
-def kikimr_yqv1(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter):
+def kikimr_yqv1(
+    kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter
+):
     kikimr_starts_counter.on_test_start()
     kikimr_extensions = get_kikimr_extensions(s3, YQV1_VERSION_NAME, kikimr_settings, mvp_external_ydb_endpoint)
     with start_kikimr(kikimr_params, kikimr_extensions) as kikimr:
@@ -112,7 +117,9 @@ def kikimr_yqv1(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, m
 
 
 @pytest.fixture(scope="module")
-def kikimr_yqv2(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter):
+def kikimr_yqv2(
+    kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter
+):
     kikimr_starts_counter.on_test_start()
     kikimr_extensions = get_kikimr_extensions(s3, YQV2_VERSION_NAME, kikimr_settings, mvp_external_ydb_endpoint)
     with start_kikimr(kikimr_params, kikimr_extensions) as kikimr:

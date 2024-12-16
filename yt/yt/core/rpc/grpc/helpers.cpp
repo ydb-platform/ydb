@@ -42,6 +42,11 @@ TGprString MakeGprString(char* str)
     return TGprString(str, gpr_free);
 }
 
+TX509Ptr MakeX509Ptr(X509* cert)
+{
+    return TX509Ptr(cert, X509_free);
+}
+
 TStringBuf ToStringBuf(const grpc_slice& slice)
 {
     return TStringBuf(
@@ -408,7 +413,7 @@ TSharedRef ExtractMessageFromEnvelopedMessage(const TSharedRef& data)
 
     auto compressedMessage = data.Slice(sourceMessage, sourceMessage + fixedHeader->MessageSize);
 
-    auto codecId = CheckedEnumCast<NCompression::ECodec>(envelope.codec());
+    auto codecId = FromProto<NCompression::ECodec>(envelope.codec());
     auto* codec = NCompression::GetCodec(codecId);
     return codec->Decompress(compressedMessage);
 }
@@ -522,25 +527,21 @@ TGrpcServerCredentialsPtr LoadServerCredentials(const TServerCredentialsConfigPt
         nullptr));
 }
 
-std::optional<TString> ParseIssuerFromX509(TStringBuf x509String)
+TX509Ptr ParsePemCertToX509(TStringBuf pemCert)
 {
     auto* bio = BIO_new(BIO_s_mem());
     auto bioGuard = Finally([&] {
         BIO_free(bio);
     });
 
-    BIO_write(bio, x509String.data(), x509String.length());
+    BIO_write(bio, pemCert.data(), pemCert.length());
 
-    auto* x509 = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
-    auto x509Guard = Finally([&] {
-        X509_free(x509);
-    });
+    return MakeX509Ptr(PEM_read_bio_X509(bio, nullptr, nullptr, nullptr));
+}
 
-    if (!x509) {
-        return std::nullopt;
-    }
-
-    auto* issuerName = X509_get_issuer_name(x509);
+std::optional<TString> ParseIssuerFromX509(const TX509Ptr& pemCertX509)
+{
+    auto* issuerName = X509_get_issuer_name(pemCertX509.get());
 
     std::array<char, 1024> buf;
     auto* issuerString = X509_NAME_oneline(issuerName, buf.data(), buf.size());
@@ -549,6 +550,29 @@ std::optional<TString> ParseIssuerFromX509(TStringBuf x509String)
     }
 
     return TString(issuerString);
+}
+
+std::optional<TString> ParseSerialNumberFromX509(const TX509Ptr& pemCertX509)
+{
+    ASN1_STRING* serialNumber = X509_get_serialNumber(pemCertX509.get());
+    if (!serialNumber) {
+        return std::nullopt;
+    }
+    BIGNUM* bn = ASN1_INTEGER_to_BN(serialNumber, nullptr);
+    auto bnGuard = Finally([&] {
+        BN_free(bn);
+    });
+    if (!bn) {
+        return std::nullopt;
+    }
+    char* hexSerialNumber = BN_bn2hex(bn);
+    auto serialNumberGuard = Finally([&] {
+        OPENSSL_free(hexSerialNumber);
+    });
+    if (!hexSerialNumber) {
+        return std::nullopt;
+    }
+    return TString(hexSerialNumber);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

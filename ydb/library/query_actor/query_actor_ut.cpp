@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
                         .Uint64(TableSize)
                         .Build();
 
-                RunStreamQuery(sql, &params, Value.Size() * 10);
+                RunStreamQuery(sql, &params, Value.size() * 10);
             }
 
             void OnStreamResult(NYdb::TResultSet&& resultSet) override {

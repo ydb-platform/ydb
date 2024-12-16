@@ -1,0 +1,135 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-3-Clause         3bd8cacec2075ebf044863c592b4abb3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [3:26]
+
+KEEP     BSD-3-Clause         4f22d74e8862bad2253398b24deb5193
+BELONGS ya.make
+    License text:
+        pybind11 is provided under a BSD-style license that can be found in the
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.rst [157:157]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer 5e8cf8f7ea53501f3d3ba7ee8ef9053d
+BELONGS ya.make
+    License text:
+        // Use at your own risk!
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        include/pybind11/detail/common.h [1269:1269]
+
+SKIP     LicenseRef-scancode-cc-pdm-1.0 90c2d2ec5e2551ccd52bd3028ab4b47b
+BELONGS ya.make
+    # part of text
+    License text:
+            Unless stated otherwise, the following C++ functions behave the same
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-cc-pdm-1.0
+        Score           : 2.15
+        Match type      : TEXT
+        Links           : https://creativecommons.org/publicdomain/mark/1.0/, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/cc-pdm-1.0.LICENSE
+    Files with this license:
+        include/pybind11/pytypes.h [836:836]
+
+KEEP     BSD-3-Clause         e918e7c95f857aafdf26127aa4830415
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: include/pybind11/attr.h at line 8, include/pybind11/buffer_info.h at line 7, include/pybind11/cast.h at line 8, include/pybind11/chrono.h at line 8, include/pybind11/complex.h at line 7, include/pybind11/detail/class.h at line 7, include/pybind11/detail/common.h at line 7, include/pybind11/detail/descr.h at line 7, include/pybind11/detail/exception_translation.h at line 7, include/pybind11/detail/init.h at line 7, include/pybind11/detail/internals.h at line 7, include/pybind11/detail/type_caster_base.h at line 7, include/pybind11/detail/typeid.h at line 7, include/pybind11/eigen.h at line 7, include/pybind11/eigen/matrix.h at line 7, include/pybind11/eigen/tensor.h at line 5, include/pybind11/embed.h at line 7, include/pybind11/eval.h at line 9, include/pybind11/functional.h at line 7, include/pybind11/gil.h at line 7, include/pybind11/iostream.h at line 7, include/pybind11/numpy.h at line 7, include/pybind11/operators.h at line 7, include/pybind11/options.h at line 7, include/pybind11/pybind11.h at line 8, include/pybind11/pytypes.h at line 7, include/pybind11/stl.h at line 7, include/pybind11/stl_bind.h at line 7, include/pybind11/typing.h at line 8
+    License text:
+            All rights reserved. Use of this source code is governed by a
+            BSD-style license that can be found in the LICENSE file.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/pybind11/attr.h [7:8]
+        include/pybind11/buffer_info.h [6:7]
+        include/pybind11/cast.h [7:8]
+        include/pybind11/chrono.h [7:8]
+        include/pybind11/complex.h [6:7]
+        include/pybind11/detail/class.h [6:7]
+        include/pybind11/detail/common.h [6:7]
+        include/pybind11/detail/descr.h [6:7]
+        include/pybind11/detail/exception_translation.h [6:7]
+        include/pybind11/detail/init.h [6:7]
+        include/pybind11/detail/internals.h [6:7]
+        include/pybind11/detail/type_caster_base.h [6:7]
+        include/pybind11/detail/typeid.h [6:7]
+        include/pybind11/eigen.h [6:7]
+        include/pybind11/eigen/matrix.h [6:7]
+        include/pybind11/eigen/tensor.h [4:5]
+        include/pybind11/embed.h [6:7]
+        include/pybind11/eval.h [8:9]
+        include/pybind11/functional.h [6:7]
+        include/pybind11/gil.h [6:7]
+        include/pybind11/iostream.h [6:7]
+        include/pybind11/numpy.h [6:7]
+        include/pybind11/operators.h [6:7]
+        include/pybind11/options.h [6:7]
+        include/pybind11/pybind11.h [7:8]
+        include/pybind11/pytypes.h [6:7]
+        include/pybind11/stl.h [6:7]
+        include/pybind11/stl_bind.h [6:7]
+        include/pybind11/typing.h [7:8]
+
+KEEP     BSD-3-Clause         fe29067de7b4b0c24f595634cdec9908
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: include/pybind11/detail/value_and_holder.h at line 3, include/pybind11/stl/filesystem.h at line 3
+    License text:
+        // All rights reserved. Use of this source code is governed by a
+        // BSD-style license that can be found in the LICENSE file.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/pybind11/detail/value_and_holder.h [2:3]
+        include/pybind11/stl/filesystem.h [2:3]

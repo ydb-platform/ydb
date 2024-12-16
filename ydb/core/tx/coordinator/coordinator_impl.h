@@ -433,6 +433,10 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
         TVector<TAcquireReadStepRequest> AcquireReadStepPending;
         bool AcquireReadStepFlushing = false;
         bool AcquireReadStepStarting = false;
+
+        // When true the state has been preserved by the state actor
+        // Any changes will not be migrated to newer generations
+        bool Preserved = false;
     };
 
 public:

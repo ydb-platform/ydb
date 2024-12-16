@@ -117,6 +117,17 @@ inline bool IsIntegralType(ESimpleLogicalValueType type)
     }
 }
 
+inline bool IsFloatingPointType(ESimpleLogicalValueType type)
+{
+    switch (type) {
+        case ESimpleLogicalValueType::Double:
+        case ESimpleLogicalValueType::Float:
+            return true;
+        default:
+            return false;
+    }
+}
+
 inline bool IsStringLikeType(ESimpleLogicalValueType type)
 {
     switch (type) {

@@ -14,7 +14,6 @@
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/api/client/yc_private/resourcemanager/cloud_service.grpc.pb.h>
 #include <ydb/mvp/core/core_ydb.h>
@@ -51,7 +50,7 @@ public:
         NActors::TActorId actorId = ctx.SelfID;
 
         {
-            Location.GetTableClient(Request, NYdb::NTable::TClientSettings().Database(Location.RootDomain))
+            Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location))
                 .CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
                 NYdb::NTable::TAsyncCreateSessionResult res(result);
                 actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));

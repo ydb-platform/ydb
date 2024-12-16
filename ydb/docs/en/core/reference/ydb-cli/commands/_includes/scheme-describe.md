@@ -21,19 +21,19 @@ Result:
 | title      | Utf8?   |        |     |
 └────────────┴─────────┴────────┴─────┘
 
-Storage settings: 
+Storage settings:
 Internal channel 0 commit log storage pool: ssd
 Internal channel 1 commit log storage pool: ssd
 Store large values in "external blobs": false
 
-Column families: 
+Column families:
 ┌─────────┬──────┬─────────────┬────────────────┐
 | Name    | Data | Compression | Keep in memory |
 ├─────────┼──────┼─────────────┼────────────────┤
 | default | ssd  | None        |                |
 └─────────┴──────┴─────────────┴────────────────┘
 
-Auto partitioning settings: 
+Auto partitioning settings:
 Partitioning by size: true
 Partitioning by load: false
 Preferred partition size (Mb): 2048

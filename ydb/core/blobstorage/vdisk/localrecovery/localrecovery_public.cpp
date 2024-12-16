@@ -190,6 +190,37 @@ namespace NKikimr {
             Become(&TThis::StateLoadBulkFormedSegments);
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::LoadBulkFormedSegments;
 
+            // find all the huge blobs and track their slot size
+            {
+                TIntrusivePtr<TLogoBlobsDs>& logoBlobs = LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs;
+                TLevelSlice<TKeyLogoBlob, TMemRecLogoBlob>::TSstIterator iter(logoBlobs->CurSlice.Get(),
+                    logoBlobs->CurSlice->Level0CurSstsNum());
+
+                for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
+                    struct TMerger {
+                        TThis* const Self;
+
+                        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound,
+                                const TKeyLogoBlob& /*key*/, ui64 /*circaLsn*/) {
+                            if (memRec.GetType() == TBlobType::HugeBlob || memRec.GetType() == TBlobType::ManyHugeBlobs) {
+                                TDiskDataExtractor extr;
+                                memRec.GetDiskData(&extr, outbound);
+                                for (const TDiskPart *location = extr.Begin; location != extr.End; ++location) {
+                                    if (location->ChunkIdx && location->Size) {
+                                        Self->LocRecCtx->RepairedHuge->RegisterBlob(*location);
+                                    }
+                                }
+                            }
+                        }
+                    } merger{this};
+
+                    TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>::TMemIterator blobIter(iter.Get().SstPtr.Get());
+                    for (blobIter.SeekToFirst(); blobIter.Valid(); blobIter.Next()) {
+                        blobIter.PutToMerger(&merger);
+                    }
+                }
+            }
+
             // start loading bulk-formed segments that are already not in index, but still required to recover SyncLog
             auto aid = ctx.Register(LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->CurSlice->BulkFormedSegments.CreateLoaderActor(
                     LocRecCtx->VCtx, LocRecCtx->PDiskCtx, SyncLogMaxLsnStored, ctx.SelfID));
@@ -394,12 +425,6 @@ namespace NKikimr {
             const ui32 blocksInChunk = LocRecCtx->PDiskCtx->Dsk->ChunkSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
             Y_ABORT_UNLESS(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize);
 
-            ui32 MaxLogoBlobDataSizeInBlocks = Config->MaxLogoBlobDataSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
-            MaxLogoBlobDataSizeInBlocks += !!(Config->MaxLogoBlobDataSize -
-                    MaxLogoBlobDataSizeInBlocks * LocRecCtx->PDiskCtx->Dsk->AppendBlockSize);
-            const ui32 slotsInChunk = blocksInChunk / MaxLogoBlobDataSizeInBlocks;
-            Y_ABORT_UNLESS(slotsInChunk > 1);
-
             auto logFunc = [&] (const TString &msg) {
                 LOG_DEBUG(ctx, BS_HULLHUGE, msg);
             };
@@ -413,9 +438,8 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
-                            Config->OldMinHugeBlobInBytes,
                             Config->MilestoneHugeBlobInBytes,
-                            Config->MaxLogoBlobDataSize,
+                            Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
                             logFunc);
@@ -435,9 +459,8 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
-                            Config->OldMinHugeBlobInBytes,
                             Config->MilestoneHugeBlobInBytes,
-                            Config->MaxLogoBlobDataSize,
+                            Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
                             lsn, entryPoint, logFunc);
@@ -490,6 +513,7 @@ namespace NKikimr {
                         Config->HullSstSizeInChunksLevel,
                         Config->HullCompFreeSpaceThreshold,
                         Config->FreshCompMaxInFlightWrites,
+                        Config->FreshCompMaxInFlightReads,
                         Config->HullCompMaxInFlightWrites,
                         Config->HullCompMaxInFlightReads,
                         Config->HullCompReadBatchEfficiencyThreshold,

@@ -327,10 +327,11 @@ int TCommandDropTable::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-void TCommandQueryBase::CheckQueryOptions() const {
+void TCommandQueryBase::CheckQueryOptions(TClientCommand::TConfig& config) const {
     if (!Query && !QueryFile) {
-        throw TMisuseException() << "Neither \"Text of query\" (\"--query\", \"-q\") "
-            << "nor \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
+        Cerr << "Neither \"Text of query\" (\"--query\", \"-q\") "
+            << "nor \"Path to file with query text\" (\"--file\", \"-f\") were provided." << Endl;
+        config.PrintHelpAndExit();
     }
     if (Query && QueryFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
@@ -365,36 +366,25 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
 
-    AddFormats(config, {
-        EOutputFormat::Pretty,
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonUnicodeArray,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::JsonBase64Array,
-        EOutputFormat::Csv,
-        EOutputFormat::Tsv,
-        EOutputFormat::Parquet,
+    AddOutputFormats(config, {
+        EDataFormat::Pretty,
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonUnicodeArray,
+        EDataFormat::JsonBase64,
+        EDataFormat::JsonBase64Array,
+        EDataFormat::Csv,
+        EDataFormat::Tsv,
+        EDataFormat::Parquet,
     });
 
-    AddParametersOption(config, "(for data & scan queries)");
+    AddParametersOption(config, "(for data, scan and generic queries)");
+    AddLegacyParametersFileOption(config);
 
-    AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
-    });
+    AddDefaultParamFormats(config);
+    AddLegacyStdinFormats(config);
 
-    AddStdinFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::Raw,
-        EOutputFormat::Csv,
-        EOutputFormat::Tsv,
-    }, {
-        EOutputFormat::NoFraming,
-        EOutputFormat::NewlineDelimited
-    });
-
-    AddParametersStdinOption(config, "query");
+    AddBatchParametersOptions(config, "query");
+    AddLegacyBatchParametersOptions(config);
 
     CheckExamples(config);
 
@@ -403,15 +393,18 @@ void TCommandExecuteQuery::Config(TConfig& config) {
 
 void TCommandExecuteQuery::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseInputFormats();
+    ParseOutputFormats();
     if (BasicStats && CollectStatsMode) {
         throw TMisuseException() << "Both mutually exclusive options \"--stats\" and \"-s\" are provided.";
     }
-    if ((!ParameterOptions.empty() || !ParameterFiles.empty() || !StdinParameters.empty() || IsStdinFormatSet || IsFramingFormatSet ||
-            config.ParseResult->Has("batch")) && QueryType == "scheme") {
-        throw TMisuseException() << "Scheme queries does not support parameters.";
+    if ((!ParameterOptions.empty() || !ParameterFiles.empty() || !InputParamNames.empty()
+            || InputFormat != EDataFormat::Default || InputFramingFormat != EFramingFormat::Default
+            || InputBinaryStringEncodingFormat != EBinaryStringEncodingFormat::Default
+            || BatchMode != EBatchMode::Default) && QueryType == "scheme") {
+        throw TMisuseException() << "Scheme queries does not support parameter options.";
     }
-    CheckQueryOptions();
+    CheckQueryOptions(config);
     CheckQueryFile();
     ParseParameters(config);
 }
@@ -453,14 +446,13 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
         }
     }
 
-    NTable::TTableClient client(CreateDriver(config));
+    TDriver driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
     NTable::TAsyncDataQueryResult asyncResult;
 
-    if (!Parameters.empty() || !IsStdinInteractive()) {
-        ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
-            ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
+    if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (GetNextParams(paramBuilder)) {
+        while (GetNextParams(driver, Query, paramBuilder)) {
             TParams params = paramBuilder->Build();
             auto operation = [this, &txSettings, &params, &settings, &asyncResult](NTable::TSession session) {
                 auto promise = NThreading::NewPromise<NTable::TDataQueryResult>();
@@ -676,7 +668,8 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
 
 template <typename TClient>
 int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
-    TClient client(CreateDriver(config));
+    TDriver driver = CreateDriver(config);
+    TClient client(driver);
     std::optional<TDuration> optTimeout;
     if (OperationTimeout) {
         optTimeout = TDuration::MilliSeconds(FromString<ui64>(OperationTimeout));
@@ -685,11 +678,9 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
 
     TAsyncPartIterator<TClient> asyncResult;
     SetInterruptHandlers();
-    if (!Parameters.empty() || !IsStdinInteractive()) {
-        ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
-            ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
+    if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (GetNextParams(paramBuilder)) {
+        while (GetNextParams(driver, Query, paramBuilder)) {
             auto operation = [this, &paramBuilder, &settings, &asyncResult](TClient client) {
                 auto promise = NThreading::NewPromise<TPartIterator<TClient>>();
                 asyncResult = promise.GetFuture();
@@ -746,11 +737,8 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
 
         while (!IsInterrupted()) {
             auto streamPart = result.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                if (streamPart.EOS()) {
-                    break;
-                }
-                ThrowOnError(streamPart);
+            if (ThrowOnErrorAndCheckEOS(streamPart)) {
+                break;
             }
 
             if (streamPart.HasResultSet()) {
@@ -793,7 +781,7 @@ void TCommandExecuteQuery::PrintFlameGraph(const TMaybe<TString>& plan)
     if (!FlameGraphPath) {
         return;
     }
-    if (FlameGraphPath->Empty()) {
+    if (FlameGraphPath->empty()) {
         Cout << Endl << "FlameGraph path can not be empty." << Endl;
         return;
     }
@@ -841,12 +829,12 @@ void TCommandExplain::Config(TConfig& config) {
     config.Opts->AddLongOption("collect-diagnostics", "Collects diagnostics and saves it to file")
         .StoreTrue(&CollectFullDiagnostics);
 
-    AddFormats(config, {
-            EOutputFormat::Pretty,
-            EOutputFormat::PrettyTable,
-            EOutputFormat::JsonUnicode,
-            EOutputFormat::JsonBase64,
-            EOutputFormat::JsonBase64Simplify
+    AddOutputFormats(config, {
+            EDataFormat::Pretty,
+            EDataFormat::PrettyTable,
+            EDataFormat::JsonUnicode,
+            EDataFormat::JsonBase64,
+            EDataFormat::JsonBase64Simplify
     });
 
     config.SetFreeArgsNum(0);
@@ -859,8 +847,8 @@ void TCommandExplain::SaveDiagnosticsToFile(const TString& diagnostics) {
 
 void TCommandExplain::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
-    CheckQueryOptions();
+    ParseOutputFormats();
+    CheckQueryOptions(config);
 }
 
 int TCommandExplain::Run(TConfig& config) {
@@ -868,9 +856,15 @@ int TCommandExplain::Run(TConfig& config) {
 
     TString planJson;
     TString ast;
+    std::optional<TDuration> timeout;
+    if (OperationTimeout) {
+        timeout = TDuration::MilliSeconds(FromString<ui64>(OperationTimeout));
+    }
+
     if (QueryType == "scan") {
         NTable::TTableClient client(CreateDriver(config));
         NTable::TStreamExecScanQuerySettings settings;
+        settings.ClientTimeout(timeout.value_or(TDuration()));
 
         if (Analyze) {
             settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
@@ -890,11 +884,8 @@ int TCommandExplain::Run(TConfig& config) {
         SetInterruptHandlers();
         while (!IsInterrupted()) {
             auto tablePart = result.ReadNext().GetValueSync();
-            if (!tablePart.IsSuccess()) {
-                if (tablePart.EOS()) {
-                    break;
-                }
-                ThrowOnError(tablePart);
+            if (ThrowOnErrorAndCheckEOS(tablePart)) {
+                break;
             }
             if (tablePart.HasQueryStats()) {
                 auto proto = NYdb::TProtoAccessor::GetProto(tablePart.GetQueryStats());
@@ -916,6 +907,7 @@ int TCommandExplain::Run(TConfig& config) {
     } else if (QueryType == "generic") {
         NQuery::TQueryClient client(CreateDriver(config));
         NQuery::TExecuteQuerySettings settings;
+        settings.ClientTimeout(timeout.value_or(TDuration()));
 
         if (Analyze) {
             settings.StatsMode(NQuery::EStatsMode::Full);
@@ -932,11 +924,8 @@ int TCommandExplain::Run(TConfig& config) {
         SetInterruptHandlers();
         while (!IsInterrupted()) {
             auto tablePart = result.ReadNext().GetValueSync();
-            if (!tablePart.IsSuccess()) {
-                if (tablePart.EOS()) {
-                    break;
-                }
-                ThrowOnError(tablePart);
+            if (ThrowOnErrorAndCheckEOS(tablePart)) {
+                break;
             }
             if (tablePart.GetStats()) {
                 auto proto = NYdb::TProtoAccessor::GetProto(*tablePart.GetStats());
@@ -955,7 +944,7 @@ int TCommandExplain::Run(TConfig& config) {
         auto result = GetSession(config).ExecuteDataQuery(
             Query,
             NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
-            settings
+            FillSettings(settings)
         ).ExtractValueSync();
         ThrowOnError(result);
         planJson = result.GetQueryPlan();
@@ -992,7 +981,7 @@ int TCommandExplain::Run(TConfig& config) {
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, Analyze);
         queryPlanPrinter.Print(planJson);
 
-        if( FlameGraphPath && !FlameGraphPath->Empty() ) {
+        if( FlameGraphPath && !FlameGraphPath->empty() ) {
             try {
                 NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphPath.GetRef(), planJson);
                 Cout << Endl << "Resource usage flame graph is successfully saved to " << FlameGraphPath.GetRef() << Endl;
@@ -1001,7 +990,7 @@ int TCommandExplain::Run(TConfig& config) {
                 Cout << Endl << "Can't save resource usage flame graph, error: " << ex.what() << Endl;
             }
         }
-        else if( FlameGraphPath && FlameGraphPath->Empty() ) {
+        else if( FlameGraphPath && FlameGraphPath->empty() ) {
             Cout << Endl << "FlameGraph path can not be empty." << Endl;
         }
     }
@@ -1040,21 +1029,18 @@ void TCommandReadTable::Config(TConfig& config) {
         .NoArgument().SetFlag(&FromExclusive);
     config.Opts->AddLongOption("to-exclusive", "Don't include the right border element into response")
         .NoArgument().SetFlag(&ToExclusive);
+    
+    AddLegacyJsonInputFormats(config);
 
-    AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
-    });
-
-    AddFormats(config, {
-        EOutputFormat::Pretty,
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonUnicodeArray,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::JsonBase64Array,
-        EOutputFormat::Csv,
-        EOutputFormat::Tsv,
-        EOutputFormat::Parquet,
+    AddOutputFormats(config, {
+        EDataFormat::Pretty,
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonUnicodeArray,
+        EDataFormat::JsonBase64,
+        EDataFormat::JsonBase64Array,
+        EDataFormat::Csv,
+        EDataFormat::Tsv,
+        EDataFormat::Parquet,
     });
 
     config.SetFreeArgsNum(1);
@@ -1063,7 +1049,8 @@ void TCommandReadTable::Config(TConfig& config) {
 
 void TCommandReadTable::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseInputFormats();
+    ParseOutputFormats();
     ParsePath(config, 0);
 }
 
@@ -1121,28 +1108,15 @@ int TCommandReadTable::Run(TConfig& config) {
         NTable::TDescribeTableResult tableResult = sessionResult.GetSession().DescribeTable(Path).GetValueSync();
         NTable::TTableDescription tableDescription = tableResult.GetTableDescription();
 
-        EBinaryStringEncoding encoding;
-        switch (InputFormat) {
-        case EOutputFormat::Default:
-        case EOutputFormat::JsonUnicode:
-            encoding = EBinaryStringEncoding::Unicode;
-            break;
-        case EOutputFormat::JsonBase64:
-            encoding = EBinaryStringEncoding::Base64;
-            break;
-        default:
-            throw TMisuseException() << "Unknown input format: " << InputFormat;
-        }
-
         if (From) {
-            TValue fromValue = JsonToYdbValue(From, GetKeyPrefixTypeFromJson(From, "from", tableDescription), encoding);
+            TValue fromValue = JsonToYdbValue(From, GetKeyPrefixTypeFromJson(From, "from", tableDescription), InputBinaryStringEncoding);
             readTableSettings.From(FromExclusive
                 ? NTable::TKeyBound::Exclusive(fromValue)
                 : NTable::TKeyBound::Inclusive(fromValue));
         }
 
         if (To) {
-            TValue toValue = JsonToYdbValue(To, GetKeyPrefixTypeFromJson(To, "to", tableDescription), encoding);
+            TValue toValue = JsonToYdbValue(To, GetKeyPrefixTypeFromJson(To, "to", tableDescription), InputBinaryStringEncoding);
             readTableSettings.To(ToExclusive
                 ? NTable::TKeyBound::Exclusive(toValue)
                 : NTable::TKeyBound::Inclusive(toValue));
@@ -1172,12 +1146,9 @@ void TCommandReadTable::PrintResponse(NTable::TTablePartIterator& result) {
 
     while (!IsInterrupted()) {
         auto tablePart = result.ReadNext().GetValueSync();
-        if (!tablePart.IsSuccess()) {
-            if (tablePart.EOS()) {
+        if (ThrowOnErrorAndCheckEOS(tablePart)) {
                 break;
             }
-            ThrowOnError(tablePart);
-        }
         if (CountOnly) {
             TResultSetParser parser(tablePart.ExtractPart());
             while (parser.TryNextRow()) {
@@ -1221,7 +1192,7 @@ void TCommandIndexAddGlobal::Config(TConfig& config) {
 
 void TCommandIndexAddGlobal::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
     ParsePath(config, 0);
 }
 

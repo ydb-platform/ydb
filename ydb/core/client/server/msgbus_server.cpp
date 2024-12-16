@@ -16,6 +16,7 @@ public:
     virtual void SendReplyMove(NBus::TBusMessageAutoPtr response) = 0;
     virtual TVector<TStringBuf> FindClientCert() const = 0;
     virtual THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() = 0;
+    virtual TString GetPeerName() const = 0;
 };
 
 class TBusMessageContext::TImplMessageBus
@@ -61,6 +62,13 @@ public:
         return {};
     }
 
+    TString GetPeerName() const override {
+        TStringBuilder ret;
+        if (IsConnectionAlive()) {
+            ret << GetPeerAddrNetAddr();
+        }
+        return std::move(ret);
+    }
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
 };
@@ -124,7 +132,6 @@ public:
             MTYPE(TBusFillNode)
             MTYPE(TBusDrainNode)
             MTYPE(TBusTestShardControlRequest)
-            MTYPE(TBusLoginRequest)
 #undef MTYPE
         }
 
@@ -182,6 +189,10 @@ public:
     };
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
+
+    TString GetPeerName() const override {
+        return RequestContext->GetPeer();
+    }
 };
 
 TBusMessageContext::TBusMessageContext()
@@ -227,6 +238,8 @@ void TBusMessageContext::Swap(TBusMessageContext &msg) {
 }
 
 TVector<TStringBuf> TBusMessageContext::FindClientCert() const { return Impl->FindClientCert(); }
+
+TString TBusMessageContext::GetPeerName() const { return Impl->GetPeerName(); }
 
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::CreateSessionIdentHolder() {
     Y_ABORT_UNLESS(Impl);
@@ -543,8 +556,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusConsoleRequest, msg);
     case MTYPE_CLIENT_TEST_SHARD_CONTROL:
         return ClientActorRequest(CreateMessageBusTestShardControl, msg);
-    case MTYPE_CLIENT_LOGIN_REQUEST:
-        return ClientActorRequest(CreateMessageBusLoginRequest, msg);
     default:
         return UnknownMessage(msg);
     }

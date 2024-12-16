@@ -170,6 +170,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("use_chunk_prober", &TThis::UseChunkProber)
         .Default(false);
+    registrar.Parameter("use_read_blocks_batcher", &TThis::UseReadBlocksBatcher)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         // Seems unreasonable to make backoff greater than half of total session timeout.
@@ -201,6 +203,8 @@ void TBlockFetcherConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("use_uncompressed_block_cache", &TThis::UseUncompressedBlockCache)
         .Default(true);
+    registrar.Parameter("group_out_of_order_blocks", &TThis::GroupOutOfOrderBlocks)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->GroupSize > config->WindowSize) {

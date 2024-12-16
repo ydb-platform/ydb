@@ -1,0 +1,103 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL bb3eb4b4e302dcb6634d591111603d92
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Boris Rasin, 2014-2021.
+        //  (C) Copyright Antony Polukhin, 2014-2024.
+        //  Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/polymorphic_pointer_cast.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL caf6818f96cbd63eb0a359a0d1dd3ac5
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Kevlin Henney and Dave Abrahams 1999.
+        //  (C) Copyright Boris Rasin 2014.
+        //  Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/polymorphic_cast.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f00e05e104061d3694899e6a7035fb29
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Boris Rasin, 2014-2021.
+        //  (C) Copyright Antony Polukhin, 2014-2024.
+        //  Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/polymorphic_pointer_cast.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f737ed06addb0e3798f6d97ca33809b1
+BELONGS ya.make
+    License text:
+        // Copyright David Abrahams 2003.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/implicit_cast.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fccaaf374e92bea92a91f3c3f74bfb06
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Kevlin Henney and Dave Abrahams 1999.
+        //  (C) Copyright Boris Rasin 2014.
+        //  Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/polymorphic_cast.hpp [3:6]

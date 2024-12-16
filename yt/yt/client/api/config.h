@@ -50,7 +50,7 @@ class TConnectionConfig
 {
 public:
     EConnectionType ConnectionType;
-    std::optional<TString> ClusterName;
+    std::optional<std::string> ClusterName;
     TTableMountCacheConfigPtr TableMountCache;
     NChaosClient::TReplicationCardCacheConfigPtr ReplicationCardCache;
 

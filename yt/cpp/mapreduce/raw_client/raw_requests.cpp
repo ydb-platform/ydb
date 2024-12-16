@@ -28,7 +28,7 @@
 
 namespace NYT::NDetail::NRawClient {
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void ExecuteBatch(
     IRequestRetryPolicyPtr retryPolicy,
@@ -173,9 +173,10 @@ TNodeId CopyWithoutRetries(
     const TCopyOptions& options)
 {
     THttpHeader header("POST", "copy");
+    TMutationId mutationId;
     header.AddMutationId();
     header.MergeParameters(SerializeParamsForCopy(transactionId, context.Config->Prefix, sourcePath, destinationPath, options));
-    return ParseGuidFromResponse(RequestWithoutRetry(context, header).Response);
+    return ParseGuidFromResponse(RequestWithoutRetry(context, mutationId, header).Response);
 }
 
 TNodeId CopyInsideMasterCell(
@@ -204,9 +205,10 @@ TNodeId MoveWithoutRetries(
     const TMoveOptions& options)
 {
     THttpHeader header("POST", "move");
+    TMutationId mutationId;
     header.AddMutationId();
     header.MergeParameters(SerializeParamsForMove(transactionId, context.Config->Prefix, sourcePath, destinationPath, options));
-    return ParseGuidFromResponse(RequestWithoutRetry( context, header).Response);
+    return ParseGuidFromResponse(RequestWithoutRetry(context, mutationId, header).Response);
 }
 
 TNodeId MoveInsideMasterCell(
@@ -309,9 +311,10 @@ void Concatenate(
     const TConcatenateOptions& options)
 {
     THttpHeader header("POST", "concatenate");
+    TMutationId mutationId;
     header.AddMutationId();
     header.MergeParameters(SerializeParamsForConcatenate(transactionId, context.Config->Prefix, sourcePaths, destinationPath, options));
-    RequestWithoutRetry(context, header);
+    RequestWithoutRetry(context, mutationId, header);
 }
 
 void PingTx(
@@ -728,7 +731,6 @@ private:
     }
 
 private:
-    THttpRequest Request_;
     NHttpClient::IHttpResponsePtr Response_;
     IInputStream* ResponseStream_;
 };
@@ -783,6 +785,55 @@ IFileReaderPtr GetJobStderr(
     return new TResponseReader(context, std::move(header));
 }
 
+TJobTraceEvent ParseJobTraceEvent(const TNode& node)
+{
+    const auto& mapNode = node.AsMap();
+    TJobTraceEvent result;
+
+    if (auto idNode = mapNode.FindPtr("operation_id")) {
+        result.OperationId = GetGuid(idNode->AsString());
+    }
+    if (auto idNode = mapNode.FindPtr("job_id")) {
+        result.JobId = GetGuid(idNode->AsString());
+    }
+    if (auto idNode = mapNode.FindPtr("trace_id")) {
+        result.TraceId = GetGuid(idNode->AsString());
+    }
+    if (auto eventIndexNode = mapNode.FindPtr("event_index")) {
+        result.EventIndex = eventIndexNode->AsInt64();
+    }
+    if (auto eventNode = mapNode.FindPtr("event")) {
+        result.Event = eventNode->AsString();
+    }
+    if (auto eventTimeNode = mapNode.FindPtr("event_time")) {
+        result.EventTime = TInstant::ParseIso8601(eventTimeNode->AsString());;
+    }
+
+    return result;
+}
+
+std::vector<TJobTraceEvent> GetJobTrace(
+    const IRequestRetryPolicyPtr& retryPolicy,
+    const TClientContext& context,
+    const TOperationId& operationId,
+    const TGetJobTraceOptions& options)
+{
+    THttpHeader header("GET", "get_job_trace");
+    header.MergeParameters(SerializeParamsForGetJobTrace(operationId, options));
+    auto responseInfo = RetryRequestWithPolicy(retryPolicy, context, header);
+    auto resultNode = NodeFromYsonString(responseInfo.Response);
+
+    std::vector<TJobTraceEvent> result;
+
+    const auto& traceEventNodesList = resultNode.AsList();
+    result.reserve(traceEventNodesList.size());
+    for (const auto& traceEventNode : traceEventNodesList) {
+        result.push_back(ParseJobTraceEvent(traceEventNode));
+    }
+
+    return result;
+}
+
 TMaybe<TYPath> GetFileFromCache(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
@@ -828,7 +879,13 @@ TNode::TListType SkyShareTable(
         host = "skynet." + proxyName + ".yt.yandex.net";
     }
 
-    header.MergeParameters(SerializeParamsForSkyShareTable(proxyName, context.Config->Prefix, tablePaths, options));
+    TSkyShareTableOptions patchedOptions = options;
+
+    if (context.Config->Pool && !patchedOptions.Pool_) {
+        patchedOptions.Pool(context.Config->Pool);
+    }
+
+    header.MergeParameters(SerializeParamsForSkyShareTable(proxyName, context.Config->Prefix, tablePaths, patchedOptions));
     TClientContext skyApiHost({ .ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient() });
     TResponseInfo response = {};
 

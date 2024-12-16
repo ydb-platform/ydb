@@ -30,7 +30,6 @@ private:
         )
             : PathId(pathId)
             , PathVersion(version)
-            , PartitionGraph(MakePartitionGraph(config))
             , MaxActivePartitions(config.GetPartitionStrategy().GetMaxPartitionCount())
             , MinActivePartitions(config.GetPartitionStrategy().GetMinPartitionCount())
             , CurPartitions(std::count_if(config.GetAllPartitions().begin(), config.GetAllPartitions().end(), [](auto& p) {
@@ -40,14 +39,13 @@ private:
 
         ui64 PathId;
         int PathVersion;
-        TPartitionGraph PartitionGraph;
         ui64 MaxActivePartitions;
         ui64 MinActivePartitions;
         ui64 CurPartitions;
     };
 
 public:
-    TPartitionScaleManager(const TString& topicPath, const TString& databasePath, ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config);
+    TPartitionScaleManager(const TString& topicName, const TString& topicPath, const TString& databasePath, ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config, const TPartitionGraph& partitionGraph);
 
 public:
     void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx);
@@ -71,6 +69,7 @@ private:
     static const ui32 MAX_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT = 1000;
 
     const TString TopicName;
+    const TString TopicPath;
     TString DatabasePath = "";
     TActorId CurrentScaleRequest;
     TDuration RequestTimeout = TDuration::MilliSeconds(0);
@@ -79,6 +78,8 @@ private:
     std::unordered_set<ui32> PartitionsToSplit;
 
     TBalancerConfig BalancerConfig;
+    const TPartitionGraph& PartitionGraph;
+
     bool RequestInflight = false;
 };
 

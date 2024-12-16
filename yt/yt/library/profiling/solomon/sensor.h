@@ -11,8 +11,8 @@ namespace NYT::NProfiling {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSimpleGauge
-    : public IGaugeImpl
-    , public ISummaryImpl
+    : public IGauge
+    , public ISummary
 {
 public:
     void Update(double value) override;
@@ -31,8 +31,8 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSimpleTimeGauge
-    : public ITimeGaugeImpl
-    , public ITimerImpl
+    : public ITimeGauge
+    , public ITimer
 {
 public:
     void Update(TDuration value) override;
@@ -51,7 +51,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSimpleCounter
-    : public ICounterImpl
+    : public ICounter
 {
 public:
     void Increment(i64 delta) override;
@@ -62,12 +62,12 @@ private:
     std::atomic<i64> Value_ = 0;
 };
 
-static_assert(sizeof(TSimpleCounter) == 24);
+static_assert(sizeof(TSimpleCounter) == 32);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSimpleTimeCounter
-    : public ITimeCounterImpl
+    : public ITimeCounter
 {
 public:
     void Add(TDuration delta) override;
@@ -75,16 +75,16 @@ public:
     TDuration GetValue() override;
 
 private:
-    std::atomic<TDuration::TValue> Value_{0};
+    std::atomic<TDuration::TValue> Value_ = 0;
 };
 
-static_assert(sizeof(TSimpleTimeCounter) == 24);
+static_assert(sizeof(TSimpleTimeCounter) == 32);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
 class TSimpleSummary
-    : public ISummaryImplBase<T>
+    : public ISummaryBase<T>
 {
 public:
     void Record(T value) override;
@@ -104,11 +104,11 @@ DECLARE_REFCOUNTED_CLASS(THistogram)
 std::vector<double> GenerateGenericBucketBounds();
 
 class THistogram
-    : public ISummaryImplBase<TDuration>
-    , public IHistogramImpl
+    : public ISummaryBase<TDuration>
+    , public IHistogram
 {
 public:
-    THistogram(const TSensorOptions& options);
+    explicit THistogram(const TSensorOptions& options);
 
     void Record(TDuration value) override;
 
@@ -121,7 +121,7 @@ public:
 
 private:
     std::vector<double> Bounds_;
-    std::vector<std::atomic<int>> Buckets_;
+    std::vector<std::atomic<i64>> Buckets_;
 
     // These two methods are not used.
     TSummarySnapshot<TDuration> GetSummary() override;

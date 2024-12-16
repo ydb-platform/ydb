@@ -3,12 +3,10 @@ UNITTEST_FOR(ydb/services/persqueue_cluster_discovery)
 FORK_SUBTESTS()
 
 IF (WITH_VALGRIND)
-    TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(ram:32)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

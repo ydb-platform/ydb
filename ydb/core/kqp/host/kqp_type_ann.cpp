@@ -3,12 +3,12 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/type_ann/type_ann_core.h>
-#include "ydb/library/yql/core/type_ann/type_ann_impl.h"
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/type_ann/type_ann_core.h>
+#include "yql/essentials/core/type_ann/type_ann_impl.h"
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 
@@ -451,7 +451,12 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
 TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
-    if (!EnsureArgsCount(*node, TKqlLookupIndexBase::Match(node.Get()) || TKqlStreamLookupTable::Match(node.Get()) ? 4 : 3, ctx)) {
+    const bool isStreamLookup = TKqlStreamLookupTable::Match(node.Get()) || TKqlStreamLookupIndex::Match(node.Get());
+    if (isStreamLookup && !EnsureArgsCount(*node, TKqlStreamLookupIndex::Match(node.Get()) ? 5 : 4, ctx)) {
+        return TStatus::Error;
+    }
+    
+    if (!isStreamLookup && !EnsureArgsCount(*node, TKqlLookupIndexBase::Match(node.Get()) ? 4 : 3, ctx)) {
         return TStatus::Error;
     }
 
@@ -495,14 +500,13 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
     YQL_ENSURE(lookupType);
 
     const TStructExprType* structType = nullptr;
-    bool isStreamLookup = TKqlStreamLookupTable::Match(node.Get());
     if (isStreamLookup) {
-        auto lookupStrategy = node->Child(TKqlStreamLookupTable::idx_LookupStrategy);
-        if (!EnsureAtom(*lookupStrategy, ctx)) {
-            return TStatus::Error;
-        }
+        TCoNameValueTupleList settingsNode{node->ChildPtr(TKqlStreamLookupTable::Match(node.Get()) ?
+            TKqlStreamLookupTable::idx_Settings : TKqlStreamLookupIndex::idx_Settings)};
+        auto settings = TKqpStreamLookupSettings::Parse(settingsNode);
+        if (settings.Strategy == EStreamLookupStrategyType::LookupJoinRows
+            || settings.Strategy == EStreamLookupStrategyType::LookupSemiJoinRows) {
 
-        if (lookupStrategy->Content() == TKqpStreamLookupJoinStrategyName) {
             if (!EnsureTupleType(node->Pos(), *lookupType, ctx)) {
                 return TStatus::Error;
             }
@@ -1642,13 +1646,6 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
     }
 
     TCoAtomList columns{node->ChildPtr(TKqpCnStreamLookup::idx_Columns)};
-
-    if (!EnsureAtom(*node->Child(TKqpCnStreamLookup::idx_LookupStrategy), ctx)) {
-        return TStatus::Error;
-    }
-
-    TCoAtom lookupStrategy(node->Child(TKqpCnStreamLookup::idx_LookupStrategy));
-
     auto inputTypeNode = node->Child(TKqpCnStreamLookup::idx_InputType);
 
     if (!EnsureType(*inputTypeNode, ctx)) {
@@ -1663,7 +1660,9 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 
     YQL_ENSURE(inputItemType);
 
-    if (lookupStrategy.Value() == TKqpStreamLookupStrategyName) {
+    TCoNameValueTupleList settingsNode{node->ChildPtr(TKqpCnStreamLookup::idx_Settings)};
+    auto settings = TKqpStreamLookupSettings::Parse(settingsNode);
+    if (settings.Strategy == EStreamLookupStrategyType::LookupRows) {
         if (!EnsureStructType(node->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }
@@ -1682,7 +1681,9 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 
         node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
 
-    } else if (lookupStrategy.Value() == TKqpStreamLookupJoinStrategyName) {
+    } else if (settings.Strategy == EStreamLookupStrategyType::LookupJoinRows
+        || settings.Strategy == EStreamLookupStrategyType::LookupSemiJoinRows) {
+        
         if (!EnsureTupleType(node->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }
@@ -1727,8 +1728,8 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
         node->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputItemType));
 
     } else {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnStreamLookup::idx_LookupStrategy)->Pos()),
-            TStringBuilder() << "Unexpected lookup strategy: " << lookupStrategy.Value()));
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnStreamLookup::idx_Settings)->Pos()),
+            TStringBuilder() << "Unexpected lookup strategy: " << settings.Strategy));
         return TStatus::Error;
     }
 
@@ -1850,7 +1851,7 @@ TStatus AnnotateKqpSinkEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 4, 5, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 5, 6, ctx)) {
         return TStatus::Error;
     }
     input->SetTypeAnn(ctx.MakeType<TVoidExprType>());

@@ -76,6 +76,7 @@ public:
     NMetrics::TAverageValue<TResourceRawValues, 20> AveragedResourceTotalValues;
     double NodeTotalUsage = 0;
     NMetrics::TFastRiseAverageValue<double, 20> AveragedNodeTotalUsage;
+    NMetrics::TAverageValue<double, 20> AveragedNodeTotalCpuUsage;
     TResourceRawValues ResourceMaximumValues;
     TInstant StartTime;
     TNodeLocation Location;
@@ -132,7 +133,11 @@ public:
     ui32 GetTabletNeighboursCount(const TTabletInfo& tablet) const {
         auto it = TabletsOfObject.find(tablet.GetObjectId());
         if (it != TabletsOfObject.end()) {
-            return it->second.size();
+            auto count = it->second.size();
+            if (tablet.IsAliveOnLocal(Local)) {
+                --count;
+            }
+            return count;
         } else {
             return 0;
         }
@@ -227,7 +232,7 @@ public:
         }
     }
 
-    bool CanBeDeleted() const;
+    bool CanBeDeleted(TInstant now) const;
     void RegisterInDomains();
     void DeregisterInDomains();
     void Ping();

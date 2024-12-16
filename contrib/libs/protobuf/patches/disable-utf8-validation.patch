@@ -1,0 +1,6 @@
+--- a/src/google/protobuf/wire_format_lite.h	(index)
++++ b/src/google/protobuf/wire_format_lite.h	(working tree)
+@@ -46,3 +46,0 @@
+-#ifndef NDEBUG
+-#define GOOGLE_PROTOBUF_UTF8_VALIDATION_ENABLED
+-#endif

@@ -1,5 +1,6 @@
 #include "core_ydb.h"
 #include "core_ydb_impl.h"
+#include "mvp_tokens.h"
 
 #include <ydb/library/actors/http/http_cache.h>
 
@@ -11,7 +12,7 @@ NJson::TJsonWriterConfig GetDefaultJsonWriterConfig() {
 
 NJson::TJsonReaderConfig NMVP::THandlerActorYdb::JsonReaderConfig;
 NJson::TJsonWriterConfig NMVP::THandlerActorYdb::JsonWriterConfig = GetDefaultJsonWriterConfig();
-TMap<std::pair<TStringBuf, TStringBuf>, TYdbUnitResources> DefaultUnitResources =
+TMap<std::pair<TString, TString>, TYdbUnitResources> DefaultUnitResources =
     {
         {
             {
@@ -57,12 +58,7 @@ NYdb::NScheme::TSchemeClient TYdbLocation::GetSchemeClient(const TRequest& reque
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    TString database = request.Parameters["database"];
-    if (database) {
-        if (!database.StartsWith('/')) {
-            database.insert(database.begin(), '/');
-        }
-        database.insert(0, RootDomain);
+    if (TString database = TYdbLocation::GetDatabaseName(request)) {
         clientSettings.Database(database);
     }
     return NYdb::NScheme::TSchemeClient(GetDriver(), clientSettings);
@@ -109,18 +105,19 @@ std::unique_ptr<NYdb::NTopic::TTopicClient> TYdbLocation::GetTopicClientPtr(TStr
     return std::make_unique<NYdb::NTopic::TTopicClient>(GetDriver(endpoint, scheme), settings);
 }
 
+std::unique_ptr<NYdb::NReplication::TReplicationClient>
+TYdbLocation::GetReplicationClientPtr(TStringBuf endpoint, TStringBuf scheme,
+                                      const NYdb::TCommonClientSettings& settings) const {
+    return std::make_unique<NYdb::NReplication::TReplicationClient>(GetDriver(endpoint, scheme), settings);
+}
+
 NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request, const NYdb::NTable::TClientSettings& defaultClientSettings) const {
     NYdb::NTable::TClientSettings clientSettings(defaultClientSettings);
     TString authToken = request.GetAuthToken();
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    TString database = request.Parameters["database"];
-    if (database) {
-        if (!database.StartsWith('/')) {
-            database.insert(database.begin(), '/');
-        }
-        database.insert(0, RootDomain);
+    if (TString database = TYdbLocation::GetDatabaseName(request)) {
         clientSettings.Database(database);
     }
     return GetTableClient(clientSettings);
@@ -156,6 +153,10 @@ NYdb::NScripting::TScriptingClient TYdbLocation::GetScriptingClient(const TReque
 
 std::unique_ptr<NYdb::NScripting::TScriptingClient> TYdbLocation::GetScriptingClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::TCommonClientSettings& settings) const {
     return std::make_unique<NYdb::NScripting::TScriptingClient>(GetDriver(endpoint, scheme), settings);
+}
+
+std::unique_ptr<NYdb::NQuery::TQueryClient> TYdbLocation::GetQueryClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::NQuery::TClientSettings& settings) const {
+    return std::make_unique<NYdb::NQuery::TQueryClient>(GetDriver(endpoint, scheme), settings);
 }
 
 NHttp::THttpOutgoingRequestPtr TYdbLocation::CreateHttpMonRequestGet(TStringBuf uri, const TRequest& request) const {
@@ -429,4 +430,49 @@ TString GetAuthHeaderValue(const TString& tokenName) {
         authHeaderValue = TYdbLocation::GetUserToken();
     }
     return authHeaderValue;
+}
+
+void TryGetLocationFromConfig(TYdbLocation& location, const YAML::Node& config) {
+    TVector<std::pair<TString, TString>> endpoints;
+    TVector<TString> dataCenters;
+    TMap<std::pair<TString, TString>, TYdbUnitResources> unitResources;
+
+    if (config["endpoints"]) {
+        for (const auto& e: config["endpoints"]) {
+            endpoints.emplace_back(std::make_pair(e.first.as<std::string>(), e.second.as<std::string>()));
+        }
+    }
+    if (config["data_centers"]) {
+        for (const auto& dc: config["data_centers"]) {
+            dataCenters.emplace_back(dc.as<std::string>());
+        }
+    }
+    if (config["unit_resources"]) {
+        for (const auto& yaml_resources: config["unit_resources"]) {
+            auto resource = TYdbUnitResources(
+                yaml_resources["cpu"].as<double>(0.0),
+                yaml_resources["memory"].as<ui64>(0),
+                yaml_resources["storage"].as<ui64>(0)
+            );
+            unitResources[std::make_pair(
+                yaml_resources["type"].as<std::string>(""),
+                yaml_resources["kind"].as<std::string>(""))] = resource;
+        }
+    }
+
+    location.Name = config["name"].as<std::string>("");
+    location.Environment = config["environment"].as<std::string>("");
+    location.Endpoints = endpoints;
+    location.RootDomain = config["root_domain"].as<std::string>("");
+    location.DataCenters = dataCenters;
+    location.UnitResources = unitResources;
+    location.NotificationsEnvironmentId = config["notifications_environment_id"].as<ui32>(0);
+    location.ServerlessDocumentProxyEndpoint = config["serverless_document_proxy_endpoint"].as<std::string>("");
+}
+
+void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config) {
+    config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = 20000;
+    config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = 10000;
+    config.IntChannelParams[GRPC_ARG_HTTP2_MAX_PINGS_WITHOUT_DATA] = 0;
+    config.IntChannelParams[GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS] = 1;
 }

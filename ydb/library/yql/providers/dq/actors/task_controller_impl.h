@@ -10,10 +10,10 @@
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -385,6 +385,13 @@ private:
         ADD_COUNTER(WaitInputTimeUs)
         ADD_COUNTER(WaitOutputTimeUs)
 
+        ADD_COUNTER(SpillingComputeWriteBytes)
+        ADD_COUNTER(SpillingChannelWriteBytes)
+        ADD_COUNTER(SpillingComputeReadTimeUs)
+        ADD_COUNTER(SpillingComputeWriteTimeUs)
+        ADD_COUNTER(SpillingChannelReadTimeUs)
+        ADD_COUNTER(SpillingChannelWriteTimeUs)
+
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
 
@@ -600,7 +607,7 @@ private:
 
 public:
     void OnQueryResult(TEvQueryResponse::TPtr& ev) {
-        YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
+        YQL_ENSURE(!ev->Get()->Record.SampleSize());
         FinalStat().FlushCounters(ev->Get()->Record);
         if (!Issues.Empty()) {
             IssuesToMessage(Issues.ToIssues(), ev->Get()->Record.MutableIssues());

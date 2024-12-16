@@ -5,12 +5,9 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(1)
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(ram:16)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -19,7 +16,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/testlib/default
     ydb/core/tx
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 YQL_LAST_ABI_VERSION()
@@ -27,7 +24,5 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     datashard_ut_column_stats.cpp
 )
-
-REQUIREMENTS(ram:32)
 
 END()

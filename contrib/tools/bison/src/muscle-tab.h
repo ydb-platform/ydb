@@ -1,6 +1,7 @@
 /* Muscle table manager for Bison,
 
-   Copyright (C) 2001-2003, 2006-2013 Free Software Foundation, Inc.
+   Copyright (C) 2001-2003, 2006-2015, 2018-2021 Free Software
+   Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -15,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef MUSCLE_TAB_H_
 # define MUSCLE_TAB_H_
@@ -118,6 +119,11 @@ void muscle_pair_list_grow (const char *muscle,
 void muscle_user_name_list_grow (char const *key, char const *user_name,
                                  location loc);
 
+/* In the format '[[file_name:line.column]], [[file_name:line.column]]',
+   append LOC to MUSCLE.  Use digraphs for special characters in each
+   file name.  */
+void muscle_location_grow (char const *key, location loc);
+
 /* Indicates whether a variable's value was specified with -D/--define, with
    -F/--force-define, or in the grammar file.  */
 typedef enum {
@@ -157,7 +163,7 @@ char *muscle_percent_define_get (char const *variable);
 /* Mimic muscle_percent_define_get_loc in ../data/bison.m4 exactly.  That is,
    if the %define variable VARIABLE is undefined, complain fatally since that's
    a Bison error.  Otherwise, return its definition location in a form
-   approriate for the first argument of warn_at, complain_at, or fatal_at.
+   appropriate for the first argument of warn_at, complain_at, or fatal_at.
    Don't record this as a Bison usage of VARIABLE as there's no reason to
    suspect that the user-supplied value has yet influenced the output.  */
 location muscle_percent_define_get_loc (char const *variable);

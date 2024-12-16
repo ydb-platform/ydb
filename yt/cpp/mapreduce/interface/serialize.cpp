@@ -134,6 +134,8 @@ void Deserialize(EValueType& valueType, const TNode& node)
         {"datetime64", VT_DATETIME64},
         {"timestamp64", VT_TIMESTAMP64},
         {"interval64", VT_INTERVAL64},
+
+        {"uuid", VT_UUID},
     };
 
     auto it = str2ValueType.find(nodeStr);
@@ -466,6 +468,12 @@ void Serialize(const TRichYPath& path, NYson::IYsonConsumer* consumer)
         .DoIf(path.BypassArtifactCache_.Defined(), [&] (TFluentAttributes fluent) {
             fluent.Item("bypass_artifact_cache").Value(*path.BypassArtifactCache_);
         })
+        .DoIf(path.Cluster_.Defined(), [&] (TFluentAttributes fluent) {
+            fluent.Item("cluster").Value(*path.Cluster_);
+        })
+        .DoIf(path.Create_.Defined(), [&] (TFluentAttributes fluent) {
+            fluent.Item("create").Value(*path.Create_);
+        })
     .EndAttributes()
     .Value(path.Path_);
 }
@@ -497,6 +505,8 @@ void Deserialize(TRichYPath& path, const TNode& node)
     DESERIALIZE_ATTR("transaction_id", path.TransactionId_);
     DESERIALIZE_ATTR("rename_columns", path.RenameColumns_);
     DESERIALIZE_ATTR("bypass_artifact_cache", path.BypassArtifactCache_);
+    DESERIALIZE_ATTR("cluster", path.Cluster_);
+    DESERIALIZE_ATTR("create", path.Create_);
     Deserialize(path.Path_, node);
 }
 
@@ -509,6 +519,7 @@ void Deserialize(TTableColumnarStatistics& statistics, const TNode& node)
 {
     const auto& nodeMap = node.AsMap();
     DESERIALIZE_ITEM("column_data_weights", statistics.ColumnDataWeight);
+    DESERIALIZE_ITEM("column_estimated_unique_counts", statistics.ColumnEstimatedUniqueCounts);
     DESERIALIZE_ITEM("legacy_chunks_data_weight", statistics.LegacyChunksDataWeight);
     DESERIALIZE_ITEM("timestamp_total_weight", statistics.TimestampTotalWeight);
 }

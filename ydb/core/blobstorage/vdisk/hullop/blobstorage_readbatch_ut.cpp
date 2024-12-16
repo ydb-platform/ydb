@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
             const ui32 offset = rng() % chunkSize;
             const ui32 len = 1 + rng() % Min<ui32>(100000, chunkSize + 1 - offset);
             TPayload payload{it->first, offset, len};
-            batcher.AddReadItem(it->first, offset, len, std::move(payload));
+            batcher.AddReadItem({it->first, offset, len}, std::move(payload));
         }
         batcher.Start();
 

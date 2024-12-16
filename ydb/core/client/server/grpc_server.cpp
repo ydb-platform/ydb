@@ -6,6 +6,10 @@
 #include <ydb/library/grpc/server/grpc_request.h>
 #include <ydb/library/grpc/server/grpc_counters.h>
 #include <ydb/library/grpc/server/grpc_async_ctx_base.h>
+#include <ydb/core/protos/node_broker.pb.h>
+
+#include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/console_base.pb.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -235,7 +239,7 @@ public:
     }
 
     TString GetPeer() const override {
-        return GetPeerName();
+        return TGrpcBaseAsyncContext::GetPeer();
     }
 
     TVector<TStringBuf> FindClientCert() const override {
@@ -249,7 +253,7 @@ private:
 
     void Finish(const TOut& resp, ui32 status) {
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s data# %s peer# %s", this,
-            Name, NYdbGrpc::FormatMessage<TOut>(resp).data(), GetPeerName().c_str());
+            Name, NYdbGrpc::FormatMessage<TOut>(resp).data(), GetPeer().c_str());
         ResponseSize = resp.ByteSize();
         ResponseStatus = status;
         StateFunc = &TSimpleRequest::FinishDone;
@@ -262,7 +266,7 @@ private:
         TOut resp;
         TString msg = "no resource";
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s nodata (no resources) peer# %s", this,
-            Name, GetPeerName().c_str());
+            Name, GetPeer().c_str());
 
         StateFunc = &TSimpleRequest::FinishDoneWithoutProcessing;
         OnBeforeCall();
@@ -276,7 +280,7 @@ private:
         OnAfterCall();
 
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] received request Name# %s ok# %s data# %s peer# %s current inflight# %li", this,
-            Name, ok ? "true" : "false", NYdbGrpc::FormatMessage<TIn>(Request, ok).data(), GetPeerName().c_str(), Server->GetCurrentInFlight());
+            Name, ok ? "true" : "false", NYdbGrpc::FormatMessage<TIn>(Request, ok).data(), GetPeer().c_str(), Server->GetCurrentInFlight());
 
         if (Context.c_call() == nullptr) {
             Y_ABORT_UNLESS(!ok);
@@ -314,7 +318,7 @@ private:
     bool FinishDone(bool ok) {
         OnAfterCall();
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request Name# %s ok# %s peer# %s", this,
-            Name, ok ? "true" : "false", GetPeerName().c_str());
+            Name, ok ? "true" : "false", GetPeer().c_str());
         Counters->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
             TDuration::Seconds(RequestTimer.Passed()));
         Server->DecRequest();
@@ -326,7 +330,7 @@ private:
     bool FinishDoneWithoutProcessing(bool ok) {
         OnAfterCall();
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request without processing Name# %s ok# %s peer# %s", this,
-            Name, ok ? "true" : "false", GetPeerName().c_str());
+            Name, ok ? "true" : "false", GetPeer().c_str());
 
         return false;
     }
@@ -453,7 +457,6 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_ACTOR_REQUEST(DrainNode,                 TDrainNodeRequest,                 MTYPE_CLIENT_DRAIN_NODE)
     ADD_ACTOR_REQUEST(InterconnectDebug,         TInterconnectDebug,                MTYPE_CLIENT_INTERCONNECT_DEBUG)
     ADD_ACTOR_REQUEST(TestShardControl,          TTestShardControlRequest,          MTYPE_CLIENT_TEST_SHARD_CONTROL)
-    ADD_ACTOR_REQUEST(LoginRequest,              TLoginRequest,                     MTYPE_CLIENT_LOGIN_REQUEST)
 
     // dynamic node registration
     ADD_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, {

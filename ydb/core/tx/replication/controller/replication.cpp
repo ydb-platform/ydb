@@ -28,6 +28,11 @@ class TReplication::TImpl: public TLagProvider {
             : Ptr(iface)
         {
         }
+
+        inline ITarget* operator->() const {
+            Y_ABORT_UNLESS(Ptr);
+            return Ptr.Get();
+        }
     };
 
     void ResolveSecret(const TString& secretName, const TActorContext& ctx) {
@@ -42,7 +47,9 @@ class TReplication::TImpl: public TLagProvider {
     ITarget* CreateTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) const {
         switch (kind) {
         case ETargetKind::Table:
-            return new TTableTarget(self, id, std::forward<Args>(args)...);
+            return new TTargetTable(self, id, std::forward<Args>(args)...);
+        case ETargetKind::IndexTable:
+            return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
         }
     }
 
@@ -72,7 +79,7 @@ class TReplication::TImpl: public TLagProvider {
 
     void ProgressTargets(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target.Ptr->Progress(ctx);
+            target->Progress(ctx);
         }
     }
 
@@ -113,19 +120,22 @@ public:
         if (!YdbProxy && !(State == EState::Removing && !Targets)) {
             THolder<IActor> ydbProxy;
             const auto& params = Config.GetSrcConnectionParams();
+            const auto& endpoint = params.GetEndpoint();
+            const auto& database = params.GetDatabase();
+            const bool ssl = params.GetEnableSsl();
 
             switch (params.GetCredentialsCase()) {
             case NKikimrReplication::TConnectionParams::kStaticCredentials:
                 if (!params.GetStaticCredentials().HasPassword()) {
                     return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
                 }
-                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetStaticCredentials()));
+                ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetStaticCredentials()));
                 break;
             case NKikimrReplication::TConnectionParams::kOAuthToken:
                 if (!params.GetOAuthToken().HasToken()) {
                     return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
                 }
-                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken().GetToken()));
+                ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetOAuthToken().GetToken()));
                 break;
             default:
                 ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
@@ -162,7 +172,7 @@ public:
 
     void Shutdown(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target.Ptr->Shutdown(ctx);
+            target->Shutdown(ctx);
         }
 
         for (auto* x : TVector<TActorId*>{&SecretResolver, &TargetDiscoverer, &TenantResolver, &YdbProxy}) {

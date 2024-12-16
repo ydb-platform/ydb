@@ -59,7 +59,7 @@ struct IServiceContext
     virtual const NYTree::IAttributeDictionary& GetEndpointAttributes() const = 0;
 
     //! Returns the description of the connected endpoint.
-    virtual const TString& GetEndpointDescription() const = 0;
+    virtual const std::string& GetEndpointDescription() const = 0;
 
     //! Returns the instant when the current retry of request was issued by the client, if known.
     virtual std::optional<TInstant> GetStartTime() const = 0;
@@ -82,6 +82,10 @@ struct IServiceContext
     //! Returns time between request execution start and the moment of reply or cancellation (if it already happened).
     virtual std::optional<TDuration> GetExecutionDuration() const = 0;
 
+    //! This duration will be subtracted from the request execution time.
+    //! Can be called multiple times; these durations are added up.
+    virtual void RecordThrottling(TDuration throttleDuration) = 0;
+
     //! Returns trace context associated with request.
     virtual NTracing::TTraceContextPtr GetTraceContext() const = 0;
 
@@ -96,12 +100,10 @@ struct IServiceContext
     virtual TMutationId GetMutationId() const = 0;
 
     //! Returns request service name.
-    // NB: Service name is supposed to be short, so SSO should work.
-    virtual std::string GetService() const = 0;
+    virtual const std::string& GetService() const = 0;
 
     //! Returns request method name.
-    // NB: Method name is supposed to be short, so SSO should work.
-    virtual std::string GetMethod() const = 0;
+    virtual const std::string& GetMethod() const = 0;
 
     //! Returns request realm id.
     virtual TRealmId GetRealmId() const = 0;

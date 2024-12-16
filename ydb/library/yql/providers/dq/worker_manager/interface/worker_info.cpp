@@ -1,6 +1,6 @@
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 #include "worker_info.h"
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NDqs {
 

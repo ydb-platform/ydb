@@ -2,7 +2,10 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for PQGroupReserve
+
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/persqueue/events/global.h>
 
 namespace {
 
@@ -16,7 +19,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropPQ TDropParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -183,7 +186,7 @@ public:
         bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
         Y_ABORT_UNLESS(parseOk);
 
-        const PQGroupReserve reserve(config, pqGroup->TotalPartitionCount);
+        const PQGroupReserve reserve(config, pqGroup->ActivePartitionCount);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside();

@@ -4,6 +4,8 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <util/string/escape.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+
 namespace NKikimr {
 
 void TOwnedCellVec::TData::operator delete(void* mem) noexcept {
@@ -64,6 +66,63 @@ TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
     };
 }
 
+struct THashableKey {
+    TConstArrayRef<TCell> Cells;
+
+    template <typename H>
+    friend H AbslHashValue(H h, const THashableKey& key) {
+        h = H::combine(std::move(h), key.Cells.size());
+        for (const TCell& cell : key.Cells) {
+            h = H::combine(std::move(h), cell.IsNull());
+            if (!cell.IsNull()) {
+                h = H::combine(std::move(h), cell.Size());
+                h = H::combine_contiguous(std::move(h), cell.Data(), cell.Size());
+            }
+        }
+        return h;
+    }
+};
+
+size_t TCellVectorsHash::operator()(TConstArrayRef<TCell> key) const {
+    return absl::Hash<THashableKey>()(THashableKey{ key });
+}
+
+bool TCellVectorsEquals::operator() (TConstArrayRef<TCell> a, TConstArrayRef<TCell> b) const {
+    if (a.size() != b.size()) {
+        return false;
+    }
+
+    const TCell* pa = a.data();
+    const TCell* pb = b.data();
+    if (pa == pb) {
+        return true;
+    }
+
+    size_t left = a.size();
+    while (left > 0) {
+        if (pa->IsNull()) {
+            if (!pb->IsNull()) {
+                return false;
+            }
+        } else {
+            if (pb->IsNull()) {
+                return false;
+            }
+            if (pa->Size() != pb->Size()) {
+                return false;
+            }
+            if (pa->Size() > 0 && ::memcmp(pa->Data(), pb->Data(), pa->Size()) != 0) {
+                return false;
+            }
+        }
+        ++pa;
+        ++pb;
+        --left;
+    }
+
+    return true;
+}
+
 namespace {
 
     struct TCellHeader {
@@ -122,9 +181,7 @@ namespace {
         if (!SerializeCellVecInit(cells, resultBuffer, resultCells))
             return;
 
-        size_t size = sizeof(ui16);
-        for (auto& cell : cells)
-            size += sizeof(TCellHeader) + cell.Size();
+        auto size = TSerializedCellVec::SerializedSize(cells);
 
         resultBuffer.ReserveAndResize(size);
         char* resultBufferData = resultBuffer.Detach();
@@ -254,8 +311,55 @@ TString TSerializedCellVec::Serialize(TConstArrayRef<TCell> cells) {
     return result;
 }
 
+size_t TSerializedCellVec::SerializedSize(TConstArrayRef<TCell> cells) {
+    size_t size = sizeof(ui16) + sizeof(TCellHeader) * cells.size();
+    for (auto& cell : cells) {
+        size += cell.Size();
+    }
+    return size;
+}
+
 bool TSerializedCellVec::DoTryParse(const TString& data) {
     return TryDeserializeCellVec(data, Buf, Cells);
+}
+
+bool TSerializedCellVec::UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec) {
+    if (Y_UNLIKELY(cells.size() == 0)) {
+        return true;
+    }
+
+    if (!serializedCellVec) {
+        TSerializedCellVec::Serialize(serializedCellVec, cells);
+        return true;
+    }
+
+    const char* buf = serializedCellVec.data();
+    const char* bufEnd = serializedCellVec.data() + serializedCellVec.size();
+    const size_t bufSize = bufEnd - buf;
+
+    if (Y_UNLIKELY(bufSize < static_cast<ptrdiff_t>(sizeof(ui16)))) {
+        return false;
+    }
+
+    ui16 cellCount = ReadUnaligned<ui16>(buf);
+    cellCount += cells.size();
+
+    size_t newSize = serializedCellVec.size();
+
+    for (auto& cell : cells) {
+        newSize += sizeof(TCellHeader) + cell.Size();
+    }
+
+    serializedCellVec.ReserveAndResize(newSize);
+
+    char* mutableBuf = serializedCellVec.Detach();
+    char* oldBufEnd = mutableBuf + bufSize;
+
+    WriteUnaligned<ui16>(mutableBuf, cellCount);
+
+    SerializeCellVecBody(cells, oldBufEnd, nullptr);
+
+    return true;
 }
 
 TSerializedCellMatrix::TSerializedCellMatrix(TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount)
@@ -307,46 +411,6 @@ bool TSerializedCellMatrix::DoTryParse(const TString& data) {
     return TryDeserializeCellMatrix(data, Buf, Cells, RowCount, ColCount);
 }
 
-TCellsBatcher::TCellsBatcher(ui16 colCount, ui64 maxBytesPerBatch)
-    : ColCount(colCount)
-    , MaxBytesPerBatch(maxBytesPerBatch) {
-}
-
-bool TCellsBatcher::IsEmpty() const {
-    return Batches.empty();
-}
-
-TCellsBatcher::TBatch TCellsBatcher::Flush(bool force) {
-    TBatch res;
-    if ((!Batches.empty() && force) || Batches.size() > 1) {
-        res = std::move(Batches.front());
-        Batches.pop_front();
-    }
-    return res;
-}
-
-ui64 TCellsBatcher::AddRow(TArrayRef<TCell> cells) {
-    Y_ABORT_UNLESS(cells.size() == ColCount);
-    ui64 newMemory = 0;
-    for (const auto& cell : cells) {
-        newMemory += cell.Size();
-    }
-    if (Batches.empty() || newMemory + sizeof(TCellHeader) * ColCount + Batches.back().MemorySerialized > MaxBytesPerBatch) {
-        Batches.emplace_back();
-        Batches.back().Memory = 0;
-        Batches.back().MemorySerialized = CellMatrixHeaderSize;
-    }
-
-    for (auto& cell : cells) {
-        Batches.back().Data.emplace_back(std::move(cell));
-    }
-
-    Batches.back().Memory += newMemory;
-    Batches.back().MemorySerialized += newMemory + sizeof(TCellHeader) * ColCount;
-
-    return newMemory;
-}
-
 void TCellsStorage::Reset(TArrayRef<const TCell> cells)
 {
     size_t cellsSize = cells.size();
@@ -389,13 +453,7 @@ size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
         return 0;
     }
 
-    size_t size = sizeof(TCell) * cellsSize;
-    for (auto& cell : cells) {
-        if (!cell.IsNull() && !cell.IsInline()) {
-            const size_t cellSize = cell.Size();
-            size += AlignUp(cellSize);
-        }
-    }
+    size_t size = EstimateSize(cells);
 
     char * allocatedBuffer = reinterpret_cast<char *>(Pool->Allocate(size));
 
@@ -427,24 +485,11 @@ size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
 
 
 TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry &reg) {
-    auto typeId = typeInfo.GetTypeId();
-    TString res;
-
-    if (typeId == NScheme::NTypeIds::Pg) {
-        res = NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc());
-    } else {
-        NScheme::ITypeSP t = reg.GetType(typeId);
-
-        if (!t.IsKnownType())
-            return Sprintf("Unknow typeId 0x%x", (ui32)typeId);
-
-        res = t->GetName();
-    }
-
-    res += " : ";
-    DbgPrintValue(res, r, typeInfo);
-
-    return res;
+    Y_UNUSED(reg);
+    TString typeName = NScheme::TypeName(typeInfo, "");
+    typeName += " : ";
+    DbgPrintValue(typeName, r, typeInfo);
+    return typeName;
 }
 
 void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
@@ -479,9 +524,17 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::ActorId:
             res += ToString(r.AsValue<NActors::TActorId>());
             break;
-        case NScheme::NTypeIds::Pg:
-            // TODO: support pg types
+        case NScheme::NTypeIds::Decimal:
+            res += typeInfo.GetDecimalType().CellValueToString(r.AsValue<std::pair<ui64, i64>>());
             break;
+        case NScheme::NTypeIds::Pg: {
+            auto convert = NPg::PgNativeTextFromNativeBinary(r.AsBuf(), typeInfo.GetPgTypeDesc());
+            if (!convert.Error)
+                res += convert.Str;
+            else
+                res += *convert.Error;
+            break;
+        }
         default:
             res += EscapeC(r.Data(), r.Size());
         }
@@ -497,6 +550,14 @@ TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& type
     }
     res += ")";
     return res;
+}
+
+size_t GetCellMatrixHeaderSize() {
+    return CellMatrixHeaderSize;
+}
+
+size_t GetCellHeaderSize() {
+    return sizeof(TCellHeader);
 }
 
 } // namespace NKikimr

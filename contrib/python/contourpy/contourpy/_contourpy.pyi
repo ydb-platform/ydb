@@ -1,14 +1,14 @@
-from typing import ClassVar, NoReturn
+from typing import ClassVar, NoReturn, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
-from typing_extensions import TypeAlias
 
 import contourpy._contourpy as cpy
 
 # Input numpy array types, the same as in common.h
 CoordinateArray: TypeAlias = npt.NDArray[np.float64]
 MaskArray: TypeAlias = npt.NDArray[np.bool_]
+LevelArray: TypeAlias = npt.ArrayLike
 
 # Output numpy array types, the same as in common.h
 PointArray: TypeAlias = npt.NDArray[np.float64]
@@ -103,6 +103,8 @@ class ContourGenerator:
     def create_filled_contour(self, lower_level: float, upper_level: float) -> FillReturn: ...
     def filled(self, lower_level: float, upper_level: float) -> FillReturn: ...
     def lines(self, level: float) -> LineReturn: ...
+    def multi_filled(self, levels: LevelArray) -> list[FillReturn]: ...
+    def multi_lines(self, levels: LevelArray) -> list[LineReturn]: ...
     @staticmethod
     def supports_corner_mask() -> bool: ...
     @staticmethod

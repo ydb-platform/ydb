@@ -31,6 +31,7 @@ class TExtCountersUpdaterActor
 
     TCounterPtr AnonRssSize;
     TCounterPtr CGroupMemLimit;
+    TCounterPtr MemoryHardLimit;
     TVector<TCounterPtr> PoolElapsedMicrosec;
     TVector<TCounterPtr> PoolCurrentThreadCount;
     TVector<ui64> PoolElapsedMicrosecPrevValue;
@@ -101,6 +102,13 @@ private:
                 }
             }
         }
+        if (!MemoryHardLimit) {
+            auto utilsGroup = GetServiceCounters(AppData()->Counters, "utils");
+            auto memoryControllerGroup = utilsGroup->FindSubgroup("component", "memory_controller");
+            if (memoryControllerGroup) {
+                MemoryHardLimit = memoryControllerGroup->FindCounter("Stats/HardLimit");
+            }
+        }
     }
 
     void Transform() {
@@ -110,8 +118,10 @@ private:
             MemoryUsedBytes->Set(AnonRssSize->Val());
             metrics->AddMetric("resources.memory.used_bytes", AnonRssSize->Val());
         }
-        if (CGroupMemLimit) {
+        if (CGroupMemLimit && !MemoryHardLimit) {
             MemoryLimitBytes->Set(CGroupMemLimit->Val());
+        } else if (MemoryHardLimit) {
+            MemoryLimitBytes->Set(MemoryHardLimit->Val());
         }
         if (StorageUsedBytes->Val() != 0) {
             metrics->AddMetric("resources.storage.used_bytes", StorageUsedBytes->Val());

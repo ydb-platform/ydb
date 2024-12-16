@@ -7,6 +7,16 @@
   - cublasLt.h
   - cublas_v2.h
   - cuda.h
+  - cuda/std/atomic
+  - cuda/std/cassert
+  - cuda/std/cmath
+  - cuda/std/cstddef
+  - cuda/std/cstdint
+  - cuda/std/functional
+  - cuda/std/limits
+  - cuda/std/tuple
+  - cuda/std/type_traits
+  - cuda/std/utility
   - cudaEGL.h
   - cudaProfiler.h
   - cudaTypedefs.h
@@ -18,19 +28,11 @@
   - cuda_profiler_api.h
   - cuda_runtime.h
   - cuda_runtime_api.h
-  - cuda/std/cassert
-  - cuda/std/cmath
-  - cuda/std/cstddef
-  - cuda/std/cstdint
-  - cuda/std/functional
-  - cuda/std/limits
-  - cuda/std/tuple
-  - cuda/std/type_traits
-  - cuda/std/utility
-  - mma.h
   - cufft.h
   - cufftXt.h
   - cupti.h
+  - cupti_profiler_target.h
+  - cupti_target.h
   - curand.h
   - curand_kernel.h
   - curand_mtgp32_host.h
@@ -40,18 +42,25 @@
   - cusparse.h
   - cusparseLt.h
   - device_atomic_functions.h
+  - device_launch_parameters.h
   - device_types.h
   - driver_types.h
   - host_defines.h
   - library_types.h
   - math_constants.h
-  - nvrtc.h
-  - nvToolsExtCuda.h
+  - mma.h
   - npp.h
+  - nppdefs.h
   - nppi.h
   - nv/target
   - nvToolsExt.h
+  - nvToolsExtCuda.h
   - nvml.h
+  - nvperf_cuda_host.h
+  - nvperf_host.h
+  - nvperf_target.h
+  - nvrtc.h
+  - nvtx3/nvToolsExt.h
   - surface_types.h
   - texture_types.h
   - vector_types.h
@@ -62,3 +71,7 @@
   includes:
   - NvInfer.h
   - NvInferPlugin.h
+
+- source_filter: "^contrib/libs/nvidia/nccl/.*"
+  includes:
+  - nvtx3/nvToolsExt.h: "contrib/libs/nvidia/nccl/src/include/nvtx3/nvToolsExt.h"

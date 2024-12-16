@@ -15,13 +15,13 @@
 #include <yt/yt/core/actions/invoker_util.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
+#include <library/cpp/yt/system/exit.h>
 
 #include <util/folder/dirut.h>
 
 #include <util/generic/guid.h>
 
 #include <util/string/ascii.h>
-
 #include <util/string/util.h>
 
 #include <util/system/env.h>
@@ -58,7 +58,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Process");
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Process");
 
 static constexpr pid_t InvalidProcessId = -1;
 
@@ -657,7 +657,7 @@ private:
                 YT_VERIFY(Pipe_);
                 ssize_t size = HandleEintr(::write, Pipe_->GetWriteFD(), &data, sizeof(data));
                 YT_VERIFY(size == sizeof(data));
-                _exit(1);
+                AbortProcessSilently(EProcessExitCode::GenericError);
             }
         }
         YT_ABORT();
@@ -720,6 +720,10 @@ IConnectionWriterPtr TSimpleProcess::GetStdInWriter()
 
 TFuture<void> TProcessBase::Spawn()
 {
+    auto finally = Finally([&] {
+        CleanUpParent();
+    });
+
     try {
         // Resolve binary path.
         std::vector<TError> innerErrors;
@@ -753,13 +757,6 @@ TFuture<void> TProcessBase::Spawn()
 void TSimpleProcess::DoSpawn()
 {
 #ifdef _unix_
-    auto finally = Finally([&] {
-        StdPipes_[STDIN_FILENO].CloseReadFD();
-        StdPipes_[STDOUT_FILENO].CloseWriteFD();
-        StdPipes_[STDERR_FILENO].CloseWriteFD();
-        PipeFactory_.Clear();
-    });
-
     YT_VERIFY(ProcessId_ == InvalidProcessId && !Finished_);
 
     // Make sure no spawn action closes Pipe_.WriteFD
@@ -806,9 +803,19 @@ void TSimpleProcess::DoSpawn()
         PollPeriod_);
 
     AsyncWaitExecutor_->Start();
+
+    YT_LOG_INFO("Process spawned (Pid: %v)", ProcessId_);
 #else
     THROW_ERROR_EXCEPTION("Unsupported platform");
 #endif
+}
+
+void TSimpleProcess::CleanUpParent()
+{
+    StdPipes_[STDIN_FILENO].CloseReadFD();
+    StdPipes_[STDOUT_FILENO].CloseWriteFD();
+    StdPipes_[STDERR_FILENO].CloseWriteFD();
+    PipeFactory_.Clear();
 }
 
 void TSimpleProcess::PrepareErrorPipe()
@@ -921,7 +928,9 @@ void TSimpleProcess::AsyncPeriodicTryWait()
 
     Finished_ = true;
     auto error = ProcessInfoToError(processInfo);
-    YT_LOG_DEBUG("Process finished (Pid: %v, MajFaults: %d, Error: %v)", ProcessId_, rusage.ru_majflt, error);
+    YT_LOG_DEBUG(error, "Process finished (Pid: %v, MajorFaults: %v)",
+        ProcessId_,
+        rusage.ru_majflt);
 
     FinishedPromise_.Set(error);
 #else

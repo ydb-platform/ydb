@@ -133,12 +133,68 @@ class TController::TTxInit: public TTxBase {
         return true;
     }
 
+    bool LoadTxIds(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::TxIds>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        while (!rowset.EndOfSet()) {
+            const auto txId = rowset.GetValue<Schema::TxIds::WriteTxId>();
+            const auto version = TRowVersion(
+                rowset.GetValue<Schema::TxIds::VersionStep>(),
+                rowset.GetValue<Schema::TxIds::VersionTxId>()
+            );
+
+            auto res = Self->AssignedTxIds.emplace(version, txId);
+            Y_VERIFY_S(res.second, "Duplicate version: " << version);
+
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool LoadWorkers(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::Workers>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        while (!rowset.EndOfSet()) {
+            const auto id = TWorkerId(
+                rowset.GetValue<Schema::Workers::ReplicationId>(),
+                rowset.GetValue<Schema::Workers::TargetId>(),
+                rowset.GetValue<Schema::Workers::WorkerId>()
+            );
+            const auto version = TRowVersion(
+                rowset.GetValue<Schema::Workers::HeartbeatVersionStep>(),
+                rowset.GetValue<Schema::Workers::HeartbeatVersionTxId>()
+            );
+
+            auto* worker = Self->GetOrCreateWorker(id);
+            worker->SetHeartbeat(version);
+            Self->WorkersWithHeartbeat.insert(id);
+            Self->WorkersByHeartbeat[version].insert(id);
+
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     inline bool Load(NIceDb::TNiceDb& db) {
         Self->Reset();
         return LoadSysParams(db)
             && LoadReplications(db)
             && LoadTargets(db)
-            && LoadSrcStreams(db);
+            && LoadSrcStreams(db)
+            && LoadTxIds(db)
+            && LoadWorkers(db);
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {

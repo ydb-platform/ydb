@@ -24,7 +24,7 @@ on:
         default: ""
       build_target:
         type: string
-        default: "ydb/apps/ydbd"
+        default: "ydb"
         description: "limit build and test to specific target"
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
     runs-on: [ self-hosted, "${{ inputs.runner_label || 'auto-provisioned' }}", "${{ format('build-preset-{0}', inputs.build_preset || 'relwithdebinfo') }}" ]
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         ref: ${{ inputs.commit_sha }}
 
@@ -50,7 +50,7 @@ jobs:
         increment: false
         run_tests: false
         put_build_results_to_cache: false
-        additional_ya_make_args: "-DDUMP_LINKER_MAP -DCOMPILER_TIME_TRACE --add-result .json"
+        additional_ya_make_args: "-DDEBUGINFO_LINES_ONLY -DDUMP_LINKER_MAP -DCOMPILER_TIME_TRACE --add-result .json"
         secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',
           secrets.TESTMO_TOKEN2, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
         vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","TESTMO_URL":"{3}","TESTMO_PROJECT_ID":"{4}"}}',

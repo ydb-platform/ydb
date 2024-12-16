@@ -124,16 +124,17 @@ public:
         TVSlotReadyTimestampQ::iterator VSlotReadyTimestampIter;
 
     public:
-        NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
+        TMonotonic VDiskStatusTimestamp;
         bool IsReady = false;
         bool OnlyPhantomsRemain = false;
 
     public:
         void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TMonotonic now, TInstant instant, bool onlyPhantomsRemain) {
-            if (status != Status) {
+            if (status != VDiskStatus) {
                 if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // became "replicating"
                     LastGotReplicating = instant;
-                } else if (Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // was "replicating"
+                } else if (VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // was "replicating"
                     Y_DEBUG_ABORT_UNLESS(LastGotReplicating != TInstant::Zero());
                     ReplicationTime += instant - LastGotReplicating;
                     LastGotReplicating = {};
@@ -145,7 +146,7 @@ public:
                     LastSeenReady = instant;
                 }
 
-                Status = status;
+                VDiskStatus = status;
                 IsReady = false;
                 if (status == NKikimrBlobStorage::EVDiskStatus::READY) {
                     PutInVSlotReadyTimestampQ(now);
@@ -157,6 +158,10 @@ public:
             if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                 OnlyPhantomsRemain = onlyPhantomsRemain;
             }
+        }
+
+        NKikimrBlobStorage::EVDiskStatus GetStatus() const {
+            return VDiskStatus.value_or(NKikimrBlobStorage::EVDiskStatus::ERROR);
         }
 
         void PutInVSlotReadyTimestampQ(TMonotonic now) {
@@ -291,15 +296,16 @@ public:
 
         TString GetStatusString() const {
             TStringStream s;
-            s << NKikimrBlobStorage::EVDiskStatus_Name(Status);
-            if (Status == NKikimrBlobStorage::REPLICATING && OnlyPhantomsRemain) {
+            const auto status = GetStatus();
+            s << NKikimrBlobStorage::EVDiskStatus_Name(status);
+            if (status == NKikimrBlobStorage::REPLICATING && OnlyPhantomsRemain) {
                 s << "/p";
             }
             return s.Str();
         }
 
         bool IsOperational() const {
-            return Status >= NKikimrBlobStorage::REPLICATING;
+            return GetStatus() >= NKikimrBlobStorage::REPLICATING;
         }
 
         void OnCommit();
@@ -990,6 +996,10 @@ public:
                 std::tie(BoxId, Fqdn, IcPort) = std::move(key);
             }
 
+            THostKey ChangeBox(Schema::BoxHostV2::BoxId::Type newBoxId) const {
+                return {{newBoxId, Fqdn, IcPort}};
+            }
+
             auto GetKey() const {
                 return std::tie(BoxId, Fqdn, IcPort);
             }
@@ -1410,6 +1420,11 @@ public:
             : NodeId(nodeInfo.NodeId)
             , Location(std::move(nodeInfo.Location))
         {}
+
+        THostRecord(const NKikimrBlobStorage::TNodeIdentifier& node)
+            : NodeId(node.GetNodeId())
+            , Location(node.GetLocation())
+        {}
     };
 
     class THostRecordMapImpl {
@@ -1422,6 +1437,15 @@ public:
                 const THostId hostId(nodeInfo.Host, nodeInfo.Port);
                 NodeIdToHostId.emplace(nodeInfo.NodeId, hostId);
                 HostIdToRecord.emplace(hostId, std::move(nodeInfo));
+            }
+        }
+
+        THostRecordMapImpl(const NKikimrBlobStorage::TStorageConfig& config) {
+            for (const auto& item : config.GetAllNodes()) {
+                const THostId hostId(item.GetHost(), item.GetPort());
+                const TNodeId nodeId = item.GetNodeId();
+                NodeIdToHostId.emplace(nodeId, hostId);
+                HostIdToRecord.emplace(hostId, item);
             }
         }
 
@@ -1510,6 +1534,7 @@ private:
     bool AllowMultipleRealmsOccupation = true;
     bool StorageConfigObtained = false;
     bool Loaded = false;
+    std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
 
     std::set<std::tuple<TGroupId, TNodeId>> GroupToNode;
 
@@ -1781,6 +1806,7 @@ private:
 
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
+    void OnHostRecordsInitiate();
 
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
@@ -2276,7 +2302,7 @@ public:
                 histo.IncrementFor(passed.Seconds());
 
                 TDuration timeBeingReplicating = slot->ReplicationTime;
-                if (slot->Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                if (slot->GetStatus() == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                     timeBeingReplicating += now - slot->LastGotReplicating;
                 }
 
@@ -2301,11 +2327,13 @@ public:
         const NKikimrBlobStorage::TVDiskKind::EVDiskKind VDiskKind;
 
         std::optional<NKikimrBlobStorage::TVDiskMetrics> VDiskMetrics;
-        NKikimrBlobStorage::EVDiskStatus VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
+        TMonotonic VDiskStatusTimestamp;
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
+        bool MetricsDirty = false;
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
-                std::map<TVSlotId, TStaticVSlotInfo>& prev)
+                std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)
             : VDiskId(VDiskIDFromVDiskID(vdisk.GetVDiskID()))
             , VDiskKind(vdisk.GetVDiskKind())
         {
@@ -2315,7 +2343,10 @@ public:
                 TStaticVSlotInfo& item = it->second;
                 VDiskMetrics = std::move(item.VDiskMetrics);
                 VDiskStatus = item.VDiskStatus;
+                VDiskStatusTimestamp = item.VDiskStatusTimestamp;
                 ReadySince = item.ReadySince;
+            } else {
+                VDiskStatusTimestamp = mono;
             }
         }
     };

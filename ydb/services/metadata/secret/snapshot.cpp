@@ -2,10 +2,18 @@
 
 namespace NKikimr::NMetadata::NSecret {
 
+void TSnapshot::BuildIndex() {
+    IndexByName.clear();
+    for (const auto& [id, secret] : Secrets) {
+        IndexByName[id.GetSecretId()].emplace_back(id);
+    }
+}
+
 bool TSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawDataResult) {
     Y_ABORT_UNLESS(rawDataResult.result_sets().size() == 2);
     ParseSnapshotObjects<TSecret>(rawDataResult.result_sets()[0], [this](TSecret&& s) {Secrets.emplace(s, s); });
     ParseSnapshotObjects<TAccess>(rawDataResult.result_sets()[1], [this](TAccess&& s) {Access.emplace_back(std::move(s)); });
+    BuildIndex();
     return true;
 }
 
@@ -73,6 +81,20 @@ bool TSnapshot::GetSecretValue(const TSecretIdOrValue& sId, TString& result) con
     }
     result = it->second.GetValue();
     return true;
+}
+
+std::vector<TSecretId> TSnapshot::GetSecretIds(const std::optional<NACLib::TUserToken>& userToken, const TString& secretId) const {
+    std::vector<TSecretId> secretIds;
+    for (const auto& [key, value]: Secrets) {
+        if (key.GetSecretId() != secretId) {
+            continue;
+        }
+        if (!CheckSecretAccess(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(key), userToken)) {
+            continue;
+        }
+        secretIds.push_back(key);
+    }
+    return secretIds;
 }
 
 }

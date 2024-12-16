@@ -31,7 +31,8 @@ struct IYPathServiceContext
 {
     virtual void SetRequestHeader(std::unique_ptr<NRpc::NProto::TRequestHeader> header) = 0;
 
-    virtual void SetReadRequestComplexityLimiter(const TReadRequestComplexityLimiterPtr& limiter) = 0;
+    virtual void SetReadRequestComplexityLimiter(
+        const TReadRequestComplexityLimiterPtr& limiter) = 0;
     virtual TReadRequestComplexityLimiterPtr GetReadRequestComplexityLimiter() = 0;
 };
 
@@ -138,9 +139,9 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define DECLARE_SUPPORTS_METHOD(method, base) \
+#define DECLARE_SUPPORTS_METHOD(method, ...) \
     class TSupports##method \
-        : public base \
+        __VA_OPT__(: public)  __VA_ARGS__ \
     { \
     protected: \
         DECLARE_YPATH_SERVICE_METHOD(::NYT::NYTree::NProto, method); \
@@ -153,11 +154,12 @@ protected:
     DEFINE_RPC_SERVICE_METHOD(TSupports##method, method) \
     { \
         NYPath::TTokenizer tokenizer(GetRequestTargetYPath(context->RequestHeader())); \
-        if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) { \
+        tokenizer.Advance(); \
+        tokenizer.Skip(NYPath::ETokenType::Ampersand); \
+        if (tokenizer.GetType() == NYPath::ETokenType::EndOfStream) { \
             method##Self(request, response, context); \
             return; \
         } \
-        tokenizer.Skip(NYPath::ETokenType::Ampersand); \
         if (tokenizer.GetType() != NYPath::ETokenType::Slash) { \
             onPathError \
             return; \
@@ -196,7 +198,6 @@ protected:
 DEFINE_YPATH_CONTEXT_IMPL(IYPathServiceContext, TTypedYPathServiceContext);
 
 class TSupportsExistsBase
-    : public virtual TRefCounted
 {
 protected:
     template <class TContextPtr>
@@ -245,7 +246,8 @@ protected:
     virtual void ValidatePermission(
         EPermissionCheckScope scope,
         EPermission permission,
-        const TString& user = {});
+        // TODO(babenko): replace with optional
+        const std::string& user = {});
 
     class TCachingPermissionValidator
     {
@@ -254,7 +256,7 @@ protected:
             TSupportsPermissions* owner,
             EPermissionCheckScope scope);
 
-        void Validate(EPermission permission, const TString& user = {});
+        void Validate(EPermission permission, const std::string& user = {});
 
     private:
         TSupportsPermissions* const Owner_;

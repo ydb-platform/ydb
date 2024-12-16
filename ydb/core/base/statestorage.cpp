@@ -164,13 +164,14 @@ void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, u
     ui32 unknown = 0;
     ui32 ok = 0;
     ui32 outdated = 0;
+    ui32 unavailable = 0;
 
     const ui32 majority = Sz / 2 + 1;
 
     ui32 cookie = 0;
     for (ui32 i = 0; i < Sz; ++i) {
         EStatus &st = Status[i];
-        if (resetOld && st != StatusUnknown)
+        if (resetOld && st != StatusUnknown && st != StatusUnavailable)
             st = StatusOutdated;
 
         if (cookie == targetCookie)
@@ -190,16 +191,19 @@ void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, u
         case StatusOutdated:
             ++outdated;
             break;
+        case StatusUnavailable:
+            ++unavailable;
+            break;
         }
     }
 
     if (owner) {
         if (ok >= majority) {
             *owner = StatusOk;
-        } else if (outdated >= majority) {
-            *owner = StatusOutdated;
         } else if (ok + unknown < majority) {
-            if (outdated)
+            if (unavailable > (Sz - majority))
+                *owner = StatusUnavailable;
+            else if (outdated)
                 *owner = StatusOutdated;
             else
                 *owner = StatusNoInfo;

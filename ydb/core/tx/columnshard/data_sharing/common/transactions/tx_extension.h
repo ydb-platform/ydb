@@ -15,11 +15,11 @@ private:
 
 public:
     virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override final {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", TBase::Self->TabletID())("tx_no", TabletTxNo)("tx_info", TxInfo);
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", TBase::Self->TabletID())("local_tx_no", TabletTxNo)("tx_info", TxInfo);
         return DoExecute(txc, ctx);
     }
     virtual void Complete(const NActors::TActorContext& ctx) override final {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", TBase::Self->TabletID())("tx_no", TabletTxNo)("tx_info", TxInfo);
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", TBase::Self->TabletID())("local_tx_no", TabletTxNo)("tx_info", TxInfo);
         return DoComplete(ctx);
     }
 

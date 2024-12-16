@@ -1,4 +1,5 @@
 #include "scan.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 
@@ -58,11 +59,16 @@ TScanCounters::TScanCounters(const TString& module)
 
     , BlobsReceivedCount(TBase::GetDeriviative("BlobsReceivedCount"))
     , BlobsReceivedBytes(TBase::GetDeriviative("BlobsReceivedBytes"))
-{
+    , ProcessedSourceCount(TBase::GetDeriviative("ProcessedSource/Count"))
+    , ProcessedSourceRawBytes(TBase::GetDeriviative("ProcessedSource/RawBytes"))
+    , ProcessedSourceRecords(TBase::GetDeriviative("ProcessedSource/Records"))
+    , ProcessedSourceEmptyCount(TBase::GetDeriviative("ProcessedSource/Empty/Count"))
+    , HistogramFilteredResultCount(TBase::GetHistogram("ProcessedSource/Filtered/Count", NMonitoring::ExponentialHistogram(20, 2))) {
     HistogramIntervalMemoryRequiredOnFail = TBase::GetHistogram("IntervalMemory/RequiredOnFail/Gb", NMonitoring::LinearHistogram(10, 1, 1));
     HistogramIntervalMemoryReduceSize = TBase::GetHistogram("IntervalMemory/Reduce/Gb", NMonitoring::ExponentialHistogram(8, 2, 1));
-    HistogramIntervalMemoryRequiredAfterReduce = TBase::GetHistogram("IntervalMemory/RequiredAfterReduce/Mb", NMonitoring::ExponentialHistogram(10, 2, 64));
-/*
+    HistogramIntervalMemoryRequiredAfterReduce =
+        TBase::GetHistogram("IntervalMemory/RequiredAfterReduce/Mb", NMonitoring::ExponentialHistogram(10, 2, 64));
+    /*
     {
         const std::map<i64, TString> borders = {{0, "0"}, {512LLU * 1024 * 1024, "0.5Gb"}, {1LLU * 1024 * 1024 * 1024, "1Gb"},
             {2LLU * 1024 * 1024 * 1024, "2Gb"}, {3LLU * 1024 * 1024 * 1024, "3Gb"},
@@ -88,12 +94,15 @@ TScanCounters::TScanCounters(const TString& module)
     ScanIntervalState = std::make_shared<TScanIntervalState>(*this);
     ResourcesSubscriberCounters = std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>();
     ScanDurationByStatus.resize((ui32)EStatusFinish::COUNT);
+    ScansFinishedByStatus.resize((ui32)EStatusFinish::COUNT);
     ui32 idx = 0;
     for (auto&& i : GetEnumAllValues<EStatusFinish>()) {
         if (i == EStatusFinish::COUNT) {
             continue;
         }
-        ScanDurationByStatus[(ui32)i] = TBase::GetHistogram("ScanDuration/" + ::ToString(i) + "/Milliseconds", NMonitoring::ExponentialHistogram(18, 2, 1));
+        ScanDurationByStatus[(ui32)i] =
+            TBase::GetHistogram("ScanDuration/" + ::ToString(i) + "/Milliseconds", NMonitoring::ExponentialHistogram(18, 2, 1));
+        ScansFinishedByStatus[(ui32)i] = TBase::GetDeriviative("ScansFinished/" + ::ToString(i));
         AFL_VERIFY(idx == (ui32)i);
         ++idx;
     }
@@ -103,4 +112,8 @@ NKikimr::NColumnShard::TScanAggregations TScanCounters::BuildAggregations() {
     return TScanAggregations(GetModuleId());
 }
 
+void TScanCounters::FillStats(::NKikimrTableStats::TTableStats& output) const {
+    output.SetRangeReads(ScansFinishedByStatus[(ui32)EStatusFinish::Success]->Val());
 }
+
+}   // namespace NKikimr::NColumnShard

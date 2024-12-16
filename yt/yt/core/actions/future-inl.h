@@ -6,6 +6,8 @@
 #undef FUTURE_INL_H_
 
 #include "bind.h"
+#include "cancelation_token.h"
+#include "invoker_util.h"
 
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/thread_affinity.h>
@@ -40,21 +42,38 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline NYT::TError MakeAbandonedError()
+inline TError WrapIntoCancelationError(const TError& error)
 {
-    return NYT::TError(NYT::EErrorCode::Canceled, "Promise abandoned");
-}
-
-inline NYT::TError MakeCanceledError(const NYT::TError& error)
-{
-    return NYT::TError(NYT::EErrorCode::Canceled, "Operation canceled")
+    return TError(NYT::EErrorCode::Canceled, "Operation canceled")
         << error;
 }
 
-template <class T>
-TFuture<T> MakeWellKnownFuture(NYT::TErrorOr<T> value)
+inline TError TryExtractCancelationError()
 {
-    return TFuture<T>(New<NYT::NDetail::TPromiseState<T>>(true, -1, -1, -1, std::move(value)));
+    const auto& currentToken = GetCurrentCancelationToken();
+
+    if (currentToken.IsCancelationRequested()) {
+        // NB(arkady-e1ppa): This clown fiesta is present because some external
+        // users managed to both hardcode "Promise abandoned" error message
+        // as the retriable one (or expected in tests) and
+        // rely on their cancelation error to never be wrapped
+        // into anything with a different error code.
+        const auto& tokenError = currentToken.GetCancelationError();
+        return TError(tokenError.GetCode(), "Promise abandoned") << tokenError;
+    }
+
+    return TError(NYT::EErrorCode::Canceled, "Promise abandoned");
+}
+
+template <class T>
+TFuture<T> MakeWellKnownFuture(TErrorOr<T> value)
+{
+    return TFuture<T>(New<NDetail::TPromiseState<T>>(
+        /*wellKnown*/ true,
+        /*promiseRefCount*/ -1,
+        /*futureRefCount*/ -1,
+        /*cancelableRefCount*/ -1,
+        std::move(value)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -312,6 +331,12 @@ public:
     bool IsCanceled() const
     {
         return Canceled_;
+    }
+
+    // Only safe to call after IsCanceled returned |true|.
+    const TError& GetCancelationError() const
+    {
+        return CancelationError_;
     }
 
     bool Wait(TDuration timeout) const;
@@ -694,13 +719,18 @@ template <class T, class F>
 void InterceptExceptions(const TPromise<T>& promise, const F& func)
 {
     try {
+        auto guard = MakeFutureCurrentTokenGuard(promise.Impl_.Get());
         func();
     } catch (const NYT::TErrorException& ex) {
         promise.Set(ex.Error());
     } catch (const std::exception& ex) {
         promise.Set(NYT::TError(ex));
     } catch (const NConcurrency::TFiberCanceledException&) {
-        promise.Set(MakeAbandonedError());
+        if (auto error = promise.GetCancelationError(); !error.IsOK()) {
+            promise.Set(std::move(error));
+        } else {
+            promise.Set(TryExtractCancelationError());
+        }
     }
 }
 
@@ -862,8 +892,7 @@ template <class T, class D>
 TFuture<T> ApplyTimeoutHelper(
     TFutureBase<T> this_,
     D timeoutOrDeadline,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker)
+    TFutureTimeoutOptions options)
 {
     auto promise = NewPromise<T>();
 
@@ -888,7 +917,7 @@ TFuture<T> ApplyTimeoutHelper(
             cancelable.Cancel(error);
         }),
         timeoutOrDeadline,
-        std::move(invoker));
+        options.Invoker);
 
     this_.Subscribe(BIND_NO_PROPAGATE([=] (const NYT::TErrorOr<T>& value) {
         NConcurrency::TDelayedExecutor::Cancel(cookie);
@@ -1124,7 +1153,7 @@ TFuture<T> TFutureBase<T>::ToImmediatelyCancelable() const
 
     promise.OnCanceled(BIND_NO_PROPAGATE([=, cancelable = AsCancelable()] (const NYT::TError& error) {
         cancelable.Cancel(error);
-        promise.TrySet(NYT::NDetail::MakeCanceledError(error));
+        promise.TrySet(NYT::NDetail::WrapIntoCancelationError(error));
     }));
 
     return promise;
@@ -1133,8 +1162,7 @@ TFuture<T> TFutureBase<T>::ToImmediatelyCancelable() const
 template <class T>
 TFuture<T> TFutureBase<T>::WithDeadline(
     TInstant deadline,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker) const
+    TFutureTimeoutOptions options) const
 {
     YT_ASSERT(Impl_);
 
@@ -1142,14 +1170,13 @@ TFuture<T> TFutureBase<T>::WithDeadline(
         return TFuture<T>(Impl_);
     }
 
-    return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(options), std::move(invoker));
+    return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(options));
 }
 
 template <class T>
 TFuture<T> TFutureBase<T>::WithTimeout(
     TDuration timeout,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker) const
+    TFutureTimeoutOptions options) const
 {
     YT_ASSERT(Impl_);
 
@@ -1157,16 +1184,15 @@ TFuture<T> TFutureBase<T>::WithTimeout(
         return TFuture<T>(Impl_);
     }
 
-    return NYT::NDetail::ApplyTimeoutHelper(*this, timeout, std::move(options), std::move(invoker));
+    return NYT::NDetail::ApplyTimeoutHelper(*this, timeout, std::move(options));
 }
 
 template <class T>
 TFuture<T> TFutureBase<T>::WithTimeout(
     std::optional<TDuration> timeout,
-    TFutureTimeoutOptions options,
-    IInvokerPtr invoker) const
+    TFutureTimeoutOptions options) const
 {
-    return timeout ? WithTimeout(*timeout, std::move(options), std::move(invoker)) : TFuture<T>(Impl_);
+    return timeout ? WithTimeout(*timeout, std::move(options)) : TFuture<T>(Impl_);
 }
 
 template <class T>
@@ -1431,6 +1457,15 @@ bool TPromiseBase<T>::IsCanceled() const
 }
 
 template <class T>
+NYT::TError TPromiseBase<T>::GetCancelationError() const
+{
+    if (!IsCanceled()) {
+        return NYT::TError{};
+    }
+    return Impl_->GetCancelationError();
+}
+
+template <class T>
 bool TPromiseBase<T>::OnCanceled(TCallback<void(const NYT::TError&)> handler) const
 {
     YT_ASSERT(Impl_);
@@ -1578,11 +1613,29 @@ struct TAsyncViaHelper<R(TArgs...)>
         TArgs... args)
     {
         auto promise = NewPromise<TUnderlying>();
-        invoker->Invoke(BIND_NO_PROPAGATE(
-            &Inner,
-            std::move(this_),
-            promise,
-            WrapToPassed(std::forward<TArgs>(args))...));
+        auto makeOnSuccess = [&] <size_t... Indeces> (std::index_sequence<Indeces...>) mutable {
+            return
+                [
+                    promise,
+                    this_ = std::move(this_),
+                    // NB(arkady-e1ppa): TArgs = [std::tuple<...>] will cause
+                    // copy/move ctor inference instead of a nested tuple if we don't
+                    // write template arguments explicitly.
+                    tuple = std::tuple<std::remove_reference_t<TArgs>...>(std::forward<TArgs>(args)...)
+                ] () mutable {
+                    if constexpr (sizeof...(TArgs) == 0) {
+                        Y_UNUSED(tuple);
+                    }
+                    Inner(std::move(this_), promise, std::forward<TArgs>(std::get<Indeces>(tuple))...);
+                };
+        };
+
+        GuardedInvoke(
+            invoker,
+            makeOnSuccess(std::make_index_sequence<sizeof...(TArgs)>()),
+            [promise] {
+                promise.Set(TryExtractCancelationError());
+            });
         return promise;
     }
 
@@ -1593,13 +1646,13 @@ struct TAsyncViaHelper<R(TArgs...)>
         TArgs... args)
     {
         auto promise = NewPromise<TUnderlying>();
-        auto makeOnSuccess = [&] <size_t... Indeces> (std::index_sequence<Indeces...>) {
+        auto makeOnSuccess = [&] <size_t... Indeces> (std::index_sequence<Indeces...>) mutable {
             return
                 [
                     promise,
                     this_ = std::move(this_),
-                    tuple = std::tuple(std::forward<TArgs>(args)...)
-                ] {
+                    tuple = std::tuple<std::remove_reference_t<TArgs>...>(std::forward<TArgs>(args)...)
+                ] () mutable {
                     if constexpr (sizeof...(TArgs) == 0) {
                         Y_UNUSED(tuple);
                     }

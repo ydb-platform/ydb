@@ -261,6 +261,7 @@ struct TBucketThrottleRequest
     TPromise<void> Promise = NewPromise<void>();
     std::atomic<bool> Cancelled = false;
     NProfiling::TCpuInstant StartTime = NProfiling::GetCpuInstant();
+    TGuid RequestId = TGuid::Create();
 
     void Cancel(const TError& /*error*/)
     {
@@ -371,7 +372,10 @@ public:
         request->Promise.OnCanceled(BIND(&TBucketThrottleRequest::Cancel, MakeWeak(request)));
         request->Promise.ToFuture().Subscribe(BIND(&TBucketThrottler::OnRequestComplete, MakeWeak(this), amount));
 
-        YT_LOG_DEBUG("Started waiting for throttler (Amount: %v)", amount);
+        YT_LOG_DEBUG(
+            "Started waiting for throttler (Amount: %v, RequestId: %v)",
+            amount,
+            request->RequestId);
 
         auto guard = Guard(Lock_);
         Queue_.push_back(request);
@@ -471,7 +475,7 @@ public:
             return TDuration::Zero();
         }
 
-        auto limit = LastLimit_.load();
+        auto limit = EstimatedLimit_.load();
         auto distributionPeriod = DistributionPeriod_.load();
         if (limit == 0) {
             return distributionPeriod;
@@ -548,9 +552,12 @@ public:
         return quota;
     }
 
-    i64 Refill(i64 quota)
+    i64 Refill(i64 quota, i64 guaranteedQuota)
     {
-        LastLimit_ = quota;
+        // This value is used to compute estimated overdraft duration.
+        // The limit is exceeded with |guaranteedQuota| because in case of an iteration with low demand
+        // the bucket gets low quota however it is eligible for greater quota that is at least |guaranteedQuota|.
+        EstimatedLimit_ = std::max(quota, guaranteedQuota);
 
         if (Quota_.Value->load() < 0) {
             auto remainingQuota = Quota_.Increment(quota);
@@ -586,7 +593,7 @@ private:
     NProfiling::TEventTimer WaitTime_;
 
     TLeakyCounter Quota_;
-    std::atomic<i64> LastLimit_ = 0;
+    std::atomic<i64> EstimatedLimit_ = 0;
     std::atomic<i64> QueueSize_ = 0;
     std::atomic<i64> Usage_ = 0;
 
@@ -750,6 +757,8 @@ void TFairThrottler::DoUpdateLeader()
 
     auto tickLimit = i64(Config_->TotalLimit * Config_->DistributionPeriod.SecondsFloat());
     auto tickIncome = ComputeFairDistribution(tickLimit, weights, demands, limits);
+    auto infiniteDemands = std::vector<i64>(weights.size(), tickLimit);
+    auto guaranteedQuotas = ComputeFairDistribution(tickLimit, weights, infiniteDemands, limits);
 
     // Distribute remaining quota according to weights and limits.
     auto freeQuota = tickLimit - std::accumulate(tickIncome.begin(), tickIncome.end(), i64(0));
@@ -768,6 +777,7 @@ void TFairThrottler::DoUpdateLeader()
 
     i64 leakedQuota = 0;
     int i = 0;
+    // TODO(akozhikhov): Shall we be concerned with the elements order on the second pass over buckets hash table?
     for (const auto& [name, bucket] : Buckets_) {
         auto state = states[i];
         auto newLimit = tickIncome[i] + freeIncome[i];
@@ -776,7 +786,7 @@ void TFairThrottler::DoUpdateLeader()
         bucketQuota[name] = state.Quota;
         bucketIncome[name] = newLimit;
 
-        leakedQuota += bucket.Throttler->Refill(newLimit);
+        leakedQuota += bucket.Throttler->Refill(newLimit, guaranteedQuotas[i]);
 
         ++i;
     }
@@ -785,6 +795,8 @@ void TFairThrottler::DoUpdateLeader()
         auto state = remote->State();
 
         state->InFlow += tickIncome[i] + freeIncome[i];
+
+        state->GuaranteedQuota = guaranteedQuotas[i];
 
         leakedQuota += state->OutFlow.exchange(0);
 
@@ -845,7 +857,7 @@ void TFairThrottler::DoUpdateFollower()
         bucketDemands[name] = demand;
 
         auto in = ipc->InFlow.exchange(0);
-        auto out = bucket.Throttler->Refill(in);
+        auto out = bucket.Throttler->Refill(in, ipc->GuaranteedQuota);
         ipc->OutFlow += out;
 
         bucketIncome[name] = in;

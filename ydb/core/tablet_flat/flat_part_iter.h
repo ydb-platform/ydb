@@ -1319,6 +1319,7 @@ namespace NTable {
 
                 if (ref >> (sizeof(ui32) * 8))
                     Y_ABORT("Upper bits of ELargeObj ref now isn't used");
+
                 if (auto blob = Env->Locate(Part, ref, op)) {
                     const auto got = NPage::TLabelWrapper().Read(**blob);
 
@@ -1332,13 +1333,12 @@ namespace NTable {
                 } else {
                     Y_ABORT_UNLESS(ref < (*Part->Blobs)->size(), "out of blobs catalog");
 
+                    op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
+
                     /* Have to preserve reference to memory with TGlobId until
                         of next iterator alteration method invocation. This is
                         why here direct array of TGlobId is used.
                     */
-
-                    op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
-
                     row.Set(pin.To, op, TCell::Make((**Part->Blobs)[ref]));
                 }
             } else {

@@ -8,6 +8,7 @@
 
 #include <library/cpp/protobuf/json/proto/enum_options.pb.h>
 
+#include <util/generic/map.h>
 #include <util/generic/yexception.h>
 #include <util/string/ascii.h>
 #include <util/string/cast.h>
@@ -394,8 +395,22 @@ namespace NProtobufJson {
 
                 case FieldDescriptor::CPPTYPE_MESSAGE: {
                     if (isMap) {
-                        for (size_t i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
-                            PrintKeyValue(reflection->GetRepeatedMessage(proto, &field, i), json);
+                        if (GetConfig().SortMapKeys) {
+                            TMap<TString, size_t> keyToIndex;
+                            for (size_t i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
+                                const Message& fieldMessage = reflection->GetRepeatedMessage(proto, &field, i);
+                                const FieldDescriptor* keyField = fieldMessage.GetDescriptor()->map_key();
+                                Y_ABORT_UNLESS(keyField, "Map entry key field not found.");
+                                TString key = MakeKey(fieldMessage, *keyField);
+                                keyToIndex[key] = i;
+                            }
+                            for (const auto& [_, i] : keyToIndex) {
+                                PrintKeyValue(reflection->GetRepeatedMessage(proto, &field, i), json);
+                            }
+                        } else {
+                            for (size_t i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
+                                PrintKeyValue(reflection->GetRepeatedMessage(proto, &field, i), json);
+                            }
                         }
                     } else {
                         for (size_t i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {

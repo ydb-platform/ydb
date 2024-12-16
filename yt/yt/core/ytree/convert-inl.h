@@ -99,13 +99,12 @@ NYson::TYsonProducer ConvertToProducer(T&& value)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-INodePtr ConvertToNode(
+INodePtr DoConvertToNode(
     const T& value,
-    INodeFactory* factory)
+    std::unique_ptr<ITreeBuilder> builder)
 {
     auto type = GetYsonType(value);
 
-    auto builder = CreateBuilderFromFactory(factory);
     builder->BeginTree();
 
     switch (type) {
@@ -135,6 +134,25 @@ INodePtr ConvertToNode(
     return builder->EndTree();
 }
 
+template <class T>
+INodePtr ConvertToNode(
+    const T& value,
+    int treeSizeLimit,
+    INodeFactory* factory)
+{
+    auto builder = CreateBuilderFromFactory(factory, treeSizeLimit);
+    return DoConvertToNode(value, std::move(builder));
+}
+
+template <class T>
+INodePtr ConvertToNode(
+    const T& value,
+    INodeFactory* factory)
+{
+    auto builder = CreateBuilderFromFactory(factory);
+    return DoConvertToNode(value, std::move(builder));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
@@ -148,17 +166,95 @@ IAttributeDictionaryPtr ConvertToAttributes(const T& value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TTo>
-TTo ConvertTo(const INodePtr& node)
+const NYson::TToken& SkipAttributes(NYson::TTokenizer* tokenizer);
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+T ConstructYTreeConvertibleObject()
 {
+    if constexpr (std::is_constructible_v<T>) {
+        return T();
+    } else {
+        return T::Create();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NYTree
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NYT::NConvertToImpl {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+double ConvertYsonStringBaseToDouble(const NYson::TYsonStringBuf& yson)
+{
+    using namespace NYT::NYTree;
+
+    NYson::TTokenizer tokenizer(yson.AsStringBuf());
+    const auto& token = SkipAttributes(&tokenizer);
+    switch (token.GetType()) {
+        case NYson::ETokenType::Int64:
+            return token.GetInt64Value();
+        case NYson::ETokenType::Double:
+            return token.GetDoubleValue();
+        case NYson::ETokenType::Boolean:
+            return token.GetBooleanValue();
+        default:
+            THROW_ERROR_EXCEPTION("Cannot parse \"double\" from %Qlv",
+                token.GetType())
+                << TErrorAttribute("data", yson.AsStringBuf());
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString ConvertYsonStringBaseToString(const NYson::TYsonStringBuf& yson)
+{
+    using namespace NYT::NYTree;
+
+    NYson::TTokenizer tokenizer(yson.AsStringBuf());
+    const auto& token = SkipAttributes(&tokenizer);
+    switch (token.GetType()) {
+        case NYson::ETokenType::String:
+            return TString(token.GetStringValue());
+        default:
+            THROW_ERROR_EXCEPTION("Cannot parse \"string\" from %Qlv",
+                token.GetType())
+                << TErrorAttribute("data", yson.AsStringBuf());
+    }
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+// NB(arkady-e1ppa): TTagInvokeTag uses decltype under the hood
+// meaning the resulting expression is not viable for template argument deduction
+// thus we have to write the type by hand in order to have TTo deducible
+// automatically.
+template <class TTo>
+TTo TagInvoke(NConvertToImpl::TFn<TTo>, const NYTree::INodePtr& node)
+{
+    using namespace NYTree;
+
     auto result = ConstructYTreeConvertibleObject<TTo>();
     Deserialize(result, node);
     return result;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TTo, class TFrom>
-TTo ConvertTo(const TFrom& value)
+TTo TagInvoke(NConvertToImpl::TFn<TTo>, const TFrom& value)
 {
+    using namespace NYTree;
+
     auto type = GetYsonType(value);
     if constexpr (
         NYson::ArePullParserDeserializable<TTo>() &&
@@ -185,12 +281,13 @@ TTo ConvertTo(const TFrom& value)
     return buildingConsumer->Finish();
 }
 
-const NYson::TToken& SkipAttributes(NYson::TTokenizer* tokenizer);
+////////////////////////////////////////////////////////////////////////////////
 
 #define IMPLEMENT_CHECKED_INTEGRAL_CONVERT_TO(type) \
     template <> \
-    inline type ConvertTo(const NYson::TYsonString& str) \
+    inline type TagInvoke(TTagInvokeTag<ConvertTo<type>>, const NYson::TYsonString& str) \
     { \
+        using namespace NYTree; \
         NYson::TTokenizer tokenizer(str.AsStringBuf()); \
         const auto& token = SkipAttributes(&tokenizer); \
         switch (token.GetType()) { \
@@ -218,82 +315,30 @@ IMPLEMENT_CHECKED_INTEGRAL_CONVERT_TO(ui8)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T>
-T ConstructYTreeConvertibleObject()
-{
-    if constexpr (std::is_constructible_v<T>) {
-        return T();
-    } else {
-        return T::Create();
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-double ConvertYsonStringBaseToDouble(const NYson::TYsonStringBuf& yson)
-{
-    NYson::TTokenizer tokenizer(yson.AsStringBuf());
-    const auto& token = SkipAttributes(&tokenizer);
-    switch (token.GetType()) {
-        case NYson::ETokenType::Int64:
-            return token.GetInt64Value();
-        case NYson::ETokenType::Double:
-            return token.GetDoubleValue();
-        case NYson::ETokenType::Boolean:
-            return token.GetBooleanValue();
-        default:
-            THROW_ERROR_EXCEPTION("Cannot parse \"double\" from %Qlv",
-                token.GetType())
-                << TErrorAttribute("data", yson.AsStringBuf());
-    }
-}
-
-TString ConvertYsonStringBaseToString(const NYson::TYsonStringBuf& yson)
-{
-    NYson::TTokenizer tokenizer(yson.AsStringBuf());
-    const auto& token = SkipAttributes(&tokenizer);
-    switch (token.GetType()) {
-        case NYson::ETokenType::String:
-            return TString(token.GetStringValue());
-        default:
-            THROW_ERROR_EXCEPTION("Cannot parse \"string\" from %Qlv",
-                token.GetType())
-                << TErrorAttribute("data", yson.AsStringBuf());
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-}
-
 template <>
-inline double ConvertTo(const NYson::TYsonString& str)
+inline double TagInvoke(TTagInvokeTag<ConvertTo<double>>, const NYson::TYsonString& str)
 {
     return ConvertYsonStringBaseToDouble(str);
 }
 
 template <>
-inline double ConvertTo(const NYson::TYsonStringBuf& str)
+inline double TagInvoke(TTagInvokeTag<ConvertTo<double>>, const NYson::TYsonStringBuf& str)
 {
     return ConvertYsonStringBaseToDouble(str);
 }
 
 template <>
-inline TString ConvertTo(const NYson::TYsonString& str)
+inline TString TagInvoke(TTagInvokeTag<ConvertTo<TString>>, const NYson::TYsonString& str)
 {
     return ConvertYsonStringBaseToString(str);
 }
 
 template <>
-inline TString ConvertTo(const NYson::TYsonStringBuf& str)
+inline TString TagInvoke(TTagInvokeTag<ConvertTo<TString>>, const NYson::TYsonStringBuf& str)
 {
     return ConvertYsonStringBaseToString(str);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NYTree
+} // namespace NYT::NConvertToImpl

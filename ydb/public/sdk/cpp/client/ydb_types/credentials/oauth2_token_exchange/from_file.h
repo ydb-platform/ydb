@@ -17,7 +17,7 @@ std::vector<TString> GetSupportedOauth2TokenExchangeJwtAlgorithms();
 //
 // Fields of json file
 //     grant-type:           [string] Grant type option (default: see TOauth2TokenExchangeParams)
-//     res:                  [string] Resource option (optional)
+//     res:                  [string | list of strings] Resource option (optional)
 //     aud:                  [string | list of strings] Audience option for token exchange request (optional)
 //     scope:                [string | list of strings] Scope option (optional)
 //     requested-token-type: [string] Requested token type option (default: see TOauth2TokenExchangeParams)

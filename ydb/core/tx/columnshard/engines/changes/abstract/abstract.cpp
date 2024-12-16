@@ -46,7 +46,7 @@ void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self
     DoWriteIndexOnComplete(self, context);
     if (self) {
         OnFinish(*self, context);
-        self->IncCounter(GetCounterIndex(context.FinishedSuccessfully));
+        self->Counters.GetTabletCounters()->IncCounter(GetCounterIndex(context.FinishedSuccessfully));
     }
 
 }
@@ -114,11 +114,11 @@ void TColumnEngineChanges::OnFinish(NColumnShard::TColumnShard& self, TChangesFi
     DoOnFinish(self, context);
 }
 
-TWriteIndexContext::TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs)
+TWriteIndexContext::TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot)
     : DB(db)
     , DBWrapper(dbWrapper)
     , EngineLogs(engineLogs)
-{
+    , Snapshot(snapshot) {
 
 }
 

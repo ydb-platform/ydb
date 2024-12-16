@@ -1,4 +1,5 @@
 #include "interconnect_stream.h"
+#include "interconnect_common.h"
 #include "logging.h"
 #include "poller_actor.h"
 #include <library/cpp/openssl/init/init.h>
@@ -276,6 +277,10 @@ namespace NInterconnect {
             RSA_free(rsa);
         }
 
+        void operator ()(EVP_PKEY *pKey) const {
+            EVP_PKEY_free(pKey);
+        }
+
         void operator ()(SSL_CTX *ctx) const {
             SSL_CTX_free(ctx);
         }
@@ -283,10 +288,12 @@ namespace NInterconnect {
 
     class TSecureSocketContext::TImpl {
         std::unique_ptr<SSL_CTX, TDeleter> Ctx;
+        TIntrusivePtr<NActors::TInterconnectProxyCommon> Common;
 
     public:
-        TImpl(const TString& certificate, const TString& privateKey, const TString& caFilePath,
-                const TString& ciphers) {
+        TImpl(TIntrusivePtr<NActors::TInterconnectProxyCommon> common)
+            : Common(std::move(common))
+        {
             int ret;
             InitOpenSSL();
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -297,14 +304,14 @@ namespace NInterconnect {
             Y_ABORT_UNLESS(Ctx, "SSL_CTX_new() failed");
             ret = SSL_CTX_set_min_proto_version(Ctx.get(), TLS1_2_VERSION);
             Y_ABORT_UNLESS(ret == 1, "failed to set min proto version");
-            ret = SSL_CTX_set_max_proto_version(Ctx.get(), TLS1_2_VERSION);
+            ret = SSL_CTX_set_max_proto_version(Ctx.get(), TLS1_3_VERSION);
             Y_ABORT_UNLESS(ret == 1, "failed to set max proto version");
 #endif
             SSL_CTX_set_verify(Ctx.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, &Verify);
             SSL_CTX_set_mode(*this, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
 
             // apply certificates in SSL context
-            if (certificate) {
+            if (const TString& certificate = Common->Settings.Certificate) {
                 std::unique_ptr<BIO, TDeleter> bio(BIO_new_mem_buf(certificate.data(), certificate.size()));
                 Y_ABORT_UNLESS(bio);
 
@@ -325,19 +332,19 @@ namespace NInterconnect {
                     // we must not free memory if certificate was added successfully by SSL_CTX_add0_chain_cert
                 }
             }
-            if (privateKey) {
+            if (const TString& privateKey = Common->Settings.PrivateKey) {
                 std::unique_ptr<BIO, TDeleter> bio(BIO_new_mem_buf(privateKey.data(), privateKey.size()));
                 Y_ABORT_UNLESS(bio);
-                std::unique_ptr<RSA, TDeleter> pkey(PEM_read_bio_RSAPrivateKey(bio.get(), nullptr, nullptr, nullptr));
+                std::unique_ptr<EVP_PKEY, TDeleter> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
                 Y_ABORT_UNLESS(pkey);
-                ret = SSL_CTX_use_RSAPrivateKey(Ctx.get(), pkey.get());
+                ret = SSL_CTX_use_PrivateKey(Ctx.get(), pkey.get());
                 Y_ABORT_UNLESS(ret == 1);
             }
-            if (caFilePath) {
+            if (const TString& caFilePath = Common->Settings.CaFilePath) {
                 ret = SSL_CTX_load_verify_locations(Ctx.get(), caFilePath.data(), nullptr);
                 Y_ABORT_UNLESS(ret == 1);
             }
-
+            const TString& ciphers = Common->Settings.CipherList;
             int success = SSL_CTX_set_cipher_list(Ctx.get(), ciphers ? ciphers.data() : "AES128-GCM-SHA256");
             Y_ABORT_UNLESS(success, "failed to set cipher list");
         }
@@ -351,34 +358,55 @@ namespace NInterconnect {
             return index;
         }
 
+        static int GetContextIndex() {
+            static int index = SSL_get_ex_new_index(0, nullptr, nullptr, nullptr, nullptr);
+            return index;
+        }
+
     private:
         static int Verify(int preverify, X509_STORE_CTX *ctx) {
+            X509* const current = X509_STORE_CTX_get_current_cert(ctx);
+            auto* const ssl = static_cast<SSL*>(X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx()));
+            auto* const errp = static_cast<TString*>(SSL_get_ex_data(ssl, GetExIndex()));
+            auto* const secureSocketContext = static_cast<TSecureSocketContext*>(SSL_get_ex_data(ssl, GetContextIndex()));
+
             if (!preverify) {
-                X509 *badCert = X509_STORE_CTX_get_current_cert(ctx);
                 int err = X509_STORE_CTX_get_error(ctx);
                 int depth = X509_STORE_CTX_get_error_depth(ctx);
-                SSL *ssl = static_cast<SSL*>(X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx()));
-                TString *errp = static_cast<TString*>(SSL_get_ex_data(ssl, GetExIndex()));
                 char buffer[1024];
-                X509_NAME_oneline(X509_get_subject_name(badCert), buffer, sizeof(buffer));
+                X509_NAME_oneline(X509_get_subject_name(current), buffer, sizeof(buffer));
                 TStringBuilder s;
                 s << "Error during certificate validation"
                     << " error# " << X509_verify_cert_error_string(err)
                     << " depth# " << depth
                     << " cert# " << buffer;
                 if (err == X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT) {
-                    X509_NAME_oneline(X509_get_issuer_name(badCert), buffer, sizeof(buffer));
+                    X509_NAME_oneline(X509_get_issuer_name(current), buffer, sizeof(buffer));
                     s << " issuer# " << buffer;
                 }
                 *errp = s;
+            } else if (auto& forbidden = secureSocketContext->Impl->Common->Settings.ForbiddenSignatureAlgorithms) {
+                do {
+                    int pknid;
+                    if (X509_get_signature_info(current, nullptr, &pknid, nullptr, nullptr) != 1) {
+                        *errp = TStringBuilder() << "failed to acquire signature info";
+                    } else if (const char *ln = OBJ_nid2ln(pknid); ln && forbidden.contains(ln)) {
+                        *errp = TStringBuilder() << "forbidden signature algorithm: " << ln;
+                    } else if (const char *sn = OBJ_nid2ln(pknid); sn && forbidden.contains(sn)) {
+                        *errp = TStringBuilder() << "forbidden signature algorithm: " << sn;
+                    } else {
+                        break;
+                    }
+                    X509_STORE_CTX_set_error(ctx, X509_V_ERR_UNSUPPORTED_SIGNATURE_ALGORITHM);
+                    return 0;
+                } while (false);
             }
             return preverify;
         }
     };
 
-    TSecureSocketContext::TSecureSocketContext(const TString& certificate, const TString& privateKey,
-            const TString& caFilePath, const TString& ciphers)
-        : Impl(new TImpl(certificate, privateKey, caFilePath, ciphers))
+    TSecureSocketContext::TSecureSocketContext(TIntrusivePtr<NActors::TInterconnectProxyCommon> common)
+        : Impl(new TImpl(std::move(common)))
     {}
 
     TSecureSocketContext::~TSecureSocketContext()
@@ -391,12 +419,13 @@ namespace NInterconnect {
         bool WantWrite_ = false;
 
     public:
-        TImpl(SSL_CTX *ctx, int fd)
+        TImpl(SSL_CTX *ctx, int fd, TSecureSocketContext *secureSocketContext)
             : Ssl(SSL_new(ctx))
         {
             Y_ABORT_UNLESS(Ssl, "SSL_new() failed");
             SSL_set_fd(Ssl, fd);
             SSL_set_ex_data(Ssl, TSecureSocketContext::TImpl::GetExIndex(), &ErrorDescription);
+            SSL_set_ex_data(Ssl, TSecureSocketContext::TImpl::GetContextIndex(), secureSocketContext);
         }
 
         ~TImpl() {
@@ -542,14 +571,33 @@ namespace NInterconnect {
 
         TString GetPeerCommonName() const {
             TString res;
-            if (X509 *cert = SSL_get_peer_certificate(Ssl)) {
+            if (std::unique_ptr<X509, void(*)(X509*)> cert{SSL_get_peer_certificate(Ssl), &X509_free}) {
                 char buffer[256];
                 memset(buffer, 0, sizeof(buffer));
-                if (X509_NAME *name = X509_get_subject_name(cert)) {
+                if (X509_NAME *name = X509_get_subject_name(cert.get())) {
                     X509_NAME_get_text_by_NID(name, NID_commonName, buffer, sizeof(buffer));
                 }
-                X509_free(cert);
                 res = TString(buffer, strnlen(buffer, sizeof(buffer)));
+            }
+            return res;
+        }
+
+        TString GetSignatureAlgorithm() const {
+            TString res;
+            if (std::unique_ptr<X509, void(*)(X509*)> cert{SSL_get_peer_certificate(Ssl), &X509_free}) {
+                int mdnid;
+                int pknid;
+                int secbits;
+                if (X509_get_signature_info(cert.get(), &mdnid, &pknid, &secbits, nullptr) == 1) {
+                    res = TStringBuilder()
+                        << "md: " << OBJ_nid2ln(mdnid)
+                        << " pk: " << OBJ_nid2ln(pknid)
+                        << " bits: " << secbits;
+                } else {
+                    res = "<failed to get signature info>";
+                }
+            } else {
+                res = "<failed to get peer certificate>";
             }
             return res;
         }
@@ -601,7 +649,7 @@ namespace NInterconnect {
     TSecureSocket::TSecureSocket(TStreamSocket& socket, TSecureSocketContext::TPtr context)
         : TStreamSocket(socket.ReleaseDescriptor())
         , Context(std::move(context))
-        , Impl(new TImpl(*Context->Impl, Descriptor))
+        , Impl(new TImpl(*Context->Impl, Descriptor, Context.get()))
     {}
 
     TSecureSocket::~TSecureSocket()
@@ -645,6 +693,10 @@ namespace NInterconnect {
 
     TString TSecureSocket::GetPeerCommonName() const {
         return Impl->GetPeerCommonName();
+    }
+
+    TString TSecureSocket::GetSignatureAlgorithm() const {
+        return Impl->GetSignatureAlgorithm();
     }
 
     bool TSecureSocket::WantRead() const {

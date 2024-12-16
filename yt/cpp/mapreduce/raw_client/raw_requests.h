@@ -53,14 +53,6 @@ TNode TryGet(
     const TYPath& path,
     const TGetOptions& options);
 
-void Set(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& path,
-    const TNode& value,
-    const TSetOptions& options = TSetOptions());
-
 void MultisetAttributes(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
@@ -256,6 +248,12 @@ TString GetJobStderrWithRetries(
     const TOperationId& operationId,
     const TJobId& jobId,
     const TGetJobStderrOptions& options = TGetJobStderrOptions());
+
+std::vector<TJobTraceEvent> GetJobTrace(
+    const IRequestRetryPolicyPtr& retryPolicy,
+    const TClientContext& context,
+    const TOperationId& operationId,
+    const TGetJobTraceOptions& options = TGetJobTraceOptions());
 
 //
 // File cache

@@ -12,6 +12,7 @@ private:
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) = 0;
     virtual TConclusionStatus DoOnFinished() = 0;
+    virtual void DoOnError(const TString& errorMessage) = 0;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const = 0;
 
 public:
@@ -22,6 +23,10 @@ public:
 
     TConclusionStatus OnFinished() {
         return DoOnFinished();
+    }
+
+    void OnError(const TString& errorMessage) {
+        DoOnError(errorMessage);
     }
 
     std::unique_ptr<TEvColumnShard::TEvInternalScan> BuildRequestInitiator() const {
@@ -54,8 +59,10 @@ private:
 
     EStage Stage = EStage::Initialization;
     static inline const ui64 FreeSpace = ((ui64)8) << 20;
-    void SwitchStage(const EStage from, const EStage to) {
-        AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
+    void SwitchStage(const std::optional<EStage> from, const EStage to) {
+        if (from) {
+            AFL_VERIFY(Stage == *from)("from", (ui32)*from)("real", (ui32)Stage)("to", (ui32)to);
+        }
         Stage = to;
     }
 

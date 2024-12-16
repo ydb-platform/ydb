@@ -1,23 +1,18 @@
+#include "helper.h"
+
 #include <yt/yt/client/hedging/counter.h>
 #include <yt/yt/client/hedging/hedging.h>
+#include <yt/yt/client/hedging/hedging_executor.h>
 
 #include <yt/yt/client/unittests/mock/client.h>
 
 #include <yt/yt/core/concurrency/scheduler.h>
 
-#include <yt/yt/core/actions/cancelable_context.h>
-
 #include <yt/yt/library/profiling/sensor.h>
 #include <yt/yt/library/profiling/testing.h>
 #include <yt/yt/library/profiling/solomon/registry.h>
 
-#include <library/cpp/iterator/zip.h>
-
 #include <library/cpp/testing/gtest/gtest.h>
-
-#include <util/generic/vector.h>
-
-#include <util/string/join.h>
 
 namespace NYT::NClient::NHedging::NRpc {
 
@@ -37,20 +32,19 @@ const auto SleepQuantum = TDuration::MilliSeconds(100);
 
 #define EXPECT_DURATION_NEAR(a, b) EXPECT_NEAR(a.MilliSeconds(), b.MilliSeconds(), 1)
 
+
 NApi::IClientPtr CreateTestHedgingClient(
-    std::initializer_list<NApi::IClientPtr> clients,
-    std::initializer_list<TCounterPtr> counters,
+    std::vector<NApi::IClientPtr> clients,
+    std::vector<TCounterPtr> counters,
     TDuration banDuration = SleepQuantum * 5)
 {
-    THedgingClientOptions options;
-    options.BanPenalty = SleepQuantum * 2;
-    options.BanDuration = banDuration;
-    std::initializer_list<TDuration> initialPenalties = {TDuration::Zero(), SleepQuantum};
-
-    for (auto [client, initialPenalty, counter] : Zip(clients, initialPenalties, counters)) {
-        options.Clients.emplace_back(client, initialPenalty, counter);
-    }
-    return CreateHedgingClient(options);
+    return NTest::CreateTestHedgingClient(
+        clients,
+        counters,
+        {TDuration::Zero(), SleepQuantum},
+        CreateDummyPenaltyProvider(),
+        SleepQuantum * 2,
+        banDuration);
 }
 
 } // namespace

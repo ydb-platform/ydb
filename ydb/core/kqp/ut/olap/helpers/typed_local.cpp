@@ -13,9 +13,32 @@ TString TTypedLocalHelper::GetTestTableSchema() const {
             Columns { Name: "pk_int" Type: "Int64" NotNull: true }
             Columns { Name: "ts" Type: "Timestamp" }
             KeyColumnNames: "pk_int"
-            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
         )";
     return result;
+}
+
+TString TTypedLocalHelper::GetMultiColumnTestTableSchema(ui32 reps) const {
+    TString result;
+    result += R"(
+            Columns { Name: "pk_int" Type: "Int64" NotNull: true }
+            Columns { Name: "ts" Type: "Timestamp" }
+        )";
+    for (ui32 i = 0; i < reps; i++) {
+        TString strNum = ToString(i);
+        result += "Columns {Name: \"field_utf" + strNum + "\" Type: \"Utf8\"}\n";
+        result += "Columns {Name: \"field_int" + strNum + "\" Type: \"Int64\"}\n";
+        result += "Columns {Name: \"field_uint" + strNum + "\" Type: \"Uint8\"}\n";
+        result += "Columns {Name: \"field_float" + strNum + "\" Type: \"Float\"}\n";
+        result += "Columns {Name: \"field_double" + strNum + "\" Type: \"Double\"}\n";
+    }
+    result += R"(
+            KeyColumnNames: "pk_int"
+    )";
+    return result;
+}
+
+void TTypedLocalHelper::CreateMultiColumnOlapTableWithStore(ui32 reps,  ui32 storeShardsCount, ui32 tableShardsCount) {
+    CreateSchemaOlapTablesWithStore(GetMultiColumnTestTableSchema(reps), {TableName}, "olapStore", storeShardsCount, tableShardsCount);
 }
 
 void TTypedLocalHelper::ExecuteSchemeQuery(const TString& alterQuery, const NYdb::EStatus expectedStatus /*= EStatus::SUCCESS*/) const {
@@ -79,7 +102,7 @@ NKikimr::NKqp::TTypedLocalHelper::TDistribution TTypedLocalHelper::GetDistributi
 }
 
 void TTypedLocalHelper::GetVolumes(ui64& rawBytes, ui64& bytes, const bool verbose /*= false*/, const std::vector<TString> columnNames /*= {}*/) {
-    TString selectQuery = "SELECT * FROM `" + TablePath + "/.sys/primary_index_stats` WHERE Activity = true";
+    TString selectQuery = "SELECT * FROM `" + TablePath + "/.sys/primary_index_stats` WHERE Activity == 1";
     if (columnNames.size()) {
         selectQuery += " AND EntityName IN ('" + JoinSeq("','", columnNames) + "')";
     }
@@ -143,16 +166,16 @@ void TTypedLocalHelper::FillPKOnly(const double pkKff /*= 0*/, const ui32 numRow
     TBase::SendDataViaActorSystem(TablePath, batch);
 }
 
-void TTypedLocalHelper::GetStats(std::vector<NKikimrColumnShardStatisticsProto::TPortionStorage>& stats, const bool verbose /*= false*/) {
-    TString selectQuery = "SELECT * FROM `" + TablePath + "/.sys/primary_index_portion_stats` WHERE Activity = true";
+void TTypedLocalHelper::GetStats(std::vector<NJson::TJsonValue>& stats, const bool verbose /*= false*/) {
+    TString selectQuery = "SELECT * FROM `" + TablePath + "/.sys/primary_index_portion_stats` WHERE Activity == 1";
     auto tableClient = KikimrRunner.GetTableClient();
     auto rows = ExecuteScanQuery(tableClient, selectQuery, verbose);
     for (auto&& r : rows) {
         for (auto&& c : r) {
             if (c.first == "Stats") {
-                NKikimrColumnShardStatisticsProto::TPortionStorage store;
-                AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(GetUtf8(c.second), &store));
-                stats.emplace_back(store);
+                NJson::TJsonValue jsonStore;
+                AFL_VERIFY(NJson::ReadJsonFastTree(GetUtf8(c.second), &jsonStore));
+                stats.emplace_back(jsonStore);
             }
         }
     }

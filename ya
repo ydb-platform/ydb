@@ -39,33 +39,33 @@ REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://devtools-reg
 PLATFORM_MAP = {
     "data": {
         "darwin": {
-            "md5": "39aa44bc47b76b8e9507831c6edc8f58",
+            "md5": "b81c67cd2cde0a12fe690f1430c99941",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/6523687639"
+                f"{REGISTRY_ENDPOINT}/7658413669"
             ]
         },
         "darwin-arm64": {
-            "md5": "f26e58e2edd7a7893584feadd91a123a",
+            "md5": "c34587db83d79e32d60183582adb1c01",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/6523685433"
+                f"{REGISTRY_ENDPOINT}/7658413007"
             ]
         },
         "linux-aarch64": {
-            "md5": "767296cd970bae206ce0ee80d47cb130",
+            "md5": "0fb37b9d38d74645a40e17496ee5deac",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/6523683560"
+                f"{REGISTRY_ENDPOINT}/7658412328"
             ]
         },
         "win32-clang-cl": {
-            "md5": "a0a49c174819b01578a9c43571fb3bc0",
+            "md5": "f125434f581643c417f36530354bf23b",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/6523689496"
+                f"{REGISTRY_ENDPOINT}/7658414238"
             ]
         },
         "linux": {
-            "md5": "66bd2f6fbe39ccd8ee157fa81cb5643c",
+            "md5": "2bf185899c8783f9d3bf462abee89470",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/6523691306"
+                f"{REGISTRY_ENDPOINT}/7658415156"
             ]
         }
     }
@@ -232,7 +232,10 @@ def _extract(path, into):
     # mock it with noop to retain current user ownership.
     tar.chown = lambda *args, **kwargs: None
 
-    tar.extractall(path=into)
+    if sys.version_info >= (3, 12):
+        tar.extractall(path=into, filter='data')
+    else:
+        tar.extractall(path=into)
     tar.close()
 
 

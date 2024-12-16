@@ -62,6 +62,9 @@ namespace NTabletFlatExecutor {
     XX(CONSUMED_STORAGE, "ConsumedStorage") \
     XX(CONSUMED_MEMORY, "ConsumedMemory") \
     XX(COMPACTION_READ_IN_FLY, "CompactionReadInFly") \
+    XX(DB_FLAT_INDEX_BYTES, "DbFlatIndexBytes") \
+    XX(DB_B_TREE_INDEX_BYTES, "DbBTreeIndexBytes") \
+    XX(CACHE_TOTAL_USED, "CacheTotalUsed") \
 
 // don't change order!
 #define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \

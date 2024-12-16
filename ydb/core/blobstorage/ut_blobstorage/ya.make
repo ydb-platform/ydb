@@ -2,12 +2,14 @@ UNITTEST()
 
 FORK_SUBTESTS()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32)
+ENDIF()
+
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -16,14 +18,17 @@ SRCS(
     assimilation.cpp
     block_race.cpp
     counting_events.cpp
+    deadlines.cpp
     decommit_3dc.cpp
     defrag.cpp
     discover.cpp
     ds_proxy_lwtrace.cpp
     encryption.cpp
     extra_block_checks.cpp
+    gc.cpp
     gc_quorum_3dc.cpp
     get.cpp
+    get_block.cpp
     group_reconfiguration.cpp
     incorrect_queries.cpp
     index_restore_get.cpp
@@ -51,8 +56,6 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/scrub
 )
 
-REQUIREMENTS(ram:32)
-
 END()
 
 RECURSE_FOR_TESTS(
@@ -61,6 +64,7 @@ RECURSE_FOR_TESTS(
     ut_blob_depot_fat
     ut_donor
     ut_group_reconfiguration
+    ut_huge
     ut_read_only_vdisk
     ut_osiris
     ut_replication

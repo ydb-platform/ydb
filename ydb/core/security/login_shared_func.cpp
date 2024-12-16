@@ -19,9 +19,9 @@ THolder<NSchemeCache::TSchemeCacheNavigate> CreateNavigateKeySetRequest(const TS
 
 TAuthCredentials PrepareCredentials(const TString& login, const TString& password, const NKikimrProto::TAuthConfig& config) {
     if (config.HasLdapAuthentication() && !config.GetLdapAuthenticationDomain().empty()) {
-        size_t n = login.find("@" + config.GetLdapAuthenticationDomain());
-        if (n != TString::npos) {
-            return {.AuthType = TAuthCredentials::EAuthType::Ldap, .Login = login.substr(0, n), .Password = password};
+        const TString domain = "@" + config.GetLdapAuthenticationDomain();
+        if (login.EndsWith(domain)) {
+            return {.AuthType = TAuthCredentials::EAuthType::Ldap, .Login = login.substr(0, login.size() - domain.size()), .Password = password};
         }
     }
     return {.AuthType = TAuthCredentials::EAuthType::Internal, .Login = login, .Password = password};
@@ -37,6 +37,9 @@ NKikimrScheme::TEvLogin CreateLoginRequest(const TAuthCredentials& credentials, 
             break;
         }
         default: {}
+    }
+    if (config.HasLoginTokenExpireTime()) {
+        record.SetExpiresAfterMs(TDuration::Parse(config.GetLoginTokenExpireTime()).MilliSeconds());
     }
     return record;
 }

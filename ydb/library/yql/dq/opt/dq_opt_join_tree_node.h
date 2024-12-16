@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h> 
 
 namespace NYql::NDq {
 
@@ -18,20 +18,22 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
     TJoinOptimizerNodeInternal(
         const std::shared_ptr<IBaseOptimizerNode>& left, 
         const std::shared_ptr<IBaseOptimizerNode>& right,
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys, 
+        const TVector<TJoinColumn>& leftJoinKeys,
+        const TVector<TJoinColumn>& rightJoinKeys, 
         const EJoinKind joinType, 
-        const EJoinAlgoType joinAlgo
+        const EJoinAlgoType joinAlgo,
+        const bool leftAny,
+        const bool rightAny
     ) 
         : IBaseOptimizerNode(JoinNodeType)
         , LeftArg(left)
         , RightArg(right)
-        , JoinConditions(joinConditions)
         , LeftJoinKeys(leftJoinKeys)
         , RightJoinKeys(rightJoinKeys)
         , JoinType(joinType)
         , JoinAlgo(joinAlgo)
+        , LeftAny(leftAny)
+        , RightAny(rightAny)
     {}
 
     virtual ~TJoinOptimizerNodeInternal() = default;
@@ -47,25 +49,27 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
 
     std::shared_ptr<IBaseOptimizerNode> LeftArg;
     std::shared_ptr<IBaseOptimizerNode> RightArg;
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& JoinConditions;
-    const TVector<TString>& LeftJoinKeys;
-    const TVector<TString>& RightJoinKeys;
+    const TVector<TJoinColumn>& LeftJoinKeys;
+    const TVector<TJoinColumn>& RightJoinKeys;
     EJoinKind JoinType;
     EJoinAlgoType JoinAlgo;
+    const bool LeftAny;
+    const bool RightAny;
 };
 
 /**
  * Create a new internal join node and compute its statistics and cost
 */
 std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
+    TOptimizerStatistics&& stats,
     std::shared_ptr<IBaseOptimizerNode> left,
     std::shared_ptr<IBaseOptimizerNode> right,
-    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     EJoinKind joinKind,
     EJoinAlgoType joinAlgo,
-    IProviderContext& ctx
+    bool leftAny,
+    bool rightAny
 );
 
 /**
@@ -75,6 +79,6 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
  * separately if the plan contains non-orderable joins). So we check the instances and if we encounter
  * an external node, we return the whole subtree unchanged.
 */
-std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(const std::shared_ptr<IBaseOptimizerNode> internal);
+std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(const std::shared_ptr<IBaseOptimizerNode>& internal);
 
 } // namespace NYql::NDq

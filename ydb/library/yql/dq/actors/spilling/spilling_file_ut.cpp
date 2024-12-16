@@ -48,13 +48,19 @@ public:
         return str;
     }
 
+    const TString& GetSpillingSessionId() const {
+        return SpillingSessionId_;
+    }
+
     TActorId StartSpillingService(ui64 maxTotalSize = 1000, ui64 maxFileSize = 500,
         ui64 maxFilePartSize = 100, const TFsPath& root = TFsPath::Cwd() / GetSpillingPrefix())
     {
         SpillingRoot_ = root;
+        SpillingSessionId_ = CreateGuidAsString();
 
         auto config = TFileSpillingServiceConfig{
             .Root = root.GetPath(),
+            .SpillingSessionId = SpillingSessionId_,
             .MaxTotalSize = maxTotalSize,
             .MaxFileSize = maxFileSize,
             .MaxFilePartSize = maxFilePartSize
@@ -91,6 +97,7 @@ public:
 
 private:
     TFsPath SpillingRoot_;
+    TString SpillingSessionId_;
 };
 
 TBuffer CreateBlob(ui32 size, char symbol) {
@@ -99,12 +106,12 @@ TBuffer CreateBlob(ui32 size, char symbol) {
     return blob;
 }
 
-TRope CreateRope(ui32 size, char symbol, ui32 chunkSize = 7) {
-    TRope result;
+TChunkedBuffer CreateRope(ui32 size, char symbol, ui32 chunkSize = 7) {
+    TChunkedBuffer result;
     while (size) {
         size_t count = std::min(size, chunkSize);
-        TString str(count, symbol);
-        result.Insert(result.End(), TRope{str});
+        auto str = std::make_shared<TString>(count, symbol);
+        result.Append(*str, str);
         size -= count;
     }
     return result;
@@ -263,7 +270,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester);
-            UNIT_ASSERT_STRINGS_EQUAL("Total size limit exceeded", resp->Get()->Message);
+            UNIT_ASSERT_STRINGS_EQUAL("Total size limit exceeded: 0/0Mb", resp->Get()->Message);
         }
     }
 
@@ -290,7 +297,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester);
-            UNIT_ASSERT_STRINGS_EQUAL("File size limit exceeded", resp->Get()->Message);
+            UNIT_ASSERT_STRINGS_EQUAL("File size limit exceeded: 0/0Mb", resp->Get()->Message);
         }
     }
 
@@ -303,8 +310,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         auto spillingActor = runtime.StartSpillingActor(tester);
 
         runtime.WaitBootstrap();
-
-        const TString filePrefix = TStringBuilder() << runtime.GetSpillingRoot().GetPath() << "/node_" << runtime.GetNodeId() << "/1_test_";
+        const TString filePrefix = TStringBuilder() << runtime.GetSpillingRoot().GetPath() << "/node_" << runtime.GetNodeId() << "_" << runtime.GetSpillingSessionId() << "/1_test_";
 
         for (ui32 i = 0; i < 5; ++i) {
             // Cerr << "---- store blob #" << i << Endl;
@@ -346,7 +352,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
 
         runtime.WaitBootstrap();
 
-        const TString filePrefix = TStringBuilder() << runtime.GetSpillingRoot().GetPath() << "/node_" << runtime.GetNodeId() << "/1_test_";
+        const TString filePrefix = TStringBuilder() << runtime.GetSpillingRoot().GetPath() << "/node_" << runtime.GetNodeId() << "_" << runtime.GetSpillingSessionId() << "/1_test_";
 
         for (ui32 i = 0; i < 5; ++i) {
             // Cerr << "---- store blob #" << i << Endl;
@@ -393,8 +399,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(tester);
             UNIT_ASSERT_VALUES_EQUAL(0, resp->Get()->BlobId);
         }
-
-        auto nodePath = TFsPath("node_" + std::to_string(spillingSvc.NodeId()));
+        auto nodePath = TFsPath("node_" + std::to_string(spillingSvc.NodeId()) + "_" + runtime.GetSpillingSessionId());
         (runtime.GetSpillingRoot() / nodePath / "1_test_0").ForceDelete();
 
         {

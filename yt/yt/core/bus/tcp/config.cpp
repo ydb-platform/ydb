@@ -15,6 +15,20 @@ void TMultiplexingBandConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("network_to_tos_level", &TThis::NetworkToTosLevel)
         .Default();
+
+    registrar.Parameter("min_multiplexing_parallelism", &TThis::MinMultiplexingParallelism)
+        .GreaterThanOrEqual(1)
+        .Default(DefaultMinMultiplexingParallelism);
+
+    registrar.Parameter("max_multiplexing_parallelism", &TThis::MaxMultiplexingParallelism)
+        .GreaterThanOrEqual(1)
+        .Default(DefaultMaxMultiplexingParallelism);
+
+    registrar.Postprocessor([] (TThis* config) {
+        THROW_ERROR_EXCEPTION_UNLESS(
+            config->MinMultiplexingParallelism <= config->MaxMultiplexingParallelism,
+            "\"min_multiplexing_parallelism\" exceeds \"max_multiplexing_parallelism\"");
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -98,7 +112,7 @@ TBusServerConfigPtr TBusServerConfig::CreateTcp(int port)
     return config;
 }
 
-TBusServerConfigPtr TBusServerConfig::CreateUds(const TString& socketPath)
+TBusServerConfigPtr TBusServerConfig::CreateUds(const std::string& socketPath)
 {
     auto config = New<TBusServerConfig>();
     config->UnixDomainSocketPath = socketPath;
@@ -161,14 +175,14 @@ void TBusClientConfig::Register(TRegistrar registrar)
     });
 }
 
-TBusClientConfigPtr TBusClientConfig::CreateTcp(const TString& address)
+TBusClientConfigPtr TBusClientConfig::CreateTcp(const std::string& address)
 {
     auto config = New<TBusClientConfig>();
     config->Address = address;
     return config;
 }
 
-TBusClientConfigPtr TBusClientConfig::CreateUds(const TString& socketPath)
+TBusClientConfigPtr TBusClientConfig::CreateUds(const std::string& socketPath)
 {
     auto config = New<TBusClientConfig>();
     config->UnixDomainSocketPath = socketPath;

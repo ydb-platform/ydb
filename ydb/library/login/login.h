@@ -7,6 +7,7 @@
 #include <deque>
 #include <util/generic/string.h>
 #include <ydb/library/login/protos/login.pb.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 
 namespace NLogin {
 
@@ -48,6 +49,7 @@ public:
 
     struct TLoginUserResponse : TBasicResponse {
         TString Token;
+        TString SanitizedToken; // Token for audit logs
     };
 
     struct TValidateTokenRequest : TBasicRequest {
@@ -172,12 +174,16 @@ public:
     TRenameGroupResponse RenameGroup(const TRenameGroupRequest& request);
     TRemoveGroupResponse RemoveGroup(const TRemoveGroupRequest& request);
 
+    void UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity);
+
     TLoginProvider();
+    TLoginProvider(const TPasswordComplexity& passwordComplexity);
     ~TLoginProvider();
 
     std::vector<TString> GetGroupsMembership(const TString& member);
     static TString GetTokenAudience(const TString& token);
     static std::chrono::system_clock::time_point GetTokenExpiresAt(const TString& token);
+    static TString SanitizeJwtToken(const TString& token);
 
 private:
     std::deque<TKeyRecord>::iterator FindKeyIterator(ui64 keyId);
@@ -186,6 +192,8 @@ private:
 
     struct TImpl;
     THolder<TImpl> Impl;
+
+    TPasswordChecker PasswordChecker;
 };
 
 }

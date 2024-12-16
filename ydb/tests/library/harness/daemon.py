@@ -10,14 +10,12 @@ from yatest.common import process
 import six
 
 from ydb.tests.library.common.wait_for import wait_for
-from ydb.tests.library.common import yatest_common
-from . import param_constants
 
 
 logger = logging.getLogger(__name__)
 
 
-def extract_stderr_details(stderr_file, max_lines=0):
+def _extract_stderr_details(stderr_file, max_lines=0):
     if max_lines == 0:
         return []
 
@@ -43,7 +41,7 @@ class DaemonError(RuntimeError):
                     "Stdout file name: \n{}".format(stdout if stdout is not None else "is not present."),
                     "Stderr file name: \n{}".format(stderr if stderr is not None else "is not present."),
                 ]
-                + extract_stderr_details(stderr, max_stderr_lines)
+                + _extract_stderr_details(stderr, max_stderr_lines)
             )
         )
 
@@ -54,14 +52,14 @@ class SeveralDaemonErrors(RuntimeError):
 
 
 class Daemon(object):
+    """Local process executed as process in current host"""
     def __init__(
         self,
         command,
         cwd,
         timeout,
-        stdin_file=yatest_common.work_path('stdin'),
-        stdout_file=yatest_common.work_path('stdout'),
-        stderr_file=yatest_common.work_path('stderr'),
+        stdout_file="/dev/null",
+        stderr_file="/dev/null",
         stderr_on_error_lines=0,
         core_pattern=None,
     ):
@@ -73,20 +71,12 @@ class Daemon(object):
         self.killed = False
         self.__core_pattern = core_pattern
         self.logger = logger.getChild(self.__class__.__name__)
-        self.__stdout_file = open(stdout_file, mode='w+b')
-        self.__stdin_file = open(stdin_file, mode='w+b')
-        self.__stderr_file = open(stderr_file, mode='w+b')
+        self.__stdout_file = open(stdout_file, mode='wb')
+        self.__stderr_file = open(stderr_file, mode='wb')
 
     @property
     def daemon(self):
         return self.__daemon
-
-    @property
-    def stdin_file_name(self):
-        if self.__stdin_file is not sys.stdin:
-            return os.path.abspath(self.__stdin_file.name)
-        else:
-            return None
 
     @property
     def stdout_file_name(self):
@@ -109,13 +99,10 @@ class Daemon(object):
         if self.is_alive():
             return
         stderr_stream = self.__stderr_file
-        if param_constants.kikimr_stderr_to_console():
-            stderr_stream = sys.stderr
         self.__daemon = process.execute(
             self.__command,
             check_exit_code=False,
             cwd=self.__cwd,
-            stdin=self.__stdin_file,
             stdout=self.__stdout_file,
             stderr=stderr_stream,
             wait=False,
@@ -218,9 +205,10 @@ class Daemon(object):
 
 @six.add_metaclass(abc.ABCMeta)
 class ExternalNodeDaemon(object):
-    def __init__(self, host):
+    """External daemon, executed as process in separate host, managed via ssh"""
+    def __init__(self, host, ssh_username):
         self._host = host
-        self._ssh_username = param_constants.ssh_username
+        self._ssh_username = ssh_username
         self._ssh_options = [
             "-o",
             "UserKnownHostsFile=/dev/null",
@@ -271,12 +259,6 @@ class ExternalNodeDaemon(object):
         self.ssh_command("sudo dmesg --clear", raise_on_error=True)
         self.ssh_command(
             'sudo rm -rf {}/* && sudo service rsyslog restart'.format(self.logs_directory), raise_on_error=True
-        )
-
-    def sky_get_and_move(self, rb_torrent, item_to_move, target_path):
-        self.ssh_command(['sky get -d %s %s' % (self._artifacts_path, rb_torrent)], raise_on_error=True)
-        self.ssh_command(
-            ['sudo mv %s %s' % (os.path.join(self._artifacts_path, item_to_move), target_path)], raise_on_error=True
         )
 
     def send_signal(self, signal):

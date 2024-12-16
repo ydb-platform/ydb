@@ -4,43 +4,47 @@
 #include "error_helpers.h"
 #include "progress_merger.h"
 
-#include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
-#include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
-#include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
-#include <ydb/library/yql/providers/yt/lib/res_pull/res_or_pull.h>
-#include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
-#include <ydb/library/yql/providers/yt/lib/schema/schema.h>
-#include <ydb/library/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
-#include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
+#include <yt/yql/providers/yt/common/yql_names.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
+#include <yt/yql/providers/yt/lib/log/yt_logger.h>
+#include <yt/yql/providers/yt/lib/res_pull/res_or_pull.h>
+#include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
+#include <yt/yql/providers/yt/lib/schema/schema.h>
+#include <yt/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
+#include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
-#include <ydb/library/yql/core/facade/yql_facade.h>
-#include <ydb/library/yql/core/file_storage/file_storage.h>
-#include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/core/file_storage/file_storage.h>
+#include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
+#include <yql/essentials/core/yql_library_compiler.h>
+#include <yql/essentials/core/yql_type_helpers.h>
+
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/yt/core/ytree/convert.h>
 
@@ -146,7 +150,12 @@ class TSkiffConverter
     : public ISkiffConverter
 {
 public:
-    TString ConvertNodeToSkiff(const TDqStatePtr state, const IDataProvider::TFillSettings& fillSettings, const NYT::TNode& rowSpec, const NYT::TNode& item) override
+    TString ConvertNodeToSkiff(
+        const TDqStatePtr state,
+        const IDataProvider::TFillSettings& fillSettings,
+        const NYT::TNode& rowSpec,
+        const NYT::TNode& item,
+        const TVector<TString>& columns) override
     {
         TMemoryUsageInfo memInfo("DqResOrPull");
         TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), state->FunctionRegistry->SupportsSizedAllocators());
@@ -154,7 +163,7 @@ public:
         TTypeEnvironment env(alloc);
         NYql::NCommon::TCodecContext codecCtx(env, *state->FunctionRegistry, &holderFactory);
 
-        auto skiffBuilder = MakeHolder<TSkiffExecuteResOrPull>(fillSettings.RowsLimitPerWrite, fillSettings.AllResultsBytesLimit, codecCtx, holderFactory, rowSpec, state->TypeCtx->OptLLVM.GetOrElse("OFF"));
+        auto skiffBuilder = MakeHolder<TSkiffExecuteResOrPull>(fillSettings.RowsLimitPerWrite, fillSettings.AllResultsBytesLimit, codecCtx, holderFactory, rowSpec, state->TypeCtx->OptLLVM.GetOrElse("OFF"), columns);
         if (item.IsList()) {
             skiffBuilder->SetListResult();
             for (auto& node : item.AsList()) {
@@ -267,7 +276,12 @@ public:
                 if (path.EndsWith("libyqlplugin.so")) {
                     continue;
                 }
-                FuncRegistry_->LoadUdfs(path, emptyRemappings, 0);
+                ui32 flags = 0;
+                // System Python UDFs are not used locally so we only need types.
+                if (path.Contains("systempython") && path.Contains(TString("udf") + MKQL_UDF_LIB_SUFFIX)) {
+                    flags |= NUdf::IRegistrator::TFlags::TypesOnly;
+                }
+                FuncRegistry_->LoadUdfs(path, emptyRemappings, flags);
                 if (DqManagerConfig_) {
                     DqManagerConfig_->UdfsWithMd5.emplace(path, MD5::File(path));
                 }
@@ -291,10 +305,26 @@ public:
 
             FuncRegistry_->SetSystemModulePaths(systemModules);
 
-            NYql::NUserData::TUserData::UserDataToLibraries({}, Modules_);
-            auto userDataTable = GetYqlModuleResolver(ExprContext_, ModuleResolver_, {}, Clusters_, {});
+            TUserDataTable userDataTable;
+            LoadYqlDefaultMounts(userDataTable);
 
-            if (!userDataTable) {
+            const auto libraries = NYTree::ConvertTo<THashMap<TString, TString>>(options.Libraries);
+            TVector<NYql::NUserData::TUserData> userData;
+            userData.reserve(libraries.size());
+            for (const auto& [module, path] : libraries) {
+                userData.emplace_back(NYql::NUserData::EType::LIBRARY, NYql::NUserData::EDisposition::FILESYSTEM, path, path);
+                Modules_[to_lower(module)] = path;
+
+                auto& block = userDataTable[TUserDataKey::File(path)];
+                block.Data = path;
+                block.Type = EUserDataType::PATH;
+                block.Usage.Set(EUserDataBlockUsage::Library, true);
+            }
+
+            NYql::NUserData::TUserData::UserDataToLibraries(userData, Modules_);
+
+            TModulesTable modulesTable;
+            if (!CompileLibraries(userDataTable, ExprContext_, modulesTable, true)) {
                 TStringStream err;
                 ExprContext_.IssueManager
                     .GetIssues()
@@ -304,6 +334,7 @@ public:
                 exit(1);
             }
 
+            ModuleResolver_ = std::make_shared<NYql::TModuleResolver>(std::move(modulesTable), ExprContext_.NextUniqueId, Clusters_, THashSet<TString>{});
             OperationAttributes_ = options.OperationAttributes;
 
             TVector<NYql::TDataProviderInitializer> dataProvidersInit;
@@ -324,7 +355,7 @@ public:
             }
 
             auto ytNativeGateway = CreateYtNativeGateway(ytServices);
-            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory(), MakeDqHelper()));
 
             ProgramFactory_ = std::make_unique<NYql::TProgramFactory>(
                 false, FuncRegistry_.Get(), ExprContext_.NextUniqueId, dataProvidersInit, "embedded");
@@ -346,7 +377,9 @@ public:
             ProgramFactory_->SetFileStorage(FileStorage_);
             ProgramFactory_->SetUrlPreprocessing(MakeIntrusive<NYql::TUrlPreprocessing>(GatewaysConfig_));
         } catch (const std::exception& ex) {
-            YQL_LOG(FATAL) << "Unexpected exception while initializing YQL plugin: " << ex.what();
+            // NB: YQL_LOG may be not initialized yet (for example, during singletons config parse),
+            // so we use std::cerr instead of it.
+            std::cerr << "Unexpected exception while initializing YQL plugin: " << ex.what() << std::endl;
             exit(1);
         }
         YQL_LOG(INFO) << "YQL plugin initialized";
@@ -369,14 +402,20 @@ public:
         program->AddCredentials({{"default_yt", NYql::TCredential("yt", "", YqlAgentToken_)}});
         program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
 
+        auto defaultQueryCluster = DefaultCluster_;
+        auto ysonSettings = NodeFromYsonString(settings.ToString()).AsMap();
+        if (auto cluster = ysonSettings.FindPtr("cluster")) {
+            defaultQueryCluster = cluster->AsString();
+        }
+
         auto userDataTable = FilesToUserTable(files);
         program->AddUserDataTable(userDataTable);
 
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = Clusters_;
         sqlSettings.ModuleMapping = Modules_;
-        if (DefaultCluster_) {
-            sqlSettings.DefaultCluster = *DefaultCluster_;
+        if (defaultQueryCluster) {
+            sqlSettings.DefaultCluster = *defaultQueryCluster;
         }
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
@@ -400,8 +439,8 @@ public:
             };
         }
 
-        if (DefaultCluster_ && !usedClusters->contains(*DefaultCluster_)) {
-            usedClusters->insert(*DefaultCluster_);
+        if (defaultQueryCluster && !usedClusters->contains(*defaultQueryCluster)) {
+            usedClusters->insert(*defaultQueryCluster);
         }
 
         std::vector<TString> clustersList(usedClusters->begin(), usedClusters->end());
@@ -414,7 +453,7 @@ public:
     TQueryResult GuardedRun(
         TQueryId queryId,
         TString user,
-        TString token,
+        TYsonString credentialsStr,
         TString queryText,
         TYsonString settings,
         std::vector<TQueryFile> files,
@@ -426,8 +465,24 @@ public:
             ActiveQueriesProgress_[queryId].Program = program;
         }
 
-        program->AddCredentials({{"default_yt", NYql::TCredential("yt", "", token)}});
+        TVector<std::pair<TString, NYql::TCredential>> credentials;
+        const auto credentialsMap = NodeFromYsonString(credentialsStr.ToString()).AsMap();
+        credentials.reserve(credentialsMap.size());
+        for (const auto& item : credentialsMap) {
+            credentials.emplace_back(item.first, NYql::TCredential {
+                item.second.HasKey("category") ? item.second.ChildAsString("category") : "",
+                item.second.HasKey("subcategory") ? item.second.ChildAsString("subcategory") : "",
+                item.second.HasKey("content") ? item.second.ChildAsString("content") : ""
+            });
+        }
+        program->AddCredentials(credentials);
         program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
+
+        auto defaultQueryCluster = DefaultCluster_;
+        auto settingsMap = NodeFromYsonString(settings.ToString()).AsMap();
+        if (auto cluster = settingsMap.FindPtr("cluster")) {
+            defaultQueryCluster = cluster->AsString();
+        }
 
         auto userDataTable = FilesToUserTable(files);
         program->AddUserDataTable(userDataTable);
@@ -454,8 +509,8 @@ public:
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = Clusters_;
         sqlSettings.ModuleMapping = Modules_;
-        if (DefaultCluster_) {
-            sqlSettings.DefaultCluster = *DefaultCluster_;
+        if (defaultQueryCluster) {
+            sqlSettings.DefaultCluster = *defaultQueryCluster;
         }
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
@@ -544,14 +599,14 @@ public:
     TQueryResult Run(
         TQueryId queryId,
         TString user,
-        TString token,
+        TYsonString credentials,
         TString queryText,
         TYsonString settings,
         std::vector<TQueryFile> files,
         int executeMode) noexcept override
     {
         try {
-            auto result = GuardedRun(queryId, user, token, queryText, settings, files, executeMode);
+            auto result = GuardedRun(queryId, user, credentials, queryText, settings, files, executeMode);
             if (result.YsonError) {
                 ExtractQuery(queryId);
             }

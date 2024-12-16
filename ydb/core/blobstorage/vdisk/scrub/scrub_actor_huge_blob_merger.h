@@ -29,6 +29,8 @@ namespace NKikimr {
 
         void Begin(const TLogoBlobID& /*id*/) {}
 
+        void Finish() {}
+
         // process on-disk data
         void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 /*sstId*/) {
             switch (memRec.GetType()) {
@@ -82,4 +84,57 @@ namespace NKikimr {
         }
     };
 
+    class TScrubCoroImpl::THugeBlobAndIndexMerger {
+    private:
+        THugeBlobMerger HugeBlobMerger;
+        TIndexRecordMerger IndexMerger;
+    public:
+        template<typename TRead>
+        THugeBlobAndIndexMerger(const TString& logPrefix, const TBlobStorageGroupType& gtype, TRead&& read, TScrubCoroImpl *impl)
+        : HugeBlobMerger(logPrefix, gtype, std::move(read), impl)
+        , IndexMerger(gtype)
+        {}
+
+        void AddFromFresh(const TMemRecLogoBlob &memRec, const TRope* data, const TKeyLogoBlob &key, ui64 lsn) {
+            HugeBlobMerger.AddFromFresh(memRec, data, key, lsn);
+            IndexMerger.AddFromFresh(memRec, data, key, lsn);
+        }
+
+        void AddFromSegment(const TMemRecLogoBlob &memRec, const TDiskPart* outbound, const TKeyLogoBlob &key, ui64 circaLsn) {
+            HugeBlobMerger.AddFromSegment(memRec, outbound, key, circaLsn);
+            IndexMerger.AddFromSegment(memRec, outbound, key, circaLsn);
+        }
+
+        static bool HaveToMergeData() { return true; }
+
+        void Finish() {
+            IndexMerger.Finish();
+            HugeBlobMerger.Finish();
+        }
+
+        void Clear() {
+            HugeBlobMerger.Clear();
+            IndexMerger.Clear();
+        }
+
+        const TMemRecLogoBlob &GetMemRec() const {
+            return IndexMerger.GetMemRec();
+        }
+
+        NMatrix::TVectorType GetPartsToRestore() const {
+            return HugeBlobMerger.GetPartsToRestore();
+        }
+
+        TDiskPart GetCorruptedPart() const {
+            return HugeBlobMerger.GetCorruptedPart();
+        }
+
+        const THugeBlobMerger &GetHugeBlobMerger() const {
+            return HugeBlobMerger;
+        }
+
+        const TIndexRecordMerger &GetIndexMerger() const {
+            return IndexMerger;
+        }
+    };
 } // NKikimr

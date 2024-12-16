@@ -3,4 +3,4 @@
 * `PARTITIONED_BY` - список [колонок партиционирования](../../../../../concepts/federated_query/s3/partitioning.md) данных в файловых хранилищах в федеративных запросах. Содержит список колонок в порядке их размещения в файловом хранилище.
 * `projection.enabled` - флаг включения [расширенного партиционирования данных](../../../../../concepts/federated_query/s3/partition_projection.md). Допустимые значения: `true`, `false`.
 * `projection.<field_name>.type` - тип поля [расширенного партиционирования данных](../../../../../concepts/federated_query/s3/partition_projection.md). Допустимые значения: `integer`, `enum`, `date`.
- * `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../../../concepts/federated_query/s3/partition_projection.md).
+* `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../../../concepts/federated_query/s3/partition_projection.md).

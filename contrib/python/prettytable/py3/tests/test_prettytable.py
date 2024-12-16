@@ -12,19 +12,10 @@ from pytest_lazy_fixtures import lf
 
 import prettytable
 from prettytable import (
-    ALL,
-    DEFAULT,
-    DOUBLE_BORDER,
-    FRAME,
-    HEADER,
-    MARKDOWN,
-    MSWORD_FRIENDLY,
-    NONE,
-    ORGMODE,
-    PLAIN_COLUMNS,
-    RANDOM,
-    SINGLE_BORDER,
+    HRuleStyle,
     PrettyTable,
+    TableStyle,
+    VRuleStyle,
     from_csv,
     from_db_cursor,
     from_html,
@@ -40,12 +31,12 @@ def test_version() -> None:
     assert prettytable.__version__[-1].isdigit()
 
 
-def helper_table(rows: int = 3) -> PrettyTable:
-    table = PrettyTable(["Field 1", "Field 2", "Field 3"])
+def helper_table(*, rows: int = 3) -> PrettyTable:
+    table = PrettyTable(["", "Field 1", "Field 2", "Field 3"])
     v = 1
     for row in range(rows):
         # Some have spaces, some not, to help test padding columns of different widths
-        table.add_row([f"value {v}", f"value{v+1}", f"value{v+2}"])
+        table.add_row([v, f"value {v}", f"value{v+1}", f"value{v+2}"])
         v += 3
     return table
 
@@ -314,22 +305,22 @@ def field_name_less_table() -> PrettyTable:
 class TestFieldNameLessTable:
     """Make sure that building and stringing a table with no fieldnames works fine"""
 
-    def test_can_string_ascii(self, field_name_less_table: prettytable) -> None:
+    def test_can_string_ascii(self, field_name_less_table: PrettyTable) -> None:
         output = field_name_less_table.get_string()
         assert "|  Field 1  | Field 2 | Field 3 | Field 4 |" in output
         assert "|  Adelaide |   1295  | 1158259 |  600.5  |" in output
 
-    def test_can_string_html(self, field_name_less_table: prettytable) -> None:
+    def test_can_string_html(self, field_name_less_table: PrettyTable) -> None:
         output = field_name_less_table.get_html_string()
         assert "<th>Field 1</th>" in output
         assert "<td>Adelaide</td>" in output
 
-    def test_can_string_latex(self, field_name_less_table: prettytable) -> None:
+    def test_can_string_latex(self, field_name_less_table: PrettyTable) -> None:
         output = field_name_less_table.get_latex_string()
         assert "Field 1 & Field 2 & Field 3 & Field 4 \\\\" in output
         assert "Adelaide & 1295 & 1158259 & 600.5 \\\\" in output
 
-    def test_add_field_names_later(self, field_name_less_table: prettytable) -> None:
+    def test_add_field_names_later(self, field_name_less_table: PrettyTable) -> None:
         field_name_less_table.field_names = [
             "City name",
             "Area",
@@ -376,21 +367,21 @@ class TestAlignment:
     """Make sure alignment works regardless of when it was set"""
 
     def test_aligned_ascii(
-        self, aligned_before_table: prettytable, aligned_after_table: prettytable
+        self, aligned_before_table: PrettyTable, aligned_after_table: PrettyTable
     ) -> None:
         before = aligned_before_table.get_string()
         after = aligned_after_table.get_string()
         assert before == after
 
     def test_aligned_html(
-        self, aligned_before_table: prettytable, aligned_after_table: prettytable
+        self, aligned_before_table: PrettyTable, aligned_after_table: PrettyTable
     ) -> None:
         before = aligned_before_table.get_html_string()
         after = aligned_after_table.get_html_string()
         assert before == after
 
     def test_aligned_latex(
-        self, aligned_before_table: prettytable, aligned_after_table: prettytable
+        self, aligned_before_table: PrettyTable, aligned_after_table: PrettyTable
     ) -> None:
         before = aligned_before_table.get_latex_string()
         after = aligned_after_table.get_latex_string()
@@ -428,7 +419,7 @@ def city_data_from_csv() -> PrettyTable:
 class TestOptionOverride:
     """Make sure all options are properly overwritten by get_string."""
 
-    def test_border(self, city_data_prettytable: prettytable) -> None:
+    def test_border(self, city_data_prettytable: PrettyTable) -> None:
         default = city_data_prettytable.get_string()
         override = city_data_prettytable.get_string(border=False)
         assert default != override
@@ -440,12 +431,12 @@ class TestOptionOverride:
 
     def test_hrules_all(self, city_data_prettytable) -> None:
         default = city_data_prettytable.get_string()
-        override = city_data_prettytable.get_string(hrules=ALL)
+        override = city_data_prettytable.get_string(hrules=HRuleStyle.ALL)
         assert default != override
 
     def test_hrules_none(self, city_data_prettytable) -> None:
         default = city_data_prettytable.get_string()
-        override = city_data_prettytable.get_string(hrules=NONE)
+        override = city_data_prettytable.get_string(hrules=HRuleStyle.NONE)
         assert default != override
 
 
@@ -535,12 +526,12 @@ class TestBasic:
         assert len(rows) == 7
         assert rows[0] == ["Adelaide", 1295, 1158259, 600.5]
 
-    def _test_no_blank_lines(self, table: prettytable) -> None:
+    def _test_no_blank_lines(self, table: PrettyTable) -> None:
         string = table.get_string()
         lines = string.split("\n")
         assert "" not in lines
 
-    def _test_all_length_equal(self, table: prettytable) -> None:
+    def _test_all_length_equal(self, table: PrettyTable) -> None:
         string = table.get_string()
         lines = string.split("\n")
         lengths = [len(line) for line in lines]
@@ -608,42 +599,42 @@ class TestBasic:
         self, city_data_prettytable: PrettyTable
     ) -> None:
         """No table should ever have blank lines in it."""
-        city_data_prettytable.hrules = NONE
+        city_data_prettytable.hrules = HRuleStyle.NONE
         self._test_no_blank_lines(city_data_prettytable)
 
     def test_all_lengths_equal_with_hrules_none(
         self, city_data_prettytable: PrettyTable
     ) -> None:
         """All lines in a table should be of the same length."""
-        city_data_prettytable.hrules = NONE
+        city_data_prettytable.hrules = HRuleStyle.NONE
         self._test_all_length_equal(city_data_prettytable)
 
     def test_no_blank_lines_with_hrules_all(
         self, city_data_prettytable: PrettyTable
     ) -> None:
         """No table should ever have blank lines in it."""
-        city_data_prettytable.hrules = ALL
+        city_data_prettytable.hrules = HRuleStyle.ALL
         self._test_no_blank_lines(city_data_prettytable)
 
     def test_all_lengths_equal_with_hrules_all(
         self, city_data_prettytable: PrettyTable
     ) -> None:
         """All lines in a table should be of the same length."""
-        city_data_prettytable.hrules = ALL
+        city_data_prettytable.hrules = HRuleStyle.ALL
         self._test_all_length_equal(city_data_prettytable)
 
     def test_no_blank_lines_with_style_msword(
         self, city_data_prettytable: PrettyTable
     ) -> None:
         """No table should ever have blank lines in it."""
-        city_data_prettytable.set_style(MSWORD_FRIENDLY)
+        city_data_prettytable.set_style(TableStyle.MSWORD_FRIENDLY)
         self._test_no_blank_lines(city_data_prettytable)
 
     def test_all_lengths_equal_with_style_msword(
         self, city_data_prettytable: PrettyTable
     ) -> None:
         """All lines in a table should be of the same length."""
-        city_data_prettytable.set_style(MSWORD_FRIENDLY)
+        city_data_prettytable.set_style(TableStyle.MSWORD_FRIENDLY)
         self._test_all_length_equal(city_data_prettytable)
 
     def test_no_blank_lines_with_int_format(
@@ -850,7 +841,7 @@ class TestBreakLine:
         [
             (
                 [["value 1", "value2\nsecond line"], ["value 3", "value4"]],
-                ALL,
+                HRuleStyle.ALL,
                 """
 +---------+-------------+
 | Field 1 |   Field 2   |
@@ -867,7 +858,7 @@ class TestBreakLine:
                     ["value 1", "value2\nsecond line"],
                     ["value 3\n\nother line", "value4\n\n\nvalue5"],
                 ],
-                ALL,
+                HRuleStyle.ALL,
                 """
 +------------+-------------+
 |  Field 1   |   Field 2   |
@@ -887,7 +878,7 @@ class TestBreakLine:
                     ["value 1", "value2\nsecond line"],
                     ["value 3\n\nother line", "value4\n\n\nvalue5"],
                 ],
-                FRAME,
+                HRuleStyle.FRAME,
                 """
 +------------+-------------+
 |  Field 1   |   Field 2   |
@@ -916,7 +907,7 @@ class TestBreakLine:
         table = PrettyTable(["Field 1", "Field 2"])
         table.add_row(["value 1", "value2\nsecond line"])
         table.add_row(["value 3", "value4"])
-        result = table.get_html_string(hrules=ALL)
+        result = table.get_html_string(hrules=HRuleStyle.ALL)
         assert (
             result.strip()
             == """
@@ -998,23 +989,51 @@ class TestJSONOutput:
             == """
 [
     [
+        "",
         "Field 1",
         "Field 2",
         "Field 3"
     ],
     {
+        "": 1,
         "Field 1": "value 1",
         "Field 2": "value2",
         "Field 3": "value3"
     },
     {
+        "": 4,
         "Field 1": "value 4",
         "Field 2": "value5",
         "Field 3": "value6"
     },
     {
+        "": 7,
         "Field 1": "value 7",
         "Field 2": "value8",
+        "Field 3": "value9"
+    }
+]""".strip()
+        )
+        options = {"fields": ["Field 1", "Field 3"]}
+        result = t.get_json_string(**options)
+        assert (
+            result.strip()
+            == """
+[
+    [
+        "Field 1",
+        "Field 3"
+    ],
+    {
+        "Field 1": "value 1",
+        "Field 3": "value3"
+    },
+    {
+        "Field 1": "value 4",
+        "Field 3": "value6"
+    },
+    {
+        "Field 1": "value 7",
         "Field 3": "value9"
     }
 ]""".strip()
@@ -1025,9 +1044,9 @@ class TestJSONOutput:
         result = t.get_json_string(header=False, indent=None, separators=(",", ":"))
         assert (
             result
-            == """[{"Field 1":"value 1","Field 2":"value2","Field 3":"value3"},"""
-            """{"Field 1":"value 4","Field 2":"value5","Field 3":"value6"},"""
-            """{"Field 1":"value 7","Field 2":"value8","Field 3":"value9"}]"""
+            == """[{"":1,"Field 1":"value 1","Field 2":"value2","Field 3":"value3"},"""
+            """{"":4,"Field 1":"value 4","Field 2":"value5","Field 3":"value6"},"""
+            """{"":7,"Field 1":"value 7","Field 2":"value8","Field 3":"value9"}]"""
         )
 
 
@@ -1041,6 +1060,7 @@ class TestHtmlOutput:
 <table>
     <thead>
         <tr>
+            <th></th>
             <th>Field 1</th>
             <th>Field 2</th>
             <th>Field 3</th>
@@ -1048,16 +1068,19 @@ class TestHtmlOutput:
     </thead>
     <tbody>
         <tr>
+            <td>1</td>
             <td>value 1</td>
             <td>value2</td>
             <td>value3</td>
         </tr>
         <tr>
+            <td>4</td>
             <td>value 4</td>
             <td>value5</td>
             <td>value6</td>
         </tr>
         <tr>
+            <td>7</td>
             <td>value 7</td>
             <td>value8</td>
             <td>value9</td>
@@ -1076,6 +1099,7 @@ class TestHtmlOutput:
 <table frame="box" rules="cols">
     <thead>
         <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 2</th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 3</th>
@@ -1083,16 +1107,19 @@ class TestHtmlOutput:
     </thead>
     <tbody>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">1</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 1</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value2</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value3</td>
         </tr>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">4</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 4</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value5</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value6</td>
         </tr>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value8</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value9</td>
@@ -1113,6 +1140,7 @@ class TestHtmlOutput:
     <caption>Title &amp; Title</caption>
     <thead>
         <tr>
+            <th></th>
             <th>Field 1</th>
             <th>Field 2</th>
             <th>Field 3</th>
@@ -1120,16 +1148,19 @@ class TestHtmlOutput:
     </thead>
     <tbody>
         <tr>
+            <td>1</td>
             <td>value 1</td>
             <td>value2</td>
             <td>value3</td>
         </tr>
         <tr>
+            <td>4</td>
             <td>value 4</td>
             <td>value5</td>
             <td>value6</td>
         </tr>
         <tr>
+            <td>7</td>
             <td>value 7</td>
             <td>value8</td>
             <td>value9</td>
@@ -1152,6 +1183,7 @@ class TestHtmlOutput:
     <caption>Title &amp; Title</caption>
     <thead>
         <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 2</th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 3</th>
@@ -1159,19 +1191,250 @@ class TestHtmlOutput:
     </thead>
     <tbody>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">1</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 1</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value2</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value3</td>
         </tr>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">4</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 4</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value5</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value6</td>
         </tr>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value8</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value9</td>
+        </tr>
+    </tbody>
+</table>
+""".strip()  # noqa: E501
+        )
+
+    def test_html_output_without_escaped_header(self) -> None:
+        t = helper_table(rows=0)
+        t.field_names = ["", "Field 1", "<em>Field 2</em>", "<a href='#'>Field 3</a>"]
+        result = t.get_html_string(escape_header=False)
+        assert (
+            result.strip()
+            == """
+<table>
+    <thead>
+        <tr>
+            <th></th>
+            <th>Field 1</th>
+            <th><em>Field 2</em></th>
+            <th><a href='#'>Field 3</a></th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+""".strip()
+        )
+
+    def test_html_output_without_escaped_data(self) -> None:
+        t = helper_table(rows=0)
+        t.add_row(
+            [
+                1,
+                "<b>value 1</b>",
+                "<span style='text-decoration: underline;'>value2</span>",
+                "<a href='#'>value3</a>",
+            ]
+        )
+        result = t.get_html_string(escape_data=False)
+        assert (
+            result.strip()
+            == """
+<table>
+    <thead>
+        <tr>
+            <th></th>
+            <th>Field 1</th>
+            <th>Field 2</th>
+            <th>Field 3</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>1</td>
+            <td><b>value 1</b></td>
+            <td><span style='text-decoration: underline;'>value2</span></td>
+            <td><a href='#'>value3</a></td>
+        </tr>
+    </tbody>
+</table>
+""".strip()
+        )
+
+    def test_html_output_with_escaped_header(self) -> None:
+        t = helper_table(rows=0)
+        t.field_names = ["", "Field 1", "<em>Field 2</em>", "<a href='#'>Field 3</a>"]
+        result = t.get_html_string(escape_header=True)
+        assert (
+            result.strip()
+            == """
+<table>
+    <thead>
+        <tr>
+            <th></th>
+            <th>Field 1</th>
+            <th>&lt;em&gt;Field 2&lt;/em&gt;</th>
+            <th>&lt;a href=&#x27;#&#x27;&gt;Field 3&lt;/a&gt;</th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+""".strip()
+        )
+
+    def test_html_output_with_escaped_data(self) -> None:
+        t = helper_table(rows=0)
+        t.add_row(
+            [
+                1,
+                "<b>value 1</b>",
+                "<span style='text-decoration: underline;'>value2</span>",
+                "<a href='#'>value3</a>",
+            ]
+        )
+        result = t.get_html_string(escape_data=True)
+        assert (
+            result.strip()
+            == """
+<table>
+    <thead>
+        <tr>
+            <th></th>
+            <th>Field 1</th>
+            <th>Field 2</th>
+            <th>Field 3</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>1</td>
+            <td>&lt;b&gt;value 1&lt;/b&gt;</td>
+            <td>&lt;span style=&#x27;text-decoration: underline;&#x27;&gt;value2&lt;/span&gt;</td>
+            <td>&lt;a href=&#x27;#&#x27;&gt;value3&lt;/a&gt;</td>
+        </tr>
+    </tbody>
+</table>
+""".strip()  # noqa: E501
+        )
+
+    def test_html_output_formatted_without_escaped_header(self) -> None:
+        t = helper_table(rows=0)
+        t.field_names = ["", "Field 1", "<em>Field 2</em>", "<a href='#'>Field 3</a>"]
+        result = t.get_html_string(escape_header=False, format=True)
+        assert (
+            result.strip()
+            == """
+<table frame="box" rules="cols">
+    <thead>
+        <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"><em>Field 2</em></th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"><a href='#'>Field 3</a></th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+""".strip()  # noqa: E501
+        )
+
+    def test_html_output_formatted_without_escaped_data(self) -> None:
+        t = helper_table(rows=0)
+        t.add_row(
+            [
+                1,
+                "<b>value 1</b>",
+                "<span style='text-decoration: underline;'>value2</span>",
+                "<a href='#'>value3</a>",
+            ]
+        )
+        result = t.get_html_string(escape_data=False, format=True)
+        assert (
+            result.strip()
+            == """
+<table frame="box" rules="cols">
+    <thead>
+        <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 2</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 3</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">1</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top"><b>value 1</b></td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top"><span style='text-decoration: underline;'>value2</span></td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top"><a href='#'>value3</a></td>
+        </tr>
+    </tbody>
+</table>
+""".strip()  # noqa: E501
+        )
+
+    def test_html_output_formatted_with_escaped_header(self) -> None:
+        t = helper_table(rows=0)
+        t.field_names = ["", "Field 1", "<em>Field 2</em>", "<a href='#'>Field 3</a>"]
+        result = t.get_html_string(escape_header=True, format=True)
+        assert (
+            result.strip()
+            == """
+<table frame="box" rules="cols">
+    <thead>
+        <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">&lt;em&gt;Field 2&lt;/em&gt;</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">&lt;a href=&#x27;#&#x27;&gt;Field 3&lt;/a&gt;</th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+""".strip()  # noqa: E501
+        )
+
+    def test_html_output_formatted_with_escaped_data(self) -> None:
+        t = helper_table(rows=0)
+        t.add_row(
+            [
+                1,
+                "<b>value 1</b>",
+                "<span style='text-decoration: underline;'>value2</span>",
+                "<a href='#'>value3</a>",
+            ]
+        )
+        result = t.get_html_string(escape_data=True, format=True)
+        assert (
+            result.strip()
+            == """
+<table frame="box" rules="cols">
+    <thead>
+        <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 2</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 3</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">1</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">&lt;b&gt;value 1&lt;/b&gt;</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">&lt;span style=&#x27;text-decoration: underline;&#x27;&gt;value2&lt;/span&gt;</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">&lt;a href=&#x27;#&#x27;&gt;value3&lt;/a&gt;</td>
         </tr>
     </tbody>
 </table>
@@ -1183,7 +1446,7 @@ class TestPositionalJunctions:
     """Verify different cases for positional-junction characters"""
 
     def test_default(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
 
         assert (
             city_data_prettytable.get_string().strip()
@@ -1202,7 +1465,7 @@ class TestPositionalJunctions:
         )
 
     def test_no_header(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
         city_data_prettytable.header = False
 
         assert (
@@ -1220,7 +1483,7 @@ class TestPositionalJunctions:
         )
 
     def test_with_title(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
         city_data_prettytable.title = "Title"
 
         assert (
@@ -1242,7 +1505,7 @@ class TestPositionalJunctions:
         )
 
     def test_with_title_no_header(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
         city_data_prettytable.title = "Title"
         city_data_prettytable.header = False
         assert (
@@ -1262,9 +1525,9 @@ class TestPositionalJunctions:
         )
 
     def test_hrule_all(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
         city_data_prettytable.title = "Title"
-        city_data_prettytable.hrules = ALL
+        city_data_prettytable.hrules = HRuleStyle.ALL
         assert (
             city_data_prettytable.get_string().strip()
             == """
@@ -1290,8 +1553,8 @@ class TestPositionalJunctions:
         )
 
     def test_vrules_none(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
-        city_data_prettytable.vrules = NONE
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
+        city_data_prettytable.vrules = VRuleStyle.NONE
         assert (
             city_data_prettytable.get_string().strip()
             == "═══════════════════════════════════════════════════\n"
@@ -1308,8 +1571,8 @@ class TestPositionalJunctions:
         )
 
     def test_vrules_frame_with_title(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
-        city_data_prettytable.vrules = FRAME
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
+        city_data_prettytable.vrules = VRuleStyle.FRAME
         city_data_prettytable.title = "Title"
         assert (
             city_data_prettytable.get_string().strip()
@@ -1335,95 +1598,95 @@ class TestStyle:
         "style, expected",
         [
             pytest.param(
-                DEFAULT,
+                TableStyle.DEFAULT,
                 """
-+---------+---------+---------+
-| Field 1 | Field 2 | Field 3 |
-+---------+---------+---------+
-| value 1 |  value2 |  value3 |
-| value 4 |  value5 |  value6 |
-| value 7 |  value8 |  value9 |
-+---------+---------+---------+
++---+---------+---------+---------+
+|   | Field 1 | Field 2 | Field 3 |
++---+---------+---------+---------+
+| 1 | value 1 |  value2 |  value3 |
+| 4 | value 4 |  value5 |  value6 |
+| 7 | value 7 |  value8 |  value9 |
++---+---------+---------+---------+
 """,
                 id="DEFAULT",
             ),
             pytest.param(
-                MARKDOWN,
+                TableStyle.MARKDOWN,  # TODO fix
                 """
-| Field 1 | Field 2 | Field 3 |
-| :-----: | :-----: | :-----: |
-| value 1 |  value2 |  value3 |
-| value 4 |  value5 |  value6 |
-| value 7 |  value8 |  value9 |
+|     | Field 1 | Field 2 | Field 3 |
+| :-: | :-----: | :-----: | :-----: |
+|  1  | value 1 |  value2 |  value3 |
+|  4  | value 4 |  value5 |  value6 |
+|  7  | value 7 |  value8 |  value9 |
 """,
                 id="MARKDOWN",
             ),
             pytest.param(
-                MSWORD_FRIENDLY,
+                TableStyle.MSWORD_FRIENDLY,
                 """
-| Field 1 | Field 2 | Field 3 |
-| value 1 |  value2 |  value3 |
-| value 4 |  value5 |  value6 |
-| value 7 |  value8 |  value9 |
+|   | Field 1 | Field 2 | Field 3 |
+| 1 | value 1 |  value2 |  value3 |
+| 4 | value 4 |  value5 |  value6 |
+| 7 | value 7 |  value8 |  value9 |
 """,
                 id="MSWORD_FRIENDLY",
             ),
             pytest.param(
-                ORGMODE,
+                TableStyle.ORGMODE,
                 """
-|---------+---------+---------|
-| Field 1 | Field 2 | Field 3 |
-|---------+---------+---------|
-| value 1 |  value2 |  value3 |
-| value 4 |  value5 |  value6 |
-| value 7 |  value8 |  value9 |
-|---------+---------+---------|
+|---+---------+---------+---------|
+|   | Field 1 | Field 2 | Field 3 |
+|---+---------+---------+---------|
+| 1 | value 1 |  value2 |  value3 |
+| 4 | value 4 |  value5 |  value6 |
+| 7 | value 7 |  value8 |  value9 |
+|---+---------+---------+---------|
 """,
                 id="ORGMODE",
             ),
             pytest.param(
-                PLAIN_COLUMNS,
-                "Field 1        Field 2        Field 3        \n"
-                "value 1         value2         value3        \n"
-                "value 4         value5         value6        \n"
-                "value 7         value8         value9",
+                TableStyle.PLAIN_COLUMNS,
+                """
+         Field 1        Field 2        Field 3        
+1        value 1         value2         value3        
+4        value 4         value5         value6        
+7        value 7         value8         value9
+""",  # noqa: W291
                 id="PLAIN_COLUMNS",
             ),
             pytest.param(
-                RANDOM,
+                TableStyle.RANDOM,
                 """
-'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
-%    value 1%    value2%    value3%
-'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
-%    value 4%    value5%    value6%
-'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
-%    value 7%    value8%    value9%
-'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^'
+%    1     value 1     value2     value3%
+%    4     value 4     value5     value6%
+%    7     value 7     value8     value9%
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^'
 """,
                 id="RANDOM",
             ),
             pytest.param(
-                DOUBLE_BORDER,
+                TableStyle.DOUBLE_BORDER,
                 """
-╔═════════╦═════════╦═════════╗
-║ Field 1 ║ Field 2 ║ Field 3 ║
-╠═════════╬═════════╬═════════╣
-║ value 1 ║  value2 ║  value3 ║
-║ value 4 ║  value5 ║  value6 ║
-║ value 7 ║  value8 ║  value9 ║
-╚═════════╩═════════╩═════════╝
+╔═══╦═════════╦═════════╦═════════╗
+║   ║ Field 1 ║ Field 2 ║ Field 3 ║
+╠═══╬═════════╬═════════╬═════════╣
+║ 1 ║ value 1 ║  value2 ║  value3 ║
+║ 4 ║ value 4 ║  value5 ║  value6 ║
+║ 7 ║ value 7 ║  value8 ║  value9 ║
+╚═══╩═════════╩═════════╩═════════╝
 """,
             ),
             pytest.param(
-                SINGLE_BORDER,
+                TableStyle.SINGLE_BORDER,
                 """
-┌─────────┬─────────┬─────────┐
-│ Field 1 │ Field 2 │ Field 3 │
-├─────────┼─────────┼─────────┤
-│ value 1 │  value2 │  value3 │
-│ value 4 │  value5 │  value6 │
-│ value 7 │  value8 │  value9 │
-└─────────┴─────────┴─────────┘
+┌───┬─────────┬─────────┬─────────┐
+│   │ Field 1 │ Field 2 │ Field 3 │
+├───┼─────────┼─────────┼─────────┤
+│ 1 │ value 1 │  value2 │  value3 │
+│ 4 │ value 4 │  value5 │  value6 │
+│ 7 │ value 7 │  value8 │  value9 │
+└───┴─────────┴─────────┴─────────┘
 """,
             ),
         ],
@@ -1447,19 +1710,19 @@ class TestStyle:
         # Act / Assert
         # This is an hrule style, not a table style
         with pytest.raises(ValueError):
-            t.set_style(ALL)
+            t.set_style(HRuleStyle.ALL)  # type: ignore[arg-type]
 
     @pytest.mark.parametrize(
         "style, expected",
         [
             pytest.param(
-                MARKDOWN,
+                TableStyle.MARKDOWN,
                 """
-| Align left | Align centre | Align right |
-| :----------| :----------: |-----------: |
-| value 1    |    value2    |      value3 |
-| value 4    |    value5    |      value6 |
-| value 7    |    value8    |      value9 |
+| l |  c  | r | Align left | Align centre | Align right |
+| :-| :-: |-: | :----------| :----------: |-----------: |
+| 1 |  2  | 3 | value 1    |    value2    |      value3 |
+| 4 |  5  | 6 | value 4    |    value5    |      value6 |
+| 7 |  8  | 9 | value 7    |    value8    |      value9 |
 """,
                 id="MARKDOWN",
             ),
@@ -1467,14 +1730,19 @@ class TestStyle:
     )
     def test_style_align(self, style, expected) -> None:
         # Arrange
-        t = helper_table()
-        t.field_names = ["Align left", "Align centre", "Align right"]
+        t = PrettyTable(["l", "c", "r", "Align left", "Align centre", "Align right"])
+        v = 1
+        for row in range(3):
+            # Some have spaces, some not, to help test padding columns of
+            # different widths
+            t.add_row([v, v + 1, v + 2, f"value {v}", f"value{v + 1}", f"value{v + 2}"])
+            v += 3
 
         # Act
         t.set_style(style)
-        t.align["Align left"] = "l"
-        t.align["Align centre"] = "c"
-        t.align["Align right"] = "r"
+        t.align["l"] = t.align["Align left"] = "l"
+        t.align["c"] = t.align["Align centre"] = "c"
+        t.align["r"] = t.align["Align right"] = "r"
 
         # Assert
         result = t.get_string()
@@ -1485,15 +1753,22 @@ class TestCsvOutput:
     def test_csv_output(self) -> None:
         t = helper_table()
         assert t.get_csv_string(delimiter="\t", header=False) == (
-            "value 1\tvalue2\tvalue3\r\n"
-            "value 4\tvalue5\tvalue6\r\n"
-            "value 7\tvalue8\tvalue9\r\n"
+            "1\tvalue 1\tvalue2\tvalue3\r\n"
+            "4\tvalue 4\tvalue5\tvalue6\r\n"
+            "7\tvalue 7\tvalue8\tvalue9\r\n"
         )
         assert t.get_csv_string() == (
-            "Field 1,Field 2,Field 3\r\n"
-            "value 1,value2,value3\r\n"
-            "value 4,value5,value6\r\n"
-            "value 7,value8,value9\r\n"
+            ",Field 1,Field 2,Field 3\r\n"
+            "1,value 1,value2,value3\r\n"
+            "4,value 4,value5,value6\r\n"
+            "7,value 7,value8,value9\r\n"
+        )
+        options = {"fields": ["Field 1", "Field 3"]}
+        assert t.get_csv_string(**options) == (
+            "Field 1,Field 3\r\n"
+            "value 1,value3\r\n"
+            "value 4,value6\r\n"
+            "value 7,value9\r\n"
         )
 
 
@@ -1501,11 +1776,11 @@ class TestLatexOutput:
     def test_latex_output(self) -> None:
         t = helper_table()
         assert t.get_latex_string() == (
-            "\\begin{tabular}{ccc}\r\n"
-            "Field 1 & Field 2 & Field 3 \\\\\r\n"
-            "value 1 & value2 & value3 \\\\\r\n"
-            "value 4 & value5 & value6 \\\\\r\n"
-            "value 7 & value8 & value9 \\\\\r\n"
+            "\\begin{tabular}{cccc}\r\n"
+            " & Field 1 & Field 2 & Field 3 \\\\\r\n"
+            "1 & value 1 & value2 & value3 \\\\\r\n"
+            "4 & value 4 & value5 & value6 \\\\\r\n"
+            "7 & value 7 & value8 & value9 \\\\\r\n"
             "\\end{tabular}"
         )
         options = {"fields": ["Field 1", "Field 3"]}
@@ -1521,12 +1796,12 @@ class TestLatexOutput:
     def test_latex_output_formatted(self) -> None:
         t = helper_table()
         assert t.get_latex_string(format=True) == (
-            "\\begin{tabular}{|c|c|c|}\r\n"
+            "\\begin{tabular}{|c|c|c|c|}\r\n"
             "\\hline\r\n"
-            "Field 1 & Field 2 & Field 3 \\\\\r\n"
-            "value 1 & value2 & value3 \\\\\r\n"
-            "value 4 & value5 & value6 \\\\\r\n"
-            "value 7 & value8 & value9 \\\\\r\n"
+            " & Field 1 & Field 2 & Field 3 \\\\\r\n"
+            "1 & value 1 & value2 & value3 \\\\\r\n"
+            "4 & value 4 & value5 & value6 \\\\\r\n"
+            "7 & value 7 & value8 & value9 \\\\\r\n"
             "\\hline\r\n"
             "\\end{tabular}"
         )
@@ -1543,42 +1818,42 @@ class TestLatexOutput:
             "\\end{tabular}"
         )
 
-        options = {"vrules": FRAME}
+        options = {"vrules": VRuleStyle.FRAME}
         assert t.get_latex_string(format=True, **options) == (
-            "\\begin{tabular}{|ccc|}\r\n"
+            "\\begin{tabular}{|cccc|}\r\n"
             "\\hline\r\n"
-            "Field 1 & Field 2 & Field 3 \\\\\r\n"
-            "value 1 & value2 & value3 \\\\\r\n"
-            "value 4 & value5 & value6 \\\\\r\n"
-            "value 7 & value8 & value9 \\\\\r\n"
+            " & Field 1 & Field 2 & Field 3 \\\\\r\n"
+            "1 & value 1 & value2 & value3 \\\\\r\n"
+            "4 & value 4 & value5 & value6 \\\\\r\n"
+            "7 & value 7 & value8 & value9 \\\\\r\n"
             "\\hline\r\n"
             "\\end{tabular}"
         )
 
-        options = {"hrules": ALL}
+        options = {"hrules": HRuleStyle.ALL}
         assert t.get_latex_string(format=True, **options) == (
-            "\\begin{tabular}{|c|c|c|}\r\n"
+            "\\begin{tabular}{|c|c|c|c|}\r\n"
             "\\hline\r\n"
-            "Field 1 & Field 2 & Field 3 \\\\\r\n"
+            " & Field 1 & Field 2 & Field 3 \\\\\r\n"
             "\\hline\r\n"
-            "value 1 & value2 & value3 \\\\\r\n"
+            "1 & value 1 & value2 & value3 \\\\\r\n"
             "\\hline\r\n"
-            "value 4 & value5 & value6 \\\\\r\n"
+            "4 & value 4 & value5 & value6 \\\\\r\n"
             "\\hline\r\n"
-            "value 7 & value8 & value9 \\\\\r\n"
+            "7 & value 7 & value8 & value9 \\\\\r\n"
             "\\hline\r\n"
             "\\end{tabular}"
         )
 
     def test_latex_output_header(self) -> None:
         t = helper_table()
-        assert t.get_latex_string(format=True, hrules=HEADER) == (
-            "\\begin{tabular}{|c|c|c|}\r\n"
-            "Field 1 & Field 2 & Field 3 \\\\\r\n"
+        assert t.get_latex_string(format=True, hrules=HRuleStyle.HEADER) == (
+            "\\begin{tabular}{|c|c|c|c|}\r\n"
+            " & Field 1 & Field 2 & Field 3 \\\\\r\n"
             "\\hline\r\n"
-            "value 1 & value2 & value3 \\\\\r\n"
-            "value 4 & value5 & value6 \\\\\r\n"
-            "value 7 & value8 & value9 \\\\\r\n"
+            "1 & value 1 & value2 & value3 \\\\\r\n"
+            "4 & value 4 & value5 & value6 \\\\\r\n"
+            "7 & value 7 & value8 & value9 \\\\\r\n"
             "\\end{tabular}"
         )
 
@@ -1716,23 +1991,23 @@ def test_paginate() -> None:
     # Arrange
     t = helper_table(rows=7)
     expected_page_1 = """
-+----------+---------+---------+
-| Field 1  | Field 2 | Field 3 |
-+----------+---------+---------+
-| value 1  |  value2 |  value3 |
-| value 4  |  value5 |  value6 |
-| value 7  |  value8 |  value9 |
-| value 10 | value11 | value12 |
-+----------+---------+---------+
++----+----------+---------+---------+
+|    | Field 1  | Field 2 | Field 3 |
++----+----------+---------+---------+
+| 1  | value 1  |  value2 |  value3 |
+| 4  | value 4  |  value5 |  value6 |
+| 7  | value 7  |  value8 |  value9 |
+| 10 | value 10 | value11 | value12 |
++----+----------+---------+---------+
     """.strip()
     expected_page_2 = """
-+----------+---------+---------+
-| Field 1  | Field 2 | Field 3 |
-+----------+---------+---------+
-| value 13 | value14 | value15 |
-| value 16 | value17 | value18 |
-| value 19 | value20 | value21 |
-+----------+---------+---------+
++----+----------+---------+---------+
+|    | Field 1  | Field 2 | Field 3 |
++----+----------+---------+---------+
+| 13 | value 13 | value14 | value15 |
+| 16 | value 16 | value17 | value18 |
+| 19 | value 19 | value20 | value21 |
++----+----------+---------+---------+
 """.strip()
 
     # Act
@@ -2008,15 +2283,139 @@ class TestMaxTableWidth:
         table.max_table_width = 5
         table.add_row([0])
 
+        # FIXME: Table is wider than table.max_table_width
         assert (
             table.get_string().strip()
             == """
-+-----+
-| Fie |
-+-----+
-|  0  |
-+-----+
++----+
+| Fi |
++----+
+| 0  |
++----+
 """.strip()
+        )
+
+    def test_max_table_width_wide(self) -> None:
+        table = PrettyTable()
+        table.max_table_width = 52
+        table.add_row(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam "
+                "nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam "
+                "erat, sed diam voluptua",
+            ]
+        )
+
+        assert (
+            table.get_string().strip()
+            == """
++---+---+---+---+---+------------------------------+
+| F | F | F | F | F |           Field 6            |
++---+---+---+---+---+------------------------------+
+| 0 | 0 | 0 | 0 | 0 | Lorem ipsum dolor sit amet,  |
+|   |   |   |   |   | consetetur sadipscing elitr, |
+|   |   |   |   |   |    sed diam nonumy eirmod    |
+|   |   |   |   |   | tempor invidunt ut labore et |
+|   |   |   |   |   | dolore magna aliquyam erat,  |
+|   |   |   |   |   |      sed diam voluptua       |
++---+---+---+---+---+------------------------------+""".strip()
+        )
+
+    def test_max_table_width_wide2(self) -> None:
+        table = PrettyTable()
+        table.max_table_width = 70
+        table.add_row(
+            [
+                "Lorem",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+                "ipsum",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+                "dolor",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+            ]
+        )
+
+        assert (
+            table.get_string().strip()
+            == """
++---+-----------------+---+-----------------+---+-----------------+
+| F |     Field 2     | F |     Field 4     | F |     Field 6     |
++---+-----------------+---+-----------------+---+-----------------+
+| L |   Lorem ipsum   | i |   Lorem ipsum   | d |   Lorem ipsum   |
+| o | dolor sit amet, | p | dolor sit amet, | o | dolor sit amet, |
+| r |    consetetur   | s |    consetetur   | l |    consetetur   |
+| e |    sadipscing   | u |    sadipscing   | o |    sadipscing   |
+| m | elitr, sed diam | m | elitr, sed diam | r | elitr, sed diam |
++---+-----------------+---+-----------------+---+-----------------+""".strip()
+        )
+
+    def test_max_table_width_wide_vrules_frame(self) -> None:
+        table = PrettyTable()
+        table.max_table_width = 52
+        table.vrules = VRuleStyle.FRAME
+        table.add_row(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam "
+                "nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam "
+                "erat, sed diam voluptua",
+            ]
+        )
+
+        assert (
+            table.get_string().strip()
+            == """
++--------------------------------------------------+
+| F   F   F   F   F             Field 6            |
++--------------------------------------------------+
+| 0   0   0   0   0   Lorem ipsum dolor sit amet,  |
+|                     consetetur sadipscing elitr, |
+|                        sed diam nonumy eirmod    |
+|                     tempor invidunt ut labore et |
+|                     dolore magna aliquyam erat,  |
+|                          sed diam voluptua       |
++--------------------------------------------------+""".strip()
+        )
+
+    def test_max_table_width_wide_vrules_none(self) -> None:
+        table = PrettyTable()
+        table.max_table_width = 52
+        table.vrules = VRuleStyle.NONE
+        table.add_row(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam "
+                "nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam "
+                "erat, sed diam voluptua",
+            ]
+        )
+
+        assert (
+            table.get_string().strip()
+            == """
+----------------------------------------------------
+  F   F   F   F   F             Field 6             
+----------------------------------------------------
+  0   0   0   0   0   Lorem ipsum dolor sit amet,   
+                      consetetur sadipscing elitr,  
+                         sed diam nonumy eirmod     
+                      tempor invidunt ut labore et  
+                      dolore magna aliquyam erat,   
+                           sed diam voluptua        
+----------------------------------------------------""".strip()  # noqa: W291
         )
 
 
@@ -2053,15 +2452,15 @@ class TestRowEndSection:
 class TestClearing:
     def test_clear_rows(self, row_prettytable: PrettyTable) -> None:
         t = helper_table()
-        t.add_row(["a", "b", "c"], divider=True)
+        t.add_row([0, "a", "b", "c"], divider=True)
         t.clear_rows()
         assert t.rows == []
         assert t.dividers == []
-        assert t.field_names == ["Field 1", "Field 2", "Field 3"]
+        assert t.field_names == ["", "Field 1", "Field 2", "Field 3"]
 
     def test_clear(self, row_prettytable: PrettyTable) -> None:
         t = helper_table()
-        t.add_row(["a", "b", "c"], divider=True)
+        t.add_row([0, "a", "b", "c"], divider=True)
         t.clear()
         assert t.rows == []
         assert t.dividers == []
@@ -2070,38 +2469,38 @@ class TestClearing:
 
 class TestPreservingInternalBorders:
     def test_internal_border_preserved(self) -> None:
-        pt = helper_table(3)
+        pt = helper_table()
         pt.border = False
         pt.preserve_internal_border = True
 
         assert (
             pt.get_string().strip()
             == """
- Field 1 | Field 2 | Field 3  
----------+---------+---------
- value 1 |  value2 |  value3  
- value 4 |  value5 |  value6  
- value 7 |  value8 |  value9 
+   | Field 1 | Field 2 | Field 3  
+---+---------+---------+---------
+ 1 | value 1 |  value2 |  value3  
+ 4 | value 4 |  value5 |  value6  
+ 7 | value 7 |  value8 |  value9  
 """.strip()  # noqa: W291
         )
 
     def test_internal_border_preserved_latex(self) -> None:
-        pt = helper_table(3)
+        pt = helper_table()
         pt.border = False
         pt.format = True
         pt.preserve_internal_border = True
 
         assert pt.get_latex_string().strip() == (
-            "\\begin{tabular}{c|c|c}\r\n"
-            "Field 1 & Field 2 & Field 3 \\\\\r\n"
-            "value 1 & value2 & value3 \\\\\r\n"
-            "value 4 & value5 & value6 \\\\\r\n"
-            "value 7 & value8 & value9 \\\\\r\n"
+            "\\begin{tabular}{c|c|c|c}\r\n"
+            " & Field 1 & Field 2 & Field 3 \\\\\r\n"
+            "1 & value 1 & value2 & value3 \\\\\r\n"
+            "4 & value 4 & value5 & value6 \\\\\r\n"
+            "7 & value 7 & value8 & value9 \\\\\r\n"
             "\\end{tabular}"
         )
 
     def test_internal_border_preserved_html(self) -> None:
-        pt = helper_table(3)
+        pt = helper_table()
         pt.format = True
         pt.border = False
         pt.preserve_internal_border = True
@@ -2112,6 +2511,7 @@ class TestPreservingInternalBorders:
 <table rules="cols">
     <thead>
         <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 2</th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 3</th>
@@ -2119,16 +2519,19 @@ class TestPreservingInternalBorders:
     </thead>
     <tbody>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">1</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 1</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value2</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value3</td>
         </tr>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">4</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 4</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value5</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value6</td>
         </tr>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value8</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value9</td>
@@ -2194,3 +2597,51 @@ class TestGeneralOutput:
         t = helper_table()
         with pytest.raises(ValueError):
             t.get_formatted_string("pdf")
+
+
+class TestDeprecations:
+    @pytest.mark.parametrize(
+        "module_name",
+        [
+            "prettytable",
+            "prettytable.prettytable",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "FRAME",
+            "ALL",
+            "NONE",
+            "HEADER",
+        ],
+    )
+    def test_hrule_constant_deprecations(self, module_name: str, name: str) -> None:
+        with pytest.deprecated_call(match=f"the '{name}' constant is deprecated"):
+            exec(f"from {module_name} import {name}")
+
+    @pytest.mark.parametrize(
+        "module_name",
+        [
+            "prettytable",
+            "prettytable.prettytable",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "DEFAULT",
+            "MSWORD_FRIENDLY",
+            "PLAIN_COLUMNS",
+            "MARKDOWN",
+            "ORGMODE",
+            "DOUBLE_BORDER",
+            "SINGLE_BORDER",
+            "RANDOM",
+        ],
+    )
+    def test_table_style_constant_deprecations(
+        self, module_name: str, name: str
+    ) -> None:
+        with pytest.deprecated_call(match=f"the '{name}' constant is deprecated"):
+            exec(f"from {module_name} import {name}")

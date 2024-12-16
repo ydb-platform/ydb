@@ -106,11 +106,11 @@ TTcpConnection::TTcpConnection(
     TConnectionId id,
     SOCKET socket,
     EMultiplexingBand multiplexingBand,
-    const TString& endpointDescription,
+    const std::string& endpointDescription,
     const IAttributeDictionary& endpointAttributes,
     const TNetworkAddress& endpointNetworkAddress,
-    const std::optional<TString>& endpointAddress,
-    const std::optional<TString>& unixDomainSocketPath,
+    const std::optional<std::string>& endpointAddress,
+    const std::optional<std::string>& unixDomainSocketPath,
     IMessageHandlerPtr handler,
     IPollerPtr poller,
     IPacketTranscoderFactory* packetTranscoderFactory,
@@ -214,7 +214,8 @@ void TTcpConnection::Start()
     }
 
     if (!Poller_->TryRegister(this)) {
-        Abort(TError(NBus::EErrorCode::TransportError, "Cannot register connection pollable"));
+        auto error = TError(NBus::EErrorCode::TransportError, "Cannot register connection pollable");
+        Abort(error, NLogging::ELogLevel::Warning);
         return;
     }
 
@@ -223,8 +224,8 @@ void TTcpConnection::Start()
     try {
         InitBuffers();
     } catch (const std::exception& ex) {
-        Abort(TError(NBus::EErrorCode::TransportError, "I/O buffers allocation error")
-            << ex);
+        auto error = TError(NBus::EErrorCode::TransportError, "I/O buffers allocation error") << ex;
+        Abort(error, NLogging::ELogLevel::Warning);
         return;
     }
 
@@ -288,16 +289,6 @@ void TTcpConnection::RunPeriodicCheck()
     }
 }
 
-EPollablePriority TTcpConnection::GetPriority() const
-{
-    switch (MultiplexingBand_.load(std::memory_order::relaxed)) {
-        case EMultiplexingBand::RealTime:
-            return EPollablePriority::RealTime;
-        default:
-            return EPollablePriority::Normal;
-    }
-}
-
 const TString& TTcpConnection::GetLoggingTag() const
 {
     return LoggingTag_;
@@ -312,10 +303,10 @@ void TTcpConnection::TryEnqueueHandshake()
     NProto::THandshake handshake;
     ToProto(handshake.mutable_connection_id(), Id_);
     if (ConnectionType_ == EConnectionType::Client) {
-        handshake.set_multiplexing_band(ToProto<int>(MultiplexingBand_.load()));
+        handshake.set_multiplexing_band(ToProto(MultiplexingBand_.load()));
     }
-    handshake.set_encryption_mode(ToProto<int>(EncryptionMode_));
-    handshake.set_verification_mode(ToProto<int>(VerificationMode_));
+    handshake.set_encryption_mode(ToProto(EncryptionMode_));
+    handshake.set_verification_mode(ToProto(VerificationMode_));
 
     auto message = MakeHandshakeMessage(handshake);
     auto messageSize = GetByteSize(message);
@@ -514,7 +505,7 @@ void TTcpConnection::SetupNetwork(const TNetworkAddress& address)
     }
 }
 
-void TTcpConnection::Abort(const TError& error)
+void TTcpConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
 {
     AbortSslSession();
 
@@ -552,7 +543,7 @@ void TTcpConnection::Abort(const TError& error)
         PendingControl_.fetch_or(static_cast<ui64>(EPollControl::Shutdown));
     }
 
-    YT_LOG_DEBUG(detailedError, "Connection aborted");
+    YT_LOG_EVENT(Logger, logLevel, detailedError, "Connection aborted");
 
     // OnShutdown() will be called after draining events from thread pools.
     YT_UNUSED_FUTURE(Poller_->Unregister(this));
@@ -630,18 +621,18 @@ void TTcpConnection::ConnectSocket(const TNetworkAddress& address)
     DialerSession_->Dial();
 }
 
-void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
+void TTcpConnection::OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError)
 {
     YT_LOG_DEBUG("Dialer finished");
 
     DialerSession_.Reset();
 
-    if (!socketOrError.IsOK()) {
+    if (!fdOrError.IsOK()) {
         Abort(TError(
             NBus::EErrorCode::TransportError,
             "Error connecting to %v",
             EndpointDescription_)
-            << socketOrError);
+            << fdOrError);
         return;
     }
 
@@ -652,7 +643,7 @@ void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
             return;
         }
 
-        Socket_ = socketOrError.Value();
+        Socket_ = fdOrError.Value();
 
         auto tosLevel = TosLevel_.load();
         if (tosLevel != DefaultTosLevel) {
@@ -663,7 +654,7 @@ void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
     }
 }
 
-const TString& TTcpConnection::GetEndpointDescription() const
+const std::string& TTcpConnection::GetEndpointDescription() const
 {
     return EndpointDescription_;
 }
@@ -673,12 +664,12 @@ const IAttributeDictionary& TTcpConnection::GetEndpointAttributes() const
     return *EndpointAttributes_;
 }
 
-const TString& TTcpConnection::GetEndpointAddress() const
+const std::string& TTcpConnection::GetEndpointAddress() const
 {
     if (EndpointAddress_) {
         return *EndpointAddress_;
     } else {
-        static const TString EmptyAddress;
+        static const std::string EmptyAddress;
         return EmptyAddress;
     }
 }

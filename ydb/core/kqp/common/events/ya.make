@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    process_response.cpp
     events.cpp
     query.cpp
     script_executions.cpp
@@ -16,6 +15,7 @@ PEERDIR(
     ydb/core/kqp/common/shutdown
     ydb/core/kqp/common/compilation
     ydb/core/resource_pools
+    ydb/core/scheme
 
     ydb/library/yql/dq/actors
     ydb/public/api/protos

@@ -269,7 +269,7 @@ std::vector<TCSMetadataRequest> TTieringActualizer::BuildMetadataRequests(
     std::shared_ptr<TDataAccessorsRequest> currentRequest;
     for (auto&& i : NewPortionIds) {
         if (!currentRequest) {
-            currentRequest = std::make_shared<TDataAccessorsRequest>();
+            currentRequest = std::make_shared<TDataAccessorsRequest>("TIERING_ACTUALIZER");
         }
         auto it = portions.find(i);
         AFL_VERIFY(it != portions.end());

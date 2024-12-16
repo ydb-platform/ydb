@@ -35,6 +35,20 @@ protected:
         return Locks.empty();
     }
 public:
+    static std::shared_ptr<ILock> Build(const TString& lockName, const std::initializer_list<std::shared_ptr<ILock>>& locks) {
+        std::vector<std::shared_ptr<ILock>> locksUseful;
+        for (auto&& i : locks) {
+            if (i && !i->IsEmpty()) {
+                locksUseful.emplace_back(i);
+            }
+        }
+        if (locksUseful.size() == 1) {
+            return locksUseful.front();
+        } else {
+            return std::make_shared<TCompositeLock>(lockName, locksUseful);
+        }
+    }
+
     TCompositeLock(const TString& lockName, const std::vector<std::shared_ptr<ILock>>& locks,
         const ELockCategory category = NDataLocks::ELockCategory::Any, const bool readOnly = false)
         : TBase(lockName, category, readOnly)

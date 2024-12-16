@@ -227,6 +227,10 @@ namespace Tests {
             DataStreamsAuthFactory = factory;
             return *this;
         }
+        TServerSettings& SetEnableOltpSink(bool withOltpSink) {
+            AppConfig->MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
+            return *this;
+        }
 
 
         // Add additional grpc services

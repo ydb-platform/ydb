@@ -95,14 +95,7 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
       If the container starts successfully, you'll see the container ID. The container might take a few seconds to initialize. The database will not be available until container initialization is complete.
 
-      {% note info %}
-
-      If you are using a Mac with an Apple Silicon processor, emulate the x86_64 CPU instruction set with [Rosetta](https://support.apple.com/en-us/102527):
-
-      - [colima](https://github.com/abiosoft/colima) with the `colima start --arch aarch64 --vm-type=vz --vz-rosetta` options.
-      - [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) with installed and enabled Rosetta 2.
-
-      {% endnote %}
+      {% include [index.md](reference/docker/_includes/rosetta.md) %}
 
 - Minikube
 

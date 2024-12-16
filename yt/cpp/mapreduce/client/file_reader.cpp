@@ -98,7 +98,7 @@ size_t TStreamReaderBase::DoRead(void* buf, size_t len)
             if (!IsRetriable(e) || attempt == retryCount) {
                 throw;
             }
-            NDetail::TWaitProxy::Get()->Sleep(GetBackoffDuration(e, Context_.Config));
+            TWaitProxy::Get()->Sleep(GetBackoffDuration(e, Context_.Config));
         } catch (std::exception& e) {
             YT_LOG_ERROR("RSP %v - failed: %v (attempt %v of %v)",
                 GetActiveRequestId(),
@@ -112,7 +112,7 @@ size_t TStreamReaderBase::DoRead(void* buf, size_t len)
             if (attempt == retryCount) {
                 throw;
             }
-            NDetail::TWaitProxy::Get()->Sleep(GetBackoffDuration(e, Context_.Config));
+            TWaitProxy::Get()->Sleep(GetBackoffDuration(e, Context_.Config));
         }
         Input_ = nullptr;
     }

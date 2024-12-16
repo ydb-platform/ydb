@@ -53,8 +53,6 @@
 #include <util/string/type.h>
 #include <util/system/env.h>
 
-using namespace NYT::NDetail::NRawClient;
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -711,7 +709,7 @@ IOperationPtr TClientBase::AttachOperation(const TOperationId& operationId)
 
 EOperationBriefState TClientBase::CheckOperation(const TOperationId& operationId)
 {
-    return NYT::NDetail::CheckOperation(RawClient_, ClientRetryPolicy_, Context_, operationId);
+    return NYT::NDetail::CheckOperation(RawClient_, ClientRetryPolicy_, operationId);
 }
 
 void TClientBase::AbortOperation(const TOperationId& operationId)
@@ -1138,7 +1136,7 @@ void TClient::InsertRows(
     THttpHeader header("PUT", "insert_rows");
     header.SetInputFormat(TFormat::YsonBinary());
     // TODO: use corresponding raw request
-    header.MergeParameters(SerializeParametersForInsertRows(Context_.Config->Prefix, path, options));
+    header.MergeParameters(NRawClient::SerializeParametersForInsertRows(Context_.Config->Prefix, path, options));
 
     auto body = NodeListToYsonString(rows);
     TRequestConfig config;
@@ -1324,7 +1322,12 @@ TJobAttributes TClient::GetJob(
     const TGetJobOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetJob(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, jobId, options);
+    auto result = RequestWithRetry<NYson::TYsonString>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &operationId, &jobId, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetJob(operationId, jobId, options);
+        });
+    return NRawClient::ParseJobAttributes(NodeFromYsonString(result.AsStringBuf()));
 }
 
 TListJobsResult TClient::ListJobs(
@@ -1332,7 +1335,11 @@ TListJobsResult TClient::ListJobs(
     const TListJobsOptions& options)
 {
     CheckShutdown();
-    return NRawClient::ListJobs(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
+    return RequestWithRetry<TListJobsResult>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &operationId, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->ListJobs(operationId, options);
+        });
 }
 
 IFileReaderPtr TClient::GetJobInput(
@@ -1340,7 +1347,7 @@ IFileReaderPtr TClient::GetJobInput(
     const TGetJobInputOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetJobInput(Context_, jobId, options);
+    return RawClient_->GetJobInput(jobId, options);
 }
 
 IFileReaderPtr TClient::GetJobFailContext(
@@ -1349,7 +1356,7 @@ IFileReaderPtr TClient::GetJobFailContext(
     const TGetJobFailContextOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetJobFailContext(Context_, operationId, jobId, options);
+    return RawClient_->GetJobFailContext(operationId, jobId, options);
 }
 
 IFileReaderPtr TClient::GetJobStderr(
@@ -1358,7 +1365,7 @@ IFileReaderPtr TClient::GetJobStderr(
     const TGetJobStderrOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetJobStderr(Context_, operationId, jobId, options);
+    return RawClient_->GetJobStderr(operationId, jobId, options);
 }
 
 std::vector<TJobTraceEvent> TClient::GetJobTrace(
@@ -1366,7 +1373,11 @@ std::vector<TJobTraceEvent> TClient::GetJobTrace(
     const TGetJobTraceOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetJobTrace(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
+    return RequestWithRetry<std::vector<TJobTraceEvent>>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &operationId, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetJobTrace(operationId, options);
+        });
 }
 
 TNode::TListType TClient::SkyShareTable(

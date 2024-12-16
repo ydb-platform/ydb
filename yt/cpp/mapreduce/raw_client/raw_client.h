@@ -154,6 +154,40 @@ public:
         const TOperationId& operationId,
         const TUpdateOperationParametersOptions& options = {}) override;
 
+    // Jobs
+
+    NYson::TYsonString GetJob(
+        const TOperationId& operationId,
+        const TJobId& jobId,
+        const TGetJobOptions& options = {}) override;
+
+    TListJobsResult ListJobs(
+        const TOperationId& operationId,
+        const TListJobsOptions& options = {}) override;
+
+    IFileReaderPtr GetJobInput(
+        const TJobId& jobId,
+        const TGetJobInputOptions& options = {}) override;
+
+    IFileReaderPtr GetJobFailContext(
+        const TOperationId& operationId,
+        const TJobId& jobId,
+        const TGetJobFailContextOptions& options = {}) override;
+
+    TString GetJobStderrWithRetries(
+        const TOperationId& operationId,
+        const TJobId& jobId,
+        const TGetJobStderrOptions& options = {}) override;
+
+    IFileReaderPtr GetJobStderr(
+        const TOperationId& operationId,
+        const TJobId& jobId,
+        const TGetJobStderrOptions& options = {}) override;
+
+    std::vector<TJobTraceEvent> GetJobTrace(
+        const TOperationId& operationId,
+        const TGetJobTraceOptions& options = {}) override;
+
 private:
     const TClientContext Context_;
 };

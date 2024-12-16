@@ -150,6 +150,37 @@ public:
         const TOperationId& operationId,
         const TUpdateOperationParametersOptions& options = {}) = 0;
 
+    virtual NYson::TYsonString GetJob(
+        const TOperationId& operationId,
+        const TJobId& jobId,
+        const TGetJobOptions& options = {}) = 0;
+
+    virtual TListJobsResult ListJobs(
+        const TOperationId& operationId,
+        const TListJobsOptions& options = {}) = 0;
+
+    virtual IFileReaderPtr GetJobInput(
+        const TJobId& jobId,
+        const TGetJobInputOptions& options = {}) = 0;
+
+    virtual IFileReaderPtr GetJobFailContext(
+        const TOperationId& operationId,
+        const TJobId& jobId,
+        const TGetJobFailContextOptions& options = {}) = 0;
+
+    virtual TString GetJobStderrWithRetries(
+        const TOperationId& operationId,
+        const TJobId& jobId,
+        const TGetJobStderrOptions& options = {}) = 0;
+
+    virtual IFileReaderPtr GetJobStderr(
+        const TOperationId& operationId,
+        const TJobId& jobId,
+        const TGetJobStderrOptions& options = {}) = 0;
+
+    virtual std::vector<TJobTraceEvent> GetJobTrace(
+        const TOperationId& operationId,
+        const TGetJobTraceOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

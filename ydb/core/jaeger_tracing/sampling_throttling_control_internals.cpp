@@ -42,7 +42,7 @@ NWilson::TTraceId TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTra
         );
     }
 
-    if (!traceId) {
+    if (!level) {
         ForEachMatchingRule(
             Setup.SamplingRules[requestType], database,
             [&level](auto& samplingRule) {

@@ -229,7 +229,7 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSour
     AFL_VERIFY(!StageData->HasPortionAccessor());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
-    std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>();
+    std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>("SIMPLE::" + step.GetName());
     request->AddPortion(Portion);
     request->SetColumnIds(GetContext()->GetAllUsageColumns()->GetColumnIds());
     request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(step, sourcePtr));
